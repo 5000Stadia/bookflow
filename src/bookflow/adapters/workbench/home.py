@@ -543,6 +543,11 @@ SECTIONS: tuple[Section, ...] = (
             _list("Other names", "other-name list", "/other-name"),
             _list("Time entries", "time-activity query", "/time-activity"),
         ),
+        tasks=(
+            Action("Use weekly timesheet", READ, ("timesheet show",), "/timesheet"),
+            Action("Time clock", READ, ("clock status",), "/clock"),
+            Action("Job calendar", READ, ("schedule calendar",), "/calendar"),
+        ),
     ),
     Section(
         "items", records="item", records_label="Item list",

@@ -1,0 +1,44 @@
+{% extends "base.html" %}{% block title %}Weekly timesheet{% endblock %}{% block body %}<link rel="stylesheet" href="{{ static_urls['timekeeping.css'] }}"><section id="timesheet">
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/employees">Employees</a> / Weekly timesheet</nav>
+<h1>Weekly timesheet</h1>
+<p class="actions"><a href="/c/{{ company_id }}/clock">Time clock</a> <a href="/c/{{ company_id }}/calendar">Job calendar</a> <a href="/c/{{ company_id }}/time-activity">Time entries</a></p>
+{% if result %}<div role="status" class="notice" data-timesheet-result><strong>{{ result }}</strong></div>{% endif %}
+{% if error %}<div role="alert" class="error" data-timesheet-error><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}{% if (error.details or {}).get('problem') %}<br>{{ error.details.problem }}{% endif %}</div>{% endif %}
+<form method="get" action="/c/{{ company_id }}/timesheet" class="sheet-nav" data-timesheet-pick>
+<label>Name <input name="employee" list="ts-employees" value="{{ employee or '' }}" required></label>
+<datalist id="ts-employees">{% for name in employees %}<option value="{{ name }}">{% endfor %}</datalist>
+<label>Week of <input type="date" name="week" value="{{ sheet.week_start if sheet else '' }}"></label>
+<button type="submit">Show</button>
+{% if sheet %}<a href="?employee={{ sheet.employee_name | urlencode }}&week={{ prev_week }}" data-prev-week>Previous</a> <a href="?employee={{ sheet.employee_name | urlencode }}&week={{ next_week }}" data-next-week>Next</a>
+{% if can_write %}<a href="?employee={{ sheet.employee_name | urlencode }}&week={{ sheet.week_start }}&copy=1" data-copy-last>Copy last sheet</a>{% endif %}{% endif %}
+</form>
+{% if sheet %}
+<p><strong>{{ sheet.employee_name }}</strong>, week of {{ sheet.week_start }} to {{ sheet.week_end }}{% if sheet.copied_from %} <span class="muted" data-copied-from>(rows copied from the week of {{ sheet.copied_from }}; fill in the hours and save)</span>{% endif %}</p>
+{% if sheet.lock_note %}<p class="muted" data-lock-note>{{ sheet.lock_note }}</p>{% endif %}
+{% set total_rows = sheet.rows | length + (blank_rows if can_write else 0) %}
+<form method="post" action="/c/{{ company_id }}/timesheet" hx-post="/c/{{ company_id }}/timesheet" hx-target="body" hx-swap="outerHTML" data-timesheet-form>
+<input type="hidden" name="employee" value="{{ sheet.employee_id }}"><input type="hidden" name="week" value="{{ sheet.week_start }}">
+<input type="hidden" name="sheet_version" value="{{ sheet.sheet_version }}"><input type="hidden" name="row_count" value="{{ total_rows }}">
+<div class="table-wrap"><table class="timesheet-grid" data-timesheet-grid><thead><tr><th>Customer:job</th><th>Service item</th><th>Notes</th><th>Class</th><th>Billable</th>
+{% for d in sheet.days %}<th class="num">{{ day_names[loop.index0] }}<br>{{ d[5:] }}</th>{% endfor %}<th class="num">Total</th></tr></thead><tbody>
+{% for n in range(total_rows) %}{% set r = sheet.rows[n] if n < sheet.rows | length else None %}{% set ro = (r and r.locked) or not can_write %}
+<tr data-sheet-row="{{ n }}"{% if n > sheet.rows | length %} class="blank-extra"{% endif %}{% if r and r.locked %} data-locked{% endif %}>
+<td class="cell-text" data-label="Customer:job"><input class="wide" name="customer_{{ n }}" list="ts-customers" value="{{ values.get('customer_%d' % n, r.customer_name if r else '') }}" {% if ro %}readonly{% endif %} aria-label="Customer:job, row {{ n + 1 }}"></td>
+<td class="cell-text" data-label="Service item"><input class="wide" name="item_{{ n }}" list="ts-items" value="{{ values.get('item_%d' % n, r.item_name if r else '') }}" {% if ro %}readonly{% endif %} aria-label="Service item, row {{ n + 1 }}"></td>
+<td class="cell-text" data-label="Notes"><input class="wide" name="notes_{{ n }}" value="{{ values.get('notes_%d' % n, (r.notes or '') if r else '') }}" {% if ro %}readonly{% endif %} aria-label="Notes, row {{ n + 1 }}"></td>
+<td data-label="Class"><input class="class-input" name="class_{{ n }}" value="{{ values.get('class_%d' % n, (r.class_name or '') if r else '') }}" {% if ro %}readonly{% endif %} aria-label="Class, row {{ n + 1 }}"></td>
+<td data-label="Billable">{% if r and r.locked %}<input type="hidden" name="billable_{{ n }}" value="{{ 'yes' if r.billable else '' }}">{{ 'yes' if r.billable else 'no' }}{% else %}<input type="checkbox" name="billable_{{ n }}" value="yes" {% if (r.billable if r else True) %}checked{% endif %} {% if not can_write %}disabled{% endif %} aria-label="Billable, row {{ n + 1 }}">{% endif %}</td>
+{% for d in sheet.days %}{% set cell = r.cells[loop.index0] if r else None %}
+<td class="num{% if cell and cell.locked %} locked{% endif %}" data-label="{{ d }}" data-day="{{ d }}"><input class="hours" name="h_{{ n }}_{{ loop.index0 }}" inputmode="decimal" value="{{ values.get('h_%d_%d' % (n, loop.index0), (cell.hours or '') if cell else '') }}" {% if not can_write %}readonly{% endif %} aria-label="Hours on {{ d }}, row {{ n + 1 }}"{% if cell and cell.locked %} title="{{ cell.lock_note }}" data-locked-cell{% endif %}>{% if cell and cell.locked %}<br><small class="muted" data-billed-hours>billed {{ cell.billed_hours }}</small>{% endif %}</td>{% endfor %}
+<td class="num" data-label="Total">{{ r.total if r else '' }}</td>
+</tr>{% endfor %}</tbody>
+<tfoot><tr data-day-totals><td colspan="5" data-label="Totals"><strong>Totals</strong></td>{% for t in sheet.day_totals %}<td class="num" data-label="{{ sheet.days[loop.index0] }}">{{ t }}</td>{% endfor %}<td class="num" data-label="Week" data-week-total><strong>{{ sheet.week_total }}</strong></td></tr></tfoot>
+</table></div>
+<datalist id="ts-customers">{% for name in customers %}<option value="{{ name }}">{% endfor %}</datalist>
+<datalist id="ts-items">{% for name in items %}<option value="{{ name }}">{% endfor %}</datalist>
+{% if can_write %}<label>Reason (shown in the audit trail) <input name="ctx:reason" value="{{ values.get('ctx:reason', '') }}" placeholder="Weekly timesheet"></label>
+<div class="actions"><button type="submit" data-timesheet-save>Save timesheet</button></div>
+<p class="muted">Hours are decimal: 7.5 is seven and a half hours. A row emptied withdraws its time. A billed cell can take more hours (they become a new, unbilled entry) but not fewer than were billed, until its sale is voided or edited.</p>{% endif %}
+</form>
+{% elif not error %}<p class="muted">Choose whose week to show.</p>{% endif %}
+</section>{% endblock %}

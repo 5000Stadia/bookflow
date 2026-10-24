@@ -576,6 +576,46 @@ A billed trip cannot be voided or have its miles changed until its invoice is vo
 (`mileage-rate set` keeps rates by date); a trip is paid back once while that check stands. The deduction
 for taxes is `report mileage-by-vehicle`; what each job was charged is `report mileage-by-job`.
 
+## Log hours: "log my 8 hours on the Smith job yesterday"
+
+Hours worked are time entries, and a person's week is a timesheet: one row per customer:job, service
+item, class, billable and notes, seven daily hours. `timesheet save` takes the whole week and writes one
+time entry per row per day with hours, so read the week first (`timesheet show`) and save it back with
+the new hours added; saving the same sheet twice changes nothing. "My" is the person you act for: leave
+`employee` out and their linked employee is used (a person links it once with `clock link`). You may
+record time and schedule entries for any employee, as the person you act for could -- typing up
+everyone's paper timesheets is ordinary work; name the employee.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "timesheet save", "reason": "Kabe: log my 8 hours on Smith yesterday",
+ "input": {"week": "2026-10-20",
+           "rows": [{"customer": "Smith", "item": "Labor", "billable": true, "notes": "Rough-in",
+                     "hours": [null, "8", null, null, null, null, null]}]}}
+```
+
+The hours list starts on the company's first work day (`timesheet preferences`; Monday by default).
+Hours already billed stay billed: a billed cell can take more hours (they become a new, unbilled entry),
+but lowering it below what was billed is refused with `E_WORK_DEPENDENCY` until the invoice is voided or
+edited. Bill time as always with `time-activity invoice`; `report unbilled-costs` lists it.
+
+Clocking: `clock in` and `clock out` record attendance as it happens (rounded per the preference, split
+at midnight). That is the one exception: you may clock in or out only the person you act for (their login
+linked to their employee record), on their instruction; clocking anyone else is refused -- record their
+hours with `timesheet save` instead. A clock left on past the maximum shift is closed only with the `end` time the person stopped.
+
+## Who is where: "what's Dave doing tomorrow?"
+
+`schedule calendar` with `employee` and `view: "day"` (or `week`, `month`) and the date lists Dave's
+schedule entries and the work orders he is assigned that day; `customer` instead shows one job's calendar.
+`schedule create` books someone on a job or work order from a local start to an end
+(`YYYY-MM-DDTHH:MM`); a double-booking still saves, with a warning naming the clash, so tell the person.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "schedule calendar", "input": {"employee": "Dave Brazer", "view": "day", "date": "2026-10-25"}}
+```
+
 ## Special prices: "give Acme 10% off pipe fittings through December"
 
 A price rule changes the price a sales line defaults to when its conditions hold: items or

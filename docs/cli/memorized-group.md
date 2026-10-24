@@ -361,6 +361,7 @@ The same example as complete `bookflow_run` arguments:
 |---|---|---|---|---|---|---|
 | `memorized_group` | `MEMORIZED_GROUP` | string | yes | no | — | minimum length 1; maximum length 64 |
 | `date` | `--date` | string \| null | no | yes | null | — |
+| `expected_facts_fingerprint` | `--expected-facts-fingerprint` | string \| null | no | yes | null | The facts_fingerprint of the preview: which revision of each member will post. A member changed since is refused with E_PREVIEW_STALE; required when a waiting slot would post a newer revision than the one it was listed with. |
 
 ### Command and context options
 

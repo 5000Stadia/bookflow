@@ -425,3 +425,13 @@ projection. Aging, statements, inventory and sales-tax liability retain their
 operational meaning; financial report basis does not change sales-tax timing.
 Cash sales-by-item quantities describe physical activity; average selling price
 is omitted because cash receipts and physical sales may fall in different periods.
+
+## The host's scheduler
+
+While `bookflow serve` runs, its scheduler enters due automatic memorized transactions, assigns
+to-dos for the ones that need a person and prepares overdue notices -- nothing is sent anywhere.
+It looks for due work every `BOOKFLOW_SCHEDULE_CHECK_SECONDS` seconds, an environment variable
+read when the host starts (default 60, at least 1); overdue notices are looked at once an hour at
+most. An automatic entry is made unattended only when the person (or agent) who saved what it
+posts also set the schedule that brings it due; anything else waits for a person on Reminders.
+

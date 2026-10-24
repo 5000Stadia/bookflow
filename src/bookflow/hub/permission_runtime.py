@@ -148,7 +148,8 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.ORDER_INVOICING_POLICY_VERSION: '7c9cc756a85b84b858a23f66ce80bd67b9cecc575d453cfcad3053c050e17531',
     c.SHORTFALL_PO_POLICY_VERSION: 'f402b4ddc9f1cf1ef50280384df98265b6539a8f6d7c6490f4e0c6ef32163374',
     c.PARTIAL_PO_POLICY_VERSION: '3655588af34a0376dddb2027c8e8669876525ff7cd92e915f2613191098940bb',
-    c.SCHEDULING_POLICY_VERSION: 'a26d0e1cf4cd7ea39dde48cdf50a7eb3f943f1b67085f3cfaf599f6d86b0c2e0',
+    c.TIMESHEETS_POLICY_VERSION: '05105fd69f67ec464bc21bbb42a91b26b18961f4630d21385f01a01d9d31e357',
+    c.SCHEDULING_POLICY_VERSION: '6e8cc68654a8ec15dcf50c94083182a93cc979976f60207244cc46cb9ad1d355',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -272,6 +273,7 @@ def known_catalog(version):
     from . import permission_order_invoicing_catalog
     from . import permission_shortfall_po_catalog
     from . import permission_partial_po_catalog
+    from . import permission_timesheets_catalog
     from . import permission_scheduling_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
@@ -322,6 +324,7 @@ def known_catalog(version):
         c.ORDER_INVOICING_POLICY_VERSION: permission_order_invoicing_catalog,
         c.SHORTFALL_PO_POLICY_VERSION: permission_shortfall_po_catalog,
         c.PARTIAL_PO_POLICY_VERSION: permission_partial_po_catalog,
+        c.TIMESHEETS_POLICY_VERSION: permission_timesheets_catalog,
         c.SCHEDULING_POLICY_VERSION: permission_scheduling_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is

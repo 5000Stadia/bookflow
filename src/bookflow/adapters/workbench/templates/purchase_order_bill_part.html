@@ -1,10 +1,10 @@
-{% extends "base.html" %}{% block title %}Bill part of purchase order {{ order.number }}{% endblock %}{% block body %}<section id="po-bill-part">
+{% extends "base.html" %}{% block title %}Bill part of purchase order {{ order.number }}{% endblock %}{% block body %}<section id="po-bill-part" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
 <nav class="crumbs"><a href="/c/{{ company_id }}/purchase-order">Purchase orders</a> / <a href="/c/{{ company_id }}/purchase-order/{{ order.id }}">{{ order.number }}</a> / Bill or close lines</nav>
 <h1>Bill or close lines · purchase order {{ order.number }}</h1>
 <p>{{ order.vendor_name }} · {{ ui_words(order.status) }} · ordered {{ order.date|longday }} · {{ order.total|amount }} {{ order.currency }}</p>
 {% if notice %}<p class="notice" role="status" data-notice>{{ notice }}{% if bill %} <a href="/c/{{ company_id }}/bill/{{ bill.id }}">Open the bill</a>{% endif %}</p>{% endif %}
 {% if error %}<div class="error" role="alert" data-error><strong>{{ error.code }}</strong> {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
-<form method="post" class="workspace-card" aria-label="Bill or close lines" data-bill-part>
+<form method="post" action="/c/{{ company_id }}/purchase-order/{{ order.id }}/bill-part" class="workspace-card" aria-label="Bill or close lines" data-bill-part hx-post="/c/{{ company_id }}/purchase-order/{{ order.id }}/bill-part" hx-target="#po-bill-part" hx-select="#po-bill-part" hx-swap="outerHTML">
 <div class="table-wrap"><table class="list-table" data-order-lines><thead><tr><th>No.</th><th>Item / account</th><th class="num">Ordered</th><th class="num">Received</th><th class="num">Billed</th><th class="num">Open</th><th>Bill now</th><th>Closed</th></tr></thead><tbody>
 {% for line in order.line_tracking %}<tr data-line="{{ line.position }}"{% if line.closed %} data-closed{% endif %}>
 <td data-label="No.">{{ line.position }}</td>

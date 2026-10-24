@@ -65,7 +65,7 @@ _PROCESS = (
     ' or any other template. Document numbers are allocated only by an entry that succeeds.'
     ' A slot that has not posted enters the template as it is now; the preview (dry run) names, for each entry,'
     ' the revision that will post and who saved it, and its facts_fingerprint sent back as'
-    ' expected_facts_fingerprint refuses the run with E_PREVIEW_STALE if a template changed in between.'
+    ' expected_facts_fingerprint refuses the run as a stale preview if a template changed in between.'
 )
 
 _ENTER = (

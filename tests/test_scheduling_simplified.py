@@ -347,3 +347,74 @@ def test_the_scheduler_interval_is_documented():
     from bookflow.core import registry
     registry.load_all()
     assert 'BOOKFLOW_SCHEDULE_CHECK_SECONDS' in registry.get('serve').description
+
+
+def test_Z2_v4_an_agents_widening_then_the_admins_narrowing_keeps_mallorys_slots_waiting(books):
+    from tests.conftest import as_user, make_actor
+    root = Path(books.root)
+    admin = admin_id(books)
+    make_actor(root, 'mallory', company_role=(books.company, 'standard'))
+    make_actor(root, 'olga', company_role=(books.company, 'admin'))
+    books.run('company update', {'scheduler_catch_up_days': 10}, reason='ten days')
+    as_user(root, 'mallory').run('memorized create', {
+        'name': 'Mallory tools', 'command': 'bill post', 'payload': tools('9999.00'),
+        'frequency': 'monthly', 'start_date': '2026-01-31', 'mode': 'enter_automatically'}, company=books.company)
+    tick(books, '2026-03-31')
+    as_user(root, 'olga').run('company update', {'scheduler_catch_up_days': 300}, company=books.company)
+    books.run('company update', {'scheduler_catch_up_days': 200}, reason='Admin pulls it back to 200')
+    out = tick(books, '2026-04-01')
+    late = [r for r in audit_rows(books, 'bill post') if '2026-01-31' in r['reason'] or '2026-02-28' in r['reason']]
+    assert late == [] and out['memorized']['held'] == 2, out
+    assert admin
+
+
+def test_Z2_the_widener_read_fails_closed_when_the_audit_does_not_match(books):
+    books.run('company update', {'scheduler_catch_up_days': 10}, reason='ten days')
+    memorize(books)
+    tick(books, '2026-03-31')
+    books.run('company update', {'scheduler_catch_up_days': 300}, reason='The author widens it')
+    with company_db(books) as db:   # a window in force that no audited change set
+        db.execute('UPDATE company_info SET scheduler_catch_up_days = 250')
+    out = tick(books, '2026-04-01')
+    assert out['memorized']['entered'] == 0 and out['memorized']['held'] == 2, out
+    due = books.run('reminders', {'as_of': '2026-04-01'})['memorized_due']
+    assert all('could not be confirmed' in r['waiting_reason'] for r in due)
+
+
+def test_Z3_v4_a_held_slot_coming_round_again_does_not_break_later_ticks(books):
+    _mallorys_held_bill(books)
+    books.run('memorized create', {'name': 'Rent', 'command': 'bill post', 'payload': rent_payload(),
+                                   'group': 'Month end', 'group_ordinal': 2}, reason='admin member')
+    shown = books.run('memorized-group show', {'memorized_group': 'Month end'})
+    books.run('memorized-group update', {'memorized_group': 'Month end', 'expected_version': shown['version'],
+                                         'start_date': '2026-01-31'}, reason='Re-save the same start date')
+    books.run('memorized create', {'name': 'Fresh rent', 'command': 'bill post', 'payload': tools('7.00'),
+                                   'frequency': 'monthly', 'start_date': '2026-02-28', 'mode': 'enter_automatically'},
+              reason='an unrelated automatic template')
+    second, third = tick(books, '2026-02-01'), tick(books, '2026-02-28')
+    assert 'error' not in second['memorized'] and 'error' not in third['memorized'], (second, third)
+    assert 700 in bill_totals(books)
+
+
+def test_Z6_v4_enter_and_group_enter_bind_to_their_preview(books):
+    from tests.conftest import as_user, make_actor
+    root = Path(books.root)
+    make_actor(root, 'mallory', company_role=(books.company, 'standard'))
+    memorize(books, frequency='never', mode='on_demand', start_date=None)
+    books.run('memorized-group create', {'name': 'Ad hoc'}, reason='g')
+    books.run('memorized create', {'name': 'Grouped', 'command': 'bill post', 'payload': tools('5.00'),
+                                   'group': 'Ad hoc', 'group_ordinal': 1}, reason='m')
+    for name, body in (('memorized enter', {'memorized': 'Monthly office rent', 'date': '2026-02-10'}),
+                       ('memorized-group enter', {'memorized_group': 'Ad hoc', 'date': '2026-02-10'})):
+        preview = books.run(name, body, reason='look first', dry_run=True)
+        assert books.run(name, dict(body, expected_facts_fingerprint=preview['facts_fingerprint']),
+                         reason='bind', dry_run=True)['dry_run']
+    preview = books.run('memorized enter', {'memorized': 'Monthly office rent', 'date': '2026-02-10'}, reason='look',
+                        dry_run=True)
+    show = books.run('memorized show', {'memorized': 'Monthly office rent'})
+    as_user(root, 'mallory').run('memorized update', {'memorized': 'Monthly office rent', 'expected_version': show['version'],
+                                                      'payload': tools('9999.00')}, company=books.company)
+    with pytest.raises(BookflowError) as stale:
+        books.run('memorized enter', {'memorized': 'Monthly office rent', 'date': '2026-02-10',
+                                      'expected_facts_fingerprint': preview['facts_fingerprint']}, reason='save what I saw')
+    assert stale.value.code == 'E_PREVIEW_STALE' and bill_totals(books) == []

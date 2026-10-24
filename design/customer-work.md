@@ -227,6 +227,17 @@ lists every billable work line that is not finished, and billed labour reaches
 `report profit-and-loss-by-job` because the invoice it becomes carries the job on its revenue
 lines like any other sale.
 
+**Timesheets, the clock and the schedule (R106).** A weekly timesheet has no record of its own: as in
+the anchor, it is a view over a person's time entries, one row per customer:job, service item, class,
+billable and notes, a cell per day of the company work week. `timesheet save` makes the entries match the
+sheet -- created, corrected or withdrawn through the same path `time-activity` uses -- and writes nothing
+for a cell whose hours did not move; when a cell holds several entries its newest absorb a change. A cell
+a posted sale carries is locked. `clock out` writes one entry per company-local day the clock ran, each
+rounded per the preference (none, 6 or 15 minutes, half up) to exact hours; a clock past the maximum shift
+needs a stated end. An agent clocks only the employee linked to its principal's login (`clock link`, a
+person's act). Schedule entries put an employee on a job or work order over local times; overlaps warn and
+never refuse; nothing posts. Each row reports a null `payroll_item`, the seam payroll will fill.
+
 ## Line price and estimated cost
 
 Capture item, description, quantity (positive decimal string,6places), unit and

@@ -262,6 +262,17 @@ def _revision_saved_or_missing(s, revision_id):
 
 
 def _widened(s, catch_up, as_of):
+    try:
+        return _widened_read(s, catch_up, as_of)
+    except Exception:  # noqa: BLE001 - an unreadable trail fails closed: nobody's widening is assumed
+        log.warning('catch-up history unreadable; slots beyond the default window wait for a person', exc_info=True)
+        if catch_up is None or catch_up <= DEFAULT_CATCH_UP_DAYS:
+            return None
+        return {'days': catch_up, 'by': 'someone unrecorded', 'by_id': None, 'kind': None, 'at': None,
+                'before': (date.fromisoformat(as_of) - timedelta(days=DEFAULT_CATCH_UP_DAYS)).isoformat()}
+
+
+def _widened_read(s, catch_up, as_of):
     """The latest change to the catch-up window, when it widened it: by whom, as what, from what.
 
     Read from the company audit trail, where every `company update` records the change. Whatever the
@@ -282,11 +293,14 @@ def _widened(s, catch_up, as_of):
         new = decode_snapshot(after) or {}
         if 'scheduler_catch_up_days' in new:
             seen.append((actor_id, kind, at, new['scheduler_catch_up_days']))
+    unknown = {'days': catch_up, 'by': 'someone unrecorded', 'by_id': None, 'kind': None, 'at': None,
+               'before': (date.fromisoformat(as_of) - timedelta(days=DEFAULT_CATCH_UP_DAYS)).isoformat()}
+    if not seen or seen[0][3] != catch_up:
+        # Fail closed: the newest audited value is not the window in force, so who set it is unknown.
+        return unknown if catch_up > DEFAULT_CATCH_UP_DAYS else None
     for index, (actor_id, kind, at, value) in enumerate(seen):
         previous = seen[index + 1][3] if index + 1 < len(seen) else None
         if value != previous:
-            if value != catch_up:
-                return None
             previous = DEFAULT_CATCH_UP_DAYS if previous is None else previous
             if catch_up <= previous:
                 return None
@@ -461,7 +475,7 @@ def _window_changes(s, since):
             if at > since:
                 changes.append((actor_id, kind, value, at))
         previous = value
-    return changes
+    return changes, (values[-1][2] if values else _NOT_RECORDED)
 
 
 def _reconsider_window_holds(s, ctx, cutoff, as_of):
@@ -480,9 +494,21 @@ def _reconsider_window_holds(s, ctx, cutoff, as_of):
         .join(t, t.c.id == o.c.template_id)
         .where(h.c.catch_up_window.isnot(None), o.c.status == 'pending', o.c.slot_date >= cutoff)).mappings().all()
     released, kept, deletes, changes_touched = {}, 0, [], []
+    current = s.company.conn.execute(sa.select(c.company_info.c.scheduler_catch_up_days)).scalar_one()
     for row in rows:
         author, principal = author_of(s, row['current_revision_id'])
-        changes = _window_changes(s, row['created_at'])
+        try:
+            changes, newest = _window_changes(s, row['created_at'])
+        except Exception:  # noqa: BLE001 - an unreadable trail fails closed
+            changes, newest = None, _NOT_RECORDED
+        if changes is None or newest != current:
+            # Fail closed: the window in force is not the newest one the audit trail records.
+            kept += 1
+            reason = ("the catch-up window's history could not be confirmed from the audit trail; "
+                      "waiting for a person to enter it")
+            if reason != row['reason']:
+                changes_touched.append((row, reason))
+            continue
         widenings, last = [], row['catch_up_window']
         for actor_id, kind, value, at in changes:
             effective = DEFAULT_CATCH_UP_DAYS if value is None else value
