@@ -185,6 +185,8 @@ def _order(s, selector, expected, profile, items, old_line_ids):
         facts = item['profile']
         if facts.item.id != line['item_id']:
             raise journals.invalid('items.item', 'must match the selected ordered item')
+        if not item.get('site_id') and line.get('site_id'):
+            item['site_id'] = line['site_id']   # the purchase-order line's site (R104)
         used[key] = used.get(key, 0) + facts.quantity_microunits
         if used[key] > line['quantity_microunits']:
             _dependency('Received quantity exceeds this ordered line’s remaining quantity.', order_line_id=key)
@@ -231,8 +233,12 @@ def prepare(s, ctx, inp, operation):
             items = previous_items
         else:
             items = check_items.resolve(s, inputs, previous_items, None, currency)
+            from bookflow.company import placements
+            header_site = placements.site_id_for(s, getattr(inp, 'site', None))
             for item, entered in zip(items, inputs):
                 item['order_line_id'] = entered.order_line_id
+                if header_site and not item.get('site_id'):
+                    item['site_id'] = header_site   # the receipt's own site (R104)
         for item in items:
             if item['profile'].item_type not in inventory.TRACKED_TYPES:
                 raise journals.invalid('items', 'item receipts receive stock items; enter other costs on a bill')
@@ -270,6 +276,9 @@ def prepare(s, ctx, inp, operation):
         order = _order(s, order_id, getattr(inp, 'purchase_order_version', None), profile, items, old_line_ids)
         if order:
             order_id = order[0]['id']
+        for item, landed in zip(items, landed_items):
+            if item.get('site_id'):
+                landed['site_id'] = item['site_id']   # a purchase-order line's site, filled in by _order (R104)
     if not metadata and old and active_bill_claims(s, line_ids=old_line_ids):
         _dependency('Release linked bill claims before changing or voiding this physical receipt.', receipt_id=old['id'])
     at, event = clock.now_iso(), new_id()
@@ -420,7 +429,8 @@ def order_remaining(s, header, rev):
     return [dict(order_line_id=line['line_id'], item_id=line['item_id'],
                  ordered_quantity_microunits=line['ordered_quantity_microunits'],
                  received_quantity_microunits=line['received_quantity_microunits'],
-                 remaining_quantity_microunits=line['open_quantity_microunits'])
+                 remaining_quantity_microunits=line['open_quantity_microunits'],
+                 **({'site_id': line['site_id']} if line.get('site_id') else {}))
             for line in line_states(s, header, rev)
             if line['item_id'] and line['ordered_quantity_microunits'] is not None]
 

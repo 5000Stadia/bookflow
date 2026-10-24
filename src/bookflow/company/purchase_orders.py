@@ -480,8 +480,9 @@ def _line_semantic(line):
             'quantity_microunits': line['quantity_microunits'],
             'rate_minor_units': line['rate_minor_units'],
             'amount_minor_units': line['amount_minor_units'],
-            'profile': line['profile'].model_dump()} | (
-                {'rate_fraction': line['rate_fraction']} if line.get('rate_fraction') is not None else {})
+            'profile': line['profile'].model_dump(),
+            **({'site_id': line['site_id']} if line.get('site_id') else {}),
+            **({'rate_fraction': line['rate_fraction']} if line.get('rate_fraction') is not None else {})}
 
 
 def _saved_semantic(s, rev):
@@ -594,10 +595,14 @@ def commercial(s, inp, old_header, old_revision, *, document_id):
                       quantity_microunits=line['quantity_microunits'],
                       rate_minor_units=line['rate_minor_units'], rate_fraction=line.get('rate_fraction'),
                       amount_minor_units=line['amount_minor_units'],
-                      profile=PurchaseOrderLineProfile.model_validate_json(line['line_snapshot']))
+                      profile=PurchaseOrderLineProfile.model_validate_json(line['line_snapshot']),
+                      **({'site_id': line['site_id']} if line.get('site_id') else {}))
                  for line in old_lines]
     else:
         prior = {line['line_id'] for line in old_lines}
+        prior_sites = {line['line_id']: line.get('site_id') for line in old_lines}
+        from bookflow.company import placements
+        header_site = placements.site_id_for(s, getattr(inp, 'site', None))
         seen, lines = set(), []
         for index, line in enumerate(inp.lines):
             key = line.line_id.upper() if line.line_id and is_ulid(line.line_id) else line.line_id
@@ -608,6 +613,11 @@ def commercial(s, inp, old_header, old_revision, *, document_id):
                 seen.add(key)
             resolved = _line(s, line, header_facts['class_id'], currency, index)
             resolved['line_id'] = key
+            # Where an item line is to arrive (R104): the line's site, else the order's, else what it had.
+            site = (placements.site_id_for(s, line.site, field=f'lines.{index}.site') if line.site is not None
+                    else header_site or (prior_sites.get(key) if key else None))
+            if site and resolved['profile'].item is not None:
+                resolved['site_id'] = site
             lines.append(resolved)
 
     total = checked_sum((line['amount_minor_units'] for line in lines), 'lines.total')
@@ -714,7 +724,7 @@ def prepare(s, ctx, inp, operation):
                 amount_minor_units=line['amount_minor_units'],
                 customer_id=facts.customer.id if facts.customer else None, billable=facts.billable,
                 class_id=facts.class_id.id if facts.class_id else None,
-                line_snapshot=json_text(facts.model_dump())))
+                line_snapshot=json_text(facts.model_dump()), site_id=line.get('site_id')))
     else:
         rev = old_revision
 
@@ -873,8 +883,9 @@ def bill_entry(rev, lines):
         basis = (dict(quantity=format_quantity_micro_units(line['quantity_microunits']),
                       unit_cost=unit_price.to_dict(unit_price.row_units(line, 'rate'), rev['currency']))
                  if line['quantity_microunits'] is not None else dict(amount=money))
+        site = {'site': line['site_id']} if line.get('site_id') else {}   # where the ordered line arrives (R104)
         items.append(BillItemInput(item=facts.item.id, description=line['description'],
-                                   **basis, **shared))
+                                   **basis, **shared, **site))
     return dict(vendor=profile.vendor.id, expenses=expenses, items=items, memo=rev['memo'],
                 terms=profile.terms.id if profile.terms else None,
                 class_id=profile.class_id.id if profile.class_id else None)

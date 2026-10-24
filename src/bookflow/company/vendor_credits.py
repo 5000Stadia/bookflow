@@ -320,6 +320,8 @@ def commercial(s, inp, previous=None):
                        'a vendor credit needs at least one expense row or item row')
     for line in lines:
         line.setdefault('line_id', None)
+    bills.place_item_lines(s, grids['item'], None, old_revision)   # each item row's site (R104)
+    for line in lines:
         if line['amount_minor_units'] <= 0:
             raise _invalid('items' if line['family'] == 'item' else 'expenses',
                            'every credited row must be worth more than nothing')
@@ -350,17 +352,19 @@ def commercial(s, inp, previous=None):
 def _line_semantic(line):
     return {'line_id': line['line_id'], 'family': line['family'], 'memo': line['memo'],
             'amount_minor_units': line['amount_minor_units'],
-            'profile': line['profile'].model_dump(mode='json')}
+            'profile': line['profile'].model_dump(mode='json'),
+            **({'site_id': line['site_semantic']} if line.get('site_semantic') else {})}
 
 
 def saved_semantic(s, revision):
     """What the stored revision says about itself, in the shape a fresh resolution says it."""
     stored = profile_row(s, revision)
+    sites = bills.saved_line_sites(s, revision)
     return dict(
         date=revision['date'], number=revision['number'], memo=revision['memo'],
         profile=VendorCreditProfile.model_validate_json(stored['profile_snapshot']).model_dump(mode='json'),
         lines=[_line_semantic(dict(line, profile=LINE_FACTS[line['family']].model_validate_json(
-            line['line_snapshot']))) for line in saved_lines(s, revision)])
+            line['line_snapshot']), site_semantic=sites.get(line['line_id']))) for line in saved_lines(s, revision)])
 
 
 def resolved_semantic(resolved):
@@ -714,13 +718,14 @@ def _business_postings(s, header, revision, batch, resolved, pending, created, e
     return credits
 
 
-def _stock_entries(pending, profile):
+def _stock_entries(pending, profile, lines=None):
     """The item rows that send stock back, in the shape the inventory ledger takes them.
 
     What leaves the shelf is read off the captured facts, not off the item master, so
     repointing an item afterwards cannot change which rows of a stored revision moved stock.
     """
     items = {row['document_line_id']: row for row in pending['vendor_credit_item_lines']}
+    sites = {position: line.get('site_id') for position, line in enumerate(lines or (), 1)}
     entries = []
     for envelope in pending['document_lines']:
         line = items.get(envelope['id'])
@@ -731,6 +736,8 @@ def _stock_entries(pending, profile):
             amount=line['amount_minor_units'], offset_account_id=profile.ap_account.id,
             class_id=envelope['class_id'])
         if entry is not None:
+            entry.site_id = sites.get(envelope['position'])   # R104
+            entry.line_identity = envelope['line_id']
             entries.append(entry)
     return entries
 
@@ -924,7 +931,7 @@ def _compose(s, ctx, inp, resolved, previous=None):
     # history. A refusal here (more sent back than is on hand, a closed period, value left
     # behind) leaves nothing behind, because nothing has been written.
     stock = inventory_effects.plan(
-        s, entries=_stock_entries(pending, profile),
+        s, entries=_stock_entries(pending, profile, resolved['lines']),
         reversing=inventory_effects.own_movements(s, old_header['id']) if previous else (),
         date=revision['date'], currency=currency, field='items')
     inventory_effects.open_dates(s, stock)

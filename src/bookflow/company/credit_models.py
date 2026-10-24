@@ -51,6 +51,15 @@ class CreditLineInput(StrictModel):
     class_id: Selector | None = None
     tax_code: Selector | None = None
     use_defaults: list[LineDefault] = Field(default_factory=list, max_length=6)
+    site: Selector | None = Field(default=None, description=(
+        "Inventory site a returned stocked line goes back to, by id or name; omitted, where its sale took it from."))
+
+    @model_serializer(mode="wrap")
+    def unset_site(self, handler):
+        values = handler(self)
+        if "site" not in self.model_fields_set:
+            values.pop("site", None)
+        return values
 
     @model_validator(mode="after")
     def one_kind_of_line(self):

@@ -51,7 +51,7 @@ from dataclasses import dataclass, field
 import sqlalchemy as sa
 
 from bookflow.core import unit_price
-from bookflow.company import accounts, items as item_service, journals, list_service, schema as c
+from bookflow.company import accounts, items as item_service, journals, list_service, placements, schema as c
 from bookflow.company.document_effects import allocate
 from bookflow.company.inventory_costing import StockRefusal, replay, shortfall_warning
 from bookflow.company.inventory_models import (
@@ -190,6 +190,7 @@ class _Change:
     asset_account_id: str = ''
     offset_account_id: str = ''
     warnings: list = field(default_factory=list)
+    sites: dict = field(default_factory=dict)   # movement id -> inventory site (R104)
 
 
 def _warnings(item, history, state, own):
@@ -209,8 +210,12 @@ def _home(s):
 
 
 def next_sequence(s):
-    return int(s.company.conn.execute(
-        sa.select(sa.func.coalesce(sa.func.max(c.inventory_movements.c.sequence), 0))).scalar_one()) + 1
+    """The next number of the company's one stock counter, shared by movements and placements (R104)."""
+    moved = int(s.company.conn.execute(
+        sa.select(sa.func.coalesce(sa.func.max(c.inventory_movements.c.sequence), 0))).scalar_one())
+    placed = int(s.company.conn.execute(
+        sa.select(sa.func.coalesce(sa.func.max(c.inventory_placements.c.sequence), 0))).scalar_one())
+    return max(moved, placed) + 1
 
 
 def _tracked_item(s, selector):
@@ -345,8 +350,9 @@ def _adjustment_change(s, ctx, inp, currency, sequence):
                     values['class_id'], description),
         **({'number': inp.number} if inp.number is not None else {}))
     document = _Document(journal, 'post', 'adjustment', [_Movement(values, 1)])
+    site_id = placements.site_id_for(s, inp.site)
     return _Change([document], item, state, currency, quantity, values['value_minor_units'],
-                   kind, asset['id'], offset['id'], warnings)
+                   kind, asset['id'], offset['id'], warnings, {identity: site_id} if site_id else {})
 
 
 def _void_change(s, inp, currency, sequence):
@@ -462,6 +468,9 @@ def _build(s, ctx, inp, operation):
     sequence = max(int(movement.values['sequence']) for document in change.documents
                    for movement in document.movements) + 1
     _correction_documents(s, change, sequence)
+    change.warnings.extend(placements.warnings(s, placements.for_movements(
+        s, [movement.values for movement in change.documents[0].movements], change.sites),
+        {change.item['id']: change.item['full_name']}))
     dates = {document.journal_date or document.journal.date
              for document in change.documents}
     journals.open_dates(s, sorted(dates))
@@ -607,6 +616,8 @@ def _run(s, ctx, inp, operation, *, persist):
         if persist:
             extra = [('inventory_documents', 'inventory_document', 'transaction_id', [marker])] \
                 if document.operation == 'post' else []
+            # Placed before the movements, which the database refuses unless their placements sum to them (R104).
+            extra.append(placements.extra(placements.placements_for_rows(s, rows, change.sites)))
             extra.append(('inventory_movements', 'inventory_movement', 'id', rows))
             applied = journals.persist_prepared(
                 fresh, ctx, s, command_name=command_name, extra=tuple(extra),

@@ -23,3 +23,4 @@ Database: `company`.
 | `created_by` | VARCHAR(26) | no | — | — | — | — | Company principal that wrote this revision. |
 | `created_via` | VARCHAR(16) | no | — | — | — | — | Interface this revision was written through. |
 | `audit_event_id` | VARCHAR(26) | no | — | — | — | audit_events.id | Audit event that committed this revision. |
+| `site_id` | VARCHAR(26) | yes | — | — | — | inventory_sites.id | Inventory site the build takes its components from and puts the assembly at; null at the default site. |

@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block title %}Build assemblies{% endblock %}{% block body %}<section id="assembly-build">
+{% extends "base.html" %}{% block title %}Build assemblies{% endblock %}{% block body %}<section id="assembly-build" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
 <nav class="crumbs"><a href="/c/{{ company_id }}/_group/items">Items</a> / Build assemblies</nav>
 <h1>Build assemblies</h1>
 {% if result %}<div role="status" class="notice" data-assembly-result>
@@ -7,7 +7,7 @@
 <p><a href="/c/{{ company_id }}/assembly/builds">All builds</a> · <a href="/c/{{ company_id }}/assembly/builds?status=pending">Pending builds</a></p>
 </div>{% endif %}
 {% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
-<form method="post" action="/c/{{ company_id }}/assembly/build">
+<form method="post" action="/c/{{ company_id }}/assembly/build" hx-post="/c/{{ company_id }}/assembly/build" hx-target="#assembly-build" hx-select="#assembly-build" hx-swap="outerHTML">
 <section class="workspace-card" aria-label="Assembly">
 <label>Assembly item <select name="item" data-assembly-item required><option value="">Choose an assembly</option>
 {% for item in assemblies %}<option value="{{ item.id }}" {% if values.item == item.id %}selected{% endif %}>{{ item.full_name }}</option>{% endfor %}</select></label>

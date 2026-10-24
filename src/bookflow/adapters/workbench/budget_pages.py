@@ -17,7 +17,7 @@ import re
 from urllib.parse import urlencode
 
 from fastapi import Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from starlette.concurrency import run_in_threadpool
 from starlette.convertors import Convertor, register_url_convertor
 
@@ -244,7 +244,11 @@ def mount(app, *, render, run, credential, page_error):
             if e.code in ('E_UNAUTHENTICATED', 'E_WORKBENCH_HEADER'):
                 raise
             return memorize_page(request, company_id, verb, filters, error=e.to_dict(), values=form, status_code=400)
-        return RedirectResponse(f'/c/{company_id}/memorized-report', status_code=303)
+        location = f'/c/{company_id}/memorized-report'
+        if request.headers.get('hx-request', '').lower() == 'true':
+            # A 303 would be followed inside the XHR; HX-Redirect makes the list a real navigation.
+            return Response(status_code=200, headers={'HX-Redirect': location})
+        return RedirectResponse(location, status_code=303)
 
     @app.post('/c/{company_id}/report/{verb}/memorize')
     async def memorize_submit(request: Request, company_id: str, verb: str):

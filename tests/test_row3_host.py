@@ -1517,6 +1517,13 @@ def _page_url(cmd, company_id):
 DEDICATED_PAGES = {
     "company backup": ("/company/backup", ()),
     "company restore": ("/company/restore", ("backup", "organization", "name", "as_copy")),
+    # The anchor's Build Assemblies window (R103). A bare page picks the assembly, quantity and date; `memo`
+    # and `pending` (its Build / Mark as pending buttons) come with the component preview, which
+    # test_assembly_build_workbench drives.
+    "assembly build": ("/assembly/build", ("item", "quantity", "date", "action")),
+    # The anchor's Assess Finance Charges window (R120): customers are its per-row `sel:` boxes and the
+    # fingerprint rides with the preview, so a bare page carries the date and the print choice.
+    "finance-charge assess": ("/finance-charge/assess", ("date", "action")),
 }
 
 
@@ -1555,6 +1562,8 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted,
     import re
 
     from bookflow.adapters.workbench import forms as F, pages
+    from bookflow.adapters.workbench import billing as BillingCards  # the billing-card sources, sales orders (R101) included
+    from bookflow.adapters.workbench import work as Work
     from bookflow.core import registry
     registry.load_all()
     from tests.mcp_coverage import workbench_row, local_workbench_boundaries, workbench_family_map, workbench_variant_map, payment_workspace_row
@@ -1655,7 +1664,7 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted,
             page = api.get(f'/c/{hosted.company_id}/invoice/{source["id"]}/update')
             assert page.status_code == 200, page.text[:300]
             assert re.search(r'name="f:settlement_guard" value="[^"]+"', page.text)
-        if cmd.noun in ("estimate", "work-order", "time-activity") and cmd.verb in ("invoice", "sales-receipt", "billing"):
+        if cmd.noun in BillingCards.NOUNS and cmd.verb in ("invoice", "sales-receipt", "billing"):
             # Billing cards first pick a real bounded source, then expose that source's inputs.
             assert 'data-billing-source-picker' in page.text, cmd.name
             source = hosted.ok(cmd.noun + ".query", {"limit": 1}, company=hosted.company_id)["items"][0]
@@ -1667,7 +1676,8 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted,
                 }, company=hosted.company_id)
                 line_ids = sorted(line["line_id"] for line in billing["lines"])
                 assert page.text.count('name="billing-selection"') == 1, cmd.name
-                assert page.text.count('name="billing-percent"') == 1, cmd.name
+                # An order bills by quantity (R101); only a quote has an original-scope percentage.
+                assert page.text.count('name="billing-percent"') == (0 if cmd.noun == "sales-order" else 1), cmd.name
                 for control in ("billing-line", "billing-mode", "billing-value"):
                     rendered_ids = re.findall(rf'name="{control}:([^"]+)"', page.text)
                     assert sorted(rendered_ids) == line_ids, (cmd.name, control)
@@ -1677,6 +1687,11 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted,
         # hidden fields; the controls counted are the generated form's own.
         form_text = _generated_form(page.text)
         for leaf in F.leaves(cmd.input_model):
+            if cmd.noun == "sales-order" and leaf["path"] in Work.ORDER_HIDDEN:
+                # A sales order has no scope of work to agree (R101): its form leaves the quoting
+                # prose out, and the command still accepts it from an agent.
+                assert f'name="f:{leaf["path"]}"' not in form_text, (cmd.name, leaf["path"])
+                continue
             for parent in leaf.get("object_controls", []):
                 assert form_text.count(f'name="clear:{parent}"') == 1, (cmd.name, parent)
             # Ask the workbench which shape this form takes rather than keeping a second
@@ -1697,13 +1712,18 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted,
                 assert kinds and sorted(kinds) == sorted(values), cmd.name
                 assert len(kinds) == len(set(kinds)), cmd.name
                 if cmd.noun in commercial_fields:
-                    destination = cmd.verb if cmd.name in ("proposal estimate", "estimate work-order", "estimate invoice", "estimate sales-receipt", "work-order invoice", "work-order sales-receipt", "time-activity invoice", "time-activity sales-receipt") else cmd.noun
+                    # A conversion (`estimate sales-order`, `sales-order invoice`) is named by the document it
+                    # makes and carries that document's fields; derived, since a kept list missed R101's two.
+                    destination = cmd.verb if cmd.verb in commercial_fields else cmd.noun
                     assert set(values) == commercial_fields[destination], cmd.name
             elif leaf["path"] == "cursor" and cmd.name in _cursor_free_reports():
                 # Statement continuations belong to the result's Next form;
                 # rerunning the filter form must always start a fresh report.
                 assert 'name="f:cursor"' not in form_text, cmd.name
-            elif leaf["path"] in ("line_ids", "selections", "percent") and cmd.noun in ("estimate", "work-order", "time-activity") and cmd.verb in ("invoice", "sales-receipt"):
+            elif leaf["path"] == "all_open" and cmd.noun == "sales-order" and cmd.verb == "invoice":
+                # The order's "Every open quantity" choice of the source-aware selection (R101).
+                assert 'value="all-open"' in form_text and 'name="f:all_open"' not in form_text, cmd.name
+            elif leaf["path"] in ("line_ids", "selections", "percent") and cmd.noun in BillingCards.NOUNS and cmd.verb in ("invoice", "sales-receipt"):
                 # These shared inputs use the source-aware controls checked above.
                 assert f'name="f:{leaf["path"]}"' not in form_text, cmd.name
                 assert f'name="collection:{leaf["path"]}"' not in form_text, cmd.name

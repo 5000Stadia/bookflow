@@ -213,10 +213,39 @@ SHORTFALL_COMMANDS = frozenset(('sales-order purchase-order', 'work-order purcha
 # line tracking and the open purchase orders report, and closes the rest through all four surfaces.
 PARTIAL_PO_COMMANDS = frozenset(('purchase-order close-lines',))
 
+# R121: accountant review. Its witness designates and removes an external accountant, exports an accountant's
+# copy, works in it, writes and imports the change file, reads the checklist and report, and cancels a second copy.
+ACCOUNTANT_REVIEW_COMMANDS = frozenset((
+    'accountant add', 'accountant list', 'accountant mark-entry', 'accountant reclassify', 'accountant remove',
+    'accountant reviewed-through', 'accountant-copy cancel', 'accountant-copy changes', 'accountant-copy export',
+    'accountant-copy import', 'accountant-copy preview', 'accountant-copy status', 'report accountant-changes',
+    'report accountant-review'))
+# R152: check printing. Its witness sets up the printer, prints an alignment sample, queues two checks, prints them,
+# confirms one misprint, cancels and reprints a run, reprints a check under a new number and reads the run, its PDF
+# and the queue through all four surfaces over identical demo copies.
+CHECK_PRINTING_COMMANDS = frozenset(('check print', 'check print-alignment', 'check print-cancel', 'check print-confirm',
+                                     'check print-pdf', 'check print-queue', 'check print-run', 'check print-setup',
+                                     'check reprint'))
+
+
+# R104 increment 1: inventory sites, transfers and Quantity on Hand by Site. Its witness runs the first shared
+# scenario (sites, a retried transfer, a correction and a void) through all four surfaces over identical demo copies.
+INVENTORY_SITE_COMMANDS = frozenset(('inventory-site activate', 'inventory-site create', 'inventory-site deactivate',
+    'inventory-site list', 'inventory-site show', 'inventory-site update', 'inventory-transfer history',
+    'inventory-transfer post', 'inventory-transfer query', 'inventory-transfer show', 'inventory-transfer update',
+    'inventory-transfer void', 'report quantity-by-site'))
 
 BROWSING_COMMANDS = frozenset(('account query options', 'class query options', 'custom-field query children', 'custom-field query options', 'customer query options', 'customer-message query options', 'customer-type query options', 'employee query options', 'item query children', 'item query options', 'item-category query options', 'job-type query options', 'other-name query options', 'payment-method query options', 'price-level query children', 'price-level query options', 'sales-rep query options', 'sales-tax-code query options', 'ship-method query options', 'term query options', 'unit-of-measure query children', 'unit-of-measure query options', 'vendor query children', 'vendor query options', 'vendor-type query options'))
 
-FROZEN_COMMANDS = PARTIAL_PO_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
+# R106: timekeeping. Its witness sets the preferences, saves, shows and copies a weekly timesheet, clocks a person
+# in and out and cancels a clock, reads the status, unlinks a login, schedules, moves, cancels and shows entries and
+# reads the calendar by employee and by job, through all four surfaces over identical demo copies.
+TIMEKEEPING_COMMANDS = frozenset(('clock cancel', 'clock in', 'clock link', 'clock out', 'clock status',
+                                  'schedule calendar', 'schedule cancel', 'schedule create', 'schedule show',
+                                  'schedule update', 'timesheet copy-last', 'timesheet preferences', 'timesheet save',
+                                  'timesheet set-preferences', 'timesheet show'))
+
+FROZEN_COMMANDS = CHECK_PRINTING_COMMANDS | ACCOUNTANT_REVIEW_COMMANDS | TIMEKEEPING_COMMANDS | INVENTORY_SITE_COMMANDS | PARTIAL_PO_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
 account create
 account deactivate
 account list
@@ -750,11 +779,15 @@ def execution_map():
     from tests.test_assembly_build_surfaces import COMMANDS as ASSEMBLY_BUILD_SURFACE_COMMANDS
     from tests.test_committed_stock_surfaces import COMMANDS as COMMITTED_STOCK_SURFACE_COMMANDS
     from tests.test_mileage_surfaces import COMMANDS as MILEAGE_SURFACE_COMMANDS
+    from tests.test_timekeeping_surfaces import COMMANDS as TIMEKEEPING_SURFACE_COMMANDS
     from tests.test_credit_transfer_surfaces import COMMANDS as COLLECTIONS_SURFACE_COMMANDS
     from tests.test_pricing_rule_surfaces import COMMANDS as PRICING_RULE_SURFACE_COMMANDS
     from tests.test_order_invoicing_surfaces import COMMANDS as ORDER_INVOICING_SURFACE_COMMANDS
     from tests.test_shortfall_surfaces import COMMANDS as SHORTFALL_SURFACE_COMMANDS
     from tests.test_purchase_order_partial_surfaces import COMMANDS as PARTIAL_PO_SURFACE_COMMANDS
+    from tests.test_inventory_site_surfaces import COMMANDS as INVENTORY_SITE_SURFACE_COMMANDS
+    from tests.test_accountant_review_surfaces import COMMANDS as ACCOUNTANT_REVIEW_SURFACE_COMMANDS
+    from tests.test_check_printing_surfaces import COMMANDS as CHECK_PRINTING_SURFACE_COMMANDS
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
     assert {c.name for c in commands} == FROZEN_COMMANDS, 'New or removed command needs a deliberate coverage disposition'
@@ -837,11 +870,15 @@ def execution_map():
                    'tests/test_assembly_build_surfaces.py::test_the_same_assembly_builds_through_python_cli_http_and_mcp' if cmd.name in ASSEMBLY_BUILD_SURFACE_COMMANDS else  # all four
                    'tests/test_committed_stock_surfaces.py::test_the_same_open_orders_report_through_python_cli_http_and_mcp' if cmd.name in COMMITTED_STOCK_SURFACE_COMMANDS else  # all four
                    'tests/test_mileage_surfaces.py::test_the_same_mileage_through_python_cli_http_and_mcp' if cmd.name in MILEAGE_SURFACE_COMMANDS else  # all four
+                   'tests/test_timekeeping_surfaces.py::test_the_same_timekeeping_through_python_cli_http_and_mcp' if cmd.name in TIMEKEEPING_SURFACE_COMMANDS else  # all four
                    'tests/test_credit_transfer_surfaces.py::test_the_same_credit_transfer_through_python_cli_http_and_mcp' if cmd.name in COLLECTIONS_SURFACE_COMMANDS else  # all four
                    'tests/test_pricing_rule_surfaces.py::test_the_same_price_rules_through_python_cli_http_and_mcp' if cmd.name in PRICING_RULE_SURFACE_COMMANDS else  # all four
                    'tests/test_order_invoicing_surfaces.py::test_the_same_order_invoice_through_python_cli_http_and_mcp' if cmd.name in ORDER_INVOICING_SURFACE_COMMANDS else  # all four
                    'tests/test_shortfall_surfaces.py::test_the_same_shortfall_purchase_through_python_cli_http_and_mcp' if cmd.name in SHORTFALL_SURFACE_COMMANDS else  # all four
                    'tests/test_purchase_order_partial_surfaces.py::test_the_same_partial_order_billing_through_python_cli_http_and_mcp' if cmd.name in PARTIAL_PO_SURFACE_COMMANDS else  # all four
+                   'tests/test_inventory_site_surfaces.py::test_the_same_sites_and_transfers_through_python_cli_http_and_mcp' if cmd.name in INVENTORY_SITE_SURFACE_COMMANDS else  # all four
+                   'tests/test_accountant_review_surfaces.py::test_the_same_accountant_review_through_python_cli_http_and_mcp' if cmd.name in ACCOUNTANT_REVIEW_SURFACE_COMMANDS else  # all four
+                   'tests/test_check_printing_surfaces.py::test_the_same_check_printing_through_python_cli_http_and_mcp' if cmd.name in CHECK_PRINTING_SURFACE_COMMANDS else  # all four
                    'tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute' if cmd.name in LOCAL_COMMANDS else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else
                 'local_lifecycle' if cmd.local_only else 'binary_' + cmd.transfer.direction if cmd.transfer else
@@ -1094,6 +1131,13 @@ def payment_workspace_row(cmd, url, page_text, config):
         'discounts[].expected_version': ('captured_state', 'payment-invoices', 'the discounted invoice row version'),
         'discount_account': ('registry_alternative_not_emitted', None,
                              "the company's customer discount account preference; the workspace does not choose one"),
+        # The anchor's Underpayment choice (R148), shown once a preview finds the cash short: Write off sends
+        # `underpayment: write_off` with its account and class; Leave open sends nothing.
+        'underpayment': ('control', 'payment-underpayment-write-off', 'Write off the extra amount (else leave open)'),
+        'write_off_account': ('control', 'payment-write-off-account', 'visible input under Write off'),
+        'write_off_class': ('control', 'payment-write-off-class', 'visible input under Write off'),
+        'discount_class': ('registry_alternative_not_emitted', None,
+                           'a typed discount posts without a class from the workspace; agents may name one'),
     })
     for path in ('applications.items[].invoice', 'applications.items[].expected_version',
                  'applications.items[].amount', 'invoice_versions[].invoice', 'invoice_versions[].expected_version'):

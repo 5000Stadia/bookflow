@@ -31,6 +31,7 @@ Database: `company`.
 | `pricing_basis` | VARCHAR(16) | no | — | — | — | — | Authoritative catalog, manual, markup or amount price mode. |
 | `markup_percent_millionths` | BIGINT | yes | — | — | — | — | Signed markup percentage in millionths. |
 | `billable` | BOOLEAN | no | — | — | — | — | Eligibility for later billing. |
+| `site_id` | VARCHAR(26) | yes | — | — | — | inventory_sites.id | Inventory site a stocked sales-order or work-order line commits at; null commits unassigned. |
 | `facts_snapshot` | TEXT | no | — | — | — | — | Versioned typed WorkLineFacts with captured profile and taxes. |
 | `created_at` | VARCHAR(32) | no | — | — | — | — | UTC creation timestamp. |
 | `created_by` | VARCHAR(26) | no | — | — | — | — | Principal recorded as creating this history. |

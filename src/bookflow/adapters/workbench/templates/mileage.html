@@ -1,11 +1,11 @@
-{% extends "base.html" %}{% block title %}Enter vehicle mileage{% endblock %}{% block body %}<section id="mileage">
+{% extends "base.html" %}{% block title %}Enter vehicle mileage{% endblock %}{% block body %}<section id="mileage" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
 <nav class="crumbs"><a href="/c/{{ company_id }}/_group/customers">Customers</a> / Enter vehicle mileage</nav>
 <h1>Enter vehicle mileage</h1>
 <p class="actions"><a href="/c/{{ company_id }}/report/mileage-by-vehicle">Mileage by vehicle</a> <a href="/c/{{ company_id }}/report/mileage-by-job">Mileage by job</a></p>
 {% if result %}<div role="status" class="notice" data-mileage-result><strong>{{ result }}</strong></div>{% endif %}
 {% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}{% if (error.details or {}).get('problem') %}<br>{{ error.details.problem }}{% endif %}</div>{% endif %}
 {% if can_write %}
-<form method="post" action="/c/{{ company_id }}/mileage">
+<form method="post" action="/c/{{ company_id }}/mileage" hx-post="/c/{{ company_id }}/mileage" hx-target="#mileage" hx-select="#mileage" hx-swap="outerHTML">
 <section class="workspace-card" aria-label="Trip" data-trip-form>
 <h2>Record a trip</h2>
 <label>Vehicle <select name="vehicle" required>{% for v in vehicles if v.active %}<option value="{{ v.id }}" {% if values.get('vehicle') == v.id %}selected{% endif %}>{{ v.name }}</option>{% endfor %}</select></label>
@@ -28,7 +28,7 @@
 {% endif %}
 <section class="workspace-card" aria-label="Trips">
 <h2>Trips</h2>
-{% if trips %}<form method="post" action="/c/{{ company_id }}/mileage"><div class="table-wrap"><table class="list-table mileage-trips" data-trip-list><thead><tr>{% if can_reimburse %}<th>Pay back</th>{% endif %}<th>End date</th><th>Vehicle</th><th>Miles</th><th>Customer:job</th><th>Billing</th><th>Deduction</th><th>Paid back</th><th>Notes</th>{% if can_write %}<th></th>{% endif %}</tr></thead><tbody>
+{% if trips %}<form method="post" action="/c/{{ company_id }}/mileage" hx-post="/c/{{ company_id }}/mileage" hx-target="#mileage" hx-select="#mileage" hx-swap="outerHTML"><div class="table-wrap"><table class="list-table mileage-trips" data-trip-list><thead><tr>{% if can_reimburse %}<th>Pay back</th>{% endif %}<th>End date</th><th>Vehicle</th><th>Miles</th><th>Customer:job</th><th>Billing</th><th>Deduction</th><th>Paid back</th><th>Notes</th>{% if can_write %}<th></th>{% endif %}</tr></thead><tbody>
 {% for t in trips %}<tr data-trip="{{ t.id }}">
 {% if can_reimburse %}<td data-label="Pay back">{% if not t.reimbursed_by %}<input type="checkbox" name="pick:{{ t.id }}" value="yes" aria-label="Pay back the trip on {{ t.trip_end_date }}">{% endif %}</td>{% endif %}
 <td data-label="End date">{{ t.trip_end_date }}</td>
@@ -58,13 +58,13 @@
 <div class="table-wrap"><table class="list-table" data-vehicle-list><thead><tr><th>Vehicle</th><th>Description</th><th>Trips</th><th>Miles</th><th>Active</th></tr></thead><tbody>
 {% for v in vehicles %}<tr><td data-label="Vehicle">{{ v.name }}</td><td data-label="Description">{{ v.description or '' }}</td><td data-label="Trips">{{ v.trip_count }}</td><td data-label="Miles">{{ v.total_miles }}</td><td data-label="Active">{{ 'yes' if v.active else 'no' }}</td></tr>{% endfor %}
 </tbody></table></div>
-{% if can_write %}<form method="post" action="/c/{{ company_id }}/mileage"><label>New vehicle <input name="vehicle_name" required></label> <label>Description <input name="vehicle_description"></label> <button type="submit" name="action" value="vehicle">Add vehicle</button></form>{% endif %}
+{% if can_write %}<form method="post" action="/c/{{ company_id }}/mileage" hx-post="/c/{{ company_id }}/mileage" hx-target="#mileage" hx-select="#mileage" hx-swap="outerHTML"><label>New vehicle <input name="vehicle_name" required></label> <label>Description <input name="vehicle_description"></label> <button type="submit" name="action" value="vehicle">Add vehicle</button></form>{% endif %}
 </section>
 <section class="workspace-card" aria-label="Mileage rates">
 <h2>Mileage rates</h2>
 <div class="table-wrap"><table class="list-table" data-rate-list><thead><tr><th>Effective date</th><th>Rate per mile</th></tr></thead><tbody>
 {% for r in rates %}<tr><td data-label="Effective date">{{ r.effective_date }}</td><td data-label="Rate per mile">{{ r.rate }} {{ r.currency }}</td></tr>{% endfor %}
 </tbody></table></div>
-{% if can_write %}<form method="post" action="/c/{{ company_id }}/mileage"><label>Effective date <input type="date" name="effective_date" required></label> <label>Rate <input name="rate" inputmode="decimal" size="8" required placeholder="0.67"></label> <button type="submit" name="action" value="rate">Set rate</button></form>{% endif %}
+{% if can_write %}<form method="post" action="/c/{{ company_id }}/mileage" hx-post="/c/{{ company_id }}/mileage" hx-target="#mileage" hx-select="#mileage" hx-swap="outerHTML"><label>Effective date <input type="date" name="effective_date" required></label> <label>Rate <input name="rate" inputmode="decimal" size="8" required placeholder="0.67"></label> <button type="submit" name="action" value="rate">Set rate</button></form>{% endif %}
 </section>
 </section>{% endblock %}

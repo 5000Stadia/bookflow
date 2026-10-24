@@ -1333,6 +1333,7 @@ FIELDS = {
         'pricing_basis': ('str', False, False, 'dependency_field'),
         'markup_percent_millionths': ('int', True, False, 'dependency_field'),
         'billable': ('bool', False, False, 'dependency_field'),
+        'site_id': ('str', True, False, 'outside_output'),
         'facts_snapshot': ('str', False, False, 'dependency_field'),
         'created_at': ('str', False, False, 'outside_output'),
         'created_by': ('str', False, False, 'outside_output'),
@@ -1645,6 +1646,7 @@ EDGES = {'accounts': [(('default_class_id',), ('classes.id',)), (('parent_id',),
  'work_lines': [(('document_id', 'line_id'), ('work_line_identities.document_id', 'work_line_identities.id')),
                 (('document_id', 'revision_id'), ('work_revisions.document_id', 'work_revisions.id')),
                 (('item_id',), ('items.id',)),
+                (('site_id',), ('inventory_sites.id',)),
                 (('unit_id',), ('unit_conversions.id',))],
  'work_links': [(('destination_document_id', 'destination_revision_id'), ('work_revisions.document_id', 'work_revisions.id')),
                 (('source_document_id', 'source_revision_id'), ('work_revisions.document_id', 'work_revisions.id'))],
@@ -1670,7 +1672,9 @@ DEPOSIT_TABLES = ('transaction_revisions', 'deposit_profiles', 'document_line_id
 # ledger_schema.TRANSACTION_TYPES, which gained sales_tax_adjustment.
 # R110: Effect, LifecycleOutput, CoordinateOutput and Manifest rehashed for SalesLineProfile.pricing_rule.
 # R101 increments 4-5 merged over R110: CoordinateOutput recomputed on the merged models.
-CODECS = {'CoordinateOutput': '6dff64ef2ddd1d75ad357d24d586297d11eabde07df56f2adcba339313a568dc', 'Effect': '8ffca29d972ff6c16c908f308f2de9fe90cba21ca8fc1b76556c138f44e3a9fc', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': '0978349e0bf8b78e4412ad989130dfbb26b877ea41b3fb1e596daeeb034c1014', 'Manifest': 'd59bfa3ea08d7ea878ba0fff911102085ec8dfdd6d154c9f81e850ba730dfbb8', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
+# CoordinateOutput moved with R104: the sales request it carries gained an optional inventory `site` (header and line).
+# R150 rehashed Effect, LifecycleOutput, CoordinateOutput and Manifest on the merged models: sub-cent fractions on SalesLineProfile and SalesPriceInput.
+CODECS = {'CoordinateOutput': '0287b302b2f7c9280a1b5645e57ef8a12c8a4f70da92a65d2c3447a354fe1152', 'Effect': '8ffca29d972ff6c16c908f308f2de9fe90cba21ca8fc1b76556c138f44e3a9fc', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': '0978349e0bf8b78e4412ad989130dfbb26b877ea41b3fb1e596daeeb034c1014', 'Manifest': 'd59bfa3ea08d7ea878ba0fff911102085ec8dfdd6d154c9f81e850ba730dfbb8', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
 
 # Explicit dependency inspection registry closure, separate from disclosure.
 DEPENDENCY_OWNERS = {'account': ('accounts',

@@ -2,6 +2,270 @@
 
 # `report` commands
 
+## `report accountant-changes`
+
+What an external accountant changed, newest first: in these books, and what came back from an accountant's copy (from_copy), each with its reason and the records written, with counts of journal entries, reclassifications, notes and review marks.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.accountant-changes` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report accountant-changes --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report accountant-changes", "input": {}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `limit` | `--limit` | integer | no | no | 100 | Most changes to list, newest first.; minimum 1; maximum 500 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.accountant-changes`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `count` | integer | yes | no | — | Every change found; rows list up to limit. |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].at` | string | yes | no | — | — |
+| `rows[].command` | string | yes | no | — | — |
+| `rows[].summary` | string | yes | no | — | — |
+| `rows[].accountant_user_id` | string | yes | no | — | The external accountant the change was made by or for. |
+| `rows[].accountant_name` | string \| null | yes | yes | — | — |
+| `rows[].agent_id` | string \| null | no | yes | null | The agent that made the change for the accountant; null when they made it. |
+| `rows[].agent_name` | string \| null | no | yes | null | — |
+| `rows[].reason` | string \| null | yes | yes | — | — |
+| `rows[].source_ref` | string \| null | yes | yes | — | — |
+| `rows[].from_copy` | boolean | yes | no | — | — |
+| `rows[].records` | array[string] | yes | no | — | record_type:record_id of what the change wrote. |
+| `journal_entries` | integer | yes | no | — | — |
+| `reclassifications` | integer | yes | no | — | — |
+| `notes` | integer | yes | no | — | — |
+| `review_marks` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "count": 0,
+  "journal_entries": 1,
+  "notes": 1,
+  "reclassifications": 1,
+  "review_marks": 1,
+  "rows": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
+## `report accountant-review`
+
+The period review checklist, after the anchor's Client Data Review: entries to review, what waits in the Uncategorized accounts, bank and card accounts not reconciled through as_of, open receivables, payables and undeposited funds, and the accountant's reviewed-through mark, each with whether it is done.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.accountant-review` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report accountant-review --as-of 2026-09-30 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report accountant-review", "input": {"as_of": "2026-09-30"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `as_of` | `--as-of` | string | yes | no | — | End of the period under review, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.accountant-review`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `as_of` | string | yes | no | — | — |
+| `items` | array[object] | yes | no | — | — |
+| `items[].key` | literal["entries_to_review", "uncategorized", "unreconciled", "open_items", "reviewed_through"] | yes | no | — | — |
+| `items[].title` | string | yes | no | — | — |
+| `items[].done` | boolean | yes | no | — | True when nothing is left to look at. |
+| `items[].detail` | string | yes | no | — | — |
+| `entries_to_review` | array[object] | yes | no | — | Up to 50 entries on the entries-to-review list, newest first. |
+| `entries_to_review[].transaction_id` | string | yes | no | — | — |
+| `entries_to_review[].type` | string | yes | no | — | — |
+| `entries_to_review[].number` | string \| null | yes | yes | — | — |
+| `entries_to_review[].date` | string | yes | no | — | — |
+| `entries_to_review[].flags` | array[string] | yes | no | — | — |
+| `entries_to_review_count` | integer | yes | no | — | — |
+| `uncategorized` | array[object] | yes | no | — | — |
+| `uncategorized[].account_id` | string | yes | no | — | — |
+| `uncategorized[].name` | string | yes | no | — | — |
+| `uncategorized[].count` | integer \| null | no | yes | null | — |
+| `uncategorized[].balance` | object | yes | no | — | — |
+| `uncategorized[].balance.amount` | string | yes | no | — | — |
+| `uncategorized[].balance.currency` | string | yes | no | — | — |
+| `uncategorized[].balance.minor_units` | integer | yes | no | — | — |
+| `unreconciled` | array[object] | yes | no | — | Active bank and card accounts with activity, not reconciled through as_of. |
+| `unreconciled[].account_id` | string | yes | no | — | — |
+| `unreconciled[].name` | string | yes | no | — | — |
+| `unreconciled[].type` | string | yes | no | — | — |
+| `unreconciled[].last_reconciled` | string \| null | yes | yes | — | Statement date of the latest finished reconciliation; null when never reconciled. |
+| `unreconciled[].balance` | object | yes | no | — | — |
+| `unreconciled[].balance.amount` | string | yes | no | — | — |
+| `unreconciled[].balance.currency` | string | yes | no | — | — |
+| `unreconciled[].balance.minor_units` | integer | yes | no | — | — |
+| `open_items` | array[object] | yes | no | — | Accounts receivable, accounts payable and undeposited funds as of as_of. |
+| `open_items[].account_id` | string | yes | no | — | — |
+| `open_items[].name` | string | yes | no | — | — |
+| `open_items[].count` | integer \| null | no | yes | null | — |
+| `open_items[].balance` | object | yes | no | — | — |
+| `open_items[].balance.amount` | string | yes | no | — | — |
+| `open_items[].balance.currency` | string | yes | no | — | — |
+| `open_items[].balance.minor_units` | integer | yes | no | — | — |
+| `reviewed_through` | object \| null | yes | yes | — | — |
+| `reviewed_through.through` | string | yes | no | — | — |
+| `reviewed_through.note` | string \| null | yes | yes | — | — |
+| `reviewed_through.accountant_user_id` | string | yes | no | — | — |
+| `reviewed_through.accountant_name` | string \| null | yes | yes | — | — |
+| `reviewed_through.at` | string | yes | no | — | — |
+| `reviewed_through.from_copy` | boolean | yes | no | — | True when the mark came back in an accountant's change file. |
+| `accountant_changes` | integer | yes | no | — | Changes an accountant made in these books or that came back from a copy (`report accountant-changes`). |
+
+Example JSON output:
+
+```json
+{
+  "accountant_changes": 1,
+  "as_of": "value",
+  "entries_to_review": [],
+  "entries_to_review_count": 1,
+  "items": [],
+  "open_items": [],
+  "reviewed_through": null,
+  "uncategorized": [],
+  "unreconciled": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
 ## `report ap-aging`
 
 Accrual payables aged by bill due date as of as_of, one row per vendor, in Current, 1-30, 31-60, 61-90 and Over 90 columns. A bill due exactly 30 days before as_of is 1-30. Bills carry what is still owed on them after what bill payments have settled against them; an unapplied bill payment, a vendor credit and a payable journal entry age by accounting date, so the aging total equals Accounts Payable on the accrual balance sheet for the same date. Paid bills, voided bills and all-zero vendors are omitted; totals cover every vendor and rows are paged.
@@ -3248,6 +3512,8 @@ The same example as complete `bookflow_run` arguments:
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
+| `site` | `--site` | string \| null | no | yes | null | Only this inventory site, by id or name: its quantity, its share of each item's value, and (on stock status) what is committed, on order and available there. Omitted, the whole company, as before. A site's value is its share of the item's by quantity over the sites holding stock (a site below zero shows none); order lines naming no site are committed at no site (Unassigned in report quantity-by-site). |
+| `by` | `--by` | literal["item", "site"] | no | no | "item" | item: one row per item (the default). site: one row per item and site (Inventory Valuation Summary by Site); each site's value is its share of the item's by quantity, so the sites add up to the item and the rows add up to the inventory asset account. |
 
 ### Command and context options
 
@@ -3309,6 +3575,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].asset_value.amount` | string | yes | no | — | — |
 | `rows[].asset_value.currency` | string | yes | no | — | — |
 | `rows[].asset_value.minor_units` | integer | yes | no | — | — |
+| `rows[].site_id` | string \| null | no | yes | null | The inventory site of this row, on a reading by site; absent otherwise. |
+| `rows[].site_name` | string \| null | no | yes | null | — |
 
 Example JSON output:
 
@@ -3740,11 +4008,13 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `totals.duplicate_numbers` | integer | yes | no | — | — |
 | `totals.duplicate_checks` | integer | yes | no | — | — |
 | `totals.retired_numbers` | integer | no | no | 0 | — |
+| `totals.spoiled_numbers` | integer | no | no | 0 | — |
+| `totals.numbers_in_printer` | integer | no | no | 0 | — |
 | `totals.legacy_uncertain_gaps` | integer | no | no | 0 | — |
 | `totals.checks_numbered_before_the_upgrade` | integer | no | no | 0 | — |
 | `disclosure` | string \| null | no | yes | null | — |
 | `rows` | array[object] | yes | no | — | — |
-| `rows[].kind` | literal["gap", "duplicate", "retired"] | yes | no | — | — |
+| `rows[].kind` | literal["gap", "duplicate", "retired", "spoiled", "printing"] | yes | no | — | — |
 | `rows[].account_id` | string | yes | no | — | — |
 | `rows[].current_account_label` | string | yes | no | — | — |
 | `rows[].current_account_name` | string | yes | no | — | — |
@@ -3756,6 +4026,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].duplicate_number` | integer \| null | no | yes | null | — |
 | `rows[].times_used` | integer \| null | no | yes | null | — |
 | `rows[].retired_number` | integer \| null | no | yes | null | — |
+| `rows[].spoiled_number` | integer \| null | no | yes | null | A spoiled or printing row's number: paper thrown away (spoiled), or in a print run still waiting for "Did checks print OK?" (printing). |
+| `rows[].spoiled_reason` | literal["misprinted", "reprinted"] \| null | no | yes | null | — |
+| `rows[].printed_for` | string \| null | no | yes | null | The cheque the paper was printed for (transaction ID). |
 | `rows[].legacy_uncertain` | boolean | no | no | false | — |
 | `rows[].before` | object \| null | no | yes | null | — |
 | `rows[].before.transaction_id` | string | yes | no | — | — |
@@ -3831,7 +4104,9 @@ Example JSON output:
     "legacy_uncertain_gaps": 0,
     "missing_numbers": 1,
     "numbered_checks": 1,
+    "numbers_in_printer": 0,
     "retired_numbers": 0,
+    "spoiled_numbers": 0,
     "unnumbered_checks": 1
   }
 }
@@ -5810,6 +6085,161 @@ Example JSON output:
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 
+## `report quantity-by-site`
+
+Quantity on Hand by Site, as of as_of: each inventory item at each site with what is on hand there, committed there by open sales-order and work-order lines naming that site, reserved there by pending builds, available and on order to arrive there, and its share of the item's value. Order and work-order lines naming no site commit on an Unassigned row (they are deducted at no site), so the sites plus Unassigned are the company figures report stock-status shows. Value is shared by quantity over the sites holding stock; a site below zero shows no value, and the sites add up to the item. site narrows it to one site. Quantities are read from placements and the report refuses when they disagree with the movement ledger (the quantity tie) or when the values disagree with the balance sheet (the asset tie). Rows are paged.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.quantity-by-site` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report quantity-by-site --as-of 2026-12-31 --site "Van 1" --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report quantity-by-site", "input": {"as_of": "2026-12-31", "site": "Van 1"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `as_of` | `--as-of` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD; stock is valued at it.; minimum length 10; maximum length 10 |
+| `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+| `site` | `--site` | string \| null | no | yes | null | Only this inventory site, by id or name: its quantity, its share of each item's value, and (on stock status) what is committed, on order and available there. Omitted, the whole company, as before. A site's value is its share of the item's by quantity over the sites holding stock (a site below zero shows none); order lines naming no site are committed at no site (Unassigned in report quantity-by-site). |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.quantity-by-site`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.asset_value` | object | yes | no | — | — |
+| `totals.asset_value.amount` | string | yes | no | — | — |
+| `totals.asset_value.currency` | string | yes | no | — | — |
+| `totals.asset_value.minor_units` | integer | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].item_id` | string | yes | no | — | — |
+| `rows[].item_name` | string | yes | no | — | — |
+| `rows[].site_id` | string \| null | yes | yes | — | Inventory site; null on an item's unassigned row (committed by lines naming no site). |
+| `rows[].site_name` | string | yes | no | — | — |
+| `rows[].quantity_on_hand` | string | yes | no | — | — |
+| `rows[].quantity_committed` | string | yes | no | — | — |
+| `rows[].quantity_for_assemblies` | string | yes | no | — | — |
+| `rows[].quantity_available` | string | yes | no | — | — |
+| `rows[].quantity_on_order` | string | yes | no | — | — |
+| `rows[].asset_value` | object | yes | no | — | — |
+| `rows[].asset_value.amount` | string | yes | no | — | — |
+| `rows[].asset_value.currency` | string | yes | no | — | — |
+| `rows[].asset_value.minor_units` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "totals": {
+    "asset_value": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    }
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
 ## `report reconciliation-discrepancy`
 
 What changed in one bank or credit card account's finished reconciliations after they were finished, as the anchor's reconciliation discrepancy report shows it. Correcting or voiding a reconciled transaction is allowed and warns; this is where the difference it left can be seen and fixed. One reconciliation row for the opening balance the account adopted and for each finished statement dated on or before as_of, oldest first: reconciled is the statement's ending balance (the adopted opening balance), current is its cleared balance as the transactions it cleared stand now, and difference is current minus reconciled, zero while it still ties. Under each, one change row per transaction it cleared whose figure on it has changed: reconciled is what it was cleared at, current what it counts for now -- zero once voided, moved to another account or re-dated after the statement -- and difference the effect of the change; type_of_change is amount, date, account or voided. A later statement carries an earlier one's difference through its beginning balance, so it shows the same difference with no change rows of its own. Money is in the statement's sign: a bank balance, or what is owed on a card. Totals count the reconciliations, those out of balance and the changed transactions; rows are paged.
@@ -6202,6 +6632,7 @@ The same example as complete `bookflow_run` arguments:
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
 | `class_id` | `--class-id` | string \| null | no | yes | null | Optional class ID or canonical full name, inactive classes included; a subclass is its own class and is not included with its parent. Omit for every class together with the lines entered under none. |
 | `customer` | `--customer` | string \| null | no | yes | null | Optional customer or job ID or canonical full name; a job is its own customer and is not included with its parent. Omit for every customer together with the income no customer was named on. |
+| `site` | `--site` | string \| null | no | yes | null | Inventory Sales by Site: only stocked item lines whose stock left (or, on a return, came back to) this inventory site, by id or name. Discount and other adjusting lines are not split by site, and income that reached no stocked item is left out; totals still state the whole period. Omit for every site. |
 
 ### Command and context options
 
@@ -6292,6 +6723,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].average_price.minor_units` | integer | yes | no | — | — |
 | `rows[].percent_of_total` | string \| null | yes | yes | — | — |
 | `rows[].percent_of_total_millionths` | integer \| null | yes | yes | — | — |
+| `rows[].site_name` | string \| null | no | yes | null | The inventory site, on Inventory Sales by Site; absent otherwise. |
 
 Example JSON output:
 
@@ -6850,6 +7282,7 @@ The same example as complete `bookflow_run` arguments:
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
+| `site` | `--site` | string \| null | no | yes | null | Only this inventory site, by id or name: its quantity, its share of each item's value, and (on stock status) what is committed, on order and available there. Omitted, the whole company, as before. A site's value is its share of the item's by quantity over the sites holding stock (a site below zero shows none); order lines naming no site are committed at no site (Unassigned in report quantity-by-site). |
 
 ### Command and context options
 
@@ -6912,6 +7345,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].asset_value.amount` | string | yes | no | — | — |
 | `rows[].asset_value.currency` | string | yes | no | — | — |
 | `rows[].asset_value.minor_units` | integer | yes | no | — | — |
+| `rows[].site_id` | string \| null | no | yes | null | The inventory site of this row, on a reading by site; absent otherwise. |
+| `rows[].site_name` | string \| null | no | yes | null | — |
 | `rows[].quantity_committed` | string | yes | no | — | Open quantity of this item on open sales orders and work orders dated by as_of, in its base unit. |
 | `rows[].quantity_for_assemblies` | string | yes | no | — | Reserved for pending assembly builds dated by as_of; available deducts it while available_deducts_pending_builds is on. |
 | `rows[].quantity_available` | string | yes | no | — | On hand less committed (and less reserved for builds under its own preference); on hand while the company's available_deducts_sales_orders preference is off. |

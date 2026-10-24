@@ -27,3 +27,4 @@ Database: `company`.
 | `billable` | BOOLEAN | no | — | — | — | — | Whether this cost is marked to be passed on to the named customer. |
 | `class_id` | VARCHAR(26) | yes | — | — | — | classes.id | Class captured for this line; null when unclassified. |
 | `line_snapshot` | TEXT | no | — | — | — | — | Versioned typed JSON object of the resolved item, account, job and class facts. |
+| `site_id` | VARCHAR(26) | yes | — | — | — | inventory_sites.id | Inventory site an item line is to arrive at; null arrives at the default site. |

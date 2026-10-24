@@ -13,9 +13,18 @@ def stored(s, lines):
     rows = s.company.conn.execute(sa.select(c.money_out_item_lines).where(
         c.money_out_item_lines.c.document_line_id.in_(ids))).mappings()
     by_id = {row['document_line_id']: row for row in rows}
-    return [dict(line_id=line['line_id'], family='item', amount_minor_units=line['amount_minor_units'] if line['kind'] == 'journal' else 0,
-                 memo=line['description'], profile=BillItemProfile.model_validate_json(
-                     by_id[line['id']]['line_snapshot'])) for line in lines if line['id'] in by_id]
+    from bookflow.company import placements
+    sites = placements.revision_line_sites(s, lines[0]['revision_id']) if lines else {}
+    out = []
+    for line in lines:
+        if line['id'] not in by_id:
+            continue
+        item = dict(line_id=line['line_id'], family='item', amount_minor_units=line['amount_minor_units'] if line['kind'] == 'journal' else 0,
+                    memo=line['description'], profile=BillItemProfile.model_validate_json(by_id[line['id']]['line_snapshot']))
+        if sites.get(line['line_id']):
+            item['site_id'] = sites[line['line_id']]   # where this line's stock is (R104)
+        out.append(item)
+    return out
 
 
 def resolve(s, inputs, previous, header_class, currency):
@@ -31,6 +40,13 @@ def resolve(s, inputs, previous, header_class, currency):
             seen.add(item.line_id)
         line = bills._item_line(s, item, header_class, currency, index)
         line['line_id'] = item.line_id
+        # A restated line keeps its inventory site unless it names another (R104).
+        kept = next((old for old in previous if item.line_id and old['line_id'] == item.line_id), None)
+        if 'site_id' not in line and kept is not None and kept.get('site_id'):
+            line['site_id'] = kept['site_id']
+        from bookflow.company import inventory
+        if line['profile'].item_type not in inventory.TRACKED_TYPES:
+            line.pop('site_id', None)
         result.append(line)
     return result
 
@@ -70,6 +86,8 @@ def attach(s, fresh, items):
             amount=item['amount_minor_units'], offset_account_id=d['purchase_funding']['account_id'],
             class_id=line['class_id'])
         if entry is not None:
+            entry.site_id = item.get('site_id')   # R104
+            entry.line_identity = line.get('line_id')
             entries.append(entry)
         outputs.append(output(item, line['line_id'], line['currency']))
     stock = inventory_effects.plan(s, entries=entries,

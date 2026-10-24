@@ -1444,3 +1444,131 @@ EXAMPLES['work-order purchase-order'] = Example(
     + ' --company "Demo Plumbing Co" --reason "Spares for the job" --json',
     {'work_order': 'DEMO-SO-WO-1', 'date': '2026-10-22', 'vendor': 'Central Supply',
      'lines': [{'item': 'Brass Shutoff Valve', 'quantity': '3'}]})
+
+# Timekeeping (R106): a week's timesheet, the clock and the job calendar.
+_TIME_CO = ' --company "Demo Plumbing Co" --json'
+EXAMPLES['timesheet show'] = Example(
+    'bookflow timesheet show --employee "Casey Worker" --week 2026-10-20' + _TIME_CO,
+    {'employee': 'Casey Worker', 'week': '2026-10-20'})
+EXAMPLES['clock in'] = Example(
+    'bookflow clock in --employee "Casey Worker" --customer "Riverside Apartments" --item "Mainline Clearing"'
+    ' --notes "Callout" --reason "Casey started the Riverside callout"' + _TIME_CO,
+    {'employee': 'Casey Worker', 'customer': 'Riverside Apartments', 'item': 'Mainline Clearing', 'notes': 'Callout'})
+EXAMPLES['clock out'] = Example(
+    'bookflow clock out --employee "Casey Worker" --reason "Casey finished"' + _TIME_CO, {'employee': 'Casey Worker'})
+EXAMPLES['schedule create'] = Example(
+    'bookflow schedule create --employee "Casey Worker" --customer "Riverside Apartments" --starts 2026-10-26T08:00'
+    ' --ends 2026-10-26T12:00 --notes "Water heater" --reason "Book the install"' + _TIME_CO,
+    {'employee': 'Casey Worker', 'customer': 'Riverside Apartments', 'starts': '2026-10-26T08:00',
+     'ends': '2026-10-26T12:00', 'notes': 'Water heater'})
+EXAMPLES['schedule calendar'] = Example(
+    'bookflow schedule calendar --employee "Casey Worker" --view day --date 2026-10-26' + _TIME_CO,
+    {'employee': 'Casey Worker', 'view': 'day', 'date': '2026-10-26'})
+EXAMPLES['timesheet copy-last'] = Example(
+    'bookflow timesheet copy-last --employee "Casey Worker" --week 2026-10-27' + _TIME_CO,
+    {'employee': 'Casey Worker', 'week': '2026-10-27'})
+EXAMPLES['timesheet save'] = Example(
+    'bookflow timesheet save --employee "Casey Worker" --week 2026-10-20 --rows \'[{"customer": "Riverside Apartments",'
+    ' "item": "Mainline Clearing", "billable": true, "notes": "Main line", "hours": ["8", "7.5", null, null, null, null,'
+    ' null]}]\' --reason "Casey\'s week"' + _TIME_CO,
+    {'employee': 'Casey Worker', 'week': '2026-10-20', 'rows': [
+        {'customer': 'Riverside Apartments', 'item': 'Mainline Clearing', 'billable': True, 'notes': 'Main line',
+         'hours': ['8', '7.5', None, None, None, None, None]}]})
+EXAMPLES['timesheet preferences'] = Example('bookflow timesheet preferences' + _TIME_CO, {})
+EXAMPLES['timesheet set-preferences'] = Example(
+    'bookflow timesheet set-preferences --clock-rounding 15 --reason "Round punches to the quarter hour"' + _TIME_CO,
+    {'clock_rounding': '15'})
+EXAMPLES['clock cancel'] = Example(
+    'bookflow clock cancel --employee "Casey Worker" --reason "Clocked in by mistake"' + _TIME_CO,
+    {'employee': 'Casey Worker'})
+EXAMPLES['clock status'] = Example('bookflow clock status' + _TIME_CO, {})
+EXAMPLES['clock link'] = Example(
+    'bookflow clock link --employee "Casey Worker" --user casey --reason "Casey\'s own login"' + _TIME_CO,
+    {'employee': 'Casey Worker', 'user': 'casey'})
+EXAMPLES['schedule update'] = Example(
+    f'bookflow schedule update {ID} --expected-version 1 --starts 2026-10-26T13:00 --ends 2026-10-26T16:00'
+    ' --reason "Customer asked for the afternoon"' + _TIME_CO,
+    {'entry': ID, 'expected_version': 1, 'starts': '2026-10-26T13:00', 'ends': '2026-10-26T16:00'})
+EXAMPLES['schedule cancel'] = Example(
+    f'bookflow schedule cancel {ID} --expected-version 2 --reason "Customer postponed"' + _TIME_CO,
+    {'entry': ID, 'expected_version': 2})
+EXAMPLES['schedule show'] = Example(f'bookflow schedule show {ID}' + _TIME_CO, {'entry': ID})
+# Inventory sites and transfers (R104 increment 1).
+_C = ' --company "Demo Plumbing Co"'
+EXAMPLES.update({
+    'inventory-site create': Example('bookflow inventory-site create --name "Van 1" --description "Service van"' + _C
+                                     + ' --reason "Track the van stock" --json', {'name': 'Van 1', 'description': 'Service van'}),
+    'inventory-site update': Example('bookflow inventory-site update Main --name Warehouse' + _C
+                                     + ' --reason "Name the default site" --json', {'site': 'Main', 'name': 'Warehouse'}),
+    'inventory-site activate': Example('bookflow inventory-site activate "Van 1"' + _C + ' --reason "Back in service" --json',
+                                       {'site': 'Van 1'}),
+    'inventory-site deactivate': Example('bookflow inventory-site deactivate "Van 1"' + _C + ' --reason "Van sold" --json',
+                                         {'site': 'Van 1'}),
+    'inventory-site show': Example('bookflow inventory-site show "Van 1"' + _C + ' --json', {'site': 'Van 1'}),
+    'inventory-site list': Example('bookflow inventory-site list' + _C + ' --json', {}),
+    'inventory-transfer post': Example(
+        'bookflow inventory-transfer post --from-site "Van 1" --to-site Warehouse'
+        ' --lines \'[{"item":"Widget","quantity":"5"}]\'' + _C + ' --reason "Unloaded 5 widgets from the van" --json',
+        {'from_site': 'Van 1', 'to_site': 'Warehouse', 'lines': [{'item': 'Widget', 'quantity': '5'}]}),
+    'inventory-transfer update': Example(
+        'bookflow inventory-transfer update T-1 --expected-version 1 --lines \'[{"item":"Widget","quantity":"4"}]\''
+        + _C + ' --reason "Only four came off" --json',
+        {'transfer': 'T-1', 'expected_version': 1, 'lines': [{'item': 'Widget', 'quantity': '4'}]}),
+    'inventory-transfer void': Example('bookflow inventory-transfer void T-1 --expected-version 2' + _C
+                                       + ' --reason "Entered twice" --json', {'transfer': 'T-1', 'expected_version': 2}),
+    'inventory-transfer show': Example('bookflow inventory-transfer show T-1' + _C + ' --json', {'transfer': 'T-1'}),
+    'inventory-transfer history': Example('bookflow inventory-transfer history T-1' + _C + ' --json', {'transfer': 'T-1'}),
+    'inventory-transfer query': Example('bookflow inventory-transfer query --site "Van 1" --limit 25' + _C + ' --json',
+                                        {'site': 'Van 1', 'limit': 25}),
+    'report quantity-by-site': Example('bookflow report quantity-by-site --as-of 2026-12-31 --site "Van 1"' + _C + ' --json',
+                                       {'as_of': '2026-12-31', 'site': 'Van 1'}),
+})
+# Accountant review (R121): the external accountant, the accountant's copy and what comes back, the checklist.
+_ACCT_CO = ' --company "Demo Plumbing Co" --json'
+_CHANGES = '/home/owner/Downloads/Demo Plumbing Co accountant changes 2026-10-14-091500.json'
+EXAMPLES.update({
+    'accountant add': Example('bookflow accountant add jlee --through 2026-09-30 --note "Q3 review" --reason "Q3 review"' + _ACCT_CO,
+                              {'user': 'jlee', 'through': '2026-09-30', 'note': 'Q3 review'}),
+    'accountant remove': Example('bookflow accountant remove jlee --reason "Review finished"' + _ACCT_CO, {'user': 'jlee'}),
+    'accountant list': Example('bookflow accountant list' + _ACCT_CO, {}),
+    'accountant reclassify': Example(
+        f'bookflow accountant reclassify {ID} --from-account "Office Supplies" --to-account "Repairs and Maintenance"'
+        ' --amount 120.00 --reason "Repairs booked to office"' + _ACCT_CO,
+        {'transaction': ID, 'from_account': 'Office Supplies', 'to_account': 'Repairs and Maintenance', 'amount': '120.00'}),
+    'accountant mark-entry': Example(f'bookflow accountant mark-entry {ID} --note "Agreed to the bank statement"'
+                                     ' --reason "Q3 review"' + _ACCT_CO, {'transaction': ID, 'note': 'Agreed to the bank statement'}),
+    'accountant reviewed-through': Example('bookflow accountant reviewed-through 2026-09-30 --note "Q3 adjustments posted"'
+                                           ' --reason "Q3 review"' + _ACCT_CO, {'through': '2026-09-30', 'note': 'Q3 adjustments posted'}),
+    'accountant-copy export': Example('bookflow accountant-copy export 2026-09-30 --reason "Q3 review by our accountant"' + _ACCT_CO,
+                                      {'through': '2026-09-30'}),
+    'accountant-copy status': Example('bookflow accountant-copy status' + _ACCT_CO, {}),
+    'accountant-copy cancel': Example('bookflow accountant-copy cancel --reason "Accountant sent a list of entries instead"' + _ACCT_CO, {}),
+    'accountant-copy changes': Example('bookflow accountant-copy changes --reason "Q3 adjustments for the owner"'
+                                       ' --company "Demo Plumbing Co (restored)" --json', {}),
+    'accountant-copy preview': Example(f'bookflow accountant-copy preview "{_CHANGES}"' + _ACCT_CO, {'file': _CHANGES}),
+    'accountant-copy import': Example(f'bookflow accountant-copy import "{_CHANGES}" --reason "Q3 adjustments"' + _ACCT_CO,
+                                      {'file': _CHANGES}),
+    'report accountant-review': Example('bookflow report accountant-review --as-of 2026-09-30' + _ACCT_CO, {'as_of': '2026-09-30'}),
+    'report accountant-changes': Example('bookflow report accountant-changes' + _ACCT_CO, {}),
+})
+# R152: Print Checks.
+_PRINT_CO = ' --company "Demo Plumbing Co" --json'
+EXAMPLES.update({
+    'check print-queue': Example('bookflow check print-queue --account Checking' + _PRINT_CO, {'account': 'Checking'}),
+    'check print': Example('bookflow check print --account Checking --first-number 1001 --style voucher'
+                           ' --reason "Print this week\'s checks"' + _PRINT_CO,
+                           {'account': 'Checking', 'first_number': '1001', 'style': 'voucher'}),
+    'check print-pdf': Example(f'bookflow check print-pdf {ID} --company "Demo Plumbing Co"', {'run': ID}),
+    'check print-confirm': Example(f'bookflow check print-confirm {ID} --failed-from 1003 --reason "Jammed at 1003"'
+                                   + _PRINT_CO, {'run': ID, 'failed_from': '1003'}),
+    'check print-cancel': Example(f'bookflow check print-cancel {ID} --reason "Wrong paper loaded"' + _PRINT_CO, {'run': ID}),
+    'check print-run': Example(f'bookflow check print-run {ID}' + _PRINT_CO, {'run': ID}),
+    'check reprint': Example(f'bookflow check reprint {ID} --new-number 1010 --reason "Coffee on check 1004"' + _PRINT_CO,
+                             {'check': ID, 'new_number': '1010'}),
+    'check print-setup': Example('bookflow check print-setup --account Checking --style standard --offset-x-hundredths 5'
+                                 ' --offset-y-hundredths -3 --reason "Fine alignment"' + _PRINT_CO,
+                                 {'account': 'Checking', 'style': 'standard', 'offset_x_hundredths': 5,
+                                  'offset_y_hundredths': -3}),
+    'check print-alignment': Example('bookflow check print-alignment --account Checking --offset-x-hundredths 5'
+                                     ' --company "Demo Plumbing Co"', {'account': 'Checking', 'offset_x_hundredths': 5}),
+})

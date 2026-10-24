@@ -10,7 +10,7 @@ is rounded once at its total. DDL below is frozen: this migration never imports 
 from alembic import op
 
 revision = 'co0091'
-down_revision = 'co0084'
+down_revision = 'co0092'
 branch_labels = depends_on = None
 
 FRACTIONS = (

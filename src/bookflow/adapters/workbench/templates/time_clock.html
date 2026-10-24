@@ -1,0 +1,33 @@
+{% extends "base.html" %}{% block title %}Time clock{% endblock %}{% block body %}<link rel="stylesheet" href="{{ static_urls['timekeeping.css'] }}"><section id="time-clock">
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/employees">Employees</a> / Time clock</nav>
+<h1>Time clock</h1>
+<p class="actions"><a href="/c/{{ company_id }}/timesheet">Weekly timesheet</a> <a href="/c/{{ company_id }}/calendar">Job calendar</a></p>
+{% if result %}<div role="status" class="notice" data-clock-result><strong>{{ result }}</strong></div>{% endif %}
+{% if error %}<div role="alert" class="error" data-clock-error><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}{% if (error.details or {}).get('problem') %}<br>{{ error.details.problem }}{% endif %}{% if (error.details or {}).get('next_step') %}<br>{{ error.details.next_step }}{% endif %}</div>{% endif %}
+<p class="muted">Clocked time is rounded {% if status.clock_rounding == 'none' %}to the second (no rounding){% else %}to the nearest {{ status.clock_rounding }} minutes{% endif %}, split at midnight, and recorded as time entries when the clock stops. A clock running past {{ status.max_shift_hours }} hours needs the time the person stopped.</p>
+<form method="post" action="/c/{{ company_id }}/clock" hx-post="/c/{{ company_id }}/clock" hx-target="body" hx-swap="outerHTML" data-clock-form>
+<section class="workspace-card" aria-label="Clocked in">
+<h2>Clocked in</h2>
+{% if status.clocks %}<div class="clock-list">{% for c in status.clocks %}<div class="clock-card" data-open-clock="{{ c.employee_id }}">
+<strong>{{ c.employee_name }}</strong> since {{ c.clock_in_local.replace('T', ' ') }} &middot; {{ c.elapsed_hours }} h so far{% if c.customer_name %} &middot; {{ c.customer_name }}{% endif %}{% if c.item_name %}, {{ c.item_name }}{% endif %}{% if c.notes %} &middot; {{ c.notes }}{% endif %}
+{% if c.over_max_shift %}<p class="error" data-over-shift>Past the maximum shift: give the time {{ c.employee_name }} stopped.</p>{% endif %}
+{% if can_write %}<div class="actions"><label>Stopped at (optional) <input type="datetime-local" name="end_{{ c.employee_id }}" value="{{ values.get('end_' ~ c.employee_id, '') }}" {% if c.over_max_shift %}required{% endif %}></label>
+<button type="submit" name="action" value="out:{{ c.employee_id }}" data-clock-out="{{ c.employee_id }}">Clock out</button>
+<button type="submit" name="action" value="cancel:{{ c.employee_id }}" formnovalidate>Cancel clock</button></div>{% endif %}
+</div>{% endfor %}</div>{% else %}<p class="muted" data-no-clocks>Nobody is clocked in.</p>{% endif %}
+</section>
+{% if can_write %}<section class="workspace-card" aria-label="Clock in">
+<h2>Clock in</h2>
+<label>Name <input name="employee" list="clock-employees" value="{{ values.get('employee', '') }}" placeholder="yours if left empty"></label>
+<datalist id="clock-employees">{% for name in employees %}<option value="{{ name }}">{% endfor %}</datalist>
+<label>Customer:job <input name="customer" list="clock-customers" value="{{ values.get('customer', '') }}"></label>
+<datalist id="clock-customers">{% for name in customers %}<option value="{{ name }}">{% endfor %}</datalist>
+<label>Service item <input name="item" list="clock-items" value="{{ values.get('item', '') }}"></label>
+<datalist id="clock-items">{% for name in items %}<option value="{{ name }}">{% endfor %}</datalist>
+<label>Notes <input name="notes" value="{{ values.get('notes', '') }}"></label>
+<label><input type="checkbox" name="billable" value="yes" {% if values.get('billable', 'yes') == 'yes' %}checked{% endif %}> Billable</label>
+<label>Reason (shown in the audit trail) <input name="ctx:reason" value="{{ values.get('ctx:reason', '') }}" placeholder="Time clock"></label>
+<div class="actions"><button type="submit" name="action" value="in" formnovalidate data-clock-in>Clock in</button></div>
+</section>{% endif %}
+</form>
+</section>{% endblock %}

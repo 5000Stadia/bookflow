@@ -127,6 +127,7 @@ def define_tables(metadata, column, table, common):
         text('pricing_basis', 'Authoritative catalog, manual, markup or amount price mode.', 16),
         integer('markup_percent_millionths', 'Signed markup percentage in millionths.', True),
         C('billable', sa.Boolean, 'Eligibility for later billing.', nullable=False),
+        ident('site_id', 'Inventory site a stocked sales-order or work-order line commits at; null commits unassigned.', 'inventory_sites.id', nullable=True),
         *snapshot('facts_snapshot', 'Versioned typed WorkLineFacts with captured profile and taxes.'), *created(),
         sa.UniqueConstraint('document_id', 'revision_id', 'id', name='uq_work_line_owner'),
         sa.UniqueConstraint('revision_id', 'line_id', name='uq_work_line_identity'),

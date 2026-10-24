@@ -148,6 +148,8 @@ def open_dates(s, dates):
     for date in dates:
         if closing and date <= closing:
             raise BookflowError('E_PERIOD_CLOSED', details={'date': date, 'closing_date': closing})
+    from bookflow.company.accountant_review import check_dates
+    check_dates(s, dates)
 
 
 def version_meta(s, h, expected, *, history_decoder=None):

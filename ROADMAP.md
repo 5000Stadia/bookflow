@@ -157,13 +157,13 @@ review cb5fcd7 (gate g96052d).
 - [ ] R172 a local agent: rerun the week-of-work trial on open-weight models served on a small business's own hardware, classify their failures, and test interface changes (typed everyday tools, shorter help and results) that let a smaller model pass without hurting hosted ones On hold: Kabe 2026-10-22 "Not now" (large downloads, no GPU).
 - [x] R151 Restore a deleted document from its preserved history
 - [x] R117 Merge duplicates: combine duplicate customers, vendors, items or accounts and move every reference to the survivor. (Customers and vendors 2026-10-09; accounts and items 2026-10-22, with refusals for stocked items and settlement accounts: design/list-merge.md)
-- [ ] R180 Quick on real-sized books: built-in performance logging and tracking (timings per command, recorded and reported) to optimise against; measure everyday commands on a company with years of history, and bring posting, deposits and reconciliation of 1,000+ rows down to seconds (Kabe 2026-10-22: "Add and build. We should have a smart performance logging and tracking we can optimize the system against").
+- [~] R180 Quick on real-sized books: built-in performance logging and tracking (timings per command, recorded and reported) to optimise against; measure everyday commands on a company with years of history, and bring posting, deposits and reconciliation of 1,000+ rows down to seconds (Kabe 2026-10-22: "Add and build. We should have a smart performance logging and tracking we can optimize the system against").
 - [~] R101 Sales orders: a non-posting customer order that reserves stock, invoices partly as items ship, tracks backorders, and can raise a purchase order for shortfalls.
 - [x] R102 Reservation-aware stock: stock status shows on hand, committed to open sales orders, on order and available, so buying decisions see real demand.
 - [x] R103 Assembly builds: building a finished item from its bill of materials consumes the components and moves their cost into the assembly.
 - [~] R104 Advanced inventory: multiple sites and bins, transfers, serial and lot numbers, physical counts, a choice of costing method, and allocating a later freight bill to received stock.
 - [ ] R181 Pick, pack and ship: picking lists, packing slips and shipments recorded apart from invoicing, so a warehouse can ship before it bills (Kabe 2026-10-22: after R104).
-- [~] R106 Job scheduling and timesheets: employee and job calendars, weekly timesheets and clock-in/out, feeding the existing time entries and billing.
+- [x] R106 Job scheduling and timesheets: employee and job calendars, weekly timesheets and clock-in/out, feeding the existing time entries and billing.
 - [ ] R107 Bulk import and migration: CSV and IIF import with saved mappings, spreadsheet-style bulk editing, and guided opening balances for invoices, bills and stock.
 - [ ] R108 Bank feeds: import statements (OFX, QFX, CSV), match them to entries, suggest the rest with rules, and optionally connect live feeds; manual reconciliation stays.
 - [x] R109 Budgets and comparisons: budget entry, budget-versus-actual, prior-period and prior-year comparisons, and saved custom report layouts.
@@ -177,7 +177,7 @@ review cb5fcd7 (gate g96052d).
 - [x] R118 Mileage and trips: log vehicle trips by job and turn them into expenses or billable charges.
 - [x] R119 Fixed assets: depreciation schedules and loan amortization that post their own entries.
 - [x] R120 Finance charges: assess late charges on overdue customer balances by a company policy.
-- [~] R121 Accountant review: a period hand-off an outside accountant can review and adjust, with the changes coming back attributed.
+- [x] R121 Accountant review: a period hand-off an outside accountant can review and adjust, with the changes coming back attributed.
 - [ ] R122 Approvals: purchase and bill approval steps before posting.
 - [ ] R123 Intercompany: linked transactions that post matching entries in two companies of one organization.
 - [x] R124 Customer deposits on orders: money received before invoicing, held as a liability until the order bills.
@@ -190,8 +190,8 @@ review cb5fcd7 (gate g96052d).
 - [~] R139 Barcode and cycle counts: scan items for sales, receiving and counts, and count stock by rotating cycles instead of all at once
 - [x] R148 Customer collections: short payments and bad-debt write-offs, bounced payments, moving a credit between jobs
 - [x] R149 Vendor refunds received as deposits against vendor credits
-- [ ] R150 Unit prices finer than a cent
-- [ ] R152 Check printing workflow: a print queue, reprints and alignment
+- [~] R150 Unit prices finer than a cent
+- [x] R152 Check printing workflow: a print queue, reprints and alignment
 - [x] R153 Very large deposits (over 200 rows) and billing part of a purchase order
 - [x] R154 Convert a non-inventory item into an inventory item
 - [ ] R155 Compact storage: pack company files to about 500 MB per 100,000 transactions

@@ -343,6 +343,13 @@ def _cheques(s, resolved, count):
     if not resolved['writes_a_cheque']:
         return [None] * count
     typed = resolved['typed_check_number']
+    if resolved.get('to_be_printed'):
+        # To be printed (R152): the cheques take their numbers when they print, from the
+        # number the person confirms is loaded in the printer, so none is allocated now.
+        if typed is not None:
+            raise _invalid('check_number', 'a cheque saved to be printed takes its number when it prints; '
+                                           'leave check_number out')
+        return [None] * count
     if typed is not None and count != 1:
         raise _invalid('check_number', 'a check number names one cheque, and this selection '
                        f'writes {count}; pay one payee at a time to number the cheque yourself')
@@ -533,8 +540,15 @@ def _output(s, header, revision, profile, pending=None, *, model=BillPaymentOutp
     numbers = _bill_numbers(s, sorted({row['obligation_transaction_id'] for row in edges}), pending)
     discounts = discount_rows(s, header, pending)
     taken = sum(row['amount_minor_units'] for row in discounts.values())
+    shown = summary(header, revision, profile, settlement_output(header, revision, source, applied, taken))
+    if pending is None:
+        # A cheque printed from the queue, or reprinted under a new number (R152), carries the
+        # number the printer gave it; the revision's profile keeps what it was written with.
+        held = check_numbers.current(s, header['id'])
+        if held is not None:
+            shown['check_number'] = held['check_number']
     return model(
-        **summary(header, revision, profile, settlement_output(header, revision, source, applied, taken)),
+        **shown,
         revision=revision_output(s, header, revision, edges, pending),
         applications=application_outputs(edges, revision['currency'], numbers, discounts), **extra)
 
@@ -584,7 +598,13 @@ def page(s, ctx, inp, *, history=False):
     if inp.number:
         query = query.where(t.c.number.contains(inp.number, autoescape=True))
     if inp.check_number:
-        query = query.where(p.c.check_number == inp.check_number)
+        # The number on the paper now: a cheque printed from the queue or reprinted under a new
+        # number (R152) carries it in the chequebook, not on the payment's revision profile.
+        held = c.check_instruments
+        query = query.where(sa.or_(
+            t.c.id.in_(sa.select(held.c.transaction_id).where(held.c.check_number == inp.check_number)),
+            sa.and_(p.c.check_number == inp.check_number,
+                    ~t.c.id.in_(sa.select(held.c.transaction_id)))))
     order = (r.c.date, t.c.id)
     query = query.order_by(*([column.desc() for column in order] if inp.direction == 'desc' else order))
     found = [dict(row) for row in s.company.conn.execute(
@@ -606,15 +626,21 @@ def page(s, ctx, inp, *, history=False):
             c.ap_source_keys.c.transaction_id.in_(identifiers))).mappings()} if found else {}
     applied = ap_settlement.source_applied_totals(s, [row['id'] for row in sources.values()])
     discounted = ap_settlement.discount_totals(s, identifiers)
+    numbers = {row['transaction_id']: row['check_number'] for row in s.company.conn.execute(
+        sa.select(c.check_instruments.c.transaction_id, c.check_instruments.c.check_number).where(
+            c.check_instruments.c.transaction_id.in_(identifiers))).mappings()} if found else {}
     items = []
     for header in ordered:
         revision = revisions[header['current_revision_id']]
         source = sources.get(header['id'])
         total = applied.get(source['id'], 0) if source else 0
-        items.append(BillPaymentSummaryOutput(**summary(
+        shown = summary(
             header, revision, profiles[revision['id']],
             settlement_output(header, revision, source, 0 if header['status'] == 'voided' else total,
-                              discounted.get(header['id'], 0)))))
+                              discounted.get(header['id'], 0)))
+        if header['id'] in numbers:
+            shown['check_number'] = numbers[header['id']]
+        items.append(BillPaymentSummaryOutput(**shown))
     return BillPaymentPageOutput(items=items, count=len(found), has_more=more,
                                  next_cursor=continuation(state, len(found), more),
                                  audit_watermark=state.sequence)
@@ -770,7 +796,10 @@ def _resolved(s, inp, currency):
              if inp.class_id else None)
     info = _info(s)
     writes_a_cheque, typed = _cheque(inp, method, funding_kind)
-    return dict(funding=funding, funding_kind=funding_kind, method=method,
+    to_be_printed = bool(getattr(inp, 'to_be_printed', False))
+    if to_be_printed and not writes_a_cheque:
+        raise _invalid('to_be_printed', 'only a payment by check from a bank account is printed')
+    return dict(funding=funding, funding_kind=funding_kind, method=method, to_be_printed=to_be_printed,
                 writes_a_cheque=writes_a_cheque, typed_check_number=typed, class_id=klass,
                 issuer={key: value for key, value in info.items()
                         if key in ('id', 'legal_name', 'home_currency')
@@ -812,8 +841,13 @@ def prepare_pay(s, ctx, inp):
             s, ctx, inp, at, event, group, rows, number, resolved, cheque)
         pending['_bill_headers'] = [dict(transaction_id=row['header']['id'], number=row['header']['number'])
                                     for row in rows]
+        mark = None
+        if resolved['to_be_printed']:
+            from bookflow.company import check_printing
+            mark = check_printing.mark_row(header['id'], DOCUMENT_TYPE, at=at, actor_id=s.actor.id,
+                                           interface=ctx.interface.value, event=event)
         documents.append(dict(header=header, revision=revision, pending=pending, rows=rows,
-                              instrument=instrument))
+                              instrument=instrument, print_mark=mark))
         outputs.append(_output(s, header, revision, pending['ap_payment_profiles'][0], pending))
         for row in rows:
             old = row['header']
@@ -905,6 +939,10 @@ def prepare_apply(s, ctx, inp):
     can answer two bills when an amount straddles it.
     """
     header, revision, profile = _payment_for_write(s, inp)
+    # The stub of a cheque in an unanswered print run lists what it settles; that list cannot
+    # change under the PDF already made (R152). Once printed, applying and unapplying go on as before.
+    from bookflow.company import check_printing
+    check_printing.guard_correction(s, header, before=None, after=None, voiding=True)
     currency = revision['currency']
     date = inp.date or revision['date']
     if date < revision['date']:
@@ -966,6 +1004,10 @@ def prepare_apply(s, ctx, inp):
 
 def prepare_unapply(s, ctx, inp):
     header, revision, profile = _payment_for_write(s, inp)
+    # The stub of a cheque in an unanswered print run lists what it settles; that list cannot
+    # change under the PDF already made (R152). Once printed, applying and unapplying go on as before.
+    from bookflow.company import check_printing
+    check_printing.guard_correction(s, header, before=None, after=None, voiding=True)
     active = ap_settlement.active_applications(s, header['id'])
     if inp.bills is not None:
         wanted = {bills.resolve(s, selector)['id'] for selector in inp.bills}
@@ -1005,6 +1047,8 @@ def prepare_unapply(s, ctx, inp):
 
 def prepare_void(s, ctx, inp):
     header, revision, profile = _payment_for_write(s, inp)
+    from bookflow.company import check_printing
+    check_printing.guard_correction(s, header, before=None, after=None, voiding=True)
     if not ctx.reason or not ctx.reason.strip():
         raise BookflowError('E_REASON_REQUIRED')
     if len(ctx.reason.strip()) > 140:
@@ -1083,6 +1127,8 @@ def apply(plan, ctx, s):
                            for row in document['pending'][table])
         if document.get('instrument'):
             touched.extend(check_numbers.touches(document['instrument']))
+        if document.get('print_mark'):
+            touched.append(Touched('check_print_mark', header['id'], 'create', None, 1, document['print_mark'], db='company'))
         summaries.append(header['number'])
     touched.extend(Touched('transaction', after['id'], 'update', old['version'], after['version'],
                            after, old, db='company') for old, after in data['changed_headers'])
@@ -1108,6 +1154,8 @@ def apply(plan, ctx, s):
         if document.get('instrument'):
             # After the revision it hangs off exists, and with the chequebook pointer it moved.
             check_numbers.write(s, document['instrument'])
+        if document.get('print_mark'):
+            s.company.conn.execute(c.check_print_marks.insert().values(**document['print_mark']))
     for _, after in data['changed_headers']:
         s.company.conn.execute(c.transactions.update().where(
             c.transactions.c.id == after['id']).values(**after))

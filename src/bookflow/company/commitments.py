@@ -46,6 +46,7 @@ class OpenLine:
     open_base: int          # the same in the item's base unit
     open_net: int           # exact net of the open quantity, minor units
     unit_factor_nanounits: int
+    site_id: str | None = None   # the inventory site the line commits at; None is unassigned (R104)
 
 
 def _rows(s, as_of, items, document_ids, stocked_only=True, kinds=None):
@@ -69,7 +70,7 @@ def _rows(s, as_of, items, document_ids, stocked_only=True, kinds=None):
     query = f"""
         SELECT d.id AS document_id, d.kind, d.number, r.date, r.customer_id, r.id AS revision_id,
                l.line_id, l.position, l.item_id, l.quantity_microunits, l.cancelled_quantity_microunits,
-               l.unit_factor_nanounits, l.net_minor_units, l.id AS row_id,
+               l.unit_factor_nanounits, l.net_minor_units, l.id AS row_id, l.site_id,
                w.root_document_id, w.root_line_id
         FROM work_documents d
         JOIN work_revisions r ON r.id = d.current_revision_id
@@ -118,7 +119,8 @@ def open_lines(s, as_of=None, *, items=None, document_ids=None, keep_closed=Fals
         open_base = base_quantity(open_micro, row["unit_factor_nanounits"]) if open_micro > 0 else 0
         out.append(OpenLine(row["document_id"], row["kind"], row["number"], row["date"], row["customer_id"],
                             row["revision_id"], row["line_id"], row["position"], row["item_id"], quantity,
-                            invoiced, cancelled, remaining, open_base, open_net, row["unit_factor_nanounits"]))
+                            invoiced, cancelled, remaining, open_base, open_net, row["unit_factor_nanounits"],
+                            row["site_id"]))
     return out
 
 
@@ -130,6 +132,24 @@ def committed(s, as_of=None, *, items=None, excluding=None):
             continue
         result[line.item_id] = result.get(line.item_id, 0) + line.open_base
     return result
+
+
+def committed_by_site(s, as_of=None, *, items=None):
+    """Committed base quantity per ``(item_id, site_id)``; a line naming no site commits unassigned (None).
+
+    The company figure is unchanged: the sites plus unassigned sum to ``committed``.
+    """
+    result = {}
+    for line in open_lines(s, as_of, items=items):
+        key = (line.item_id, line.site_id)
+        result[key] = result.get(key, 0) + line.open_base
+    return result
+
+
+def for_assemblies_by_site(s, as_of=None):
+    """Components reserved for pending builds per ``(item_id, site_id)``, a build naming no site at the default."""
+    from bookflow.company import assembly_builds
+    return dict(assembly_builds.reserved_by_site(s, as_of=as_of))
 
 
 def committed_by(s, item_id, *, excluding=None):

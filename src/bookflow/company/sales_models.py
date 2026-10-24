@@ -152,12 +152,17 @@ class SalesLineInput(StrictModel):
         "off non-taxable sales, so a sale never shows negative tax."))
     refresh_defaults: bool = False
     use_defaults: list[SalesLineDefault] = Field(default_factory=list, max_length=7)
+    site: Selector | None = Field(default=None, description=(
+        "Inventory site a stocked line takes from (a sale), gives back to (a return) or commits at (an order), "
+        "by id or name. Omitted: the document's site, else the source line's, else the default site."))
 
     @model_serializer(mode="wrap")
     def legacy_line_request(self, handler):
         values = handler(self)
         if "percent" not in self.model_fields_set:
             values.pop("percent", None)
+        if "site" not in self.model_fields_set:
+            values.pop("site", None)
         return values
 
     @model_validator(mode="after")
@@ -188,8 +193,11 @@ class SalesFields(StrictModel):
         values = handler(self)
         if 'sales_tax_calculation' not in self.model_fields_set:
             values.pop('sales_tax_calculation', None)
+        if 'site' not in self.model_fields_set:
+            values.pop('site', None)
         return values
 
+    site: Selector | None = Field(None, description="Inventory site the stocked lines take from or give back to, by id or name, where a line names none; omitted, the default site.")
     sales_tax_calculation: Policy = Field(None, description="Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects")
     number: _Number | None = None
     memo: Text | None = None

@@ -125,7 +125,8 @@ def line_states(s, header, rev, *, pending_claims=(), released=(), closures=None
                      received_quantity_microunits=received + direct_quantity,
                      billed_quantity_microunits=direct_quantity + through.get(key, 0),
                      billed_amount_minor_units=direct_amount,
-                     closed=key in closed, measured='quantity' if quantity_line else 'amount')
+                     closed=key in closed, measured='quantity' if quantity_line else 'amount',
+                     site_id=line.get('site_id'))
         if whole or header['status'] == 'voided' or key in closed:
             state['open_quantity_microunits'] = 0 if quantity_line else None
             state['open_amount_minor_units'] = None if quantity_line else 0

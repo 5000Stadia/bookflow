@@ -870,6 +870,7 @@ The same example as complete `bookflow_run` arguments:
 | `items[].billable` | inside `--items` JSON array | boolean | no | no | false | — |
 | `items[].class_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
 | `items[].class_mode` | inside `--items` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `items[].site` | inside `--items` JSON array | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
 | `number` | `--number` | string \| null | no | yes | null | — |
 | `ap_account` | `--ap-account` | string \| null | no | yes | null | — |
 | `supplier_reference` | `--supplier-reference` | string \| null | no | yes | null | — |
@@ -3035,6 +3036,7 @@ The same example as complete `bookflow_run` arguments:
 | `items[].billable` | inside `--items` JSON array | boolean | no | no | false | — |
 | `items[].class_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
 | `items[].class_mode` | inside `--items` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `items[].site` | inside `--items` JSON array | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
 | `number` | `--number` | string \| null | no | yes | null | — |
 | `supplier_reference` | `--supplier-reference` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |

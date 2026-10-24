@@ -119,6 +119,7 @@ def create(folder: Path, *, company_id: str, display_name: str, created_by: dict
             src.backup(dst)
             dst.execute("PRAGMA journal_mode=DELETE")
         facts = check_database(snapshot, company_id=company_id)
+        _blank_copy_keys(snapshot)
         inspected = inspect(snapshot) if inspect is not None else None
         with closing(sqlite3.connect(sqlite_uri(snapshot, "ro"), uri=True)) as conn:
             bodies = sorted({(r[0], r[1]) for r in conn.execute(
@@ -172,6 +173,15 @@ def create(folder: Path, *, company_id: str, display_name: str, created_by: dict
     sha, size = _sha256_file(target)
     return {"manifest": manifest, "path": target, "file_name": target.name, "sha256": sha, "size_bytes": size,
             "inspected": inspected}
+
+
+def _blank_copy_keys(snapshot: Path) -> None:
+    """No backup carries an accountant's copy key (R121): whoever held one could sign change files for the
+    copy that is out. Books restored from it cannot verify that copy's file; the owner cancels and makes a new one."""
+    with closing(sqlite3.connect(sqlite_uri(snapshot, "rw"), uri=True)) as db:
+        if db.execute("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='accountant_copies'").fetchone():
+            db.execute("UPDATE accountant_copies SET mac_key=? WHERE side='owner'", ("0" * 64,))
+            db.commit()
 
 
 def read_manifest(archive: Path) -> dict[str, Any]:
