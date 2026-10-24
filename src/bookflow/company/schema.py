@@ -1213,3 +1213,5 @@ from bookflow.company.timekeeping_schema import define_tables as _define_timekee
 globals().update(_define_timekeeping_tables(metadata, _column, _table, _common))
 from bookflow.company.inventory_site_schema import define_tables as _define_inventory_site_tables
 globals().update(_define_inventory_site_tables(metadata, _column, _table, _common))
+from bookflow.company.accountant_review_schema import define_tables as _define_accountant_review_tables
+globals().update(_define_accountant_review_tables(metadata, _column, _table, _common))

@@ -34,6 +34,9 @@ def register(s: Session, *, company_id: str, organization_id: str, display_name:
            "schema_revision": schema_revision, "is_demo": is_demo, **common(s.actor.id, via)}
     s.hub.conn.execute(h.companies.insert().values(**row))
     touched = [Touched("company", company_id, "create", None, 1, row)]
+    # Restored or attached books may already name an external accountant (R121).
+    from bookflow.hub import company_accountants
+    company_accountants.register(s, company_id, s.abs_path(rel_path))
     if owner_membership or administrator_id is not None:
         m = {"id": new_id(), "user_id": administrator_id or s.actor.id, "scope_type": "company", "scope_id": company_id, "role": "admin" if administrator_id else "owner",
              "granted_by": s.actor.id, "granted_at": now_iso(), "revoked_at": None}
@@ -73,6 +76,9 @@ def delete_company_rows(s: Session, company_id: str) -> list[Touched]:
     s.hub.conn.execute(h.memberships.delete().where(h.memberships.c.scope_type == "company", h.memberships.c.scope_id == company_id))
     s.hub.conn.execute(h.companies.delete().where(h.companies.c.id == company_id))
     touched.append(Touched("company", company_id, "delete", row["version"], None, None, before=row))
+    # The hub's mirror of its external-accountant designations goes with it (R121).
+    s.hub.conn.execute(h.company_accountants.delete().where(h.company_accountants.c.company_id == company_id))
+    s.hub.conn.execute(h.company_accountant_sync.delete().where(h.company_accountant_sync.c.company_id == company_id))
     s.config.clear_default_everywhere({company_id})
     s.pending_config = True
     return touched

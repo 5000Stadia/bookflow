@@ -76,6 +76,7 @@ ACCEPTED = {
     'partial-po-v1': (622, '3655588af34a0376dddb2027c8e8669876525ff7cd92e915f2613191098940bb'),
     'timesheets-v1': (637, '05105fd69f67ec464bc21bbb42a91b26b18961f4630d21385f01a01d9d31e357'),
     'inventory-sites-v1': (650, '6b52f7a61a5e4cc9d7eee36318abb8803d39742e4fd2c4883394b4dd34b23529'),
+    'accountant-review-v1': (664, '1ee5b051d410ea9b481203ec6812a9bdd9b6784ededa18b6f02e25daa6b1eb21'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -163,6 +164,11 @@ CHAIN_ADDITIONS = {
                            'inventory-transfer history', 'inventory-transfer post', 'inventory-transfer query',
                            'inventory-transfer show', 'inventory-transfer update', 'inventory-transfer void',
                            'report quantity-by-site'},
+    'accountant-review-v1': {'accountant add', 'accountant list', 'accountant mark-entry', 'accountant reclassify',
+                             'accountant remove', 'accountant reviewed-through', 'accountant-copy cancel',
+                             'accountant-copy changes', 'accountant-copy export', 'accountant-copy import',
+                             'accountant-copy preview', 'accountant-copy status', 'report accountant-changes',
+                             'report accountant-review'},
 }
 
 _ANCESTOR_EDIT = """

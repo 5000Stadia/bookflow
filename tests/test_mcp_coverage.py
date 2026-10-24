@@ -64,7 +64,9 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +15 timekeeping (R106): timesheet show/copy-last/save/preferences/set-preferences, clock in/out/cancel/status/
     # link, schedule create/update/cancel/show/calendar.
     # +13 inventory-site, inventory-transfer and report quantity-by-site (R104 increment 1).
-    assert len(rows) == 652
+    # +14 accountant review (R121): accountant add/remove/list/reclassify/mark-entry/reviewed-through, accountant-copy
+    # export/status/cancel/changes/preview/import, report accountant-review and accountant-changes.
+    assert len(rows) == 666
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -300,7 +302,10 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # work lines, credit-memo lines, bill item lines shared by checks, card charges, vendor credits and receipts,
     # purchase-order lines and headers, inventory adjust, assembly build and update, item update's site_settings,
     # the stock reports' site filter, and report sales-by-item's site). No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==3549
+    # 3549 -> 3557 (R121), measured per command: accountant reclassify 3 (amount, date, memo), accountant add,
+    # mark-entry and reviewed-through 1 each (note), accountant-copy import 1 (changes), accountant-copy export 1 (accountant) -- their null branches.
+    # No existing command moved. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==3557
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

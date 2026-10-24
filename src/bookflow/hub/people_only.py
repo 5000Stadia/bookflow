@@ -27,6 +27,8 @@ ACT_SUBJECTS = {
     'account merge': 'Merging accounts', 'account unmerge': 'Undoing an account merge',
     'item merge': 'Merging items', 'item unmerge': 'Undoing an item merge',
     'clock link': "Linking a person's login to an employee",
+    'accountant add': 'Making someone the external accountant', 'accountant remove': 'Ending an external accountant designation',
+    'accountant-copy cancel': "Cancelling an accountant's copy", 'accountant-copy import': "Importing an accountant's changes",
 }
 
 
