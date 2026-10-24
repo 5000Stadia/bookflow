@@ -178,6 +178,9 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0083 = importlib.import_module("bookflow.storage.company_migrations.versions.0083_mileage")
 
     def older(conn):
+        for table in ("accountant_review_marks", "accountant_adjustments", "accountant_imports", "accountant_copies",
+                      "accountant_designations"):
+            conn.execute(f"DROP TABLE {table}")  # co0088's, with its index
         conn.execute("DROP TABLE purchase_coverage_links")  # co0087's, with its triggers
         conn.execute("ALTER TABLE company_info DROP COLUMN available_deducts_pending_builds")  # co0082's one column
         for table in ("price_rule_preferences", "price_rules"):

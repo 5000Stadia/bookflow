@@ -10,16 +10,16 @@
 <h2>Accountant's copy</h2>
 {% if status.restricted_to %}
 <p data-copy-side="accountant">These books are an <strong>accountant's copy</strong>. They take adjusting entries, reclassifications, review marks and notes dated on or before <strong>{{ status.restricted_to }}</strong>. When you are done, write the change file and send it to the owner.</p>
-{% if can_admin %}<form method="post" action="/c/{{ company_id }}/accountant"><label>Reason <input name="ctx:reason" placeholder="Q3 adjustments"></label>
+{% if can_admin %}<form method="post" action="/c/{{ company_id }}/accountant" hx-post="/c/{{ company_id }}/accountant" hx-target="body" hx-swap="outerHTML"><label>Reason <input name="ctx:reason" placeholder="Q3 adjustments"></label>
 <div class="actions"><button type="submit" name="action" value="changes" data-write-changes>Write the change file</button></div></form>{% endif %}
 {% elif cur %}
 <p data-copy-side="owner">A copy is <strong>out</strong> with dividing date <strong>{{ cur.dividing_date }}</strong> ({{ cur.file_name }}, made {{ cur.created_at[:10] }} by {{ cur.created_by_name }}). Until its changes come back, these books refuse changes dated on or before that date, account edits and list merges.</p>
-{% if can_admin %}<form method="post" action="/c/{{ company_id }}/accountant">
+{% if can_admin %}<form method="post" action="/c/{{ company_id }}/accountant" hx-post="/c/{{ company_id }}/accountant" hx-target="body" hx-swap="outerHTML">
 <label>Reason (needed to cancel) <input name="ctx:reason" placeholder="Accountant sent a list instead"></label>
 <div class="actions"><button type="submit" name="action" value="cancel" data-cancel-copy>Cancel the copy (remove restrictions)</button></div></form>{% endif %}
 {% else %}
 <p data-no-copy>No copy is out.</p>
-{% if can_admin %}<form method="post" action="/c/{{ company_id }}/accountant">
+{% if can_admin %}<form method="post" action="/c/{{ company_id }}/accountant" hx-post="/c/{{ company_id }}/accountant" hx-target="body" hx-swap="outerHTML">
 <label>Dividing date <input type="date" name="through" required></label>
 <label>Reason <input name="ctx:reason" placeholder="Year-end review"></label>
 <p class="muted">Your accountant works on or before the dividing date; you keep working after it.</p>
@@ -31,7 +31,7 @@
 {% if not status.restricted_to and can_admin %}
 <section class="workspace-card" aria-label="Import accountant's changes" data-import-changes>
 <h2>Import the accountant's changes</h2>
-<form method="post" action="/c/{{ company_id }}/accountant">
+<form method="post" action="/c/{{ company_id }}/accountant" hx-post="/c/{{ company_id }}/accountant" hx-target="body" hx-swap="outerHTML">
 <label>Change file (full path on this machine) <input name="file" value="{{ file }}" size="60" required></label>
 <div class="actions"><button type="submit" name="action" value="preview" data-preview-changes>Preview</button></div>
 {% if preview %}
@@ -55,7 +55,7 @@
 <section class="workspace-card" aria-label="Review checklist" data-review-checklist>
 <h2>Review checklist through {{ checklist.as_of }}</h2>
 <form method="get" action="/c/{{ company_id }}/accountant"><label>Through <input type="date" name="as_of" value="{{ as_of }}"></label> <button type="submit">Show</button></form>
-<ul class="checklist">{% for item in checklist['items'] %}<li data-check="{{ item.key }}">{{ '✓' if item.done else '○' }} <strong>{{ item.title }}</strong>: {{ item.detail }}</li>{% endfor %}</ul>
+<ul class="checklist" style="list-style:none;padding-left:0">{% for item in checklist['items'] %}<li data-check="{{ item.key }}">{{ '✓' if item.done else '○' }} <strong>{{ item.title }}</strong>: {{ item.detail }}</li>{% endfor %}</ul>
 {% if checklist.entries_to_review %}<p><a href="/c/{{ company_id }}/report/entries-to-review?as_of={{ checklist.as_of }}">Open the entries to review</a></p>{% endif %}
 <p class="muted">Changes an accountant made: {{ checklist.accountant_changes }} (<code>report accountant-changes</code>).</p>
 {% if accountants %}<p>External accountants: {% for a in accountants %}{{ a.display_name or a.username }} (through {{ a.through }}){% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}

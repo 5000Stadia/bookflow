@@ -16,6 +16,8 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 
 - [`account`](cli/account.md)
 - [`account query`](cli/account-query.md)
+- [`accountant`](cli/accountant.md)
+- [`accountant-copy`](cli/accountant-copy.md)
 - [`activity`](cli/activity.md)
 - [`agent`](cli/agent.md)
 - [`application`](cli/application.md)
@@ -137,6 +139,11 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 
 ## Schema reference
 
+- [`company/accountant_adjustments`](schema/company/accountant_adjustments.md)
+- [`company/accountant_copies`](schema/company/accountant_copies.md)
+- [`company/accountant_designations`](schema/company/accountant_designations.md)
+- [`company/accountant_imports`](schema/company/accountant_imports.md)
+- [`company/accountant_review_marks`](schema/company/accountant_review_marks.md)
 - [`company/accounts`](schema/company/accounts.md)
 - [`company/ap_applications`](schema/company/ap_applications.md)
 - [`company/ap_obligation_components`](schema/company/ap_obligation_components.md)
