@@ -76,6 +76,7 @@ ACCEPTED = {
     'partial-po-v1': (622, '3655588af34a0376dddb2027c8e8669876525ff7cd92e915f2613191098940bb'),
     'timesheets-v1': (637, '05105fd69f67ec464bc21bbb42a91b26b18961f4630d21385f01a01d9d31e357'),
     'inventory-sites-v1': (650, '6b52f7a61a5e4cc9d7eee36318abb8803d39742e4fd2c4883394b4dd34b23529'),
+    'inventory-counts-v1': (660, '1e8caad163175a4b854b0e43ae4bedbb30ff2c0391751ed89ffd40b4566e8689'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -163,6 +164,10 @@ CHAIN_ADDITIONS = {
                            'inventory-transfer history', 'inventory-transfer post', 'inventory-transfer query',
                            'inventory-transfer show', 'inventory-transfer update', 'inventory-transfer void',
                            'report quantity-by-site'},
+    'inventory-counts-v1': {'inventory-count cancel', 'inventory-count create', 'inventory-count enter',
+                            'inventory-count post', 'inventory-count query', 'inventory-count sheet',
+                            'inventory-count show', 'inventory-count void', 'report inventory-valuation-detail',
+                            'report physical-inventory-worksheet'},
 }
 
 _ANCESTOR_EDIT = """

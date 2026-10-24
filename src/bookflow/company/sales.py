@@ -851,7 +851,8 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
     stock = inventory_effects.plan(
         s, entries=[] if operation == 'void' else _stock_entries(pending, resolved['lines'] if resolved else None),
         reversing=inventory_effects.own_movements(s, old_header['id']) if old_header else (),
-        date=revision['date'], currency=revision['currency'])
+        date=revision['date'], currency=revision['currency'],
+        count_position=getattr(inp, 'count_position', None) or 'before')
     inventory_effects.open_dates(s, stock)
     current_batch = None
     if old_header:

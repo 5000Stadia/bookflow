@@ -150,6 +150,7 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.PARTIAL_PO_POLICY_VERSION: '3655588af34a0376dddb2027c8e8669876525ff7cd92e915f2613191098940bb',
     c.TIMESHEETS_POLICY_VERSION: '05105fd69f67ec464bc21bbb42a91b26b18961f4630d21385f01a01d9d31e357',
     c.INVENTORY_SITES_POLICY_VERSION: '6b52f7a61a5e4cc9d7eee36318abb8803d39742e4fd2c4883394b4dd34b23529',
+    c.INVENTORY_COUNTS_POLICY_VERSION: '1e8caad163175a4b854b0e43ae4bedbb30ff2c0391751ed89ffd40b4566e8689',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -275,6 +276,7 @@ def known_catalog(version):
     from . import permission_partial_po_catalog
     from . import permission_timesheets_catalog
     from . import permission_inventory_sites_catalog
+    from . import permission_inventory_counts_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
         c.SETUP_POLICY_VERSION: permission_setup_catalog,
@@ -326,6 +328,7 @@ def known_catalog(version):
         c.PARTIAL_PO_POLICY_VERSION: permission_partial_po_catalog,
         c.TIMESHEETS_POLICY_VERSION: permission_timesheets_catalog,
         c.INVENTORY_SITES_POLICY_VERSION: permission_inventory_sites_catalog,
+        c.INVENTORY_COUNTS_POLICY_VERSION: permission_inventory_counts_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is
     # a handful of string comparisons, once per process, and no descriptor is hashed for
@@ -336,7 +339,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.INVENTORY_SITES_POLICY_VERSION)
+    return known_catalog(c.INVENTORY_COUNTS_POLICY_VERSION)
 
 
 def catalog_for_root(tx):

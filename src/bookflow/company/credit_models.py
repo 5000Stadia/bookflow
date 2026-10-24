@@ -98,8 +98,11 @@ class _CreditMemoFields(StrictModel):
         values = handler(self)
         if "sales_tax_calculation" not in self.model_fields_set:
             values.pop("sales_tax_calculation", None)
+        if "count_position" not in self.model_fields_set:
+            values.pop("count_position", None)
         return values
 
+    count_position: Literal["before", "after"] | None = Field(None, description="Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after.")
     date: _Date | None = Field(default=None, description="Accounting date. Omitted, it is today in the company's timezone.")
     customer: Selector
     lines: CreditLines

@@ -199,7 +199,8 @@ def replay_items(s, working, load, refuse):
                 sequence=0, currency=receipt['currency'], asset_account_id=receipt['asset_account_id'],
                 offset_account_id=receipt['offset_account_id'], class_id=receipt['class_id'],
                 corrects_movement_id=receipt['id'], reverses_movement_id=None, returns_movement_id=None,
-                filled_by_movement_id=None, fallback_unit_cost_minor_units=None)
+                filled_by_movement_id=None, fallback_unit_cost_minor_units=None,
+                count_position=receipt.get('count_position') or 'before')
             load(receipt['item_id']).append(partner)
             partners[target['id']] = partner
             waiting.add(receipt['item_id'])

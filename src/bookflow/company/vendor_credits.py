@@ -930,7 +930,8 @@ def _compose(s, ctx, inp, resolved, previous=None):
     stock = inventory_effects.plan(
         s, entries=_stock_entries(pending, profile, resolved['lines']),
         reversing=inventory_effects.own_movements(s, old_header['id']) if previous else (),
-        date=revision['date'], currency=currency, field='items')
+        date=revision['date'], currency=currency, field='items',
+        count_position=getattr(inp, 'count_position', None) or 'before')
     inventory_effects.open_dates(s, stock)
     old_batch = source_key = None
     if previous:

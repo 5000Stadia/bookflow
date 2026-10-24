@@ -1523,3 +1523,30 @@ EXAMPLES.update({
     'report quantity-by-site': Example('bookflow report quantity-by-site --as-of 2026-12-31 --site "Van 1"' + _C + ' --json',
                                        {'as_of': '2026-12-31', 'site': 'Van 1'}),
 })
+# Physical counts (R104 increment 2).
+EXAMPLES.update({
+    'inventory-count create': Example('bookflow inventory-count create --site "Van 1"' + _C
+                                      + ' --reason "Monday van count" --json', {'site': 'Van 1'}),
+    'inventory-count enter': Example(
+        'bookflow inventory-count enter C-1 --entries \'[{"item":"Widget","quantity":"12"}]\'' + _C
+        + ' --reason "Counted the van" --json', {'count': 'C-1', 'entries': [{'item': 'Widget', 'quantity': '12'}]}),
+    'inventory-count post': Example(
+        'bookflow inventory-count post C-1 --expected-version 1 --adjustment-account "Cost of Goods Sold"'
+        ' --preview-fingerprint 0f3c9a1e5b7d2c4e6a8b0d1f3e5c7a9b' + _C + ' --reason "Van count" --json',
+        {'count': 'C-1', 'expected_version': 1, 'adjustment_account': 'Cost of Goods Sold',
+         'preview_fingerprint': '0f3c9a1e5b7d2c4e6a8b0d1f3e5c7a9b'}),
+    'inventory-count cancel': Example('bookflow inventory-count cancel C-1 --expected-version 1' + _C
+                                      + ' --reason "Not today" --json', {'count': 'C-1', 'expected_version': 1}),
+    'inventory-count void': Example('bookflow inventory-count void C-1 --expected-version 2' + _C
+                                    + ' --reason "Counted the wrong van" --json', {'count': 'C-1', 'expected_version': 2}),
+    'inventory-count show': Example('bookflow inventory-count show C-1' + _C + ' --json', {'count': 'C-1'}),
+    'inventory-count sheet': Example('bookflow inventory-count sheet C-1' + _C + ' --json', {'count': 'C-1'}),
+    'inventory-count query': Example('bookflow inventory-count query --site "Van 1" --status recorded' + _C + ' --json',
+                                     {'site': 'Van 1', 'status': 'recorded'}),
+    'report physical-inventory-worksheet': Example(
+        'bookflow report physical-inventory-worksheet --as-of 2026-12-31 --site "Van 1"' + _C + ' --json',
+        {'as_of': '2026-12-31', 'site': 'Van 1'}),
+    'report inventory-valuation-detail': Example(
+        'bookflow report inventory-valuation-detail --date-from 2026-12-01 --date-to 2026-12-31' + _C + ' --json',
+        {'date_from': '2026-12-01', 'date_to': '2026-12-31'}),
+})

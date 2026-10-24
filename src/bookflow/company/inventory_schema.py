@@ -65,15 +65,30 @@ cannot say which, and a stored kind is the only thing that can be right.
 
 import sqlalchemy as sa
 
-# The documents that write movements, in their stored spelling.
-DOCUMENT_KINDS = ('adjustment', 'recost')
+# The documents that write movements, in their stored spelling. ``count`` is a physical count's
+# posted difference (R104 increment 2); ``landed_cost`` is reserved for increment 6.
+DOCUMENT_KINDS = ('adjustment', 'recost', 'count', 'landed_cost')
 
-# The movement kinds. ``INPUT_KINDS`` is what a replay walks; the other two are produced by
+# The movement kinds. ``INPUT_KINDS`` is what a replay walks; the derived two are produced by
 # replay or by a void and are never re-read as new stock activity. Anything that needs "every
 # movement kind" derives it from here rather than writing the words again.
-INPUT_KINDS = ('receipt', 'issue', 'value', 'vendor_return')
+#
+# ``found`` (R104 increment 2) is quantity in whose value is an *output* of costing, as an issue's
+# is: the running average at its position, else the last average, else the purchase cost captured
+# on it, else zero. So a purchase later backdated in front of it recosts it. ``landed`` is reserved
+# for landed cost (increment 6): the kind is admitted by the table now, so the table is rebuilt once,
+# but replay does not walk it yet.
+INPUT_KINDS = ('receipt', 'issue', 'value', 'vendor_return', 'found')
+RESERVED_KINDS = ('landed',)
 DERIVED_KINDS = ('recost', 'reversal')
-MOVEMENT_KINDS = INPUT_KINDS + DERIVED_KINDS
+MOVEMENT_KINDS = INPUT_KINDS + RESERVED_KINDS + DERIVED_KINDS
+
+# Where a movement sits against that date's physical counts (R104 increment 2). Replay orders by
+# date, then this rank, then sequence: a document placed ``before`` the counts (the default, and
+# every row written before counts existed), the counts' own differences, then documents stated
+# ``after``. So paperwork entered at nine for jobs done before a four o'clock count lands before it.
+COUNT_POSITIONS = ('before', 'count', 'after')
+POSITION_RANK = {position: rank for rank, position in enumerate(COUNT_POSITIONS)}
 
 
 def define_tables(metadata, column, table):
@@ -98,7 +113,7 @@ def define_tables(metadata, column, table):
         C('document_line_id', sa.String(26), 'Entered line this movement is attributed to.', nullable=False),
         C('effective_date', sa.String(10), 'Accounting date reports value this movement on.', nullable=False),
         C('sequence', sa.BigInteger, 'Company-wide recorded order; decides same-day replay order.', nullable=False),
-        C('kind', sa.String(16), 'Movement kind: receipt, issue, value, vendor_return, recost or reversal.', nullable=False),
+        C('kind', sa.String(16), 'Movement kind: receipt, issue, value, vendor_return, found, landed, recost or reversal.', nullable=False),
         C('quantity_microunits', sa.BigInteger, 'Signed quantity change in micro-units.', nullable=False),
         C('value_minor_units', sa.BigInteger, 'Signed inventory asset value change in minor units.', nullable=False),
         C('currency', sa.String(3), 'Home currency of this movement value.', nullable=False),
@@ -110,9 +125,12 @@ def define_tables(metadata, column, table):
           sa.ForeignKey('classes.id'), nullable=True),
         C('corrects_movement_id', sa.String(26), 'Issue whose effective cost this delta corrects; null except on recost.', nullable=True),
         C('reverses_movement_id', sa.String(26), 'Movement this row exactly retires; null except on reversal.', nullable=True),
-        C('returns_movement_id', sa.String(26), 'Issue this receipt gives back; null except on a return.', nullable=True),
+        C('returns_movement_id', sa.String(26), 'Issue this receipt gives back, or receipt this vendor return sends back; null otherwise.', nullable=True),
         C('filled_by_movement_id', sa.String(26), 'Receipt whose arrival trued up the provisional cost of the issue this recost corrects; null except on a true-up.', nullable=True),
-        C('fallback_unit_cost_minor_units', sa.BigInteger, "Item purchase cost per base unit captured when this issue was recorded, the provisional cost if the item has never held stock; null except on an issue.", nullable=True),
+        C('fallback_unit_cost_minor_units', sa.BigInteger, "Item purchase cost per base unit captured when this issue or found quantity was recorded, its cost if the item has never held stock; null except on an issue or a found quantity.", nullable=True),
+        C('count_position', sa.String(8), "Where the movement sits against its date's physical counts: before (the default), count (a count's own difference) or after.",
+          nullable=False, default='before', server_default='before'),
+        C('landed_on_movement_id', sa.String(26), 'Receipt a landed cost is allocated to; null except on a landed movement (reserved for landed cost).', nullable=True),
         sa.ForeignKeyConstraint(['transaction_id', 'posting_batch_id'],
                                 ['posting_batches.transaction_id', 'posting_batches.id'],
                                 name='fk_inventory_movement_batch'),
@@ -130,6 +148,8 @@ def define_tables(metadata, column, table):
                                 name='fk_inventory_movement_returns'),
         sa.ForeignKeyConstraint(['filled_by_movement_id'], ['inventory_movements.id'],
                                 name='fk_inventory_movement_filled_by'),
+        sa.ForeignKeyConstraint(['landed_on_movement_id'], ['inventory_movements.id'],
+                                name='fk_inventory_movement_landed_on'),
         # One movement per asset posting line, both ways. Without the first half a movement
         # could claim a line already claimed and double the asset; without the second the
         # report total and the balance sheet would disagree with nothing to point at.
@@ -154,19 +174,28 @@ def define_tables(metadata, column, table):
             "AND corrects_movement_id IS NULL AND reverses_movement_id IS NULL) OR "
             "(kind = 'vendor_return' AND quantity_microunits < 0 AND value_minor_units <= 0 "
             "AND corrects_movement_id IS NULL AND reverses_movement_id IS NULL) OR "
+            "(kind = 'found' AND quantity_microunits > 0 AND value_minor_units >= 0 "
+            "AND corrects_movement_id IS NULL AND reverses_movement_id IS NULL) OR "
+            "(kind = 'landed' AND quantity_microunits = 0 AND value_minor_units != 0 "
+            "AND corrects_movement_id IS NULL AND reverses_movement_id IS NULL) OR "
             "(kind = 'recost' AND quantity_microunits = 0 AND value_minor_units != 0 "
             "AND corrects_movement_id IS NOT NULL AND reverses_movement_id IS NULL) OR "
             "(kind = 'reversal' AND reverses_movement_id IS NOT NULL AND corrects_movement_id IS NULL "
             "AND (quantity_microunits != 0 OR value_minor_units != 0))",
             name='ck_inventory_movement_shape'),
         sa.Index('ix_inventory_movements_item', 'item_id', 'effective_date', 'sequence', 'id'),
-        # Only a receipt gives stock back, so only a receipt names the issue it mirrors.
-        sa.CheckConstraint("returns_movement_id IS NULL OR kind = 'receipt'",
+        # A receipt names the issue it gives back; a vendor return may name the receipt it sends
+        # back (reserved for FIFO, increment 7).
+        sa.CheckConstraint("returns_movement_id IS NULL OR kind IN ('receipt', 'vendor_return')",
                            name='ck_inventory_movement_returns_kind'),
+        sa.CheckConstraint("landed_on_movement_id IS NULL OR kind = 'landed'",
+                           name='ck_inventory_movement_landed_kind'),
+        sa.CheckConstraint(f'count_position IN ({quoted(COUNT_POSITIONS)})',
+                           name='ck_inventory_movement_count_position'),
         # A true-up is a recost, and only an issue captures a fallback cost to be provisional at.
         sa.CheckConstraint("filled_by_movement_id IS NULL OR kind = 'recost'",
                            name='ck_inventory_movement_filled_by_kind'),
-        sa.CheckConstraint("fallback_unit_cost_minor_units IS NULL OR (kind = 'issue' "
+        sa.CheckConstraint("fallback_unit_cost_minor_units IS NULL OR (kind IN ('issue', 'found') "
                            "AND typeof(fallback_unit_cost_minor_units) = 'integer' "
                            "AND fallback_unit_cost_minor_units >= 0)",
                            name='ck_inventory_movement_fallback_cost'),
@@ -180,7 +209,7 @@ def define_tables(metadata, column, table):
         C('transaction_id', sa.String(26), 'The posted journal entry this inventory document was written as.',
           primary_key=True),
         C('type', sa.String(32), 'Transaction type of the marked document; always journal_entry.', nullable=False),
-        C('kind', sa.String(16), 'Document a person or the recalculation wrote: adjustment or recost.', nullable=False),
+        C('kind', sa.String(16), 'Document a person or the recalculation wrote: adjustment, recost, count or landed_cost.', nullable=False),
         C('created_at', sa.String(32), 'UTC time this document marker was written.', nullable=False),
         C('created_by', sa.String(26), 'Company principal the document is attributed to.', nullable=False),
         C('created_via', sa.String(16), 'Interface the document was written through.', nullable=False),

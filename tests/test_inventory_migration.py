@@ -167,6 +167,12 @@ def test_the_guards_refuse_an_unmatched_or_mutated_movement(tmp_path):
                    corrects_movement_id=None, reverses_movement_id=None)
         columns = ", ".join(row)
         placeholders = ", ".join("?" for _ in row)
+        # Placed first, as every writer places a movement (co0089), so the guard under test is the
+        # one that answers.
+        conn.execute("INSERT INTO inventory_placements (id, item_id, site_id, quantity_microunits, effective_date, "
+                     "count_position, sequence, source, movement_id, created_at, created_by, created_via, audit_event_id) "
+                     "VALUES ('01ARZ3NDEKTSV4RRFFQ69G5FAW', ?, (SELECT id FROM inventory_sites), 1, '2026-01-01', "
+                     "'before', 1, 'movement', ?, 'x', 'y', 'cli', 'z')", (row['item_id'], row['id']))
         # co0046 rewrote this guard's message when zero-value movements arrived.
         with pytest.raises(sqlite3.IntegrityError, match="does not match its"):
             conn.execute(f"INSERT INTO inventory_movements ({columns}) VALUES ({placeholders})",

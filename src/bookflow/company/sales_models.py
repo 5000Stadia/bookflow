@@ -170,9 +170,12 @@ class SalesFields(StrictModel):
             values.pop('sales_tax_calculation', None)
         if 'site' not in self.model_fields_set:
             values.pop('site', None)
+        if 'count_position' not in self.model_fields_set:
+            values.pop('count_position', None)
         return values
 
     site: Selector | None = Field(None, description="Inventory site the stocked lines take from or give back to, by id or name, where a line names none; omitted, the default site.")
+    count_position: Literal['before', 'after'] | None = Field(None, description="Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after.")
     sales_tax_calculation: Policy = Field(None, description="Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects")
     number: _Number | None = None
     memo: Text | None = None

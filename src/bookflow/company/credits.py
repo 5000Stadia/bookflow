@@ -623,7 +623,7 @@ def prepare(s, ctx, inp, *, previous=None):
     stock = inventory_effects.plan(
         s, entries=_stock_entries(s, resolved['lines'], date=resolved['date']),
         reversing=inventory_effects.own_movements(s, header['id']) if previous else (),
-        date=resolved['date'], currency=currency)
+        date=resolved['date'], currency=currency, count_position=getattr(inp, 'count_position', None) or 'before')
     inventory_effects.open_dates(s, stock)
     old_batch = None
     if previous:

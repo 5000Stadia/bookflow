@@ -713,6 +713,40 @@ jobs at night; the van ends as counted.
   stock left; discounts and other adjusting lines are not split by site.
 - Transfer lines are in base units; moving between bins of one site waits for bins (increment 5).
 
+## As built: increment 2
+
+- **The count's own position is `count`.** Movements and placements carry `count_position` `before`, `count`
+  or `after`; a count's differences sit at `count`, between that date's documents placed before it and those
+  stated after. Replay orders by date, this rank, then sequence. Every stored row is `before`.
+- **One standing journal entry per count.** A count posts its differences in one journal entry marked
+  `count`. Deriving it again corrects that entry by a new revision (its old movements reversed exactly in its
+  own transaction, every counted item restated at the count's date and position), as a sale's correction
+  does; a count left with no difference voids its entry, and a later difference posts a new one. So "reverses
+  that loss" is exact, not a found quantity at a rounded average. Voiding a count voids its entry.
+- **Re-derivation runs inside every company write.** Dispatch takes the stock sequence before a command
+  applies and, after it, derives again every recorded count whose site and items the command's placements
+  reached on or before its date (`inventory_counts.settle_in_command`), in date order so a re-derived count
+  reaches a later one. The result says "Placed before count C-3 of Van 1 on ..." and "Count C-3 ... was
+  derived again". A dry run does not show the re-derivation; the saved result does.
+- **`count_position` on documents.** Invoices, sales receipts, credit memos, bills, item receipts, vendor
+  credits, transfers and `inventory adjust` take it; checks, card charges and assembly builds place before
+  (their headers gained no field). A correction that changes only `count_position` is not seen as a change.
+- **A count line is the item at the site, unassigned,** until bins, lots and serial numbers arrive; `bins`,
+  `cycle` and place fields on entries are refused with that said. Lines and placements already carry bin, lot
+  and serial columns, and a count whose places cancel moves stock by placements alone.
+- **Two counts of one place on one date** cannot both be recorded; the second is refused naming the first.
+- **Differences worth nothing** (an item with no average and no purchase cost) cannot post, since Bookflow
+  posts no zero-amount entry; the post is refused naming the count.
+- **Permissions:** create, enter and cancel are `item` (standard), post and void `ledger.post` (standard);
+  reads are `item` member and the two reports `reports` member (layer `inventory-counts-v1`).
+- **`inventory adjust`**: `lines` (1-200) with `new_quantity` (the quantity at the line's site on the date,
+  before any count that day) and `new_value` (the item's whole value on the date); a line already holding
+  what it says is skipped. An increase with no value is `found`; its basis (average, purchase cost or none)
+  is on each line of the result.
+- **Entries resolve `code` by `items.barcode`** only; the full barcode lookup is increment 3.
+- **The count screen's keypad is the phone's number keypad** (`inputmode="decimal"`), and the item field is
+  pinned on top; scanning proper (Enter as look-up) is increment 3.
+
 ## 10. Open questions
 
 Each default stands if nobody decides.

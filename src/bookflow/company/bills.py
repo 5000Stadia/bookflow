@@ -1316,7 +1316,8 @@ def prepare(s, ctx, inp, operation):
         s, entries=[] if operation == 'void' or received else _stock_entries(
             pending, resolved['profile'], resolved['lines'], _header_site(s, inp)),
         reversing=inventory_effects.own_movements(s, old_header['id']) if old_header else (),
-        date=revision['date'], currency=revision['currency'], field='items')
+        date=revision['date'], currency=revision['currency'], field='items',
+        count_position=getattr(inp, 'count_position', None) or 'before')
     inventory_effects.open_dates(s, stock)
 
     current_batch = None

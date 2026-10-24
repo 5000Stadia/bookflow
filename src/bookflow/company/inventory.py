@@ -54,7 +54,8 @@ from bookflow.company import accounts, items as item_service, journals, list_ser
 from bookflow.company.document_effects import allocate
 from bookflow.company.inventory_costing import StockRefusal, replay, shortfall_warning
 from bookflow.company.inventory_models import (
-    InventoryAdjustmentSummary, InventoryCorrectionOutput, InventoryOutput, InventoryWriteOutput,
+    InventoryAdjustmentLineSummary, InventoryAdjustmentSummary, InventoryCorrectionOutput, InventoryOutput,
+    InventoryWriteOutput,
 )
 from bookflow.company.inventory_schema import INPUT_KINDS
 from bookflow.company.journal_models import (
@@ -153,10 +154,15 @@ def owning_document_kind(s, transaction_id):
 
 @dataclass
 class _Movement:
-    """A movement waiting for the posting-line identities its document has not minted yet."""
+    """A movement waiting for the posting-line identities its document has not minted yet.
+
+    ``line_index`` is the 1-based entered-line position of its asset line, or None for a movement
+    worth nothing, which carries no posting line and hangs off the document's first entered line
+    (R104 increment 2: a line worth nothing moves quantity with no journal lines).
+    """
 
     values: dict
-    line_index: int                       # 1-based entered-line position of its asset line
+    line_index: int | None = None
     reverses_line_id: str | None = None   # on a void, the original asset posting line
 
 
@@ -167,6 +173,19 @@ class _Document:
     kind: str
     movements: list[_Movement] = field(default_factory=list)
     journal_date: str | None = None   # a void carries the date of what it reverses
+    extra_placements: list = field(default_factory=list)   # a count's own, moving no quantity
+    after_persist: object = None      # callback(fresh, rows, provenance) -> extra persist entries
+    reason: str | None = None         # a generated void's reason, when the caller gave none
+
+
+@dataclass
+class _Line:
+    """One adjusted line, as written: what moved, where, and on which basis it was valued."""
+
+    item: dict
+    movement_id: str
+    site_id: str | None
+    basis: str
 
 
 @dataclass
@@ -182,6 +201,10 @@ class _Change:
     offset_account_id: str = ''
     warnings: list = field(default_factory=list)
     sites: dict = field(default_factory=dict)   # movement id -> inventory site (R104)
+    items: dict = field(default_factory=dict)   # item id -> item, every item this change moves
+    states: dict = field(default_factory=dict)  # item id -> its replay with this change
+    lines: list = field(default_factory=list)   # _Line per adjusted line
+    placements: list = field(default_factory=list)  # planned placements for its own movements
 
 
 def _warnings(item, history, state, own):
@@ -194,6 +217,13 @@ def _warnings(item, history, state, own):
         before = set()
     return [shortfall_warning(item['full_name'], shortfall) for shortfall in state.shortfalls
             if shortfall.movement['id'] in own or shortfall.movement['id'] not in before]
+
+
+def found_warnings(item, state, own):
+    """A found quantity valued at nothing says so: no average, no last average, no purchase cost."""
+    return [f'{item["full_name"]}: the units found on {found.movement["effective_date"]} are valued at zero, '
+            'because the item has no average cost and no purchase cost; a later receipt does not revalue them.'
+            for found in state.found if found.movement['id'] in own and found.basis == 'none']
 
 
 def _home(s):
@@ -209,31 +239,32 @@ def next_sequence(s):
     return max(moved, placed) + 1
 
 
-def _tracked_item(s, selector):
+def _tracked_item(s, selector, field_name='item'):
     item = item_service.resolve_item(s.company, selector)
     if item['type'] not in TRACKED_TYPES:
         readable = ' and '.join(name.replace('_', ' ') for name in TRACKED_TYPES)
-        raise invalid('item', f'a {item["type"].replace("_", " ")} item carries no stock; only '
-                              f'{readable} items have a quantity and a value to adjust')
+        raise invalid(field_name, f'a {item["type"].replace("_", " ")} item carries no stock; only '
+                                  f'{readable} items have a quantity and a value to adjust')
     if not item['active']:
-        raise BookflowError('E_INACTIVE_REFERENCE', details={'record_type': 'item', 'record_id': item['id']})
+        raise BookflowError('E_INACTIVE_REFERENCE', details={'record_type': 'item', 'record_id': item['id'],
+                                                             'field': field_name})
     return item
 
 
-def _asset_account(s, item):
+def _asset_account(s, item, field_name='item'):
     if item['asset_account_id'] is None:
-        raise invalid('item', 'this item has no inventory-asset account')
+        raise invalid(field_name, 'this item has no inventory-asset account')
     row = accounts.resolve_account(s.company, item['asset_account_id'])
     if row.get('system_role') != ASSET_ROLE:
-        raise invalid('item', "this item's asset account is not the inventory-asset account")
+        raise invalid(field_name, "this item's asset account is not the inventory-asset account")
     return journals.active(row, 'account')
 
 
-def _offset_account(s, selector, asset):
+def offset_account(s, selector, asset_id=None):
     row = journals.active(accounts.resolve_account(s.company, selector), 'account')
     if row['type'] == 'non_posting':
         raise invalid('adjustment_account', 'must be a posting account')
-    if row['id'] == asset['id']:
+    if row['id'] == asset_id or row.get('system_role') == ASSET_ROLE:
         raise invalid('adjustment_account', 'the other side of an inventory adjustment cannot be '
                                             'the inventory-asset account itself')
     if row.get('system_role') in journals.OWNED_SYSTEM_ROLES:
@@ -242,7 +273,7 @@ def _offset_account(s, selector, asset):
     return row
 
 
-def _class_row(s, class_id):
+def class_row(s, class_id):
     if class_id is None:
         return None
     from bookflow.company.lists import get_list_definition
@@ -287,64 +318,164 @@ def refuse_stock(refusal, item, *, quantity_field='quantity_change', value_field
         details={'fields': [{'field': value_field, 'problem': problem}], **details})
 
 
-def _adjustment_change(s, ctx, inp, currency, sequence):
-    """The adjustment document and its one movement, with the value the average decides."""
-    item = _tracked_item(s, inp.item)
-    from bookflow.company import item_conversions
-    item_conversions.require_stock_date(s, item['id'], item['full_name'], inp.date, 'date')
-    asset = _asset_account(s, item)
-    offset = _offset_account(s, inp.adjustment_account, asset)
-    klass = _class_row(s, inp.class_id)
-    quantity = 0 if inp.quantity_change is None else parse_quantity_micro_units(
-        inp.quantity_change, field='quantity_change')
-    stated = None
-    if inp.value_change is not None:
-        stated = parse_domestic_amount(inp.value_change, currency, 'value_change').minor_units
-        if inp.negative_value:
-            stated = -stated
-    history = movements(s, item_id=item['id'])
-    identity = new_id()
-    kind = 'receipt' if quantity > 0 else 'issue' if quantity < 0 else 'value'
-    proposed = dict(id=identity, kind=kind, quantity_microunits=quantity,
-                    value_minor_units=stated if stated is not None else -1,
-                    effective_date=inp.date, sequence=sequence,
-                    corrects_movement_id=None, reverses_movement_id=None,
-                    returns_movement_id=None, filled_by_movement_id=None,
-                    fallback_unit_cost_minor_units=(fallback_cost(s, item['id'], currency)
-                                                    if kind == 'issue' else None))
-    if kind == 'issue':
-        # What it is worth is the average's answer, not the caller's, so the value is read off
-        # a first replay and written back before the corrections are worked out.
+def value_at(rows, date):
+    """An item's replayed value on ``date``: every movement dated by then, corrections included."""
+    return sum(int(row['value_minor_units']) for row in rows if row['effective_date'] <= date)
+
+
+def movement_values(*, item_id, kind, quantity, value, date, sequence, currency, asset_id, offset_id, class_id,
+                    position='before', fallback=None):
+    """A new input movement's columns, before its document gives it posting identities."""
+    return dict(id=new_id(), item_id=item_id, kind=kind, quantity_microunits=quantity, value_minor_units=value,
+                effective_date=date, sequence=sequence, currency=currency, asset_account_id=asset_id,
+                offset_account_id=offset_id, class_id=class_id, corrects_movement_id=None,
+                reverses_movement_id=None, returns_movement_id=None, filled_by_movement_id=None,
+                fallback_unit_cost_minor_units=fallback, count_position=position)
+
+
+def reversal_values(row, sequence):
+    """The exact inverse of one stored movement, at its own date and position."""
+    return dict(id=new_id(), kind='reversal', item_id=row['item_id'],
+                quantity_microunits=-int(row['quantity_microunits']),
+                value_minor_units=-int(row['value_minor_units']),
+                effective_date=row['effective_date'], sequence=sequence,
+                currency=row['currency'], asset_account_id=row['asset_account_id'],
+                offset_account_id=row['offset_account_id'], class_id=row['class_id'],
+                corrects_movement_id=None, reverses_movement_id=row['id'], returns_movement_id=None,
+                filled_by_movement_id=None, fallback_unit_cost_minor_units=None,
+                count_position=row.get('count_position') or 'before',
+                revision_id=row['revision_id'], document_line_id=row['document_line_id'])
+
+
+def value_movements(s, planned, items, refuse):
+    """Write each costed movement's value back from replay: an issue's and a found quantity's.
+
+    ``planned`` are new movements in write order; each item is replayed with what came before it,
+    so a second line of one item sees the first. Returns ``{item_id: replay}`` with all of them.
+    """
+    working = {}
+    states = {}
+    for values in planned:
+        item_id = values['item_id']
+        if item_id not in working:
+            working[item_id] = movements(s, item_id=item_id)
+        if values['kind'] in ('issue', 'found'):
+            try:
+                values['value_minor_units'] = replay(working[item_id] + [values]).targets[values['id']]
+            except StockRefusal as refusal:
+                raise refuse(refusal, items[item_id]) from None
+        working[item_id].append(values)
+    for item_id, rows in working.items():
         try:
-            proposed['value_minor_units'] = replay(history + [proposed]).targets[identity]
+            states[item_id] = replay(rows)
         except StockRefusal as refusal:
-            raise refuse_stock(refusal, item) from None
-    if proposed['value_minor_units'] == 0:
-        raise invalid('quantity_change' if kind == 'issue' else 'value_change',
+            raise refuse(refusal, items[item_id]) from None
+    return working, states
+
+
+def _adjustment_change(s, ctx, inp, currency, sequence):
+    """The adjustment document and its movements, one per line, with the values the average decides."""
+    from bookflow.company import item_conversions
+    lines = inp.entered_lines()
+    many = inp.lines is not None
+    header_site = placements.site_id_for(s, inp.site)
+    header_class = class_row(s, inp.class_id)
+    offset = None
+    position = getattr(inp, 'count_position', None) or 'before'
+    items, planned, written = {}, [], []
+    held_cache = {}
+    histories = {}
+    for index, line in enumerate(lines):
+        prefix = f'lines.{index}.' if many else ''
+        item = _tracked_item(s, line.item, prefix + 'item')
+        items.setdefault(item['id'], item)
+        item_conversions.require_stock_date(s, item['id'], item['full_name'], inp.date, prefix + 'item' if many else 'date')
+        asset = _asset_account(s, item, prefix + 'item')
+        offset = offset or offset_account(s, inp.adjustment_account, asset['id'])
+        klass = class_row(s, line.class_id) if line.class_id is not None else header_class
+        site_id = placements.site_id_for(s, line.site, field=prefix + 'site') if line.site is not None else header_site
+        place = site_id or placements.default_site_id(s)
+        key = (item['id'], place)
+        if line.new_quantity is not None:
+            # What the place holds on the date, with this adjustment's earlier lines there.
+            reading = placements.held(s, [item['id']], place, inp.date,
+                                      ('before',) if position == 'before' else ('before', 'count', 'after'))
+            books = sum(quantity for (each, _), quantity in reading.items() if each == item['id'])
+            target = parse_quantity_micro_units(line.new_quantity, field=prefix + 'new_quantity')
+            quantity = target - books - held_cache.get(key, 0)
+        else:
+            quantity = 0 if line.quantity_change is None else parse_quantity_micro_units(
+                line.quantity_change, field=prefix + 'quantity_change')
+        held_cache[key] = held_cache.get(key, 0) + quantity
+        stated = None
+        if line.value_change is not None:
+            stated = parse_domestic_amount(line.value_change, currency, prefix + 'value_change').minor_units
+            if line.negative_value:
+                stated = -stated
+        elif line.new_value is not None:
+            if quantity < 0:
+                raise invalid(prefix + 'new_value', 'a quantity decrease takes its value from the weighted '
+                                                    'average; new_value does not apply')
+            if item['id'] not in histories:
+                histories[item['id']] = movements(s, item_id=item['id'])
+            current = value_at(histories[item['id']] + [p for p in planned if p['item_id'] == item['id']], inp.date)
+            stated = parse_domestic_amount(line.new_value, currency, prefix + 'new_value').minor_units - current
+        if quantity == 0 and not stated:
+            if many:
+                continue        # this line already holds what it says: nothing to adjust
+            raise invalid('quantity_change', 'an adjustment must change quantity, value, or both')
+        kind = ('receipt' if stated is not None else 'found') if quantity > 0 else 'issue' if quantity < 0 else 'value'
+        if kind == 'receipt' and stated < 0:
+            raise invalid(prefix + ('value_change' if line.value_change is not None else 'new_value'),
+                          'a quantity increase cannot be worth a negative amount')
+        values = movement_values(
+            item_id=item['id'], kind=kind, quantity=quantity, value=stated if stated is not None else -1,
+            date=inp.date, sequence=sequence, currency=currency, asset_id=asset['id'], offset_id=offset['id'],
+            class_id=klass['id'] if klass else None, position=position,
+            fallback=fallback_cost(s, item['id'], currency) if kind in ('issue', 'found') else None)
+        sequence += 1
+        planned.append(values)
+        written.append((values, item, site_id, line, 'stated' if stated is not None else None))
+    if not planned:
+        raise invalid('lines', 'every line already holds what it says; this adjustment changes nothing')
+
+    def refuse(refusal, item):
+        return refuse_stock(refusal, item)
+    working, states = value_movements(s, planned, items, refuse)
+    found_basis = {found.movement['id']: found.basis for state in states.values() for found in state.found}
+    if not any(int(values['value_minor_units']) for values in planned):
+        raise invalid('quantity_change' if not many else 'lines',
                       'this adjustment is worth nothing at the current average cost, and '
                       'Bookflow posts no zero-amount entry')
-    values = dict(proposed, item_id=item['id'], currency=currency,
-                  asset_account_id=asset['id'], offset_account_id=offset['id'],
-                  class_id=klass['id'] if klass else None)
-    # Replayed with every dimension it will be written with: an issue taken below zero ahead of
-    # a receipt already on file owes itself a true-up at that receipt, and the true-up reads
-    # its accounts and class off the movement it corrects.
-    try:
-        state = replay(history + [values])
-    except StockRefusal as refusal:
-        raise refuse_stock(refusal, item) from None
-    warnings = _warnings(item, history, state, {identity})
-    description = inp.memo or f'Inventory adjustment for {item["full_name"]}'
+    journal_lines, movements_out, change_lines, sites = [], [], [], {}
+    for values, item, site_id, line, basis in written:
+        description = line.description or inp.memo or f'Inventory adjustment for {item["full_name"]}'
+        index = None
+        if int(values['value_minor_units']):
+            journal_lines.extend(pair(values['asset_account_id'], values['offset_account_id'],
+                                      values['value_minor_units'], currency, values['class_id'], description))
+            index = len(journal_lines) - 1
+        movements_out.append(_Movement(values, index))
+        if site_id:
+            sites[values['id']] = site_id
+        change_lines.append(_Line(item, values['id'], site_id or placements.default_site_id(s),
+                                  basis or found_basis.get(values['id'], 'average')))
+    warnings = []
+    for item_id, state in states.items():
+        own = {values['id'] for values in planned if values['item_id'] == item_id}
+        history = [row for row in working[item_id] if row['id'] not in own]
+        warnings += _warnings(items[item_id], history, state, own)
+        warnings += found_warnings(items[item_id], state, own)
     journal = JournalPostInput(
         date=inp.date, memo=inp.memo, custom_fields=inp.custom_fields,
-        custom_field_kinds=inp.custom_field_kinds,
-        lines=pair(asset['id'], offset['id'], values['value_minor_units'], currency,
-                    values['class_id'], description),
+        custom_field_kinds=inp.custom_field_kinds, lines=journal_lines,
         **({'number': inp.number} if inp.number is not None else {}))
-    document = _Document(journal, 'post', 'adjustment', [_Movement(values, 1)])
-    site_id = placements.site_id_for(s, inp.site)
-    return _Change([document], item, state, currency, quantity, values['value_minor_units'],
-                   kind, asset['id'], offset['id'], warnings, {identity: site_id} if site_id else {})
+    document = _Document(journal, 'post', 'adjustment', movements_out)
+    first = planned[0]
+    first_item = items[first['item_id']]
+    return _Change([document], first_item, states[first['item_id']], currency, int(first['quantity_microunits']),
+                   int(first['value_minor_units']), first['kind'], first['asset_account_id'], offset['id'],
+                   warnings, sites, items, states, change_lines)
 
 
 def _void_change(s, inp, currency, sequence):
@@ -353,54 +484,54 @@ def _void_change(s, inp, currency, sequence):
     own = [row for row in movements(s, transaction_id=header['id']) if row['kind'] in INPUT_KINDS]
     if not own:
         raise BookflowError('E_INTERNAL', message='An inventory adjustment has no movement to reverse.')
-    item = item_service.resolve_item(s.company, own[0]['item_id'])
-    retired = {row['reverses_movement_id'] for row in movements(s, item_id=item['id'])
+    items = {}
+    for row in own:
+        items.setdefault(row['item_id'], item_service.resolve_item(s.company, row['item_id']))
+    item = items[own[0]['item_id']]
+    retired = {row['reverses_movement_id'] for item_id in items for row in movements(s, item_id=item_id)
                if row['kind'] == 'reversal'}
     if header['status'] == 'voided' or all(row['id'] in retired for row in own):
         # Already reversed; the journal writer answers "no change" and nothing else runs.
-        return _Change([], item, replay(movements(s, item_id=item['id'])), currency)
+        return _Change([], item, replay(movements(s, item_id=item['id'])), currency, items=items)
     revision = journals.revision(s, header)
     reversals = []
     for row in own:
-        reversals.append(_Movement(dict(
-            id=new_id(), kind='reversal', item_id=row['item_id'],
-            quantity_microunits=-int(row['quantity_microunits']),
-            value_minor_units=-int(row['value_minor_units']),
-            effective_date=row['effective_date'], sequence=sequence,
-            currency=row['currency'], asset_account_id=row['asset_account_id'],
-            offset_account_id=row['offset_account_id'], class_id=row['class_id'],
-            corrects_movement_id=None, reverses_movement_id=row['id'], returns_movement_id=None,
-            filled_by_movement_id=None, fallback_unit_cost_minor_units=None,
-            revision_id=revision['id'], document_line_id=row['document_line_id']),
-            line_index=0, reverses_line_id=row['posting_line_id']))
+        reversals.append(_Movement(reversal_values(row, sequence), line_index=0,
+                                   reverses_line_id=row['posting_line_id']))
         sequence += 1
-    history = movements(s, item_id=item['id'])
-    try:
-        state = replay(history + [m.values for m in reversals])
-    except StockRefusal as refusal:
-        raise refuse_stock(refusal, item) from None
+    states, warnings = {}, []
+    for item_id, each in items.items():
+        history = movements(s, item_id=item_id)
+        try:
+            states[item_id] = replay(history + [m.values for m in reversals if m.values['item_id'] == item_id])
+        except StockRefusal as refusal:
+            raise refuse_stock(refusal, each) from None
+        warnings += _warnings(each, history, states[item_id], set())
     journal = JournalVoidInput(journal=header['id'], expected_version=inp.expected_version)
     first = reversals[0].values
-    change = _Change([_Document(journal, 'void', 'adjustment', reversals)], item, state, currency,
+    change = _Change([_Document(journal, 'void', 'adjustment', reversals)], item, states[item['id']], currency,
                      first['quantity_microunits'], first['value_minor_units'], 'reversal',
-                     first['asset_account_id'], first['offset_account_id'],
-                     _warnings(item, history, state, set()))
+                     first['asset_account_id'], first['offset_account_id'], warnings, items=items, states=states)
     change.documents[0].journal_date = revision['date']
     return change
 
 
-def _correction_documents(s, change, sequence):
+def correction_documents(s, change, sequence):
     """One dated document per affected date, one line pair per corrected movement.
 
     A true-up -- the settlement of a provisional cost, dated at the receipt that settled it --
     goes in a document of its own for that date, so every correction's memo says what it is.
     """
-    # The adjusted item first, then any assembly a build made from it (R103): a correction of a
+    # The adjusted items first, then any assembly a build made from them (R103): a correction of a
     # build's component issue is paired with one of the build's assembly receipt, and the assembly
-    # is replayed with it. With no builds in the company this is the adjusted item's own replay.
+    # is replayed with it. With no builds in the company this is each adjusted item's own replay.
     from bookflow.company import assembly_builds
     planned = [movement.values for document in change.documents for movement in document.movements]
-    working = {change.item['id']: movements(s, item_id=change.item['id']) + planned}
+    working = {}
+    for values in planned:
+        if values['item_id'] not in working:
+            working[values['item_id']] = movements(s, item_id=values['item_id'])
+        working[values['item_id']].append(values)
 
     def load(item_id):
         if item_id not in working:
@@ -413,6 +544,9 @@ def _correction_documents(s, change, sequence):
         for correction in state.corrections:
             by_date.setdefault((correction.effective_date, correction.filled_by is not None),
                                []).append((item_id, correction))
+    names = sorted({item_name(s, item_id) for item_id, _ in states if any(
+        correction for correction in dict(states)[item_id].corrections)})
+    label = names[0] if len(names) == 1 else f'{len(names)} items'
     for date, true_up in sorted(by_date):
         lines, pending = [], []
         for item_id, correction in by_date[(date, true_up)]:
@@ -435,7 +569,8 @@ def _correction_documents(s, change, sequence):
                 corrects_movement_id=target['id'], reverses_movement_id=None,
                 returns_movement_id=None,
                 filled_by_movement_id=correction.filled_by['id'] if true_up else None,
-                fallback_unit_cost_minor_units=None),
+                fallback_unit_cost_minor_units=None,
+                count_position=target.get('count_position') or 'before'),
                 line_index=len(lines) - 1))
             sequence += 1
             if partner is not None:
@@ -444,9 +579,25 @@ def _correction_documents(s, change, sequence):
                 sequence += 1
         memo = ('Provisional cost true-up' if true_up else 'Weighted-average cost correction')
         change.documents.append(_Document(JournalPostInput(
-            date=date, memo=f'{memo} for {change.item["full_name"]}',
+            date=date, memo=f'{memo} for {label}',
             lines=lines), 'post', 'recost', pending))
     return sequence
+
+
+def complete(s, change):
+    """Add the corrections a change owes, its below-zero warnings by site, and check every date is open."""
+    sequence = max(int(movement.values['sequence']) for document in change.documents
+                   for movement in document.movements) + 1
+    correction_documents(s, change, sequence)
+    own = [movement.values for movement in change.documents[0].movements]
+    change.placements = change.placements or placements.for_movements(s, own, change.sites)
+    change.warnings.extend(placements.warnings(s, change.placements + list(change.documents[0].extra_placements),
+                                               {item_id: item['full_name'] for item_id, item in change.items.items()}
+                                               or {change.item['id']: change.item['full_name']}))
+    dates = {document.journal_date or document.journal.date
+             for document in change.documents}
+    journals.open_dates(s, sorted(dates))
+    return change
 
 
 def _build(s, ctx, inp, operation):
@@ -457,37 +608,51 @@ def _build(s, ctx, inp, operation):
               else _void_change(s, inp, currency, sequence))
     if not change.documents:
         return change
-    sequence = max(int(movement.values['sequence']) for document in change.documents
-                   for movement in document.movements) + 1
-    _correction_documents(s, change, sequence)
-    change.warnings.extend(placements.warnings(s, placements.for_movements(
-        s, [movement.values for movement in change.documents[0].movements], change.sites),
-        {change.item['id']: change.item['full_name']}))
-    dates = {document.journal_date or document.journal.date
-             for document in change.documents}
-    journals.open_dates(s, sorted(dates))
-    return change
+    return complete(s, change)
 
 
 # ---------------------------------------------------------------- persistence
 
 
 def _attach(document, fresh):
-    """Give each pending movement the posting and document line identities just minted."""
+    """Give each pending movement the posting and document line identities just minted.
+
+    A void or a correction reverses the current batch: each reversal movement takes the leg that
+    reverses its original's (a movement worth nothing takes the reversing batch alone). A post or a
+    correction's new revision gives every other movement its own asset leg by entered position.
+    """
     pending = fresh.data['pending']
-    if document.operation == 'void':
-        by_original = {line['reversed_line_id']: line for line in pending['posting_lines']}
+    header_id = fresh.data['header']['id']
+    if document.operation in ('void', 'update'):
+        by_original = {line['reversed_line_id']: line for line in pending['posting_lines']
+                       if line.get('reversed_line_id')}
+        inverse = next((batch for batch in pending['posting_batches'] if batch['kind'] == 'reversal'), None)
         for movement in document.movements:
+            if movement.values['kind'] != 'reversal':
+                continue
+            if movement.reverses_line_id is None:
+                # A movement worth nothing had no posting line; its reversal has none either.
+                movement.values.update(transaction_id=header_id, posting_batch_id=inverse['id'], posting_line_id=None)
+                continue
             leg = by_original.get(movement.reverses_line_id)
             if leg is None:
                 raise BookflowError('E_INTERNAL', message='A void did not reverse its inventory posting line.')
             movement.values.update(transaction_id=leg['transaction_id'],
                                    posting_batch_id=leg['batch_id'], posting_line_id=leg['id'])
-        return
+        if document.operation == 'void':
+            return
     revision = pending['transaction_revisions'][0]
     entered = {line['position']: line for line in pending['document_lines']}
-    legs = {line['line_no']: line for line in pending['posting_lines']}
+    batch = next(batch for batch in pending['posting_batches'] if batch['kind'] != 'reversal')
+    legs = {line['line_no']: line for line in pending['posting_lines'] if line['batch_id'] == batch['id']}
     for movement in document.movements:
+        if movement.values['kind'] == 'reversal' and document.operation == 'update':
+            continue
+        if movement.line_index is None:
+            movement.values.update(transaction_id=header_id, revision_id=revision['id'],
+                                   posting_batch_id=batch['id'], posting_line_id=None,
+                                   document_line_id=entered[min(entered)]['id'])
+            continue
         line, leg = entered[movement.line_index], legs[movement.line_index]
         movement.values.update(transaction_id=leg['transaction_id'], revision_id=revision['id'],
                                posting_batch_id=leg['batch_id'], posting_line_id=leg['id'],
@@ -502,7 +667,7 @@ def check_attribution(claimed, posting_lines, control_account_ids):
     second movement on one line would double it. ``claimed`` is the posting line every planned
     movement names; ``posting_lines`` is every leg the document is about to write.
     """
-    claimed = list(claimed)
+    claimed = [line for line in claimed if line is not None]
     control = {line['id'] for line in posting_lines
                if line['account_id'] in control_account_ids}
     if len(claimed) != len(set(claimed)) or control != set(claimed):
@@ -516,6 +681,24 @@ def asset_account_ids(s):
         c.accounts.c.system_role == ASSET_ROLE)).scalars())
 
 
+def _line_summaries(s, change):
+    names = placements.site_names(s)
+    by_id = {movement.values['id']: movement.values for document in change.documents[:1]
+             for movement in document.movements}
+    out = []
+    for line in change.lines:
+        values = by_id[line.movement_id]
+        state = change.states.get(line.item['id'], change.state)
+        out.append(InventoryAdjustmentLineSummary(
+            item_id=line.item['id'], item_name=line.item['full_name'], site_id=line.site_id,
+            site_name=names.get(line.site_id), quantity_change=format_quantity_micro_units(int(values['quantity_microunits'])),
+            value_change=Money(int(values['value_minor_units']), change.currency).to_dict(),
+            movement_kind=values['kind'], value_basis=line.basis,
+            quantity_on_hand=format_quantity_micro_units(state.quantity_microunits),
+            inventory_value=Money(state.value_minor_units, change.currency).to_dict()))
+    return out
+
+
 def _summary(s, change, corrections):
     state = change.state
     return InventoryAdjustmentSummary(
@@ -527,7 +710,7 @@ def _summary(s, change, corrections):
         average_cost=Money(state.average_cost_minor_units, change.currency).to_dict(),
         inventory_value=Money(state.value_minor_units, change.currency).to_dict(),
         asset_account_id=change.asset_account_id, adjustment_account_id=change.offset_account_id,
-        movement_kind=change.movement_kind, corrections=corrections)
+        movement_kind=change.movement_kind, corrections=corrections, lines=_line_summaries(s, change))
 
 
 def _corrections_output(s, change):
@@ -563,27 +746,26 @@ def _blocked_correction(error, change, document):
                  'item_id': change.item['id'], 'item_name': change.item['full_name']})
 
 
-def _run(s, ctx, inp, operation, *, persist):
-    change = _build(s, ctx, inp, operation)
-    command_name = 'inventory ' + ('adjust' if operation == 'post' else 'void')
-    if not change.documents:
-        header = resolve(s, inp.adjustment)
-        fresh = journals.prepare(s, ctx, JournalVoidInput(
-            journal=header['id'], expected_version=inp.expected_version), 'void', owner=OWNER)
-        summary = document_summary(s, header, change.currency)
-        return InventoryWriteOutput(**fresh.preview.model_dump(), adjustment=summary), [], False
+def persist_change(s, ctx, change, *, command_name, persist, nouns=None):
+    """Prepare, and with ``persist`` write, every document of a change in order.
 
+    Returns the first document's preview or saved output, and what was touched. Shared by
+    adjustments and physical counts, whose differences post as the same kind of journal entry.
+    """
+    nouns = nouns or {'adjustment': 'inventory adjustment', 'count': 'inventory count difference'}
     at = clock.now_iso()
     asset_accounts = asset_account_ids(s)
     reserved, touched, primary = [], [], None
-    for document in change.documents:
-        if document.kind == 'recost':
-            # The journal writer allocates the adjustment's own number, and every correction
-            # takes the next free one after the numbers this call has already handed out.
+    for position, document in enumerate(change.documents):
+        if document.kind == 'recost' or (position and getattr(document.journal, 'number', '') is None):
+            # The journal writer allocates the first document's own number, and every later
+            # document takes the next free one after the numbers this call has already handed out.
             number, _ = allocate(s, 'journal_entry', None, reserved=reserved)
             document.journal = document.journal.model_copy(update={'number': number})
+        call = ctx.model_copy(update={'reason': document.reason}) if document.reason and not (
+            ctx.reason and ctx.reason.strip()) else ctx
         try:
-            fresh = journals.prepare(s, ctx, document.journal, document.operation, owner=OWNER)
+            fresh = journals.prepare(s, call, document.journal, document.operation, owner=OWNER)
         except BookflowError as error:
             if document.kind != 'recost':
                 raise
@@ -596,31 +778,47 @@ def _run(s, ctx, inp, operation, *, persist):
                           fresh.data['pending']['posting_lines'], asset_accounts)
         for movement in document.movements:
             movement.values['number'] = fresh.data['header']['number']
-        marker = dict(transaction_id=document.movements[0].values['transaction_id'],
-                      type='journal_entry', kind=document.kind, created_at=at,
-                      created_by=s.actor.id, created_via=ctx.interface.value,
-                      audit_event_id=fresh.data['event'])
-        rows = [dict({key: value for key, value in movement.values.items() if key != 'number'},
-                     created_at=at, created_by=s.actor.id, created_via=ctx.interface.value,
-                     audit_event_id=fresh.data['event']) for movement in document.movements]
+        provenance = dict(created_at=at, created_by=s.actor.id, created_via=ctx.interface.value,
+                          audit_event_id=fresh.data['event'])
+        marker = dict(transaction_id=fresh.data['header']['id'], type='journal_entry', kind=document.kind,
+                      **provenance)
+        rows = [dict({key: value for key, value in movement.values.items() if key != 'number'}, **provenance)
+                for movement in document.movements]
         if persist:
             extra = [('inventory_documents', 'inventory_document', 'transaction_id', [marker])] \
                 if document.operation == 'post' else []
+            if document.after_persist is not None:
+                extra.extend(document.after_persist(fresh, rows, provenance))
             # Placed before the movements, which the database refuses unless their placements sum to them (R104).
-            extra.append(placements.extra(placements.placements_for_rows(s, rows, change.sites)))
+            planned = change.placements if position == 0 else None
+            placed = placements.placements_for_rows(s, rows, change.sites, planned)
+            placed += placements.with_provenance(document.extra_placements, **provenance)
+            extra.append(placements.extra(placed))
             extra.append(('inventory_movements', 'inventory_movement', 'id', rows))
             applied = journals.persist_prepared(
-                fresh, ctx, s, command_name=command_name, extra=tuple(extra),
-                noun='inventory adjustment' if document.kind == 'adjustment'
-                else 'inventory cost correction')
+                fresh, call, s, command_name=command_name, extra=tuple(extra),
+                noun=nouns.get(document.kind, 'inventory cost correction'))
             touched.extend(applied.touched)
             primary = primary or applied.output
         else:
             primary = primary or fresh.preview
+    return primary, touched
+
+
+def _run(s, ctx, inp, operation, *, persist):
+    change = _build(s, ctx, inp, operation)
+    command_name = 'inventory ' + ('adjust' if operation == 'post' else 'void')
+    if not change.documents:
+        header = resolve(s, inp.adjustment)
+        fresh = journals.prepare(s, ctx, JournalVoidInput(
+            journal=header['id'], expected_version=inp.expected_version), 'void', owner=OWNER)
+        summary = document_summary(s, header, change.currency)
+        return InventoryWriteOutput(**fresh.preview.model_dump(), adjustment=summary), [], False
+    primary, touched = persist_change(s, ctx, change, command_name=command_name, persist=persist)
     output = InventoryWriteOutput(**primary.model_dump(), adjustment=_summary(s, change, _corrections_output(s, change)))
     if change.warnings:
         output.warnings = list(output.warnings) + [
-            line for line in change.warnings if line not in output.warnings]
+            line for line in dict.fromkeys(change.warnings) if line not in output.warnings]
     return output, touched, True
 
 
@@ -637,7 +835,9 @@ def apply(plan, ctx, s):
     if not changed:
         return Applied(output, [], 'no change')
     verb = 'adjust' if operation == 'post' else 'void'
-    return Applied(output, touched, f'{verb} inventory for {output.adjustment.item_name}', audited=True)
+    many = len(output.adjustment.lines) > 1
+    return Applied(output, touched, f'{verb} inventory for '
+                   + (f'{len(output.adjustment.lines)} lines' if many else output.adjustment.item_name), audited=True)
 
 
 # ---------------------------------------------------------------- reads
@@ -650,19 +850,34 @@ def document_summary(s, header, currency=None):
     if not own:
         raise BookflowError('E_RECORD_NOT_FOUND',
                             details={'record_type': 'inventory_adjustment', 'selector': header['id']})
+    own.sort(key=lambda row: int(row['sequence']))
     movement = own[0]
-    item = item_service.resolve_item(s.company, movement['item_id'])
-    change = _Change([], item, replay(movements(s, item_id=item['id'])), currency,
+    items, states = {}, {}
+    for row in own:
+        if row['item_id'] not in items:
+            items[row['item_id']] = item_service.resolve_item(s.company, row['item_id'])
+            states[row['item_id']] = replay(movements(s, item_id=row['item_id']))
+    item = items[movement['item_id']]
+    sites = {}
+    for movement_id, rows in placements.movement_placements(s, [row['id'] for row in own]).items():
+        sites[movement_id] = max(rows, key=lambda p: abs(int(p['quantity_microunits'])))['site_id']
+    bases = {found.movement['id']: found.basis for state in states.values() for found in state.found}
+    change = _Change([_Document(None, 'post', 'adjustment', [_Movement(row) for row in own])], item,
+                     states[item['id']], currency,
                      int(movement['quantity_microunits']), int(movement['value_minor_units']),
-                     movement['kind'], movement['asset_account_id'], movement['offset_account_id'])
-    recosts = [row for row in sorted(movements(s, item_id=item['id']),
-                                     key=lambda row: (row['effective_date'], int(row['sequence'])))
-               if row['kind'] == 'recost']
+                     movement['kind'], movement['asset_account_id'], movement['offset_account_id'],
+                     items=items, states=states,
+                     lines=[_Line(items[row['item_id']], row['id'], sites.get(row['id']),
+                                  bases.get(row['id'], 'average') if row['kind'] == 'found' else 'stated')
+                            for row in own])
+    recosts = [row for item_id in items for row in sorted(
+        movements(s, item_id=item_id), key=lambda row: (row['effective_date'], int(row['sequence'])))
+        if row['kind'] == 'recost']
     numbers = {} if not recosts else {row['id']: row['number'] for row in s.company.conn.execute(
         sa.select(c.transactions.c.id, c.transactions.c.number).where(
             c.transactions.c.id.in_([row['transaction_id'] for row in recosts]))).mappings()}
     corrections = [InventoryCorrectionOutput(
-        item_id=item['id'], item_name=item['full_name'], effective_date=row['effective_date'],
+        item_id=row['item_id'], item_name=items[row['item_id']]['full_name'], effective_date=row['effective_date'],
         corrects_movement_id=row['corrects_movement_id'],
         filled_by_movement_id=row.get('filled_by_movement_id'),
         delta=Money(int(row['value_minor_units']), row['currency']).to_dict(),
