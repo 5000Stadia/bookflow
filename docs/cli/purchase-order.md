@@ -91,6 +91,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].received_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
+| `receiving[].site_id` | string \| null | no | yes | null | Inventory site the line is to arrive at; null for the default site. |
 | `line_tracking` | array[object] | no | no | [] | — |
 | `line_tracking[].line_id` | string | yes | no | — | — |
 | `line_tracking[].position` | integer | yes | no | — | — |
@@ -644,6 +645,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].received_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
+| `receiving[].site_id` | string \| null | no | yes | null | Inventory site the line is to arrive at; null for the default site. |
 | `line_tracking` | array[object] | no | no | [] | — |
 | `line_tracking[].line_id` | string | yes | no | — | — |
 | `line_tracking[].position` | integer | yes | no | — | — |
@@ -1034,6 +1036,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
 | `items[].receiving[].received_quantity_microunits` | integer | yes | no | — | — |
 | `items[].receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
+| `items[].receiving[].site_id` | string \| null | no | yes | null | Inventory site the line is to arrive at; null for the default site. |
 | `items[].line_tracking` | array[object] | no | no | [] | — |
 | `items[].line_tracking[].line_id` | string | yes | no | — | — |
 | `items[].line_tracking[].position` | integer | yes | no | — | — |
@@ -1189,6 +1192,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].received_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
+| `receiving[].site_id` | string \| null | no | yes | null | Inventory site the line is to arrive at; null for the default site. |
 | `line_tracking` | array[object] | no | no | [] | — |
 | `line_tracking[].line_id` | string | yes | no | — | — |
 | `line_tracking[].position` | integer | yes | no | — | — |
@@ -1593,6 +1597,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].received_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
+| `receiving[].site_id` | string \| null | no | yes | null | Inventory site the line is to arrive at; null for the default site. |
 | `line_tracking` | array[object] | no | no | [] | — |
 | `line_tracking[].line_id` | string | yes | no | — | — |
 | `line_tracking[].position` | integer | yes | no | — | — |
@@ -1988,6 +1993,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].received_quantity_microunits` | integer | yes | no | — | — |
 | `receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
+| `receiving[].site_id` | string \| null | no | yes | null | Inventory site the line is to arrive at; null for the default site. |
 | `line_tracking` | array[object] | no | no | [] | — |
 | `line_tracking[].line_id` | string | yes | no | — | — |
 | `line_tracking[].position` | integer | yes | no | — | — |

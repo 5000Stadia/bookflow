@@ -4532,6 +4532,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `purchase_order.receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
 | `purchase_order.receiving[].received_quantity_microunits` | integer | yes | no | — | — |
 | `purchase_order.receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
+| `purchase_order.receiving[].site_id` | string \| null | no | yes | null | Inventory site the line is to arrive at; null for the default site. |
 | `purchase_order.line_tracking` | array[object] | no | no | [] | — |
 | `purchase_order.line_tracking[].line_id` | string | yes | no | — | — |
 | `purchase_order.line_tracking[].position` | integer | yes | no | — | — |
