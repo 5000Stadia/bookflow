@@ -189,6 +189,8 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
         conn.execute("UPDATE sqlite_schema SET sql = replace(sql, ', site_id VARCHAR(26) REFERENCES inventory_sites (id)', '') "
                      "WHERE name IN ('work_lines', 'purchase_order_lines', 'assembly_builds')")
         conn.execute("PRAGMA writable_schema=OFF")
+        for table in ("schedule_entries", "time_clocks", "timekeeping_people", "timekeeping_preferences"):
+            conn.execute(f"DROP TABLE {table}")  # co0090's four, with their indexes
         conn.execute("DROP TABLE purchase_coverage_links")  # co0087's, with its triggers
         conn.execute("ALTER TABLE company_info DROP COLUMN available_deducts_pending_builds")  # co0082's one column
         for table in ("price_rule_preferences", "price_rules"):

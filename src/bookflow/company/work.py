@@ -1,6 +1,7 @@
 """Non-posting customer work, immutable scope revisions and durable conversion."""
 from __future__ import annotations
 
+import contextvars as _contextvars
 from copy import deepcopy
 import hashlib
 import json
@@ -523,6 +524,11 @@ def _dependencies(s, header, before, after):
             raise BookflowError('E_WORK_DEPENDENCY', details={'source_id': linked[0]['source_document_id'], 'problem': 'quoted lines cannot be removed or repriced'})
 
 
+# Employees a caller may assign although inactive: a clock started while the person was active is
+# closed and its time recorded even if they were deactivated meanwhile (R106, `clock out`).
+INACTIVE_ASSIGNEES_OK = _contextvars.ContextVar('inactive_assignees_ok', default=frozenset())
+
+
 def _assignees(s, requested, previous=()):
     from bookflow.company.parties import resolve_party
     from bookflow.company.sales_facts import Reference
@@ -536,7 +542,7 @@ def _assignees(s, requested, previous=()):
         if row['id'] in saved:
             result.append(saved[row['id']])
         else:
-            if not row['active']:
+            if not row['active'] and row['id'] not in INACTIVE_ASSIGNEES_OK.get():
                 raise BookflowError('E_INACTIVE_REFERENCE', details={'record_type': 'employee', 'record_id': row['id']})
             result.append(Reference(id=row['id'], label=row['name'], version=row['version']))
     return result

@@ -10,10 +10,10 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_partial_po_catalog as previous, permission_catalog as c
+from . import permission_timesheets_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = '8f89bac7128d6a1e2799df8449caaa025bf8425a'
+SOURCE_COMMIT = '1c9be137bd09b4c1bb27bf3cd28e0520138f10d5'
 _OWNER = 'bookflow.commands.inventory_site_cmds.{}|src/bookflow/commands/inventory_site_cmds.py'
 # (name, capability, threshold, planner)
 _ADDED = (

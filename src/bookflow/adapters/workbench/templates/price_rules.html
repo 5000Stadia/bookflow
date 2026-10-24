@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block title %}Price rules{% endblock %}{% block body %}<section id="price-rules">
+{% extends "base.html" %}{% block title %}Price rules{% endblock %}{% block body %}<section id="price-rules" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
 <nav class="crumbs"><a href="/c/{{ company_id }}/_group/customers">Customers</a> / Price rules</nav>
 <h1>Price rules</h1>
 <p class="muted">A rule sets the price a sales line starts at when its item, customer, class, rep, date and quantity match. A price you type on a line always wins, and saved documents keep the prices they were given.</p>
@@ -6,7 +6,7 @@
 {% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
 <section class="workspace-card" aria-label="Rules">
 <h2>Rules, first to last</h2>
-{% if rules %}<form method="post" action="/c/{{ company_id }}/price-rules"><div class="table-wrap"><table class="list-table" data-price-rule-list><thead><tr><th>Priority</th><th>Rule</th><th>What it does</th><th>Active</th>{% if can_write %}<th></th>{% endif %}</tr></thead><tbody>
+{% if rules %}<form method="post" action="/c/{{ company_id }}/price-rules" hx-post="/c/{{ company_id }}/price-rules" hx-target="#price-rules" hx-select="#price-rules" hx-swap="outerHTML"><div class="table-wrap"><table class="list-table" data-price-rule-list><thead><tr><th>Priority</th><th>Rule</th><th>What it does</th><th>Active</th>{% if can_write %}<th></th>{% endif %}</tr></thead><tbody>
 {% for r in rules %}<tr data-price-rule="{{ r.id }}"{% if not r.active %} class="muted"{% endif %}>
 <td data-label="Priority">{{ r.priority }}</td>
 <td data-label="Rule"><a href="/c/{{ company_id }}/price-rules?rule={{ r.id }}">{{ r.name }}</a></td>
@@ -18,7 +18,7 @@
 </form>{% else %}<p data-no-price-rules>No price rules yet. Lines are priced from the item and its price level.</p>{% endif %}
 </section>
 {% if can_write %}
-<form method="post" action="/c/{{ company_id }}/price-rules">
+<form method="post" action="/c/{{ company_id }}/price-rules" hx-post="/c/{{ company_id }}/price-rules" hx-target="#price-rules" hx-select="#price-rules" hx-swap="outerHTML">
 <section class="workspace-card" aria-label="Rule" data-price-rule-form>
 <h2>{% if editing %}Edit {{ editing.name }}{% else %}New price rule{% endif %}</h2>
 {% if editing %}<input type="hidden" name="rule" value="{{ editing.id }}"><input type="hidden" name="expected_version" value="{{ editing.version }}">{% endif %}
@@ -48,7 +48,7 @@
 <div class="actions"><button type="submit" name="action" value="{{ 'update' if editing else 'create' }}" data-price-rule-save>{{ 'Save rule' if editing else 'Add rule' }}</button>{% if editing %} <a href="/c/{{ company_id }}/price-rules">New rule instead</a>{% endif %}</div>
 </section>
 </form>
-<form method="post" action="/c/{{ company_id }}/price-rules">
+<form method="post" action="/c/{{ company_id }}/price-rules" hx-post="/c/{{ company_id }}/price-rules" hx-target="#price-rules" hx-select="#price-rules" hx-swap="outerHTML">
 <section class="workspace-card" aria-label="When rules disagree" data-price-rule-policy>
 <h2>When a price level and rules both apply</h2>
 <p><label><input type="radio" name="conflict_policy" value="lowest_price" {% if policy == 'lowest_price' %}checked{% endif %}> Use the lowest price</label></p>
@@ -58,7 +58,7 @@
 </section>
 </form>
 {% else %}<p>When a price level and rules both apply: {{ 'the lowest price wins' if policy == 'lowest_price' else 'the first rule by priority wins' }}.</p>{% endif %}
-<form method="post" action="/c/{{ company_id }}/price-rules">
+<form method="post" action="/c/{{ company_id }}/price-rules" hx-post="/c/{{ company_id }}/price-rules" hx-target="#price-rules" hx-select="#price-rules" hx-swap="outerHTML">
 <section class="workspace-card" aria-label="Check a price" data-price-check>
 <h2>Check a price</h2>
 <label>Item <input name="item" required value="{{ values.get('item', '') if check else '' }}"></label>

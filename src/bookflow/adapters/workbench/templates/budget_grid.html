@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block title %}{{ budget.name }} · Set up budgets{% endblock %}{% block body %}<section id="budget-grid" data-budget="{{ budget.id }}">
+{% extends "base.html" %}{% block title %}{{ budget.name }} · Set up budgets{% endblock %}{% block body %}<section id="budget-grid" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }" data-budget="{{ budget.id }}">
 <style>
 .budget-table input{width:5.4rem;text-align:right;padding-left:.3rem;padding-right:.3rem}
 .budget-table th,.budget-table td{padding-left:.3rem;padding-right:.3rem}
@@ -25,7 +25,7 @@
 Amounts never post. <a href="/c/{{ company_id }}/report/budget-overview?f:budget={{ budget.id }}">Budget overview</a> · <a href="/c/{{ company_id }}/report/budget-vs-actual?f:budget={{ budget.id }}">Budget vs. actual</a></p>
 {% if notice %}<p role="status" class="notice" data-budget-notice>{{ notice }}</p>{% endif %}
 {% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
-<form method="post" action="/c/{{ company_id }}/budget/{{ budget.id }}">
+<form method="post" action="/c/{{ company_id }}/budget/{{ budget.id }}" hx-post="/c/{{ company_id }}/budget/{{ budget.id }}" hx-target="#budget-grid" hx-select="#budget-grid" hx-swap="outerHTML">
 <input type="hidden" name="version" value="{{ budget.version }}">
 {% if dimension_key %}<section class="workspace-card" aria-label="Current {{ 'customer:job' if budget.dimension == 'customer' else 'class' }}">
 <label>Current {{ 'customer:job' if budget.dimension == 'customer' else 'class' }} <input name="dimension" value="{{ dimension }}" list="budget-dimensions" data-budget-dimension placeholder="Name or id"></label>

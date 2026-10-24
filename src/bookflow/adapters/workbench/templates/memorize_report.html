@@ -1,8 +1,8 @@
-{% extends "base.html" %}{% block title %}Memorize {{ title }}{% endblock %}{% block body %}<section id="memorize-report">
+{% extends "base.html" %}{% block title %}Memorize {{ title }}{% endblock %}{% block body %}<section id="memorize-report" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
 <nav class="crumbs"><a href="/c/{{ company_id }}/_group/reports">Reports</a> / <a href="/c/{{ company_id }}/memorized-report">Memorized reports</a> / Memorize</nav>
 <h1>Memorize {{ title }}</h1>
 {% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
-<form method="post" action="/c/{{ company_id }}/report/{{ verb }}/memorize" class="workspace-card">
+<form method="post" action="/c/{{ company_id }}/report/{{ verb }}/memorize" class="workspace-card" hx-post="/c/{{ company_id }}/report/{{ verb }}/memorize" hx-target="#memorize-report" hx-select="#memorize-report" hx-swap="outerHTML">
 {% for key, value in filters.items() %}<input type="hidden" name="f:{{ key }}" value="{{ value|string|lower if value is sameas true or value is sameas false else value }}">{% endfor %}
 <p><label>Name <input name="name" required maxlength="200" value="{{ values.get('name', title) }}" data-memorize-name></label></p>
 <p><label>Memorized report group (optional) <input name="group" maxlength="200" value="{{ values.get('group', '') }}" list="memorized-groups" placeholder="Company, Banking, Accountant…"></label></p>

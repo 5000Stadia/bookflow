@@ -2216,6 +2216,34 @@ for _noun in ('sales-order', 'work-order'):
         'E_DIRECTIVE_INACTIVE': 'context directive is inactive',
     }
 
+# Timekeeping (R106): weekly timesheets, the time clock and the job schedule.
+_TIME_TAIL = {'E_IDEMPOTENCY_MISMATCH': 'same key, different input', 'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+              'E_DIRECTIVE_INACTIVE': 'deactivated --directive', 'E_REASON_REQUIRED': 'an agent/system write supplies neither reason nor directive'}
+_TIME_REFS = {'E_VALIDATION': 'no employee named and the login is not linked to one; an unparseable time',
+              'E_RECORD_NOT_FOUND': 'unknown employee, customer, item or class',
+              'E_INACTIVE_REFERENCE': 'an inactive employee, customer or item',
+              'E_VALUE_RANGE': 'more than 24 hours in a day'}
+MATRIX['timesheet show'] = {'E_RECORD_NOT_FOUND': 'unknown employee', 'E_VALIDATION': 'no employee named and the login is not linked to one'}
+MATRIX['timesheet copy-last'] = dict(MATRIX['timesheet show'])
+MATRIX['timesheet save'] = _TIME_REFS | {'E_VALIDATION': 'two rows with the same customer:job, item, class, billable and notes; hours that are not a decimal; no employee and no linked login',
+                                         'E_VERSION_CONFLICT': 'expected_sheet_version no longer matches the week',
+                                         'E_WORK_DEPENDENCY': 'a change to hours a posted sale carries'} | _TIME_TAIL
+MATRIX['timesheet preferences'] = {}
+MATRIX['timesheet set-preferences'] = {'E_VALIDATION': 'a week day, rounding or maximum shift outside the choices'} | _TIME_TAIL
+MATRIX['clock in'] = _TIME_REFS | {'E_VALIDATION': 'already clocked in; a start in the future or longer ago than the maximum shift'} | _TIME_TAIL
+MATRIX['clock out'] = _TIME_REFS | {'E_VALIDATION': 'past the maximum shift with no stated end; an end before clock-in, in the future or longer than the maximum shift; no customer:job or item',
+                                    'E_RECORD_NOT_FOUND': 'the person is not clocked in'} | _TIME_TAIL
+MATRIX['clock cancel'] = {'E_VALIDATION': 'a reason over 140 characters', 'E_RECORD_NOT_FOUND': 'the person is not clocked in'} | _TIME_TAIL
+MATRIX['clock status'] = {'E_RECORD_NOT_FOUND': 'unknown employee'}
+MATRIX['clock link'] = {'E_VALIDATION': 'an agent login, or a login already linked to another employee',
+                        'E_RECORD_NOT_FOUND': 'unknown employee or user'} | _TIME_TAIL
+MATRIX['schedule create'] = {'E_VALIDATION': 'no customer:job or work order, a time not YYYY-MM-DDTHH:MM, an end not after the start',
+                             'E_RECORD_NOT_FOUND': 'unknown employee, customer or work order',
+                             'E_INACTIVE_REFERENCE': 'an inactive employee'} | _TIME_TAIL
+MATRIX['schedule update'] = MATRIX['schedule create'] | {'E_VERSION_CONFLICT': 'stale expected_version'}
+MATRIX['schedule cancel'] = {'E_RECORD_NOT_FOUND': 'unknown entry', 'E_VERSION_CONFLICT': 'stale expected_version'} | _TIME_TAIL
+MATRIX['schedule show'] = {'E_RECORD_NOT_FOUND': 'unknown entry'}
+MATRIX['schedule calendar'] = {'E_RECORD_NOT_FOUND': 'unknown employee or customer', 'E_VALIDATION': 'not a date'}
 # Inventory sites and transfers (R104 increment 1).
 _SITE_COMMON = {
     'E_IDEMPOTENCY_MISMATCH': 'same key, different input',

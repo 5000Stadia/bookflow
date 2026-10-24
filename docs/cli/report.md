@@ -3248,7 +3248,7 @@ The same example as complete `bookflow_run` arguments:
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
-| `site` | `--site` | string \| null | no | yes | null | Only this inventory site, by id or name: its quantity, its share of each item's value, and (on stock status) what is committed, on order and available there. Omitted, the whole company, as before. |
+| `site` | `--site` | string \| null | no | yes | null | Only this inventory site, by id or name: its quantity, its share of each item's value, and (on stock status) what is committed, on order and available there. Omitted, the whole company, as before. A site's value is its share of the item's by quantity over the sites holding stock (a site below zero shows none); order lines naming no site are committed at no site (Unassigned in report quantity-by-site). |
 | `by` | `--by` | literal["item", "site"] | no | no | "item" | item: one row per item (the default). site: one row per item and site (Inventory Valuation Summary by Site); each site's value is its share of the item's by quantity, so the sites add up to the item and the rows add up to the inventory asset account. |
 
 ### Command and context options
@@ -5816,7 +5816,7 @@ Example JSON output:
 
 ## `report quantity-by-site`
 
-Quantity on Hand by Site, as of as_of: each inventory item at each site with what is on hand there, committed there by open sales-order and work-order lines naming that site, reserved there by pending builds, available and on order to arrive there, and its share of the item's value. Lines naming no site commit on an Unassigned row, so the sites plus Unassigned are the company figures report stock-status shows. site narrows it to one site. Quantities are read from placements and the report refuses when they disagree with the movement ledger (the quantity tie) or when the values disagree with the balance sheet (the asset tie). Rows are paged.
+Quantity on Hand by Site, as of as_of: each inventory item at each site with what is on hand there, committed there by open sales-order and work-order lines naming that site, reserved there by pending builds, available and on order to arrive there, and its share of the item's value. Order and work-order lines naming no site commit on an Unassigned row (they are deducted at no site), so the sites plus Unassigned are the company figures report stock-status shows. Value is shared by quantity over the sites holding stock; a site below zero shows no value, and the sites add up to the item. site narrows it to one site. Quantities are read from placements and the report refuses when they disagree with the movement ledger (the quantity tie) or when the values disagree with the balance sheet (the asset tie). Rows are paged.
 
 | Contract | Value |
 |---|---|
@@ -5848,7 +5848,7 @@ The same example as complete `bookflow_run` arguments:
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
-| `site` | `--site` | string \| null | no | yes | null | Only this inventory site, by id or name: its quantity, its share of each item's value, and (on stock status) what is committed, on order and available there. Omitted, the whole company, as before. |
+| `site` | `--site` | string \| null | no | yes | null | Only this inventory site, by id or name: its quantity, its share of each item's value, and (on stock status) what is committed, on order and available there. Omitted, the whole company, as before. A site's value is its share of the item's by quantity over the sites holding stock (a site below zero shows none); order lines naming no site are committed at no site (Unassigned in report quantity-by-site). |
 
 ### Command and context options
 
@@ -6361,6 +6361,7 @@ The same example as complete `bookflow_run` arguments:
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
 | `class_id` | `--class-id` | string \| null | no | yes | null | Optional class ID or canonical full name, inactive classes included; a subclass is its own class and is not included with its parent. Omit for every class together with the lines entered under none. |
 | `customer` | `--customer` | string \| null | no | yes | null | Optional customer or job ID or canonical full name; a job is its own customer and is not included with its parent. Omit for every customer together with the income no customer was named on. |
+| `site` | `--site` | string \| null | no | yes | null | Inventory Sales by Site: only stocked item lines whose stock left (or, on a return, came back to) this inventory site, by id or name. Discount and other adjusting lines are not split by site, and income that reached no stocked item is left out; totals still state the whole period. Omit for every site. |
 
 ### Command and context options
 
@@ -6451,6 +6452,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].average_price.minor_units` | integer | yes | no | — | — |
 | `rows[].percent_of_total` | string \| null | yes | yes | — | — |
 | `rows[].percent_of_total_millionths` | integer \| null | yes | yes | — | — |
+| `rows[].site_name` | string \| null | no | yes | null | The inventory site, on Inventory Sales by Site; absent otherwise. |
 
 Example JSON output:
 
@@ -7009,7 +7011,7 @@ The same example as complete `bookflow_run` arguments:
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
-| `site` | `--site` | string \| null | no | yes | null | Only this inventory site, by id or name: its quantity, its share of each item's value, and (on stock status) what is committed, on order and available there. Omitted, the whole company, as before. |
+| `site` | `--site` | string \| null | no | yes | null | Only this inventory site, by id or name: its quantity, its share of each item's value, and (on stock status) what is committed, on order and available there. Omitted, the whole company, as before. A site's value is its share of the item's by quantity over the sites holding stock (a site below zero shows none); order lines naming no site are committed at no site (Unassigned in report quantity-by-site). |
 
 ### Command and context options
 

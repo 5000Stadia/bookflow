@@ -26,6 +26,7 @@ ACT_SUBJECTS = {
     'item convert': 'Converting an item to an inventory part',
     'account merge': 'Merging accounts', 'account unmerge': 'Undoing an account merge',
     'item merge': 'Merging items', 'item unmerge': 'Undoing an item merge',
+    'clock link': "Linking a person's login to an employee",
 }
 
 
