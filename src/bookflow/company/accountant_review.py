@@ -873,11 +873,8 @@ def apply_import(plan, ctx, s) -> Applied:
                 result_type, result_id = 'transaction', fresh.data['header']['id']
                 mapped[key] = result_id
             else:
-                s.actor = as_accountant
-                try:
-                    result_type, result_id, record = _apply_other(s, change_ctx, ch, copy, mapped, who_id)
-                finally:
-                    s.actor = person
+                # Reads run as the person; the record and its audit event name the accountant.
+                result_type, result_id, record = _apply_other(s, change_ctx, ch, copy, mapped, who_id)
                 write_event_to(s.company, change_ctx, 'accountant-copy import',
                                f"{_summary(ch, {})} (from {acct_name}'s accountant's copy)"[:512], [record],
                                actor_id=who_id, actor_kind='human')
