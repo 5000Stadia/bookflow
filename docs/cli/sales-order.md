@@ -3684,6 +3684,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `purchase_order.receiving[].ordered_quantity_microunits` | integer | yes | no | — | — |
 | `purchase_order.receiving[].received_quantity_microunits` | integer | yes | no | — | — |
 | `purchase_order.receiving[].remaining_quantity_microunits` | integer | yes | no | — | — |
+| `purchase_order.line_tracking` | array[object] | no | no | [] | — |
+| `purchase_order.line_tracking[].line_id` | string | yes | no | — | — |
+| `purchase_order.line_tracking[].position` | integer | yes | no | — | — |
+| `purchase_order.line_tracking[].item_id` | string \| null | yes | yes | — | — |
+| `purchase_order.line_tracking[].account_id` | string \| null | yes | yes | — | — |
+| `purchase_order.line_tracking[].description` | string \| null | yes | yes | — | — |
+| `purchase_order.line_tracking[].measured` | literal["quantity", "amount"] | yes | no | — | — |
+| `purchase_order.line_tracking[].ordered_quantity` | string \| null | yes | yes | — | — |
+| `purchase_order.line_tracking[].received_quantity` | string \| null | yes | yes | — | — |
+| `purchase_order.line_tracking[].billed_quantity` | string \| null | yes | yes | — | — |
+| `purchase_order.line_tracking[].open_quantity` | string \| null | yes | yes | — | — |
+| `purchase_order.line_tracking[].amount_minor_units` | integer | yes | no | — | — |
+| `purchase_order.line_tracking[].billed_amount_minor_units` | integer | yes | no | — | — |
+| `purchase_order.line_tracking[].open_amount_minor_units` | integer \| null | yes | yes | — | — |
+| `purchase_order.line_tracking[].closed` | boolean | yes | no | — | — |
+| `purchase_order.part_bill_ids` | array[string] | no | no | [] | — |
 | `purchase_order.number` | string | yes | no | — | — |
 | `purchase_order.current_revision_id` | string | yes | no | — | — |
 | `purchase_order.status` | literal["open", "partly_received", "closed", "voided"] | yes | no | — | — |
@@ -3883,8 +3899,10 @@ Example JSON output:
     "dry_run": false,
     "expected_date": null,
     "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "line_tracking": [],
     "memo": null,
     "number": "value",
+    "part_bill_ids": [],
     "receiving": [],
     "reference": null,
     "revision": {

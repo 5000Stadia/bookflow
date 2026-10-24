@@ -525,7 +525,11 @@ class History:
 
     def identities(self, kind):
         self.load(kind)
-        return sorted(set(self.raw[kind]) | set(self.entries[kind]))
+        # Raw rows and entries are fixed once a kind is loaded, so the sorted union is too.
+        cache = self.__dict__.setdefault('_identity_cache', {})
+        if kind not in cache:
+            cache[kind] = sorted(set(self.raw[kind]) | set(self.entries[kind]))
+        return cache[kind]
 
     def commercial(self, header, sequence):
         """Decode the revision actually owned by this historical header event."""
@@ -539,7 +543,7 @@ class History:
             event_sequence,value=self.commercial_images[key]
             if event_sequence > sequence:
                 raise MissingHistory('foreign or future commercial revision')
-            return deepcopy(value)
+            return json.loads(value)   # a fresh copy; the C decoder is far cheaper than deepcopy
         revision = self.s.company.conn.execute(sa.select(c.transaction_revisions, c.audit_events.c.seq.label('event_sequence')).join(
             c.audit_events, c.audit_events.c.id == c.transaction_revisions.c.audit_event_id).where(
             c.transaction_revisions.c.id == header['current_revision_id'],
@@ -548,8 +552,8 @@ class History:
             raise MissingHistory('foreign or future commercial revision')
         if header['type'] in ('invoice', 'sales_receipt'):
             value=sales._saved_semantic(self.s, revision)
-            self.commercial_images[key]=(revision['event_sequence'],value)
-            return deepcopy(value)
+            self.commercial_images[key]=(revision['event_sequence'],json.dumps(value))
+            return json.loads(self.commercial_images[key][1])
         kind = {'deposit': 'deposit_profile', 'payment': 'payment_profile'}.get(header['type'])
         if kind is None:
             raise MissingHistory('invalid deposit graph transaction kind')
@@ -563,8 +567,8 @@ class History:
                 'currency': revision['currency'], 'total_minor_units': revision['total_minor_units'],
                 'custom_fields': json.loads(revision['custom_fields_snapshot']),
                 'profile': {k: v for k, v in profile.items() if k not in ('transaction_id', 'revision_id')}}
-        self.commercial_images[key]=(revision['event_sequence'],value)
-        return deepcopy(value)
+        self.commercial_images[key]=(revision['event_sequence'],json.dumps(value))
+        return json.loads(self.commercial_images[key][1])
 
     def chain(self, kind, identity):
         self.load(kind)
@@ -1270,7 +1274,9 @@ def _number_dependencies(history, original, relation, transactions, document):
 def _current_relations(history, sources, deposits, relation):
     """Reconstruct negative/current projections from complete immutable events."""
     for source in sorted(sources):
-        members=history.find('deposit_membership',lambda row:row['source_transaction_id']==source)
+        # The indexed lookup, not a scan of every membership per receipt: a deposit of n
+        # receipts otherwise compared n x n rows here.
+        members=history.find_owners('deposit_membership','source_transaction_id',[source])
         ordered=sorted(members,key=lambda row:(history.events[history.anchors['deposit_membership',row['id']].event_id]['seq'],row['kind']=='claim',row['id']))
         current=None
         for member in ordered:

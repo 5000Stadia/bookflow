@@ -163,7 +163,7 @@ review cb5fcd7 (gate g96052d).
 - [x] R103 Assembly builds: building a finished item from its bill of materials consumes the components and moves their cost into the assembly.
 - [~] R104 Advanced inventory: multiple sites and bins, transfers, serial and lot numbers, physical counts, a choice of costing method, and allocating a later freight bill to received stock.
 - [ ] R181 Pick, pack and ship: picking lists, packing slips and shipments recorded apart from invoicing, so a warehouse can ship before it bills (Kabe 2026-10-22: after R104).
-- [ ] R106 Job scheduling and timesheets: employee and job calendars, weekly timesheets and clock-in/out, feeding the existing time entries and billing.
+- [~] R106 Job scheduling and timesheets: employee and job calendars, weekly timesheets and clock-in/out, feeding the existing time entries and billing.
 - [ ] R107 Bulk import and migration: CSV and IIF import with saved mappings, spreadsheet-style bulk editing, and guided opening balances for invoices, bills and stock.
 - [ ] R108 Bank feeds: import statements (OFX, QFX, CSV), match them to entries, suggest the rest with rules, and optionally connect live feeds; manual reconciliation stays.
 - [x] R109 Budgets and comparisons: budget entry, budget-versus-actual, prior-period and prior-year comparisons, and saved custom report layouts.
@@ -192,6 +192,6 @@ review cb5fcd7 (gate g96052d).
 - [x] R149 Vendor refunds received as deposits against vendor credits
 - [ ] R150 Unit prices finer than a cent
 - [ ] R152 Check printing workflow: a print queue, reprints and alignment
-- [~] R153 Very large deposits (over 200 rows) and billing part of a purchase order
+- [x] R153 Very large deposits (over 200 rows) and billing part of a purchase order
 - [x] R154 Convert a non-inventory item into an inventory item
 - [ ] R155 Compact storage: pack company files to about 500 MB per 100,000 transactions

@@ -17,7 +17,8 @@ from bookflow.commands.common import UNSURE_ACCOUNT
 DESCRIPTIONS = {
     'post': ('Bank selected undeposited customer payments and sales receipts into one bank account as one '
              'deposit, with any other money entered beside them and an optional cash-back line; credits '
-             'Undeposited Funds for each receipt and debits the bank for the net total. Discover the '
+             'Undeposited Funds for each receipt and debits the bank for the net total. One deposit holds up to '
+             '2,000 rows (receipts plus other money); read a large one back with `deposit items`, 200 rows a page. Discover the '
              'receipts, their ids and their expected versions with `deposit sources`. A customer\'s deposit '
              '(down payment, retainer) on work not yet billed is not a deposit here: take it with `prepayment '
              'receive`, then bank that receipt with this command.' + UNSURE_ACCOUNT),

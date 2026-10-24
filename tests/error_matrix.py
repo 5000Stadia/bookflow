@@ -1520,6 +1520,15 @@ MATRIX["purchase-order void"] = {
     "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
     "E_DIRECTIVE_INACTIVE": "deactivated --directive",
 }
+MATRIX["purchase-order close-lines"] = {
+    "E_RECORD_NOT_FOUND": "unknown purchase order",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_VALIDATION": "a voided order, or a line that is not on the order",
+    "E_WORK_DEPENDENCY": "the order already became one bill in full",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
 MATRIX["billing-group rename"] = {
     "E_RECORD_NOT_FOUND": "unknown billing group",
     "E_NAME_TAKEN": "another billing group already has that name",
