@@ -42,12 +42,22 @@ def read_books(path: Path) -> list[tuple[str, str, str]]:
         return [tuple(r) for r in db.execute('SELECT user_id, through_date, updated_at FROM accountant_designations WHERE active=1')]
 
 
+def fingerprint(pairs) -> str:
+    """SHA-256 of a company's designations: sorted ``user_id|through_date`` lines."""
+    import hashlib
+    return hashlib.sha256('\n'.join(sorted(f'{u}|{d}' for u, d in pairs)).encode()).hexdigest()
+
+
 def _mirrored(conn, company_id):
     rows = conn.execute(sa.select(h.company_accountants.c.user_id, h.company_accountants.c.through_date).where(
         h.company_accountants.c.company_id == company_id)).all()
-    state = conn.execute(sa.select(h.company_accountant_sync.c.state).where(
-        h.company_accountant_sync.c.company_id == company_id)).scalar()
-    return {(r[0], r[1]) for r in rows}, state
+    sync = conn.execute(sa.select(h.company_accountant_sync.c.state, h.company_accountant_sync.c.fingerprint).where(
+        h.company_accountant_sync.c.company_id == company_id)).first()
+    pairs = {(r[0], r[1]) for r in rows}
+    # Verified only while the rows still hash to what was read from the books: rows lost or edited in hub.db
+    # (an older copy put back, a hand edit) read as unverified.
+    state = sync[0] if sync and sync[1] == fingerprint(pairs) else ('unverified' if sync else None)
+    return pairs, state
 
 
 def record(conn, company_id, rows, problem=None) -> bool:
@@ -66,7 +76,7 @@ def record(conn, company_id, rows, problem=None) -> bool:
             conn.execute(t.insert().values(company_id=company_id, user_id=user_id, through_date=through, designated_at=when or at))
     conn.execute(sync.delete().where(sync.c.company_id == company_id))
     conn.execute(sync.insert().values(company_id=company_id, state='unverified' if problem else 'verified', checked_at=at,
-                                      problem=problem[:200] if problem else None))
+                                      problem=problem[:200] if problem else None, fingerprint=None if problem else fingerprint(want)))
     return True
 
 
@@ -119,9 +129,14 @@ def scope_check(s, user_ids, scope_type, scope_id):
         designated = {r[0] for r in s.hub.conn.execute(sa.text(
             'SELECT DISTINCT company_id FROM company_accountants WHERE company_id IN (SELECT value FROM json_each(:c))'
             ' AND user_id IN (SELECT value FROM json_each(:u))'), dict(c=ids_json, u=json.dumps(users)))}
+    mirrored = {}
+    for company_id, user_id, through in s.hub.conn.execute(sa.text(
+            'SELECT company_id, user_id, through_date FROM company_accountants WHERE company_id IN (SELECT value FROM json_each(:c))'),
+            dict(c=ids_json)):
+        mirrored.setdefault(company_id, set()).add((user_id, through))
     verified = {r[0] for r in s.hub.conn.execute(sa.text(
-        "SELECT company_id FROM company_accountant_sync WHERE state='verified' AND company_id IN (SELECT value FROM json_each(:c))"),
-        dict(c=ids_json))}
+        "SELECT company_id, fingerprint FROM company_accountant_sync WHERE state='verified' AND company_id IN (SELECT value FROM json_each(:c))"),
+        dict(c=ids_json)) if r[1] is not None and r[1] == fingerprint(mirrored.get(r[0], set()))}
     unverified = []
     for company_id in ids:
         if company_id in verified:

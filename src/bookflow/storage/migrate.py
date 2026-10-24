@@ -166,6 +166,9 @@ def migrate_to_head(db: Database, chain: str, backups_dir: Path | None, *, commi
         db.raw.execute("BEGIN IMMEDIATE")
         try:
             command.upgrade(_config(chain, db.conn), HEADS[chain])  # HEADS is the target, so the constants are the single truth
+            if chain == "hub" and before is not None and before >= "hub0016":
+                # An upgraded hub vouches for no company's external accountants until it has read their books again (R121).
+                db.raw.execute("UPDATE company_accountant_sync SET state='unverified', problem='the hub was upgraded'")
             problems = db.raw.execute("PRAGMA foreign_key_check").fetchall()
             if problems:
                 raise BookflowError("E_MIGRATION_FAILED", details={"chain": chain, "from": before, "to": HEADS[chain], "cause": "foreign key check", "rows": len(problems)})

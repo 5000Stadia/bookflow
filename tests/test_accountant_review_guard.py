@@ -12,6 +12,7 @@ import pytest
 
 from bookflow import BookflowError
 from bookflow.core.ids import new_id
+from bookflow.hub.company_accountants import fingerprint
 from tests.conftest import add_membership, make_actor
 from tests.test_service_sales_lifecycle import COMPANY
 
@@ -110,7 +111,7 @@ def test_an_organization_of_200_companies_is_checked_in_well_under_a_second(root
         for i in range(200):
             row = dict(template, id=new_id(), display_name=f'Branch {i}', name_key=f'branch {i}', path=f'nowhere/branch-{i}')
             hub.execute(f"INSERT INTO companies ({', '.join(row)}) VALUES ({', '.join('?' for _ in row)})", tuple(row.values()))
-            hub.execute("INSERT INTO company_accountant_sync VALUES (?, 'verified', 'now', NULL)", (row['id'],))
+            hub.execute("INSERT INTO company_accountant_sync VALUES (?, 'verified', 'now', NULL, ?)", (row['id'], fingerprint(set())))
     add_membership(root, owner, 'organization', organization, 'owner')
     # The guard runs before the grant is planned, so a refusal times the guard alone. (An allowed organization grant
     # over 200 companies spends tens of seconds in the existing permission reconciliation, not here.)
@@ -136,3 +137,35 @@ def test_the_accountant_holds_standard_with_no_extra_capabilities(root, client):
     e = refused(lambda: client.run('accountant add', {'user': 'extra-cpa', 'through': THROUGH}, company=COMPANY, reason='x'),
                 'E_VALIDATION')
     assert e.details['reason'] == 'extra_grants' and 'undo' in e.message
+
+
+def test_a_mirror_that_no_longer_matches_what_was_read_is_not_trusted(root, client, designated):
+    """The reviewer's case: the accountant rows are gone from hub.db, the sync row still says verified."""
+    company, cpa = designated
+    with sqlite3.connect(root / 'hub.db') as hub:
+        hub.execute('DELETE FROM company_accountants WHERE company_id=?', (company,))
+        assert hub.execute('SELECT state FROM company_accountant_sync WHERE company_id=?', (company,)).fetchone() == ('verified',)
+    # The rows no longer hash to the fingerprint read from the books, so the books are read: still designated.
+    assert refused(lambda: grant(client, 'outside-cpa', 'admin', company=company), 'E_VALIDATION').details['reason'] == 'external_accountant'
+    db = company_db(root)
+    os.chmod(db, 0)
+    try:
+        assert refused(lambda: grant(client, 'outside-cpa', 'admin', company=company),
+                       'E_PERMISSION').details['reason'] == 'accountants_unverified'
+    finally:
+        os.chmod(db, 0o644)
+    # A sync row with no fingerprint at all is not trusted either.
+    with sqlite3.connect(root / 'hub.db') as hub:
+        hub.execute('UPDATE company_accountant_sync SET fingerprint=NULL WHERE company_id=?', (company,))
+    refused(lambda: grant(client, 'outside-cpa', 'admin', company=company), 'E_VALIDATION')
+    # The next write to the company puts the mirror back, fingerprint and all.
+    client.run('customer create', {'name': 'Any write'}, company=COMPANY, reason='write')
+    assert hub_rows(root, company) == ({(cpa, THROUGH)}, 'verified')
+
+
+def test_detaching_a_company_removes_its_accountant_rows(root, client, designated):
+    company, cpa = designated
+    client.run('company detach', {'company': company}, reason='moving it')
+    with sqlite3.connect(root / 'hub.db') as hub:
+        assert hub.execute('SELECT COUNT(*) FROM company_accountants WHERE company_id=?', (company,)).fetchone() == (0,)
+        assert hub.execute('SELECT COUNT(*) FROM company_accountant_sync WHERE company_id=?', (company,)).fetchone() == (0,)

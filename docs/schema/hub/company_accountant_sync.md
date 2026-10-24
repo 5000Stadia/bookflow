@@ -12,3 +12,4 @@ Database: `hub`.
 | `state` | VARCHAR(12) | no | — | — | — | — | verified: company_accountants matches the company's books; unverified: the books could not be read, so membership changes there are refused. |
 | `checked_at` | VARCHAR(32) | no | — | — | — | — | When the company's books were last compared. |
 | `problem` | VARCHAR(200) | yes | — | — | — | — | Why the books could not be read; null when verified. |
+| `fingerprint` | VARCHAR(64) | yes | — | — | — | — | SHA-256 of the company's designations (sorted user_id\|through_date lines) as read from its books; the guard trusts the mirror only while its own rows still hash to this. |

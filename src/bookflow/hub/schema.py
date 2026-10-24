@@ -276,6 +276,7 @@ company_accountant_sync = _table(
     _column("state", sa.String(12), "verified: company_accountants matches the company's books; unverified: the books could not be read, so membership changes there are refused.", nullable=False),
     _column("checked_at", sa.String(32), "When the company's books were last compared.", nullable=False),
     _column("problem", sa.String(200), "Why the books could not be read; null when verified.", nullable=True),
+    _column("fingerprint", sa.String(64), "SHA-256 of the company's designations (sorted user_id|through_date lines) as read from its books; the guard trusts the mirror only while its own rows still hash to this.", nullable=True),
     sa.CheckConstraint("state IN ('verified','unverified')", name="ck_company_accountant_sync_state"),
     description="Whether company_accountants is known to match each company's own designations.",
 )

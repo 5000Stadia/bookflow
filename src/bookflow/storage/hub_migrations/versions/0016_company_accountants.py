@@ -6,6 +6,7 @@ designations are read here from its own books, read-only; a company whose books 
 unverified, and membership changes there are refused until a write to it compares them again. Books from
 before co0088 hold no designation. The DDL is literal: this revision is frozen.
 """
+import hashlib
 import json
 import sqlite3
 from contextlib import closing
@@ -18,7 +19,7 @@ revision = 'hub0016'
 down_revision = 'hub0015'
 branch_labels = None
 depends_on = None
-DDL = ('\nCREATE TABLE company_accountants (\n\tcompany_id VARCHAR(26) NOT NULL, \n\tuser_id VARCHAR(26) NOT NULL, \n\tthrough_date VARCHAR(10) NOT NULL, \n\tdesignated_at VARCHAR(32) NOT NULL, \n\tPRIMARY KEY (company_id, user_id)\n)\n\n', "\nCREATE TABLE company_accountant_sync (\n\tcompany_id VARCHAR(26) NOT NULL, \n\tstate VARCHAR(12) NOT NULL, \n\tchecked_at VARCHAR(32) NOT NULL, \n\tproblem VARCHAR(200), \n\tPRIMARY KEY (company_id), \n\tCONSTRAINT ck_company_accountant_sync_state CHECK (state IN ('verified','unverified'))\n)\n\n")
+DDL = ('\nCREATE TABLE company_accountants (\n\tcompany_id VARCHAR(26) NOT NULL, \n\tuser_id VARCHAR(26) NOT NULL, \n\tthrough_date VARCHAR(10) NOT NULL, \n\tdesignated_at VARCHAR(32) NOT NULL, \n\tPRIMARY KEY (company_id, user_id)\n)\n\n', "\nCREATE TABLE company_accountant_sync (\n\tcompany_id VARCHAR(26) NOT NULL, \n\tstate VARCHAR(12) NOT NULL, \n\tchecked_at VARCHAR(32) NOT NULL, \n\tproblem VARCHAR(200), \n\tfingerprint VARCHAR(64), \n\tPRIMARY KEY (company_id), \n\tCONSTRAINT ck_company_accountant_sync_state CHECK (state IN ('verified','unverified'))\n)\n\n")
 INDEXES = ('CREATE INDEX ix_company_accountants_user ON company_accountants (user_id, company_id)',)
 NEW_OBJECTS = ('company_accountants', 'company_accountant_sync', 'ix_company_accountants_user')
 
@@ -50,12 +51,13 @@ def upgrade():
                 raise sqlite3.DatabaseError('the hub has no file')
             rows = read_designations(root / rel / 'company.db')
         except (sqlite3.Error, OSError) as e:
-            db.exec_driver_sql("INSERT INTO company_accountant_sync VALUES (?, 'unverified', ?, ?)",
+            db.exec_driver_sql("INSERT INTO company_accountant_sync VALUES (?, 'unverified', ?, ?, NULL)",
                                (company_id, now, f'{type(e).__name__}: {e}'[:200]))
             continue
         for user_id, through, at in rows:
             db.exec_driver_sql('INSERT INTO company_accountants VALUES (?, ?, ?, ?)', (company_id, user_id, through, at))
-        db.exec_driver_sql("INSERT INTO company_accountant_sync VALUES (?, 'verified', ?, NULL)", (company_id, now))
+        fingerprint = hashlib.sha256('\n'.join(sorted(f'{u}|{d}' for u, d, _ in rows)).encode()).hexdigest()
+        db.exec_driver_sql("INSERT INTO company_accountant_sync VALUES (?, 'verified', ?, NULL, ?)", (company_id, now, fingerprint))
 
 
 def downgrade():
