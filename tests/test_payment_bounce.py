@@ -278,7 +278,7 @@ def test_refusals_say_what_to_do(july):
 
 
 def test_a_receipt_with_an_early_payment_discount_returns_only_its_cash(books):
-    """980.00 cash and a 20.00 discount settled the invoice: the bank takes back 980.00, the discount stays as credit."""
+    """980.00 cash and a 20.00 discount settled the invoice: the bank takes back 980.00, the discount stays on the invoice."""
     terms = {row['name']: row['id'] for row in books['run']('term query', dict(limit=50))['items']}
     customer = books['run']('customer create', dict(name='Adams Plumbing', terms_id=terms['2% 10 Net 30']))['id']
     sale = invoice(books, customer, '1000.00', '3001', date='2026-03-01')
@@ -291,10 +291,9 @@ def test_a_receipt_with_an_early_payment_discount_returns_only_its_cash(books):
     assert by_id(books, checking=books['bank'])['checking'] == 98000
     done = bounce(books, paid, date='2026-03-12', bank_fee=None, customer_fee=None)
     assert done['returned']['minor_units'] == 98000
-    # The invoice owes its whole 1,000.00 again; the 20.00 discount is the customer's credit, as when any discounted
-    # settlement is unapplied.
-    assert due(books, sale) == 100000
-    assert done['credit_left']['minor_units'] == 2000
+    # The 980.00 that never arrived is owed again; the 20.00 discount was never money and stays on the invoice.
+    assert due(books, sale) == 98000
+    assert done['credit_left']['minor_units'] == 0
     assert by_id(books, checking=books['bank'])['checking'] == 0
 
 

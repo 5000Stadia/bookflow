@@ -10,7 +10,7 @@ imports current application metadata.
 from alembic import op
 
 revision = 'co0084'
-down_revision = 'co0080'
+down_revision = 'co0087'
 branch_labels = depends_on = None
 DDL = (
     "\nCREATE TABLE purchase_order_bill_claims (\n\tid VARCHAR(26) NOT NULL, \n\torder_id VARCHAR(26) NOT NULL, \n\torder_line_id VARCHAR(26) NOT NULL, \n\tbill_id VARCHAR(26) NOT NULL, \n\tbill_revision_id VARCHAR(26) NOT NULL, \n\tquantity_microunits BIGINT, \n\tamount_minor_units BIGINT NOT NULL, \n\tcreated_at TEXT NOT NULL, \n\tcreated_by VARCHAR(26) NOT NULL, \n\tcreated_via TEXT NOT NULL, \n\taudit_event_id VARCHAR(26) NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT ck_po_bill_claim_quantity CHECK (quantity_microunits IS NULL OR (typeof(quantity_microunits)='integer' AND quantity_microunits>0)), \n\tCONSTRAINT ck_po_bill_claim_amount CHECK (typeof(amount_minor_units)='integer' AND amount_minor_units>=0), \n\tFOREIGN KEY(order_id) REFERENCES purchase_orders (id), \n\tFOREIGN KEY(order_line_id) REFERENCES purchase_order_line_identities (id), \n\tFOREIGN KEY(bill_id) REFERENCES transactions (id), \n\tFOREIGN KEY(bill_revision_id) REFERENCES transaction_revisions (id), \n\tFOREIGN KEY(audit_event_id) REFERENCES audit_events (id)\n)\n\n",

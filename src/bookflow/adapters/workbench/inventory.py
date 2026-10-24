@@ -10,7 +10,8 @@ filter, not over the page.
 COMMANDS = {"report inventory-valuation", "report stock-status"}
 
 HEADINGS = {"item_name": "Item", "description": "Description", "quantity_on_hand": "On hand",
-            "quantity_available": "Available", "quantity_on_order": "On order",
+            "quantity_committed": "On sales orders", "quantity_available": "Available",
+            "quantity_on_order": "On order", "next_delivery_date": "Next delivery",
             "average_cost": "Avg cost", "asset_value": "Asset value",
             "reorder_point_min": "Reorder point", "reorder_point_max": "Max",
             "below_reorder_point": "Order"}

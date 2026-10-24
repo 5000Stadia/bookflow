@@ -6,6 +6,7 @@ from bookflow.company.ledger_reports import (
 from bookflow.company.check_reports import (
     MissingChecksInput, MissingChecksOutput, missing_checks,
 )
+from bookflow.company.open_sales_orders import OpenSalesOrdersInput, OpenSalesOrdersOutput, open_sales_orders
 from bookflow.core.registry import Plan, command
 from bookflow.company.financial_statements import (
     ProfitAndLossInput, ProfitAndLossOutput, BalanceSheetInput, BalanceSheetOutput,
@@ -208,7 +209,7 @@ def plan_inventory_valuation(inp, ctx, s):
 
 
 @command("report stock-status", scope="company", required_role="member", capability="reports",
-    description="What to reorder, as of as_of: each inventory item with what is on hand, what is available, its reorder points and whether it has fallen to or below the lower one, beside its average cost, asset value and preferred vendor. Quantity available equals quantity on hand and quantity on order is zero until sales orders, purchase orders and assembly builds exist to commit or expect stock; both columns are here so the reading does not change when they do. Asset value totals the same figure report inventory-valuation totals and the balance sheet carries for that date. Totals and the below-reorder count cover every item; rows are paged.",
+    description="What to reorder, as of as_of: each inventory item with what is on hand, what is available, its reorder points and whether it has fallen to or below the lower one, beside its average cost, asset value and preferred vendor. Quantity committed is the open quantity of the item on open sales orders and work orders dated by as_of (measured as it stands now); quantity available is on hand less committed while the company's available_deducts_sales_orders preference is on, on hand while it is off, and the reorder flag compares available, not on hand, with the reorder point. Quantity on order and the next delivery date come from live purchase orders; on order is beside the flag, not in it. Quantity for assemblies is 0 until assembly builds exist. Asset value totals the same figure report inventory-valuation totals and the balance sheet carries for that date. Totals and the below-reorder count cover every item; rows are paged.",
     input_model=StockStatusInput, output_model=StockStatusOutput,
     error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
 def plan_stock_status(inp, ctx, s):
@@ -283,6 +284,14 @@ def plan_vendor_balance_detail(inp, ctx, s):
     error_codes=["E_QUERY_STALE", "E_VALUE_RANGE", "E_RECORD_NOT_FOUND"])
 def plan_open_purchase_orders(inp, ctx, s):
     return Plan(preview=open_purchase_orders(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report open-sales-orders", scope="company", required_role="member", capability="reports",
+    description="What customers have ordered and not yet received: one row per open line of every open, active sales order (by customer, the default, or by item), with its date, number, customer PO, ship date, item, ordered, invoiced, cancelled and backordered quantities and the exact open amount. By item, a stocked item's row adds what is on hand, available (on hand less what open sales orders and work orders commit) and on order. Filters: customer, item, order date_from and date_to, and short_only for lines whose stocked item has more committed than on hand. Closed, voided and inactive orders are left out. Orders are read as they stand now. Totals cover every row; rows are paged.",
+    input_model=OpenSalesOrdersInput, output_model=OpenSalesOrdersOutput,
+    error_codes=["E_QUERY_STALE", "E_RECORD_NOT_FOUND"])
+def plan_open_sales_orders(inp, ctx, s):
+    return Plan(preview=open_sales_orders(inp, s, principal_id=ctx.on_behalf_of))
 
 
 @command("report purchases-by-vendor", scope="company", required_role="member", capability="reports",

@@ -255,6 +255,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `conversion.destination_revision_id` | string | yes | no | — | — |
 | `conversion.destination_type` | literal["bill"] | yes | no | — | — |
 | `conversion.audit_event_id` | string | yes | no | — | — |
+| `covers` | array[object] \| null | no | yes | null | The sales-order and work-order lines this order was written to cover (by sales-order or work-order purchase-order), each with what is still to arrive for it. Absent on an order written by hand. |
+| `covers[].work_document_id` | string | yes | no | — | — |
+| `covers[].work_kind` | string \| null | yes | yes | — | — |
+| `covers[].work_number` | string \| null | yes | yes | — | — |
+| `covers[].work_line_id` | string | yes | no | — | — |
+| `covers[].purchase_order_id` | string | yes | no | — | — |
+| `covers[].purchase_order_line_id` | string | yes | no | — | — |
+| `covers[].purchase_order_number` | string \| null | yes | yes | — | — |
+| `covers[].linked` | string | yes | no | — | Base quantity the purchase-order line was ordered to cover. |
+| `covers[].to_arrive` | string | yes | no | — | What it still covers: the linked quantity, capped by what the purchase-order line has still to arrive; 0 once received, removed, closed or voided. |
+| `covers[].expected_date` | string \| null | yes | yes | — | — |
 | `changed` | boolean | no | no | true | — |
 | `changed_fields` | array[string] | no | no | [] | — |
 
@@ -795,6 +806,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `conversion.destination_revision_id` | string | yes | no | — | — |
 | `conversion.destination_type` | literal["bill"] | yes | no | — | — |
 | `conversion.audit_event_id` | string | yes | no | — | — |
+| `covers` | array[object] \| null | no | yes | null | The sales-order and work-order lines this order was written to cover (by sales-order or work-order purchase-order), each with what is still to arrive for it. Absent on an order written by hand. |
+| `covers[].work_document_id` | string | yes | no | — | — |
+| `covers[].work_kind` | string \| null | yes | yes | — | — |
+| `covers[].work_number` | string \| null | yes | yes | — | — |
+| `covers[].work_line_id` | string | yes | no | — | — |
+| `covers[].purchase_order_id` | string | yes | no | — | — |
+| `covers[].purchase_order_line_id` | string | yes | no | — | — |
+| `covers[].purchase_order_number` | string \| null | yes | yes | — | — |
+| `covers[].linked` | string | yes | no | — | Base quantity the purchase-order line was ordered to cover. |
+| `covers[].to_arrive` | string | yes | no | — | What it still covers: the linked quantity, capped by what the purchase-order line has still to arrive; 0 once received, removed, closed or voided. |
+| `covers[].expected_date` | string \| null | yes | yes | — | — |
 | `changed` | boolean | no | no | true | — |
 | `changed_fields` | array[string] | no | no | [] | — |
 
@@ -1329,6 +1351,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `conversion.destination_revision_id` | string | yes | no | — | — |
 | `conversion.destination_type` | literal["bill"] | yes | no | — | — |
 | `conversion.audit_event_id` | string | yes | no | — | — |
+| `covers` | array[object] \| null | no | yes | null | The sales-order and work-order lines this order was written to cover (by sales-order or work-order purchase-order), each with what is still to arrive for it. Absent on an order written by hand. |
+| `covers[].work_document_id` | string | yes | no | — | — |
+| `covers[].work_kind` | string \| null | yes | yes | — | — |
+| `covers[].work_number` | string \| null | yes | yes | — | — |
+| `covers[].work_line_id` | string | yes | no | — | — |
+| `covers[].purchase_order_id` | string | yes | no | — | — |
+| `covers[].purchase_order_line_id` | string | yes | no | — | — |
+| `covers[].purchase_order_number` | string \| null | yes | yes | — | — |
+| `covers[].linked` | string | yes | no | — | Base quantity the purchase-order line was ordered to cover. |
+| `covers[].to_arrive` | string | yes | no | — | What it still covers: the linked quantity, capped by what the purchase-order line has still to arrive; 0 once received, removed, closed or voided. |
+| `covers[].expected_date` | string \| null | yes | yes | — | — |
 
 Example JSON output:
 
@@ -1720,6 +1753,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `conversion.destination_revision_id` | string | yes | no | — | — |
 | `conversion.destination_type` | literal["bill"] | yes | no | — | — |
 | `conversion.audit_event_id` | string | yes | no | — | — |
+| `covers` | array[object] \| null | no | yes | null | The sales-order and work-order lines this order was written to cover (by sales-order or work-order purchase-order), each with what is still to arrive for it. Absent on an order written by hand. |
+| `covers[].work_document_id` | string | yes | no | — | — |
+| `covers[].work_kind` | string \| null | yes | yes | — | — |
+| `covers[].work_number` | string \| null | yes | yes | — | — |
+| `covers[].work_line_id` | string | yes | no | — | — |
+| `covers[].purchase_order_id` | string | yes | no | — | — |
+| `covers[].purchase_order_line_id` | string | yes | no | — | — |
+| `covers[].purchase_order_number` | string \| null | yes | yes | — | — |
+| `covers[].linked` | string | yes | no | — | Base quantity the purchase-order line was ordered to cover. |
+| `covers[].to_arrive` | string | yes | no | — | What it still covers: the linked quantity, capped by what the purchase-order line has still to arrive; 0 once received, removed, closed or voided. |
+| `covers[].expected_date` | string \| null | yes | yes | — | — |
 | `changed` | boolean | no | no | true | — |
 | `changed_fields` | array[string] | no | no | [] | — |
 
@@ -2104,6 +2148,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `conversion.destination_revision_id` | string | yes | no | — | — |
 | `conversion.destination_type` | literal["bill"] | yes | no | — | — |
 | `conversion.audit_event_id` | string | yes | no | — | — |
+| `covers` | array[object] \| null | no | yes | null | The sales-order and work-order lines this order was written to cover (by sales-order or work-order purchase-order), each with what is still to arrive for it. Absent on an order written by hand. |
+| `covers[].work_document_id` | string | yes | no | — | — |
+| `covers[].work_kind` | string \| null | yes | yes | — | — |
+| `covers[].work_number` | string \| null | yes | yes | — | — |
+| `covers[].work_line_id` | string | yes | no | — | — |
+| `covers[].purchase_order_id` | string | yes | no | — | — |
+| `covers[].purchase_order_line_id` | string | yes | no | — | — |
+| `covers[].purchase_order_number` | string \| null | yes | yes | — | — |
+| `covers[].linked` | string | yes | no | — | Base quantity the purchase-order line was ordered to cover. |
+| `covers[].to_arrive` | string | yes | no | — | What it still covers: the linked quantity, capped by what the purchase-order line has still to arrive; 0 once received, removed, closed or voided. |
+| `covers[].expected_date` | string \| null | yes | yes | — | — |
 | `changed` | boolean | no | no | true | — |
 | `changed_fields` | array[string] | no | no | [] | — |
 

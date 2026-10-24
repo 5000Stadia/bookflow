@@ -250,6 +250,10 @@ class SettlementPaymentVersion(StrictModel):
 
 class InvoiceUpdateInput(SalesUpdateInput, InvoiceFields):
     invoice: Selector
+    release_to_order: Literal['reopen', 'cancel'] = Field(default='reopen', description=(
+        'For lines made from a sales order or work order that this correction takes back: reopen (the default) '
+        'leaves that quantity open on the order again, committed and billable; cancel cancels it on the order in '
+        'the same transaction. The preview and result name the order lines either way.'))
     operation_key: Annotated[str, Field(pattern=r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$')] | None = Field(default=None, description='Required when the invoice has active payment applications. Choose one unique key for this correction and reuse it for preview, save and retries. When supplied, also give a reason of 1–140 characters.')
     settlement_versions: list[SettlementPaymentVersion] = Field(default_factory=list, description='For a changed invoice with active payment applications, supply every funding payment and its current expected_version, or supply settlement_guard instead. Read invoice settlement to review current settlement evidence; do not provide both alternatives.')
     settlement_guard: str | None = Field(default=None, max_length=2048, description='For a changed invoice with active payment applications, pass the guard returned by invoice settlement (or the settlement_dependencies error), or supply settlement_versions instead. After a stale rejection, review current settlement and preview again; do not provide both alternatives.')
@@ -263,7 +267,7 @@ class InvoiceUpdateInput(SalesUpdateInput, InvoiceFields):
     @model_serializer(mode='wrap')
     def compatible_settlement(self, handler):
         values = handler(self)
-        for key in ('operation_key', 'settlement_versions', 'settlement_guard', 'sales_tax_calculation'):
+        for key in ('operation_key', 'settlement_versions', 'settlement_guard', 'sales_tax_calculation', 'release_to_order'):
             if key not in self.model_fields_set:
                 values.pop(key, None)
         return values
@@ -306,6 +310,17 @@ class SalesReceiptShowInput(SalesShowInput):
 class InvoiceVoidInput(StrictModel):
     invoice: Selector
     expected_version: _Version | None = None
+    release_to_order: Literal['reopen', 'cancel'] = Field(default='reopen', description=(
+        'For lines made from a sales order or work order that this correction takes back: reopen (the default) '
+        'leaves that quantity open on the order again, committed and billable; cancel cancels it on the order in '
+        'the same transaction. The preview and result name the order lines either way.'))
+
+    @model_serializer(mode='wrap')
+    def compatible_request(self, handler):
+        values = handler(self)
+        if 'release_to_order' not in self.model_fields_set:
+            values.pop('release_to_order', None)
+        return values
 
 
 class SalesReceiptVoidInput(StrictModel):

@@ -1315,3 +1315,132 @@ EXAMPLES.update({
     "loan list": Example('bookflow loan list' + _C, {}),
     "loan pay": Example('bookflow loan pay "Truck loan" --reason "December payment"' + _C, {"loan": "Truck loan"}),
 })
+# R103: build finished assemblies from their components; run with --dry-run first to see max_buildable.
+EXAMPLES["assembly build"] = Example(
+    'bookflow assembly build --item "Two-Valve Kit" --quantity 2 --date 2026-07-31 --reason "Built two kits today"'
+    ' --company "Demo Plumbing Co" --json', {"item": "Two-Valve Kit", "quantity": "2", "date": "2026-07-31"})
+EXAMPLES["assembly update"] = Example(
+    'bookflow assembly update 01JASSEMBLYBUILD0000000001 --quantity 3 --reason "Three, not two"'
+    ' --company "Demo Plumbing Co" --json', {"build": "01JASSEMBLYBUILD0000000001", "quantity": "3"})
+EXAMPLES["assembly finalize"] = Example(
+    'bookflow assembly finalize 01JASSEMBLYBUILD0000000001 --reason "Valves arrived"'
+    ' --company "Demo Plumbing Co" --json', {"build": "01JASSEMBLYBUILD0000000001"})
+EXAMPLES["assembly void"] = Example(
+    'bookflow assembly void 01JASSEMBLYBUILD0000000001 --reason "Entered twice"'
+    ' --company "Demo Plumbing Co" --json', {"build": "01JASSEMBLYBUILD0000000001"})
+EXAMPLES["assembly delete"] = Example(
+    'bookflow assembly delete 01JASSEMBLYBUILD0000000001 --reason "Not building these after all"'
+    ' --company "Demo Plumbing Co" --json', {"build": "01JASSEMBLYBUILD0000000001"})
+EXAMPLES["assembly show"] = Example(
+    'bookflow assembly show 01JASSEMBLYBUILD0000000001 --company "Demo Plumbing Co" --json',
+    {"build": "01JASSEMBLYBUILD0000000001"})
+EXAMPLES["assembly list"] = Example(
+    'bookflow assembly list --status pending --company "Demo Plumbing Co" --json', {"status": "pending"})
+# R102: what customers have ordered and not yet received, by item, with on hand, available and on order.
+EXAMPLES['report open-sales-orders'] = Example(
+    'bookflow report open-sales-orders --by item --date-to 2026-10-31 --company "Demo Plumbing Co" --json', {'by': 'item', 'date_to': '2026-10-31'})
+
+# Mileage (R118): a trip by total miles, billed to a job, and the rate that prices the deduction.
+EXAMPLES["trip create"] = Example(
+    'bookflow trip create --vehicle "Service van" --trip-end-date 2026-10-20 --total-miles 42 --billable'
+    ' --customer "Riverside Apartments" --item "Mainline Clearing" --billing-rate 0.70 --notes "Site visit"'
+    ' --reason "Mileage log" --company "Demo Plumbing Co" --json',
+    {'vehicle': 'Service van', 'trip_end_date': '2026-10-20', 'total_miles': '42', 'billable': True,
+     'customer': 'Riverside Apartments', 'item': 'Mainline Clearing', 'billing_rate': '0.70', 'notes': 'Site visit'})
+EXAMPLES["trip invoice"] = Example(
+    f'bookflow trip invoice {ID} --expected-version 1 --conversion-key riverside-miles-oct --date 2026-10-22'
+    ' --reason "Bill October mileage" --company "Demo Plumbing Co" --json',
+    {'trip': ID, 'expected_version': 1, 'conversion_key': 'riverside-miles-oct', 'date': '2026-10-22'})
+EXAMPLES["mileage-rate set"] = Example(
+    'bookflow mileage-rate set --effective-date 2026-01-01 --rate 0.70 --reason "Standard rate for 2026"'
+    ' --company "Demo Plumbing Co" --json', {'effective_date': '2026-01-01', 'rate': '0.70'})
+_MILES_CO = ' --company "Demo Plumbing Co" --json'
+EXAMPLES.update({
+    'vehicle create': Example('bookflow vehicle create --name "Service van" --description "Ford Transit, plate 7ABC123"'
+                              ' --reason "New van"' + _MILES_CO, {'name': 'Service van', 'description': 'Ford Transit, plate 7ABC123'}),
+    'vehicle update': Example('bookflow vehicle update "Service van" --active false --reason "Sold the van"' + _MILES_CO,
+                              {'vehicle': 'Service van', 'active': False}),
+    'vehicle show': Example('bookflow vehicle show "Service van"' + _MILES_CO, {'vehicle': 'Service van'}),
+    'vehicle list': Example('bookflow vehicle list' + _MILES_CO, {}),
+    'mileage-rate delete': Example('bookflow mileage-rate delete 2027-01-01 --reason "Entered a year early"' + _MILES_CO,
+                                   {'effective_date': '2027-01-01'}),
+    'mileage-rate list': Example('bookflow mileage-rate list' + _MILES_CO, {}),
+    'trip update': Example(f'bookflow trip update {ID} --expected-version 1 --total-miles 40 --reason "Odometer note said 40"'
+                           + _MILES_CO, {'trip': ID, 'expected_version': 1, 'total_miles': '40'}),
+    'trip void': Example(f'bookflow trip void {ID} --expected-version 2 --reason "Logged twice"' + _MILES_CO,
+                         {'trip': ID, 'expected_version': 2}),
+    'trip show': Example(f'bookflow trip show {ID}' + _MILES_CO, {'trip': ID}),
+    'trip query': Example('bookflow trip query --vehicle "Service van" --date-from 2026-10-01 --date-to 2026-10-31 --unreimbursed'
+                          + _MILES_CO, {'vehicle': 'Service van', 'date_from': '2026-10-01', 'date_to': '2026-10-31',
+                                        'unreimbursed': True}),
+    'trip billing': Example(f'bookflow trip billing {ID}' + _MILES_CO, {'trip': ID}),
+    'trip sales-receipt': Example(
+        f'bookflow trip sales-receipt {ID} --expected-version 1 --conversion-key riverside-miles-cash --date 2026-10-22'
+        ' --deposit-to "Undeposited Funds" --amount-received 29.40 --reason "Paid on site"' + _MILES_CO,
+        {'trip': ID, 'expected_version': 1, 'conversion_key': 'riverside-miles-cash', 'date': '2026-10-22',
+         'deposit_to': 'Undeposited Funds', 'amount_received': '29.40'}),
+    'trip reimburse': Example(
+        f'bookflow trip reimburse --trips {ID} --pay-to \'{{"name_type": "employee", "name_id": "Casey Worker"}}\''
+        ' --account Checking --expense-account "Travel Mileage" --date 2026-10-31 --reason "October mileage"' + _MILES_CO,
+        {'trips': [ID], 'pay_to': {'name_type': 'employee', 'name_id': 'Casey Worker'}, 'account': 'Checking',
+         'expense_account': 'Travel Mileage', 'date': '2026-10-31'}),
+    'report mileage-by-vehicle': Example('bookflow report mileage-by-vehicle --date-from 2026-01-01 --date-to 2026-12-31'
+                                         + _MILES_CO, {'date_from': '2026-01-01', 'date_to': '2026-12-31'}),
+    'report mileage-by-job': Example('bookflow report mileage-by-job --date-from 2026-01-01 --date-to 2026-12-31 --detail'
+                                     + _MILES_CO, {'date_from': '2026-01-01', 'date_to': '2026-12-31', 'detail': True}),
+})
+EXAMPLES["customer-credit transfer"] = Example(
+    'bookflow customer-credit transfer --from-customer "Payment Example Customer:Job B"'
+    ' --to-customer "Payment Example Customer:Job A" --amount 10.00 --date 2026-10-20 --operation-key xfer-b-to-a'
+    ' --reason "Customer asked to use the Job B credit on Job A"' + _C,
+    {"from_customer": "Payment Example Customer:Job B", "to_customer": "Payment Example Customer:Job A",
+     "amount": "10.00", "date": "2026-10-20", "operation_key": "xfer-b-to-a"})
+EXAMPLES["customer-credit transfer-void"] = Example(
+    f'bookflow customer-credit transfer-void {ID} --reason "Moved to the wrong job"' + _C, {"transfer": ID})
+
+# Price rules (R110): a promotion for one customer's category, quantity breaks, and the price a line would get.
+_PRICE_CO = ' --company "Demo Plumbing Co" --json'
+EXAMPLES.update({
+    'price-rule create': Example(
+        'bookflow price-rule create --name "Riverside clearing 10% off" --customers "Riverside Apartments"'
+        ' --items "Mainline Clearing" --value 10 --date-to 2026-12-31 --reason "Year-end deal"' + _PRICE_CO,
+        {'name': 'Riverside clearing 10% off', 'customers': ['Riverside Apartments'], 'items': ['Mainline Clearing'],
+         'value': '10', 'date_to': '2026-12-31'}),
+    'price-rule update': Example(
+        'bookflow price-rule update "Riverside clearing 10% off" --expected-version 1 --rounding x.99'
+        ' --reason "Charm pricing"' + _PRICE_CO,
+        {'rule': 'Riverside clearing 10% off', 'expected_version': 1, 'rounding': 'x.99'}),
+    'price-rule activate': Example(f'bookflow price-rule activate {ID} --expected-version 2 --reason "Deal back on"' + _PRICE_CO,
+                                   {'rule': ID, 'expected_version': 2}),
+    'price-rule deactivate': Example(f'bookflow price-rule deactivate {ID} --expected-version 1 --reason "Deal ended"' + _PRICE_CO,
+                                     {'rule': ID, 'expected_version': 1}),
+    'price-rule show': Example('bookflow price-rule show "Riverside clearing 10% off"' + _PRICE_CO,
+                               {'rule': 'Riverside clearing 10% off'}),
+    'price-rule list': Example('bookflow price-rule list --customer "Riverside Apartments"' + _PRICE_CO,
+                               {'customer': 'Riverside Apartments'}),
+    'price-rule preview': Example(
+        'bookflow price-rule preview --item "Mainline Clearing" --customer "Riverside Apartments" --quantity 10'
+        ' --date 2026-11-02' + _PRICE_CO,
+        {'item': 'Mainline Clearing', 'customer': 'Riverside Apartments', 'quantity': '10', 'date': '2026-11-02'}),
+    'price-rule preferences': Example('bookflow price-rule preferences' + _PRICE_CO, {}),
+    'price-rule set-preferences': Example(
+        'bookflow price-rule set-preferences --conflict-policy priority --reason "Rules over price levels"' + _PRICE_CO,
+        {'conflict_policy': 'priority'}),
+})
+# R101 increment 4: bill what can ship on an order; retries with the same key return the same invoice.
+EXAMPLES['sales-order invoice'] = Example(
+    'bookflow sales-order invoice DEMO-SO-1 --expected-version 2 --conversion-key "riverside-ship-1" --date 2026-10-22'
+    ' --company "Demo Plumbing Co" --reason "Shipped what we had" --json',
+    {'sales_order': 'DEMO-SO-1', 'expected_version': 2, 'conversion_key': 'riverside-ship-1', 'date': '2026-10-22'})
+EXAMPLES['sales-order billing'] = Example('bookflow sales-order billing DEMO-SO-1 --company "Demo Plumbing Co" --json',
+                                          {'sales_order': 'DEMO-SO-1'})
+# R101 increment 5: order what an order is short from the items' preferred vendor; a retry orders nothing.
+EXAMPLES['sales-order purchase-order'] = Example(
+    'bookflow sales-order purchase-order DEMO-SO-1 --date 2026-10-22 --company "Demo Plumbing Co" --reason "Order the backorder" --json',
+    {'sales_order': 'DEMO-SO-1', 'date': '2026-10-22'})
+EXAMPLES['work-order purchase-order'] = Example(
+    'bookflow work-order purchase-order DEMO-SO-WO-1 --date 2026-10-22 --vendor "Central Supply" --lines '
+    + _shlex.quote(_json.dumps([{'item': 'Brass Shutoff Valve', 'quantity': '3'}]))
+    + ' --company "Demo Plumbing Co" --reason "Spares for the job" --json',
+    {'work_order': 'DEMO-SO-WO-1', 'date': '2026-10-22', 'vendor': 'Central Supply',
+     'lines': [{'item': 'Brass Shutoff Valve', 'quantity': '3'}]})

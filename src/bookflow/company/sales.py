@@ -516,7 +516,8 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
         if key:
             seen.add(key)
         resolved, line_warnings = sales_defaults.resolve_line(s, line, profile, previous=prior.get(key),
-            previous_header=old_profile, refresh=inp.refresh_defaults, defer_tax=True, line_kinds=True)
+            previous_header=old_profile, refresh=inp.refresh_defaults, defer_tax=True, line_kinds=True, date=date,
+            old_date=old_revision['date'] if old_revision else None)
         if group is not None:
             resolved['profile'].group = group
         # A kept line naming an account or item merged since saves with the survivor (R117).
@@ -701,6 +702,9 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
     if operation != 'post':
         from bookflow.company.sales_deletions import require_not_deleted
         require_not_deleted(s, resolve(s, getattr(inp, document_type), document_type)['id'])
+    if document_type == 'invoice' and operation in ('update', 'void'):
+        from bookflow.company.credit_transfers import guard_document
+        guard_document(s, resolve(s, inp.invoice, 'invoice')['id'], 'corrected' if operation == 'update' else 'voided')
     if document_type == 'invoice' and operation == 'update' and not _settlement_internal:
         from bookflow.company.payment_invoice_corrections import prepare as settlement_prepare
         return settlement_prepare(s, ctx, inp)
@@ -842,6 +846,11 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
                                        revision_id=revision['id'], document_line_id=movement.key, batch=batch)
     inventory_effects.bind_reversals(stock, pending['posting_lines'], pending['posting_batches'])
     inventory_effects.check(s, stock, pending['posting_lines'])
+    if billing_source is None and operation != 'void' and stock.moves_stock:
+        # An ordinary sale that takes stock open orders and work orders have committed says so.
+        from bookflow.company.commitments import taking_warnings
+        warnings = warnings + [w for w in taking_warnings(s, _stock_entries(pending),
+                               own_transaction=old_header['id'] if old_header else None) if w not in warnings]
     view_profile = pending['sales_profiles'][0] if pending['sales_profiles'] else profile_row(s, revision)
     output = SalesWriteOutput(**summary(header, revision, view_profile), revision=revision_output(s, revision, pending),
         facts_fingerprint=fingerprint, warnings=warnings + [line for line in stock.warnings if line not in warnings],

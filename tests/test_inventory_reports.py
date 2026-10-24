@@ -103,7 +103,9 @@ def test_stock_status_carries_the_reorder_point_and_the_flag(client, stocked):
     # The demo valve reorders at six and only four are left.
     assert rows[ITEM]["reorder_point_min"] == "6" and rows[ITEM]["reorder_point_max"] == "24"
     assert rows[ITEM]["below_reorder_point"] is True
-    assert rows[ITEM]["quantity_available"] == rows[ITEM]["quantity_on_hand"]
+    # The demo's sales order still wants 8 valves and its stocked work order 2 (R102): available is on hand less those.
+    assert rows[ITEM]["quantity_committed"] == "10"
+    assert int(rows[ITEM]["quantity_available"]) == int(rows[ITEM]["quantity_on_hand"]) - 10
     assert rows[ITEM]["quantity_on_order"] == "0"
     assert rows[KIT]["reorder_point_min"] is None and rows[KIT]["below_reorder_point"] is False
     assert report["totals"]["below_reorder_point"] == 1

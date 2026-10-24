@@ -44,8 +44,9 @@ TIME_STATES = ('recorded', 'voided')
 ORDER_STATES = ('open', 'closed', 'voided')
 # The states each kind can hold, in one place, so a reader that needs them for a kind asks
 # rather than re-deciding which enumeration applies.
+# A billable trip's one-line billing document (R118) is recorded mileage, shaped as recorded time is.
 STATES = dict(proposal=QUOTE_STATES, estimate=QUOTE_STATES, work_order=WORK_STATES,
-              time_activity=TIME_STATES, sales_order=ORDER_STATES)
+              time_activity=TIME_STATES, sales_order=ORDER_STATES, mileage=TIME_STATES)
 # An estimate's operational destination: at most one of these, ever.
 DESTINATION_RELATIONS = ('estimate_work_order', 'estimate_sales_order')
 TABLE_KINDS = (('work_revisions', 'work_revision'), ('work_line_identities', 'work_line'),
@@ -174,8 +175,11 @@ def revision_output(s, rev, pending=None, *, summary_only=False, header=None):
     output, known, complete = [], 0, True
     from bookflow.company import sales_orders
     ordering = header is not None and header['kind'] in sales_orders.ORDER_KINDS
-    figures = (sales_orders.line_quantities(s, header, rev, lines, identities, rev['currency'])
-               if ordering and header['current_revision_id'] == rev['id'] else {})
+    current = ordering and header['current_revision_id'] == rev['id']
+    figures = sales_orders.line_quantities(s, header, rev, lines, identities, rev['currency']) if current else {}
+    stock = _line_stock(s, header, lines) if current else {}
+    from bookflow.company.shortfall import document_coverage
+    coverage = document_coverage(s, header['id']) if current else {}
     for line in lines:
         f, ident = line_facts(line), identities[line['line_id']]
         currency = rev['currency']
@@ -187,7 +191,7 @@ def revision_output(s, rev, pending=None, *, summary_only=False, header=None):
             facts=f, quantity=format_quantity_micro_units(f.quantity_microunits),
             completed_quantity=format_quantity_micro_units(f.completed_quantity_microunits),
             cancelled_quantity=format_quantity_micro_units(f.cancelled_quantity_microunits) if ordering else None,
-            order=figures.get(line['line_id']),
+            order=figures.get(line['line_id']), stock=stock.get(f.item_id), coverage=coverage.get(line['line_id']),
             unit_price=amount(f.unit_price_minor_units), net=amount(f.net_minor_units),
             tax=amount(f.tax_minor_units), total=amount(f.gross_minor_units),
             estimated_unit_cost=amount(f.estimated_unit_cost_minor_units), estimated_cost=amount(f.estimated_cost_minor_units),
@@ -201,6 +205,26 @@ def revision_output(s, rev, pending=None, *, summary_only=False, header=None):
         custom_fields_snapshot=snapshot, custom_fields=custom.project(snapshot), lines=output,
         known_cost_total=Money(known, rev['currency']).to_dict(), cost_complete=complete,
         estimated_profit=Money(rev['net_minor_units'] - known, rev['currency']).to_dict() if complete else None)
+
+
+def _line_stock(s, header, lines):
+    """On hand, committed elsewhere, on order and available to this document, per stocked item."""
+    from bookflow.company import commitments
+    from bookflow.company.items import TRACKED_TYPES
+    from bookflow.company.inventory_reports import _incoming
+    from bookflow.company.work_outputs import LineStock
+    items = {line_facts(line).item_id for line in lines if line_facts(line).profile.item_type in TRACKED_TYPES}
+    if not items:
+        return {}
+    stock = commitments.on_hand(s, items)
+    elsewhere = commitments.committed(s, items=list(items), excluding=header['id'])
+    on_order, _ = _incoming(s, clock.today_iso())
+    deducts = commitments.deducts_documents(s)
+    plain = format_quantity_micro_units
+    return {item: LineStock(on_hand=plain(stock.get(item, 0)), committed_elsewhere=plain(elsewhere.get(item, 0)),
+                            on_order=plain(on_order.get(item, 0)),
+                            available=plain(stock.get(item, 0) - (elsewhere.get(item, 0) if deducts else 0)))
+            for item in items}
 
 
 def links(s, document_id, pending=None, headers=None, *, cursor=None, ctx=None):
@@ -370,7 +394,7 @@ def _lifecycle(kind, old, value, inp, ctx):
     status = value['status']
     if status not in STATES[kind]:
         raise _invalid('status', 'status does not apply to this document kind')
-    if kind == 'time_activity':
+    if kind in ('time_activity', 'mileage'):
         # Time that was worked has no decision to move through and no schedule to run down.
         # `recorded` is the only state this path writes; `time-activity void` writes the other
         # one without coming here, exactly as `estimate void` does.
@@ -429,6 +453,11 @@ def _state_invariants(kind, value):
     f, status = value['facts'], value['status']
     if f['expires_on'] and f['expires_on'] < value['date']:
         raise _invalid('expires_on', 'must not precede the document date')
+    if kind == 'mileage':
+        # A billable trip's billing document is the trip's miles: one line, kept by `trip`.
+        if len(value['lines']) != 1:
+            raise _invalid('miles', 'a trip is billed as one line')
+        return
     if kind == 'time_activity':
         # A time entry is one person's one stretch of work: the two facts that make it that
         # rather than a work order are checked here, where every path reaches them, so the
@@ -563,7 +592,9 @@ def _resolve_lines(s, inp, kind, profile, old_rev=None, old_profile=None):
             seen.add(key)
         resolved, line_warnings = work_defaults.resolve_line(s, line, profile,
             previous=line_facts(prior[key]) if key else None, previous_header=old_profile,
-            refresh=inp.refresh_defaults, kind=kind, document_tax=True)
+            refresh=inp.refresh_defaults, kind=kind, document_tax=True,
+            date=getattr(inp, 'date', None) or (old_rev['date'] if old_rev else None),
+            old_date=old_rev['date'] if old_rev else None)
         if group is not None:
             resolved.profile.group = group
         resolved_lines.append((key, resolved))
@@ -833,7 +864,11 @@ def prepare(s, ctx, inp, kind, operation):
         resolved, warnings = _resolve_facts(s, inp, kind, old_facts, old_rev['date'] if old else None, old['status'] if old else None)
         line_values, line_warnings = _resolve_lines(s, inp, kind, resolved.profile, old_rev, old_facts.profile if old else None)
         warnings += [w for w in line_warnings if w not in warnings]
-        custom_plan, custom_warnings = _custom_plan(s, inp, kind, header['id'], old_rev)
+        if kind == 'mileage':
+            # A trip's billing document carries no custom fields of its own (R118): the trip is the record.
+            custom_plan, custom_warnings = None, []
+        else:
+            custom_plan, custom_warnings = _custom_plan(s, inp, kind, header['id'], old_rev)
         warnings += custom_warnings
         number, sequence = _number(s, kind, inp.number if inp.number is not None else old['number'] if old else None, header['id'])
         def picked(key, default=None):
@@ -845,8 +880,8 @@ def prepare(s, ctx, inp, kind, operation):
         value = dict(date=picked('date'), number=number, title=title,
             status=picked('status', 'open' if kind == 'sales_order' else 'draft'), active=picked('active', True), decision_note=picked('decision_note'),
             facts=resolved.model_dump(mode='json'), lines=line_values,
-            custom_fields=_custom_semantic(custom_plan.snapshot))
-        custom_snapshot = custom_plan.snapshot
+            custom_fields=_custom_semantic(custom_plan.snapshot if custom_plan else {}))
+        custom_snapshot = custom_plan.snapshot if custom_plan else {}
     # Report invalid completion timestamps before captured-fact parsing in tax preparation.
     _state_invariants(kind, value)
     work_tax.prepare(s,header['id'],value)
@@ -874,6 +909,9 @@ def prepare(s, ctx, inp, kind, operation):
     accepted = {key: old_rev[key] for key in ('accepted_revision_id', 'accepted_at', 'accepted_by')} if old_rev else None
     rev = _new_revision(s, ctx, header, value, custom_snapshot, old_rev, pending, event, at, acceptance=accepted)
     view = output(s, header, rev, pending, [header], ctx=ctx)
+    if kind in ('sales_order', 'work_order') and operation != 'void':
+        from bookflow.company.commitments import shortage_warnings
+        warnings = warnings + shortage_warnings(s, view, header['id'])
     return Plan(WorkWriteOutput(**view.model_dump(), facts_fingerprint=fingerprint,
         changed_fields=changes, warnings=warnings), dict(input=inp, kind=kind, operation=operation,
         changed=True, headers=[header], before={old['id']: old} if old else {}, pending=pending,
@@ -990,6 +1028,9 @@ def _prepare_destination(s, ctx, inp, kind, operation):
         conversion_key_hash=key_hash, request_hash=request_hash,
         created_at=at, created_by=s.actor.id, created_via=ctx.interface.value))
     view = output(s, header, rev, pending, [header, source_current], ctx=ctx)
+    if destination_kind in ('sales_order', 'work_order'):
+        from bookflow.company.commitments import shortage_warnings
+        warnings = warnings + shortage_warnings(s, view, header['id'])
     return Plan(WorkWriteOutput(**view.model_dump(), facts_fingerprint=fingerprint,
         warnings=warnings, changed_fields=['created', 'source_link']),
         dict(input=inp, kind=kind, operation=operation, changed=True, headers=headers, before=before,

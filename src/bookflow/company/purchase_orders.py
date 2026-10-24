@@ -385,18 +385,20 @@ def _conversion_output(row):
 
 
 def output(s, header, rev, pending=None, conversion=None):
+    from bookflow.company.shortfall import covers
     return PurchaseOrderOutput(**summary(s, header, rev, conversion),
                                revision=revision_output(s, rev, pending),
-                               conversion=_conversion_output(conversion))
+                               conversion=_conversion_output(conversion), covers=covers(s, header['id']))
 
 
 def show(s, inp):
     header = resolve(s, inp.purchase_order)
     requested = revision(s, header, inp.revision_number)
     conversion = conversion_row(s, header['id'])
+    from bookflow.company.shortfall import covers
     return PurchaseOrderOutput(**summary(s, header, revision(s, header), conversion),
                                revision=revision_output(s, requested),
-                               conversion=_conversion_output(conversion))
+                               conversion=_conversion_output(conversion), covers=covers(s, header['id']))
 
 
 def page(s, ctx, inp, *, history=False):

@@ -15,7 +15,7 @@ TRANSACTIONS = {
         'item-receipt post', 'purchase-order post', 'inventory adjust',
         'statement-charge post', 'sales-tax pay', 'sales-tax adjust', 'batch-invoice post',
         'estimate create', 'proposal create', 'work-order create', 'sales-order create',
-        'time-activity create', 'payment receive', 'payment bounce', 'bill pay',
+        'time-activity create', 'payment receive', 'payment bounce', 'customer-credit transfer', 'bill pay',
     )},
     'deposit post': 'document.date',
 }
@@ -39,6 +39,7 @@ REPORTS = {
     'report balance-sheet-comparison': ('date_to',),
     'report trial-balance': ('date_to',),
     'report open-purchase-orders': ('date_to',),
+    'report open-sales-orders': ('date_to',),
     # Read over a period, as the anchor's Sales Tax Liability report is; as_of stays a
     # synonym for date_to on the command, so the form leaves it empty.
     'sales-tax liability': ('date_from', 'date_to'),

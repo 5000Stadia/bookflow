@@ -626,6 +626,13 @@ def add_note(s, output, customer_selector, context):
     note = customer_note(s, customer_id, context)
     if note and output is not None and note not in output.warnings:
         output.warnings.append(note)
+    try:  # the customer's open sales orders (R101 increment 4): advice, never a refusal
+        from bookflow.company.sales_orders import order_note
+        note = order_note(s, customer_id, context, output)
+    except Exception:
+        note = None
+    if note and output is not None and note not in output.warnings:
+        output.warnings.append(note)
     return output
 
 

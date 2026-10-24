@@ -10,6 +10,23 @@ def prepayments_kinds():
     return HOLDING_KINDS
 
 
+ORDER_DESCRIPTIONS = {
+    'invoice': ('Invoice what has shipped on a sales order. With no selection it bills what can ship: each stocked line '
+                'up to what is available to this order (on hand less what other orders and work orders commit), shared '
+                'in line order among its lines for one item, and every other open line when anything ships or the order '
+                'has no open stocked line; if nothing can ship it refuses with each line\'s open quantity and '
+                'availability. all_open bills every open quantity whatever the stock; line_ids bills whole open '
+                'remainders; selections take a quantity per line, naming line_id or an item that exactly one open line '
+                'carries. Percent, net-amount and rebill selections are refused. The invoice is taxed as an ordinary '
+                'invoice of its own date (defaulted tax selections resolved again, current rates); order_tax shows the '
+                'difference from the order\'s quoted tax. Posting issues the stock and consumes the order lines in one '
+                'transaction; apply_prepayment (default true) uses money held on the order or its estimate. A retried '
+                'conversion key returns the original invoice.'),
+    'billing': ('Show an order\'s lines with ordered, invoiced, cancelled and remaining quantities, remaining amounts and '
+                'tax forecast, and the invoices made from it.'),
+}
+
+
 def register(kind, prefix, verb):
     destination = verb.replace('-', '_')
     read = verb == 'billing'
@@ -23,12 +40,17 @@ def register(kind, prefix, verb):
         if verb == 'invoice' and plan.data.get('changed', True) and not plan.preview.idempotent_replay:
             from bookflow.company import prepayments
             prepayments.conversion_preview(s, plan.preview, kind, getattr(inp, kind), inp.apply_prepayment)
+            if kind == 'sales_order':
+                from bookflow.company import sales_orders, work
+                note = sales_orders.prepayment_date_warning(s, work.resolve(s, inp.sales_order, kind), plan.preview, inp.date)
+                if note:
+                    plan.preview.warnings.append(note)
         elif verb == 'invoice':
             from bookflow.company import prepayments
             plan = Plan(prepayments.conversion_replay(s, plan.preview), plan.data)
         return plan
     cmd = command(kind.replace('_', '-') + ' ' + verb, scope='company',
-        description=(
+        description=ORDER_DESCRIPTIONS[verb] if kind == 'sales_order' else (
             'Show quoted, completed, billed and remaining work, exact partial quantities, original-scope percentages, current billing owner and linked invoices/receipts. Quoted tax is informational; actual installments use the captured source tax policy. Remaining tax forecasts all remaining billable nets together in current source order. Uncharged physical scope is not a debt.' if read else
             'This work is finished; make an invoice for remaining work, selected quantities or net amounts, or percentages of original scope. Rebill a released allocation by its exact allocation ID. Permanent retries preserve the original bill. Extra charges are added as independent unlinked lines through invoice update; quoted scope stays capped at 100%. Completion, payment and sending remain separate operations.' if verb == 'invoice' else
             'They paid; make a sales receipt for remaining or selected partial work with the exact gross received, payment method and deposit account. Percentages refer to original scope; tax is calculated per bill. Rebill an exact released allocation when entirely free. This creates a paid sale, never payment of an existing invoice.') +
@@ -53,6 +75,11 @@ def register(kind, prefix, verb):
                 if applied.output is not None and getattr(applied.output, 'changed', True):
                     applied.output = prepayments.conversion_draw(s, ctx, applied.output, kind, getattr(inp, kind),
                                                                  inp.apply_prepayment)
+                    if kind == 'sales_order':
+                        from bookflow.company import sales_orders, work
+                        note = sales_orders.prepayment_date_warning(s, work.resolve(s, inp.sales_order, kind), applied.output, inp.date)
+                        if note and note not in applied.output.warnings:
+                            applied.output.warnings.append(note)
                 elif applied.output is not None:
                     applied.output = prepayments.conversion_replay(s, applied.output)
                 return applied
@@ -72,5 +99,7 @@ def register(kind, prefix, verb):
 
 # The kinds come from billing_queries, which is where what can be billed is declared.
 BILLING_COMMANDS = [register(kind, ''.join(word.title() for word in kind.split('_')), verb)
-    for kind in billing_queries.BILLING_KINDS
-    for verb in ('invoice', 'sales-receipt', 'billing')]
+    for kind in billing_queries.BILLING_KINDS if kind != 'mileage'  # a trip's are `trip invoice` etc. (mileage_cmds)
+    for verb in ('invoice', 'sales-receipt', 'billing')
+    # An order becomes an invoice, never a sales receipt (the anchor offers none).
+    if not (kind == 'sales_order' and verb == 'sales-receipt')]

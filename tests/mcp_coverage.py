@@ -164,6 +164,10 @@ PREPAYMENT_COMMANDS = frozenset(('prepayment receive', 'prepayment attach', 'pre
 # balance and undoes, for an account and an item, through all four surfaces over identical small companies.
 LIST_MERGE_COMMANDS = frozenset(('account merge', 'account unmerge', 'item merge', 'item unmerge'))
 
+# R148 the rest of customer collections: moving credit between jobs. Its witness previews a transfer,
+# records it, records it again (nothing written), reads both jobs' aging and voids it, on all four surfaces.
+COLLECTIONS_COMMANDS = frozenset(('customer-credit transfer', 'customer-credit transfer-void'))
+
 # R101: the sales order. Its witness quotes, converts (and replays), creates, revises, closes, copies,
 # voids and reads orders back through all four surfaces over identical demo copies.
 SALES_ORDER_COMMANDS = frozenset(('estimate sales-order', 'sales-order copy', 'sales-order create', 'sales-order history',
@@ -174,13 +178,45 @@ SALES_ORDER_COMMANDS = frozenset(('estimate sales-order', 'sales-order copy', 's
 FIXED_ASSET_COMMANDS = frozenset(('fixed-asset depreciate', 'fixed-asset dispose', 'fixed-asset list', 'fixed-asset schedule',
                                   'fixed-asset setup', 'loan create', 'loan list', 'loan pay', 'loan show', 'loan update'))
 
+# R103: assembly builds. Its witness builds, edits, marks pending, finalizes, voids, deletes, shows and lists
+# through all four surfaces over identical demo copies.
+ASSEMBLY_BUILD_COMMANDS = frozenset(('assembly build', 'assembly update', 'assembly finalize', 'assembly void',
+                                     'assembly delete', 'assembly show', 'assembly list'))
+
+# R102: committed stock. Its witness reads report open-sales-orders by customer and by item through all four
+# surfaces over identical demo copies.
+COMMITTED_STOCK_COMMANDS = frozenset(('report open-sales-orders',))
+
+# R118: mileage. Its witness adds and renames a vehicle, sets, lists and removes rates, records, corrects, voids,
+# reads and queries trips, bills one by invoice and one by sales receipt, reads the billing window, pays the
+# driver back by check and runs both mileage reports through all four surfaces over identical demo copies.
+MILEAGE_COMMANDS = frozenset(('mileage-rate delete', 'mileage-rate list', 'mileage-rate set', 'report mileage-by-job',
+                              'report mileage-by-vehicle', 'trip billing', 'trip create', 'trip invoice', 'trip query',
+                              'trip reimburse', 'trip sales-receipt', 'trip show', 'trip update', 'trip void',
+                              'vehicle create', 'vehicle list', 'vehicle show', 'vehicle update'))
+
+# R110: price rules. Its witness sets the conflict preference, adds, changes, shows, lists, previews, deactivates
+# and reactivates a rule through all four surfaces over identical demo copies.
+PRICING_RULE_COMMANDS = frozenset(('price-rule activate', 'price-rule create', 'price-rule deactivate', 'price-rule list',
+                                   'price-rule preferences', 'price-rule preview', 'price-rule set-preferences',
+                                   'price-rule show', 'price-rule update'))
+
+# R101 increment 4: invoicing from orders. Its witness invoices the demo order by its default, replays the key
+# and reads the order's billing through all four surfaces over identical demo copies.
+ORDER_INVOICING_COMMANDS = frozenset(('sales-order invoice', 'sales-order billing'))
+
+# R101 increment 5: shortfall coverage. Its witness orders a demo order's shortfall, is refused ordering it
+# again, and orders spares for a work order through all four surfaces over identical demo copies.
+SHORTFALL_COMMANDS = frozenset(('sales-order purchase-order', 'work-order purchase-order'))
+
 # R153 billing part of a purchase order. Its witness orders ten, bills four against the order, reads the
 # line tracking and the open purchase orders report, and closes the rest through all four surfaces.
 PARTIAL_PO_COMMANDS = frozenset(('purchase-order close-lines',))
 
+
 BROWSING_COMMANDS = frozenset(('account query options', 'class query options', 'custom-field query children', 'custom-field query options', 'customer query options', 'customer-message query options', 'customer-type query options', 'employee query options', 'item query children', 'item query options', 'item-category query options', 'job-type query options', 'other-name query options', 'payment-method query options', 'price-level query children', 'price-level query options', 'sales-rep query options', 'sales-tax-code query options', 'ship-method query options', 'term query options', 'unit-of-measure query children', 'unit-of-measure query options', 'vendor query children', 'vendor query options', 'vendor-type query options'))
 
-FROZEN_COMMANDS = PARTIAL_PO_COMMANDS | FIXED_ASSET_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
+FROZEN_COMMANDS = PARTIAL_PO_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
 account create
 account deactivate
 account list
@@ -711,6 +747,13 @@ def execution_map():
     from tests.test_list_merge_surfaces import COMMANDS as LIST_MERGE_SURFACE_COMMANDS
     from tests.test_sales_order_surfaces import COMMANDS as SALES_ORDER_SURFACE_COMMANDS
     from tests.test_fixed_asset_surfaces import COMMANDS as FIXED_ASSET_SURFACE_COMMANDS
+    from tests.test_assembly_build_surfaces import COMMANDS as ASSEMBLY_BUILD_SURFACE_COMMANDS
+    from tests.test_committed_stock_surfaces import COMMANDS as COMMITTED_STOCK_SURFACE_COMMANDS
+    from tests.test_mileage_surfaces import COMMANDS as MILEAGE_SURFACE_COMMANDS
+    from tests.test_credit_transfer_surfaces import COMMANDS as COLLECTIONS_SURFACE_COMMANDS
+    from tests.test_pricing_rule_surfaces import COMMANDS as PRICING_RULE_SURFACE_COMMANDS
+    from tests.test_order_invoicing_surfaces import COMMANDS as ORDER_INVOICING_SURFACE_COMMANDS
+    from tests.test_shortfall_surfaces import COMMANDS as SHORTFALL_SURFACE_COMMANDS
     from tests.test_purchase_order_partial_surfaces import COMMANDS as PARTIAL_PO_SURFACE_COMMANDS
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
@@ -791,6 +834,13 @@ def execution_map():
                    'tests/test_list_merge_surfaces.py::test_the_same_list_merge_through_python_cli_http_and_mcp' if cmd.name in LIST_MERGE_SURFACE_COMMANDS else  # all four
                    'tests/test_sales_order_surfaces.py::test_the_same_orders_through_python_cli_http_and_mcp' if cmd.name in SALES_ORDER_SURFACE_COMMANDS else  # all four
                    'tests/test_fixed_asset_surfaces.py::test_the_same_fixed_assets_and_loan_through_python_cli_http_and_mcp' if cmd.name in FIXED_ASSET_SURFACE_COMMANDS else  # all four
+                   'tests/test_assembly_build_surfaces.py::test_the_same_assembly_builds_through_python_cli_http_and_mcp' if cmd.name in ASSEMBLY_BUILD_SURFACE_COMMANDS else  # all four
+                   'tests/test_committed_stock_surfaces.py::test_the_same_open_orders_report_through_python_cli_http_and_mcp' if cmd.name in COMMITTED_STOCK_SURFACE_COMMANDS else  # all four
+                   'tests/test_mileage_surfaces.py::test_the_same_mileage_through_python_cli_http_and_mcp' if cmd.name in MILEAGE_SURFACE_COMMANDS else  # all four
+                   'tests/test_credit_transfer_surfaces.py::test_the_same_credit_transfer_through_python_cli_http_and_mcp' if cmd.name in COLLECTIONS_SURFACE_COMMANDS else  # all four
+                   'tests/test_pricing_rule_surfaces.py::test_the_same_price_rules_through_python_cli_http_and_mcp' if cmd.name in PRICING_RULE_SURFACE_COMMANDS else  # all four
+                   'tests/test_order_invoicing_surfaces.py::test_the_same_order_invoice_through_python_cli_http_and_mcp' if cmd.name in ORDER_INVOICING_SURFACE_COMMANDS else  # all four
+                   'tests/test_shortfall_surfaces.py::test_the_same_shortfall_purchase_through_python_cli_http_and_mcp' if cmd.name in SHORTFALL_SURFACE_COMMANDS else  # all four
                    'tests/test_purchase_order_partial_surfaces.py::test_the_same_partial_order_billing_through_python_cli_http_and_mcp' if cmd.name in PARTIAL_PO_SURFACE_COMMANDS else  # all four
                    'tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute' if cmd.name in LOCAL_COMMANDS else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else

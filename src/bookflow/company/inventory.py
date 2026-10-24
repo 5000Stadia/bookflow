@@ -139,8 +139,13 @@ def owning_document_kind(s, transaction_id):
     adjustment's accounting and its movements are one fact, and editing half of it in the
     journal editor would leave the stock ledger describing a posting that no longer exists.
     """
-    return s.company.conn.execute(sa.select(c.inventory_documents.c.kind).where(
+    kind = s.company.conn.execute(sa.select(c.inventory_documents.c.kind).where(
         c.inventory_documents.c.transaction_id == transaction_id)).scalar_one_or_none()
+    if kind is None:
+        from bookflow.company import assembly_builds
+        if assembly_builds.is_build(s, transaction_id):
+            return assembly_builds.KIND
+    return kind
 
 
 # ---------------------------------------------------------------- building one change
@@ -384,13 +389,27 @@ def _correction_documents(s, change, sequence):
     A true-up -- the settlement of a provisional cost, dated at the receipt that settled it --
     goes in a document of its own for that date, so every correction's memo says what it is.
     """
+    # The adjusted item first, then any assembly a build made from it (R103): a correction of a
+    # build's component issue is paired with one of the build's assembly receipt, and the assembly
+    # is replayed with it. With no builds in the company this is the adjusted item's own replay.
+    from bookflow.company import assembly_builds
+    planned = [movement.values for document in change.documents for movement in document.movements]
+    working = {change.item['id']: movements(s, item_id=change.item['id']) + planned}
+
+    def load(item_id):
+        if item_id not in working:
+            working[item_id] = movements(s, item_id=item_id)
+        return working[item_id]
+    states, partners = assembly_builds.replay_items(
+        s, working, load, lambda refusal, item_id: refuse_stock(refusal, {'id': item_id, 'full_name': item_name(s, item_id)}))
     by_date: dict[tuple, list] = {}
-    for correction in change.state.corrections:
-        by_date.setdefault((correction.effective_date, correction.filled_by is not None),
-                           []).append(correction)
+    for item_id, state in states:
+        for correction in state.corrections:
+            by_date.setdefault((correction.effective_date, correction.filled_by is not None),
+                               []).append((item_id, correction))
     for date, true_up in sorted(by_date):
         lines, pending = [], []
-        for correction in by_date[(date, true_up)]:
+        for item_id, correction in by_date[(date, true_up)]:
             target = correction.target_movement
             lines.extend(pair(
                 target['asset_account_id'], target['offset_account_id'],
@@ -400,8 +419,9 @@ def _correction_documents(s, change, sequence):
                 if true_up else
                 f'Weighted-average cost correction for movement {target["id"]} '
                 f'dated {target["effective_date"]}'))
+            partner = partners.get(target['id']) if not true_up else None
             pending.append(_Movement(dict(
-                id=new_id(), kind='recost', item_id=change.item['id'],
+                id=new_id(), kind='recost', item_id=item_id,
                 quantity_microunits=0, value_minor_units=correction.delta_minor_units,
                 effective_date=date, sequence=sequence, currency=change.currency,
                 asset_account_id=target['asset_account_id'],
@@ -410,8 +430,12 @@ def _correction_documents(s, change, sequence):
                 returns_movement_id=None,
                 filled_by_movement_id=correction.filled_by['id'] if true_up else None,
                 fallback_unit_cost_minor_units=None),
-                line_index=len(pending) * 2 + 1))
+                line_index=len(lines) - 1))
             sequence += 1
+            if partner is not None:
+                partner['sequence'] = sequence
+                pending.append(_Movement(partner, line_index=len(lines)))
+                sequence += 1
         memo = ('Provisional cost true-up' if true_up else 'Weighted-average cost correction')
         change.documents.append(_Document(JournalPostInput(
             date=date, memo=f'{memo} for {change.item["full_name"]}',
@@ -497,9 +521,11 @@ def _summary(s, change, corrections):
         movement_kind=change.movement_kind, corrections=corrections)
 
 
-def _corrections_output(change):
+def _corrections_output(s, change):
     return [InventoryCorrectionOutput(
-        item_id=change.item['id'], item_name=change.item['full_name'],
+        item_id=movement.values['item_id'],
+        item_name=change.item['full_name'] if movement.values['item_id'] == change.item['id']
+        else item_name(s, movement.values['item_id']),
         effective_date=movement.values['effective_date'],
         corrects_movement_id=movement.values['corrects_movement_id'],
         filled_by_movement_id=movement.values.get('filled_by_movement_id'),
@@ -580,7 +606,7 @@ def _run(s, ctx, inp, operation, *, persist):
             primary = primary or applied.output
         else:
             primary = primary or fresh.preview
-    output = InventoryWriteOutput(**primary.model_dump(), adjustment=_summary(s, change, _corrections_output(change)))
+    output = InventoryWriteOutput(**primary.model_dump(), adjustment=_summary(s, change, _corrections_output(s, change)))
     if change.warnings:
         output.warnings = list(output.warnings) + [
             line for line in change.warnings if line not in output.warnings]

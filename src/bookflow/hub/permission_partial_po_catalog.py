@@ -1,4 +1,4 @@
-"""Add closing purchase order lines by hand without rewriting any accepted descriptor.
+"""Add closing purchase order lines by hand without rewriting any accepted descriptor (chained on shortfall-po-v1).
 
 R153. `purchase-order close-lines` closes or reopens ordered lines, the order's Closed box per
 line; it changes a purchase order and posts nothing, so it is `ledger.post` `standard`, as
@@ -10,10 +10,10 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_fixed_asset_catalog as previous, permission_catalog as c
+from . import permission_shortfall_po_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = '5f885570c07c4d5fb51f7df295bb25a03f66dde3'
+SOURCE_COMMIT = '7759da73bb6d955dfe80443370094a984d963de8'
 _OWNER = 'bookflow.commands.purchase_order_cmds.{}|src/bookflow/commands/purchase_order_cmds.py'
 _ADDED = (
     ('purchase-order close-lines', 'ledger.post', 'standard', 'plan_purchase_order_close_lines'),

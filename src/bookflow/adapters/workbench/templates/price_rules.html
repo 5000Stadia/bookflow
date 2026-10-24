@@ -1,0 +1,75 @@
+{% extends "base.html" %}{% block title %}Price rules{% endblock %}{% block body %}<section id="price-rules">
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/customers">Customers</a> / Price rules</nav>
+<h1>Price rules</h1>
+<p class="muted">A rule sets the price a sales line starts at when its item, customer, class, rep, date and quantity match. A price you type on a line always wins, and saved documents keep the prices they were given.</p>
+{% if result %}<div role="status" class="notice" data-price-rule-result><strong>{{ result }}</strong></div>{% endif %}
+{% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
+<section class="workspace-card" aria-label="Rules">
+<h2>Rules, first to last</h2>
+{% if rules %}<form method="post" action="/c/{{ company_id }}/price-rules"><div class="table-wrap"><table class="list-table" data-price-rule-list><thead><tr><th>Priority</th><th>Rule</th><th>What it does</th><th>Active</th>{% if can_write %}<th></th>{% endif %}</tr></thead><tbody>
+{% for r in rules %}<tr data-price-rule="{{ r.id }}"{% if not r.active %} class="muted"{% endif %}>
+<td data-label="Priority">{{ r.priority }}</td>
+<td data-label="Rule"><a href="/c/{{ company_id }}/price-rules?rule={{ r.id }}">{{ r.name }}</a></td>
+<td data-label="What it does">{{ r.summary }}</td>
+<td data-label="Active">{{ 'yes' if r.active else 'no' }}</td>
+{% if can_write %}<td>{% if r.active %}<button type="submit" name="action" value="deactivate:{{ r.id }}:{{ r.version }}" aria-label="Turn off {{ r.name }}">Turn off</button>{% else %}<button type="submit" name="action" value="activate:{{ r.id }}:{{ r.version }}" aria-label="Turn on {{ r.name }}">Turn on</button>{% endif %}</td>{% endif %}
+</tr>{% endfor %}</tbody></table></div>
+{% if can_write %}<label>Reason (shown in the audit trail) <input name="ctx:reason" placeholder="Promotion ended"></label>{% endif %}
+</form>{% else %}<p data-no-price-rules>No price rules yet. Lines are priced from the item and its price level.</p>{% endif %}
+</section>
+{% if can_write %}
+<form method="post" action="/c/{{ company_id }}/price-rules">
+<section class="workspace-card" aria-label="Rule" data-price-rule-form>
+<h2>{% if editing %}Edit {{ editing.name }}{% else %}New price rule{% endif %}</h2>
+{% if editing %}<input type="hidden" name="rule" value="{{ editing.id }}"><input type="hidden" name="expected_version" value="{{ editing.version }}">{% endif %}
+<label>Name <input name="name" {% if not editing %}required{% endif %} value="{{ values.get('name', '') }}" placeholder="Acme fittings 10% off"></label>
+<label>Description <input name="description" value="{{ values.get('description', '') }}"></label>
+<fieldset><legend>Applies when (leave a box empty to match all; separate names with commas)</legend>
+<label>Items <input name="items" value="{{ values.get('items', '') }}" placeholder="a parent item covers its subitems"></label>
+<label>Item categories <input name="item_categories" value="{{ values.get('item_categories', '') }}"></label>
+<label>Customers <input name="customers" value="{{ values.get('customers', '') }}" placeholder="a customer covers its jobs"></label>
+<label>Customer types <input name="customer_types" value="{{ values.get('customer_types', '') }}"></label>
+<label>Classes <input name="classes" value="{{ values.get('classes', '') }}"></label>
+<label>Sales reps <input name="sales_reps" value="{{ values.get('sales_reps', '') }}"></label>
+<label>From <input type="date" name="date_from" value="{{ values.get('date_from', '') }}"></label>
+<label>Through <input type="date" name="date_to" value="{{ values.get('date_to', '') }}"></label>
+<label>Minimum quantity <input name="min_quantity" inputmode="decimal" size="8" value="{{ values.get('min_quantity', '') }}"></label>
+</fieldset>
+<fieldset><legend>Price</legend>
+<label>Adjust by <select name="kind">{% for v, l in (('percent', 'percent'), ('amount', 'amount')) %}<option value="{{ v }}" {% if values.get('kind', 'percent') == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></label>
+<label>Value <input name="value" inputmode="decimal" size="8" value="{{ values.get('value', '') }}" placeholder="10"></label>
+<label><select name="direction" aria-label="Direction">{% for v, l in (('down', 'lower (a discount)'), ('up', 'higher (a markup)')) %}<option value="{{ v }}" {% if values.get('direction', 'down') == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></label>
+<label>than <select name="basis">{% for v, l in (('sales_price', 'the sales price'), ('cost', 'the cost')) %}<option value="{{ v }}" {% if values.get('basis', 'sales_price') == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></label>
+<label>Or quantity breaks <input name="breaks" value="{{ values.get('breaks', '') }}" placeholder="10:5, 50:10"></label>
+<label>Round <select name="rounding">{% for v, l in (('cent', 'to the cent'), ('x.99', 'up to .99'), ('x.95', 'up to .95'), ('dollar', 'to the nearest dollar')) %}<option value="{{ v }}" {% if values.get('rounding', 'cent') == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></label>
+<label>Priority <input name="priority" inputmode="numeric" size="5" value="{{ values.get('priority', '') }}" placeholder="last"></label>
+</fieldset>
+<label>Reason (shown in the audit trail) <input name="ctx:reason" placeholder="Year-end promotion"></label>
+<div class="actions"><button type="submit" name="action" value="{{ 'update' if editing else 'create' }}" data-price-rule-save>{{ 'Save rule' if editing else 'Add rule' }}</button>{% if editing %} <a href="/c/{{ company_id }}/price-rules">New rule instead</a>{% endif %}</div>
+</section>
+</form>
+<form method="post" action="/c/{{ company_id }}/price-rules">
+<section class="workspace-card" aria-label="When rules disagree" data-price-rule-policy>
+<h2>When a price level and rules both apply</h2>
+<p><label><input type="radio" name="conflict_policy" value="lowest_price" {% if policy == 'lowest_price' %}checked{% endif %}> Use the lowest price</label></p>
+<p><label><input type="radio" name="conflict_policy" value="priority" {% if policy == 'priority' %}checked{% endif %}> Use the first rule by priority</label></p>
+<p><label>Reason <input name="ctx:reason" placeholder="Pricing policy"></label></p>
+<div class="actions"><button type="submit" name="action" value="policy">Save</button></div>
+</section>
+</form>
+{% else %}<p>When a price level and rules both apply: {{ 'the lowest price wins' if policy == 'lowest_price' else 'the first rule by priority wins' }}.</p>{% endif %}
+<form method="post" action="/c/{{ company_id }}/price-rules">
+<section class="workspace-card" aria-label="Check a price" data-price-check>
+<h2>Check a price</h2>
+<label>Item <input name="item" required value="{{ values.get('item', '') if check else '' }}"></label>
+<label>Customer:job <input name="customer" required value="{{ values.get('customer', '') if check else '' }}"></label>
+<label>Quantity <input name="quantity" inputmode="decimal" size="6" value="{{ values.get('quantity', '1') if check else '1' }}"></label>
+<label>Date <input type="date" name="date" value="{{ values.get('date', '') if check else '' }}"></label>
+<div class="actions"><button type="submit" name="action" value="check">Check</button></div>
+{% if check %}<div role="status" class="notice" data-price-check-result><strong>{{ check.unit_price }} {{ check.currency }}</strong> for {{ check.quantity }} × {{ check.item }} to {{ check.customer }} on {{ check.date }}: {{ check.note }}.
+<div class="table-wrap"><table class="list-table"><thead><tr><th>From</th><th>Name</th><th>Price</th><th></th></tr></thead><tbody>
+{% for c in check.candidates %}<tr><td data-label="From">{{ c.source.replace('_', ' ') }}</td><td data-label="Name">{{ c.name or '' }}</td><td data-label="Price">{{ c.unit_price }}</td><td>{{ 'chosen' if c.chosen else '' }}</td></tr>{% endfor %}
+</tbody></table></div></div>{% endif %}
+</section>
+</form>
+</section>{% endblock %}

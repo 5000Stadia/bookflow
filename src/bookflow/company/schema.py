@@ -203,6 +203,7 @@ company_info = _table(
     _column("estimates_enabled", sa.Boolean, "Enable new estimates; existing estimate workflows remain available.", nullable=False, server_default="1"),
     _column("progress_billing_enabled", sa.Boolean, "Enable partial quantity, amount, percentage and exact rebill selections.", nullable=False, server_default="1"),
     _column("sales_orders_enabled", sa.Boolean, "Enable new sales orders; existing orders stay readable and invoiceable.", nullable=False, server_default="1"),
+    _column("available_deducts_pending_builds", sa.Boolean, "Quantity available deducts what pending assembly builds have reserved.", nullable=False, server_default="1"),
     _column("available_deducts_sales_orders", sa.Boolean, "Quantity available deducts what open sales orders and work orders have committed.", nullable=False, server_default="1"),
     _column("close_estimates_after_billing", sa.Boolean, "Make estimates inactive after final positive net billing, effective only with progress billing disabled.", nullable=False, server_default="0"),
     _column("automatically_apply_payments", sa.Boolean, "Suggest exact-match then oldest invoice allocations for new cash.", nullable=False, server_default="0"),
@@ -1198,5 +1199,13 @@ from bookflow.company.list_merge_schema import define_tables as _define_list_mer
 globals().update(_define_list_merge_tables(metadata, _column, _table))
 from bookflow.company.fixed_asset_schema import define_tables as _define_fixed_asset_tables
 globals().update(_define_fixed_asset_tables(metadata, _column, _table, _common))
+from bookflow.company.assembly_build_schema import define_tables as _define_assembly_build_tables
+globals().update(_define_assembly_build_tables(metadata, _column, _table))
+from bookflow.company.mileage_schema import define_tables as _define_mileage_tables
+globals().update(_define_mileage_tables(metadata, _column, _table, _common))
+from bookflow.company.credit_transfer_schema import define_tables as _define_credit_transfer_tables
+globals().update(_define_credit_transfer_tables(metadata, _column, _table))
+from bookflow.company.pricing_rule_schema import define_tables as _define_pricing_rule_tables
+globals().update(_define_pricing_rule_tables(metadata, _column, _table, _common))
 from bookflow.company.purchase_order_billing_schema import define_tables as _define_po_billing_tables
 globals().update(_define_po_billing_tables(metadata, _column, _table))

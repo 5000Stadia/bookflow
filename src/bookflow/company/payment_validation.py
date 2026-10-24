@@ -84,7 +84,12 @@ def validate(plan, s, ctx):
         require(all(new[key] == value for key, value in old.items() if key not in ('version', 'updated_at', 'updated_by', 'updated_via')), 'settlement changed invoice facts')
     discounts = data.get('discounts') or []
     if data['operation'] == 'apply':
-        require(not discounts and data.get('account_mutation') is None, 'apply took a discount')
+        from bookflow.company.payments import _REATTACH
+        kept = _REATTACH.get() or {}
+        # Only a bounce's reattachment carries a discount on an apply: the whole edge is the discount.
+        require(data.get('account_mutation') is None and all(
+            row['invoice_id'] in kept and any(app['id'] == row['application_id'] and app['amount_minor_units'] == row['amount_minor_units']
+                                              for app in applications) for row in discounts), 'apply took a discount')
         require(all(not pending[name] for name in ('transaction_revisions', 'document_lines', 'document_line_identities',
             'payment_profiles', 'payment_components', 'payment_component_keys', 'posting_batches', 'posting_lines', 'posting_line_sources')), 'apply wrote financial facts')
         funding = query.payment_facts(s, header['id'], write=True)
@@ -136,21 +141,36 @@ def validate(plan, s, ctx):
         # A write-off puts nothing in the bank and posts no cash leg.
         require(not cash_legs, 'a write-off posts no cash debit')
     cash_leg = cash_legs[0] if amount else None
-    discount_accounts = {row['discount_account_id'] for row in discounts}
-    require(len(discount_accounts) <= 1, 'one discount account per receipt')
+    # An underpayment written off is part of its edge's discount with an account of its own.
+    write_offs = {row['discount_id']: row for row in data.get('write_offs') or []}
+    by_discount = {row['id']: row for row in discounts}
+    for row in write_offs.values():
+        owner = by_discount.get(row['discount_id'])
+        require(owner is not None and owner['application_id'] == row['application_id'] and owner['invoice_id'] == row['invoice_id']
+                and type(row['amount_minor_units']) is int and 0 < row['amount_minor_units'] <= owner['amount_minor_units']
+                and row['transaction_id'] == header['id'] and row['audit_event_id'] == data['event'], 'write-off is not part of its discount')
+    early_accounts = {row['discount_account_id'] for row in discounts
+                      if row['amount_minor_units'] > write_offs.get(row['id'], {}).get('amount_minor_units', 0)}
+    write_off_accounts = {row['account_id'] for row in write_offs.values()}
+    require(len(early_accounts) <= 1 and len(write_off_accounts) <= 1, 'one discount and one write-off account per receipt')
+    discount_accounts = early_accounts | write_off_accounts
+    discount_debits = defaultdict(int)
+    discount_leg_count = defaultdict(int)
     for leg in legs:
         require((leg['debit_minor_units'] > 0) != (leg['credit_minor_units'] > 0), 'zero or two-sided leg')
         own = [source for source in sources if source['posting_line_id'] == leg['id']]
         require(sum(row['amount_minor_units'] for row in own) == leg['debit_minor_units'] + leg['credit_minor_units'], 'posting attribution sum')
         if leg['debit_minor_units'] and leg is not cash_leg:
-            require(leg['account_id'] in discount_accounts and leg['name_type'] == 'customer'
-                    and leg['debit_minor_units'] == discounted.get(leg['name_id']), 'discount debit differs')
+            require(leg['account_id'] in discount_accounts and leg['name_type'] == 'customer', 'discount debit differs')
+            discount_debits[leg['name_id']] += leg['debit_minor_units']
+            discount_leg_count[leg['name_id']] += 1
         elif leg['debit_minor_units']:
             continue
         else:
             require(len(own) == 1 and leg['account_id'] == profile['ar_account_id'], 'AR component leg differs')
             component = next(row for row in capacities.values() if row['id'] == own[0]['payment_component_id'])
             require(leg['name_type'] == 'customer' and leg['name_id'] == keys[component['component_key_id']]['party_id'], 'AR posting party differs')
+    require(dict(discount_debits) == {party: units for party, units in discounted.items() if units}, 'discount debit differs')
     debit_ids = {row['id'] for row in legs if row['debit_minor_units']}
     for component in capacities.values():
         require(type(component['amount_minor_units']) is int and component['amount_minor_units'] > 0, 'zero component')
@@ -162,7 +182,7 @@ def validate(plan, s, ctx):
         paid_in = component['amount_minor_units'] - discounted.get(party, 0)
         require(len(credit) == 1 and credit[0]['amount_minor_units'] == component['amount_minor_units']
                 and paid_in >= 0 and [row['amount_minor_units'] for row in cash] == ([paid_in] if paid_in else [])
-                and len(debit) == (1 if paid_in else 0) + (1 if discounted.get(party) else 0)
+                and len(debit) == (1 if paid_in else 0) + discount_leg_count.get(party, 0)
                 and sum(row['amount_minor_units'] for row in debit) == component['amount_minor_units']
                 and all(row['tax_component_id'] is None for row in own), 'component must attribute cash, discount and AR exactly')
     custom.validate(s.company, data['custom_plan'], header['id'], data['custom_plan'].snapshot, record_type='payment')

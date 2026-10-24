@@ -761,6 +761,7 @@ MATRIX['payment apply'].update({
     'E_DUPLICATE_NUMBER': _UNREACHED_HERE,
 })
 MATRIX['payment unapply'].update({
+    'E_DEPOSIT_DEPENDENCY': 'an unapplied invoice took a discount or write-off, which leaves with it and restates the receipt, and the receipt is banked on a deposit',
     'E_APPLICATION_INACTIVE': 'a named application is absent or already reversed, or the receipt is not posted',
     'E_VERSION_CONFLICT': 'stale expected_version on the receipt or on an invoice named by invoice_expected_version',
     'E_HAS_APPLICATIONS': _UNREACHED_HERE,
@@ -1986,6 +1987,43 @@ MATRIX['report customer-prepayments'] = {
     'E_RECORD_NOT_FOUND': 'unknown customer',
     'E_INTERNAL': 'the Customer Prepayments account differs from what the receipts hold (an unattributed posting)',
 }
+# R148: moving credit between jobs is an invoice, the source credit's applications to it and a credit
+# memo (and its applications) in one transaction, so it can be refused for what any of them can.
+MATRIX['customer-credit transfer'] = {
+    'E_RECORD_NOT_FOUND': 'unknown customer or job, credit memo, receipt or target invoice',
+    'E_VERSION_CONFLICT': 'stale expected_version on a target invoice in apply_to',
+    'E_VALIDATION': 'the two are the same or not jobs of one customer, the amount is not more than zero, both a credit memo and a receipt are named, a named credit is not the source\'s, an apply_to invoice is not the target\'s or takes more than it owes or than is moved, or the Credit Transfer item or clearing account cannot carry it',
+    'E_VALUE_RANGE': 'an amount outside signed 64-bit minor units',
+    'E_AMOUNT_PRECISION': 'more decimals than the home currency has',
+    'E_REASON_REQUIRED': 'the transfer has no reason, or an agent/system write supplies neither reason nor directive',
+    'E_PERIOD_CLOSED': 'the transfer date is on or before the closing date',
+    'E_PREVIEW_STALE': 'expected_facts_fingerprint no longer matches the books',
+    'E_INACTIVE_REFERENCE': 'the source or target customer or job is inactive',
+    'E_APPLICATION_CAPACITY': 'a step would apply more than a document holds',
+    'E_APPLICATION_INCOMPATIBLE': 'a credit on another receivable account or currency',
+    'E_APPLICATION_INACTIVE': 'the named credit memo or receipt is voided',
+    'E_CREDIT_UNAVAILABLE': 'the source has less credit dated on or before the transfer date than the amount',
+    'E_PAYMENT_OPERATION_KEY_REUSED': 'the operation_key belongs to a transfer between other jobs',
+    'E_DUPLICATE_NUMBER': 'a document number is already used',
+    'E_IDEMPOTENCY_MISMATCH': 'same idempotency key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+MATRIX['customer-credit transfer-void'] = {
+    'E_RECORD_NOT_FOUND': 'unknown transfer id',
+    'E_VERSION_CONFLICT': 'a document of the transfer changed while it was being voided',
+    'E_VALIDATION': 'a document of the transfer cannot be voided as it stands',
+    'E_REASON_REQUIRED': 'the void has no reason, or an agent/system write supplies neither reason nor directive',
+    'E_PERIOD_CLOSED': 'the transfer, or a use of the moved credit, is dated on or before the closing date',
+    'E_PREVIEW_STALE': 'the transfer\'s documents changed between preview and write',
+    'E_HAS_REFUND': 'part of the moved credit was refunded to the customer; void that refund first',
+    'E_HAS_APPLICATIONS': 'something still stands on the charge invoice or the credit memo',
+    'E_APPLICATION_INACTIVE': 'a document of the transfer is already voided',
+    'E_DEPOSIT_DEPENDENCY': 'a receipt the transfer drew on is held by a deposit change',
+    'E_IDEMPOTENCY_MISMATCH': 'same idempotency key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
 
 # The sales order (R101): a fifth customer-work kind. It refuses for the family's reasons, plus its own:
 # new orders while the company has them off, and a void or a consumed-line change while an invoice
@@ -2050,3 +2088,130 @@ MATRIX['loan show'] = {'E_VALIDATION': 'a payment that does not cover the intere
 MATRIX['loan list'] = {'E_VALIDATION': 'a loan whose payment does not cover the interest'}
 MATRIX['loan pay'] = dict(_ASSET_POST, E_VALIDATION='a paid-off loan, extra principal above the balance, extra_only without an amount or date, no payment account, or a number on a card charge',
                           E_DUPLICATE_NUMBER='the check number is already used on the account')
+# Assembly builds (R103): an assembly built from its components, posted, pending, edited, voided or deleted.
+_BUILD_COMMON = {
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+    'E_REASON_REQUIRED': 'an agent/system write supplies neither reason nor directive',
+}
+MATRIX['assembly build'] = {
+    'E_RECORD_NOT_FOUND': 'unknown assembly item',
+    'E_INACTIVE_REFERENCE': 'the assembly item is inactive',
+    'E_VALIDATION': 'not an inventory assembly, no bill of materials, a quantity not above zero, components short of the build without pending, a component on hand at no cost, or a change that leaves a later build short',
+    'E_VALUE_RANGE': 'a quantity or cost outside signed 64-bit storage',
+    'E_PERIOD_CLOSED': 'the build date or a correction date falls in a closed period',
+    **_BUILD_COMMON,
+}
+for _verb, _extra in (('update', 'a deleted or voided build, or components short of the new quantity'),
+                      ('finalize', 'a build that is not pending, or components still short'),
+                      ('void', 'a build that is not built (a pending build is deleted instead)'),
+                      ('delete', 'a build already deleted')):
+    MATRIX['assembly ' + _verb] = {
+        'E_RECORD_NOT_FOUND': 'no build with that id or journal number',
+        'E_INACTIVE_REFERENCE': 'the assembly item is inactive',
+        'E_VALIDATION': _extra,
+        'E_VALUE_RANGE': 'a quantity or cost outside signed 64-bit storage',
+        'E_PERIOD_CLOSED': 'the build date, old or new, or a correction date falls in a closed period',
+        'E_VERSION_CONFLICT': 'stale expected_version',
+        **_BUILD_COMMON,
+    }
+MATRIX['assembly show'] = {'E_RECORD_NOT_FOUND': 'no build with that id or journal number'}
+MATRIX['assembly list'] = {
+    'E_RECORD_NOT_FOUND': 'unknown item filter',
+    'E_VALIDATION': 'bad status or limit',
+}
+
+# Committed stock (R102): the open-sales-orders report.
+MATRIX['report open-sales-orders'] = {
+    'E_RECORD_NOT_FOUND': 'unknown customer or item filter',
+    'E_QUERY_STALE': 'company audit changed between pages',
+}
+
+# Mileage (R118): vehicles, mileage rates, trips, trip billing and reimbursement, mileage reports.
+_MILEAGE_TAIL = {'E_IDEMPOTENCY_MISMATCH': 'same key, different input', 'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+                 'E_DIRECTIVE_INACTIVE': 'deactivated --directive', 'E_REASON_REQUIRED': 'an agent/system write supplies neither reason nor directive'}
+MATRIX['vehicle create'] = {'E_VALIDATION': 'a blank name', 'E_NAME_TAKEN': 'a vehicle already has the name'} | _MILEAGE_TAIL
+MATRIX['vehicle update'] = {'E_VALIDATION': 'a blank name', 'E_RECORD_NOT_FOUND': 'unknown vehicle',
+                            'E_NAME_TAKEN': 'another vehicle has the name', 'E_VERSION_CONFLICT': 'stale expected_version'} | _MILEAGE_TAIL
+MATRIX['vehicle show'] = {'E_RECORD_NOT_FOUND': 'unknown vehicle'}
+MATRIX['vehicle list'] = {}
+MATRIX['mileage-rate set'] = {'E_VALIDATION': 'not a rate from 0 through 1000', 'E_AMOUNT_PRECISION': 'more than four decimal places'} | _MILEAGE_TAIL
+MATRIX['mileage-rate delete'] = {'E_VALIDATION': 'not a date', 'E_RECORD_NOT_FOUND': 'no rate starts on the date'} | _MILEAGE_TAIL
+MATRIX['mileage-rate list'] = {}
+_TRIP_WRITE = {'E_VALIDATION': 'one odometer reading, odometer end not above start, total_miles disagreeing with the readings, no miles, a start after the end, or billable without a customer:job or item; a non-service, non-other-charge item',
+               'E_RECORD_NOT_FOUND': 'unknown vehicle, customer, item or class',
+               'E_INACTIVE_REFERENCE': 'a newly named vehicle, customer, item or class is inactive',
+               'E_VALUE_RANGE': 'miles beyond range', 'E_AMOUNT_PRECISION': 'a billing rate finer than the currency allows',
+               'E_PREVIEW_STALE': 'the books changed since the preview'} | _MILEAGE_TAIL
+MATRIX['trip create'] = dict(_TRIP_WRITE)
+MATRIX['trip update'] = _TRIP_WRITE | {'E_VERSION_CONFLICT': 'stale expected_version',
+                                       'E_WORK_DEPENDENCY': 'an invoice carries the trip, or a posted check paid it back, and the change would move what they stand on'}
+MATRIX['trip void'] = {'E_RECORD_NOT_FOUND': 'unknown trip', 'E_VALIDATION': 'a reason over 140 characters',
+                       'E_VERSION_CONFLICT': 'stale expected_version',
+                       'E_WORK_DEPENDENCY': 'an invoice carries the trip, or a posted check paid it back'} | _MILEAGE_TAIL
+MATRIX['trip show'] = {'E_RECORD_NOT_FOUND': 'unknown trip'}
+MATRIX['trip query'] = {'E_RECORD_NOT_FOUND': 'unknown vehicle or customer', 'E_VALIDATION': 'a cursor not from the previous page'}
+_TRIP_BILL = {'E_RECORD_NOT_FOUND': 'unknown trip', 'E_VERSION_CONFLICT': 'stale trip expected_version',
+              'E_WORK_DEPENDENCY': 'the trip is voided, not billable, or already billed', 'E_CONVERSION_KEY_REUSED': 'the key was used for other work or input',
+              'E_PERIOD_CLOSED': 'the sale date is on or before the closing date', 'E_DUPLICATE_NUMBER': 'the sale number is taken',
+              'E_INACTIVE_REFERENCE': 'an inactive customer or item', 'E_VALUE_RANGE': 'an amount beyond range',
+              'E_AMOUNT_PRECISION': 'an amount finer than the currency allows', 'E_PREVIEW_STALE': 'the trip billing changed since the preview',
+              'E_FEATURE_DISABLED': 'a partial billing mode the company turned off'} | _MILEAGE_TAIL
+MATRIX['trip invoice'] = dict(_TRIP_BILL)
+MATRIX['trip sales-receipt'] = dict(_TRIP_BILL)
+MATRIX['trip billing'] = {'E_RECORD_NOT_FOUND': 'unknown trip', 'E_QUERY_STALE': 'billing changed between pages',
+                          'E_WORK_DEPENDENCY': 'the trip is voided or not billable'}
+MATRIX['trip reimburse'] = {'E_VALIDATION': 'a trip named twice, a voided trip, no mileage rate on a trip end date, or a zero amount',
+                            'E_RECORD_NOT_FOUND': 'unknown trip, payee or account', 'E_INACTIVE_REFERENCE': 'an inactive payee or account',
+                            'E_WORK_DEPENDENCY': 'a trip already paid back by a posted check', 'E_PERIOD_CLOSED': 'the check date is on or before the closing date',
+                            'E_AMOUNT_PRECISION': 'a rate with more than four decimal places', 'E_VALUE_RANGE': 'an amount beyond range',
+                            'E_DUPLICATE_NUMBER': 'the check number is taken on the account',
+                            'E_PREVIEW_STALE': 'the trips or rates changed since the preview whose fingerprint was given'} | _MILEAGE_TAIL
+MATRIX['report mileage-by-vehicle'] = {'E_VALIDATION': 'date_from after date_to', 'E_RECORD_NOT_FOUND': 'unknown vehicle'}
+MATRIX['report mileage-by-job'] = {'E_VALIDATION': 'date_from after date_to', 'E_RECORD_NOT_FOUND': 'unknown customer'}
+
+# Price rules (R110).
+_PRICE_TAIL = {'E_IDEMPOTENCY_MISMATCH': 'same key, different input', 'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+               'E_DIRECTIVE_INACTIVE': 'deactivated --directive', 'E_REASON_REQUIRED': 'an agent/system write supplies neither reason nor directive'}
+_PRICE_WRITE = {'E_VALIDATION': 'no value or breaks, both, breaks not rising, date_to before date_from, a zero min_quantity, or x.99 rounding without cents',
+                'E_RECORD_NOT_FOUND': 'an unknown item, category, customer, customer type, class or sales rep',
+                'E_INACTIVE_REFERENCE': 'a named item, customer, class or rep is inactive',
+                'E_VALUE_RANGE': 'a discount over 100 percent', 'E_AMOUNT_PRECISION': 'an amount finer than the currency allows',
+                'E_NAME_TAKEN': 'another rule has the name'} | _PRICE_TAIL
+MATRIX['price-rule create'] = dict(_PRICE_WRITE)
+MATRIX['price-rule update'] = _PRICE_WRITE | {'E_VERSION_CONFLICT': 'stale expected_version'}
+MATRIX['price-rule activate'] = {'E_RECORD_NOT_FOUND': 'unknown rule', 'E_VERSION_CONFLICT': 'stale expected_version'} | _PRICE_TAIL
+MATRIX['price-rule deactivate'] = {'E_RECORD_NOT_FOUND': 'unknown rule', 'E_VERSION_CONFLICT': 'stale expected_version'} | _PRICE_TAIL
+MATRIX['price-rule show'] = {'E_RECORD_NOT_FOUND': 'unknown rule'}
+MATRIX['price-rule list'] = {'E_RECORD_NOT_FOUND': 'unknown item or customer filter'}
+MATRIX['price-rule preview'] = {'E_VALIDATION': 'a zero quantity, or an item with no price that no rule prices',
+                                'E_RECORD_NOT_FOUND': 'unknown item, customer, class, rep or price level'}
+MATRIX['price-rule preferences'] = {}
+MATRIX['price-rule set-preferences'] = {'E_VALIDATION': 'not lowest_price or priority'} | _PRICE_TAIL
+# Invoicing from sales orders (R101 increment 4).
+MATRIX['sales-order invoice'] = {
+    **_SALES_WRITE_ERRORS, **_WORK_WRITE_ERRORS,
+    'E_VALIDATION': 'nothing on the order can ship by default (each line\'s open quantity and availability are given), a percent or net-amount selection, or an item that no single open line carries',
+    'E_WORK_DEPENDENCY': 'the order is voided, closed or inactive, a selected line is already invoiced, or a quantity exceeds what is open',
+    'E_CONVERSION_KEY_REUSED': 'permanent key already names a different operational or financial intent',
+}
+MATRIX['sales-order billing'] = {
+    'E_RECORD_NOT_FOUND': 'order absent from selected company',
+    'E_QUERY_STALE': 'company audit changed between linked destination pages',
+}
+
+# Shortfall coverage (R101 increment 5).
+for _noun in ('sales-order', 'work-order'):
+    MATRIX[f'{_noun} purchase-order'] = {
+        'E_RECORD_NOT_FOUND': 'document, vendor or item absent from selected company',
+        'E_VALIDATION': 'nothing is short for this vendor (a retry orders nothing), short lines come from several vendors and none is named, explicit lines without a vendor, or an item with no purchase cost',
+        'E_WORK_DEPENDENCY': 'the document is closed, cancelled, voided or inactive and commits nothing',
+        'E_INACTIVE_REFERENCE': 'the vendor or an item is inactive',
+        'E_VALUE_RANGE': 'a quantity or amount beyond supported bounds',
+        'E_AMOUNT_PRECISION': 'a rate with more precision than the currency has',
+        'E_DUPLICATE_NUMBER': 'the purchase order number is already used',
+        'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+        'E_DIRECTIVE_NOT_FOUND': 'context directive does not exist',
+        'E_DIRECTIVE_INACTIVE': 'context directive is inactive',
+    }

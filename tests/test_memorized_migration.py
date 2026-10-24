@@ -46,7 +46,9 @@ def test_the_frozen_ddl_is_the_current_metadata():
     compiled += tuple(str(CreateIndex(index).compile(dialect=dialect())).strip() for index in indexes)
     assert M.DDL == compiled
     assert M.GUARDS == tuple(guard_statements())
-    assert set(M.NEW_TABLES) == {name for name in c.metadata.tables if name.startswith('memorized')}
+    # Memorized reports (R109) are a separate feature that shares the prefix.
+    assert set(M.NEW_TABLES) == {name for name in c.metadata.tables
+                                 if name.startswith('memorized') and not name.startswith('memorized_report')}
     # Every composite foreign key names a real key of its target, not an arbitrary column pair.
     for name in M.NEW_TABLES:
         for key in c.metadata.tables[name].foreign_key_constraints:

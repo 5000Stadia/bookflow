@@ -492,6 +492,50 @@ on `report entries-to-review`, so say why in it.
 Discounts for a charge that is waived, not a bad debt); `applications` stays empty. To reverse it, `payment
 unapply` then `payment void` the receipt.
 
+## Acme paid 480 of a 500 invoice; write off the 20
+
+A short payment is an underpayment, and the anchor asks whether to leave it or write it off. To write
+it off, record the receipt for the cash with `underpayment` `"write_off"` and the account it goes to:
+the invoice is paid in full, 480.00 to the bank and 20.00 to Bad Debt, in one receipt.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "payment receive", "reason": "Acme short-paid invoice 1043 by 20.00; owner agreed to write it off",
+ "input": {"customer": "Acme", "date": "2026-07-15", "amount": "480.00", "operation_key": "acme-1043",
+           "payment_method": "Check", "reference": "5521",
+           "applications": {"mode": "inline", "items": [{"invoice": "1043", "expected_version": 1, "amount": "480.00"}]},
+           "underpayment": "write_off", "write_off_account": "Bad Debt"}}
+```
+
+`write_off_class` puts a class on the write-off; an early-payment discount on the same invoice goes to
+`discount_account` as usual. Unapplying the invoice later takes the write-off back with it. Leave `underpayment` out and the 20.00 stays owed;
+the result's `summary.underpayment.next` is then the 0.00 receipt that writes it off later. Cash
+beyond the invoices stays as the customer's credit, and `summary.overpayment.next` is the
+`customer-refund post` that sends it back. An agent's write-off is listed on `report entries-to-review`.
+
+## Use the credit on job A for job B
+
+A credit (an open credit memo or a receipt's unapplied money) belongs to the job it was written for.
+To use it on another job of the same customer, move it with `customer-credit transfer`, and name the
+other job's invoices in `apply_to` to use it at once (leave `amount` out of a row to pay what it owes).
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "customer-credit transfer", "reason": "Acme asked to use the Kitchen overpayment on the Bath job",
+ "input": {"from_customer": "Acme:Kitchen", "to_customer": "Acme:Bath", "amount": "120.00", "date": "2026-07-15",
+           "operation_key": "acme-kitchen-bath", "apply_to": [{"invoice": "1088", "expected_version": 1}]}}
+```
+
+It charges Kitchen 120.00 on an invoice that Kitchen's own credit pays (oldest credit first, or the
+`credit_memo` or `payment` named) and gives Bath a credit memo for 120.00, both through the Credit
+Transfer item and the Credit Transfer Clearing account (set up on first use; it nets to zero), as the
+anchor's guides do it with a clearing account. It works between the parent customer and a job too, never
+between two customers (pay one back with `customer-refund post` instead). `payment invoices` lists a
+job's credit memos as `available_credits`; `payment query` with `has_available_credit` lists receipts
+holding money. The job the credit leaves may be inactive. Never void or edit the charge invoice or the
+credit memo yourself; to undo it, `customer-credit transfer-void <transfer_id>`: what the moved credit paid is
+owed again and both documents are voided at the transfer's date.
+
 ## Assess this month's finance charges
 
 Late charges follow the company's policy (`company update --finance-charge-annual-rate 18
@@ -511,6 +555,49 @@ Leaving out `customers` assesses every proposed row; to leave a customer out or 
 the ones to charge (`"customers": [{"customer": "Acme"}, {"customer": "Birch", "amount": "1.50"}]`).
 Each charge is a statement charge dated that day; assessing the same date again charges nobody twice.
 To take one back, `statement-charge void` it.
+
+## Log mileage: "42 miles to the Smith job, billable"
+
+A trip is a vehicle, the trip end date (and start date, if it ran over several days), and either both
+odometer readings or `total_miles`. Billable miles name the customer:job and the mileage item (a service
+or other-charge item; its price is the price per mile). Recording a trip posts nothing.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "trip create", "reason": "Mileage log",
+ "input": {"vehicle": "Service van", "trip_end_date": "2026-10-20", "total_miles": "42",
+           "billable": true, "customer": "Smith", "item": "Mileage", "notes": "Site visit"}}
+```
+
+Bill it with `trip invoice` (the trip ID, its `version` as `expected_version`, a `conversion_key` and a
+date): the miles are billed exactly once, and `report unbilled-costs` lists billable trips not yet billed.
+A billed trip cannot be voided or have its miles changed until its invoice is voided. To pay a driver back,
+`trip reimburse` writes one check for chosen trips at the mileage rate in effect on each trip's end date
+(`mileage-rate set` keeps rates by date); a trip is paid back once while that check stands. The deduction
+for taxes is `report mileage-by-vehicle`; what each job was charged is `report mileage-by-job`.
+
+## Special prices: "give Acme 10% off pipe fittings through December"
+
+A price rule changes the price a sales line defaults to when its conditions hold: items or
+`item_categories`, `customers` (a customer covers its jobs) or `customer_types`, `classes`, `sales_reps`,
+a `date_from`/`date_to` window on the transaction date, and `min_quantity`. Its adjustment is a percent or
+amount (`kind`), `down` or `up`, from the item's `sales_price` or `cost`, rounded to the `cent`, `x.99`,
+`x.95` or `dollar`. Quantity discounts are `breaks`: `[{"min_quantity": "10", "value": "5"}, {"min_quantity":
+"50", "value": "10"}]` is 5% off from 10 and 10% off from 50.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "price-rule create", "reason": "Acme year-end deal",
+ "input": {"name": "Acme fittings 10% off", "customers": ["Acme"], "item_categories": ["Pipe fittings"],
+           "value": "10", "date_to": "2026-12-31"}}
+```
+
+Before quoting, `price-rule preview` (item, customer, quantity, date) says what a line would cost and
+why ("price from rule Acme fittings 10% off: ..."). When a price level and rules both price a line, the
+company preference picks the lowest price (the default) or the first rule by `priority`
+(`price-rule set-preferences`). A line priced by a rule carries it in `item_snapshot.pricing_rule`; a typed
+`unit_price` overrides it. Saved documents never change when a rule does; end a deal early with
+`price-rule deactivate`.
 
 ## How are we doing against budget?
 
@@ -623,6 +710,47 @@ invoice made from it does. Its show output gives each line `order.ordered`, `inv
 - Estimates, proposals, work orders and orders may carry stocked parts. A stocked line is billed
   by quantity, never by a percent or an amount, and the invoice made from it issues the stock.
 - `company update --sales-orders-enabled false` stops new orders; existing ones stay readable.
+
+## Billing what shipped on an order
+
+"Bill Acme for what shipped today" is `sales-order invoice <number> --expected-version <v>
+--conversion-key <new key> --date <today>`. With no selection it bills what can ship: each
+stocked line up to what is available to this order (on hand less what other orders and work
+orders commit), and the order's other open lines with it. If nothing can ship it refuses and lists
+each line's open quantity and availability: choose `--all-open true` (bill every open quantity
+whatever the stock), `line_ids` or `selections` (a quantity per line, naming the line or its
+item). The invoice is taxed at its own date's rates; `order_tax` shows the difference from the
+order's quote. Money held on the order or its estimate is applied unless `apply_prepayment` is
+false. A retry with the same key returns the same invoice.
+
+Voiding, deleting or updating away an order-made invoice line reopens that quantity on the order
+by default; pass `release_to_order cancel` to cancel it on the order instead. The preview says
+which. A credit memo never changes the order. `invoice post`, `sales-receipt post` and
+`payment receive` warn when the customer has an open order and give the command to use instead.
+
+## Ordering what an order is short
+
+`sales-order purchase-order <number> --date <d>` (or `work-order purchase-order`) writes one
+purchase order for what the document is short: its open stocked quantity not on hand, not already
+on order for it and not needed first by other open documents. Lines default to those whose
+preferred vendor is the vendor; with several vendors it refuses and lists each vendor with its
+lines, so run it once per vendor with `--vendor`. Running it again before anything changes orders
+nothing. Explicit `lines` (item or line_id, quantity) order any amount, spares included. Each
+document line shows the purchase-order lines ordered for it and what is still to arrive; each
+purchase order shows what it covers. Amending a purchase order down, receiving it or voiding it
+brings the shortfall back by exactly that.
+
+## What is available to sell
+
+`report stock-status` and `item show` give each stocked item its quantity on hand, committed (the
+open quantity on open sales orders and work orders, a complete but uninvoiced work order included),
+available (on hand less committed) and on order, with the next expected delivery. The company
+preference `available_deducts_sales_orders` (on by default) decides whether available deducts
+committed. An order or work-order preview gives each stocked line its on hand, committed elsewhere,
+on order and available to it, and warns when it ends short; an ordinary invoice or sales receipt
+that takes committed stock warns and names the documents. Neither refuses. `report
+open-sales-orders` (`--by customer` or `--by item`, `--short-only`) lists what customers have
+ordered and not yet received.
 
 ## Bill work in installments
 
@@ -784,6 +912,27 @@ part. It is one-way and a person's act: an agent is refused with `E_PERMISSION`,
 owner which item and why, and suggest `--dry-run` to see the accounts it will carry. Nothing
 posted changes; stock starts at 0 on the conversion date and is counted with `inventory adjust`.
 After a conversion, no stock line for that item may be dated before the conversion date.
+
+## We built 5 water heater kits today
+
+A finished item made from parts is an inventory assembly; record the work with `assembly build`.
+Preview it first: the dry run lists each component with what one kit needs, what is on hand that
+day and what pending builds hold, and `max_buildable`, the most the parts allow.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "assembly build", "reason": "Owner: we built 5 water heater kits today",
+ "input": {"item": "Water Heater Kit", "quantity": "5", "date": "2026-07-14"}}
+```
+
+The parts leave stock at their average cost and the kits arrive at the sum; a service or other
+non-stock part on the bill of materials adds its purchase cost. A component that is itself an
+assembly is taken from stock, never built for you: build it first. More than the parts allow is
+refused with the shortages and `max_buildable`; if the owner wants the build held until parts
+arrive, send `"pending": true` (nothing posts, the parts are reserved) and later `assembly finalize
+BUILD`. `assembly list --status pending` is the pending builds report. Correct a build with
+`assembly update` (quantity, date, memo); `assembly void` or `assembly delete` takes it back. Never
+use `inventory adjust` to fake a build: it would not move the parts' cost into the kit.
 
 ## Stock sent back to a vendor
 

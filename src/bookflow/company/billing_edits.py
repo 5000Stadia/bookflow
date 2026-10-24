@@ -24,6 +24,10 @@ def protect_work(s, header, before, after):
         dependency('billed work agreement cannot be changed while a sale consumes its roots', source_id=header['id'])
     if header['kind'] == 'estimate' and after['status'] != 'accepted':
         dependency('billed estimate acceptance cannot be revoked', source_id=header['id'])
+    if header['kind'] == 'mileage' and after['status'] != 'recorded':
+        # A billed trip (R118): the invoice is standing on its miles.
+        dependency('a billed trip cannot be voided or made non-billable while a sale consumes it; '
+                   'void or edit the invoice first', source_id=header['id'])
     if header['kind'] == 'time_activity' and after['status'] != 'recorded':
         # The same refusal one kind over: a source a sale is standing on cannot be moved into a
         # state it could not be billed from. For recorded time that state is `voided`, and the
@@ -59,7 +63,7 @@ def retained_allocated_line(s, inp, previous, *, refresh=False):
     if proof is None or proof != facts.allocation_proof:
         raise sales.BookflowError('E_INTERNAL', message='Allocated sale and stored source proofs disagree')
     warnings = [] if item['active'] else ['Retaining the captured inactive item on an existing allocated line.']
-    return billing.resolved_line(alloc.captured_line(rows[0]), proof), warnings
+    return _posted_tax(s, rows[0], previous, billing.resolved_line(alloc.captured_line(rows[0]), proof)), warnings
 
 
 def protect_sale(s, inp, old, old_revision, resolved):
@@ -122,3 +126,34 @@ def carry_allocations(plan, s):
                 tax_minor_units=profile['tax_minor_units'],gross_minor_units=profile['gross_minor_units'],
                 document_line_id=line['id'], created_at=header['updated_at'], created_by=header['updated_by'],
                 created_via=header['updated_via']))
+
+
+def _posted_tax(s, allocation, previous, resolved):
+    """A retained line made from a sales order keeps the tax it was invoiced with.
+
+    An order's invoice is taxed as of its own date, not with the quote's captured tax, so a later
+    correction carries the posted line's tax code and tax rules rather than rebuilding them from the
+    quote. Every other source bills its captured tax, which is exactly what `resolved` already has.
+    """
+    import sqlalchemy as sa
+    from bookflow.company import sales_calculations as calc
+    from bookflow.company.sales_facts import TaxRule
+    kind = s.company.conn.execute(sa.select(c.work_documents.c.kind).where(
+        c.work_documents.c.id == allocation['source_document_id'])).scalar()
+    if kind != 'sales_order':
+        return resolved
+    posted = SalesLineProfile.model_validate_json(previous['item_snapshot'])
+    rows = s.company.conn.execute(sa.select(c.sales_tax_components).where(
+        c.sales_tax_components.c.document_line_id == previous['id'])).mappings().all()
+    rules = []
+    for row in sorted(rows, key=lambda row: json.loads(row['component_snapshot']).get('position', 0)):
+        snapshot = json.loads(row['component_snapshot'])
+        rules.append(TaxRule(**snapshot['tax_item'], rate_percent_millionths=row['rate_percent_millionths'],
+                             agency=snapshot['agency'], liability_account=snapshot['liability_account']))
+    resolved['profile'] = resolved['profile'].model_copy(update=dict(tax_code=posted.tax_code))
+    net = resolved['net_minor_units']
+    resolved['taxes'] = [dict(rule=rule, taxable_minor_units=net, tax_minor_units=calc.tax(net, rule.rate_percent_millionths))
+                         for rule in rules]
+    resolved['tax_minor_units'] = calc.total(cell['tax_minor_units'] for cell in resolved['taxes'])
+    resolved['gross_minor_units'] = calc.total((net, resolved['tax_minor_units']))
+    return resolved

@@ -929,7 +929,10 @@ def context(noun, verb, leaves, originals, *, shown=None, result=None, preview=F
                  + ' up to, and whether it agrees with the amount above, shows here as you enter them.')
     else:
         totals = sale_totals(figures, noun == 'invoice')
-        reconciliation, reconciled = None, None
+        # R110: which lines took their price from a price rule, said beside the totals.
+        from bookflow.company.pricing_rules import preview_note
+        reconciliation = preview_note(result if result is not None else shown)
+        reconciled = True if reconciliation else None
         empty = 'Totals show here as you enter the customer and lines.'
 
     return dict(layout(noun, leaves, hidden),

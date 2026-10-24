@@ -46,7 +46,7 @@ def define_tables(metadata, column, table, common):
                 check(f"json_valid({name}) AND json_type({name}) = 'object'", name)]
 
     work_documents = T('work_documents', *common(),
-        text('kind', 'Document kind: proposal, estimate, work_order, time_activity or sales_order.', 16),
+        text('kind', 'Document kind: proposal, estimate, work_order, time_activity, sales_order or mileage.', 16),
         text('number', 'Visible number unique within kind.', 64),
         ident('current_revision_id', 'Current immutable revision owned by this document.'),
         text('status', 'Current commercial decision or operational state.', 16),
@@ -54,9 +54,9 @@ def define_tables(metadata, column, table, common):
         ident('estimate_group_id', 'Standalone estimate root or source proposal grouping alternatives.',
               'work_documents.id', nullable=True),
         sa.UniqueConstraint('kind', 'number', name='uq_work_kind_number'),
-        check("kind IN ('proposal','estimate','work_order','time_activity','sales_order')", 'kind'),
+        check("kind IN ('proposal','estimate','work_order','time_activity','sales_order','mileage')", 'kind'),
         check("(kind = 'estimate' AND estimate_group_id IS NOT NULL) OR (kind <> 'estimate' AND estimate_group_id IS NULL)", 'group'),
-        check("(kind IN ('proposal','estimate') AND status IN ('draft','open','accepted','declined','superseded','cancelled','voided')) OR (kind = 'work_order' AND status IN ('draft','scheduled','in_progress','on_hold','complete','cancelled')) OR (kind = 'time_activity' AND status IN ('recorded','voided')) OR (kind = 'sales_order' AND status IN ('open','closed','voided'))", 'status'),
+        check("(kind IN ('proposal','estimate') AND status IN ('draft','open','accepted','declined','superseded','cancelled','voided')) OR (kind = 'work_order' AND status IN ('draft','scheduled','in_progress','on_hold','complete','cancelled')) OR (kind = 'time_activity' AND status IN ('recorded','voided')) OR (kind = 'sales_order' AND status IN ('open','closed','voided')) OR (kind = 'mileage' AND status IN ('recorded','voided'))", 'status'),
         check('active IN (0,1)', 'active'), exact('version', positive=True),
         check('length(trim(number)) BETWEEN 1 AND 64', 'number'),
         owner(['id', 'current_revision_id'], ['work_revisions.document_id', 'work_revisions.id'], 'current_revision', True),
@@ -160,4 +160,18 @@ def define_tables(metadata, column, table, common):
         description='Immutable birth ancestry, consumed source facts and permanent conversion replay keys.')
     sa.Index('uq_work_estimate_order', work_links.c.source_document_id, unique=True,
              sqlite_where=sa.text("relation IN ('estimate_work_order','estimate_sales_order')"))
+    # Shortfall coverage (sales-orders design §5): which purchase-order line was ordered to cover
+    # which sales-order or work-order line. Immutable; how much it still covers is derived.
+    purchase_coverage_links = T('purchase_coverage_links',
+        ident('id', 'Immutable coverage link ULID.', primary_key=True),
+        ident('work_document_id', 'Sales order or work order whose shortfall this covers.', 'work_documents.id'),
+        ident('work_line_id', 'Stable line identity of that document.', 'work_line_identities.id'),
+        ident('purchase_order_id', 'Purchase order written to cover it.', 'purchase_orders.id'),
+        ident('purchase_order_line_id', 'Stable identity of the purchase-order line.'),
+        integer('quantity_microunits', 'Base quantity the line was ordered to cover, in millionths.'),
+        ident('audit_event_id', 'Audit event that wrote the link.', 'audit_events.id'), *created(),
+        sa.UniqueConstraint('purchase_order_line_id', name='uq_purchase_coverage_po_line'),
+        check("typeof(quantity_microunits) = 'integer' AND quantity_microunits > 0", 'coverage_quantity'),
+        description='Immutable links from a purchase-order line to the order or work-order line it covers.')
+    sa.Index('ix_purchase_coverage_document', purchase_coverage_links.c.work_document_id)
     return {name: value for name, value in locals().items() if isinstance(value, sa.Table)}

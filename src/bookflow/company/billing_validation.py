@@ -48,7 +48,7 @@ def validate_sale_allocations(plan, s):
             and row['created_at'] == data['header']['updated_at'], 'allocation provenance')
 
 
-def _derived_lines(s, inp, rev, source_lines, selected, envelopes, allocated_ids, profiles, currency):
+def _derived_lines(s, inp, rev, source_lines, selected, envelopes, allocated_ids, profiles, currency, order=False):
     """Rebuild, from the quote alone, every line the sale carries along and each taxable base.
 
     In quote order: a billed line where its allocation is; a subtotal wherever a line of its
@@ -103,6 +103,9 @@ def _derived_lines(s, inp, rev, source_lines, selected, envelopes, allocated_ids
                 cut = None if quoted_cut is None else part(quoted_cut)
                 if cut is not None and proof is not None:
                     cut = min(cut, row['net_minor_units'] + share)
+                if order:
+                    # A sales order's invoice cuts taxable sales by today's taxability (sales_orders.recut_discounts).
+                    cut = next((t.taxable_minor_units for t in adjustment.targets if t.position == placed[position]), None)
                 wanted.append((placed[position], share, cut))
                 shares.setdefault(billed_envelope['id'], []).append((share, share if cut is None else cut, facts_posted))
             require([(t.position, t.amount_minor_units, t.taxable_minor_units) for t in adjustment.targets] ==
@@ -136,13 +139,19 @@ def _validate(plan, s, ctx):
     source = work.resolve(s, getattr(inp,kind), kind)
     require(source['version'] == inp.expected_version and source['active'], 'stale or inactive source')
     require(query.current_owner(s,source)['id'] == source['id'], 'ancestor is not current billing owner')
-    require(source['status'] == 'accepted' if kind == 'estimate' else source['status'] != 'cancelled', 'ineligible source')
+    require(source['status'] == 'accepted' if kind == 'estimate' else source['status'] == 'open' if kind == 'sales_order'
+            else source['status'] != 'cancelled', 'ineligible source')
     rev = work.revision(s,source)
     identities = query.root_identities(s,source)
     source_lines = work.saved_lines(s,rev)
     from bookflow.company import work_preferences as policy
-    policy.check_selection(s, inp, source, rev, source_lines, identities)
-    selected_ids = checks.selected_identities(s,inp,source_lines,identities)
+    chosen = inp
+    if kind == 'sales_order':
+        from bookflow.company.sales_orders import billing_choice
+        chosen = billing_choice(s, inp, source, rev, source_lines, identities)
+    else:
+        policy.check_selection(s, inp, source, rev, source_lines, identities)
+    selected_ids = checks.selected_identities(s,chosen,source_lines,identities)
     selected = [(line,(identities[line['line_id']]['root_document_id'],identities[line['line_id']]['root_line_id']),
                  work.line_facts(line)) for line in source_lines if line['line_id'] in selected_ids]
     header, created = data['header'], data['pending']['transaction_revisions'][0]
@@ -195,31 +204,40 @@ def _validate(plan, s, ctx):
     allocated_ids = {row['document_line_id'] for row in allocs}
     billed_envelopes = [envelope for envelope in envelopes if envelope['id'] in allocated_ids]
     require(len(allocs) == len(selected) == len(billed_envelopes), 'missing selected allocation')
-    bases = _derived_lines(s, inp, rev, source_lines, selected, envelopes, allocated_ids, profiles, rev['currency'])
+    bases = _derived_lines(s, inp, rev, source_lines, selected, envelopes, allocated_ids, profiles, rev['currency'],
+                           order=kind == 'sales_order')
     captured_header = work.facts(rev)
     posted_header = SalesProfile.model_validate_json(data['pending']['sales_profiles'][0]['profile_snapshot'])
+    expected_header = captured_header.profile
+    if kind == 'sales_order':
+        # An order's invoice is taxed as of its own date: compare against that, not the quote.
+        from bookflow.company import sales_orders
+        expected_header = sales_orders.invoice_day_profile(s, rev, captured_header.profile)
     for field in type(captured_header.profile).model_fields:
         if field in ('origins', 'schema_version', 'sales_tax_calculation', 'tax_policy_origin') or (field == 'terms' and (dest == 'sales_receipt' or 'terms' in inp.model_fields_set)):
             continue
-        require(getattr(posted_header, field) == getattr(captured_header.profile, field),
+        require(getattr(posted_header, field) == getattr(expected_header, field),
             'captured commercial header differs: ' + field)
     from bookflow.company import tax_policy
-    require(tax_policy.effective(posted_header) == tax_policy.effective(captured_header.profile)
-        and tax_policy.origin(posted_header) == tax_policy.origin(captured_header.profile), 'captured tax policy differs')
+    require(tax_policy.effective(posted_header) == tax_policy.effective(expected_header)
+        and tax_policy.origin(posted_header) == tax_policy.origin(expected_header), 'captured tax policy differs')
     if dest == 'sales_receipt':
         require(posted_header.terms is None, 'paid receipt cannot carry invoice credit terms')
     require(json.loads(created['issuer_snapshot']) == captured_header.issuer_snapshot, 'captured issuer differs')
     exact_cells=tax_attribution.validate_sales(s,header,created,posted_header,data['pending'],require)
     roots = set()
     for actual, envelope, (line, root, lf) in zip(allocs, billed_envelopes, selected):
+        tax_code, tax_rules = lf.profile.tax_code, [t.rule for t in lf.taxes]
+        if kind == 'sales_order':
+            tax_code, tax_rules = sales_orders.line_tax(s, lf, expected_header)
         require(root not in roots, 'duplicate root in conversion')
         roots.add(root)
         d = math.denominator(lf.quantity_microunits,lf.net_minor_units)
-        spans = checks.selected_spans(s,inp,line,root,lf,rev['currency'])
+        spans = checks.selected_spans(s,chosen,line,root,lf,rev['currency'])
         proof = None if spans == ((0,d),) and lf.schema_version==1 else alloc.make_proof(s,source,rev,line,root,lf,spans,excluding=header['id'])
         width = sum(b-a for a,b in spans)
         net = sum(round(Fraction(lf.net_minor_units*b,d))-round(Fraction(lf.net_minor_units*a,d)) for a,b in spans)
-        tax = sum(exact_cells[envelope['id'],t.rule.id] for t in lf.taxes)
+        tax = sum(exact_cells[envelope['id'],rule.id] for rule in tax_rules)
         q, bq = Fraction(lf.quantity_microunits*width,d), Fraction(lf.base_quantity_microunits*width,d)
         quantity = q.numerator if q.denominator == 1 else None
         base_quantity = bq.numerator if bq.denominator == 1 else None
@@ -248,14 +266,13 @@ def _validate(plan, s, ctx):
             changed_representation |= {'price_rule', 'price_basis_minor_units'}
         for field in type(lf.profile).model_fields:
             if field not in changed_representation:
-                require(getattr(posted_line, field) == getattr(lf.profile, field),
+                require(getattr(posted_line, field) == (tax_code if field == 'tax_code' else getattr(lf.profile, field)),
                     'captured line classification differs: ' + field)
         require(posted_line.pricing_basis == ('allocated' if proof else 'amount' if lf.pricing_basis == 'amount' else 'unit'), 'line price basis')
         require(posted_line.allocation_proof == proof, 'sale and source allocation proofs differ')
         taxes = [row for row in data['pending']['sales_tax_components'] if row['document_line_id'] == envelope['id']]
-        require(len(taxes) == len(lf.taxes), 'captured tax components missing')
-        for posted_tax, source_tax in zip(taxes, lf.taxes):
-            rule = source_tax.rule
+        require(len(taxes) == len(tax_rules), 'captured tax components missing')
+        for posted_tax, rule in zip(taxes, tax_rules):
             captured_tax = json.loads(posted_tax['component_snapshot'])
             require(posted_tax['tax_item_id'] == rule.id and posted_tax['agency_id'] == rule.agency.id
                 and posted_tax['liability_account_id'] == rule.liability_account.id

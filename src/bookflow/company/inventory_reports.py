@@ -70,8 +70,11 @@ class InventoryValuationRow(StockRow):
 
 
 class StockStatusRow(StockRow):
-    quantity_available: str
+    quantity_committed: str = Field(description="Open quantity of this item on open sales orders and work orders dated by as_of, in its base unit.")
+    quantity_for_assemblies: str = Field(description="Reserved for pending assembly builds dated by as_of; available deducts it while available_deducts_pending_builds is on.")
+    quantity_available: str = Field(description="On hand less committed (and less reserved for builds under its own preference); on hand while the company's available_deducts_sales_orders preference is off.")
     quantity_on_order: str
+    next_delivery_date: str | None = Field(description="Earliest expected date of a live purchase order with this item still to arrive.")
     reorder_point_min: str | None
     reorder_point_max: str | None
     below_reorder_point: bool
@@ -169,7 +172,7 @@ def _check_tie(raw, params, total: int) -> None:
             "difference_minor_units": control - total, "as_of": params["date_to"]})
 
 
-def _run(inp, s, principal_id, report):
+def _run(inp, s, principal_id, report, available=None):
     """Both reports: the same selected rows, totalled over the whole filter, then paged."""
     with ledger._snapshot(s.company):
         ledger.register_ledger_functions(s.company)
@@ -179,10 +182,11 @@ def _run(inp, s, principal_id, report):
         total = below = 0
         # Stream every row, including those past this page, so a page boundary can never
         # hide an amount from a total or a count.
-        for quantity, value, reorder_min in raw.execute(
-                _SELECTED + "SELECT quantity, value, reorder_min FROM selected", params):
+        for item_id, quantity, value, reorder_min in raw.execute(
+                _SELECTED + "SELECT id, quantity, value, reorder_min FROM selected", params):
             total += money(int(value), currency).minor_units
-            below += int(_below(int(quantity), reorder_min))
+            reading = int(quantity) if available is None else available(item_id, int(quantity))
+            below += int(_below(reading, reorder_min))
         _check_tie(raw, params, total)
         page = _rows(raw.execute(
             _SELECTED + """SELECT * FROM selected
@@ -209,19 +213,18 @@ def inventory_valuation(inp: InventoryValuationInput, s, *, principal_id=None) -
         next_cursor=ledger._continuation(state, offset, len(rows), len(page) > inp.limit, s.company))
 
 
-def _on_order(s, as_of):
-    """Quantity still to arrive per item, from every live purchase order dated by `as_of`.
+def _incoming(s, as_of):
+    """Quantity still to arrive and the earliest expected date per item, from every live purchase
+    order dated by `as_of`.
 
     Read through `receiving.order_remaining`, the one owner of how much of an order line is still
     coming, so a partial receipt reduces it exactly as the order's own page says. Closed and voided
-    orders contribute nothing. As in the anchor product's stock status, this is what is on order
-    now for orders placed by the report date; a line received beyond its ordered quantity is not
-    negative on order.
+    orders contribute nothing; a line received beyond its ordered quantity is not negative on order.
     """
     from bookflow.company import purchase_orders as orders, receiving, schema as c
     import sqlalchemy as sa
     t = c.purchase_orders
-    result = {}
+    quantity, dates = {}, {}
     for header in s.company.conn.execute(
             sa.select(t).where(t.c.status.in_(("open", "partly_received")))).mappings():
         rev = orders.revision(s, dict(header))
@@ -229,26 +232,41 @@ def _on_order(s, as_of):
             continue
         for line in receiving.order_remaining(s, dict(header), rev):
             if line["remaining_quantity_microunits"] > 0:
-                result[line["item_id"]] = result.get(line["item_id"], 0) + line["remaining_quantity_microunits"]
-    return result
+                item = line["item_id"]
+                quantity[item] = quantity.get(item, 0) + line["remaining_quantity_microunits"]
+                if rev["expected_date"] and (item not in dates or rev["expected_date"] < dates[item]):
+                    dates[item] = rev["expected_date"]
+    return quantity, dates
 
 
 def stock_status(inp: StockStatusInput, s, *, principal_id=None) -> StockStatusOutput:
-    state, offset, page, currency, total, below = _run(inp, s, principal_id, "stock-status")
-    on_order = _on_order(s, inp.as_of)
+    from bookflow.company import commitments
+    committed = commitments.committed(s, inp.as_of)
+    builds = commitments.for_assemblies(s, inp.as_of)
+    deduct_documents, deduct_builds = commitments.deducts_documents(s), commitments.deducts_builds(s)
+
+    def reading(item_id, quantity):
+        return commitments.figures(s, quantity, item_id, committed_map=committed, builds_map=builds,
+                                   deduct_documents=deduct_documents, deduct_builds=deduct_builds)
+
+    state, offset, page, currency, total, below = _run(inp, s, principal_id, "stock-status",
+                                                       available=lambda item, quantity: reading(item, quantity).available)
+    on_order, deliveries = _incoming(s, inp.as_of)
     rows = []
     for row in page[:inp.limit]:
         quantity = int(row["quantity"])
+        figures = reading(row["id"], quantity)
         rows.append(StockStatusRow(
             **_shared(row, currency),
-            # Nothing reserves stock yet -- no sales order or build commits it -- so available is
-            # on hand. On order is real: purchase orders shipped, and this column read "0" for
-            # every item until they were counted here.
-            quantity_available=_quantity(quantity),
+            quantity_committed=_quantity(figures.committed),
+            quantity_for_assemblies=_quantity(figures.for_assemblies),
+            # On order stays beside the reorder flag, not in it (design §9, question 2).
+            quantity_available=_quantity(figures.available),
             quantity_on_order=_quantity(on_order.get(row["id"], 0)),
+            next_delivery_date=deliveries.get(row["id"]),
             reorder_point_min=None if row["reorder_min"] is None else _quantity(row["reorder_min"]),
             reorder_point_max=None if row["reorder_max"] is None else _quantity(row["reorder_max"]),
-            below_reorder_point=_below(quantity, row["reorder_min"]),
+            below_reorder_point=_below(figures.available, row["reorder_min"]),
             preferred_vendor_id=row["preferred_vendor_id"]))
     return StockStatusOutput(
         metadata=state.metadata, rows=rows, count=len(rows),
