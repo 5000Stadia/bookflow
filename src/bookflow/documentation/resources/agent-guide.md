@@ -664,6 +664,13 @@ When the accountant's change file arrives, `accountant-copy preview` (its full p
 new, imported or refused, and why; show that to the owner and let them import. Each imported change is
 posted as the accountant, and `report accountant-changes` lists everything an accountant changed.
 
+## "Why is it slow?"
+
+Every command's time is recorded beside the hub (never in the books, and never what was typed):
+`perf report` (`since` 24h or 7d, optionally one `command` or `surface`) gives p50, p95 and max per
+command and the slowest single calls, each with its SQL statement count. Quote those figures rather
+than guessing; an installation administrator can turn recording off with `perf settings`.
+
 ## How are we doing against budget?
 
 A budget is a named plan for one fiscal year: an amount per account per month, entered positive for

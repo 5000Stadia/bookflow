@@ -1550,4 +1550,13 @@ EXAMPLES.update({
                                       {'file': _CHANGES}),
     'report accountant-review': Example('bookflow report accountant-review --as-of 2026-09-30' + _ACCT_CO, {'as_of': '2026-09-30'}),
     'report accountant-changes': Example('bookflow report accountant-changes' + _ACCT_CO, {}),
+    # Performance tracking (R180).
+    'perf report': Example('bookflow perf report --since 7d --surface http --json', {'since': '7d', 'surface': 'http'}),
+    'perf settings': Example('bookflow perf settings --recording off --json', {'recording': 'off'}),
+    'perf generate': Example('bookflow perf generate --output /srv/bench --profile large --json',
+                             {'output': '/srv/bench', 'profile': 'large'}),
+    'perf bench': Example('bookflow perf bench --template /srv/bench/bench-large-s180-co0088 --name before --json',
+                          {'template': '/srv/bench/bench-large-s180-co0088', 'name': 'before'}),
+    'perf compare': Example('bookflow perf compare --run after --baseline before --threshold 25 --json',
+                            {'run': 'after', 'baseline': 'before', 'threshold': 25}),
 })

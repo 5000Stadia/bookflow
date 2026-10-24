@@ -66,8 +66,10 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +13 inventory-site, inventory-transfer and report quantity-by-site (R104 increment 1).
     # +14 accountant review (R121): accountant add/remove/list/reclassify/mark-entry/reviewed-through, accountant-copy
     # export/status/cancel/changes/preview/import, report accountant-review and accountant-changes.
-    assert len(rows) == 666
-    assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
+    # +5 performance tracking (R180): perf report and perf settings (routed), perf generate, bench and compare
+    # (standalone local tools, three more local lifecycle rows).
+    assert len(rows) == 671
+    assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 8
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
     # and unexplained, which is exactly what `payment delete` was on 2026-09-15 -- registered,
@@ -305,7 +307,9 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 3549 -> 3557 (R121), measured per command: accountant reclassify 3 (amount, date, memo), accountant add,
     # mark-entry and reviewed-through 1 each (note), accountant-copy import 1 (changes), accountant-copy export 1 (accountant) -- their null branches.
     # No existing command moved. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==3557
+    # 3557 -> 3560 (R180), measured per command: perf report 2 (command, surface), perf settings 1 (recording)
+    # -- their null branches. No existing command moved. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==3560
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

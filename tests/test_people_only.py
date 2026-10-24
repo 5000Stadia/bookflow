@@ -10,7 +10,7 @@ import bookflow
 from bookflow import BookflowError
 from bookflow.core import registry
 from bookflow.hub import permission_human_admin_catalog as layer, people_only, permission_runtime as runtime
-from bookflow.hub import permission_accountant_review_catalog as tip_layer
+from bookflow.hub import permission_performance_catalog as tip_layer
 from tests.conftest import hosted_call, make_agent
 from tests.test_row3_host import hosted  # noqa: F401 - fixture
 
@@ -40,6 +40,7 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # timesheets-v1 adds `clock link`: saying which login is which employee is what lets an agent clock a person in.
     # accountant-review-v1 adds designating and removing an external accountant, cancelling an accountant's copy
     # and importing an accountant's changes: who may change the books, and what comes into them, is the owner's call.
+    # performance-v1 adds none: `perf report` is a read and `perf settings` is installation administrators only.
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {
         'journal restore', 'invoice restore', 'customer merge', 'customer unmerge', 'vendor merge', 'vendor unmerge',
