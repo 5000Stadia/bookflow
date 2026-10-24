@@ -259,6 +259,13 @@ class PurchaseOrderReceivingOutput(_Input):
     remaining_quantity_microunits: int
     site_id: str | None = Field(default=None, description='Inventory site the line is to arrive at; null for the default site.')
 
+    @model_serializer(mode='wrap')
+    def _no_site_as_before(self, handler):
+        values = handler(self)
+        if self.site_id is None:
+            values.pop('site_id', None)
+        return values
+
 
 class PurchaseOrderLineTracking(_Input):
     """One ordered line's progress: what arrived, what was billed and what is still open.
