@@ -17,6 +17,7 @@ import json
 
 from pydantic import ValidationError
 
+from bookflow.core import unit_price
 from bookflow.company import document_effects as effects, schema as c
 from bookflow.company.bill_facts import BillProfile
 from bookflow.core.errors import BookflowError
@@ -57,7 +58,8 @@ def _item(line, facts):
             'an item line names a family a bill cannot receive')
     require(facts.quantity_microunits == line['quantity_microunits'],
             'the captured quantity disagrees with the column')
-    require(facts.unit_cost_minor_units == line['unit_cost_minor_units'],
+    require(facts.unit_cost_minor_units == line['unit_cost_minor_units']
+            and facts.unit_cost_fraction == line.get('unit_cost_fraction'),
             'the captured unit cost disagrees with the column')
     require(type(line['quantity_microunits']) is int and 0 < line['quantity_microunits'] <= INT64_MAX,
             'an item line has no positive quantity')
@@ -66,15 +68,15 @@ def _item(line, facts):
         freight = amount(facts.receipt_shipping_minor_units)
         require(product + freight == line['amount_minor_units'], 'received product/shipping total differs')
         if facts.receipt_product_unit_cost_minor_units is not None:
-            require(bills.extension(line['quantity_microunits'], facts.receipt_product_unit_cost_minor_units) == product, 'received product rate differs')
+            require(bills.extension_units(line['quantity_microunits'], facts.units('receipt_product_unit_cost')) == product, 'received product rate differs')
     if facts.amount_basis == 'unit_cost':
         require(line['unit_cost_minor_units'] is not None, 'a derived amount names no unit cost')
         amount(line['unit_cost_minor_units'])
-        require(bills.extension(line['quantity_microunits'], line['unit_cost_minor_units'])
+        require(bills.extension_units(line['quantity_microunits'], unit_price.row_units(line, 'unit_cost'))
                 == line['amount_minor_units'],
                 'a derived amount is not the quantity times the unit cost')
     else:
-        require(line['unit_cost_minor_units'] is None,
+        require(line['unit_cost_minor_units'] is None and line.get('unit_cost_fraction') is None,
                 'an entered amount carries a unit cost it was not derived from')
 
 

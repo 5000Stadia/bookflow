@@ -36,6 +36,7 @@ import zlib
 import sqlalchemy as sa
 from sqlalchemy.dialects.sqlite import insert
 
+from bookflow.core import unit_price
 from bookflow.company import accounts, list_service, schema as c
 from bookflow.company import document_effects as effects
 from bookflow.company.bill_models import BillExpenseInput, BillItemInput
@@ -298,8 +299,8 @@ def _line(s, line, header_class, currency, index):
         if quantity <= 0:
             raise BookflowError('E_VALUE_RANGE', details={
                 'fields': [{'field': field + '.quantity', 'problem': 'must be greater than zero'}]})
-        rate = parse_domestic_amount(line.rate, currency, field + '.rate', ).minor_units
-        extended = calc.extension(quantity, rate)
+        rate = unit_price.parse(line.rate, currency, field + '.rate')
+        extended = calc.extension_units(quantity, rate)
         if extended <= 0:
             raise _invalid(field + '.amount', 'quantity times rate must come to at least one minor unit')
         if line.amount is not None:
@@ -322,7 +323,8 @@ def _line(s, line, header_class, currency, index):
     profile = PurchaseOrderLineProfile(item=item, account=account_facts, class_id=klass,
                                        customer=customer, billable=line.billable, origins=origins)
     return dict(line_id=None, description=description, quantity_microunits=quantity,
-                rate_minor_units=rate, amount_minor_units=amount, profile=profile)
+                rate_minor_units=unit_price.split(rate)[0], rate_fraction=unit_price.split(rate)[1],
+                amount_minor_units=amount, profile=profile)
 
 
 # ---------------------------------------------------------------- reads
@@ -352,7 +354,7 @@ def _line_output(line, currency):
         billable=bool(line['billable']),
         quantity=(format_quantity_micro_units(line['quantity_microunits'])
                   if line['quantity_microunits'] is not None else None),
-        rate=(Money(line['rate_minor_units'], currency).to_dict()
+        rate=(unit_price.to_dict(unit_price.row_units(line, 'rate'), currency)
               if line['rate_minor_units'] is not None else None),
         amount=Money(line['amount_minor_units'], currency).to_dict(), currency=currency,
         line_snapshot=json.loads(line['line_snapshot']))
@@ -478,7 +480,8 @@ def _line_semantic(line):
             'quantity_microunits': line['quantity_microunits'],
             'rate_minor_units': line['rate_minor_units'],
             'amount_minor_units': line['amount_minor_units'],
-            'profile': line['profile'].model_dump()}
+            'profile': line['profile'].model_dump()} | (
+                {'rate_fraction': line['rate_fraction']} if line.get('rate_fraction') is not None else {})
 
 
 def _saved_semantic(s, rev):
@@ -589,7 +592,7 @@ def commercial(s, inp, old_header, old_revision, *, document_id):
     if old_revision and inp.lines is None:
         lines = [dict(line_id=line['line_id'], description=line['description'],
                       quantity_microunits=line['quantity_microunits'],
-                      rate_minor_units=line['rate_minor_units'],
+                      rate_minor_units=line['rate_minor_units'], rate_fraction=line.get('rate_fraction'),
                       amount_minor_units=line['amount_minor_units'],
                       profile=PurchaseOrderLineProfile.model_validate_json(line['line_snapshot']))
                  for line in old_lines]
@@ -707,7 +710,7 @@ def prepare(s, ctx, inp, operation):
                 position=position, item_id=facts.item.id if facts.item else None,
                 account_id=facts.account.id if facts.account else None,
                 description=line['description'], quantity_microunits=line['quantity_microunits'],
-                rate_minor_units=line['rate_minor_units'],
+                rate_minor_units=line['rate_minor_units'], rate_fraction=line.get('rate_fraction'),
                 amount_minor_units=line['amount_minor_units'],
                 customer_id=facts.customer.id if facts.customer else None, billable=facts.billable,
                 class_id=facts.class_id.id if facts.class_id else None,
@@ -868,7 +871,7 @@ def bill_entry(rev, lines):
         # Quantity times rate where the order gave both, so the bill line says what was
         # ordered rather than one opaque amount; an amount-only line stays an amount.
         basis = (dict(quantity=format_quantity_micro_units(line['quantity_microunits']),
-                      unit_cost={'minor_units': line['rate_minor_units'], 'currency': rev['currency']})
+                      unit_cost=unit_price.to_dict(unit_price.row_units(line, 'rate'), rev['currency']))
                  if line['quantity_microunits'] is not None else dict(amount=money))
         items.append(BillItemInput(item=facts.item.id, description=line['description'],
                                    **basis, **shared))

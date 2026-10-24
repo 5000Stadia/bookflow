@@ -95,7 +95,8 @@
     if (currency !== undefined) {
       const config = document.querySelector('[data-math-config]');
       const currencies = config ? JSON.parse(config.textContent) : {};
-      return {scale: currencies[currency] ?? null, currency};
+      const extra = Number(input.dataset.mathExtraPlaces || 0);  // R150 unit prices and costs
+      return {scale: currencies[currency] === undefined ? null : currencies[currency] + extra, currency};
     }
     return {scale: Number(input.dataset.mathScale)};
   }
@@ -126,7 +127,7 @@
       if (match) {
         const currencies = JSON.parse(document.getElementById('math-currencies')?.textContent || '{}');
         const currency = match[1];
-        ctx = {...ctx, currency, scale: Object.hasOwn(currencies, currency) ? currencies[currency] : null};
+        ctx = {...ctx, currency, scale: Object.hasOwn(currencies, currency) ? currencies[currency] + Number(input.dataset.mathExtraPlaces || 0) : null};
         expression = expression.slice(0, match.index); suffix = ' ' + currency;
       }
       const result = evaluate(expression, ctx.scale, {integer: ctx.scale === 0 && !ctx.currency});

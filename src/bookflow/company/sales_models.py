@@ -75,9 +75,10 @@ class SalesMoneyInput(StrictModel):
 
 
 class SalesPriceInput(StrictModel):
-    """A unit price or cost as money: ``amount`` may carry up to three places beyond the minor
-    unit (R150), and ``minor_units``, when given with it, is its nearest minor unit."""
-    minor_units: int | None = Field(default=None, ge=0, le=INT64_MAX)
+    """A unit price or cost as money, the shape of SalesMoneyInput: ``amount`` may carry up to
+    three places beyond the minor unit (R150), and ``minor_units`` is then its nearest minor unit;
+    without ``amount`` the price is ``minor_units`` exactly."""
+    minor_units: int = Field(ge=0, le=INT64_MAX)
     currency: str = Field(min_length=3, max_length=3)
     amount: str | None = None
 
@@ -86,9 +87,9 @@ class SalesPriceInput(StrictModel):
         from bookflow.core import unit_price
         if not is_currency(self.currency):
             raise ValueError("unknown currency code")
-        if self.amount is None and self.minor_units is None:
-            raise ValueError("give amount or minor_units")
-        if self.amount is not None:
+        if "amount" in self.model_fields_set:
+            if self.amount is None:
+                raise ValueError("amount must agree with minor_units")
             try:
                 unit_price.parse(self.model_dump(exclude_none=True), self.currency, "amount")
             except BookflowError as exc:
@@ -445,7 +446,7 @@ class StatementChargePostInput(StrictModel):
     item: Selector
     quantity: Quantity = "1"
     unit: Selector | None = None
-    rate: str | SalesMoneyInput | None = None
+    rate: str | SalesPriceInput | None = None
     amount: str | SalesMoneyInput | None = None
     description: Text | None = None
     class_id: Selector | None = None

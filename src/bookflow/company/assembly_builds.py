@@ -43,6 +43,7 @@ import json
 
 import sqlalchemy as sa
 
+from bookflow.core import unit_price
 from bookflow.company import inventory, inventory_effects, items as item_service, journals, schema as c
 from bookflow.company.assembly_build_models import (
     AssemblyBuildListOutput, AssemblyBuildListRow, AssemblyBuildOutput, AssemblyComponentOutput,
@@ -303,9 +304,12 @@ def capture(s, item, currency):
             cost = component.get('cost_minor_units')
             usable = cost is not None and component.get('cost_currency') == currency and int(cost) > 0 \
                 and component.get('expense_account_id') is not None
-            captured.append(dict(item_id=component['id'], kind='cost', quantity_microunits=per,
-                                 unit_cost_minor_units=int(cost) if usable else 0,
-                                 account_id=component.get('expense_account_id') if usable else None))
+            row = dict(item_id=component['id'], kind='cost', quantity_microunits=per,
+                       unit_cost_minor_units=int(cost) if usable else 0,
+                       account_id=component.get('expense_account_id') if usable else None)
+            if usable and component.get('cost_fraction'):
+                row['unit_cost_fraction'] = int(component['cost_fraction'])  # R150: only when sub-cent
+            captured.append(row)
     if not any(row['kind'] == 'stock' or row['unit_cost_minor_units'] for row in captured):
         raise _invalid('item', 'this assembly has no components with stock or a cost to build it from; '
                                'add its bill of materials with `item update --members`')
@@ -407,7 +411,7 @@ def _plan(s, item, components, quantity, date, *, reversing=(), exclude=None):
                         'stock is worth with `inventory adjust --value-change`, then build.'),
                         item_id=entry['item']['id'], reason='component_without_value')
         else:
-            cost = round_ratio_half_even(entry['component']['unit_cost_minor_units'] * entry['need'], MICRO)
+            cost = unit_price.extension(entry['need'], unit_price.row_units(entry['component'], 'unit_cost'))
         entry['cost'] = cost
         total += cost
     if total <= 0:
@@ -785,7 +789,8 @@ def show(s, inp):
                 int(row['value_minor_units']) for row in inventory.movements(s, item_id=component['item_id'])
                 if row['kind'] == 'recost' and issue and row['corrects_movement_id'] == issue[0]['id'])
             if component['kind'] == 'cost':
-                cost = round_ratio_half_even(component['unit_cost_minor_units'] * _need(component['quantity_microunits'], build.quantity), MICRO)
+                cost = unit_price.extension(_need(component['quantity_microunits'], build.quantity),
+                                            unit_price.row_units(component, 'unit_cost'))
             build.rows.append(dict(component=component, item=component_item,
                                    need=_need(component['quantity_microunits'], build.quantity),
                                    on_hand=_on_hand(inventory.movements(s, item_id=component['item_id']), build.date),

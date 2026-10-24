@@ -101,11 +101,12 @@ def _validate(plan, s, ctx):
         amount(row['amount_minor_units'], positive=True)
         require((row['item_id'] is None) != (row['account_id'] is None),
                 'an ordered line is an item or an account, never both and never neither')
-        require((row['quantity_microunits'] is None) == (row['rate_minor_units'] is None),
+        require((row['quantity_microunits'] is None) == (row['rate_minor_units'] is None)
+                and (row['rate_minor_units'] is not None or row.get('rate_fraction') is None),
                 'quantity and rate are stored together or not at all')
         if row['quantity_microunits'] is not None:
             from bookflow.company import sales_calculations as calc
-            require(calc.extension(row['quantity_microunits'], row['rate_minor_units'])
+            require(calc.extension(row['quantity_microunits'], row['rate_minor_units'], row.get('rate_fraction'))
                     == row['amount_minor_units'], 'the line amount is its quantity times its rate')
         facts = PurchaseOrderLineProfile.model_validate_json(row['line_snapshot'])
         captured = facts.item.account.id if facts.item else facts.account.id

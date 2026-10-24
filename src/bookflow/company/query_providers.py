@@ -285,7 +285,8 @@ def _item(inp, session):
     p = _from_options(table, items.item_query_options(session.company, filters=inp.filter))
     p.columns.update(price=sa.null(), cost=sa.null(), quantity_on_hand=items.quantity_on_hand_expression(table),
         preferred_vendor=_label(schema.vendors, table.c.preferred_vendor_id))
-    p.extra = {name: table.c[name] for name in ("price_minor_units", "price_currency", "cost_minor_units", "cost_currency")}
+    p.extra = {name: table.c[name] for name in ("price_minor_units", "price_currency", "price_fraction",
+                                                "cost_minor_units", "cost_currency", "cost_fraction")}
     def transform(row):
         for field in ("price", "cost"):
             money = items._money_output(row, field)

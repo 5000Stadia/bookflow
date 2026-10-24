@@ -49,6 +49,7 @@ def retained_lines(s, saved, pending):
             **{k: old[k] for k in ('item_id', 'description', 'quantity_microunits', 'unit_id',
                                    'unit_factor_nanounits', 'base_quantity_microunits',
                                    *credits.MONEY_COLUMNS)},
+            unit_price_fraction=old.get('unit_price_fraction'),  # R150: the exact rate travels with it
             line_id=line_id, profile=SalesLineProfile.model_validate_json(old['item_snapshot']),
             taxes=[dict(rule=None, source=cell, captured=cell,
                         source_tax_component_id=cell['source_tax_component_id']) for cell in cells],

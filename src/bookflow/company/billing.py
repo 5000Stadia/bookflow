@@ -154,6 +154,7 @@ def resolved_line(lf, proof=None):
     if lf.pricing_basis == 'amount':
         facts['price_rule'] = None
         facts['price_basis_minor_units'] = None
+        facts.pop('price_basis_fraction', None)
         facts['origins'] = {k: v for k, v in facts['origins'].items() if k not in ('unit_price', 'price_level', 'price_basis_amount')}
         facts['origins']['net_amount'] = Origin(kind='explicit').model_dump()
     else:
@@ -164,6 +165,7 @@ def resolved_line(lf, proof=None):
     profile = SalesLineProfile.model_validate(facts)
     resolved = {key: getattr(lf, key) for key in ('item_id', 'description', 'quantity_microunits',
         'unit_id', 'unit_factor_nanounits', 'base_quantity_microunits', *sales.MONEY_COLUMNS)} | dict(
+        unit_price_fraction=lf.unit_price_fraction,  # R150: the quoted exact rate
         line_id=None, profile=profile, taxes=[dict(rule=t.rule, taxable_minor_units=t.taxable_minor_units,
             tax_minor_units=t.tax_minor_units) for t in lf.taxes])
     if proof is None:

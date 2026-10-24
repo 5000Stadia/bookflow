@@ -34,6 +34,7 @@ import json
 
 import sqlalchemy as sa
 
+from bookflow.core import unit_price
 from bookflow.company.aliases import alias
 from bookflow.company import credit_returns as returns
 from bookflow.company import document_effects as effects
@@ -463,6 +464,8 @@ def commercial(s, inp, *, document_id, pending, previous=None):
 def _line_semantic(line):
     values = {key: line[key] for key in ('item_id', 'description', 'quantity_microunits', 'unit_id',
                                          'unit_factor_nanounits', 'base_quantity_microunits', *MONEY_COLUMNS)}
+    if line.get('unit_price_fraction') is not None:  # R150: a whole-minor line keeps its fingerprint
+        values['unit_price_fraction'] = line['unit_price_fraction']
     values['profile'] = line['profile'].model_dump()
     values['source'] = line['source']
     values['intervals'] = [list(interval) for interval in line['intervals']]
@@ -712,7 +715,8 @@ def _business_postings(header, revision, batch, resolved, pending, created, audi
             **audited, item_id=line['item_id'], quantity_microunits=line['quantity_microunits'],
             unit_id=line['unit_id'], unit_factor_nanounits=line['unit_factor_nanounits'],
             base_quantity_microunits=line['base_quantity_microunits'],
-            unit_price_minor_units=line['unit_price_minor_units'], pricing_basis=facts.pricing_basis,
+            unit_price_minor_units=line['unit_price_minor_units'], unit_price_fraction=line.get('unit_price_fraction'),
+            pricing_basis=facts.pricing_basis,
             net_minor_units=line['net_minor_units'], tax_minor_units=line['tax_minor_units'],
             gross_minor_units=line['gross_minor_units'], item_snapshot=json_text(facts.model_dump()),
             posting_source_id=net_source['id'] if net_source else None,
@@ -997,7 +1001,7 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
                                       'source_revision_id', 'source_line_id')},
             quantity=format_quantity_micro_units(detail['quantity_microunits']),
             base_quantity=format_quantity_micro_units(detail['base_quantity_microunits']),
-            unit_price=Money(detail['unit_price_minor_units'], currency).to_dict()
+            unit_price=unit_price.to_dict(unit_price.row_units(detail, 'unit_price'), currency)
             if detail['unit_price_minor_units'] is not None else None,
             net=Money(detail['net_minor_units'], currency).to_dict(),
             tax=Money(detail['tax_minor_units'], currency).to_dict(),

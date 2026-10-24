@@ -27,6 +27,7 @@ import re
 
 import sqlalchemy as sa
 
+from bookflow.core import unit_price
 from bookflow.company import document_effects as effects, schema as c
 from bookflow.core.errors import BookflowError
 from bookflow.core.exact import format_quantity_micro_units, parse_quantity_micro_units
@@ -119,7 +120,8 @@ def line_states(s, header, rev, *, pending_claims=(), released=(), closures=None
         state = dict(line_id=key, position=line['position'] if 'position' in line else position,
                      item_id=line['item_id'], account_id=line['account_id'], description=line['description'],
                      ordered_quantity_microunits=line['quantity_microunits'],
-                     rate_minor_units=line['rate_minor_units'], amount_minor_units=line['amount_minor_units'],
+                     rate_minor_units=line['rate_minor_units'], rate_fraction=line.get('rate_fraction'),
+                     amount_minor_units=line['amount_minor_units'],
                      received_quantity_microunits=received + direct_quantity,
                      billed_quantity_microunits=direct_quantity + through.get(key, 0),
                      billed_amount_minor_units=direct_amount,
@@ -304,14 +306,12 @@ def source(s, inp):
                     f'only {format_quantity_micro_units(open_quantity)} of '
                     f'{format_quantity_micro_units(state["ordered_quantity_microunits"])} remain open on this line '
                     f'({format_quantity_micro_units(state["received_quantity_microunits"])} already received or billed)'))
-            rate = line['rate_minor_units']
+            rate = unit_price.row_units(line, 'rate')  # R150: the exact ordered rate
             if selection.unit_cost is not None:
-                rate = sales_money(selection.unit_cost, currency, field + '.unit_cost').minor_units
-                if rate < 0:
-                    raise _invalid(field + '.unit_cost', 'must not be negative')
+                rate = unit_price.parse(selection.unit_cost, currency, field + '.unit_cost')
                 unit_costs[len(chosen)] = rate
             line['quantity_microunits'] = quantity
-            amount = extension(quantity, rate)
+            amount = unit_price.extension(quantity, rate)
             line['amount_minor_units'] = amount
         else:
             if selection.quantity is not None or selection.unit_cost is not None:
@@ -337,7 +337,7 @@ def source(s, inp):
             row = carried['items'][position]
             position += 1
             if index in unit_costs:
-                row = row.model_copy(update={'unit_cost': {'minor_units': unit_costs[index], 'currency': currency}})
+                row = row.model_copy(update={'unit_cost': unit_price.to_dict(unit_costs[index], currency)})
             items.append(row)
         elif line['item_id'] is not None:
             items.append(carried['items'][position])
