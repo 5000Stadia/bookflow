@@ -19,7 +19,9 @@ def normalize(obj):
     if isinstance(obj, dict):
         # A relative age ("seconds since the last update") depends on when each run reads it,
         # not on the interface; check its shape and compare the rest.
-        return {k: ("<age>" if k.startswith("seconds_since") and type(v) is int and v >= 0 else normalize(v))
+        # Likewise a read's own "now" (clock status) is when it ran, not what it read.
+        return {k: ("<age>" if k.startswith("seconds_since") and type(v) is int and v >= 0
+                    else "<now>" if k == "now" and isinstance(v, str) else normalize(v))
                 for k, v in obj.items()}
     if isinstance(obj, list):
         return [normalize(v) for v in obj]
