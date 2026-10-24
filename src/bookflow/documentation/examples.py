@@ -1444,3 +1444,52 @@ EXAMPLES['work-order purchase-order'] = Example(
     + ' --company "Demo Plumbing Co" --reason "Spares for the job" --json',
     {'work_order': 'DEMO-SO-WO-1', 'date': '2026-10-22', 'vendor': 'Central Supply',
      'lines': [{'item': 'Brass Shutoff Valve', 'quantity': '3'}]})
+
+# Timekeeping (R106): a week's timesheet, the clock and the job calendar.
+_TIME_CO = ' --company "Demo Plumbing Co" --json'
+EXAMPLES['timesheet show'] = Example(
+    'bookflow timesheet show --employee "Casey Worker" --week 2026-10-20' + _TIME_CO,
+    {'employee': 'Casey Worker', 'week': '2026-10-20'})
+EXAMPLES['clock in'] = Example(
+    'bookflow clock in --employee "Casey Worker" --customer "Riverside Apartments" --item "Mainline Clearing"'
+    ' --notes "Callout" --reason "Casey started the Riverside callout"' + _TIME_CO,
+    {'employee': 'Casey Worker', 'customer': 'Riverside Apartments', 'item': 'Mainline Clearing', 'notes': 'Callout'})
+EXAMPLES['clock out'] = Example(
+    'bookflow clock out --employee "Casey Worker" --reason "Casey finished"' + _TIME_CO, {'employee': 'Casey Worker'})
+EXAMPLES['schedule create'] = Example(
+    'bookflow schedule create --employee "Casey Worker" --customer "Riverside Apartments" --starts 2026-10-26T08:00'
+    ' --ends 2026-10-26T12:00 --notes "Water heater" --reason "Book the install"' + _TIME_CO,
+    {'employee': 'Casey Worker', 'customer': 'Riverside Apartments', 'starts': '2026-10-26T08:00',
+     'ends': '2026-10-26T12:00', 'notes': 'Water heater'})
+EXAMPLES['schedule calendar'] = Example(
+    'bookflow schedule calendar --employee "Casey Worker" --view day --date 2026-10-26' + _TIME_CO,
+    {'employee': 'Casey Worker', 'view': 'day', 'date': '2026-10-26'})
+EXAMPLES['timesheet copy-last'] = Example(
+    'bookflow timesheet copy-last --employee "Casey Worker" --week 2026-10-27' + _TIME_CO,
+    {'employee': 'Casey Worker', 'week': '2026-10-27'})
+EXAMPLES['timesheet save'] = Example(
+    'bookflow timesheet save --employee "Casey Worker" --week 2026-10-20 --rows \'[{"customer": "Riverside Apartments",'
+    ' "item": "Mainline Clearing", "billable": true, "notes": "Main line", "hours": ["8", "7.5", null, null, null, null,'
+    ' null]}]\' --reason "Casey\'s week"' + _TIME_CO,
+    {'employee': 'Casey Worker', 'week': '2026-10-20', 'rows': [
+        {'customer': 'Riverside Apartments', 'item': 'Mainline Clearing', 'billable': True, 'notes': 'Main line',
+         'hours': ['8', '7.5', None, None, None, None, None]}]})
+EXAMPLES['timesheet preferences'] = Example('bookflow timesheet preferences' + _TIME_CO, {})
+EXAMPLES['timesheet set-preferences'] = Example(
+    'bookflow timesheet set-preferences --clock-rounding 15 --reason "Round punches to the quarter hour"' + _TIME_CO,
+    {'clock_rounding': '15'})
+EXAMPLES['clock cancel'] = Example(
+    'bookflow clock cancel --employee "Casey Worker" --reason "Clocked in by mistake"' + _TIME_CO,
+    {'employee': 'Casey Worker'})
+EXAMPLES['clock status'] = Example('bookflow clock status' + _TIME_CO, {})
+EXAMPLES['clock link'] = Example(
+    'bookflow clock link --employee "Casey Worker" --user casey --reason "Casey\'s own login"' + _TIME_CO,
+    {'employee': 'Casey Worker', 'user': 'casey'})
+EXAMPLES['schedule update'] = Example(
+    f'bookflow schedule update {ID} --expected-version 1 --starts 2026-10-26T13:00 --ends 2026-10-26T16:00'
+    ' --reason "Customer asked for the afternoon"' + _TIME_CO,
+    {'entry': ID, 'expected_version': 1, 'starts': '2026-10-26T13:00', 'ends': '2026-10-26T16:00'})
+EXAMPLES['schedule cancel'] = Example(
+    f'bookflow schedule cancel {ID} --expected-version 2 --reason "Customer postponed"' + _TIME_CO,
+    {'entry': ID, 'expected_version': 2})
+EXAMPLES['schedule show'] = Example(f'bookflow schedule show {ID}' + _TIME_CO, {'entry': ID})

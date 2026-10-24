@@ -8,8 +8,7 @@ from bookflow.company import job_schedule, time_clocks, timekeeping, timesheets
 from bookflow.company import timekeeping_models as m
 from bookflow.core.registry import Plan, command
 
-_WRITE_ERRORS = ['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE', 'E_VALUE_RANGE',
-                 'E_AMOUNT_PRECISION', 'E_PREVIEW_STALE']
+_WRITE_ERRORS = ['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE', 'E_VALUE_RANGE']
 
 
 def _write(name, description, inp, out, planner, applier, *, errors, positional=(), version=None, role='standard'):
@@ -126,7 +125,7 @@ clock_status = _read(
     ' the maximum shift and must be closed with a stated end time.',
     m.ClockStatusInput, m.ClockStatusOutput, plan_clock_status, errors=['E_RECORD_NOT_FOUND'])
 clock_link = _write(
-    'clock link', "Say which person's login is an employee, or unlink it (user null). Then that person's own"
+    'clock link', "Say which person's login is an employee, or unlink it (no user). Then that person's own"
     ' timesheet and clock need no employee named, and an agent acting for them may clock them in and out on their'
     ' instruction. A person\'s act.',
     m.ClockLinkInput, m.ClockLinkOutput, plan_clock_link, timekeeping.apply_link,

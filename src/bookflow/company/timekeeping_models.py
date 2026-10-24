@@ -155,7 +155,7 @@ class ClockStatusInput(_Strict):
 
 class ClockLinkInput(_Strict):
     employee: Selector = Field(description='Employee ID or name.')
-    user: str | None = Field(max_length=64, description='Username or user id of the login that is this employee; null unlinks.')
+    user: str | None = Field(None, max_length=64, description='Username or user id of the login that is this employee; leave it out (or null) to unlink.')
 
 
 class ClockOutput(_Strict):
