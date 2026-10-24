@@ -10,7 +10,7 @@ import bookflow
 from bookflow import BookflowError
 from bookflow.core import registry
 from bookflow.hub import permission_human_admin_catalog as layer, people_only, permission_runtime as runtime
-from bookflow.hub import permission_partial_po_catalog as tip_layer
+from bookflow.hub import permission_timesheets_catalog as tip_layer
 from tests.conftest import hosted_call, make_agent
 from tests.test_row3_host import hosted  # noqa: F401 - fixture
 
@@ -37,11 +37,12 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # collections-v1 adds none: moving a customer's credit between jobs is bookkeeping.
     # pricing-rules-v1 adds none: price rules are bookkeeping setup, as price levels are.
     # order-invoicing-v1 adds none, nor does shortfall-po-v1, nor partial-po-v1.
+    # timesheets-v1 adds `clock link`: saying which login is which employee is what lets an agent clock a person in.
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {
         'journal restore', 'invoice restore', 'customer merge', 'customer unmerge', 'vendor merge', 'vendor unmerge',
         'item convert',
-        'account merge', 'account unmerge', 'item merge', 'item unmerge'}
+        'account merge', 'account unmerge', 'item merge', 'item unmerge', 'clock link'}
 
     # Every write at the identity capabilities is people-only; the one exception lets an
     # agent revoke its own token. Reads are not listed.
