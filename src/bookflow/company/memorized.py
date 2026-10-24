@@ -484,6 +484,8 @@ def apply_group_write(plan, ctx, s):
                        before['version'] if before else None, row['version'], row, before, db='company')]
     summary = ('memorized group ' if before is None else 'updated memorized group ') + row['name']
     _audit(s, ctx, data['command_name'], summary, touched, event)
+    if before is None or any(before.get(k) != row.get(k) for k in _SCHEDULE_KEYS):
+        _record_group_setter(s, ctx, row['id'], at)
     if before is None:
         s.company.conn.execute(c.memorized_groups.insert().values(**row))
     else:
@@ -492,6 +494,21 @@ def apply_group_write(plan, ctx, s):
     out = MemorizedGroupWriteOutput(**_group_out_fields(row), schedule=_schedule_out(row),
                                     member_count=member_count, warnings=list(warnings))
     return Applied(out, touched, summary, audited=True)
+
+
+_SCHEDULE_KEYS = ('status', 'mode', 'frequency', 'anchor_day', 'start_date', 'next_date', 'stop_date',
+                  'remaining_count', 'days_in_advance')
+
+
+def _record_group_setter(s, ctx, group_id, at):
+    """Who set this group's schedule, mode or status: the scheduler enters a member only while the
+    setter may too, and names the setter on the posting (R111)."""
+    from bookflow.hub.credentials import _binding
+    epoch = _binding(s.hub, s.actor.id, ctx.on_behalf_of)[1] if s.actor.kind == 'agent' else None
+    s.company.conn.execute(c.scheduled_group_authority.delete().where(c.scheduled_group_authority.c.group_id == group_id))
+    s.company.conn.execute(c.scheduled_group_authority.insert().values(
+        group_id=group_id, set_by=s.actor.id, principal_id=ctx.on_behalf_of if s.actor.kind == 'agent' else None,
+        authority_epoch=epoch, set_at=at))
 
 
 def _group_out_fields(row):

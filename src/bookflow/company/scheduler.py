@@ -26,6 +26,16 @@ the books (a closed period, an inactive account) makes a blocked occurrence and 
 author. Blocked occurrences are never retried by the scheduler: a person runs `memorized retry`
 or `memorized skip`.
 
+*Who scheduled it.* A group's schedule, mode and status can be set by someone other than its
+members' authors, so whoever last set them is recorded (``scheduled_group_authority``, with an
+agent's epoch) and must pass the same checks as the author. When the setter is someone else, the
+author's own right must still admit the entry, and the entry is made *as the setter* -- an agent
+setter's entries are that agent's writes, on its review list -- with a reason naming both
+("...; memorized by A, scheduled by B"). A deactivated or suspended setter blocks the entry and an
+administrator gets the to-do. A template's own schedule is part of its revision, so its author is
+its setter. A slot older than the default catch-up window, let in because an administrator widened
+``scheduler_catch_up_days``, says who widened it in its reason.
+
 *How it is recorded.* The posting is the author's write: its audit event names the author as the
 actor (an agent stays an agent, so `report entries-to-review` and `audit list --actor/--principal`
 see it exactly as a direct write), ``on_behalf_of`` is the agent's principal (null for a person),
@@ -107,14 +117,18 @@ def _act_as(s, user_id: str, principal: str | None = None, epoch: int | None = N
     s.directive_code = None
 
 
-def _cannot_act(s, user_id: str | None, principal: str | None = None,
-                revision_id: str | None = None) -> tuple[str | None, int | None]:
-    """Why this author can no longer lend its authority to an entry (or None), and its epoch.
+_NOT_RECORDED = object()
+
+
+def _cannot_act(s, user_id: str | None, principal: str | None = None, saved=_NOT_RECORDED,
+                what: str = 'saved this memorized transaction') -> tuple[str | None, int | None]:
+    """Why this person or agent can no longer lend its authority to an entry (or None), and its epoch.
 
     Checked here, before anything is dispatched, in every permission mode -- a root still in the
     legacy mode never consults a credential at all -- and again by ``ScheduledBinding`` inside
     the policy check. An agent gets exactly a bearer token's checks: assigned to the person it
-    acted for (who is active), not suspended, and the authority epoch it saved the revision with.
+    acted for (who is active), not suspended, and the authority epoch it had when it ``saved``
+    (``_NOT_RECORDED`` when nothing recorded it: an agent's save from before this upgrade).
     """
     from bookflow.hub import credentials, schema as h
     user = s.hub.conn.execute(sa.select(h.users).where(h.users.c.id == user_id)).mappings().first() if user_id else None
@@ -131,12 +145,29 @@ def _cannot_act(s, user_id: str | None, principal: str | None = None,
         return f'{name} (an agent) is suspended', None
     eligible, epoch = credentials._binding(s.hub, user_id, principal)
     if not eligible:
-        return f'{name} (an agent) no longer acts for the person it saved it for', None
-    saved = s.company.conn.execute(sa.select(c.scheduled_revision_authority.c.authority_epoch).where(
-        c.scheduled_revision_authority.c.revision_id == revision_id)).first() if revision_id else None
-    if saved is None or saved[0] != epoch:
-        return f"{name} (an agent) holds different authority than when it saved this memorized transaction", None
+        return f'{name} (an agent) no longer acts for the person it {what} for', None
+    if saved is _NOT_RECORDED:
+        return f'{name} (an agent) {what} before this upgrade; re-save it to schedule it', None
+    if saved != epoch:
+        return f'{name} (an agent) holds different authority than when it {what}', None
     return None, epoch
+
+
+def group_setter(s, occurrence):
+    """Who set the schedule of the group that drives this occurrence: (setter, principal, saved epoch,
+    group), or None when no scheduled group drives it."""
+    from bookflow.company import memorized as service
+    if not occurrence.get('group_run_id'):
+        return None
+    run = service._one(s, c.memorized_group_runs, c.memorized_group_runs.c.id == occurrence['group_run_id'])
+    group = service._one(s, c.memorized_groups, c.memorized_groups.c.id == run['group_id']) if run else None
+    if group is None or group['frequency'] == 'never':
+        return None
+    row = s.company.conn.execute(sa.select(c.scheduled_group_authority).where(
+        c.scheduled_group_authority.c.group_id == group['id'])).mappings().first()
+    if row is None:   # set before this upgrade: its last editor, with nothing recorded about an agent's epoch
+        return group['updated_by'], None, _NOT_RECORDED, group
+    return row['set_by'], row['principal_id'], row['authority_epoch'], group
 
 
 def _blocked(code, message, **details):
@@ -144,60 +175,88 @@ def _blocked(code, message, **details):
     return BookflowError(code, message=message[:500], details=details)
 
 
-def _rebase(s, ctx, claimed) -> list:
-    """Point each waiting occurrence at its template as it is now (the anchor enters the memorized
-    transaction as it stands), so content and authority come from the same, current revision."""
-    from bookflow.company import memorized as service
-    from bookflow.core import clock
-    from bookflow.core.registry import Touched
-    touched, at = [], clock.now_iso()
-    for occurrence in claimed:
-        if not occurrence['_enter'] or occurrence['status'] != 'pending' or occurrence['attempt_count']:
-            continue
-        template = service._one(s, c.memorized_transactions, c.memorized_transactions.c.id == occurrence['template_id'])
-        if template is None or template['current_revision_id'] == occurrence['revision_id']:
-            continue
-        values = dict(revision_id=template['current_revision_id'], command=template['command'],
-                      version=occurrence['version'] + 1, updated_at=at, updated_by=s.actor.id,
-                      updated_via=ctx.interface.value)
-        before = {k: v for k, v in occurrence.items() if not k.startswith('_')}
-        touched.append(Touched('memorized_occurrence', occurrence['id'], 'update', occurrence['version'],
-                               values['version'], dict(before, **values), before, db='company'))
-        s.company.conn.execute(c.memorized_occurrences.update().where(c.memorized_occurrences.c.id == occurrence['id'])
-                               .values(**values))
-        occurrence.update(values)
-    return touched
+def _name(s, user_id):
+    from bookflow.hub import schema as h
+    row = s.hub.conn.execute(sa.select(h.users.c.display_name, h.users.c.username).where(h.users.c.id == user_id)).first()
+    return (row[0] or row[1]) if row else 'someone'
 
 
-def _enter(s, occurrence, as_of):
-    """Enter one claimed occurrence with the authority of its revision's author, and as that author."""
+def _enter(s, occurrence, as_of, widened=None):
+    """Enter one claimed occurrence with the authority of its revision's author -- and, when someone
+    else set the schedule of the group driving it, with that setter's authority too, as the setter."""
     from bookflow.company import memorized as service, memorized_entry
+    from bookflow.core import registry
+    from bookflow.core.context import ActorKind
+    from bookflow.core.dispatch import authorize
+    from bookflow.core.errors import BookflowError
     recovered = memorized_entry._recover(s, occurrence)
     if recovered is not None:
         return {'occurrence': occurrence, 'output': recovered['output'], 'recovered': recovered['source']}
     template = service._one(s, c.memorized_transactions, c.memorized_transactions.c.id == occurrence['template_id'])
     author, principal = author_of(s, occurrence['revision_id'])
-    why, epoch = _cannot_act(s, author, principal, occurrence['revision_id'])
+    why, epoch = _cannot_act(s, author, principal, _revision_saved_or_missing(s, occurrence['revision_id']))
     if why is not None:
         return {'occurrence': occurrence, 'error': _blocked(
             'E_PERMISSION', f"Not entered: the author of this memorized transaction, {why}, so it no longer "
                             "carries anyone's authority. A person must review it.", reason='author_inactive')}
-    _act_as(s, author, principal, epoch)
-    from bookflow.core.context import ActorKind
-    ctx = context().model_copy(update={'actor_id': author, 'actor_kind': ActorKind(s.actor.kind), 'on_behalf_of': principal})
     frequency = template['frequency']
-    if template['group_id']:
-        group = service._one(s, c.memorized_groups, c.memorized_groups.c.id == template['group_id'])
-        if group is not None and group['frequency'] != 'never':
-            frequency = group['frequency']
-    reason = f"On schedule: {template['name']} ({frequency.replace('_', ' ')}) for {occurrence['slot_date']}"
+    actor, actor_principal, actor_epoch = author, principal, epoch
+    setter = group_setter(s, occurrence)
+    note = ''
+    if setter is not None:
+        set_by, set_principal, set_saved, group = setter
+        frequency = group['frequency']
+        if set_by != author:
+            why, set_epoch = _cannot_act(s, set_by, set_principal, set_saved, what="set this group's schedule")
+            if why is not None:
+                return {'occurrence': occurrence, 'error': _blocked(
+                    'E_PERMISSION', f"Not entered: whoever set the schedule of its group, {why}. A person must "
+                                    "review it.", reason='setter_inactive')}
+            # The author's own right must still admit the entry, though it is the setter who enters it.
+            _act_as(s, author, principal, epoch)
+            check = context().model_copy(update={'actor_id': author, 'actor_kind': ActorKind(s.actor.kind),
+                                                 'on_behalf_of': principal, 'reason': 'scheduled entry check'})
+            try:
+                authorize(registry.get(occurrence['command']), check, s, dry_run=True)
+            except BookflowError as error:
+                return {'occurrence': occurrence, 'error': _blocked(
+                    'E_PERMISSION', f"Not entered: its author, {_name(s, author)}, may no longer make it "
+                                    f"({error.code}).", reason='author_not_permitted')}
+            actor, actor_principal, actor_epoch = set_by, set_principal, set_epoch
+            note = f'; memorized by {_name(s, author)}, scheduled by {_name(s, set_by)}'
+    _act_as(s, actor, actor_principal, actor_epoch)
+    ctx = context().model_copy(update={'actor_id': actor, 'actor_kind': ActorKind(s.actor.kind),
+                                       'on_behalf_of': actor_principal})
+    if widened and occurrence['slot_date'] < widened['before']:
+        note += f"; catch-up widened to {widened['days']} days by {widened['by']}"
+    reason = f"On schedule: {template['name']} ({frequency.replace('_', ' ')}) for {occurrence['slot_date']}{note}"
     result = memorized_entry._enter_one(s, ctx, occurrence, reason=reason)
     error = result.get('error')
     if error is not None and error.code == 'E_COMPANY_NOT_FOUND':
-        name = s.actor.display_name or s.actor.username
-        result['error'] = _blocked('E_PERMISSION', f'Not entered: the author of this memorized transaction, {name}, '
+        result['error'] = _blocked('E_PERMISSION', f'Not entered: {_name(s, actor)}, whose authority it runs on, '
                                                    'is no longer a member of this company.', reason='author_not_member')
     return result
+
+
+def _revision_saved_or_missing(s, revision_id):
+    row = s.company.conn.execute(sa.select(c.scheduled_revision_authority.c.authority_epoch).where(
+        c.scheduled_revision_authority.c.revision_id == revision_id)).first()
+    return _NOT_RECORDED if row is None else row[0]
+
+
+def _widened(s, catch_up):
+    """Who widened the catch-up window past the default, and to what, for the reason of what it lets in."""
+    from bookflow.core.audit import decode_snapshot
+    if catch_up is None or catch_up <= DEFAULT_CATCH_UP_DAYS:
+        return None
+    e, n = c.audit_events, c.audit_entries
+    for actor_id, before, after in s.company.conn.execute(
+            sa.select(e.c.actor_id, n.c.before, n.c.after).join(n, n.c.event_id == e.c.id)
+            .where(e.c.command == 'company update').order_by(e.c.seq.desc())):
+        old, new = decode_snapshot(before) or {}, decode_snapshot(after) or {}
+        if 'scheduler_catch_up_days' in new and old.get('scheduler_catch_up_days') != new['scheduler_catch_up_days']:
+            return {'days': catch_up, 'by': _name(s, actor_id)}
+    return {'days': catch_up, 'by': 'an administrator'}
 
 
 def _mode(s, item):
@@ -243,6 +302,9 @@ def enter_due(s, system_id: str, as_of: str) -> dict[str, Any]:
     from bookflow.core.ids import new_id
     info = s.company.conn.execute(sa.select(c.company_info.c.scheduler_catch_up_days)).mappings().one()
     catch_up = info['scheduler_catch_up_days']
+    widened = _widened(s, catch_up)
+    if widened is not None:
+        widened['before'] = (date.fromisoformat(as_of) - timedelta(days=DEFAULT_CATCH_UP_DAYS)).isoformat()
     if catch_up is None:
         catch_up = DEFAULT_CATCH_UP_DAYS
     cutoff = (date.fromisoformat(as_of) - timedelta(days=catch_up)).isoformat()
@@ -272,11 +334,12 @@ def enter_due(s, system_id: str, as_of: str) -> dict[str, Any]:
         try:
             _upsert_principals(s, ctx)
             claimed = memorized_entry._claim(s, ctx, data, PROCESS)
-            rebased = _rebase(s, ctx, claimed)
-            if rebased:
-                write_event_to(s.company, ctx, PROCESS, f'{len(rebased)} waiting entr{"y" if len(rebased) == 1 else "ies"} '
-                               'will replay the memorized transaction as it is now', rebased,
-                               actor_id=system_id, actor_kind='system', event_id=new_id())
+            for occurrence in claimed:
+                # A blocked slot waits for a person (`memorized retry`); the scheduler never tries it again,
+                # even when the same slot comes round in a group run.
+                if occurrence['status'] == 'blocked':
+                    occurrence['_enter'] = False
+            memorized_entry.rebase(s, ctx, claimed, PROCESS)
             s.commits.commit(s.company, 'memorized.enter')
         except BaseException:
             if s.company.write_transaction:
@@ -284,10 +347,8 @@ def enter_due(s, system_id: str, as_of: str) -> dict[str, Any]:
             raise
         results = []
         for occurrence in claimed:
-            # A blocked slot waits for a person (`memorized retry`); the scheduler never tries it again,
-            # even when the same slot comes round in a group run.
-            if occurrence['_enter'] and occurrence['status'] != 'blocked':
-                results.append(_enter(s, occurrence, as_of))
+            if occurrence['_enter']:
+                results.append(_enter(s, occurrence, as_of, widened))
         _act_as(s, system_id)
         s.company.raw.execute('BEGIN IMMEDIATE')
         try:
@@ -307,17 +368,22 @@ def enter_due(s, system_id: str, as_of: str) -> dict[str, Any]:
 
 
 def _active_admin(s) -> str | None:
-    """An active person who administers this company: who reviews what no author can carry."""
+    """An active person who administers this company and can open it: who reviews what no author can carry.
+
+    A person holding the owner or admin role on the company or its organization; failing that, a hub
+    administrator who is a member of it. Never someone who cannot open the company.
+    """
     from bookflow.hub import schema as h
     u, m, row = h.users, h.memberships, s.company_row
-    found = s.hub.conn.execute(sa.select(u.c.id).join(m, m.c.user_id == u.c.id).where(
-        u.c.active.is_(True), u.c.kind == 'human', m.c.revoked_at.is_(None), m.c.role == 'admin',
-        sa.or_(sa.and_(m.c.scope_type == 'company', m.c.scope_id == row['id']),
-               sa.and_(m.c.scope_type == 'organization', m.c.scope_id == row['organization_id'])))
-        .order_by(u.c.created_at, u.c.id).limit(1)).scalar_one_or_none()
-    return found or s.hub.conn.execute(sa.select(u.c.id).where(
-        u.c.active.is_(True), u.c.kind == 'human', u.c.hub_admin.is_(True)).order_by(u.c.created_at, u.c.id).limit(1)
-    ).scalar_one_or_none()
+    scope = sa.or_(sa.and_(m.c.scope_type == 'company', m.c.scope_id == row['id']),
+                   sa.and_(m.c.scope_type == 'organization', m.c.scope_id == row['organization_id']))
+    base = sa.select(u.c.id).join(m, m.c.user_id == u.c.id).where(
+        u.c.active.is_(True), u.c.kind == 'human', m.c.revoked_at.is_(None), scope)
+    rank = sa.case((m.c.role == 'owner', 0), else_=1)
+    found = s.hub.conn.execute(base.where(m.c.role.in_(('owner', 'admin'))).order_by(rank, u.c.created_at, u.c.id)
+                               .limit(1)).scalar_one_or_none()
+    return found or s.hub.conn.execute(base.where(u.c.hub_admin.is_(True)).order_by(u.c.created_at, u.c.id)
+                                       .limit(1)).scalar_one_or_none()
 
 
 def assign_blocked(s, system_id: str, as_of: str) -> int:
@@ -349,15 +415,16 @@ def assign_blocked(s, system_id: str, as_of: str) -> int:
         author, principal = author_of(s, occ['revision_id'])
         names = s.hub.conn.execute(sa.select(h.users.c.display_name, h.users.c.username).where(h.users.c.id == author)).first()
         author_name = (names[0] or names[1]) if names else 'its author'
-        authority = occ['error_code'] in AUTHORITY_CODES or _cannot_act(s, author, principal, occ['revision_id'])[0] is not None
+        authority = occ['error_code'] in AUTHORITY_CODES or _cannot_act(s, author, principal, _revision_saved_or_missing(s, occ['revision_id']))[0] is not None
         if authority:
             assignee = _active_admin(s)
             title = f"Review {occ['name']} for {occ['slot_date']}: its author can no longer post it"
-            notes = (f"The scheduler did not enter {occ['name']} for {occ['slot_date']} because it runs with the "
-                     f"authority of the person or agent who last saved it, {author_name}, and that authority is gone:\n"
-                     f"{occ['error_code']}: {occ['error_message']}\n\nIf it should still be entered, re-save the memorized "
-                     f"transaction under your own name and `memorized retry {occ['id']}`; otherwise "
-                     f"`memorized skip {occ['id']}`.")
+            notes = (f"The scheduler did not enter {occ['name']} for {occ['slot_date']}: it runs with the authority of "
+                     f"whoever saved it ({author_name}) and of whoever scheduled its group, and that authority is gone:\n"
+                     f"{occ['error_code']}: {occ['error_message']}\n\nA retry enters the memorized transaction as it is "
+                     f"now, in the name of whoever retries it. Read it first (`memorized show {occ['template_id']}`) and "
+                     f"correct it if it is not what the company should post; then `memorized retry {occ['id']}`. If it "
+                     f"should not be entered, `memorized skip {occ['id']}`.")
         else:
             assignee = author
             title = f"Enter {occ['name']} for {occ['slot_date']}: the scheduler could not"

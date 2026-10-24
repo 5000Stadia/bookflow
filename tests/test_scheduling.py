@@ -473,7 +473,7 @@ def test_co0085_is_exactly_the_current_metadata_and_a_fresh_company_reaches_it(t
     from bookflow.storage.engine import open_database
     from bookflow.storage.migrate import HEADS, migrate_to_head
     m = importlib.import_module('bookflow.storage.company_migrations.versions.0085_scheduling')
-    tables = ('todos', 'overdue_notices', 'scheduled_revision_authority')
+    tables = ('todos', 'overdue_notices', 'scheduled_revision_authority', 'scheduled_group_authority')
     compiled = tuple(str(CreateTable(c.metadata.tables[name]).compile(dialect=dialect())) for name in tables)
     indexes = tuple(str(CreateIndex(index).compile(dialect=dialect())) for name in tables
                     for index in sorted(c.metadata.tables[name].indexes, key=lambda index: index.name))

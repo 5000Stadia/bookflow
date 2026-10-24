@@ -96,4 +96,14 @@ def define_tables(metadata, C, T, common):
         C('created_at', sa.String(32), 'UTC time the revision was saved.', nullable=False),
         description="The authority an agent held when it saved a memorized transaction revision, so the scheduler applies a token's checks to it.")
 
-    return {'todos': todos, 'overdue_notices': notices, 'scheduled_revision_authority': authority}
+    group_authority = T('scheduled_group_authority',
+        C('group_id', sa.String(26), 'Memorized group whose schedule or mode was set.', primary_key=True),
+        C('set_by', sa.String(26), 'The person or agent who last set the group\'s schedule, mode or status.', nullable=False),
+        C('principal_id', sa.String(26), 'The person an agent setter acted for; null for a person.', nullable=True),
+        C('authority_epoch', sa.Integer, "An agent setter's authority epoch when it set the schedule; null for a person.", nullable=True),
+        C('set_at', sa.String(32), 'UTC time it was set.', nullable=False),
+        description="Who last set each memorized group's schedule and mode: the scheduler enters a member only while both "
+                    "the member's author and this setter may, and records the setter on the posting.")
+
+    return {'todos': todos, 'overdue_notices': notices, 'scheduled_revision_authority': authority,
+            'scheduled_group_authority': group_authority}

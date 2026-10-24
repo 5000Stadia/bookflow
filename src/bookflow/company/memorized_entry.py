@@ -225,6 +225,7 @@ def apply_entry(plan, ctx, s):
                 return Applied(out, [], f"skipped the {row['slot_date']} entry of {template['name']}",
                                finalized=True, audited=True)
             claimed = _claim(s, ctx, data, name)
+            rebase(s, ctx, claimed, name)
             s.commits.commit(s.company, 'memorized.enter')
         except BaseException:
             if s.company.write_transaction:
@@ -354,6 +355,44 @@ def _claim(s, ctx, data, command_name):
     for table, _record_type, row, moved in updates:
         s.company.conn.execute(table.update().where(table.c.id == row['id']).values(**moved))
     return claimed
+
+
+def rebase(s, ctx, claimed, command_name):
+    """Point every slot about to be entered at its template as it is now.
+
+    A slot that has never posted enters the memorized transaction as it stands -- the anchor's
+    behaviour -- whoever enters it and however (the scheduler, `memorized process`, `memorized
+    retry`), so the content and the authority of an entry always come from the same, current
+    revision and a superseded payload can never be posted in a later saver's name. A slot that
+    did post before its outcome was recorded (a host killed in between) keeps the revision that
+    produced its document: recovery is consulted first, and such a slot is never re-pointed.
+    The frozen membership of a group run is history of what the run captured, and is left as it is.
+    """
+    from bookflow.core.registry import Touched
+    touched, at = [], clock.now_iso()
+    for occurrence in claimed:
+        if not occurrence.get('_enter') or occurrence['status'] not in ('pending', 'blocked'):
+            continue
+        template = service._one(s, c.memorized_transactions, c.memorized_transactions.c.id == occurrence['template_id'])
+        if template is None or template['current_revision_id'] == occurrence['revision_id']:
+            continue
+        if _recover(s, occurrence) is not None:
+            continue
+        values = dict(revision_id=template['current_revision_id'], command=template['command'],
+                      version=occurrence['version'] + 1, updated_at=at, updated_by=s.actor.id,
+                      updated_via=ctx.interface.value)
+        before = {k: v for k, v in occurrence.items() if not k.startswith('_')}
+        touched.append(Touched('memorized_occurrence', occurrence['id'], 'update', occurrence['version'],
+                               values['version'], dict(before, **values), before, db='company'))
+        s.company.conn.execute(c.memorized_occurrences.update().where(c.memorized_occurrences.c.id == occurrence['id'])
+                               .values(**values))
+        occurrence.update(values)
+    if touched:
+        write_event_to(s.company, ctx, command_name,
+                       f'{len(touched)} entr{"y" if len(touched) == 1 else "ies"} will replay the memorized transaction as it is now',
+                       touched, actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code,
+                       event_id=new_id())
+    return touched
 
 
 def _group_run(s, ctx, group, slot, at, event, runs, touched):

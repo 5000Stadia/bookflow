@@ -234,3 +234,148 @@ def test_a_people_only_command_cannot_be_memorized_or_entered(books, monkeypatch
     monkeypatch.setattr(people_only, 'people_only_commands', lambda: frozenset({'bill post'}))
     out = books.run('memorized process', {'as_of': '2026-01-31'}, reason='Run')
     assert out['blocked_count'] == 1 and out['blocked'][0]['error_code'] == 'E_VALIDATION'
+
+
+def bill_totals(books):
+    with company_db(books) as db:
+        return [row[0] for row in db.execute(
+            "SELECT r.total_minor_units FROM transactions t JOIN transaction_revisions r ON r.id = t.current_revision_id "
+            "WHERE t.type = 'bill' ORDER BY r.date, t.id")]
+
+
+def tools(amount):
+    return rent_payload(account='Tool Hire', vendor='Tool Depot', amount=amount)
+
+
+def _agent_turns_on_the_admins_group(books):
+    admin = admin_id(books)
+    agent = local_agent(books, 'helper', 'helperlogin', admin)
+    books.run('memorized-group create', {'name': 'Owner draws', 'frequency': 'monthly', 'start_date': '2026-01-31',
+                                         'mode': 'remind'}, reason='Admin keeps a reminder')
+    books.run('memorized create', {'name': 'Draw', 'command': 'bill post', 'payload': tools('500.00'),
+                                   'group': 'Owner draws', 'group_ordinal': 1}, reason='Admin memorizes')
+    group = books.run('memorized-group show', {'memorized_group': 'Owner draws'})
+    run_as(books, 'helperlogin', 'memorized-group update',
+           {'memorized_group': 'Owner draws', 'expected_version': group['version'], 'mode': 'enter_automatically',
+            'start_date': '2025-11-30'}, on_behalf_of=admin, reason='Agent turns it on')
+    return admin, agent
+
+
+def test_R3_a_group_switched_on_by_a_since_deactivated_agent_posts_nothing(books):
+    admin, agent = _agent_turns_on_the_admins_group(books)
+    books.client.run('agent deactivate', {'agent': 'helper'})
+    out = tick(books, '2026-01-31')
+    assert out['memorized']['entered'] == 0 and out['memorized']['blocked'] == 3, out
+    assert bill_totals(books) == []
+    blocked = occurrences(books, 'Draw')
+    assert all('set the schedule of its group' in o['error_message'] for o in blocked)
+    assert todo_for(books, blocked[0]['id'])['assignee_id'] == admin
+
+
+def test_R3_a_group_switched_on_by_an_agent_posts_as_that_agents_write_naming_both(books):
+    admin, agent = _agent_turns_on_the_admins_group(books)
+    out = tick(books, '2026-01-31')
+    assert out['memorized']['entered'] == 3, out
+    rows = audit_rows(books, 'bill post')
+    assert {(r['actor_id'], r['actor_kind'], r['on_behalf_of']) for r in rows} == {(agent, 'agent', admin)}
+    assert all('memorized by' in r['reason'] and 'scheduled by' in r['reason'] for r in rows)
+    assert len(books.run('audit list', {'actor': 'helper', 'command': 'bill post', 'limit': 10})['items']) == 3
+
+
+def test_R3_widening_catch_up_names_who_widened_it_on_what_it_lets_in(books):
+    books.run('company update', {'scheduler_catch_up_days': 1000}, reason='Let the old ones in')
+    memorize(books, start_date='2024-06-30')
+    tick(books, '2026-01-31')
+    rows = audit_rows(books, 'bill post')
+    old = [r for r in rows if 'catch-up widened to 1000 days by' in r['reason']]
+    assert old and len(old) < len(rows)
+
+
+def test_R2a_a_retry_after_the_admin_resaves_posts_the_resaved_content(books):
+    from tests.conftest import as_user, make_actor
+    root = Path(books.root)
+    make_actor(root, 'mallory', company_role=(books.company, 'standard'))
+    as_user(root, 'mallory').run('memorized create', {
+        'name': 'Mallory tools', 'command': 'bill post', 'payload': tools('9999.00'),
+        'frequency': 'monthly', 'start_date': '2026-01-31', 'mode': 'enter_automatically'}, company=books.company)
+    books.client.run('user deactivate', {'user': 'mallory'})
+    tick(books, '2026-01-31')
+    [occ] = occurrences(books, 'Mallory tools')
+    assert 'as it is now' in todo_for(books, occ['id'])['notes']
+    show = books.run('memorized show', {'memorized': 'Mallory tools'})
+    books.run('memorized update', {'memorized': 'Mallory tools', 'expected_version': show['version'],
+                                   'payload': tools('10.00')}, reason='Re-save, corrected')
+    books.run('memorized retry', {'occurrence': occ['id'], 'expected_version': occ['version']}, reason='As the to-do says')
+    assert bill_totals(books) == [1000]
+
+
+def test_R2b_a_persons_process_posts_the_current_content_as_the_scheduler_does(books):
+    from tests.conftest import as_user, make_actor
+    root = Path(books.root)
+    make_actor(root, 'mallory', company_role=(books.company, 'standard'))
+    books.run('company update', {'scheduler_catch_up_days': 10}, reason='ten days')
+    as_user(root, 'mallory').run('memorized create', {
+        'name': 'Mallory tools', 'command': 'bill post', 'payload': tools('9999.00'),
+        'frequency': 'monthly', 'start_date': '2026-01-31', 'mode': 'enter_automatically'}, company=books.company)
+    tick(books, '2026-03-31')
+    show = books.run('memorized show', {'memorized': 'Mallory tools'})
+    books.run('memorized update', {'memorized': 'Mallory tools', 'expected_version': show['version'],
+                                   'payload': tools('10.00')}, reason='Admin corrects the amount')
+    books.run('memorized process', {'as_of': '2026-03-31'}, reason='Admin enters the missed ones')
+    assert sorted(bill_totals(books)) == [1000, 1000, 999900]
+    with company_db(books) as db:
+        assert db.execute("SELECT count(*) FROM audit_events WHERE summary LIKE '%as it is now%'").fetchone()[0] >= 1
+
+
+def test_R6_the_review_to_do_goes_to_the_companys_owner_not_a_non_member(books):
+    from tests.conftest import as_user, make_actor
+    root = Path(books.root)
+    installer = admin_id(books)
+    paula = make_actor(root, 'paula', company_role=(books.company, 'owner'))
+    make_actor(root, 'mallory', company_role=(books.company, 'standard'))
+    as_user(root, 'mallory').run('memorized create', {
+        'name': 'Mallory tools', 'command': 'bill post', 'payload': tools('12.00'),
+        'frequency': 'monthly', 'start_date': '2026-01-31', 'mode': 'enter_automatically'}, company=books.company)
+    books.client.run('user deactivate', {'user': 'mallory'})
+    folder = Path(books.run('company show', {})['path'])
+    with sqlite3.connect(root / 'hub.db') as hub:   # the installer keeps the installation, not this business
+        hub.execute("UPDATE memberships SET revoked_at = '2026-01-01T00:00:00.000Z' WHERE user_id = ?", (installer,))
+    tick(books, '2026-01-31')
+    with sqlite3.connect(folder / 'company.db') as db:
+        assert [row[0] for row in db.execute('SELECT assignee_id FROM todos')] == [paula]
+
+
+def test_R1b_a_recovered_slot_keeps_the_revision_that_posted_it(books, monkeypatch):
+    from bookflow.company import memorized_entry
+    from tests.conftest import as_user, make_actor
+    root = Path(books.root)
+    make_actor(root, 'mallory', company_role=(books.company, 'standard'))
+    memorize(books)
+    real, calls = memorized_entry._record, {'n': 0}
+
+    def dies(*a, **k):
+        calls['n'] += 1
+        if calls['n'] == 1:
+            raise RuntimeError('host killed between post and record')
+        return real(*a, **k)
+    monkeypatch.setattr(memorized_entry, '_record', dies)
+    tick(books, '2026-01-31')
+    original = occurrences(books)[0]['revision_id']
+    show = books.run('memorized show', {'memorized': 'Monthly office rent'})
+    as_user(root, 'mallory').run('memorized update', {'memorized': 'Monthly office rent', 'expected_version': show['version'],
+                                                      'payload': tools('9999.00')}, company=books.company)
+    tick(books, '2026-02-01')
+    [occ] = [o for o in occurrences(books) if o['slot_date'] == '2026-01-31']
+    assert occ['status'] == 'entered' and occ['revision_id'] == original
+    assert bill_totals(books) == [180000]
+
+
+def test_R4b_an_agent_revision_from_before_the_upgrade_says_to_resave_it(books):
+    admin = admin_id(books)
+    local_agent(books, 'helper', 'helperlogin', admin)
+    agent_rent(books, 'helperlogin', admin)
+    with company_db(books) as db:
+        db.execute('DELETE FROM scheduled_revision_authority')
+    tick(books, '2026-01-31')
+    [occ] = occurrences(books, 'Agent rent')
+    assert occ['status'] == 'blocked' and 'before this upgrade; re-save it to schedule it' in occ['error_message']
