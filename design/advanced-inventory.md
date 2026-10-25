@@ -746,6 +746,8 @@ jobs at night; the van ends as counted.
   nothing else to post leaves them unrecorded, says so, and is derived again by the next stock change it reaches;
   neither a post nor a re-derivation refuses anyone's write for it. A blind count's re-derivation names the
   count and the items, never quantities.
+- **A count whose only differences are worth nothing** is recorded but moves no stock until the next stock change
+  its date reaches; the post warns, and it heals at that change.
 - **Found units fill a shortfall** as a receipt does, owing the short sale its true-up dated at the found
   quantity; co0093 widens co0059's true-up guard to admit them.
 - **Permissions:** create, enter and cancel are `item` (standard), post and void `ledger.post` (standard);
