@@ -1668,7 +1668,7 @@ DEPOSIT_TABLES = ('transaction_revisions', 'deposit_profiles', 'document_line_id
 # R110: Effect, LifecycleOutput, CoordinateOutput and Manifest rehashed for SalesLineProfile.pricing_rule.
 # R101 increments 4-5 merged over R110: CoordinateOutput recomputed on the merged models.
 # CoordinateOutput moved with R104: the sales request it carries gained an optional inventory `site` (header and line).
-CODECS = {'CoordinateOutput': '9604f8cedbbea6a3f8c68b9f8c837e2dd66ee059c33d9267603975f39c75fc87', 'Effect': '7808ba1b94a7b285d8af46fa5abfe6bc6c1bc65945932115d572fa3678d217fb', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': 'd1a97fd2438cd733e29a83cc6bee5ea293c42c562f9e99406ec9c19e519307d1', 'Manifest': 'cd41072899be327b0f41199b18c243edbfd61361ba7be55bb1e0defee22a0a4c', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
+CODECS = {'CoordinateOutput': 'cc3ede2d90dc9bd96789309739faeab49e471dac6a9abe2de5cff260bde94e60', 'Effect': '7808ba1b94a7b285d8af46fa5abfe6bc6c1bc65945932115d572fa3678d217fb', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': 'd1a97fd2438cd733e29a83cc6bee5ea293c42c562f9e99406ec9c19e519307d1', 'Manifest': 'cd41072899be327b0f41199b18c243edbfd61361ba7be55bb1e0defee22a0a4c', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
 
 # Explicit dependency inspection registry closure, separate from disclosure.
 DEPENDENCY_OWNERS = {'account': ('accounts',

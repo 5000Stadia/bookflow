@@ -172,6 +172,7 @@ def test_two_counters_at_once_both_land_and_a_retry_lands_once(van):
     # Two counters at the same moment, each on their own connection, five scans each.
     import os
     import threading
+    import time
     import bookflow
     books, errors = van['books'], []
 
@@ -179,8 +180,18 @@ def test_two_counters_at_once_both_land_and_a_retry_lands_once(van):
         try:
             client = bookflow.connect(data_root=os.environ['BOOKFLOW_DATA_ROOT'])
             for n in range(5):
-                client.run('inventory-count enter', dict(count='C-1', entries=[dict(item='Widget', quantity='1', mode='add')]),
-                           company=books['company'], reason=f'{name} scan', idempotency_key=f'{name}-{n}')
+                # One command runs on a data root at a time; a client told the root is busy tries again,
+                # under the same idempotency key, so a retried scan still lands once.
+                for _ in range(200):
+                    try:
+                        client.run('inventory-count enter', dict(count='C-1', entries=[
+                            dict(item='Widget', quantity='1', mode='add')]), company=books['company'],
+                            reason=f'{name} scan', idempotency_key=f'{name}-{n}')
+                        break
+                    except bookflow.BookflowError as busy:
+                        if busy.code != 'E_DB_BUSY':
+                            raise
+                        time.sleep(0.05)
         except Exception as error:      # noqa: BLE001 - reported below
             errors.append(error)
     threads = [threading.Thread(target=counter, args=(name,)) for name in ('front', 'back')]
