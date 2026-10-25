@@ -423,6 +423,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `entered[].group_ordinal` | integer \| null | yes | yes | — | — |
 | `entered[].replays_author_id` | string \| null | no | yes | null | Who saved the revision this entry posts (or would post). |
 | `entered[].replays_author` | string \| null | no | yes | null | — |
+| `entered[].waiting_reason` | string \| null | no | yes | null | Why the scheduler held this entry for a person, when it did. |
 | `blocked` | array[object] | no | no | [] | — |
 | `blocked[].id` | string | yes | no | — | — |
 | `blocked[].version` | integer | yes | no | — | — |
@@ -444,6 +445,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `blocked[].group_ordinal` | integer \| null | yes | yes | — | — |
 | `blocked[].replays_author_id` | string \| null | no | yes | null | Who saved the revision this entry posts (or would post). |
 | `blocked[].replays_author` | string \| null | no | yes | null | — |
+| `blocked[].waiting_reason` | string \| null | no | yes | null | Why the scheduler held this entry for a person, when it did. |
 | `pending` | array[object] | no | no | [] | — |
 | `pending[].id` | string | yes | no | — | — |
 | `pending[].version` | integer | yes | no | — | — |
@@ -465,6 +467,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `pending[].group_ordinal` | integer \| null | yes | yes | — | — |
 | `pending[].replays_author_id` | string \| null | no | yes | null | Who saved the revision this entry posts (or would post). |
 | `pending[].replays_author` | string \| null | no | yes | null | — |
+| `pending[].waiting_reason` | string \| null | no | yes | null | Why the scheduler held this entry for a person, when it did. |
 | `entered_count` | integer | no | no | 0 | — |
 | `blocked_count` | integer | no | no | 0 | — |
 | `pending_count` | integer | no | no | 0 | — |
@@ -750,6 +753,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `runs[].members[].group_ordinal` | integer \| null | yes | yes | — | — |
 | `runs[].members[].replays_author_id` | string \| null | no | yes | null | Who saved the revision this entry posts (or would post). |
 | `runs[].members[].replays_author` | string \| null | no | yes | null | — |
+| `runs[].members[].waiting_reason` | string \| null | no | yes | null | Why the scheduler held this entry for a person, when it did. |
 
 Example JSON output:
 

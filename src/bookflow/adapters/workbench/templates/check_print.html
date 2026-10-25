@@ -1,0 +1,88 @@
+{% extends "base.html" %}{% block title %}Print checks{% endblock %}{% block body %}<section id="print-checks" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+{% set post = '/c/' ~ company_id ~ '/print-checks' %}
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/banking">Banking</a> / Print checks</nav>
+<h1>Print checks</h1>
+<p class="actions"><a href="/c/{{ company_id }}/report/missing-checks">Missing checks</a> <a href="/c/{{ company_id }}/check/post">Write a check</a> <a href="/c/{{ company_id }}/pay-bills">Pay bills</a></p>
+{% if result %}<div role="status" class="notice" data-print-result><strong>{{ result }}</strong>{% if run_out %} <a href="/c/{{ company_id }}/print-checks/run/{{ run_out.id }}.pdf" target="_blank" rel="noopener" data-print-pdf>Open the checks PDF</a>{% endif %}</div>{% endif %}
+{% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
+
+<form method="get" action="{{ post }}" class="workspace-card" aria-label="Bank account">
+<label>Bank account <select name="account" onchange="this.form.submit()">{% for b in banks %}<option value="{{ b.id }}" {% if b.id == account %}selected{% endif %}>{{ b.full_name or b.name }}</option>{% endfor %}</select></label>
+<noscript><button type="submit">Show</button></noscript>
+</form>
+
+{% for w in waiting %}
+<form method="post" action="{{ post }}" hx-post="{{ post }}" hx-target="#print-checks" hx-select="#print-checks" hx-swap="outerHTML">
+<section class="workspace-card" aria-label="Did checks print OK?" data-confirm-run="{{ w.id }}">
+<input type="hidden" name="account" value="{{ w.account_id }}">
+<h2>Did checks print OK?</h2>
+<p>Print run of {{ w['items']|length }} {{ w.style }} check(s) on {{ w.account_name }}, numbers {{ w['items'][0].check_number }} to {{ w['items'][-1].check_number }}. <a href="/c/{{ company_id }}/print-checks/run/{{ w.id }}.pdf" target="_blank" rel="noopener" data-print-pdf>Open the checks PDF</a></p>
+<div class="table-wrap"><table class="list-table" data-run-items><thead><tr><th>No.</th><th>Date</th><th>Payee</th><th>Amount</th></tr></thead><tbody>
+{% for i in w['items'] %}<tr><td data-label="No.">{{ i.check_number }}</td><td data-label="Date">{{ i.date }}</td><td data-label="Payee">{{ i.payee_name or '' }}</td><td data-label="Amount">{{ display_money(i.amount) }}</td></tr>{% endfor %}
+</tbody></table></div>
+<fieldset><legend>What came out of the printer</legend>
+<label><input type="radio" name="ok:{{ w.id }}" value="yes" checked> Every check printed correctly</label>
+<label><input type="radio" name="ok:{{ w.id }}" value="no"> Some did not; the first check that printed incorrectly is number <input name="failed_from:{{ w.id }}" inputmode="numeric" size="8" aria-label="First check that printed incorrectly"></label>
+</fieldset>
+<p class="muted">Checks that did not print go back to the queue for a new number; their numbers are recorded as spoiled. Write VOID on the spoiled paper.</p>
+{% if can_confirm %}<label>Reason (shown in the audit trail) <input name="ctx:reason" placeholder="Checks printed"></label>
+<div class="actions"><button type="submit" name="action" value="confirm:{{ w.id }}" data-confirm>OK</button> <button type="submit" name="action" value="cancel:{{ w.id }}" data-cancel-run>Nothing printed: cancel the run</button></div>{% endif %}
+</section>
+</form>
+{% endfor %}
+
+<form method="post" action="{{ post }}" hx-post="{{ post }}" hx-target="#print-checks" hx-select="#print-checks" hx-swap="outerHTML">
+<section class="workspace-card" aria-label="Select checks to print" data-print-queue>
+<input type="hidden" name="account" value="{{ account or '' }}">
+<h2>Select checks to print</h2>
+{% if current and current.checks %}
+<div class="table-wrap"><table class="list-table" data-queue><thead><tr><th>Print</th><th>Date</th><th>Payee</th><th>Amount</th><th>From</th><th>Memo</th></tr></thead><tbody>
+{% for q in current.checks %}<tr data-queued="{{ q.transaction_id }}">
+<td data-label="Print"><input type="checkbox" name="pick:{{ q.transaction_id }}" value="yes" {% if not values or values.get('pick:' ~ q.transaction_id) %}checked{% endif %} aria-label="Print the check to {{ q.payee_name or 'no payee' }} for {{ q.amount.amount }}"></td>
+<td data-label="Date">{{ q.date }}</td><td data-label="Payee">{{ q.payee_name or '' }}</td><td data-label="Amount">{{ display_money(q.amount) }}</td>
+<td data-label="From">{% if q.document_type == 'bill_payment' %}<a href="/c/{{ company_id }}/bill-payment/{{ q.transaction_id }}">Pay bills</a>{% else %}<a href="/c/{{ company_id }}/check/{{ q.transaction_id }}">Write checks</a>{% endif %}</td>
+<td data-label="Memo">{{ q.memo or '' }}</td></tr>{% endfor %}
+</tbody></table></div>
+<p>{{ current.checks|length }} check(s) waiting, {{ display_money(current.total) }} in all.</p>
+{% if can_print %}
+<div class="pay-bills-grid">
+<label>First check number <input name="first_number" inputmode="numeric" size="10" value="{{ values.get('first_number', current.next_check_number or '') }}" data-first-number></label>
+<label>Check style <select name="style">{% for st in ('voucher', 'standard', 'wallet') %}<option value="{{ st }}" {% if values.get('style', current.settings.style) == st %}selected{% endif %}>{{ st|capitalize }}</option>{% endfor %}</select></label>
+<label>Checks on first page <select name="checks_on_first_page">{% for n in (3, 2, 1) %}<option value="{{ n }}" {% if values.get('checks_on_first_page', '3')|string == n|string %}selected{% endif %}>{{ n }}{% if n == 3 %} (full sheet){% endif %}</option>{% endfor %}</select></label>
+<label>Reason (shown in the audit trail) <input name="ctx:reason" value="{{ values.get('ctx:reason', '') }}" placeholder="Print checks"></label>
+</div>
+<p class="muted">Make sure the first check loaded in the printer carries the first check number. Standard and wallet checks come three to a sheet; a partial sheet goes in top edge first. Alignment: horizontal {{ current.settings.offset_x_hundredths }}, vertical {{ current.settings.offset_y_hundredths }} hundredths of an inch.</p>
+<div class="actions"><button type="submit" name="action" value="print" data-print>Print</button></div>
+{% endif %}
+{% else %}<p data-queue-empty>No checks are waiting to be printed on this account. Save a check with Print later, or pay bills To be printed.</p>{% endif %}
+</section>
+</form>
+
+{% if can_setup and account %}
+<form method="post" action="{{ post }}" hx-post="{{ post }}" hx-target="#print-checks" hx-select="#print-checks" hx-swap="outerHTML">
+<section class="workspace-card" aria-label="Printer setup" data-printer-setup>
+<input type="hidden" name="account" value="{{ account }}">
+<h2>Printer setup</h2>
+{% set st = current.settings if current else None %}
+<label>Check style <select name="setup_style">{% for s_ in ('voucher', 'standard', 'wallet') %}<option value="{{ s_ }}" {% if st and st.style == s_ %}selected{% endif %}>{{ s_|capitalize }}</option>{% endfor %}</select></label>
+<label>Horizontal (hundredths of an inch, + moves right) <input name="offset_x_hundredths" inputmode="numeric" size="5" value="{{ values.get('offset_x_hundredths', st.offset_x_hundredths if st else 0) }}"></label>
+<label>Vertical (hundredths of an inch, + moves up) <input name="offset_y_hundredths" inputmode="numeric" size="5" value="{{ values.get('offset_y_hundredths', st.offset_y_hundredths if st else 0) }}"></label>
+<label>Reason <input name="ctx:reason" placeholder="Printer setup"></label>
+<div class="actions"><button type="submit" name="action" value="setup" data-setup-save>Save setup</button> <a href="/c/{{ company_id }}/print-checks/alignment.pdf?account={{ account }}" target="_blank" rel="noopener" data-alignment-sample>Print an alignment sample</a></div>
+</section>
+</form>
+{% endif %}
+
+{% if can_reprint %}
+<form method="post" action="{{ post }}" hx-post="{{ post }}" hx-target="#print-checks" hx-select="#print-checks" hx-swap="outerHTML">
+<section class="workspace-card" aria-label="Reprint a check" data-reprint>
+<input type="hidden" name="account" value="{{ account or '' }}">
+<h2>Reprint a check</h2>
+<label>Check (its id, from the check or bill payment page) <input name="reprint_check" value="{{ values.get('reprint_check', '') }}"></label>
+<label>New check number (leave blank to reprint with the same number) <input name="new_number" inputmode="numeric" size="10" value="{{ values.get('new_number', '') }}"></label>
+<label>Reason <input name="ctx:reason" placeholder="Reprint"></label>
+<div class="actions"><button type="submit" name="action" value="reprint">Reprint</button></div>
+</section>
+</form>
+{% endif %}
+</section>{% endblock %}

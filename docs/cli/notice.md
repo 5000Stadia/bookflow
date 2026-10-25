@@ -20,7 +20,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 ### CLI
 
-`bookflow notice dismiss 01JNOTICE00000000000000000 --note "Called; paying Friday" --company "Demo Plumbing Co" --json`
+`bookflow notice dismiss 01JNOTICE00000000000000000 --note "Called; paying Friday" --company "Demo Plumbing Co"`
 
 ### MCP
 
@@ -212,7 +212,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 ### CLI
 
-`bookflow notice generate --as-of 2026-11-01 --reason "Monthly collection notices" --company "Demo Plumbing Co" --json`
+`bookflow notice generate --as-of 2026-11-01 --reason "Monthly collection notices" --company "Demo Plumbing Co"`
 
 ### MCP
 
@@ -390,7 +390,7 @@ List overdue notices: ready to send by default, or sent, dismissed or all. Each 
 
 ### CLI
 
-`bookflow notice list --status ready --company "Demo Plumbing Co" --json`
+`bookflow notice list --status ready --company "Demo Plumbing Co"`
 
 ### MCP
 
@@ -541,7 +541,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 ### CLI
 
-`bookflow notice mark-sent 01JNOTICE00000000000000000 --method email --company "Demo Plumbing Co" --json`
+`bookflow notice mark-sent 01JNOTICE00000000000000000 --method email --company "Demo Plumbing Co"`
 
 ### MCP
 
@@ -731,7 +731,7 @@ Show one overdue notice: whom it is to, what was overdue, the letter text and wh
 
 ### CLI
 
-`bookflow notice show 01JNOTICE00000000000000000 --company "Demo Plumbing Co" --json`
+`bookflow notice show 01JNOTICE00000000000000000 --company "Demo Plumbing Co"`
 
 ### MCP
 

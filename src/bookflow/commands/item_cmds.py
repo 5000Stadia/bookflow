@@ -29,6 +29,12 @@ class ItemCreateInput(items.ItemInput):
     pass
 
 
+class SiteSettingInput(StrictInput):
+    site: str = Field(min_length=1, max_length=200, description="Inventory site id or name.")
+    reorder_point_min: str | None = Field(default=None, description="Reorder minimum at this site in the base unit; null for none.")
+    reorder_point_max: str | None = Field(default=None, description="Reorder maximum at this site in the base unit; null for none.")
+
+
 class ItemUpdateInput(StrictInput):
     item: str = Field(description="Item id or canonical full name")
     expected_version: int | None = Field(default=None, ge=1)
@@ -87,6 +93,10 @@ class ItemUpdateInput(StrictInput):
     members: list[items.ItemMemberInput] | None = None
     vendor_profiles: list[items.ItemVendorProfileInput] | None = None
     custom_fields: dict[str, Any | None] | None = None
+    site_settings: list[SiteSettingInput] | None = Field(default=None, max_length=200, description=(
+        "Per-site reorder points of an inventory item (R104): each entry names a site and its reorder_point_min "
+        "and reorder_point_max there (null clears one). report stock-status --site compares available there with "
+        "the site's minimum; the item's own reorder points stay the company figures."))
 
 
 class ItemSelector(StrictInput):
@@ -211,8 +221,11 @@ def plan_item_update(inp: ItemUpdateInput, ctx: Context, session: Session) -> Pl
     changes = {
         field: getattr(inp, field)
         for field in inp.model_fields_set
-        if field not in {"item", "expected_version"}
+        if field not in {"item", "expected_version", "site_settings"}
     }
+    from bookflow.company import placements
+    site_settings = (placements.plan_site_settings(session, ctx, current, inp.site_settings)
+                     if inp.site_settings is not None else [])
     update = items.plan_item_update(
         session.company,
         current["id"],
@@ -238,15 +251,22 @@ def plan_item_update(inp: ItemUpdateInput, ctx: Context, session: Session) -> Pl
         "merged_over_versions": list(meta.merged_over_versions),
         "affected_descendant_ids": list(update.affected_descendant_ids),
     })
-    return Plan(preview=preview, data={"update": update})
+    if site_settings:
+        preview.changed_fields = list(dict.fromkeys([*preview.changed_fields, "site_settings"]))
+    return Plan(preview=preview, data={"update": update, "site_settings": site_settings})
 
 
 def apply_item_update(plan: Plan, ctx: Context, session: Session) -> Applied:
     update = plan.data["update"]
+    from bookflow.company import placements
+    settled = placements.apply_site_settings(session, plan.data.get("site_settings") or [])
     if update.mutation is None:
+        if settled:
+            return Applied(plan.preview, settled, "updated item site settings")
         return Applied(plan.preview, [], "no change")
     items.persist_item_update(session.company, update)
-    return Applied(plan.preview, [_touched(update.mutation)], f"updated item {update.mutation.after['full_name']}")
+    return Applied(plan.preview, [_touched(update.mutation), *settled],
+                   f"updated item {update.mutation.after['full_name']}")
 
 
 def plan_item_show(inp: ItemSelector, ctx: Context, session: Session) -> Plan:

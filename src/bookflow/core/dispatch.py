@@ -639,6 +639,10 @@ def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, co
                     company_source=company_source, dry_run=dry_run)
     if cmd.authorize_input is not None:
         cmd.authorize_input(inp, ctx, s)
+    if cmd.scope == "company" and cmd.is_write and s.company is not None:
+        # An external accountant, an accountant's copy, or books with a copy out (R121).
+        from bookflow.company.accountant_review import admit
+        admit(s, cmd, inp)
     if cmd.transfer is not None:
         from bookflow.core.transfers import validate_resource
         validate_resource(cmd, inp, ctx, s)
@@ -916,17 +920,20 @@ def _repair_projection(s: Session, ctx: Context) -> list:
     if s.company is None or s.company_row is None or s.dry_run:
         return []
     from bookflow.company.info import read_info
+    from bookflow.hub import company_accountants
+    # The hub's mirror of the external-accountant designations converges here too (R121).
+    mirrored = company_accountants.converge(s)
     info = read_info(s.company)
     row = s.company_row
     changes = {k: info[k] for k in ("legal_name", "home_currency") if info.get(k) != row.get(k)}
     if not changes:
-        return []
+        return mirrored
     if not s.hub.write_transaction:
         s.hub.raw.execute("BEGIN IMMEDIATE")
     from bookflow.hub import companies as co
     new, t = co.update(s, row, ctx.interface.value, **changes)
     s.company_row = new
-    return [t]
+    return [*mirrored, t]
 
 
 def _upsert_principals(s: Session, ctx: Context) -> None:

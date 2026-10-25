@@ -20,7 +20,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 ### CLI
 
-`bookflow todo complete 01JTODO0000000000000000000 --company "Demo Plumbing Co" --json`
+`bookflow todo complete 01JTODO0000000000000000000 --company "Demo Plumbing Co"`
 
 ### MCP
 
@@ -181,7 +181,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 ### CLI
 
-`bookflow todo create --title "Call Rivera about the deposit" --due-date 2026-11-03 --assignee night-agent --priority high --link-type customer --link "Rivera Construction" --company "Demo Plumbing Co" --json`
+`bookflow todo create --title "Call Rivera about the deposit" --due-date 2026-11-03 --assignee night-agent --priority high --link-type customer --link "Rivera Construction" --company "Demo Plumbing Co"`
 
 ### MCP
 
@@ -344,7 +344,7 @@ List to-dos, soonest due first and high priority first within a day. Open ones b
 
 ### CLI
 
-`bookflow todo list --mine --company "Demo Plumbing Co" --json`
+`bookflow todo list --mine --company "Demo Plumbing Co"`
 
 ### MCP
 
@@ -475,7 +475,7 @@ Show one to-do: what, when, for whom, about what, and who made and completed it.
 
 ### CLI
 
-`bookflow todo show 01JTODO0000000000000000000 --company "Demo Plumbing Co" --json`
+`bookflow todo show 01JTODO0000000000000000000 --company "Demo Plumbing Co"`
 
 ### MCP
 
@@ -617,7 +617,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 ### CLI
 
-`bookflow todo update 01JTODO0000000000000000000 --due-date 2026-11-05 --expected-version 1 --company "Demo Plumbing Co" --json`
+`bookflow todo update 01JTODO0000000000000000000 --due-date 2026-11-05 --expected-version 1 --company "Demo Plumbing Co"`
 
 ### MCP
 

@@ -18,7 +18,7 @@ What needs doing, across the company, as of today (or `as_of`) -- the anchor's R
 
 ### CLI
 
-`bookflow reminders --mine --company "Demo Plumbing Co" --json`
+`bookflow reminders --mine --company "Demo Plumbing Co"`
 
 ### MCP
 

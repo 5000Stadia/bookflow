@@ -434,6 +434,7 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].class_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].tax_code` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].use_defaults` | inside `--lines` JSON array | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level"]] | no | no | [] | — |
+| `lines[].site` | inside `--lines` JSON array | string \| null | no | yes | null | Inventory site a returned stocked line goes back to, by id or name; omitted, where its sale took it from. |
 | `ar_account` | `--ar-account` | string \| null | no | yes | null | — |
 | `number` | `--number` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
@@ -2271,6 +2272,7 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].class_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].tax_code` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].use_defaults` | inside `--lines` JSON array | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level"]] | no | no | [] | — |
+| `lines[].site` | inside `--lines` JSON array | string \| null | no | yes | null | Inventory site a returned stocked line goes back to, by id or name; omitted, where its sale took it from. |
 | `ar_account` | `--ar-account` | string \| null | no | yes | null | — |
 | `number` | `--number` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |

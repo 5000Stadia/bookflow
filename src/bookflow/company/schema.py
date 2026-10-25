@@ -1216,5 +1216,11 @@ from bookflow.company.purchase_order_billing_schema import define_tables as _def
 globals().update(_define_po_billing_tables(metadata, _column, _table))
 from bookflow.company.timekeeping_schema import define_tables as _define_timekeeping_tables
 globals().update(_define_timekeeping_tables(metadata, _column, _table, _common))
+from bookflow.company.inventory_site_schema import define_tables as _define_inventory_site_tables
+globals().update(_define_inventory_site_tables(metadata, _column, _table, _common))
+from bookflow.company.accountant_review_schema import define_tables as _define_accountant_review_tables
+globals().update(_define_accountant_review_tables(metadata, _column, _table, _common))
+from bookflow.company.check_print_schema import define_tables as _define_check_print_tables
+globals().update(_define_check_print_tables(metadata, _column, _table, _common))
 from bookflow.company.scheduling_schema import define_tables as _define_scheduling_tables
 globals().update(_define_scheduling_tables(metadata, _column, _table, _common))

@@ -102,7 +102,7 @@ WORK_GRID = (('item', 'Item'), ('description', 'Description'), ('quantity', 'Qua
 # The header of a money-out document, in the order it reads: the account it is drawn on, who
 # the money went to, when, its number, and the figure on its face.
 MONEY_OUT_PRIMARY = ('account', 'pay_to.name_type', 'pay_to.name_id', 'date', 'number',
-                     'amount', 'class_id')
+                     'to_be_printed', 'amount', 'class_id')
 MONEY_OUT_FOOTER = ('memo',)
 
 # The whole of a transfer: where it comes from, where it goes, when, and how much. The memo
@@ -390,7 +390,7 @@ NOUN_LABELS = {
               'pay_to.name_id': 'Pay to the Order of', 'amount': 'Amount of this check',
               # Never a second "Number" beside the document's own: what a person writes here
               # is the number on the paper, and that is the only number this window shows.
-              'number': 'Check No.'},
+              'number': 'Check No.', 'to_be_printed': 'Print later'},
     'card-charge': {'account': 'Credit Card', 'pay_to.name_type': 'Kind of name',
                     'pay_to.name_id': 'Purchased From', 'amount': 'Amount of this charge'},
     'card-credit': {'account': 'Credit Card', 'pay_to.name_type': 'Kind of name',
@@ -415,7 +415,9 @@ NOUN_DESCRIPTIONS = {
               'amount': 'The figure on the face of the check. The item and expense lines below together must equal it.',
               'number': 'The number written on the check. Leave it empty to take the next one from '
                         "this bank account's own next check number. A number below that is accepted "
-                        'and does not move it back; one already used on this account is refused.'},
+                        'and does not move it back; one already used on this account is refused.',
+              'to_be_printed': 'Save the check with no number and print it later from Print Checks, '
+                               'which numbers it from the first check in the printer. Leave Check No. empty.'},
     'card-charge': {'account': 'The credit card account this purchase was charged to.',
                     'pay_to.name_type': 'Which list the name comes from. Choose this before searching.',
                     'pay_to.name_id': 'Search by name, then choose the match.',

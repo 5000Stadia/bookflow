@@ -89,6 +89,7 @@ def unchanged(s, previous, resolved):
     pending = {'credit_source_claims': []}
     release_claims(s, previous['header']['id'], pending, lambda: {'id': new_id()}, new_id())
     old_lines = retained_lines(s, saved_lines(s, revision), pending)
+    credits.place_lines(s, old_lines, revision)
     return ([line['line_id'] for line in old_lines] == [line.get('line_id') for line in resolved['lines']]
             and [credits._line_semantic(line) for line in old_lines]
             == [credits._line_semantic(line) for line in resolved['lines']])

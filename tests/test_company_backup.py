@@ -179,6 +179,22 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0083 = importlib.import_module("bookflow.storage.company_migrations.versions.0083_mileage")
 
     def older(conn):
+        for table in ("check_print_outcomes", "check_spoiled_numbers", "check_print_run_items", "check_print_runs",
+                      "check_print_marks", "check_print_settings"):
+            conn.execute(f"DROP TABLE {table}")  # co0092's six tables, with their indexes and guards
+        for table in ("accountant_review_marks", "accountant_adjustments", "accountant_imports", "accountant_copies",
+                      "accountant_designations"):
+            conn.execute(f"DROP TABLE {table}")  # co0088's (next newest), with its index
+        # co0089's: the guard on inventory_movements, the nine site tables, and three site_id columns.
+        conn.execute("DROP TRIGGER inventory_movements_placed")
+        for table in ("inventory_placements", "inventory_transfer_lines", "inventory_transfer_revisions",
+                      "inventory_transfers", "item_site_settings", "serial_numbers", "lots", "inventory_bins",
+                      "inventory_sites"):
+            conn.execute(f"DROP TABLE {table}")
+        conn.execute("PRAGMA writable_schema=ON")
+        conn.execute("UPDATE sqlite_schema SET sql = replace(sql, ', site_id VARCHAR(26) REFERENCES inventory_sites (id)', '') "
+                     "WHERE name IN ('work_lines', 'purchase_order_lines', 'assembly_builds')")
+        conn.execute("PRAGMA writable_schema=OFF")
         for table in ("schedule_entries", "time_clocks", "timekeeping_people", "timekeeping_preferences"):
             conn.execute(f"DROP TABLE {table}")  # co0090's four, with their indexes
         conn.execute("DROP TABLE purchase_coverage_links")  # co0087's, with its triggers

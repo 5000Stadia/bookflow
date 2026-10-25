@@ -232,7 +232,9 @@ def check_numbers(conn, revision_ids):
     from bookflow.company import schema as c
     found = {}
     ids = sorted(revision_ids)
-    for table in (c.check_instrument_revisions, c.customer_refund_profiles, c.ap_payment_profiles,
+    # The current projection first: a cheque reprinted under a new number (R152) carries the new
+    # number on the revision it is still at, and the bank clears the paper that was not spoiled.
+    for table in (c.check_instruments, c.check_instrument_revisions, c.customer_refund_profiles, c.ap_payment_profiles,
                   c.sales_tax_payment_profiles):
         for start in range(0, len(ids), 400):
             chunk = ids[start:start + 400]

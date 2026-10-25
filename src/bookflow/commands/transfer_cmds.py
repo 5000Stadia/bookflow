@@ -26,7 +26,8 @@ DESCRIPTIONS = {
         " on both sides: a bank account the money leaves goes down, a bank account it arrives in"
         " goes up, and a credit card it is sent to has less owed on it." + _ENDS +
         " A transfer has exactly two legs of one amount, so it takes no line grid, no payee and"
-        " no number of its own."),
+        " no number of its own. To move stock between inventory sites (a van and a warehouse), use"
+        " `inventory-transfer post`; this command moves money and refuses an item or a site."),
     'update': (
         "Correct a transfer. Every field is optional and a field left out keeps what was"
         " captured. Changing `to_account` moves the money out of the account it went into and"

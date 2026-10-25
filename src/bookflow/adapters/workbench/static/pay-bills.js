@@ -93,7 +93,12 @@
     const account = fundingAccount(), chosen = method();
     const offered = !!account && account.type === 'bank' && !!chosen && chosen.kind === 'check';
     $('check-label').hidden = !offered;
-    if (!offered) $('check').value = '';
+    $('print-label').hidden = !offered;
+    if (!offered) { $('check').value = ''; $('print').checked = false; }
+    /* To be printed: the cheques take their numbers when they print (Print Checks), so no
+       number is typed now. */
+    $('check').disabled = offered && $('print').checked;
+    if ($('check').disabled) $('check').value = '';
   }
 
   // ------------------------------------------------------------------ the open bills
@@ -327,7 +332,7 @@
     }
     const unpaid = groups.find(group => group.total === 0n);
     if (unpaid) return `The payment to ${unpaid.vendor} would pay no money. A discount is taken beside money paid to the same vendor.`;
-    if ($('check').value.trim() && !$('check-label').hidden && groups.length > 1)
+    if ($('check').value.trim() && !$('check-label').hidden && !$('print').checked && groups.length > 1)
       return `A check number names one check, and this selection writes ${groups.length} payments. Clear the check number, or pay one vendor at a time.`;
     return '';
   }
@@ -349,15 +354,16 @@
     };
     for (const [field, id] of [['check_number', 'check'], ['reference', 'reference'], ['memo', 'memo']]) {
       const value = $(id).value.trim();
-      if (value && !(field === 'check_number' && $('check-label').hidden)) input[field] = value;
+      if (value && !(field === 'check_number' && ($('check-label').hidden || $('print').checked))) input[field] = value;
     }
+    if (!$('print-label').hidden && $('print').checked) input.to_be_printed = true;
     const out = await command('bill pay', input);
-    drawResult(out);
+    drawResult(out, input);
     await loadBills();
     note(`Saved. ${out.group_count} payment${out.group_count === 1 ? '' : 's'} written for ${exact.money(out.paid.amount, out.paid.currency)}.`);
   }
 
-  function drawResult(out) {
+  function drawResult(out, input) {
     const area = $('result');
     area.hidden = false;
     area.dataset.groupCount = String(out.group_count);
@@ -377,7 +383,7 @@
         '/c/' + encodeURIComponent(config.company) + '/bill-payment/' + encodeURIComponent(payment.id)));
       head.append(el('span', ` · ${payment.vendor_name} · ${exact.money(payment.total.amount, payment.currency)}`
         + ` · ${payment.payment_method_name}`
-        + (payment.check_number ? ` · check ${payment.check_number}` : '')));
+        + (payment.check_number ? ` · check ${payment.check_number}` : (input && input.to_be_printed ? ' · to be printed' : ''))));
       card.append(head);
       const settled = el('ul');
       for (const line of payment.revision.lines) {
@@ -439,6 +445,7 @@
   // The suggestion depends on the payment date, so a new date redraws every row's offer.
   $('date').addEventListener('change', () => { for (const tr of $('rows').querySelectorAll('tr')) tr.drawHint?.(); });
   for (const id of ['funding', 'method']) $(id).addEventListener('change', () => { drawCheckNumber(); redrawTotals(); });
+  $('print').addEventListener('change', drawCheckNumber);
   $('find-vendor').addEventListener('click', () => perform(async () => {
     const out = await command('vendor query', {query: $('vendor').value, limit: 25});
     const results = $('vendor-results');

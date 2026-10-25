@@ -2419,6 +2419,9 @@ The same example as complete `bookflow_run` arguments:
 | `vendor_profiles[].manufacturer_part_number` | inside `--vendor-profiles` JSON array | string \| null | no | yes | null | — |
 | `vendor_profiles[].availability_notes` | inside `--vendor-profiles` JSON array | string \| null | no | yes | null | — |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] \| null | no | yes | null | — |
+| `site_settings[].site` | inside `--site-settings` JSON array | string | yes | no | — | Inventory site id or name.; minimum length 1; maximum length 200 |
+| `site_settings[].reorder_point_min` | inside `--site-settings` JSON array | string \| null | no | yes | null | Reorder minimum at this site in the base unit; null for none. |
+| `site_settings[].reorder_point_max` | inside `--site-settings` JSON array | string \| null | no | yes | null | Reorder maximum at this site in the base unit; null for none. |
 
 ### Command and context options
 

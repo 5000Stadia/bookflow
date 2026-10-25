@@ -121,6 +121,15 @@ class CheckPostInput(_MoneyOutPost):
         'another cheque drawn on the same account is refused. Leading zeros are kept as '
         'typed, and 01001 and 1001 are one number. A number that is not a plain run of '
         'digits is a real cheque number with no place in the sequence.'))
+    to_be_printed: bool = Field(default=False, description=(
+        'Print Later: save the check with no number yet and put it in its bank account\'s print '
+        'queue; `check print` gives it a number when it is printed. Leave `number` out.'))
+
+    @model_validator(mode='after')
+    def _print_later(self) -> Self:
+        if self.to_be_printed and self.number is not None:
+            raise ValueError('a check saved to be printed takes its number when it prints; leave number out')
+        return self
 
 
 class CardChargePostInput(_MoneyOutPost):
@@ -210,6 +219,10 @@ class CheckUpdateInput(_MoneyOutCorrection):
         'when the cheque moves to another bank account. The number it had stays on the '
         'revision that carried it, so history and printing keep reading what was issued, and '
         'it is never handed out again automatically.'))
+    to_be_printed: bool | None = Field(default=None, description=(
+        'For a check waiting to be printed: false takes it out of the print queue and gives it the next '
+        'number now, as a hand-written check. A check that already has a number is reprinted with '
+        '`check reprint`, not queued again.'))
 
 
 class CardChargeUpdateInput(_MoneyOutCorrection):
@@ -358,6 +371,9 @@ class MoneyOutSummary(_Input):
     item_total: JournalMoneyOutput | None = None
     items: list[MoneyOutItemOutput] = Field(default_factory=list)
     check_number: str | None = None
+    print_status: Literal['queued', 'in_run', 'printed'] | None = Field(default=None, exclude_if=lambda value: value is None, description=(
+        'For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting '
+        '"Did checks print OK?") or printed.'))
 
 
 class PurchaseDeletionInfo(_Input):

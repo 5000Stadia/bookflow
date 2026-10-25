@@ -11,7 +11,7 @@ from sqlalchemy.dialects.sqlite import insert
 
 from bookflow.company import schema as c, document_effects as effects, sales_calculations as calc
 from bookflow.company import journal_custom_fields as custom, custom_fields as cf
-from bookflow.company import work_defaults
+from bookflow.company import work_defaults, placements
 from bookflow.company.work_facts import WorkFacts, WorkLineFacts
 from bookflow.company import work_tax
 from bookflow.company.work_tax_facts import read_facts, read_line
@@ -327,7 +327,8 @@ def _semantic(rev, lines):
     value = {key: rev[key] for key in ('date', 'number', 'title', 'status', 'active', 'decision_note')}
     value.update(facts=json.loads(rev['facts_snapshot']),
         custom_fields=_custom_semantic(json.loads(rev['custom_fields_snapshot'])),
-        lines=[{'line_id': line['line_id'], 'facts': json.loads(line['facts_snapshot'])} for line in lines])
+        lines=[{'line_id': line['line_id'], 'facts': json.loads(line['facts_snapshot']),
+                **({'site_id': line['site_id']} if line.get('site_id') else {})} for line in lines])
     return value
 
 
@@ -616,7 +617,14 @@ def _resolve_lines(s, inp, kind, profile, old_rev=None, old_profile=None):
             payload['schema_version']=1
             for component in payload['taxes']:component['tax_minor_units']=calc.tax(base,component['rule']['rate_percent_millionths'])
             payload['tax_minor_units']=sum(t['tax_minor_units'] for t in payload['taxes']);payload['gross_minor_units']=payload['net_minor_units']+payload['tax_minor_units']
-        out.append({'line_id': key, 'facts': payload})
+        entry = {'line_id': key, 'facts': payload}
+        # A stocked line's inventory site (R104): the line's own, else what the line had.
+        line_input = inputs[len(out)]
+        site = (placements.site_id_for(s, line_input.site, field='lines.site')
+                if getattr(line_input, 'site', None) is not None else (prior[key].get('site_id') if key else None))
+        if site:
+            entry['site_id'] = site
+        out.append(entry)
     from bookflow.company import sales_orders, tax_policy
     sales_orders.apply_cancellations(s, kind, inputs, out, old_rev, tax_policy.effective(profile))
     return out, warnings
@@ -781,7 +789,7 @@ def _new_revision(s, ctx, header, value, custom_snapshot, old_rev, pending, even
                 root_document_id=root_doc, root_line_id=root_line, source_line_id=source['id'] if source else None))
         pending['work_lines'].append(dict(id=new_id(), document_id=header['id'], revision_id=rev_id,
             line_id=identity, position=position, **{key: getattr(line, key) for key in LINE_COLUMNS},
-            facts_snapshot=line.model_dump_json(), **provenance))
+            site_id=entry.get('site_id'), facts_snapshot=line.model_dump_json(), **provenance))
     work_tax.persist(s,header,rev,value,pending,provenance)
     return rev
 
@@ -1011,7 +1019,8 @@ def _prepare_destination(s, ctx, inp, kind, operation):
     value = dict(date=inp.date, number=number, title=getattr(inp, 'title', None) or source_rev['title'],
         status='open' if destination_kind == 'sales_order' else 'draft', active=True, decision_note=None, facts=f,
         custom_fields=_custom_semantic(custom_plan.snapshot),
-        lines=[dict(line_id=None, facts=fresh(line)) for line in source_lines])
+        lines=[dict(line_id=None, facts=fresh(line), **({'site_id': line['site_id']} if line.get('site_id') else {}))
+               for line in source_lines])
     work_tax.prepare(s,header['id'],value)
     _state_invariants(destination_kind, value)
     fingerprint = _fingerprint(s, inp, kind, operation, value, source_rev, warnings, header['id'])

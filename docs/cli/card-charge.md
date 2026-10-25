@@ -336,6 +336,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].document.items[].profile.billable` | boolean | no | no | false | — |
 | `items[].document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `items[].document.check_number` | string \| null | no | yes | null | — |
+| `items[].document.print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -444,6 +445,7 @@ The same example as complete `bookflow_run` arguments:
 | `items[].billable` | inside `--items` JSON array | boolean | no | no | false | — |
 | `items[].class_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
 | `items[].class_mode` | inside `--items` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `items[].site` | inside `--items` JSON array | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
 
@@ -697,6 +699,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.billable` | boolean | no | no | false | — |
 | `document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `document.check_number` | string \| null | no | yes | null | — |
+| `document.print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 
 Example JSON output:
 
@@ -1018,6 +1021,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].document.items[].profile.billable` | boolean | no | no | false | — |
 | `items[].document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `items[].document.check_number` | string \| null | no | yes | null | — |
+| `items[].document.print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -1332,6 +1336,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.billable` | boolean | no | no | false | — |
 | `document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `document.check_number` | string \| null | no | yes | null | — |
+| `document.print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 
 Example JSON output:
 
@@ -1523,6 +1528,7 @@ The same example as complete `bookflow_run` arguments:
 | `items[].billable` | inside `--items` JSON array | boolean | no | no | false | — |
 | `items[].class_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
 | `items[].class_mode` | inside `--items` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `items[].site` | inside `--items` JSON array | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
 | `card_charge` | `CARD_CHARGE` | string | yes | no | — | minimum length 1 |
@@ -1778,6 +1784,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.billable` | boolean | no | no | false | — |
 | `document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `document.check_number` | string \| null | no | yes | null | — |
+| `document.print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 
 Example JSON output:
 
@@ -2212,6 +2219,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.billable` | boolean | no | no | false | — |
 | `document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `document.check_number` | string \| null | no | yes | null | — |
+| `document.print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 
 Example JSON output:
 

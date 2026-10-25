@@ -781,6 +781,9 @@ def authorize_membership_grant(inp: MembershipGrantInput, ctx: Context, s: Sessi
     if existing is not None and existing["revoked_at"] is None:
         # Moving an owner off ownership is an owner's act too, not only granting it.
         authorize_membership_scope(s, scope, membership_floor(existing["role"]))
+    # An external accountant's access stays at standard while designated, and they change no one's (R121).
+    from bookflow.company.accountant_review import guard_membership_change
+    guard_membership_change(s, "membership grant", user, scope, inp.role, inp.grants)
     return user, scope, existing
 
 
@@ -852,6 +855,8 @@ def authorize_membership_revoke(inp: MembershipSelector, ctx: Context, s: Sessio
     if existing is None:
         raise BookflowError("E_RECORD_NOT_FOUND", details={"user": inp.user, "scope": scope.scope_type})
     authorize_membership_scope(s, scope, membership_floor(existing["role"]))
+    from bookflow.company.accountant_review import guard_membership_change
+    guard_membership_change(s, "membership revoke", user, scope)
     return user, scope, existing
 
 

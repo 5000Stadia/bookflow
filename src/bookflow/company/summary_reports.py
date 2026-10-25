@@ -85,7 +85,7 @@ from bookflow.company.report_basis import Basis, basis_field
 
 from typing import Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_serializer, model_validator
 
 from bookflow.company import financial_statements as statements
 from bookflow.company import ledger_reports as ledger
@@ -196,7 +196,17 @@ class SalesByCustomerInput(ClassFilterInput):
 
 
 class SalesByItemInput(ClassAndCustomerFilterInput):
-    pass
+    site: str | None = Field(default=None, min_length=1, max_length=200, description=(
+        "Inventory Sales by Site: only stocked item lines whose stock left (or, on a return, came back to) this "
+        "inventory site, by id or name. Discount and other adjusting lines are not split by site, and income "
+        "that reached no stocked item is left out; totals still state the whole period. Omit for every site."))
+
+    @model_serializer(mode="wrap")
+    def _unset_site(self, handler):
+        values = handler(self)
+        if "site" not in self.model_fields_set:
+            values.pop("site", None)
+        return values
 
 
 class SalesByRepInput(ClassAndCustomerFilterInput):
@@ -278,6 +288,14 @@ class SalesByItemRow(StrictModel):
     average_price: MoneyOutput | None
     percent_of_total: str | None
     percent_of_total_millionths: int | None
+    site_name: str | None = Field(default=None, description="The inventory site, on Inventory Sales by Site; absent otherwise.")
+
+    @model_serializer(mode="wrap")
+    def _company_rows_as_before(self, handler):
+        values = handler(self)
+        if self.site_name is None:
+            values.pop("site_name", None)
+        return values
 
 
 class SalesByRepTotals(StrictModel):
@@ -435,6 +453,33 @@ _BY_ITEM = _ITEM_ATTRIBUTION + """, by_item AS (
  SELECT b.item_id, b.income, b.quantity, b.unknown_quantity,
         i.full_name, i.name, i.full_name_key, i.type, i.parent_id, i.active
  FROM combined b LEFT JOIN items i ON i.id=b.item_id
+ WHERE b.income!='0' OR b.quantity!='0'
+) """
+
+# Inventory Sales by Site (R104): the stocked item lines whose stock left (an issue) or came back (a
+# return) at one site, read from that line's own movement placements. A reversal posts against the same
+# entered line, so a voided or corrected sale nets out at the site it was taken from.
+_BY_ITEM_AT_SITE = _ITEM_ATTRIBUTION + """, sited AS (
+ SELECT m.document_line_id, min(p.site_id) AS site_id
+ FROM inventory_movements m JOIN inventory_placements p ON p.movement_id=m.id
+ WHERE m.kind IN ('issue','receipt') GROUP BY m.document_line_id
+), at_site AS (
+ SELECT p.item_id, e.direction*s.amount_minor_units AS amount,
+        CASE WHEN p.base_quantity_microunits IS NULL THEN NULL ELSE e.direction*p.base_quantity_microunits END AS quantity
+ FROM income_lines e
+ JOIN posting_line_sources s ON s.posting_line_id=e.line_id
+ JOIN item_lines p ON p.document_line_id=s.document_line_id
+ JOIN sited t ON t.document_line_id=s.document_line_id
+ WHERE p.adjusts=0 AND t.site_id=:site
+), by_item AS (
+ SELECT item_id, bookflow_sum_int(amount) AS income,
+        bookflow_sum_int(coalesce(quantity,0)) AS quantity,
+        count(CASE WHEN quantity IS NULL THEN 1 END) AS unknown_quantity
+ FROM at_site GROUP BY item_id
+), selected AS (
+ SELECT b.item_id, b.income, b.quantity, b.unknown_quantity,
+        i.full_name, i.name, i.full_name_key, i.type, i.parent_id, i.active
+ FROM by_item b JOIN items i ON i.id=b.item_id
  WHERE b.income!='0' OR b.quantity!='0'
 ) """
 
@@ -648,9 +693,13 @@ def sales_by_item(inp: SalesByItemInput, s, *, principal_id=None) -> SalesByItem
         unattributed = _total(raw, currency, _ITEM_ATTRIBUTION + "SELECT amount FROM unattributed", params)
         if attributed + unattributed != grand:
             raise BookflowError("E_INTERNAL", message="Income by item and income with no item do not add up to the period's income")
-        page = _rows(raw.execute(_BY_ITEM + f"""SELECT * FROM selected
+        site = None
+        if inp.site is not None:
+            from bookflow.company import placements
+            site = placements.resolve_site(s, inp.site, active=False)
+        page = _rows(raw.execute((_BY_ITEM if site is None else _BY_ITEM_AT_SITE) + f"""SELECT * FROM selected
             ORDER BY {_ITEM_ORDER} LIMIT :limit OFFSET :offset""",
-            {**params, "limit": inp.limit + 1, "offset": offset}))
+            {**params, "limit": inp.limit + 1, "offset": offset, **({"site": site["id"]} if site else {})}))
         rows = []
         for row in page[:inp.limit]:
             amount = money(int(row["income"]), currency)
@@ -669,7 +718,8 @@ def sales_by_item(inp: SalesByItemInput, s, *, principal_id=None) -> SalesByItem
                 active=None if row["active"] is None else bool(row["active"]),
                 quantity=format_quantity_micro_units(quantity), quantity_microunits=quantity,
                 quantity_complete=complete, income=amount, average_price=average,
-                percent_of_total=text, percent_of_total_millionths=coefficient))
+                percent_of_total=text, percent_of_total_millionths=coefficient,
+                site_name=site["name"] if site else None))
         return SalesByItemOutput(metadata=state.metadata, rows=rows, count=len(rows),
             totals=SalesByItemTotals(income=money(grand, currency),
                 item_income=money(attributed, currency), no_item_income=money(unattributed, currency)),
