@@ -15,6 +15,7 @@ Templates are keyed by (profile, seed, company migration head); `template_name` 
 from __future__ import annotations
 
 import json
+import os
 import random
 import shutil
 import time
@@ -117,20 +118,43 @@ WORK = ("Service call", "Drain clearing", "Valve replacement", "Inspection", "He
 
 def generate(target: Path, profile: str = "large", seed: int = 180,
              progress: Callable[[str], None] | None = None) -> dict[str, Any]:
-    """Build a template folder at `target` (which must not exist). Returns its manifest."""
+    """Build a template folder at `target`. Returns its manifest.
+
+    Resumable: after the lists and after every twelfth month the run saves a checkpoint
+    (`<target>/checkpoint/`: a copy of the root taken between commands, and the generator's
+    state, its random state included). Run again with the same target and a killed run carries
+    on from its last checkpoint; the documents posted after it are thrown away with the old root.
+    """
     import bookflow
 
     p = PROFILES[profile]
     say = progress or (lambda _m: None)
     target = Path(target)
-    if target.exists():
+    if (target / "manifest.json").exists():
         raise FileExistsError(str(target))
-    root = target / "root"
-    target.mkdir(parents=True)
-    rng = random.Random(seed)
+    root, saved = target / "root", target / "checkpoint"
     started = time.perf_counter()
-    phases: dict[str, float] = {}
-    counts: dict[str, int] = {}
+    rng = random.Random(seed)
+    st: dict[str, Any]
+    if (saved / "state.json").exists():
+        st = json.loads((saved / "state.json").read_text())
+        if (st["profile"], st["seed"]) != (profile, seed):
+            raise ValueError(f"{target} holds a checkpoint for {st['profile']}/{st['seed']}")
+        shutil.rmtree(root, ignore_errors=True)
+        shutil.copytree(saved / "root", root)
+        rng.setstate(_rng_state(st.pop("rng")))
+        say(f"resumed at month {st['month']} after {st['elapsed']:.0f}s")
+    else:
+        shutil.rmtree(target, ignore_errors=True)
+        target.mkdir(parents=True)
+        st = {"profile": profile, "seed": seed, "month": None, "elapsed": 0.0, "phases": {}, "counts": {},
+              "ids": {}, "number": {"inv": 0, "bill": 0, "pay": 0, "dep": 0}, "open_invoices": [],
+              "open_bills": [], "post_times": []}
+    base_elapsed = st["elapsed"]
+    phases, counts, ids, number = st["phases"], st["counts"], st["ids"], st["number"]
+
+    def elapsed() -> float:
+        return base_elapsed + time.perf_counter() - started
 
     def phase(name: str, t0: float) -> None:
         phases[name] = round(time.perf_counter() - t0, 2)
@@ -139,60 +163,74 @@ def generate(target: Path, profile: str = "large", seed: int = 180,
     def count(kind: str, n: int = 1) -> None:
         counts[kind] = counts.get(kind, 0) + n
 
-    t0 = time.perf_counter()
-    c = bookflow.connect(data_root=str(root))
-    c.init()
-    c.organization.new(name=ORG)
-    c.company.new(legal_name=COMPANY, home_currency="USD", organization=ORG, chart="service")
-    phase("setup", t0)
+    def checkpoint() -> None:
+        _checkpoint(root)
+        tmp = target / "checkpoint.new"
+        shutil.rmtree(tmp, ignore_errors=True)
+        shutil.copytree(root, tmp / "root")
+        (tmp / "state.json").write_text(json.dumps({**st, "elapsed": elapsed(), "rng": rng.getstate()}))
+        shutil.rmtree(saved, ignore_errors=True)
+        tmp.rename(saved)
 
-    ids: dict[str, Any] = {}
+    if st["month"] is None:
+        t0 = time.perf_counter()
+        c = bookflow.connect(data_root=str(root))
+        c.init()
+        c.organization.new(name=ORG)
+        c.company.new(legal_name=COMPANY, home_currency="USD", organization=ORG, chart="service")
+        phase("setup", t0)
+
     with held_session(root) as call:
         co = COMPANY
 
         def run(name, raw):
             return call(name, raw, co)
 
-        accounts = run("account list", {})["items"]
-        ids["company"] = call("company show", {}, co)["company_id"]
-        by_type: dict[str, list] = {}
-        for a in accounts:
-            by_type.setdefault(a["type"], []).append(a)
-        income = by_type["income"][0]["id"]
-        expenses = [a["id"] for a in by_type.get("expense", [])][:6] or [run("account create", {"name": "Supplies", "type": "expense"})["id"]]
-        bank = (by_type.get("bank") or [None])[0]
-        checking = bank["id"] if bank else run("account create", {"name": "Checking", "type": "bank"})["id"]
-        uf = next(a["id"] for a in accounts if a.get("system_role") == "undeposited_funds"
-                  or a["name"] == "Undeposited Funds")
-        non = next(x["id"] for x in run("sales-tax-code list", {})["items"] if not x.get("taxable"))
-        methods = run("payment-method list", {})["items"]
-        method = next((x["id"] for x in methods if x.get("kind") == "check"), None) or methods[0]["id"]
-        ids.update(checking=checking, undeposited=uf, income=income, expense=expenses[0], payment_method=method)
+        if st["month"] is None:
+            accounts = run("account list", {})["items"]
+            ids["company"] = call("company show", {}, co)["company_id"]
+            by_type: dict[str, list] = {}
+            for a in accounts:
+                by_type.setdefault(a["type"], []).append(a)
+            ids["income"] = by_type["income"][0]["id"]
+            ids["expenses"] = [a["id"] for a in by_type.get("expense", [])][:6] or [
+                run("account create", {"name": "Supplies", "type": "expense"})["id"]]
+            bank = (by_type.get("bank") or [None])[0]
+            ids["checking"] = bank["id"] if bank else run("account create", {"name": "Checking", "type": "bank"})["id"]
+            ids["undeposited"] = next(a["id"] for a in accounts if a.get("system_role") == "undeposited_funds"
+                                      or a["name"] == "Undeposited Funds")
+            non = next(x["id"] for x in run("sales-tax-code list", {})["items"] if not x.get("taxable"))
+            methods = run("payment-method list", {})["items"]
+            ids["payment_method"] = next((x["id"] for x in methods if x.get("kind") == "check"), None) or methods[0]["id"]
+            ids["expense"] = ids["expenses"][0]
+            t0 = time.perf_counter()
+            items = []
+            for i in range(p.items):
+                work = WORK[i % len(WORK)]
+                price = rng.choice((45, 65, 85, 95, 125, 145, 185, 240, 320)) * 100 + rng.choice((0, 0, 50))
+                items.append((run("item create", {
+                    "name": f"{work} {i:04d}", "type": "service", "description": work, "sales_enabled": True,
+                    "price": _money(price), "income_account_id": ids["income"], "sales_tax_code_id": non})["id"], price))
+            count("items", p.items)
+            ids["customers"] = [run("customer create", {"name": f"{rng.choice(FIRST)} {rng.choice(LAST)} {i:05d}"})["id"]
+                                for i in range(p.customers)]
+            count("customers", p.customers)
+            ids["vendors"] = [run("vendor create", {"name": f"{rng.choice(FIRST)} Supply {i:04d}"})["id"]
+                              for i in range(p.vendors)]
+            count("vendors", p.vendors)
+            ids["items"] = items
+            ids.update(item=items[0][0], customer=ids["customers"][0], vendor=ids["vendors"][0])
+            phase("lists", t0)
+            st["month"] = 0
+            checkpoint()
 
+        items = [tuple(x) for x in ids["items"]]
+        customers, vendors, expenses = ids["customers"], ids["vendors"], ids["expenses"]
+        checking, uf, method = ids["checking"], ids["undeposited"], ids["payment_method"]
+        open_invoices, open_bills, post_times = st["open_invoices"], st["open_bills"], st["post_times"]
         t0 = time.perf_counter()
-        items = []
-        for i in range(p.items):
-            work = WORK[i % len(WORK)]
-            price = rng.choice((45, 65, 85, 95, 125, 145, 185, 240, 320)) * 100 + rng.choice((0, 0, 50))
-            items.append((run("item create", {
-                "name": f"{work} {i:04d}", "type": "service", "description": work, "sales_enabled": True,
-                "price": _money(price), "income_account_id": income, "sales_tax_code_id": non})["id"], price))
-        count("items", p.items)
-        customers = [run("customer create", {"name": f"{rng.choice(FIRST)} {rng.choice(LAST)} {i:05d}"})["id"]
-                     for i in range(p.customers)]
-        count("customers", p.customers)
-        vendors = [run("vendor create", {"name": f"{rng.choice(FIRST)} Supply {i:04d}"})["id"]
-                   for i in range(p.vendors)]
-        count("vendors", p.vendors)
-        phase("lists", t0)
-        ids.update(item=items[0][0], customer=customers[0], vendor=vendors[0])
-
-        t0 = time.perf_counter()
-        open_invoices: list[dict] = []  # oldest first
-        open_bills: list[dict] = []
-        number = {"inv": 0, "bill": 0, "pay": 0, "dep": 0}
-        post_times: list[float] = []
-        for month in range(p.months):
+        while st["month"] < p.months:
+            month = st["month"]
             y, m = _month(month)
             for _ in range(p.invoices):
                 lines = [{"item": it, "quantity": str(rng.randint(1, 3))}
@@ -201,12 +239,12 @@ def generate(target: Path, profile: str = "large", seed: int = 180,
                 a = time.perf_counter()
                 out = run("invoice post", {"date": _day(rng, y, m), "number": f"INV-{number['inv']:06d}",
                                            "customer": rng.choice(customers), "lines": lines})
-                post_times.append(time.perf_counter() - a)
+                post_times.append(round(time.perf_counter() - a, 4))
                 open_invoices.append({"id": out["id"], "version": out["version"],
                                       "customer": out["customer_id"], "total": out["total"]})
                 count("invoices"); count("invoice_lines", len(lines))
             paid = []
-            # Customers pay the oldest invoices, most of them in full, a month or two later.
+            # Customers pay the oldest invoices, in full, a month or more later.
             for inv in open_invoices[:p.payments] if month > 0 else []:
                 number["pay"] += 1
                 out = run("payment receive", {
@@ -240,10 +278,14 @@ def generate(target: Path, profile: str = "large", seed: int = 180,
                                  "funding_account": checking, "method": "check"})
                 count("bill_payments")
             del open_bills[:p.bill_payments]
+            st["month"] = month + 1
             if month % 6 == 5 or month == p.months - 1:
                 say(f"month {month + 1}/{p.months} {y}-{m:02d}: {sum(counts.get(k, 0) for k in ('invoices', 'payments', 'deposits', 'bills', 'bill_payments'))} documents, "
-                    f"{time.perf_counter() - started:.0f}s")
-        phase("history", t0)
+                    f"{elapsed():.0f}s, load {_load()}")
+            if month % 12 == 11 and month != p.months - 1:
+                checkpoint()
+        if "history" not in phases:
+            phase("history", t0)
         tenth = max(1, len(post_times) // 10)
         invoice_post = {"first_tenth_ms": round(1000 * sum(post_times[:tenth]) / tenth, 1),
                         "last_tenth_ms": round(1000 * sum(post_times[-tenth:]) / tenth, 1)}
@@ -272,16 +314,31 @@ def generate(target: Path, profile: str = "large", seed: int = 180,
         phase("group", t0)
 
     _checkpoint(root)
+    for key in ("items", "customers", "vendors", "expenses"):
+        ids.pop(key, None)
     manifest = {
         "profile": asdict(p), "seed": seed, "template": target.name, "counts": counts, "ids": ids,
         "organization": ORG, "group_organization": GROUP_ORG, "member": MEMBER, "company_name": COMPANY,
-        "generation_seconds": round(time.perf_counter() - started, 1), "phases": phases,
+        "generation_seconds": round(elapsed(), 1), "phases": phases, "load_1m_at_end": _load(),
         "invoice_post_ms": invoice_post,  # mean of the first and last tenth, in posting order
         "disk_bytes": disk_bytes(root), "history": [f"{HISTORY_START[0]}-{HISTORY_START[1]:02d}", ids["last_day"]],
     }
     (target / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True))
+    shutil.rmtree(saved, ignore_errors=True)
     say(f"done: {manifest['generation_seconds']}s, {manifest['disk_bytes'] / 1e6:.1f} MB")
     return manifest
+
+
+def _rng_state(value):
+    version, internal, gauss = value
+    return version, tuple(internal), gauss
+
+
+def _load():
+    try:
+        return round(os.getloadavg()[0], 1)
+    except OSError:
+        return None
 
 
 def _checkpoint(root: Path) -> None:

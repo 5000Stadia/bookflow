@@ -179,9 +179,7 @@ class PerfGenerateOutput(BaseModel):
 def run_perf_generate(_cmd, inp: PerfGenerateInput, _ctx: Context) -> dict:
     from bookflow.perf import generate as gen
     target = Path(inp.output).expanduser() / gen.template_name(inp.profile, inp.seed)
-    reused = (target / "manifest.json").exists()
-    if target.exists() and not reused:
-        raise BookflowError("E_USAGE", message=f"{target} exists but holds no finished template; remove it first.")
+    reused = (target / "manifest.json").exists()  # otherwise a killed run's checkpoint is resumed
     manifest = gen.load(target) if reused else gen.generate(target, inp.profile, inp.seed)
     return PerfGenerateOutput(template=str(target), reused=reused, generation_seconds=manifest["generation_seconds"],
                               disk_bytes=manifest["disk_bytes"], counts=manifest["counts"]).model_dump(mode="json")
