@@ -163,6 +163,30 @@ def _capture(s, command_name, payload, *, warnings):
     return command, payload, index, reference_schema
 
 
+SCHEDULE_DECISION = ('mode', 'frequency', 'start_date', 'days_in_advance', 'stop_date', 'anchor_day')
+
+
+def past_slots_warning(s, fields, previous, warnings):
+    """Say how many slots dated before today an automatic schedule set now leaves for a person.
+
+    The scheduler never enters unattended a slot dated before the moment its schedule was set or last
+    changed (R111): such slots wait on Reminders for a person to enter or skip.
+    """
+    if fields.get('mode') != 'enter_automatically' or fields.get('frequency', 'never') == 'never':
+        return
+    if previous and all(previous.get(k) == fields.get(k) for k in SCHEDULE_DECISION):
+        return
+    today_ = schedule.today(s.company_tz)
+    if not fields.get('next_date') or fields['next_date'] > today_:
+        return
+    past = schedule.slots_due(fields['frequency'], fields['next_date'], fields.get('anchor_day'), fields.get('stop_date'),
+                              fields.get('remaining_count'), 0, today_, 1000)
+    if past:
+        warnings.append(f"{len(past)} slot{'s' if len(past) != 1 else ''} dated today or earlier (from {past[0]}) will "
+                        'wait for a person: the scheduler never enters unattended a slot dated on or before the day '
+                        'its schedule was set.')
+
+
 def _schedule_fields(inp, previous=None, *, warnings):
     """Build the stored schedule from the input, keeping whatever the input did not name."""
     previous = previous or {}
@@ -206,11 +230,15 @@ def prepare(s, ctx, inp, verb):
     data: dict[str, Any] = {'verb': verb, 'warnings': warnings}
     if verb == 'create':
         display, key = _name_key(inp.name)
-        if _one(s, c.memorized_transactions, c.memorized_transactions.c.name_key == key,
-                c.memorized_transactions.c.status != 'deleted'):
-            raise BookflowError('E_NAME_TAKEN', details={'name': display})
+        taken = _one(s, c.memorized_transactions, c.memorized_transactions.c.name_key == key)
+        if taken:
+            # A deleted template keeps its name: its history still answers to it.
+            raise BookflowError('E_NAME_TAKEN', message=(
+                'A deleted memorized transaction keeps that name; choose another.' if taken['status'] == 'deleted' else None),
+                details={'name': display, 'field': 'name'})
         command, payload, index, reference_schema = _capture(s, inp.command, inp.payload, warnings=warnings)
         fields = _schedule_fields(inp, warnings=warnings)
+        past_slots_warning(s, fields, None, warnings)
         group = _resolve_group(s, inp.group) if inp.group else None
         _check_group_pairing(group, fields, inp.group_ordinal, bool(inp.group))
         data.update(command=command.name, payload=payload, index=index, name=display, name_key=key,
@@ -223,9 +251,8 @@ def prepare(s, ctx, inp, verb):
         _version_conflict(row, inp.expected_version, 'memorized_transaction')
         revision = _one(s, c.memorized_transaction_revisions, c.memorized_transaction_revisions.c.id == row['current_revision_id'])
         display, key = _name_key(inp.name) if inp.name else (row['name'], row['name_key'])
-        if key != row['name_key'] and _one(s, c.memorized_transactions, c.memorized_transactions.c.name_key == key,
-                                           c.memorized_transactions.c.status != 'deleted'):
-            raise BookflowError('E_NAME_TAKEN', details={'name': display})
+        if key != row['name_key'] and _one(s, c.memorized_transactions, c.memorized_transactions.c.name_key == key):
+            raise BookflowError('E_NAME_TAKEN', details={'name': display, 'field': 'name'})
         if inp.payload is not None:
             command, payload, index, reference_schema = _capture(s, row['command'], inp.payload, warnings=warnings)
         else:
@@ -235,6 +262,7 @@ def prepare(s, ctx, inp, verb):
                                                 c.memorized_references.c.revision_id == revision['id'])]
             reference_schema = revision['reference_schema']
         fields = _schedule_fields(inp, row, warnings=warnings)
+        past_slots_warning(s, fields, row, warnings)
         if inp.status:
             fields['status'] = inp.status
         if 'group' in inp.model_fields_set:
@@ -409,6 +437,7 @@ def prepare_group(s, ctx, inp, verb):
         if _one(s, c.memorized_groups, c.memorized_groups.c.name_key == key, c.memorized_groups.c.status != 'deleted'):
             raise BookflowError('E_NAME_TAKEN', details={'name': display})
         fields = _schedule_fields(inp, warnings=warnings)
+        past_slots_warning(s, fields, None, warnings)
         data.update(name=display, name_key=key, fields=fields)
         preview = _group_write_preview(s, ctx, None, display, fields, 0, warnings)
     elif verb == 'update':
@@ -419,6 +448,7 @@ def prepare_group(s, ctx, inp, verb):
                                            c.memorized_groups.c.status != 'deleted'):
             raise BookflowError('E_NAME_TAKEN', details={'name': display})
         fields = _schedule_fields(inp, row, warnings=warnings)
+        past_slots_warning(s, fields, row, warnings)
         if inp.status:
             fields['status'] = inp.status
         members = _members(s, row['id'])

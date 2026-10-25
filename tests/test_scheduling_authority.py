@@ -318,8 +318,10 @@ def test_X4_a_group_scheduled_before_the_upgrade_waits_until_its_schedule_is_sav
 
 
 def test_R3_X5_widening_catch_up_names_who_widened_it_on_what_it_lets_in(books):
-    books.run('company update', {'scheduler_catch_up_days': 1000}, reason='Let the old ones in')
+    books.clock.set('2024-06-01')                     # the rent was memorized in mid-2024 ...
     memorize(books, start_date='2024-06-30')
+    books.clock.set('2026-01-31')                     # ... and the host was off until the window was widened
+    books.run('company update', {'scheduler_catch_up_days': 1000}, reason='Let the old ones in')
     tick(books, '2026-01-31')
     rows = audit_rows(books, 'bill post')
     old = [r for r in rows if 'catch-up window widened by' in r['reason'] and '(1000 days)' in r['reason']]
@@ -330,8 +332,10 @@ def test_X5_a_catch_up_widened_by_someone_else_holds_the_extra_slots(books):
     from tests.conftest import as_user, make_actor
     root = Path(books.root)
     make_actor(root, 'olga', company_role=(books.company, 'admin'))
+    books.clock.set('2024-06-01')
+    memorize(books, start_date='2024-06-30')            # the installer's own template, memorized in 2024
+    books.clock.set('2026-01-31')
     as_user(root, 'olga').run('company update', {'scheduler_catch_up_days': 1000}, company=books.company)
-    memorize(books, start_date='2024-06-30')            # the installer's own template
     with host(books) as running:
         for minute in range(3):
             out = running.schedule_now(now=at('2026-01-31').replace(minute=minute))[books.company]['memorized']

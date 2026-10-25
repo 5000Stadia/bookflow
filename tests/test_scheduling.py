@@ -16,9 +16,31 @@ from bookflow.core.errors import BookflowError
 from tests.test_memorized_transactions import _company, dates, memorize, rent_payload
 
 
+class Clock:
+    """The wall clock these tests run on: it starts on 1 January 2026 and moves with each tick, so a
+    template saved before a tick was saved before that day, as it would be on a real host."""
+
+    def __init__(self):
+        self.value = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+    def __call__(self):
+        return self.value
+
+    def set(self, day, hour=0):
+        self.value = datetime.fromisoformat(f'{day}T{hour:02d}:00:00').replace(tzinfo=timezone.utc)
+
+    def advance_to(self, moment):
+        self.value = max(self.value, moment)
+
+
 @pytest.fixture
 def books(tmp_path, monkeypatch):
-    return _company(tmp_path, monkeypatch, 'UTC')
+    from bookflow.core import clock as core_clock
+    wall = Clock()
+    monkeypatch.setattr(core_clock, 'now', wall)
+    made = _company(tmp_path, monkeypatch, 'UTC')
+    made.clock = wall
+    return made
 
 
 def at(day, hour=12):
@@ -38,8 +60,11 @@ def host(books):
 
 
 def tick(books, day, hour=12):
+    moment = at(day, hour)
+    if getattr(books, 'clock', None) is not None:
+        books.clock.advance_to(moment)
     with host(books) as running:
-        return running.schedule_now(now=at(day, hour))[books.company]
+        return running.schedule_now(now=moment)[books.company]
 
 
 def company_db(books):
@@ -229,8 +254,8 @@ def test_C_a_waiting_slot_replays_the_current_revision_as_its_authors_write(book
     bob, as_bob = member(books, 'bob')
     as_bob('memorized create', dict(name='Supplies', command='bill post',
                                     payload=rent_payload(amount='9999.00'), frequency='monthly',
-                                    start_date='2026-01-31', mode='remind'))
-    assert tick(books, '2026-01-31')['memorized']['waiting'] == 1   # claimed on Bob's revision
+                                    start_date='2026-02-05', days_in_advance=5, mode='remind'))
+    assert tick(books, '2026-01-31')['memorized']['waiting'] == 1   # the 02-05 slot, claimed on Bob's revision
     shown = books.run('memorized show', {'memorized': 'Supplies'})
     books.run('memorized update', {'memorized': 'Supplies', 'expected_version': shown['version'],
                                    'payload': rent_payload(amount='120.00'), 'mode': 'enter_automatically'},

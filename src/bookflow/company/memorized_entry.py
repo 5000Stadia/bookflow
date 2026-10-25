@@ -97,7 +97,16 @@ def prepare_entry(s, ctx, inp, verb):
         if template['status'] == 'deleted':
             raise BookflowError('E_VALIDATION', details={'fields': [{'field': 'memorized', 'problem': 'has been deleted'}]})
         slot = inp.date or as_of
+        if s.actor.kind != 'human':
+            # While a slot of this template waits for a person, an agent enters it on no date at all:
+            # another date would post the same content and leave the held slot listed.
+            held = held_reasons(s)
+            waiting_held = [o['id'] for o in _rows(s, c.memorized_occurrences, c.memorized_occurrences.c.template_id ==
+                                                    template['id'], c.memorized_occurrences.c.status == 'pending')
+                            if o['id'] in held]
+            _refuse_held_for_agents(s, waiting_held, verb)
         waiting = _existing(s, template['id'], slot)
+        data['slot_state'] = {f"{template['id']}:{slot}": _slot_state(waiting)}
         if waiting is not None and waiting['status'] in ('pending', 'blocked'):
             # A scheduled slot already waits for this date: entering it by hand takes that slot, so one
             # slot can never post twice (once by hand, once from the waiting occurrence).
@@ -131,7 +140,12 @@ def prepare_entry(s, ctx, inp, verb):
                                     'and left out: only a person may enter or skip them.')
     if verb == 'group-enter':
         existing = [_existing(s, item['template']['id'], item['slot']) for item in plan_rows]
-        _refuse_held_for_agents(s, [row['id'] for row in existing if row is not None], verb)
+        if s.actor.kind != 'human':
+            held = held_reasons(s)
+            members = {item['template']['id'] for item in plan_rows}
+            _refuse_held_for_agents(s, [o['id'] for o in _rows(s, c.memorized_occurrences,
+                                                               c.memorized_occurrences.c.status == 'pending')
+                                        if o['template_id'] in members and o['id'] in held], verb)
         for item, row in zip(plan_rows, existing):
             if row is not None and row['status'] in ('pending', 'blocked'):
                 item['occurrence_seen'] = row
@@ -152,8 +166,14 @@ def prepare_entry(s, ctx, inp, verb):
     revisions = {item['template']['id']: item['template']['current_revision_id'] for item in plan_rows if item['enter']}
     data['revisions'] = revisions
     preview = _entry_preview(s, plan_rows, as_of)
-    preview.facts_fingerprint = _fingerprint(revisions)
-    _check_fingerprint(inp, preview.facts_fingerprint)
+    preview.facts_fingerprint = _fingerprint(dict(revisions, **data.get('slot_state', {})))
+    hint = None
+    if verb == 'enter' and plan_rows and plan_rows[0]['origin'] == 'manual':
+        taken = _existing(s, plan_rows[0]['template']['id'], plan_rows[0]['slot'])
+        if taken is not None and taken['status'] == 'entered':
+            hint = (f"The {taken['slot_date']} slot of {plan_rows[0]['template']['name']} has been entered since the "
+                    "preview (the scheduler or someone else entered it); entering it again would post it twice.")
+    _check_fingerprint(inp, preview.facts_fingerprint, hint)
     preview.warnings = list(data['warnings'])
     return Plan(preview, data)
 
@@ -205,10 +225,34 @@ def _fingerprint(revisions):
     return hashlib.sha256(json.dumps(sorted(revisions.items())).encode()).hexdigest()
 
 
-def _check_fingerprint(inp, current):
+def _check_fingerprint(inp, current, hint=None):
     expected = getattr(inp, 'expected_facts_fingerprint', None)
     if expected is not None and expected != current:
-        raise BookflowError('E_PREVIEW_STALE', details={'reason': 'memorized_revision', 'current_facts_fingerprint': current})
+        raise BookflowError('E_PREVIEW_STALE', message=hint, details={
+            'reason': 'memorized_slot' if hint else 'memorized_revision', 'current_facts_fingerprint': current})
+
+
+def _rows(s, table, *where):
+    return service._rows(s, table, *where)
+
+
+def _slot_state(row):
+    """What a scheduled slot looked like: nothing, or its status and version (part of an enter's fingerprint)."""
+    return 'none' if row is None else f"{row['id']}:{row['status']}:{row['version']}"
+
+
+def _slot_unchanged(s, data):
+    """In the writing transaction: a slot the plan saw has not been entered or taken since (by the scheduler)."""
+    for key, seen in (data.get('slot_state') or {}).items():
+        template_id, slot = key.split(':', 1)
+        now = _existing(s, template_id, slot)
+        if _slot_state(now) != seen:
+            name = s.company.conn.execute(sa.select(c.memorized_transactions.c.name).where(
+                c.memorized_transactions.c.id == template_id)).scalar_one_or_none()
+            raise BookflowError('E_PREVIEW_STALE', message=(
+                f"The {slot} slot of {name} changed since the preview: "
+                f"{'the scheduler entered it' if now is not None and now['status'] == 'entered' else 'it was listed or taken'}"
+                ". Look again before entering it."), details={'reason': 'memorized_slot', 'current_facts_fingerprint': None})
 
 
 def _still_current(s, revisions):
@@ -351,6 +395,7 @@ def apply_entry(plan, ctx, s):
                 return Applied(out, [], f"skipped the {row['slot_date']} entry of {template['name']}",
                                finalized=True, audited=True)
             _still_current(s, data.get('revisions'))
+            _slot_unchanged(s, data)
             claimed = _claim(s, ctx, data, name)
             rebase(s, ctx, claimed, name)
             s.commits.commit(s.company, 'memorized.enter')

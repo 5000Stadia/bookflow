@@ -473,6 +473,7 @@ def test_Z13_slots_never_claimed_while_the_host_was_off_wait_after_an_agents_wid
     as_user(root, 'mallory').run('memorized create', {
         'name': 'Mallory tools', 'command': 'bill post', 'payload': tools('9999.00'),
         'frequency': 'monthly', 'start_date': '2026-01-31', 'mode': 'enter_automatically'}, company=books.company)
+    books.clock.set('2026-04-01')                    # the host stayed off; time passed
     run_as(books, 'helperlogin', 'company update', {'scheduler_catch_up_days': 300}, on_behalf_of=admin, reason='widen')
     books.run('company update', {'scheduler_catch_up_days': 200}, reason='pull back to 200')
     out = tick(books, '2026-04-01')
@@ -506,3 +507,77 @@ def test_the_fingerprint_is_documented_as_a_consistency_check():
     from pathlib import Path as P
     text = (P(__file__).resolve().parents[1] / 'src/bookflow/documentation/resources/concepts.md').read_text()
     assert 'not proof that anyone looked at a preview' in text
+
+
+# ---------------------------------------------------------------- sixth review (Z8r, Z8d, Z9r, Z13b)
+
+def test_Z8r_a_manual_entry_previewed_before_the_tick_entered_the_slot_is_refused(books):
+    memorize(books, name='Rent', start_date='2026-01-31')
+    body = {'memorized': 'Rent', 'date': '2026-01-31'}
+    preview = books.run('memorized enter', body, reason='look', dry_run=True)
+    tick(books, '2026-01-31')                        # the scheduler enters that slot meanwhile
+    with pytest.raises(BookflowError) as stale:
+        books.run('memorized enter', dict(body, expected_facts_fingerprint=preview['facts_fingerprint']), reason='save')
+    assert stale.value.code == 'E_PREVIEW_STALE' and 'entered since the preview' in stale.value.message
+    assert bill_totals(books) == [180000]
+
+
+def test_Z8d_an_agent_enters_a_template_with_a_held_slot_on_no_date(books):
+    admin = admin_id(books)
+    _mallorys_held_bill(books)
+    local_agent(books, 'helper', 'helperlogin', admin)
+    for day in ('2026-02-01', '2026-01-31'):
+        with pytest.raises(BookflowError) as refused:
+            run_as(books, 'helperlogin', 'memorized enter', {'memorized': 'Mallory tools', 'date': day},
+                   on_behalf_of=admin, reason='Agent enters it another day')
+        assert refused.value.code == 'E_PERMISSION' and refused.value.details['reason'] == 'held_for_a_person'
+    assert bill_totals(books) == [] and [r['template_name'] for r in waiting(books, 'Mallory tools')] == ['Mallory tools']
+    books.run('memorized enter', {'memorized': 'Mallory tools', 'date': '2026-02-01'}, reason='A person may')
+    assert bill_totals(books) == [999900]
+
+
+def test_Z9r_delete_and_re_create_posts_no_history_unattended(books):
+    memorize(books, name='Rent', start_date='2026-01-31')
+    tick(books, '2026-03-31')
+    assert len(bill_totals(books)) == 3
+    show = books.run('memorized show', {'memorized': 'Rent'})
+    books.run('memorized delete', {'memorized': show['id'], 'expected_version': show['version']}, reason='Remove')
+    with pytest.raises(BookflowError) as taken:
+        memorize(books, name='Rent', start_date='2026-01-31')
+    assert taken.value.code == 'E_NAME_TAKEN' and taken.value.details['field'] == 'name'
+    made = memorize(books, name='Rent again', start_date='2026-01-31')
+    assert any('3 slots dated today or earlier (from 2026-01-31) will wait for a person' in w for w in made['warnings'])
+    out = tick(books, '2026-04-01')
+    assert out['memorized']['entered'] == 0 and out['memorized']['held'] == 3, out
+    assert len(bill_totals(books)) == 3
+    due = [r for r in books.run('reminders', {'as_of': '2026-04-01'})['memorized_due'] if r['template_name'] == 'Rent again']
+    assert len(due) == 3 and all(r['waiting_reason'].startswith('due before this schedule was set on 2026-03-31')
+                                 for r in due)
+
+
+def test_Z9r_a_new_automatic_template_with_a_past_start_waits_for_its_past_slots(books):
+    books.clock.set('2026-03-15')
+    made = memorize(books, name='Late rent', start_date='2026-01-31')
+    assert any('2 slots dated today or earlier' in w for w in made['warnings'])
+    out = tick(books, '2026-03-31')
+    assert out['memorized']['entered'] == 1 and out['memorized']['held'] == 2, out
+
+
+def test_Z13b_window_changes_count_in_the_order_made_whatever_their_clock_says(books):
+    from tests.conftest import as_user, make_actor
+    root = Path(books.root)
+    admin = admin_id(books)
+    make_actor(root, 'mallory', company_role=(books.company, 'standard'))
+    local_agent(books, 'helper', 'helperlogin', admin)
+    with sqlite3.connect(root / 'hub.db') as hub:
+        hub.execute("UPDATE memberships SET role = 'admin' WHERE user_id = (SELECT id FROM users WHERE username = 'helper')")
+    as_user(root, 'mallory').run('memorized create', {
+        'name': 'Mallory tools', 'command': 'bill post', 'payload': tools('9999.00'),
+        'frequency': 'monthly', 'start_date': '2026-01-31', 'mode': 'enter_automatically'}, company=books.company)
+    books.clock.set('2026-04-01')
+    books.run('company update', {'scheduler_catch_up_days': 10}, reason='ten days')
+    books.clock.set('2026-01-20')                   # a skewed clock writes an earlier `at` on the next change
+    run_as(books, 'helperlogin', 'company update', {'scheduler_catch_up_days': 300}, on_behalf_of=admin, reason='widen')
+    out = tick(books, '2026-04-01')
+    assert out['memorized']['held'] == 2, out
+    assert not any('2026-01-31' in r['reason'] or '2026-02-28' in r['reason'] for r in audit_rows(books, 'bill post'))

@@ -65,6 +65,7 @@ Nothing here sends anything off the machine.
 """
 from __future__ import annotations
 
+import json
 import logging
 from datetime import date, timedelta
 from types import SimpleNamespace
@@ -209,10 +210,44 @@ def _hold(s, occurrence, author, principal, history=None, as_of=None) -> str | N
         why, _ = _cannot_act(s, set_by, set_principal, set_saved, what="set this group's schedule")
         if why is not None:
             return f"whoever set its group's schedule, {why}; waiting for a person to enter it"
+    set_on = schedule_set_on(s, occurrence)
+    if set_on is not None and occurrence['slot_date'] <= set_on:
+        return f"due before this schedule was set on {set_on}; waiting for a person to enter it"
     if history is not None:
         hold, _ = _slot_window(s, occurrence, author, history, as_of)
         return hold
     return None
+
+
+def schedule_set_on(s, occurrence) -> str | None:
+    """The company-local day the schedule that brings this occurrence due was set or last changed.
+
+    A group's is when its schedule, mode or status was last saved; a template's own schedule lives
+    in its revisions, so it is the oldest revision of the current run whose schedule and mode are
+    the ones in force. Nothing dated before it is ever entered unattended (deleting a template and
+    making it again, or a new automatic template with a past start, would otherwise post history).
+    """
+    from bookflow.company import memorized as service
+    from bookflow.company.memorized_schedule import today
+    from bookflow.core.clock import parse_iso
+    setter = group_setter(s, occurrence)
+    if setter is not None:
+        row = s.company.conn.execute(sa.select(c.scheduled_group_authority.c.set_at).where(
+            c.scheduled_group_authority.c.group_id == setter[3]['id'])).first()
+        return today(s.company_tz, at=parse_iso(row[0])) if row else None
+    r = c.memorized_transaction_revisions
+    revisions = s.company.conn.execute(sa.select(r.c.created_at, r.c.schedule_snapshot).where(
+        r.c.template_id == occurrence['template_id']).order_by(r.c.version.desc())).all()
+    if not revisions:
+        return None
+    keys = service.SCHEDULE_DECISION
+    current = {k: json.loads(revisions[0][1]).get(k) for k in keys}
+    since = revisions[0][0]
+    for created_at, snapshot in revisions:
+        if {k: json.loads(snapshot).get(k) for k in keys} != current:
+            break
+        since = created_at
+    return today(s.company_tz, at=parse_iso(since))
 
 
 def _enter(s, occurrence, as_of, history=None, released=None):
@@ -275,14 +310,18 @@ def window_history(s):
     try:
         e, n = c.audit_events, c.audit_entries
         changes, previous = [], _NOT_RECORDED
-        for actor_id, kind, at, after in s.company.conn.execute(
-                sa.select(e.c.actor_id, e.c.actor_kind, e.c.at, n.c.after).join(n, n.c.event_id == e.c.id)
+        for actor_id, kind, at, after, seq in s.company.conn.execute(
+                sa.select(e.c.actor_id, e.c.actor_kind, e.c.at, n.c.after, e.c.seq).join(n, n.c.event_id == e.c.id)
                 .where(e.c.command == 'company update', n.c.record_type == 'company_info').order_by(e.c.seq)):
             new = decode_snapshot(after) or {}
             if 'scheduler_catch_up_days' not in new or new['scheduler_catch_up_days'] == previous:
                 continue
             previous = new['scheduler_catch_up_days']
-            changes.append((actor_id, kind, DEFAULT_CATCH_UP_DAYS if previous is None else previous, at, previous))
+            # Ordered by seq, the order the changes were made in; a change is never earlier than the one
+            # before it, whatever a skewed clock wrote in its `at`.
+            if changes and at < changes[-1][3]:
+                at = changes[-1][3]
+            changes.append((actor_id, kind, DEFAULT_CATCH_UP_DAYS if previous is None else previous, at, previous, seq))
         current = s.company.conn.execute(sa.select(c.company_info.c.scheduler_catch_up_days)).scalar_one()
     except Exception:  # noqa: BLE001 - an unreadable trail fails closed
         log.warning('catch-up history unreadable; catch-up slots wait for a person', exc_info=True)
@@ -294,7 +333,7 @@ def window_history(s):
 def _decide(s, changes, start, author):
     """(hold reason, note) for a slot that fell outside the window before ``changes[start]``."""
     widenings, before = [], (changes[start - 1][2] if start > 0 else DEFAULT_CATCH_UP_DAYS)
-    for actor_id, kind, days, at, _ in changes[start:]:
+    for actor_id, kind, days, at, *_ in changes[start:]:
         if days > before:
             widenings.append((actor_id, kind, days))
         before = days
@@ -326,8 +365,8 @@ def _slot_window(s, occurrence, author, history, as_of):
                     "waiting for a person to enter it"), None
         return None, None
     window = DEFAULT_CATCH_UP_DAYS
-    for index, (actor_id, kind, days, at, _) in enumerate(changes):
-        moment = min(date.fromisoformat(at[:10]), date.fromisoformat(as_of))
+    for index, (actor_id, kind, days, at, *_) in enumerate(changes):
+        moment = min(date.fromisoformat(at[:10]), date.fromisoformat(as_of))   # `at` is already monotonic
         if (moment - due).days > window:
             return _decide(s, changes, index, author)
         window = days
@@ -500,7 +539,13 @@ def _reconsider_window_holds(s, ctx, cutoff, as_of, history):
     changes, trusted = history
     for row in rows:
         author, _ = author_of(s, row['current_revision_id'])
-        later = [index for index, change in enumerate(changes) if change[3] > row['created_at']]
+        # Changes made after the hold, in the order made (audit seq, never wall-clock time).
+        held_at = s.company.conn.execute(sa.select(sa.func.max(c.audit_events.c.seq)).select_from(c.audit_entries)
+                                         .join(c.audit_events, c.audit_events.c.id == c.audit_entries.c.event_id)
+                                         .where(c.audit_entries.c.record_type == 'scheduled_hold',
+                                                c.audit_entries.c.record_id == row['occurrence_id'],
+                                                c.audit_entries.c.action == 'create')).scalar_one_or_none() or 0
+        later = [index for index, change in enumerate(changes) if change[5] > held_at]
         if not trusted:
             hold, note = ("the catch-up window's history could not be confirmed from the audit trail; "
                           "waiting for a person to enter it"), None
