@@ -21,7 +21,7 @@ def _run(client, name, body=None, **context):
 
 def _part(client, name, **extra):
     income = next(row['id'] for row in client.account.query(company=CO, limit=200)['items'] if row['type'] == 'income')
-    return client.item.create(company=CO, name=name, type='non_inventory_part', price='3.00',
+    return client.item.create(company=CO, name=name, type='non_inventory_part', price='3.00', description=name,
                               income_account_id=income, **extra)
 
 
