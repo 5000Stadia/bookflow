@@ -230,7 +230,7 @@ Example JSON output:
 
 ## `prepayment attach`
 
-Move what a prepayment receipt still holds to one of its customer's documents (an accepted estimate or a work order), or back to the customer when no document is named. What was already drawn stays where it went. The receipt's history keeps every move. Example: {"receipt": "57", "document": "work-order 1002"}.
+Move what a prepayment receipt still holds to one of its customer's documents (an accepted estimate, a work order or a sales order), or back to the customer when no document is named. What was already drawn stays where it went. The receipt's history keeps every move. Example: {"receipt": "57", "document": "work-order 1002"}.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -262,7 +262,7 @@ The same example as complete `bookflow_run` arguments:
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `receipt` | `RECEIPT` | string | yes | no | — | The prepayment receipt: sales receipt ID or number.; minimum length 1; maximum length 1000 |
-| `document` | `--document` | string \| null | no | yes | null | The customer-work document the money is held on: its id, or its kind and number such as "estimate 1001" or "work-order 1002" (a bare number works when only one document carries it). An estimate must be accepted. Omit it to hold the money for the customer again. |
+| `document` | `--document` | string \| null | no | yes | null | The customer-work document the money is held on: its id, or its kind and number such as "estimate 1001", "work-order 1002" or "sales-order 1003" (a bare number works when only one document carries it). An estimate must be accepted. Omit it to hold the money for the customer again. |
 
 ### Command and context options
 
@@ -582,7 +582,7 @@ Example JSON output:
 
 ## `prepayment receive`
 
-A customer prepayment is a deposit, down payment or retainer: money paid before the work bills. It is held on the Customer Prepayments liability (set up on first use), never income, until an invoice uses it or it is paid back. Take one: name the customer or job, or the document it is for (an accepted estimate or a work order, as "estimate 1001" or "work-order 1002"), the amount, and optionally date, payment method, reference, deposit-to (default Undeposited Funds, banked later with `deposit post`), class and memo. It is an ordinary sales receipt with one Customer Prepayment line: it prints as the customer's receipt and deposits, corrects, voids and deletes as any sales receipt, while nothing is drawn from it. An invoice made from the document (`estimate invoice`, `work-order invoice`) uses it by itself; `prepayment apply` uses it on any invoice. Example: {"document": "work-order 1002", "amount": "200.00", "payment_method": "Check", "reference": "4471"}.
+A customer prepayment is a deposit, down payment or retainer: money paid before the work bills. It is held on the Customer Prepayments liability (set up on first use), never income, until an invoice uses it or it is paid back. Take one: name the customer or job, or the document it is for (an accepted estimate, a work order or a sales order, as "estimate 1001", "work-order 1002" or "sales-order 1003"), the amount, and optionally date, payment method, reference, deposit-to (default Undeposited Funds, banked later with `deposit post`), class and memo. It is an ordinary sales receipt with one Customer Prepayment line: it prints as the customer's receipt and deposits, corrects, voids and deletes as any sales receipt, while nothing is drawn from it. An invoice made from the document (`estimate invoice`, `work-order invoice`, `sales-order invoice`) uses it by itself; `prepayment apply` uses it on any invoice. Example: {"document": "work-order 1002", "amount": "200.00", "payment_method": "Check", "reference": "4471"}.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -613,7 +613,7 @@ The same example as complete `bookflow_run` arguments:
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `customer` | `--customer` | string \| null | no | yes | null | Customer or job the money is held for, when it is not for one document: ID or full name. |
-| `document` | `--document` | string \| null | no | yes | null | The customer-work document the money is held on: its id, or its kind and number such as "estimate 1001" or "work-order 1002" (a bare number works when only one document carries it). An estimate must be accepted. The customer is the document's. |
+| `document` | `--document` | string \| null | no | yes | null | The customer-work document the money is held on: its id, or its kind and number such as "estimate 1001", "work-order 1002" or "sales-order 1003" (a bare number works when only one document carries it). An estimate must be accepted. The customer is the document's. |
 | `amount` | `--amount` | string | yes | no | — | Amount received, in the home currency, such as "200.00".; minimum length 1; maximum length 40 |
 | `date` | `--date` | string \| null | no | yes | null | Date received. Defaults to today. |
 | `payment_method` | `--payment-method` | string \| null | no | yes | null | How they paid: payment method ID or name. Defaults as a sales receipt does. |

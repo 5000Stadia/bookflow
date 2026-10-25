@@ -451,8 +451,9 @@ bounce: unapply and void it.
 
 A deposit, down payment or retainer is a customer prepayment: money paid before the work bills,
 held on the Customer Prepayments liability (set up on first use) and never income. Take it with
-`prepayment receive`, naming the accepted estimate or work order it is for (or the customer when
-it is for no document yet). Do not post it with `sales-receipt post` or `payment receive`: those
+`prepayment receive`, naming the accepted estimate, work order or sales order it is for (as
+`"sales-order 1003"`; or the customer when it is for no document yet), so the invoice made from
+that document uses it by itself. Do not post it with `sales-receipt post` or `payment receive`: those
 make it a sale or a receivable credit, and both commands say so when the customer holds money.
 
 <!-- bookflow-example: illustrative -->
