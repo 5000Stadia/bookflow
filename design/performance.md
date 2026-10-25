@@ -138,6 +138,13 @@ interpreter start), 5 repetitions after one warm-up, on a fresh copy of the gene
 `perf compare` flags a scenario when its p50 is more than the threshold (default 25%) and more
 than 20 ms slower than the baseline's.
 
+**Keeping comparisons fair.** Wall times move with the machine's load: this machine runs other
+projects, and the baseline below was taken at a load average around 45 on 16 cores, which
+inflates every time. Each run records the 1-minute load average and CPU count beside its figures.
+Compare wall times only between runs taken under similar load (within about 20%), and otherwise
+compare the SQL statement counts, which do not depend on load at all: a change that halves a
+command's statements is real whatever the load. `perf compare` shows both columns.
+
 ## Baseline
 
 (Filled in by step 3.)

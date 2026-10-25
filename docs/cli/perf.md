@@ -124,6 +124,8 @@ This command has no HTTP route.
 |---|---|---|---|---|---|
 | `run` | string | yes | no | — | — |
 | `baseline` | string | yes | no | — | — |
+| `run_load_1m` | number \| null | no | yes | null | Load average when the run was taken; compare wall times only under similar load |
+| `baseline_load_1m` | number \| null | no | yes | null | — |
 | `threshold_pct` | number | yes | no | — | — |
 | `floor_ms` | number | yes | no | — | — |
 | `regressions` | integer | yes | no | — | — |
@@ -143,10 +145,12 @@ Example JSON output:
 ```json
 {
   "baseline": "value",
+  "baseline_load_1m": null,
   "floor_ms": 1.0,
   "items": [],
   "regressions": 1,
   "run": "value",
+  "run_load_1m": null,
   "threshold_pct": 1.0
 }
 ```

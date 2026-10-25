@@ -269,8 +269,9 @@ def run_bench(template: Path, *, name: str, repeat: int = DEFAULT_REPEAT, only: 
                     "sql_count": inner[-1]["sql_count"] if inner else None,
                     "sql_ms": round(percentile([r["sql_ms"] for r in inner], 0.5), 1) if inner else None,
                     "rows": max([(r["rows_in"] or 0) for r in inner] + [(r["rows_out"] or 0) for r in inner]) if inner else None,
+                    "load_1m": _load(),
                 }
-                say(f"{s.name}: p50 {results[s.name]['p50_ms']} ms, {results[s.name]['sql_count']} statements")
+                say(f"{s.name}: p50 {results[s.name]['p50_ms']} ms, {results[s.name]['sql_count']} statements, load {results[s.name]['load_1m']}")
     finally:
         if previous_root is None:
             os.environ.pop("BOOKFLOW_DATA_ROOT", None)
@@ -291,6 +292,13 @@ def run_bench(template: Path, *, name: str, repeat: int = DEFAULT_REPEAT, only: 
                                                   "python": platform.python_version()},
         "repeat": repeat, "seconds": round(time.perf_counter() - started, 1), "scenarios": results,
     }
+
+
+def _load():
+    try:
+        return round(os.getloadavg()[0], 1)
+    except OSError:
+        return None
 
 
 # ---------------------------------------------------------------- stored runs and comparison
@@ -326,4 +334,6 @@ def compare(run: dict, baseline: dict, *, threshold: float = 0.25, floor_ms: flo
                      "regression": bool(ratio and ratio > 1 + threshold and delta > floor_ms),
                      "improvement": bool(ratio and ratio < 1 / (1 + threshold) and -delta > floor_ms)})
     return {"run": run["name"], "baseline": baseline["name"], "threshold_pct": round(threshold * 100, 1),
+            "run_load_1m": (run.get("machine") or {}).get("load_1m"),
+            "baseline_load_1m": (baseline.get("machine") or {}).get("load_1m"),
             "floor_ms": floor_ms, "items": rows, "regressions": sum(r["regression"] for r in rows)}

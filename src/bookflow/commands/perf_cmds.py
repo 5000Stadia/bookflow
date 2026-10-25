@@ -252,6 +252,8 @@ class PerfCompareRow(BaseModel):
 class PerfCompareOutput(BaseModel):
     run: str
     baseline: str
+    run_load_1m: float | None = Field(None, description="Load average when the run was taken; compare wall times only under similar load")
+    baseline_load_1m: float | None = None
     threshold_pct: float
     floor_ms: float
     regressions: int
