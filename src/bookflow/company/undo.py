@@ -16,6 +16,7 @@ from typing import Any, Literal
 
 import sqlalchemy as sa
 
+from bookflow.core import unit_price
 from bookflow.company import custom_fields, list_service, schema
 from bookflow.company.lists import all_list_definitions, get_list_definition, normalize_display_name
 from bookflow.core import audit
@@ -325,7 +326,9 @@ def _price_child(value: Mapping[str, Any]) -> dict[str, Any]:
         "position": value["position"],
         "active": value.get("active", True),
         "item_id": value["item_id"],
-        "price_minor_units": None if money is None else money["minor_units"],
+        # R150: the snapshot's amount text is the exact price; minor_units is only its nearest cent.
+        "price_minor_units": None if money is None else unit_price.split(unit_price.parse(money, money["currency"], "price"))[0],
+        "price_fraction": None if money is None else unit_price.split(unit_price.parse(money, money["currency"], "price"))[1],
         "price_currency": None if money is None else money["currency"],
         "percent_millionths": (
             None if percent is None else parse_percentage_millionths(percent)
@@ -375,7 +378,10 @@ def _item_vendor_child(value: Mapping[str, Any]) -> dict[str, Any]:
         "preferred_rank": value["preferred_rank"],
         "vendor_item_name": value.get("vendor_item_name"),
         "purchase_cost_minor_units": (
-            None if money is None else money["minor_units"]
+            None if money is None else unit_price.split(unit_price.parse(money, money["currency"], "purchase_cost"))[0]
+        ),
+        "purchase_cost_fraction": (
+            None if money is None else unit_price.split(unit_price.parse(money, money["currency"], "purchase_cost"))[1]
         ),
         "purchase_cost_currency": None if money is None else money["currency"],
         "minimum_quantity_microunits": (
@@ -1740,6 +1746,10 @@ def _owner_storage_values(
             values[f"{field}_currency"] = (
                 None if money is None else money["currency"]
             )
+            if field in ("price", "cost"):
+                # R150: the amount text is exact; minor_units is only its nearest minor unit.
+                exact = None if money is None else unit_price.parse(money, money["currency"], field)
+                values[f"{field}_minor_units"], values[f"{field}_fraction"] = unit_price.split(exact)
         for field, column in {
             "charge_percent": "other_charge_percent_millionths",
             "discount_percent": "discount_percent_millionths",

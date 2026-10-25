@@ -21,7 +21,8 @@ from bookflow.company.parties import project_party_record
 from bookflow.company.work_models import WORK_KINDS
 from bookflow.company.profiles import TermInput, compute_term_dates
 from bookflow.company.sales_calculations import (
-    adjusted_price, base_quantity, extension, nonnegative, selected_price, tax, total,
+    adjusted_price, adjusted_price_units, base_quantity, extension, extension_units, nonnegative, selected_price,
+    selected_price_units, tax, total,
 )
 from bookflow.company.sales_facts import (
     ADJUSTMENT_ITEM_TYPES, DISCOUNT_ACCOUNT_TYPES, SELLABLE_ITEM_TYPES,
@@ -29,6 +30,7 @@ from bookflow.company.sales_facts import (
     SalesLineProfile, SalesProfile, TaxCode, TaxRule, Term, Unit,
 )
 from bookflow.company.sales_models import Address, SalesLineInput, _invalid, money
+from bookflow.core import unit_price
 from bookflow.core.errors import BookflowError
 from bookflow.core.money import Money
 from bookflow.core.exact import format_percentage_millionths, parse_quantity_micro_units, parse_percentage_millionths
@@ -485,7 +487,8 @@ def _price_rule(db, selector, item_id, currency, *, captured=None):
                 schema.price_level_items.c.item_id == item_id, schema.price_level_items.c.active.is_(True))).mappings().first()
         else:
             saved = next((value for value in historical['items'] if value['item_id'] == item_id and value.get('active', True)), None)
-            member = (dict(price_minor_units=saved['price']['minor_units'] if saved['price'] else None,
+            saved_units = unit_price.parse(saved['price'], saved['price']['currency'], 'price_level') if saved['price'] else None
+            member = (dict(price_minor_units=unit_price.split(saved_units)[0], price_fraction=unit_price.split(saved_units)[1],
                 price_currency=saved['price']['currency'] if saved['price'] else None,
                 percent_millionths=parse_percentage_millionths(saved['percent']) if saved['percent'] is not None else None,
                 adjustment_basis=saved['adjustment_basis']) if saved else None)
@@ -493,26 +496,28 @@ def _price_rule(db, selector, item_id, currency, *, captured=None):
         if member:
             if member['price_minor_units'] is not None and member['price_currency'] != currency:
                 raise _invalid('price_level', 'fixed price must use home currency')
-            values.update(fixed_minor_units=member['price_minor_units'], percent_millionths=member['percent_millionths'],
+            values.update(fixed_minor_units=member['price_minor_units'], fixed_fraction=member.get('price_fraction'),
+                          percent_millionths=member['percent_millionths'],
                           adjustment_basis=member['adjustment_basis'])
     return PriceRule(**values)
 
 
 def _derived_price(profile):
+    """The base-unit price without price rules, in R150 price units (thousandths of a minor unit)."""
     rule = profile.price_rule
-    base = profile.standard_price_minor_units
+    base = profile.units('standard_price')
     if rule and rule.matched:
         if rule.fixed_minor_units is not None:
-            base = rule.fixed_minor_units
+            base = unit_price.join(rule.fixed_minor_units, rule.fixed_fraction)
             percent = 0
         else:
-            base = {'standard_price': base, 'cost': profile.cost_minor_units,
-                    'current_custom_price': profile.price_basis_minor_units}[rule.adjustment_basis]
+            base = {'standard_price': base, 'cost': profile.units('cost'),
+                    'current_custom_price': profile.units('price_basis')}[rule.adjustment_basis]
             percent = rule.percent_millionths
         if base is None:
             raise _invalid('unit_price', f'selected rule requires {rule.adjustment_basis}; supply its base or an explicit price')
-        return adjusted_price(base, percent, rule.increment_minor_units,
-                              rule.offset_minor_units, rule.rounding_mode)
+        return adjusted_price_units(base, percent, rule.increment_minor_units,
+                                    rule.offset_minor_units, rule.rounding_mode)
     if base is None:
         raise _invalid('unit_price', 'item has no standard price; supply an explicit price or usable rule')
     return nonnegative(base, 'unit_price')
@@ -702,7 +707,8 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
                                        {SYSTEM_ROLE_TYPES[INVENTORY_ASSET_ROLE]}))
         profile = SalesLineProfile(item=_ref(item), item_type=item['type'], income_account=income,
                                    **stock,
-                                   standard_price_minor_units=item['price_minor_units'], cost_minor_units=item['cost_minor_units'])
+                                   standard_price_minor_units=item['price_minor_units'], cost_minor_units=item['cost_minor_units'],
+                                   standard_price_fraction=item.get('price_fraction'), cost_fraction=item.get('cost_fraction'))
     else:
         profile = old.model_copy(deep=True)
     fields.origins['item'] = Origin(kind='explicit')
@@ -784,6 +790,7 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
         profile.pricing_basis = 'unit'
         profile.net_amount_minor_units = profile.price_rule = profile.price_basis_minor_units = None
         profile.standard_price_minor_units = profile.cost_minor_units = profile.pricing_rule = None
+        profile.standard_price_fraction = profile.cost_fraction = profile.price_basis_fraction = None
         for field in ('unit_price', 'price_level', 'price_basis_amount', 'net_amount'):
             fields.origins.pop(field, None)
     elif retained_billed:
@@ -811,7 +818,7 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
             money(inp.net_amount, currency, 'net_amount').minor_units
             if 'net_amount' in fields.supplied else old.net_amount_minor_units)
         profile.price_rule = profile.pricing_rule = None
-        profile.price_basis_minor_units = None
+        profile.price_basis_minor_units = profile.price_basis_fraction = None
         for field in ('unit_price', 'price_level', 'price_basis_amount'):
             fields.origins.pop(field, None)
         if adjustment_role == 'charge':
@@ -872,18 +879,19 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
         elif level_selector is None or (not info['enable_price_levels'] and price_needs and not price_explicit):
             profile.price_rule = None
         if 'price_basis_amount' in fields.supplied:
-            profile.price_basis_minor_units = money(inp.price_basis_amount, currency, 'price_basis_amount').minor_units
+            profile.set_units('price_basis', unit_price.parse(inp.price_basis_amount, currency, 'price_basis_amount'))
             fields.origins['price_basis_amount'] = Origin(kind='explicit')
             price_needs = price_needs or fields.defaulted('unit_price')
         elif old:
             profile.price_basis_minor_units = old.price_basis_minor_units
+            profile.price_basis_fraction = old.price_basis_fraction
         if price_override is not None:
             profile.origins = fields.origins
             profile.pricing_rule = None
             price = price_override(profile, factor)
         elif 'unit_price' in fields.supplied:
             profile.pricing_rule = None
-            price = money(inp.unit_price, currency).minor_units
+            price = unit_price.parse(inp.unit_price, currency)
             fields.origins['unit_price'] = Origin(kind='explicit')
         elif price_needs and not price_explicit:
             # R110 hook: price rules may better the price level's (or item's) price; the rule is captured.
@@ -892,23 +900,23 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
                 s, profile, header, base_qty, date, lambda: _derived_price(profile),
                 old_base_qty=base_quantity(previous['quantity_microunits'], old_factor) if old is not None else None,
                 level_explicit=fields.origins.get('price_level', Origin(kind='default')).kind == 'explicit')
-            price = selected_price(base_price, factor)
+            price = selected_price_units(base_price, factor)
             fields.origins['unit_price'] = Origin(kind='default', source_id=(
                 profile.pricing_rule.id if profile.pricing_rule else profile.price_rule.id if profile.price_rule else item['id']))
             if base_price and not price:
-                warnings.append(f'unit_price: nonzero base price {base_price} rounded to zero at factor {factor}')
+                warnings.append(f'unit_price: nonzero base price {unit_price.text(base_price, currency)} rounded to zero at factor {factor}')
         else:
-            price = previous['unit_price_minor_units']
+            price = unit_price.row_units(previous, 'unit_price')
         if not info['enable_price_levels'] and other_needs:
             warnings.append('price_level: price levels disabled; standard/manual price is in use')
-        elif rule_reasons and not other_needs and price != previous['unit_price_minor_units']:
+        elif rule_reasons and not other_needs and price != unit_price.row_units(previous, 'unit_price'):
             why = profile.pricing_rule.summary if profile.pricing_rule else 'no price rule applies now'
-            warnings.append(f"unit_price: {Money(previous['unit_price_minor_units'], currency).amount} became "
-                            f"{Money(price, currency).amount} because the {' and '.join(rule_reasons)} changed; {why}")
+            warnings.append(f"unit_price: {unit_price.text(unit_price.row_units(previous, 'unit_price'), currency)} became "
+                            f"{unit_price.text(price, currency)} because the {' and '.join(rule_reasons)} changed; {why}")
 
     profile.origins = fields.origins
     net = (0 if adjustment_role in ADJUSTMENT_ITEM_TYPES else profile.net_amount_minor_units if amount_mode else
-           nonnegative(net_override, 'line.net') if net_override is not None else extension(quantity, price))
+           nonnegative(net_override, 'line.net') if net_override is not None else extension_units(quantity, price))
     exempt = header.customer_tax_code is not None and not header.customer_tax_code.taxable
     taxable = profile.tax_code is not None and profile.tax_code.taxable and not exempt
     if not header.preferences.sales_tax_enabled:
@@ -934,7 +942,8 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
     gross = total((net, tax_amount), 'line.gross')
     resolved = dict(item_id=profile.item.id, quantity_microunits=quantity,
                     unit_id=profile.unit.id if profile.unit else None, unit_factor_nanounits=factor,
-                    base_quantity_microunits=base_qty, unit_price_minor_units=price,
+                    base_quantity_microunits=base_qty, unit_price_minor_units=unit_price.split(price)[0],
+                    unit_price_fraction=unit_price.split(price)[1],
                     net_minor_units=net, tax_minor_units=tax_amount, gross_minor_units=gross,
                     description=description, profile=profile, taxes=taxes)
     if line_kinds:

@@ -33,8 +33,10 @@ Database: `company`.
 | `purchase_enabled` | BOOLEAN | no | false | — | — | — | Whether the purchase profile is enabled. |
 | `price_minor_units` | BIGINT | yes | — | — | — | — | Standard sales price as signed integer minor units; null with its currency. |
 | `price_currency` | VARCHAR(3) | yes | — | — | — | — | ISO 4217 currency for standard sales price; null with its amount. |
+| `price_fraction` | BIGINT | yes | — | — | — | — | Standard sales price beyond its rounded minor units, in signed thousandths of a minor unit (price = price_minor_units + fraction/1000); null when the price is whole minor units. |
 | `cost_minor_units` | BIGINT | yes | — | — | — | — | Standard purchase cost as signed integer minor units; null with its currency. |
 | `cost_currency` | VARCHAR(3) | yes | — | — | — | — | ISO 4217 currency for standard purchase cost; null with its amount. |
+| `cost_fraction` | BIGINT | yes | — | — | — | — | Standard purchase cost beyond its rounded minor units, in signed thousandths of a minor unit (price = cost_minor_units + fraction/1000); null when the price is whole minor units. |
 | `income_account_id` | VARCHAR(26) | yes | — | — | ix_items_income_account_id | accounts.id | Active income account id; null when the type does not use one. |
 | `expense_account_id` | VARCHAR(26) | yes | — | — | ix_items_expense_account_id | accounts.id | Active expense account id; null when the type does not use one. |
 | `cogs_account_id` | VARCHAR(26) | yes | — | — | ix_items_cogs_account_id | accounts.id | Active cost-of-goods-sold account id; null when the type does not use one. |

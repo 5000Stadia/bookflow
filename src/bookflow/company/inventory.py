@@ -50,6 +50,7 @@ from dataclasses import dataclass, field
 
 import sqlalchemy as sa
 
+from bookflow.core import unit_price
 from bookflow.company import accounts, items as item_service, journals, list_service, placements, schema as c
 from bookflow.company.document_effects import allocate
 from bookflow.company.inventory_costing import StockRefusal, replay, shortfall_warning
@@ -99,18 +100,26 @@ def movements(s, *, item_id=None, transaction_id=None, as_of=None):
 
 
 def fallback_cost(s, item_id, currency):
-    """The item's purchase cost per base unit, captured on an issue as its provisional fallback.
+    """The item's purchase cost per base unit, captured on an issue as its provisional fallback,
+    exactly, in R150 price units (thousandths of a minor unit): 0.004 is a cost, not none.
 
     ``None`` when the item records no purchase cost -- a stocked item must record one, so in
     practice that is a cost of zero -- or one in another currency: a stock value is always home
     currency and Bookflow never converts one implicitly.
     """
-    row = s.company.conn.execute(sa.select(c.items.c.cost_minor_units, c.items.c.cost_currency)
+    row = s.company.conn.execute(sa.select(c.items.c.cost_minor_units, c.items.c.cost_currency,
+                                           c.items.c.cost_fraction)
                                  .where(c.items.c.id == item_id)).first()
-    if row is None or row.cost_minor_units is None or row.cost_currency != currency \
-            or int(row.cost_minor_units) <= 0:
+    if row is None or row.cost_minor_units is None or row.cost_currency != currency:
         return None
-    return int(row.cost_minor_units)
+    units = unit_price.join(int(row.cost_minor_units), row.cost_fraction)
+    return units if units > 0 else None
+
+
+def fallback_columns(s, item_id, currency, kind):
+    """The two movement columns an issue captures its fallback cost in (both None otherwise)."""
+    minor, fraction = unit_price.split(fallback_cost(s, item_id, currency) if kind == 'issue' else None)
+    return dict(fallback_unit_cost_minor_units=minor, fallback_unit_cost_fraction=fraction)
 
 
 def item_name(s, item_id):
@@ -310,8 +319,7 @@ def _adjustment_change(s, ctx, inp, currency, sequence):
                     effective_date=inp.date, sequence=sequence,
                     corrects_movement_id=None, reverses_movement_id=None,
                     returns_movement_id=None, filled_by_movement_id=None,
-                    fallback_unit_cost_minor_units=(fallback_cost(s, item['id'], currency)
-                                                    if kind == 'issue' else None))
+                    **fallback_columns(s, item['id'], currency, kind))
     if kind == 'issue':
         # What it is worth is the average's answer, not the caller's, so the value is read off
         # a first replay and written back before the corrections are worked out.
@@ -370,7 +378,7 @@ def _void_change(s, inp, currency, sequence):
             currency=row['currency'], asset_account_id=row['asset_account_id'],
             offset_account_id=row['offset_account_id'], class_id=row['class_id'],
             corrects_movement_id=None, reverses_movement_id=row['id'], returns_movement_id=None,
-            filled_by_movement_id=None, fallback_unit_cost_minor_units=None,
+            filled_by_movement_id=None, fallback_unit_cost_minor_units=None, fallback_unit_cost_fraction=None,
             revision_id=revision['id'], document_line_id=row['document_line_id']),
             line_index=0, reverses_line_id=row['posting_line_id']))
         sequence += 1
@@ -435,7 +443,7 @@ def _correction_documents(s, change, sequence):
                 corrects_movement_id=target['id'], reverses_movement_id=None,
                 returns_movement_id=None,
                 filled_by_movement_id=correction.filled_by['id'] if true_up else None,
-                fallback_unit_cost_minor_units=None),
+                fallback_unit_cost_minor_units=None, fallback_unit_cost_fraction=None),
                 line_index=len(lines) - 1))
             sequence += 1
             if partner is not None:
@@ -524,7 +532,9 @@ def _summary(s, change, corrections):
         quantity_change=format_quantity_micro_units(change.quantity_microunits),
         value_change=Money(change.value_minor_units, change.currency).to_dict(),
         quantity_on_hand=format_quantity_micro_units(state.quantity_microunits),
-        average_cost=Money(state.average_cost_minor_units, change.currency).to_dict(),
+        # R150: an average is a unit cost, shown to the price scale as the valuation report shows it.
+        average_cost=unit_price.to_dict(unit_price.average(state.value_minor_units, state.quantity_microunits),
+                                        change.currency),
         inventory_value=Money(state.value_minor_units, change.currency).to_dict(),
         asset_account_id=change.asset_account_id, adjustment_account_id=change.offset_account_id,
         movement_kind=change.movement_kind, corrections=corrections)

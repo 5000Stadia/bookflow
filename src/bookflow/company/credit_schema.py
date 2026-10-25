@@ -34,6 +34,7 @@ tables carry one nullable credit-source column each.
 """
 
 import sqlalchemy as sa
+from bookflow.company.unit_price_schema import fraction_column
 
 
 def define_tables(metadata, column, table):
@@ -103,6 +104,7 @@ def define_tables(metadata, column, table):
         integer('unit_factor_nanounits', 'Positive captured base units per selected unit in billionths.'),
         C('base_quantity_microunits', sa.BigInteger, 'Exact credited base quantity in millionths.', nullable=False),
         C('unit_price_minor_units', sa.BigInteger, 'Home-currency price per selected unit; null when the net is taken rather than priced.', nullable=True),
+        fraction_column('unit_price', 'Unit price'),
         C('pricing_basis', sa.String(16), 'Authoritative unit or amount pricing mode.', nullable=False),
         integer('net_minor_units', 'Home-currency line net before tax.'),
         integer('tax_minor_units', 'Home-currency sum of this line tax components.'),

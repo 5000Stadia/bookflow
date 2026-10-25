@@ -9,6 +9,7 @@ from pydantic import ValidationError
 import sqlalchemy as sa
 from sqlalchemy.dialects.sqlite import insert
 
+from bookflow.core import unit_price
 from bookflow.company import schema as c, document_effects as effects, sales_calculations as calc
 from bookflow.company import journal_custom_fields as custom, custom_fields as cf
 from bookflow.company import work_defaults, placements
@@ -57,7 +58,8 @@ TABLE_KINDS = (('work_revisions', 'work_revision'), ('work_line_identities', 'wo
 LINE_COLUMNS = ('item_id', 'unit_id', 'quantity_microunits', 'completed_quantity_microunits', 'cancelled_quantity_microunits',
     'unit_factor_nanounits', 'base_quantity_microunits', 'unit_price_minor_units',
     'net_minor_units', 'tax_minor_units', 'gross_minor_units', 'estimated_unit_cost_minor_units',
-    'estimated_cost_minor_units', 'pricing_basis', 'markup_percent_millionths', 'billable')
+    'estimated_cost_minor_units', 'pricing_basis', 'markup_percent_millionths', 'billable',
+    'unit_price_fraction', 'estimated_unit_cost_fraction')
 AGREED_FIELDS = ('profile', 'scope', 'inclusions', 'exclusions', 'timing', 'commercial_terms')
 OPERATIONAL_FIELDS = ('priority', 'site_address', 'assignees', 'scheduled_start', 'scheduled_end',
                       'actual_start', 'actual_end')
@@ -193,9 +195,9 @@ def revision_output(s, rev, pending=None, *, summary_only=False, header=None):
             completed_quantity=format_quantity_micro_units(f.completed_quantity_microunits),
             cancelled_quantity=format_quantity_micro_units(f.cancelled_quantity_microunits) if ordering else None,
             order=figures.get(line['line_id']), stock=stock.get(f.item_id), coverage=coverage.get(line['line_id']),
-            unit_price=amount(f.unit_price_minor_units), net=amount(f.net_minor_units),
+            unit_price=unit_price.to_dict(f.price_units, currency) if f.price_units is not None else None, net=amount(f.net_minor_units),
             tax=amount(f.tax_minor_units), total=amount(f.gross_minor_units),
-            estimated_unit_cost=amount(f.estimated_unit_cost_minor_units), estimated_cost=amount(f.estimated_cost_minor_units),
+            estimated_unit_cost=unit_price.to_dict(f.cost_units, currency) if f.cost_units is not None else None, estimated_cost=amount(f.estimated_cost_minor_units),
             **_shown(f, currency)))
         if f.estimated_cost_minor_units is None:
             complete = False

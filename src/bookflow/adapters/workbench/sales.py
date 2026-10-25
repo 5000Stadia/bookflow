@@ -62,8 +62,8 @@ def editable_values(record):
         row.update({key: _id(facts.get(key)) for key in ('unit', 'class_id', 'tax_code')})
         row['price_level'] = _id(facts.get('price_rule'))
         if facts.get('price_basis_minor_units') is not None:
-            from bookflow.core.money import Money
-            row['price_basis_amount'] = Money(facts['price_basis_minor_units'], line['currency']).to_dict()['amount']
+            from bookflow.core import unit_price  # R150: the exact basis, 0.0333 stays 0.0333
+            row['price_basis_amount'] = unit_price.text(unit_price.row_units(facts, 'price_basis'), line['currency'])
         if line.get('pricing_basis') == 'amount':
             row.pop('price_level', None)
             row.pop('price_basis_amount', None)

@@ -2,6 +2,7 @@
 import json
 from pydantic import ValidationError
 from fractions import Fraction
+from bookflow.core import unit_price
 from bookflow.company import schema as c, work, sales, billing_queries as query
 from bookflow.company.work_tax_facts import read_line, read_facts
 from bookflow.company import work_tax, tax_attribution
@@ -252,7 +253,8 @@ def _validate(plan, s, ctx):
         snapshot = json.loads(actual['facts_snapshot'])
         require(read_line(snapshot['line']) == lf and read_facts(snapshot['document']) == work.facts(rev), 'snapshot types')
         projected = profiles[envelope['id']]
-        require(all(projected[k] == getattr(lf,k) for k in ('item_id','unit_id','unit_factor_nanounits','unit_price_minor_units')),
+        require(all(projected[k] == getattr(lf,k) for k in ('item_id','unit_id','unit_factor_nanounits','unit_price_minor_units'))
+                and projected.get('unit_price_fraction') == lf.unit_price_fraction,
                 'captured line units/item/rate differ')
         require(projected['quantity_microunits'] == quantity and projected['base_quantity_microunits'] == base_quantity
                 and projected['net_minor_units'] == net and projected['tax_minor_units'] == tax

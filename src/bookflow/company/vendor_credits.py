@@ -44,6 +44,7 @@ import json
 
 import sqlalchemy as sa
 
+from bookflow.core import unit_price
 from bookflow.company import ap_settlement, bill_payments, bills, journals, schema as c
 from bookflow.company import document_effects as effects
 from bookflow.company import inventory_effects
@@ -138,7 +139,8 @@ def merged_line(envelope, profile, family='expense'):
         merged.update(item_id=profile['item_id'], billable=bool(profile['billable']),
                       quantity_microunits=profile['quantity_microunits'],
                       quantity=format_quantity_micro_units(profile['quantity_microunits']),
-                      unit_cost_minor_units=profile['unit_cost_minor_units'])
+                      unit_cost_minor_units=profile['unit_cost_minor_units'],
+                      unit_cost_fraction=profile.get('unit_cost_fraction'))
     return merged
 
 
@@ -494,7 +496,7 @@ def revision_output(s, header, revision, edges, pending=None, *, summary_only=Fa
         items=[VendorCreditItemOutput(
             **dict(line, amount=Money(line['amount_minor_units'], currency).to_dict(),
                    unit_cost=None if line['unit_cost_minor_units'] is None
-                   else Money(line['unit_cost_minor_units'], currency).to_dict(),
+                   else unit_price.to_dict(unit_price.row_units(line, 'unit_cost'), currency),
                    line_snapshot=json.loads(line['line_snapshot'])))
             for line in by_family(lines, 'item')])
 
@@ -919,7 +921,8 @@ def _compose(s, ctx, inp, resolved, previous=None):
         if line['family'] == 'item':
             pending['vendor_credit_item_lines'].append(dict(
                 shared, item_id=facts.item.id, quantity_microunits=facts.quantity_microunits,
-                unit_cost_minor_units=facts.unit_cost_minor_units, billable=facts.billable))
+                unit_cost_minor_units=facts.unit_cost_minor_units, unit_cost_fraction=facts.unit_cost_fraction,
+                billable=facts.billable))
         else:
             pending['vendor_credit_expense_lines'].append(shared)
     # What this write does to stock, decided in full before any of it is built: the previous
