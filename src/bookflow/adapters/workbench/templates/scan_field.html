@@ -1,0 +1,18 @@
+{# The Scan field (R104 increment 3, design/advanced-inventory.md §7). One reusable piece:
+   import it, call scan_field(company_id, mode, target), and load scan.js once.
+     mode "lines": a document's item grid. A known code adds a line, or adds 1 to the last line
+       for that item; "6*" first makes that line 6. target is a CSS selector for the lines
+       (default: the form's first grid with item lines).
+     mode "rows": fixed rows named item_N / quantity_N (the transfer form). Same rules.
+     mode "count": the count screen. Fills the entry form's item and quantity and enters it as
+       "Add to it", so each scan adds 1 (or N).
+   The input has no name, so it never travels with the form, and scan.js treats Enter as look-up,
+   never as submit. An unknown code says so with "Assign to an item" and leaves the form and the
+   typed code as they were. #}
+{% macro scan_field(company_id, mode='lines', target='', label='Scan or type an item') %}
+<div class="scan-field" data-scan data-scan-mode="{{ mode }}" data-scan-lookup="/c/{{ company_id }}/barcode/lookup"{% if target %} data-scan-target="{{ target }}"{% endif %}>
+<label class="scan">{{ label }} <input type="text" data-scan-input autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go" placeholder="Item name or barcode" aria-describedby="scan-status-{{ mode }}"></label>
+<small class="scan-hint">Scan a barcode, or type 6* before it for six.</small>
+<p class="scan-status" id="scan-status-{{ mode }}" data-scan-status role="status" aria-live="polite"></p>
+</div>
+{% endmacro %}

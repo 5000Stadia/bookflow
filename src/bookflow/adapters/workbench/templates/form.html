@@ -258,6 +258,7 @@
 {% if noun == 'report' and source_report_watermark is not none %}<input type="hidden" name="_source_report_watermark" value="{{ source_report_watermark }}">{% endif %}
 {% if return_context %}<input type="hidden" name="_return_token" value="{{ return_context.token }}"><input type="hidden" name="_return_target" value="{{ return_context.target }}">{% endif %}
 {% if panel_return %}<input type="hidden" name="_back" value="{{ panel_return }}">{% endif %}
+{% if noun in ('invoice', 'sales-receipt', 'bill', 'item-receipt') and verb in ('post', 'update') and company_id %}{% from "scan_field.html" import scan_field %}{{ scan_field(company_id) }}<script src="{{ static_urls['scan.js'] }}" defer></script>{% endif %}
 {% if document %}{% include "sales_document_form.html" %}{% elif form_groups %}
 {% set groups = form_groups %}
 {% if noun == 'company' %}
