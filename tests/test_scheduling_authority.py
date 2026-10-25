@@ -322,7 +322,7 @@ def test_R3_X5_widening_catch_up_names_who_widened_it_on_what_it_lets_in(books):
     memorize(books, start_date='2024-06-30')
     tick(books, '2026-01-31')
     rows = audit_rows(books, 'bill post')
-    old = [r for r in rows if 'catch-up widened to 1000 days by' in r['reason']]
+    old = [r for r in rows if 'catch-up window widened by' in r['reason'] and '(1000 days)' in r['reason']]
     assert old and len(old) < len(rows)
 
 
@@ -339,7 +339,7 @@ def test_X5_a_catch_up_widened_by_someone_else_holds_the_extra_slots(books):
     entered = [o for o in occurrences(books) if o['status'] == 'entered']
     assert held and entered and max(o['slot_date'] for o in held) < '2025-01-31' <= min(o['slot_date'] for o in entered)
     due = books.run('reminders', {'as_of': '2026-01-31'})['memorized_due']
-    assert any('catch-up widened to 1000 days by Olga' in (r['waiting_reason'] or '') for r in due)
+    assert any('catch-up window widened by Olga (1000 days), not by its author' in (r['waiting_reason'] or '') for r in due)
 
 
 def test_X6_a_preview_names_the_revision_and_its_author_and_a_later_edit_is_stale(books):

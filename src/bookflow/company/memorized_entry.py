@@ -97,8 +97,17 @@ def prepare_entry(s, ctx, inp, verb):
         if template['status'] == 'deleted':
             raise BookflowError('E_VALIDATION', details={'fields': [{'field': 'memorized', 'problem': 'has been deleted'}]})
         slot = inp.date or as_of
-        plan_rows.append({'template': template, 'slot': slot, 'origin': 'manual', 'enter': True,
-                          'advance': False, 'group_run': None, 'group_ordinal': None})
+        waiting = _existing(s, template['id'], slot)
+        if waiting is not None and waiting['status'] in ('pending', 'blocked'):
+            # A scheduled slot already waits for this date: entering it by hand takes that slot, so one
+            # slot can never post twice (once by hand, once from the waiting occurrence).
+            _refuse_held_for_agents(s, [waiting['id']], verb)
+            plan_rows.append({'template': template, 'slot': slot, 'origin': 'scheduled', 'enter': True,
+                              'advance': False, 'occurrence': waiting, 'group_run': waiting['group_run_id'],
+                              'group_ordinal': waiting['group_ordinal']})
+        else:
+            plan_rows.append({'template': template, 'slot': slot, 'origin': 'manual', 'enter': True,
+                              'advance': False, 'group_run': None, 'group_ordinal': None})
     elif verb == 'group-enter':
         group = service._resolve_group(s, inp.memorized_group)
         if group['status'] == 'deleted':
@@ -131,6 +140,15 @@ def prepare_entry(s, ctx, inp, verb):
                               and row['revision_id'] != _current_revision(s, row['template_id'])
                               and _recover(s, row) is None])
     data['work'] = plan_rows
+    held = held_reasons(s)
+    releasing = [(item['template']['name'], item['slot'], held[row['id']]) for item in plan_rows
+                 for row in [item.get('occurrence') or item.get('occurrence_seen')]
+                 if item['enter'] and row is not None and row['id'] in held]
+    if releasing:
+        data['warnings'].append(
+            f"{len(releasing)} entr{'y was' if len(releasing) == 1 else 'ies were'} held for a person and "
+            f"{'is' if len(releasing) == 1 else 'are'} entered by you: "
+            + '; '.join(f'{name} for {slot} ({reason})' for name, slot, reason in releasing))
     revisions = {item['template']['id']: item['template']['current_revision_id'] for item in plan_rows if item['enter']}
     data['revisions'] = revisions
     preview = _entry_preview(s, plan_rows, as_of)
@@ -287,7 +305,7 @@ def _due_work(s, inp, as_of, keep_waiting=None):
 
 def _entry_preview(s, work, as_of):
     from bookflow.company.memorized_models import MemorizedEntryOutput
-    entered, pending = [], []
+    entered, pending, held = [], [], held_reasons(s)
     for item in work:
         template = item['template']
         waiting = item.get('occurrence') or {}
@@ -305,7 +323,9 @@ def _entry_preview(s, work, as_of):
         }
         if item['enter'] and not (waiting and _recover(s, waiting) is not None):
             row['revision_id'] = template['current_revision_id']   # what will post: the template as it is now
-        (entered if item['enter'] else pending).append(_with_author(s, service._occurrence_out(row, template['name'])))
+        out = _with_author(s, service._occurrence_out(row, template['name']))
+        out['waiting_reason'] = held.get(row['id'])
+        (entered if item['enter'] else pending).append(out)
     return MemorizedEntryOutput(as_of=as_of, entered=entered, pending=pending, blocked=[],
                                 entered_count=len(entered), pending_count=len(pending),
                                 blocked_count=0, dry_run=s.dry_run)

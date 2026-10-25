@@ -188,7 +188,7 @@ def _who(s, user_id, principal):
     return f'{_name(s, user_id)} for {_name(s, principal)}' if principal else _name(s, user_id)
 
 
-def _hold(s, occurrence, author, principal, widened) -> str | None:
+def _hold(s, occurrence, author, principal, history=None, as_of=None) -> str | None:
     """Why this occurrence must wait for a person rather than be entered unattended, or None.
 
     It is entered unattended only when one principal decided both what it posts and when: the
@@ -209,14 +209,13 @@ def _hold(s, occurrence, author, principal, widened) -> str | None:
         why, _ = _cannot_act(s, set_by, set_principal, set_saved, what="set this group's schedule")
         if why is not None:
             return f"whoever set its group's schedule, {why}; waiting for a person to enter it"
-    if widened and occurrence['slot_date'] < widened['before'] and (
-            widened['kind'] == 'agent' or widened['by_id'] != author):
-        return (f"catch-up widened to {widened['days']} days by {widened['by']}, not by its author; "
-                "waiting for a person to enter it")
+    if history is not None:
+        hold, _ = _slot_window(s, occurrence, author, history, as_of)
+        return hold
     return None
 
 
-def _enter(s, occurrence, as_of, widened=None, released=None):
+def _enter(s, occurrence, as_of, history=None, released=None):
     """Enter one claimed occurrence as the author of the revision it replays, with that author's
     full authority (the ordinary authorization, input checks and plan) -- or say why it waits."""
     from bookflow.company import memorized as service, memorized_entry
@@ -231,7 +230,7 @@ def _enter(s, occurrence, as_of, widened=None, released=None):
         return {'occurrence': occurrence, 'error': _blocked(
             'E_PERMISSION', f"Not entered: the author of this memorized transaction, {why}, so it no longer "
                             "carries anyone's authority. A person must review it.", reason='author_inactive')}
-    held = _hold(s, occurrence, author, principal, widened)
+    held = _hold(s, occurrence, author, principal, None if released else history, as_of)
     if held is not None:
         return {'occurrence': occurrence, 'hold': held}
     frequency = template['frequency']
@@ -241,8 +240,11 @@ def _enter(s, occurrence, as_of, widened=None, released=None):
     note = ''
     if released:
         note = f'; {released}'
-    elif widened and occurrence['slot_date'] < widened['before']:
-        note = f"; catch-up widened to {widened['days']} days by {widened['by']}"
+    elif history is not None:
+        _, widening = _slot_window(s, occurrence, author, history, as_of)
+        if widening:
+            note = f'; {widening}'
+
     _act_as(s, author, principal, epoch)
     ctx = context().model_copy(update={'actor_id': author, 'actor_kind': ActorKind(s.actor.kind),
                                        'on_behalf_of': principal})
@@ -261,52 +263,75 @@ def _revision_saved_or_missing(s, revision_id):
     return _NOT_RECORDED if row is None else row[0]
 
 
-def _widened(s, catch_up, as_of):
-    try:
-        return _widened_read(s, catch_up, as_of)
-    except Exception:  # noqa: BLE001 - an unreadable trail fails closed: nobody's widening is assumed
-        log.warning('catch-up history unreadable; slots beyond the default window wait for a person', exc_info=True)
-        if catch_up is None or catch_up <= DEFAULT_CATCH_UP_DAYS:
-            return None
-        return {'days': catch_up, 'by': 'someone unrecorded', 'by_id': None, 'kind': None, 'at': None,
-                'before': (date.fromisoformat(as_of) - timedelta(days=DEFAULT_CATCH_UP_DAYS)).isoformat()}
+def window_history(s):
+    """Every audited change to the catch-up window, oldest first, and whether it accounts for the window in force.
 
-
-def _widened_read(s, catch_up, as_of):
-    """The latest change to the catch-up window, when it widened it: by whom, as what, from what.
-
-    Read from the company audit trail, where every `company update` records the change. Whatever the
-    size, a widening lets in the slots older than the window it replaced (a value left empty counts
-    as the default year); those entries name it in their reason, and wait for a person when the
-    widening was an agent's or anyone's but their author's.
+    Each `company update` keeps the company row as it stood after it, so a change is an event whose
+    value differs from the one before. Each change is (actor, actor kind, effective days, at); an
+    empty value counts as the default year. When the newest audited value is not the window in force,
+    or the trail cannot be read, the history is not trusted and the scheduler fails closed.
     """
     from bookflow.core.audit import decode_snapshot
-    if catch_up is None:
-        return None
-    e, n = c.audit_events, c.audit_entries
-    # Each `company update` keeps the company row as it stood after it: the change is the newest event
-    # whose value differs from the one before it.
-    seen = []
-    for actor_id, kind, at, after in s.company.conn.execute(
-            sa.select(e.c.actor_id, e.c.actor_kind, e.c.at, n.c.after).join(n, n.c.event_id == e.c.id)
-            .where(e.c.command == 'company update', n.c.record_type == 'company_info').order_by(e.c.seq.desc())):
-        new = decode_snapshot(after) or {}
-        if 'scheduler_catch_up_days' in new:
-            seen.append((actor_id, kind, at, new['scheduler_catch_up_days']))
-    unknown = {'days': catch_up, 'by': 'someone unrecorded', 'by_id': None, 'kind': None, 'at': None,
-               'before': (date.fromisoformat(as_of) - timedelta(days=DEFAULT_CATCH_UP_DAYS)).isoformat()}
-    if not seen or seen[0][3] != catch_up:
-        # Fail closed: the newest audited value is not the window in force, so who set it is unknown.
-        return unknown if catch_up > DEFAULT_CATCH_UP_DAYS else None
-    for index, (actor_id, kind, at, value) in enumerate(seen):
-        previous = seen[index + 1][3] if index + 1 < len(seen) else None
-        if value != previous:
-            previous = DEFAULT_CATCH_UP_DAYS if previous is None else previous
-            if catch_up <= previous:
-                return None
-            return {'days': catch_up, 'by': _name(s, actor_id), 'by_id': actor_id, 'kind': kind, 'at': at,
-                    'before': (date.fromisoformat(as_of) - timedelta(days=previous)).isoformat()}
-    return None
+    try:
+        e, n = c.audit_events, c.audit_entries
+        changes, previous = [], _NOT_RECORDED
+        for actor_id, kind, at, after in s.company.conn.execute(
+                sa.select(e.c.actor_id, e.c.actor_kind, e.c.at, n.c.after).join(n, n.c.event_id == e.c.id)
+                .where(e.c.command == 'company update', n.c.record_type == 'company_info').order_by(e.c.seq)):
+            new = decode_snapshot(after) or {}
+            if 'scheduler_catch_up_days' not in new or new['scheduler_catch_up_days'] == previous:
+                continue
+            previous = new['scheduler_catch_up_days']
+            changes.append((actor_id, kind, DEFAULT_CATCH_UP_DAYS if previous is None else previous, at, previous))
+        current = s.company.conn.execute(sa.select(c.company_info.c.scheduler_catch_up_days)).scalar_one()
+    except Exception:  # noqa: BLE001 - an unreadable trail fails closed
+        log.warning('catch-up history unreadable; catch-up slots wait for a person', exc_info=True)
+        return [], False
+    trusted = (changes[-1][4] == current) if changes else current is None
+    return changes, trusted
+
+
+def _decide(s, changes, start, author):
+    """(hold reason, note) for a slot that fell outside the window before ``changes[start]``."""
+    widenings, before = [], (changes[start - 1][2] if start > 0 else DEFAULT_CATCH_UP_DAYS)
+    for actor_id, kind, days, at, _ in changes[start:]:
+        if days > before:
+            widenings.append((actor_id, kind, days))
+        before = days
+    if not widenings:
+        return None, None
+    named = ', '.join(f'{_name(s, actor)} ({days} days)' for actor, _, days in widenings)
+    agents = sorted({_name(s, actor) for actor, kind, _ in widenings if kind == 'agent'})
+    if agents:
+        return (f"catch-up window widened by {named}; a widening by an agent ({', '.join(agents)}) always waits "
+                "for a person"), None
+    if changes[-1][0] == author or all(actor == author for actor, _, _ in widenings):
+        return None, f'catch-up window widened by {named}'
+    return f'catch-up window widened by {named}, not by its author; waiting for a person to enter it', None
+
+
+def _slot_window(s, occurrence, author, history, as_of):
+    """Whether a widening of the catch-up window let this slot in, and if so on whose say.
+
+    The window in force when each change was made is compared with the slot's age then (a change
+    made after this tick's date counts as made on it), using the whole audited history: a slot that
+    was ever older than the window in force was let in by every widening after that. Fails closed
+    when the history does not account for the window in force: any slot already past due waits.
+    """
+    changes, trusted = history
+    due = date.fromisoformat(occurrence['due_date'])
+    if not trusted:
+        if (date.fromisoformat(as_of) - due).days > 0:
+            return ("the catch-up window's history could not be confirmed from the audit trail; "
+                    "waiting for a person to enter it"), None
+        return None, None
+    window = DEFAULT_CATCH_UP_DAYS
+    for index, (actor_id, kind, days, at, _) in enumerate(changes):
+        moment = min(date.fromisoformat(at[:10]), date.fromisoformat(as_of))
+        if (moment - due).days > window:
+            return _decide(s, changes, index, author)
+        window = days
+    return None, None
 
 
 def _mode(s, item):
@@ -352,7 +377,7 @@ def enter_due(s, system_id: str, as_of: str) -> dict[str, Any]:
     from bookflow.core.ids import new_id
     info = s.company.conn.execute(sa.select(c.company_info.c.scheduler_catch_up_days)).mappings().one()
     catch_up = info['scheduler_catch_up_days']
-    widened = _widened(s, catch_up, as_of)
+    history = window_history(s)
     if catch_up is None:
         catch_up = DEFAULT_CATCH_UP_DAYS
     cutoff = (date.fromisoformat(as_of) - timedelta(days=catch_up)).isoformat()
@@ -360,7 +385,7 @@ def enter_due(s, system_id: str, as_of: str) -> dict[str, Any]:
     _act_as(s, system_id)
     ctx = context().model_copy(update={'actor_id': system_id, 'actor_kind': ActorKind.system,
                                        'reason': f'On schedule: memorized transactions due by {as_of}'})
-    released, kept = _reconsider_window_holds(s, ctx, cutoff, as_of)
+    released, kept = _reconsider_window_holds(s, ctx, cutoff, as_of, history)
     if kept:
         summary['held'] = kept
 
@@ -405,7 +430,7 @@ def enter_due(s, system_id: str, as_of: str) -> dict[str, Any]:
         results, holds, window = [], [], []
         for occurrence in claimed:
             if occurrence['_enter']:
-                outcome = _enter(s, occurrence, as_of, widened, released.get(occurrence['id']))
+                outcome = _enter(s, occurrence, as_of, history, released.get(occurrence['id']))
                 (holds if 'hold' in outcome else results).append(outcome)
             elif (occurrence['status'] == 'pending' and (occurrence['template_id'], occurrence['slot_date']) in left
                   and occurrence['id'] not in held):
@@ -458,76 +483,44 @@ def _write_holds(s, ctx, holds):
                    actor_id=s.actor.id, actor_kind=s.actor.kind, event_id=new_id())
 
 
-def _window_changes(s, since):
-    """Every change to the catch-up window after ``since``, oldest first: (actor, kind, value, at)."""
-    from bookflow.core.audit import decode_snapshot
-    e, n = c.audit_events, c.audit_entries
-    values = []
-    for actor_id, kind, at, after in s.company.conn.execute(
-            sa.select(e.c.actor_id, e.c.actor_kind, e.c.at, n.c.after).join(n, n.c.event_id == e.c.id)
-            .where(e.c.command == 'company update', n.c.record_type == 'company_info').order_by(e.c.seq)):
-        new = decode_snapshot(after) or {}
-        if 'scheduler_catch_up_days' in new:
-            values.append((actor_id, kind, new['scheduler_catch_up_days'], at))
-    changes, previous = [], None
-    for index, (actor_id, kind, value, at) in enumerate(values):
-        if index == 0 or value != previous:
-            if at > since:
-                changes.append((actor_id, kind, value, at))
-        previous = value
-    return changes, (values[-1][2] if values else _NOT_RECORDED)
-
-
-def _reconsider_window_holds(s, ctx, cutoff, as_of):
+def _reconsider_window_holds(s, ctx, cutoff, as_of, history):
     """Slots left for a person under a narrower catch-up window that the current window now reaches.
 
-    One enters unattended only if its author set the current window, or made every widening since
-    the window it was left under; it then names those widenings in its reason. Otherwise it stays
-    held, naming each widener since. Returns ({occurrence: note}, how many stay held).
+    One enters unattended only if every widening since the window it was left under was its
+    author's (or its author set the window in force) and none was an agent's; it then names those
+    widenings in its reason. Otherwise it stays held, naming each widener. Fails closed when the
+    history does not account for the window in force. Returns ({occurrence: note}, how many stay held).
     """
-    from bookflow.core.audit import write_event_to
-    from bookflow.core.ids import new_id
-    from bookflow.core.registry import Touched
     h, o, t = c.scheduled_holds, c.memorized_occurrences, c.memorized_transactions
     rows = s.company.conn.execute(
         sa.select(h, o.c.slot_date, t.c.current_revision_id).join(o, o.c.id == h.c.occurrence_id)
         .join(t, t.c.id == o.c.template_id)
         .where(h.c.catch_up_window.isnot(None), o.c.status == 'pending', o.c.slot_date >= cutoff)).mappings().all()
     released, kept, deletes, changes_touched = {}, 0, [], []
-    current = s.company.conn.execute(sa.select(c.company_info.c.scheduler_catch_up_days)).scalar_one()
+    changes, trusted = history
     for row in rows:
-        author, principal = author_of(s, row['current_revision_id'])
-        try:
-            changes, newest = _window_changes(s, row['created_at'])
-        except Exception:  # noqa: BLE001 - an unreadable trail fails closed
-            changes, newest = None, _NOT_RECORDED
-        if changes is None or newest != current:
-            # Fail closed: the window in force is not the newest one the audit trail records.
-            kept += 1
-            reason = ("the catch-up window's history could not be confirmed from the audit trail; "
-                      "waiting for a person to enter it")
-            if reason != row['reason']:
-                changes_touched.append((row, reason))
+        author, _ = author_of(s, row['current_revision_id'])
+        later = [index for index, change in enumerate(changes) if change[3] > row['created_at']]
+        if not trusted:
+            hold, note = ("the catch-up window's history could not be confirmed from the audit trail; "
+                          "waiting for a person to enter it"), None
+        elif not later:
             continue
-        widenings, last = [], row['catch_up_window']
-        for actor_id, kind, value, at in changes:
-            effective = DEFAULT_CATCH_UP_DAYS if value is None else value
-            if effective > last:
-                widenings.append((actor_id, kind, effective))
-            last = effective
-        if not changes:
-            continue
-        named = ', '.join(f'{_name(s, actor)} ({days} days)' for actor, _, days in widenings) or 'nobody'
-        setter_of_current = changes[-1][0]
-        if setter_of_current == author or (widenings and all(actor == author for actor, _, _ in widenings)):
-            released[row['occurrence_id']] = f'catch-up widened since it was left under {row["catch_up_window"]} days by {named}'
+        else:
+            hold, note = _decide(s, changes, later[0], author)
+            if hold is None and note is None:
+                continue
+        if hold is None:
+            released[row['occurrence_id']] = f"left under {row['catch_up_window']} days; {note}"
             deletes.append(row)
         else:
             kept += 1
-            reason = (f'left for a person under the {row["catch_up_window"]}-day catch-up window, widened since by '
-                      f'{named}, not by its author; waiting for a person to enter it')[:400]
+            reason = f"left for a person under the {row['catch_up_window']}-day catch-up window; {hold}"[:400]
             if reason != row['reason']:
                 changes_touched.append((row, reason))
+    from bookflow.core.audit import write_event_to
+    from bookflow.core.ids import new_id
+    from bookflow.core.registry import Touched
     if deletes or changes_touched:
         s.company.raw.execute('BEGIN IMMEDIATE')
         try:

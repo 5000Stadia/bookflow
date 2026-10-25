@@ -256,6 +256,11 @@ def prepare(s, ctx, inp, verb):
         row = _resolve_template(s, inp.memorized)
         _version_conflict(row, inp.expected_version, 'memorized_transaction')
         data.update(row=row)
+        # Deleting sets the waiting slots aside: a slot held for a person is a person's to set aside.
+        from bookflow.company.memorized_entry import _refuse_held_for_agents
+        _refuse_held_for_agents(s, [o['id'] for o in _rows(s, c.memorized_occurrences,
+                                                           c.memorized_occurrences.c.template_id == row['id'],
+                                                           c.memorized_occurrences.c.status == 'pending')], 'skip')
         revision = _one(s, c.memorized_transaction_revisions, c.memorized_transaction_revisions.c.id == row['current_revision_id'])
         fields = dict(_schedule_out(row), status='deleted', next_date=None)
         preview = _template_write_preview(s, ctx, row, row['name'], row['command'], fields, [],
@@ -319,6 +324,9 @@ def apply_write(plan, ctx, s):
             s.company.conn.execute(c.memorized_occurrences.update().where(c.memorized_occurrences.c.id == occurrence['id'])
                 .values(status='skipped', version=occurrence['version'] + 1, updated_at=at,
                         updated_by=s.actor.id, updated_via=ctx.interface.value))
+        if waiting:
+            from bookflow.company.memorized_entry import release_holds
+            release_holds(s, ctx, data['command_name'], [o['id'] for o in waiting], 'set aside, deleting the template,')
         revision = _one(s, c.memorized_transaction_revisions, c.memorized_transaction_revisions.c.id == row['current_revision_id'])
         out = _row_write_output(s, after, revision, [], warnings, deleted=True)
         return Applied(out, touched, summary, audited=True)

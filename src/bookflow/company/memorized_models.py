@@ -214,6 +214,7 @@ class OccurrenceOutput(BaseModel):
     group_ordinal: int | None
     replays_author_id: str | None = Field(None, description='Who saved the revision this entry posts (or would post).')
     replays_author: str | None = None
+    waiting_reason: str | None = Field(None, description='Why the scheduler held this entry for a person, when it did.')
 
 
 class MemorizedSummary(BaseModel):

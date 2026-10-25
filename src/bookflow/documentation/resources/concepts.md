@@ -435,3 +435,11 @@ read when the host starts (default 60, at least 1); overdue notices are looked a
 most. An automatic entry is made unattended only when the person (or agent) who saved what it
 posts also set the schedule that brings it due; anything else waits for a person on Reminders.
 
+
+A person entering memorized transactions by hand (`memorized process`, `retry`, `enter`,
+`memorized-group enter`) sees in the preview which revision of each template will post and who
+saved it, and gets a `facts_fingerprint`. Sent back as `expected_facts_fingerprint`, it refuses the
+entry if a template changed in between. It is a consistency check -- a guard against a stale
+preview -- not proof that anyone looked at a preview: it is computed from which revisions will
+post, so anyone can compute it. Entries the scheduler held for a person are entered or skipped
+only by a person, and a preview names each one and why it was held.
