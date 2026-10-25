@@ -10,7 +10,7 @@ import bookflow
 from bookflow import BookflowError
 from bookflow.core import registry
 from bookflow.hub import permission_human_admin_catalog as layer, people_only, permission_runtime as runtime
-from bookflow.hub import permission_check_printing_catalog as tip_layer
+from bookflow.hub import permission_barcodes_catalog as tip_layer
 from tests.conftest import hosted_call, make_agent
 from tests.test_row3_host import hosted  # noqa: F401 - fixture
 
@@ -41,6 +41,7 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # accountant-review-v1 adds designating and removing an external accountant, cancelling an accountant's copy
     # and importing an accountant's changes: who may change the books, and what comes into them, is the owner's call.
     # check-printing-v1 adds confirming a print run, cancelling one and reprinting a check: paper in a printer.
+    # barcodes-v1 adds none: looking codes up and numbering items are bookkeeping.
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {
         'journal restore', 'invoice restore', 'customer merge', 'customer unmerge', 'vendor merge', 'vendor unmerge',

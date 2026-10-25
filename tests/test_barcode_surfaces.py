@@ -38,7 +38,7 @@ def test_the_same_barcodes_through_python_cli_http_and_mcp(root, tmp_path):
                                                    'lines': [{'item': code, 'quantity': '3'}]})
                 shown = await call('invoice show', {'invoice': sale['id']})
                 refused = await call('item create', {'name': 'Scan Copy', 'type': 'non_inventory_part',
-                                                      'description': 'Copy', 'income_account_id': income,
+                                                      'description': 'Copy', 'price': '4.00', 'income_account_id': income,
                                                       'barcode': '0012345678905'}, rejected=True)
                 results[surface] = dict(looked=looked, unknown=unknown, made=made, again=again, code=code,
                                         line=shown['revision']['lines'][0], refused=refused)
