@@ -750,6 +750,43 @@ jobs at night; the van ends as counted.
 - **The count screen's keypad is the phone's number keypad** (`inputmode="decimal"`), and the item field is
   pinned on top; scanning proper (Enter as look-up) is increment 3.
 
+## As built: increment 3
+
+- **One resolver.** Every `item` field already went through `list_service.resolve_selector`; a list
+  definition now names an optional code column (`code_field`, items: `barcode`) that the selector tries
+  after id and name. A code matches exactly (trimmed). One active holder wins; with none active, the one
+  inactive holder is returned for the caller's own inactive rule; two active holders refuse with
+  E_VALIDATION listing both (`details.candidates`).
+- **Duplicates.** A create or a changed barcode another active item carries is refused (E_VALIDATION on
+  `barcode`, `details.item`); an item saved without changing its code is not re-checked, so kept
+  duplicates stay editable. A blank barcode is stored as none.
+- **`barcode generate`** numbers from the `sequences` row `barcode` (co0094): `2` + an 11-digit serial +
+  the check digit, skipping any code already on an item or bin. With no `items` it numbers every active
+  inventory part, assembly and non-inventory part without a code; named items that have one are skipped
+  and listed. Each assignment is an ordinary item update in the item's history.
+- **`barcode lookup`** answers an unknown code without an error (`found: false`, a message saying how to
+  assign it). Its look-up list (`barcodes._KINDS`) holds items only; bins, serial numbers and lots slot in
+  there in their increments.
+- **The Scan field** is one partial (`scan_field.html`) and one script (`scan.js`), with three modes:
+  document grids (invoice, sales receipt, bill, item receipt), fixed rows (the transfer form) and the count
+  screen's entry form. It asks `GET /c/{company}/barcode/lookup` (a barcode, then an item id, then a name).
+  A repeat scan adds 1 to the last line for that item; `6*` before a code sets that line to 6. "Assign to
+  an item" opens the item list in a new window, so nothing typed is lost. The field has no form name and
+  never travels with the form.
+- **Coming back active.** An item becoming active again (`item activate`, an undone deactivation or
+  cascade) with a code another active item now holds is refused with E_VALIDATION naming the holder (an
+  undo surfaces it as E_UNDO_CONFLICT); `item unmerge` refuses with its own E_MERGE_REFUSED. Clear one code
+  first.
+- **The Scan route reads codes first:** barcode, then id, then name (a scanner sends codes), unlike an
+  `item` field. Where a code and another item's name collide it takes the code and says "matched code X
+  on <item>; an item named X also exists". Enter takes the typed text and clears the field at once; scans
+  queue and resolve in order, focus is never pulled back, and `0*` is refused.
+- **UPC-A and EAN-13 are not equated:** a 12-digit UPC-A scan matches only if it is stored as those 12
+  digits (not as the 13-digit EAN with a leading 0).
+- **Demo codes.** Copper Coupling 0012345678905, Two-Valve Kit 2000000000015 (so the generator's first
+  code is 2000000000022), Service Call Kit 0036000291452, Received Shipping Kit 4006381333931; the Brass
+  Shutoff Valve keeps its 100000000050. No oracle moves: codes change no quantity or amount.
+
 ## 10. Open questions
 
 Each default stands if nobody decides.

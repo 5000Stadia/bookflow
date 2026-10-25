@@ -332,6 +332,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.mileage_cmds": ["vehicle", "mileage-rate", "trip", "report"],
     "bookflow.commands.timekeeping_cmds": ["timesheet", "clock", "schedule"],
     "bookflow.commands.check_print_cmds": ["check"],
+    "bookflow.commands.barcode_cmds": ["barcode"],
     "bookflow.commands.pricing_rule_cmds": ["price-rule"],
     "bookflow.commands.accountant_cmds": ["accountant", "accountant-copy", "report"],
     "bookflow.commands.memorized_cmds": ["memorized", "memorized-group"],

@@ -191,6 +191,8 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
             for old_text, new_text in co0093.REWIND[table]:
                 assert conn.execute("UPDATE sqlite_schema SET sql = replace(sql, ?, ?) WHERE name = ?", (new_text, old_text, table)).rowcount == 1
         conn.execute("PRAGMA writable_schema=OFF")
+        conn.execute("DROP TRIGGER inventory_movements_true_up_link")   # co0093 widened co0059's guard
+        conn.execute(co0093.TRUE_UP_GUARD[0])
         for table, column in co0091.FRACTIONS:
             conn.execute(f"ALTER TABLE {table} DROP COLUMN {column}")  # co0091's sub-cent fractions
         for table in ("check_print_outcomes", "check_spoiled_numbers", "check_print_run_items", "check_print_runs",

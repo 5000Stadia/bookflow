@@ -183,6 +183,11 @@ class ItemInput(StrictModel):
     vendor_profiles: list[ItemVendorProfileInput] | None = None
     custom_fields: dict[str, Any | None] | None = None
 
+    @field_validator("barcode")
+    @classmethod
+    def _blank_barcode_is_none(cls, value: str | None) -> str | None:
+        return value or None
+
     @field_validator(
         "reorder_point_min", "reorder_point_max", "assembly_build_point",
     )
@@ -1142,6 +1147,29 @@ def _validate_type_change(db: Database, current: Mapping[str, Any], target_type:
         raise BookflowError("E_TYPE_CHANGE", details={"record_id": current["id"], "from": old_type, "to": target_type, "hierarchy": True})
 
 
+def assert_barcode_available(db: Database, barcode: str | None, *, exclude_id: str | None = None,
+                             reactivating: str | None = None) -> None:
+    """A new or changed barcode another active item carries is refused, naming that item (R104 §7).
+
+    Duplicates kept from before codes were checked stay; only the write that would add one is refused.
+    ``reactivating`` names an item becoming active again (activate, unmerge, an undone deactivation):
+    it may not bring a code back while another active item holds it.
+    """
+    if not barcode:
+        return
+    query = sa.select(schema.items.c.id, schema.items.c.full_name).where(
+        schema.items.c.barcode == barcode, schema.items.c.active.is_(True))
+    if exclude_id is not None:
+        query = query.where(schema.items.c.id != exclude_id)
+    taken = db.conn.execute(query.order_by(schema.items.c.full_name)).first()
+    if taken is not None:
+        problem = f"barcode {barcode!r} is already on {taken.full_name}"
+        if reactivating is not None:
+            problem = (f"{reactivating} carries barcode {barcode!r}, which the active item {taken.full_name} now holds; "
+                       f"clear the code on one of them first")
+        raise _validation("barcode", problem, item_id=taken.id, item=taken.full_name)
+
+
 def plan_item_create(
     db: Database,
     payload: Mapping[str, Any],
@@ -1170,6 +1198,7 @@ def plan_item_create(
         preferred_supplied="preferred_vendor_id" in supplied,
     ) if parsed.type in {"service", "non_inventory_part", "inventory_part", "inventory_assembly", "other_charge"} else ()
     owner_values["preferred_vendor_id"] = _preferred_from_profiles(vendor_rows)
+    assert_barcode_available(db, owner_values.get("barcode"))
     custom_plan = custom_fields.plan_owner_value_patch(
         db,
         record_type=ITEM_RECORD_TYPE,
@@ -1343,6 +1372,8 @@ def plan_item_update(
         changed_fields.update(".".join(path) for path in custom_plan.logical_paths)
     if not changed_fields:
         return ItemUpdatePlan(None, (), ())
+    if "barcode" in changed_fields:
+        assert_barcode_available(db, after_candidate.get("barcode"), exclude_id=record_id)
     after = {
         **after_candidate,
         **list_service.update_metadata(current, actor_id, via, at=at or now_iso()),
@@ -1425,6 +1456,17 @@ def plan_item_active_change(
         dependents = _member_dependents(db, [str(row["id"]) for row in rows])
         if dependents:
             raise BookflowError("E_RECORD_IN_USE", details={"record_id": record_id, "dependents": list(dependents)})
+    else:
+        claimed: dict[str, str] = {}
+        for row in rows:
+            code = row.get("barcode")
+            if not code or row.get("active"):
+                continue
+            if code in claimed:
+                raise _validation("barcode", f"{row['full_name']} and {claimed[code]} both carry barcode {code!r}; "
+                                  "clear the code on one of them first", item=claimed[code])
+            claimed[code] = str(row["full_name"])
+            assert_barcode_available(db, code, exclude_id=str(row["id"]), reactivating=str(row["full_name"]))
     timestamp = at or now_iso()
     mutations: list[ItemMutation] = []
     for row in rows:

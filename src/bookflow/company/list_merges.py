@@ -591,6 +591,13 @@ def plan_unmerge(db, kind: str, merged_selector: str) -> UnmergePlan:
         if last is None or last["merged_id"] != merged["id"]:
             raise _refuse(f"this {kind} is not merged into another one", merged_id=merged["id"])
         return UnmergePlan(kind, merged, None, last)
+    if kind == "item" and (merge["deactivated_merged"] or merged.get("active")) and merged.get("barcode"):
+        from bookflow.company import items  # R104: unmerging may not bring back a code another item now holds
+        try:
+            items.assert_barcode_available(db, merged["barcode"], exclude_id=merged["id"], reactivating=merged["full_name"])
+        except BookflowError as exc:  # unmerge refuses with its own declared code, naming the holder
+            raise _refuse(exc.details["fields"][0]["problem"], merged_id=merged["id"], item_id=exc.details["item_id"],
+                          item=exc.details["item"]) from None
     restores, kept = [], []
     for ref in db.conn.execute(sa.select(schema.list_merge_references).where(
             schema.list_merge_references.c.merge_id == merge["id"]).order_by(

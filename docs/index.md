@@ -25,6 +25,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`attachment`](cli/attachment.md)
 - [`audit`](cli/audit.md)
 - [`backup`](cli/backup.md)
+- [`barcode`](cli/barcode.md)
 - [`batch-invoice`](cli/batch-invoice.md)
 - [`bill`](cli/bill.md)
 - [`bill payment`](cli/bill-payment.md)

@@ -12,7 +12,7 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_check_printing_catalog as previous, permission_catalog as c
+from . import permission_barcodes_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
 SOURCE_COMMIT = '6985a28ce5ab0ced0e8e52ad7e9678351c38237f'

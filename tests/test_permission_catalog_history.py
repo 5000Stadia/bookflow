@@ -78,7 +78,8 @@ ACCEPTED = {
     'inventory-sites-v1': (650, '6b52f7a61a5e4cc9d7eee36318abb8803d39742e4fd2c4883394b4dd34b23529'),
     'accountant-review-v1': (664, '1ee5b051d410ea9b481203ec6812a9bdd9b6784ededa18b6f02e25daa6b1eb21'),
     'check-printing-v1': (673, 'a4c3dc284228e3321e3b9fe710ec73488a84800195a5bae91896dd9324979522'),
-    'inventory-counts-v1': (683, '2f9cb3bcba04ef1ebb0a7641bca8080c0433fbb0ede1303d6ca88ba1c5829c88'),
+    'barcodes-v1': (675, 'f2e8e164a17a2a43960e2af90d3382579423e8ef8b03902bc9d36ee07e23058a'),
+    'inventory-counts-v1': (685, '5af62281b43f9d583b58533c6dc155c4b8eb95fcc8ef9b7ebc7c994e8963e250'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -173,6 +174,7 @@ CHAIN_ADDITIONS = {
                              'report accountant-review'},
     'check-printing-v1': {'check print', 'check print-alignment', 'check print-cancel', 'check print-confirm',
                           'check print-pdf', 'check print-queue', 'check print-run', 'check print-setup', 'check reprint'},
+    'barcodes-v1': {'barcode generate', 'barcode lookup'},
     'inventory-counts-v1': {'inventory-count cancel', 'inventory-count create', 'inventory-count enter',
                             'inventory-count post', 'inventory-count query', 'inventory-count sheet',
                             'inventory-count show', 'inventory-count void', 'report inventory-valuation-detail',
