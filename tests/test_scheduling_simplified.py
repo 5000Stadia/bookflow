@@ -481,7 +481,7 @@ def test_Z13_slots_never_claimed_while_the_host_was_off_wait_after_an_agents_wid
     dates_posted = [r['reason'] for r in audit_rows(books, 'bill post')]
     assert not any('2026-01-31' in r or '2026-02-28' in r for r in dates_posted)
     due = books.run('reminders', {'as_of': '2026-04-01'})['memorized_due']
-    assert len(due) == 2 and all('a widening by an agent' in r['waiting_reason'] for r in due)
+    assert len(due) == 2 and all('not by its author' in r['waiting_reason'] for r in due)
 
 
 def test_Z10_an_agents_own_widening_keeps_its_slots_waiting_and_says_why(books):
@@ -499,8 +499,8 @@ def test_Z10_an_agents_own_widening_keeps_its_slots_waiting_and_says_why(books):
     tick(books, '2026-04-01')
     assert bill_totals(books) == [800]
     due = books.run('reminders', {'as_of': '2026-04-01'})['memorized_due']
-    assert len(due) == 2 and all('a widening by an agent' in r['waiting_reason'] and 'not by its author' not in r['waiting_reason']
-                                 for r in due)
+    assert len(due) == 2 and all('an agent widened the stored window' in r['waiting_reason']
+                                 and 'not by its author' not in r['waiting_reason'] for r in due)
 
 
 def test_the_fingerprint_is_documented_as_a_consistency_check():
@@ -579,5 +579,94 @@ def test_Z13b_window_changes_count_in_the_order_made_whatever_their_clock_says(b
     books.clock.set('2026-01-20')                   # a skewed clock writes an earlier `at` on the next change
     run_as(books, 'helperlogin', 'company update', {'scheduler_catch_up_days': 300}, on_behalf_of=admin, reason='widen')
     out = tick(books, '2026-04-01')
-    assert out['memorized']['held'] == 2, out
+    assert out['memorized']['entered'] == 1, out          # only 03-31; an agent's widening reaches no further back
     assert not any('2026-01-31' in r['reason'] or '2026-02-28' in r['reason'] for r in audit_rows(books, 'bill post'))
+
+
+# ---------------------------------------------------------------- seventh review
+
+def test_7_1_resuming_a_paused_template_leaves_the_paused_months_waiting(books):
+    books.clock.set('2026-01-15')
+    memorize(books, name='Rent')
+    tick(books, '2026-01-31')
+    books.clock.set('2026-02-10')
+    show = books.run('memorized show', {'memorized': 'Rent'})
+    books.run('memorized update', {'memorized': 'Rent', 'expected_version': show['version'], 'status': 'paused'},
+              reason='Pause while we renegotiate')
+    tick(books, '2026-05-31')
+    books.clock.set('2026-06-10')
+    show = books.run('memorized show', {'memorized': 'Rent'})
+    resumed = books.run('memorized update', {'memorized': 'Rent', 'expected_version': show['version'], 'status': 'active'},
+                        reason='Resume')
+    assert any('4 slots dated today or earlier (from 2026-02-28)' in w for w in resumed['warnings']), resumed['warnings']
+    out = tick(books, '2026-06-10')
+    assert out['memorized']['entered'] == 0 and out['memorized']['held'] == 4, out
+    assert bill_totals(books) == [180000]
+    due = [r for r in books.run('reminders', {'as_of': '2026-06-10'})['memorized_due'] if r['template_name'] == 'Rent']
+    assert [r['slot_date'] for r in due] == ['2026-02-28', '2026-03-31', '2026-04-30', '2026-05-31']
+    assert all(r['waiting_reason'].startswith('due before this schedule was set on 2026-06-10') for r in due)
+
+
+def test_7_2_entering_a_date_whose_slot_already_posted_needs_again(books):
+    memorize(books, name='Rent')
+    tick(books, '2026-01-31')
+    for who in ('person', 'agent'):
+        body = {'memorized': 'Rent', 'date': '2026-01-31'}
+        with pytest.raises(BookflowError) as refused:
+            if who == 'person':
+                books.run('memorized enter', body, reason='by hand')
+            else:
+                admin = admin_id(books)
+                if not getattr(books, 'agent_made', False):
+                    local_agent(books, 'helper', 'helperlogin', admin)
+                    books.agent_made = True
+                run_as(books, 'helperlogin', 'memorized enter', body, on_behalf_of=admin, reason='agent by hand')
+        assert refused.value.code == 'E_VALIDATION' and 'was already entered as' in refused.value.message, who
+    assert bill_totals(books) == [180000]
+    books.run('memorized enter', {'memorized': 'Rent', 'date': '2026-01-31', 'again': True}, reason='A second, on purpose')
+    assert bill_totals(books) == [180000, 180000]
+
+
+def test_7_3_a_widening_stamped_before_an_earlier_audited_event_counts_from_that_event(books):
+    from tests.conftest import as_user, make_actor
+    root = Path(books.root)
+    make_actor(root, 'mallory', company_role=(books.company, 'standard'))
+    make_actor(root, 'olga', company_role=(books.company, 'admin'))
+    books.run('company update', {'scheduler_catch_up_days': 10}, reason='ten days')
+    as_user(root, 'mallory').run('memorized create', {
+        'name': 'Mallory tools', 'command': 'bill post', 'payload': tools('9999.00'),
+        'frequency': 'monthly', 'start_date': '2026-01-31', 'mode': 'enter_automatically'}, company=books.company)
+    books.clock.set('2026-02-15')
+    books.run('bill post', dict(rent_payload(), date='2026-02-15'), reason='ordinary activity on 02-15')
+    books.clock.set('2026-01-15')                   # a person's widening, stamped by a clock reading 01-15
+    as_user(root, 'olga').run('company update', {'scheduler_catch_up_days': 300}, company=books.company)
+    books.clock.set('2026-02-20')
+    tick(books, '2026-04-01')
+    # 01-31 was past the 10 days by 02-15, the latest audited moment before the widening: it waits.
+    late = [r for r in audit_rows(books, 'bill post') if 'Mallory tools' in (r['reason'] or '') and '2026-01-31' in r['reason']]
+    assert late == []
+    due = books.run('reminders', {'as_of': '2026-04-01'})['memorized_due']
+    assert any('2026-01-31' == r['slot_date'] and 'not by its author' in (r['waiting_reason'] or '') for r in due)
+
+
+def test_7_4_an_agents_widening_never_extends_unattended_reach(books):
+    from tests.conftest import as_user, make_actor
+    root = Path(books.root)
+    admin = admin_id(books)
+    local_agent(books, 'helper', 'helperlogin', admin)
+    with sqlite3.connect(root / 'hub.db') as hub:
+        hub.execute("UPDATE memberships SET role = 'admin' WHERE user_id = (SELECT id FROM users WHERE username = 'helper')")
+    books.run('company update', {'scheduler_catch_up_days': 10}, reason='ten days')
+    memorize(books, name='Rent')                    # the admin's own template
+    books.clock.set('2026-04-01')
+    run_as(books, 'helperlogin', 'company update', {'scheduler_catch_up_days': 300}, on_behalf_of=admin, reason='widen')
+    out = tick(books, '2026-04-01')
+    assert out['memorized']['entered'] == 1 and out['memorized']['left_for_a_person'] == 2, out   # 03-31 only
+    due = books.run('reminders', {'as_of': '2026-04-01'})['memorized_due']
+    assert len(due) == 2 and all('an agent widened the stored window' in r['waiting_reason'] for r in due)
+
+
+def test_7_5_the_concepts_page_says_todays_slot_waits_unlike_the_anchor():
+    from pathlib import Path as P
+    text = (P(__file__).resolve().parents[1] / 'src/bookflow/documentation/resources/concepts.md').read_text()
+    assert 'The anchor would enter it; Bookflow deliberately does not, for safety' in text

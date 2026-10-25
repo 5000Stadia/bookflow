@@ -90,6 +90,8 @@ class MemorizedListInput(_Input):
 class MemorizedEnterInput(_Input):
     memorized: _Selector
     date: _Date | None = None
+    again: bool = Field(False, description='Enter it although the scheduled slot for this date has already been entered '
+                                           '(a deliberate second entry). Without it, or a preview\'s fingerprint, that is refused.')
     expected_facts_fingerprint: Annotated[str, Field(pattern=r'^[0-9a-f]{64}$')] | None = Field(
         None, description='The facts_fingerprint of the preview: the revision that will post. A template changed '
                           'since is refused with E_PREVIEW_STALE.')

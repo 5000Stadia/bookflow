@@ -36,7 +36,9 @@ a group whose schedule was set before this upgrade (who set it is unknown) -- th
 for a person exactly as a reminder does (``scheduled_holds``, shown on Reminders with both names)
 and posts only when a person enters it, as that person. A slot let in by a widening of
 ``scheduler_catch_up_days`` (whatever its size) names who widened it in its reason, and waits for a
-person when that widening was an agent's or anyone's but the slot's author's.
+person when that widening was anyone's but the slot's author's. An agent's change to the window never
+extends unattended reach, whenever it was made: the scheduler uses the most recent window a person set
+(or the default year), and slots beyond it wait for a person with a reason naming the agent's change.
 
 *How it is recorded.* The posting is the author's write: its audit event names the author as the
 actor (an agent stays an agent, so `report entries-to-review` and `audit list --actor/--principal`
@@ -241,10 +243,14 @@ def schedule_set_on(s, occurrence) -> str | None:
     if not revisions:
         return None
     keys = service.SCHEDULE_DECISION
-    current = {k: json.loads(revisions[0][1]).get(k) for k in keys}
+
+    def decision(snapshot):
+        values = json.loads(snapshot)
+        return {k: values.get(k, 'active' if k == 'status' else None) for k in keys}
+    current = decision(revisions[0][1])
     since = revisions[0][0]
     for created_at, snapshot in revisions:
-        if {k: json.loads(snapshot).get(k) for k in keys} != current:
+        if decision(snapshot) != current:
             break
         since = created_at
     return today(s.company_tz, at=parse_iso(since))
@@ -317,10 +323,11 @@ def window_history(s):
             if 'scheduler_catch_up_days' not in new or new['scheduler_catch_up_days'] == previous:
                 continue
             previous = new['scheduler_catch_up_days']
-            # Ordered by seq, the order the changes were made in; a change is never earlier than the one
-            # before it, whatever a skewed clock wrote in its `at`.
-            if changes and at < changes[-1][3]:
-                at = changes[-1][3]
+            # Ordered by seq, the order the changes were made in; a change's moment is never earlier than
+            # anything audited before it, whatever a skewed clock wrote in its `at`.
+            earlier = s.company.conn.execute(sa.select(sa.func.max(e.c.at)).where(e.c.seq < seq)).scalar_one_or_none()
+            if earlier and earlier > at:
+                at = earlier
             changes.append((actor_id, kind, DEFAULT_CATCH_UP_DAYS if previous is None else previous, at, previous, seq))
         current = s.company.conn.execute(sa.select(c.company_info.c.scheduler_catch_up_days)).scalar_one()
     except Exception:  # noqa: BLE001 - an unreadable trail fails closed
@@ -340,10 +347,6 @@ def _decide(s, changes, start, author):
     if not widenings:
         return None, None
     named = ', '.join(f'{_name(s, actor)} ({days} days)' for actor, _, days in widenings)
-    agents = sorted({_name(s, actor) for actor, kind, _ in widenings if kind == 'agent'})
-    if agents:
-        return (f"catch-up window widened by {named}; a widening by an agent ({', '.join(agents)}) always waits "
-                "for a person"), None
     if changes[-1][0] == author or all(actor == author for actor, _, _ in widenings):
         return None, f'catch-up window widened by {named}'
     return f'catch-up window widened by {named}, not by its author; waiting for a person to enter it', None
@@ -374,6 +377,29 @@ def _slot_window(s, occurrence, author, history, as_of):
             return _decide(s, changes, index, author)
         window = days
     return None, None
+
+
+def person_window(history):
+    """The window the scheduler reaches back with unattended, and what agents did to the stored one.
+
+    An agent's change to the catch-up window never extends unattended reach, whenever it was made: the
+    window used is the most recent one a person set (or the default year). Returns (days, person-only
+    history, [(agent, days)] for agent widenings past it since).
+    """
+    changes, trusted = history
+    person = [change for change in changes if change[1] != 'agent']
+    days = person[-1][2] if person else DEFAULT_CATCH_UP_DAYS
+    since = changes[changes.index(person[-1]) + 1:] if person else changes
+    agents = [(change[0], change[2]) for change in since if change[1] == 'agent' and change[2] > days]
+    return days, (person, trusted), agents
+
+
+def _agent_note(s, agents, days):
+    if not agents:
+        return ''
+    named = ', '.join(f'{_name(s, actor)} ({widened} days)' for actor, widened in agents)
+    return (f'; an agent widened the stored window ({named}), but an agent never lets the host reach further back '
+            f'than the {days} days a person set')
 
 
 def _mode(s, item):
@@ -417,17 +443,14 @@ def enter_due(s, system_id: str, as_of: str) -> dict[str, Any]:
     from bookflow.core.audit import write_event_to
     from bookflow.core.dispatch import _upsert_principals
     from bookflow.core.ids import new_id
-    info = s.company.conn.execute(sa.select(c.company_info.c.scheduler_catch_up_days)).mappings().one()
-    catch_up = info['scheduler_catch_up_days']
-    history = window_history(s)
-    if catch_up is None:
-        catch_up = DEFAULT_CATCH_UP_DAYS
+    catch_up, history, agents = person_window(window_history(s))
+    agent_note = _agent_note(s, agents, catch_up)
     cutoff = (date.fromisoformat(as_of) - timedelta(days=catch_up)).isoformat()
     summary = {'entered': 0, 'blocked': 0, 'waiting': 0, 'left_for_a_person': 0}
     _act_as(s, system_id)
     ctx = context().model_copy(update={'actor_id': system_id, 'actor_kind': ActorKind.system,
                                        'reason': f'On schedule: memorized transactions due by {as_of}'})
-    released, kept = _reconsider_window_holds(s, ctx, cutoff, as_of, history)
+    released, kept = _reconsider_window_holds(s, ctx, cutoff, as_of, history, agent_note)
     if kept:
         summary['held'] = kept
 
@@ -477,7 +500,8 @@ def enter_due(s, system_id: str, as_of: str) -> dict[str, Any]:
             elif (occurrence['status'] == 'pending' and (occurrence['template_id'], occurrence['slot_date']) in left
                   and occurrence['id'] not in held):
                 window.append({'occurrence': occurrence,
-                               'hold': f'older than the {catch_up}-day catch-up window; waiting for a person to enter it',
+                               'hold': f'older than the {catch_up}-day catch-up window{agent_note}; waiting for a person '
+                                       'to enter it',
                                'window': catch_up})
         _act_as(s, system_id)
         s.company.raw.execute('BEGIN IMMEDIATE')
@@ -525,7 +549,7 @@ def _write_holds(s, ctx, holds):
                    actor_id=s.actor.id, actor_kind=s.actor.kind, event_id=new_id())
 
 
-def _reconsider_window_holds(s, ctx, cutoff, as_of, history):
+def _reconsider_window_holds(s, ctx, cutoff, as_of, history, agent_note=''):
     """Slots left for a person under a narrower catch-up window that the current window now reaches.
 
     One enters unattended only if every widening since the window it was left under was its
@@ -537,10 +561,18 @@ def _reconsider_window_holds(s, ctx, cutoff, as_of, history):
     rows = s.company.conn.execute(
         sa.select(h, o.c.slot_date, t.c.current_revision_id).join(o, o.c.id == h.c.occurrence_id)
         .join(t, t.c.id == o.c.template_id)
-        .where(h.c.catch_up_window.isnot(None), o.c.status == 'pending', o.c.slot_date >= cutoff)).mappings().all()
+        .where(h.c.catch_up_window.isnot(None), o.c.status == 'pending')).mappings().all()
     released, kept, deletes, changes_touched = {}, 0, [], []
     changes, trusted = history
     for row in rows:
+        if row['slot_date'] < cutoff:
+            # Still beyond the window a person set: it stays held, saying so if an agent widened the stored one.
+            if agent_note:
+                kept += 1
+                reason = f"older than the {row['catch_up_window']}-day catch-up window{agent_note}; waiting for a person"[:400]
+                if reason != row['reason']:
+                    changes_touched.append((row, reason))
+            continue
         author, _ = author_of(s, row['current_revision_id'])
         # Changes made after the hold, in the order made (audit seq, never wall-clock time).
         held_at = s.company.conn.execute(sa.select(sa.func.max(c.audit_events.c.seq)).select_from(c.audit_entries)

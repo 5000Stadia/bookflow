@@ -107,6 +107,16 @@ def prepare_entry(s, ctx, inp, verb):
             _refuse_held_for_agents(s, waiting_held, verb)
         waiting = _existing(s, template['id'], slot)
         data['slot_state'] = {f"{template['id']}:{slot}": _slot_state(waiting)}
+        if waiting is not None and waiting['status'] == 'entered' and not inp.again:
+            # The slot for this date already posted: a second entry is a deliberate act, never a slip.
+            ref = waiting['document_number'] or waiting['transaction_id'] or waiting['id']
+            said = f"The {slot} slot of {template['name']} was already entered as {ref}."
+            if s.dry_run or inp.expected_facts_fingerprint is not None:
+                data['warnings'].append(said + ' Entering it posts a second entry.')
+            else:
+                raise BookflowError('E_VALIDATION', message=said + ' Pass again: true to enter it a second time.',
+                                    details={'fields': [{'field': 'again', 'problem': f'the {slot} slot was already entered as {ref}'}],
+                                             'occurrence': waiting['id']})
         if waiting is not None and waiting['status'] in ('pending', 'blocked'):
             # A scheduled slot already waits for this date: entering it by hand takes that slot, so one
             # slot can never post twice (once by hand, once from the waiting occurrence).

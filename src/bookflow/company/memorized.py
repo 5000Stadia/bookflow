@@ -163,7 +163,7 @@ def _capture(s, command_name, payload, *, warnings):
     return command, payload, index, reference_schema
 
 
-SCHEDULE_DECISION = ('mode', 'frequency', 'start_date', 'days_in_advance', 'stop_date', 'anchor_day')
+SCHEDULE_DECISION = ('mode', 'frequency', 'start_date', 'days_in_advance', 'stop_date', 'anchor_day', 'status')
 
 
 def past_slots_warning(s, fields, previous, warnings):
@@ -172,7 +172,9 @@ def past_slots_warning(s, fields, previous, warnings):
     The scheduler never enters unattended a slot dated before the moment its schedule was set or last
     changed (R111): such slots wait on Reminders for a person to enter or skip.
     """
-    if fields.get('mode') != 'enter_automatically' or fields.get('frequency', 'never') == 'never':
+    fields = dict(fields, status=fields.get('status') or (previous or {}).get('status') or 'active')
+    if (fields.get('mode') != 'enter_automatically' or fields.get('frequency', 'never') == 'never'
+            or fields['status'] != 'active'):
         return
     if previous and all(previous.get(k) == fields.get(k) for k in SCHEDULE_DECISION):
         return
@@ -262,9 +264,9 @@ def prepare(s, ctx, inp, verb):
                                                 c.memorized_references.c.revision_id == revision['id'])]
             reference_schema = revision['reference_schema']
         fields = _schedule_fields(inp, row, warnings=warnings)
-        past_slots_warning(s, fields, row, warnings)
         if inp.status:
             fields['status'] = inp.status
+        past_slots_warning(s, fields, row, warnings)
         if 'group' in inp.model_fields_set:
             # `--clear group` names the field with no value, which is how a template leaves
             # its group; naming no field at all leaves it where it is.
@@ -385,7 +387,8 @@ def apply_write(plan, ctx, s):
         previous_revision_id=before['current_revision_id'] if before else None,
         command=row['command'], payload=edges.canonical(data['payload']),
         payload_hash=edges.digest(data['payload']),
-        schedule_snapshot=edges.canonical({k: fields[k] for k in sorted(fields)}),
+        # The status in force is part of the schedule decision: a resume is a schedule set anew (R111).
+        schedule_snapshot=edges.canonical({**{k: fields[k] for k in sorted(fields)}, 'status': row['status']}),
         reference_schema=data['reference_schema'], **_created(s, ctx, at), audit_event_id=event)
 
     touched.append(Touched('memorized_transaction', row['id'], 'create' if before is None else 'update',
@@ -448,9 +451,9 @@ def prepare_group(s, ctx, inp, verb):
                                            c.memorized_groups.c.status != 'deleted'):
             raise BookflowError('E_NAME_TAKEN', details={'name': display})
         fields = _schedule_fields(inp, row, warnings=warnings)
-        past_slots_warning(s, fields, row, warnings)
         if inp.status:
             fields['status'] = inp.status
+        past_slots_warning(s, fields, row, warnings)
         members = _members(s, row['id'])
         if fields['frequency'] != 'never' and any(m['frequency'] != 'never' for m in members):
             raise BookflowError('E_VALIDATION', details={'fields': [{'field': 'frequency', 'problem':
