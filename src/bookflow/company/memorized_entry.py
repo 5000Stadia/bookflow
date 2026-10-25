@@ -114,9 +114,11 @@ def prepare_entry(s, ctx, inp, verb):
             if s.dry_run:
                 data['warnings'].append(said + ' Saving needs again: true ("Enter it again"); it then posts a second entry.')
             else:
-                raise BookflowError('E_VALIDATION', message=said + ' Pass again: true to enter it a second time.',
-                                    details={'fields': [{'field': 'again', 'problem': f'the {slot} slot was already entered as {ref}'}],
-                                             'occurrence': waiting['id']})
+                # Raised after the fingerprint is checked: a slot posted since the preview is a stale preview first.
+                data['refuse'] = BookflowError(
+                    'E_VALIDATION', message=said + ' Pass again: true to enter it a second time.',
+                    details={'fields': [{'field': 'again', 'problem': f'the {slot} slot was already entered as {ref}'}],
+                             'occurrence': waiting['id']})
         if waiting is not None and waiting['status'] in ('pending', 'blocked'):
             # A scheduled slot already waits for this date: entering it by hand takes that slot, so one
             # slot can never post twice (once by hand, once from the waiting occurrence).
@@ -184,6 +186,8 @@ def prepare_entry(s, ctx, inp, verb):
             hint = (f"The {taken['slot_date']} slot of {plan_rows[0]['template']['name']} has been entered since the "
                     "preview (the scheduler or someone else entered it); entering it again would post it twice.")
     _check_fingerprint(inp, preview.facts_fingerprint, hint)
+    if data.get('refuse') is not None:
+        raise data.pop('refuse')
     preview.warnings = list(data['warnings'])
     return Plan(preview, data)
 
