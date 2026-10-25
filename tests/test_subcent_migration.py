@@ -89,7 +89,7 @@ def test_whole_cent_books_read_byte_identical_after_the_upgrade(books):  # noqa:
                    for t, n in M.FRACTIONS), 'a whole-cent price stores no fraction'
         for table, name in M.FRACTIONS:  # what the base revision's database is
             raw.execute(f'ALTER TABLE {table} DROP COLUMN {name}')
-        raw.execute("UPDATE alembic_version SET version_num = 'co0084'")
+        raw.execute('UPDATE alembic_version SET version_num = ?', (M.down_revision,))
     assert client.run('upgrade', {})['companies_migrated'] == [co]
     assert _shown(run, docs) == shown
     assert _rows(path) == rows
