@@ -377,6 +377,8 @@ def prepare(s, ctx, inp, kind, destination):
     data.update(kind=kind, destination=destination, billing_allocations=allocations,
         billing_conversion=conversion, work_header=current, work_before=source, work_pending=pending_work)
     sale.preview.revision.billing_sources = query.sale_source_output(s, rev['id'], allocations)
+    from bookflow.company.sales_orders import attach_invoice_orders
+    attach_invoice_orders(s, sale.preview.revision)
     sale.preview.source_effect = source_effect(source, source_rev, pending_work['work_revisions'][0], source['version'])
     sale.preview.source_current = source_current(current)
     if kind == 'sales_order':

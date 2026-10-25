@@ -26,6 +26,10 @@ def context(result, company_id, source=None):
     quoted = {line['line_id']: line for line in (source or {}).get('revision', {}).get('lines', [])}
     for line in out['lines']:
         line['quoted_rate'] = (quoted.get(line['line_id'], {}).get('unit_price') or {}).get('amount')
+        # A sales order's dialog shows each line's ordered, invoiced and backordered quantities and its
+        # item's stock (on hand, or available with the switch), as the order's own show reads them.
+        line['order'] = quoted.get(line['line_id'], {}).get('order')
+        line['stock'] = quoted.get(line['line_id'], {}).get('stock')
     for row in [out, *out['lines']]:
         for key, value in list(row.items()):
             if key.endswith('_minor_units'):

@@ -975,6 +975,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].created_by` | string | yes | no | — | — |
 | `revision.lines[].created_via` | string | yes | no | — | — |
 | `revision.lines[].tax_ordinal` | integer \| null | no | yes | null | — |
+| `revision.lines[].order` | object \| null | no | yes | null | Present on a line made from a sales order (sales-order invoice): the order, its ordered quantity, what earlier invoices billed and what stayed backordered. Absent on every other line. |
+| `revision.lines[].order.sales_order_id` | string | yes | no | — | — |
+| `revision.lines[].order.sales_order_number` | string | yes | no | — | The order the line was billed from. |
+| `revision.lines[].order.ordered` | string | yes | no | — | The order line's quantity, as the order stands now. |
+| `revision.lines[].order.previously_invoiced` | string | yes | no | — | What active invoices posted before this one billed of the order line. |
+| `revision.lines[].order.backordered` | string | yes | no | — | What was still open on the order line after this sale: ordered less cancelled, previously invoiced and this line's quantity; never below 0. |
 | `revision.lines[].line_kind` | literal["item", "subtotal", "discount", "charge"] \| null | no | yes | null | Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced. Absent on every other line, which is an ordinary item line. |
 | `revision.lines[].amount` | object \| null | no | yes | null | The amount the line shows, when it differs from net: a subtotal's sum, a discount's negative amount, or a sold line's amount before the discounts taken out of its net. |
 | `revision.lines[].amount.amount` | string | yes | no | — | — |
@@ -2593,6 +2599,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].created_by` | string | yes | no | — | — |
 | `revision.lines[].created_via` | string | yes | no | — | — |
 | `revision.lines[].tax_ordinal` | integer \| null | no | yes | null | — |
+| `revision.lines[].order` | object \| null | no | yes | null | Present on a line made from a sales order (sales-order invoice): the order, its ordered quantity, what earlier invoices billed and what stayed backordered. Absent on every other line. |
+| `revision.lines[].order.sales_order_id` | string | yes | no | — | — |
+| `revision.lines[].order.sales_order_number` | string | yes | no | — | The order the line was billed from. |
+| `revision.lines[].order.ordered` | string | yes | no | — | The order line's quantity, as the order stands now. |
+| `revision.lines[].order.previously_invoiced` | string | yes | no | — | What active invoices posted before this one billed of the order line. |
+| `revision.lines[].order.backordered` | string | yes | no | — | What was still open on the order line after this sale: ordered less cancelled, previously invoiced and this line's quantity; never below 0. |
 | `revision.lines[].line_kind` | literal["item", "subtotal", "discount", "charge"] \| null | no | yes | null | Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced. Absent on every other line, which is an ordinary item line. |
 | `revision.lines[].amount` | object \| null | no | yes | null | The amount the line shows, when it differs from net: a subtotal's sum, a discount's negative amount, or a sold line's amount before the discounts taken out of its net. |
 | `revision.lines[].amount.amount` | string | yes | no | — | — |

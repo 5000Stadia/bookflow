@@ -32,8 +32,22 @@ class TaxComponentOutput(CreatedOutput):
     component_snapshot: SalesTaxComponent
 
 
+class SaleLineOrder(StrictModel):
+    """A sale line made from a sales order: where that order line stood, as the anchor's invoice prints it."""
+    sales_order_id: str
+    sales_order_number: str = Field(description="The order the line was billed from.")
+    ordered: str = Field(description="The order line's quantity, as the order stands now.")
+    previously_invoiced: str = Field(description="What active invoices posted before this one billed of the order line.")
+    backordered: str = Field(description=(
+        "What was still open on the order line after this sale: ordered less cancelled, previously invoiced and "
+        "this line's quantity; never below 0."))
+
+
 class SalesLineOutput(CreatedOutput):
     tax_ordinal: int | None = None
+    order: SaleLineOrder | None = Field(default=None, description=(
+        "Present on a line made from a sales order (sales-order invoice): the order, its ordered quantity, what "
+        "earlier invoices billed and what stayed backordered. Absent on every other line."))
     line_kind: Literal["item", "subtotal", "discount", "charge"] | None = Field(default=None, description=(
         "Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced. "
         "Absent on every other line, which is an ordinary item line."))
@@ -44,7 +58,7 @@ class SalesLineOutput(CreatedOutput):
     @model_serializer(mode='wrap')
     def preserve_legacy_tax_order(self, handler):
         result = handler(self)
-        for key in ('tax_ordinal', 'line_kind', 'amount'):
+        for key in ('tax_ordinal', 'line_kind', 'amount', 'order'):
             if getattr(self, key) is None:
                 result.pop(key, None)
         return result
