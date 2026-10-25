@@ -15,5 +15,6 @@ Database: `company`.
 | `item_id` | VARCHAR(26) | no | — | — | ix_price_level_items_item_id, ux_price_level_items_item | items.id | Item receiving this per-item adjustment. |
 | `price_minor_units` | BIGINT | yes | — | — | — | — | Per-item fixed price as signed integer minor units; null with its currency. |
 | `price_currency` | VARCHAR(3) | yes | — | — | — | — | ISO 4217 currency for per-item fixed price; null with its amount. |
+| `price_fraction` | BIGINT | yes | — | — | — | — | Per-item fixed price beyond its rounded minor units, in signed thousandths of a minor unit (price = price_minor_units + fraction/1000); null when the price is whole minor units. |
 | `percent_millionths` | BIGINT | yes | — | — | — | — | Per-item signed adjustment percent in millionths of one percentage point; null for fixed price. |
 | `adjustment_basis` | VARCHAR(20) | no | — | — | — | — | Adjustment basis: standard_price, cost, or current_custom_price. |

@@ -1,6 +1,7 @@
 """Non-posting customer work identities and immutable commercial history."""
 
 import sqlalchemy as sa
+from bookflow.company.unit_price_schema import fraction_column
 
 
 def define_tables(metadata, column, table, common):
@@ -119,7 +120,9 @@ def define_tables(metadata, column, table, common):
         integer('unit_factor_nanounits', 'Captured base units per selected unit in billionths.'),
         integer('base_quantity_microunits', 'Rounded base quantity in millionths.'),
         integer('unit_price_minor_units', 'Captured unit price; null in amount mode.', True), *totals(),
+        fraction_column('unit_price', 'Unit price'),
         integer('estimated_unit_cost_minor_units', 'Estimated selected-unit cost; null when unknown.', True),
+        fraction_column('estimated_unit_cost', 'Estimated unit cost'),
         integer('estimated_cost_minor_units', 'Extended estimated cost; null when unknown.', True),
         text('pricing_basis', 'Authoritative catalog, manual, markup or amount price mode.', 16),
         integer('markup_percent_millionths', 'Signed markup percentage in millionths.', True),

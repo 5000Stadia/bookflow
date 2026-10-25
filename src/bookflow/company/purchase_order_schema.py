@@ -30,6 +30,7 @@ than a status somebody could edit around.
 """
 
 import sqlalchemy as sa
+from bookflow.company.unit_price_schema import fraction_column
 
 STATES = ('open', 'partly_received', 'closed', 'voided')
 
@@ -144,6 +145,7 @@ def define_tables(metadata, column, table, common):
         text('description', 'Entered line description; null when blank.', 2000, True),
         integer('quantity_microunits', 'Ordered quantity in millionths; null when the line is an amount alone.', True),
         integer('rate_minor_units', 'Home-currency unit cost; null when the line is an amount alone.', True),
+        fraction_column('rate', 'Unit cost'),
         integer('amount_minor_units', 'Positive home-currency amount ordered on this line.'),
         ident('customer_id', 'Customer or job this cost is attributed to; null when unattributed.',
               'customers.id', nullable=True),

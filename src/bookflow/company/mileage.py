@@ -326,7 +326,7 @@ def billing_state(s, document_id: str | None) -> dict[str, Any]:
     a = c.work_billing_allocations
     sales = sorted({r[0] for r in s.company.conn.execute(alloc.active_query([root]).with_only_columns(a.c.transaction_id))})
     return dict(status='not_billable' if state == 'nonbillable' else state, net=facts.net_minor_units, sales=sales,
-                unit_price=facts.unit_price_minor_units, header=header, line_id=row['line_id'])
+                unit_price=facts.price_units, header=header, line_id=row['line_id'])  # R150: price units
 
 
 def trip_output(s, row, *, cls=TripOutput, table=None, **extra) -> TripOutput:
@@ -905,7 +905,8 @@ def mileage_by_job(s, inp) -> MileageReportOutput:
             g['billable'] += trip['miles_microunits']
             g['amount'] += amount or 0
         if inp.detail:
-            rate = Money(state['unit_price'], currency).amount if state.get('unit_price') is not None else None
+            from bookflow.core import unit_price
+            rate = unit_price.text(state['unit_price'], currency) if state.get('unit_price') is not None else None
             g['detail'].append(_detail_row(s, trip, names, currency, rate=rate, amount=amount, status=state['status']))
     rows = [MileageGroupRow(key=key, name=names['customers'].get(key, ''), trips=g['trips'], miles=miles_text(g['miles']),
                             billable_miles=miles_text(g['billable']), amount=money(g['amount'], currency), detail=g['detail'])

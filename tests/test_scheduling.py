@@ -288,6 +288,7 @@ def test_G_waiting_reminders_never_starve_automatic_entries(books):
 
 
 def test_H_a_group_backlog_past_the_batch_limit_loses_no_members_slot(books):
+    books.clock.set('2025-12-31')                   # scheduled the day before its first slot
     books.run('memorized-group create', {'name': 'Daily three', 'frequency': 'daily', 'start_date': '2026-01-01',
                                          'mode': 'enter_automatically'}, reason='Create the group')
     for ordinal in (1, 2, 3):

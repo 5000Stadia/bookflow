@@ -158,6 +158,7 @@ def test_O_reminders_show_remind_groups_drop_deleted_slots_and_list_automatic_on
 
 
 def test_N_a_catch_up_tick_takes_a_small_batch_and_lets_others_write(books):
+    books.clock.set('2025-12-31')                   # scheduled the day before its first slot
     import time
     books.run('memorized create', {'name': 'Daily sales', 'command': 'bill post',
                                    'payload': rent_payload(account='Tool Hire', vendor='Tool Depot', amount='3.00'),

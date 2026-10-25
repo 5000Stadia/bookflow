@@ -89,6 +89,8 @@ class PriceRule(Reference):
     offset_minor_units: int = Field(ge=-INT64_MAX-1, le=INT64_MAX)
     percent_millionths: int | None = None
     fixed_minor_units: int | None = None
+    # R150: a fixed price's thousandths of a minor unit beyond fixed_minor_units; absent when whole.
+    fixed_fraction: int | None = Field(default=None, ge=-500, le=500, exclude_if=lambda v: v is None)
     adjustment_basis: Literal["standard_price", "cost", "current_custom_price"] = "standard_price"
     matched: bool = True
 
@@ -104,6 +106,9 @@ class AppliedPriceRule(Reference):
     rounding: Literal["cent", "x.99", "x.95", "dollar"]
     value: int = Field(ge=0, le=INT64_MAX)
     base_minor_units: int = Field(ge=0, le=INT64_MAX)
+    # R150: a sub-minor basis price's remainder in thousandths of a minor unit; absent when whole.
+    # A rule's price is always whole minor units, since every rounding it offers is a cent or more.
+    base_fraction: int | None = Field(default=None, ge=-500, le=500, exclude_if=lambda v: v is None)
     price_minor_units: int = Field(ge=0, le=INT64_MAX)
     conflict_policy: Literal["lowest_price", "priority"]
     summary: str = Field(max_length=2000)
@@ -301,6 +306,10 @@ class SalesLineProfile(StrictModel):
     standard_price_minor_units: int | None = None
     cost_minor_units: int | None = None
     price_basis_minor_units: int | None = None
+    # R150: each price's thousandths of a minor unit beyond its rounded minor units; absent when whole.
+    standard_price_fraction: int | None = Field(default=None, ge=-500, le=500, exclude_if=lambda v: v is None)
+    cost_fraction: int | None = Field(default=None, ge=-500, le=500, exclude_if=lambda v: v is None)
+    price_basis_fraction: int | None = Field(default=None, ge=-500, le=500, exclude_if=lambda v: v is None)
     origins: dict[str, Origin] = Field(default_factory=dict)
 
     pricing_basis: Literal["unit", "amount", "allocated"] = "unit"
@@ -308,6 +317,17 @@ class SalesLineProfile(StrictModel):
     allocation_proof: AllocationProof | TaxAllocationProof | None = None
     adjustment: LineAdjustment | None = None
     group: LineGroup | None = None
+
+    def units(self, prefix: str) -> int | None:
+        """R150: the exact price ``prefix`` (standard_price, cost, price_basis) in price units."""
+        from bookflow.core import unit_price
+        return unit_price.join(getattr(self, prefix + '_minor_units'), getattr(self, prefix + '_fraction'))
+
+    def set_units(self, prefix: str, price_units: int | None) -> None:
+        from bookflow.core import unit_price
+        minor, fraction = unit_price.split(price_units)
+        setattr(self, prefix + '_minor_units', minor)
+        setattr(self, prefix + '_fraction', fraction)
 
     @model_validator(mode="before")
     @classmethod

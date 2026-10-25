@@ -31,6 +31,7 @@ bounds which orders by their own date.
 """
 from __future__ import annotations
 
+from bookflow.core import unit_price
 from bookflow.company.party_merges import survivor_sql
 from typing import Literal
 
@@ -283,7 +284,8 @@ def purchases_by_item(inp: PurchasesByItemInput, s, *, principal_id=None) -> Pur
             amount = money(int(row["amount"]), currency)
             quantity = int(row["quantity"])
             text, coefficient = _percent(amount.minor_units, grand)
-            average = (money(round_ratio_half_even(amount.minor_units * QUANTITY_SCALE, quantity), currency)
+            # R150: an average unit cost, shown to the price scale.
+            average = (MoneyOutput(**unit_price.to_dict(unit_price.average(amount.minor_units, quantity), currency))
                        if quantity else None)
             rows.append(PurchasesByItemRow(item_id=row["item_id"], current_item_label=row["full_name"],
                 current_item_name=row["name"],

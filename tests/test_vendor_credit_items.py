@@ -138,7 +138,7 @@ def test_the_july_return_is_one_document_that_takes_the_items_out_at_the_credite
 
     # 22 on hand worth 911.85: the key's July figure, not 914.06, and the average moved from
     # 1080.25 / 26 = 41.55 to 911.85 / 22 = 41.45 because the credit was at 42.10.
-    assert _stock(books) == ('22', AFTER_CREDIT, '41.45')
+    assert _stock(books) == ('22', AFTER_CREDIT, '41.44773')  # R150: an average shows to five places
     assert _stock(books)[1] != AT_AVERAGE
 
     # Inventory Asset: 741.24 + 505.20 - 166.19 - 168.40 = 911.85, the same figure the stock
@@ -277,7 +277,7 @@ def test_the_next_sale_costs_at_the_average_the_return_left_behind(books):
     # 22 on hand worth 911.85: two more out of it take 2 x 911.85 / 22 = 82.8954, which is 82.90.
     books['run']('inventory adjust', dict(item=books['breaker'], date='2026-08-02', quantity_change='-2',
                                           adjustment_account=books['shrink'], memo='Sold'))
-    assert _stock(books) == ('20', '828.95', '41.45')
+    assert _stock(books) == ('20', '828.95', '41.4475')  # R150: an average shows to five places
 
 
 def test_a_return_dated_before_a_sale_recosts_the_sale_at_its_own_date(books):
@@ -350,6 +350,6 @@ def test_correcting_the_expenses_tab_keeps_the_items_tab_and_the_stock(books):
         expenses=[{'account': books['freight'], 'amount': '15.00'}]), reason='Freight was 15')
     assert corrected['total']['amount'] == '183.40'
     assert corrected['revision']['items'][0]['quantity'] == '4'
-    assert _stock(books) == ('22', AFTER_CREDIT, '41.45')
+    assert _stock(books) == ('22', AFTER_CREDIT, '41.44773')  # R150: an average shows to five places
     history = books['run']('vendor-credit history', {'credit': credit['id']})
     assert history['count'] == 2 and history['items'][1]['item_total']['amount'] == CREDIT

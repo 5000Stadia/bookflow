@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlalchemy as sa
+from bookflow.company.unit_price_schema import fraction_column
 
 metadata = sa.MetaData()
 
@@ -740,7 +741,9 @@ items = _table(
     _column("sales_enabled", sa.Boolean, "Whether the sales profile is enabled.", nullable=False, default=False),
     _column("purchase_enabled", sa.Boolean, "Whether the purchase profile is enabled.", nullable=False, default=False),
     *_money("price", "Standard sales price"),
+    fraction_column("price", "Standard sales price"),
     *_money("cost", "Standard purchase cost"),
+    fraction_column("cost", "Standard purchase cost"),
     _column("income_account_id", sa.String(26), "Active income account id; null when the type does not use one.", sa.ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=True),
     _column("expense_account_id", sa.String(26), "Active expense account id; null when the type does not use one.", sa.ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=True),
     _column("cogs_account_id", sa.String(26), "Active cost-of-goods-sold account id; null when the type does not use one.", sa.ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=True),
@@ -830,6 +833,7 @@ item_vendor_profiles = _table(
     _column("preferred_rank", sa.Integer, "Positive preference rank; rank one is the derived preferred vendor.", nullable=False),
     _column("vendor_item_name", sa.String(200), "Vendor-specific item name; null when not recorded.", nullable=True),
     *_money("purchase_cost", "Vendor purchase cost"),
+    fraction_column("purchase_cost", "Vendor purchase cost"),
     _column("minimum_quantity_microunits", sa.BigInteger, "Nonnegative vendor minimum quantity in micro-units; null when unset.", nullable=True),
     _column("lead_time_days", sa.Integer, "Nonnegative vendor lead time in days; null when unset.", nullable=True),
     _column("manufacturer_part_number", sa.String(128), "Vendor-specific manufacturer part number; null when unset.", nullable=True),
@@ -872,6 +876,7 @@ price_level_items = _table(
     *_owned_child("price_level_id", "price_levels"),
     _column("item_id", sa.String(26), "Item receiving this per-item adjustment.", sa.ForeignKey("items.id", ondelete="RESTRICT"), nullable=False),
     *_money("price", "Per-item fixed price"),
+    fraction_column("price", "Per-item fixed price"),
     _column("percent_millionths", sa.BigInteger, "Per-item signed adjustment percent in millionths of one percentage point; null for fixed price.", nullable=True),
     _column("adjustment_basis", sa.String(20), "Adjustment basis: standard_price, cost, or current_custom_price.", nullable=False),
     _money_pair_check("price"),

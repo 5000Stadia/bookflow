@@ -33,6 +33,7 @@ from typing import Any
 
 import sqlalchemy as sa
 
+from bookflow.core import unit_price
 from bookflow.company import cutover_sources as src
 from bookflow.company import schema as c
 from bookflow.company.cutover_models import (
@@ -906,10 +907,28 @@ def _look_alikes(built: Built, kind: str, names: list[str], table: list[dict], n
                  f"{len(pairs) - MAX_LOOKALIKES} more pairs of {kind}s look alike; only the first {MAX_LOOKALIKES} are listed")
 
 
-def _money_text(built: Built, row: src.ListRow, column: str) -> str | None:
+def _price_text(built: Built, units: int) -> str:
+    """R150: a unit price or cost in price units (three places past the minor unit), trimmed."""
+    places = built.books.places
+    total = places + unit_price.EXTRA_PLACES
+    whole, fraction = divmod(abs(units), 10 ** total)
+    digits = f"{fraction:0{total}d}"
+    digits = digits[:max(places, len(digits.rstrip("0")))]
+    return f"{whole}.{digits}" if digits else str(whole)
+
+
+def _money_text(built: Built, row: src.ListRow, column: str, *, price: bool = False) -> str | None:
+    """An amount column as decimal text; ``price`` reads a unit price or cost to three more places (R150)."""
     value = row.get(column)
     if not value:
         return None
+    if price:
+        try:
+            units = src.parse_amount(value, built.books.places + unit_price.EXTRA_PLACES)
+        except ValueError:
+            units = None
+        if units is not None:
+            return _price_text(built, units) if units > 0 else None
     try:
         minor = src.parse_amount(value, built.books.places)
     except ValueError:
@@ -1155,14 +1174,24 @@ def _source_money(built: Built, text: str) -> int | None:
         return None
 
 
+def _source_price(built: Built, text: str) -> int | None:
+    """R150: a price or cost column in price units, or None when blank, a percent or unreadable."""
+    if not text or text.strip().endswith("%"):
+        return None
+    try:
+        return src.parse_amount(text, built.books.places + unit_price.EXTRA_PLACES)
+    except ValueError:
+        return None
+
+
 def _item_differences(built: Built, row: src.ListRow, record: dict[str, Any]) -> list[str]:
     """Price and cost where an item here says something other than the old books' item."""
     found = []
     for column, field_, word in (("PRICE", "price_minor_units", "price"), ("COST", "cost_minor_units", "cost")):
-        wanted = _source_money(built, row.get(column))
-        mine = record.get(field_)
+        wanted = _source_price(built, row.get(column))
+        mine = unit_price.row_units(record, word)
         if wanted is not None and (wanted or None) != (mine or None):
-            found.append(f"{word} {_show(built, mine or 0)} here, {_show(built, wanted)} in the old books")
+            found.append(f"{word} {_price_text(built, mine or 0)} here, {_price_text(built, wanted)} in the old books")
     return found
 
 
@@ -1234,7 +1263,7 @@ def _item_payload(built: Built, row: src.ListRow, kind: str) -> dict | None:
             if minor:
                 payload["discount_amount"] = _amount_text(built, minor)
         return payload
-    price = _money_text(built, row, "PRICE") or _amount_text(built, 0)
+    price = _money_text(built, row, "PRICE", price=True) or _amount_text(built, 0)
     if row.get("PRICE").endswith("%"):
         if kind == "other_charge" and _percent(row.get("PRICE")):
             payload["charge_percent"] = _percent(row.get("PRICE"))
@@ -1247,7 +1276,7 @@ def _item_payload(built: Built, row: src.ListRow, kind: str) -> dict | None:
         payload["price"] = price
     if code:
         payload["sales_tax_code_id"] = code
-    cost = _money_text(built, row, "COST")
+    cost = _money_text(built, row, "COST", price=True)
     vendor = _party_for(built, "vendor", row.get("PREFVEND")) if row.get("PREFVEND") else None
     if kind == "inventory_part":
         cogs = _item_account(built, row, "COGSACCNT", {"cost_of_goods_sold"}, "cost of goods sold account")
@@ -2966,9 +2995,11 @@ def _lists_section(built: Built) -> CutoverListSection:
         if kind and kind != record["type"]:
             add("item", row.path, record, "type", kind, record["type"])
         for column, field_, word in (("PRICE", "price_minor_units", "price"), ("COST", "cost_minor_units", "cost")):
-            wanted = _source_money(built, row.get(column))
-            if wanted is not None and (wanted or None) != (record.get(field_) or None):
-                add("item", row.path, record, word, amount(wanted) or "0.00", amount(record.get(field_)))
+            wanted = _source_price(built, row.get(column))
+            mine = unit_price.row_units(record, word)
+            if wanted is not None and (wanted or None) != (mine or None):
+                add("item", row.path, record, word, _price_text(built, wanted) if wanted else "0.00",
+                    _price_text(built, mine) if mine else None)
     for outside_id, target in built.targets.items():
         if not outside_id.startswith("term:") or not target.get("settings") or not target["id"]:
             continue

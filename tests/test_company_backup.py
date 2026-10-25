@@ -178,7 +178,11 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0079 = importlib.import_module("bookflow.storage.company_migrations.versions.0079_assembly_builds")
     co0083 = importlib.import_module("bookflow.storage.company_migrations.versions.0083_mileage")
 
+    co0091 = importlib.import_module("bookflow.storage.company_migrations.versions.0091_subcent_unit_prices")
+
     def older(conn):
+        for table, column in co0091.FRACTIONS:
+            conn.execute(f"ALTER TABLE {table} DROP COLUMN {column}")  # co0091's sub-cent fractions
         for table in ("check_print_outcomes", "check_spoiled_numbers", "check_print_run_items", "check_print_runs",
                       "check_print_marks", "check_print_settings"):
             conn.execute(f"DROP TABLE {table}")  # co0092's six tables, with their indexes and guards

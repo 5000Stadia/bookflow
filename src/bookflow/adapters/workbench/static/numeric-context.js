@@ -49,7 +49,9 @@
       const currency = (override && !override.matches(':disabled') && override.value.trim()) || base;
       let currencies;
       try { currencies = JSON.parse(document.getElementById('math-currencies')?.textContent || '{}'); } catch (_) { currencies = {}; }
-      const scale = Object.hasOwn(currencies, currency) ? currencies[currency] : null;
+      // A unit price or cost (R150) carries extra places beyond the currency's minor unit.
+      const extra = Number(input.dataset.mathExtraPlaces || 0);
+      const scale = Object.hasOwn(currencies, currency) ? currencies[currency] + extra : null;
       return {scale, currency, mode};
     }
     const value = input.dataset.mathScale;

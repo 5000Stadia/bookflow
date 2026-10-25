@@ -364,9 +364,12 @@ def _slot_window(s, occurrence, author, history, as_of):
             return ("the catch-up window's history could not be confirmed from the audit trail; "
                     "waiting for a person to enter it"), None
         return None, None
+    from bookflow.company.memorized_schedule import today
+    from bookflow.core.clock import parse_iso
     window = DEFAULT_CATCH_UP_DAYS
     for index, (actor_id, kind, days, at, *_) in enumerate(changes):
-        moment = min(date.fromisoformat(at[:10]), date.fromisoformat(as_of))   # `at` is already monotonic
+        # The company-local day of the change (as the tick's own date is), never later than the tick's.
+        moment = min(date.fromisoformat(today(s.company_tz, at=parse_iso(at))), date.fromisoformat(as_of))
         if (moment - due).days > window:
             return _decide(s, changes, index, author)
         window = days

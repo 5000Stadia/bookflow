@@ -329,6 +329,8 @@ class VendorCreditItemOutput(CreatedOutput):
     quantity_microunits: int
     unit_cost: MoneyOutput | None
     unit_cost_minor_units: int | None
+    # R150: thousandths of a minor unit beyond unit_cost_minor_units; absent when whole.
+    unit_cost_fraction: int | None = Field(default=None, exclude_if=lambda v: v is None)
     amount: MoneyOutput
     amount_minor_units: int
     currency: str
