@@ -68,8 +68,9 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # export/status/cancel/changes/preview/import, report accountant-review and accountant-changes.
     # +9 check printing (R152): check print-queue, print, print-confirm, print-cancel, reprint, print-run, print-pdf,
     # print-setup and print-alignment.
+    # +2 barcodes (R104 increment 3): barcode lookup and barcode generate.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
-    assert len(rows) == 686
+    assert len(rows) == 688
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -314,10 +315,12 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 3557 -> 3574 (R152, check printing), measured: +17 from the nine check print commands' optional fields
     # (account, first_number, style, checks, failed_from, failed, new_number, offsets, expected_version null branches)
     # and to_be_printed on check post, check update and bill pay. No new variant kind.
-    # 3574 -> 3609 (R111): the eleven todo, notice and reminders commands' optional inputs, company update's five
-    # scheduler and overdue notice preferences, and the optional expected_facts_fingerprint on memorized process, retry,
-    # skip, enter and memorized-group enter, their null branches. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==3609
+    # 3574 -> 3576 (R104 increment 3, barcodes), measured: barcode lookup's optional as_of and barcode
+    # generate's optional items -- their null branches. No existing command moved. No new variant kind.
+    # 3576 -> 3612 (R111): the eleven todo, notice and reminders commands' optional inputs, company update's five
+    # scheduler and overdue notice preferences, the optional expected_facts_fingerprint on memorized process, retry,
+    # skip, enter and memorized-group enter, and memorized enter's again, their null branches. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==3612
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

@@ -22,6 +22,6 @@ Database: `company`.
 | `full_name` | VARCHAR(700) | no | — | — | — | — | Colon-joined path such as A:3:Top. |
 | `full_name_key` | VARCHAR(1400) | no | — | unique with site_id + full_name_key | — | — | Case-folded full name; unique per site. |
 | `depth` | INTEGER | no | — | — | — | — | Level of the bin, 1 to 3 (pallet, row, section). |
-| `barcode` | VARCHAR(128) | yes | — | — | — | — | Scannable label code; null when none. |
+| `barcode` | VARCHAR(128) | yes | — | — | ix_inventory_bins_barcode | — | Scannable label code; null when none. |
 | `description` | VARCHAR(1000) | yes | — | — | — | — | Description as entered; null when blank. |
 | `active` | BOOLEAN | no | — | — | — | — | Whether new stock lines may name this bin. |

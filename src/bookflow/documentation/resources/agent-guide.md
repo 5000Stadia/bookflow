@@ -1068,6 +1068,16 @@ owner set up) has sent it, `notice mark-sent NOTICE --method email`; if the owne
 `notice dismiss NOTICE --note "why"`. A dismissed notice is not prepared again until the next
 notice period.
 
+## A scanned barcode
+
+Pass a scanned code as `item`: every `item` field resolves an id, then a name, then a barcode, so
+`{"item": "0012345678905", "quantity": "2"}` on an invoice line bills the item carrying that code, with
+no other syntax. A code two active items share is refused naming both; name the item instead. For
+anything else about a code (what it is, where it is, which line fields to use) call `barcode lookup
+--code`; an unknown code is not an error, and the answer says how to assign it (`item update <item>
+--barcode <code>`). `barcode generate` gives items without a code an EAN-13 of the company's own
+(prefix 2); existing codes never change, and a code already on another active item is refused.
+
 ## Stock sent back to a vendor
 
 Enter it as one `vendor-credit post` with `items`: one row per thing sent back, each with

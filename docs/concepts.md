@@ -443,3 +443,10 @@ entry if a template changed in between. It is a consistency check -- a guard aga
 preview -- not proof that anyone looked at a preview: it is computed from which revisions will
 post, so anyone can compute it. Entries the scheduler held for a person are entered or skipped
 only by a person, and a preview names each one and why it was held.
+
+An automatic template saved today never enters unattended a slot dated today or earlier -- not even
+its first slot when that is today: the scheduler leaves it for a person, and the save warns how many
+wait. The anchor would enter it; Bookflow deliberately does not, for safety (a template deleted and
+made again, or one given a past start, must never post history by itself). A pause and resume counts
+as the schedule being set again. An agent's change to the catch-up window never lets the host reach
+further back than the window a person set.

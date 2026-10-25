@@ -2327,6 +2327,11 @@ MATRIX['check print-pdf'] = {'E_RECORD_NOT_FOUND': 'unknown run'}
 MATRIX['check print-setup'] = {'E_RECORD_NOT_FOUND': 'unknown account', 'E_VALIDATION': 'not a bank account, or an offset beyond 2 inches',
                                'E_VERSION_CONFLICT': 'stale expected_version'} | _PRINT_TAIL
 MATRIX['check print-alignment'] = {'E_RECORD_NOT_FOUND': 'unknown account', 'E_VALIDATION': 'not a bank account, or a partial voucher sheet'}
+# Barcodes (R104 increment 3): what a code names, and numbering items that have none.
+MATRIX['barcode lookup'] = {'E_VALIDATION': 'no code, or as_of is not a date'}
+MATRIX['barcode generate'] = {'E_RECORD_NOT_FOUND': 'a named item is unknown', 'E_INACTIVE_REFERENCE': 'a named item is inactive',
+                              'E_VALIDATION': 'a named code is on two items', 'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+                              'E_DIRECTIVE_NOT_FOUND': 'unknown --directive', 'E_DIRECTIVE_INACTIVE': 'deactivated --directive'}
 # Unattended scheduling and reminders (R111): to-dos, overdue notices and the Reminders list.
 _SCHED_TAIL = {
     'E_REASON_REQUIRED': 'an agent/system write supplies neither reason nor directive',

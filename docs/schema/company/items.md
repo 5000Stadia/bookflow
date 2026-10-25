@@ -46,7 +46,7 @@ Database: `company`.
 | `default_class_id` | VARCHAR(26) | yes | — | — | ix_items_default_class_id | classes.id | Default active class id; null when unset. |
 | `sales_tax_code_id` | VARCHAR(26) | yes | — | — | ix_items_sales_tax_code_id | sales_tax_codes.id | Default active sales-tax code id; null when unset. |
 | `manufacturer_part_number` | VARCHAR(128) | yes | — | — | — | — | Manufacturer part number; null when not recorded. |
-| `barcode` | VARCHAR(128) | yes | — | — | — | — | Barcode value; null when not recorded. |
+| `barcode` | VARCHAR(128) | yes | — | — | ix_items_barcode | — | Barcode value; null when not recorded. |
 | `unit_of_measure_set_id` | VARCHAR(26) | yes | — | — | ix_items_unit_of_measure_set_id | units_of_measure.id | Active unit-of-measure set id; null when units are disabled or unset. |
 | `reorder_point_min_microunits` | BIGINT | yes | — | — | — | — | Minimum reorder point in quantity micro-units; null when unset. |
 | `reorder_point_max_microunits` | BIGINT | yes | — | — | — | — | Maximum reorder point in quantity micro-units; null when unset. |

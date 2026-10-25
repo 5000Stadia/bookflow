@@ -41,6 +41,7 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # accountant-review-v1 adds designating and removing an external accountant, cancelling an accountant's copy
     # and importing an accountant's changes: who may change the books, and what comes into them, is the owner's call.
     # check-printing-v1 adds confirming a print run, cancelling one and reprinting a check: paper in a printer.
+    # barcodes-v1 adds none: looking codes up and numbering items are bookkeeping.
     # scheduling-v1 adds none (to-dos, notices, reminders).
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {

@@ -14,7 +14,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = 'co0085'
-down_revision = 'co0091'
+down_revision = 'co0094'
 branch_labels = depends_on = None
 DDL = (
     "\nCREATE TABLE todos (\n\tid VARCHAR(26) NOT NULL, \n\tversion INTEGER NOT NULL, \n\tcreated_at VARCHAR(32) NOT NULL, \n\tcreated_by VARCHAR(26) NOT NULL, \n\tcreated_via VARCHAR(16) NOT NULL, \n\tupdated_at VARCHAR(32) NOT NULL, \n\tupdated_by VARCHAR(26) NOT NULL, \n\tupdated_via VARCHAR(16) NOT NULL, \n\ttitle VARCHAR(160) NOT NULL, \n\tnotes TEXT, \n\tdue_date VARCHAR(10) NOT NULL, \n\tpriority VARCHAR(8) NOT NULL, \n\tassignee_id VARCHAR(26), \n\tstatus VARCHAR(10) NOT NULL, \n\tlink_type VARCHAR(16), \n\tlink_id VARCHAR(26), \n\tcompleted_at VARCHAR(32), \n\tcompleted_by VARCHAR(26), \n\tsource_ref VARCHAR(64), \n\tPRIMARY KEY (id), \n\tCONSTRAINT ck_todo_title CHECK (length(trim(title)) > 0), \n\tCONSTRAINT ck_todo_due_date CHECK (length(due_date) = 10), \n\tCONSTRAINT ck_todo_priority CHECK (priority IN ('high', 'medium', 'low')), \n\tCONSTRAINT ck_todo_status CHECK (status IN ('open', 'done', 'inactive')), \n\tCONSTRAINT ck_todo_link_type CHECK (link_type IS NULL OR link_type IN ('customer', 'vendor', 'transaction', 'memorized')), \n\tCONSTRAINT ck_todo_link_pair CHECK ((link_type IS NULL) = (link_id IS NULL)), \n\tCONSTRAINT ck_todo_completed CHECK ((status = 'done') = (completed_at IS NOT NULL))\n)\n\n",

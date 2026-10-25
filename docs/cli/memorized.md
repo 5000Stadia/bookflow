@@ -405,6 +405,7 @@ The same example as complete `bookflow_run` arguments:
 |---|---|---|---|---|---|---|
 | `memorized` | `MEMORIZED` | string | yes | no | — | minimum length 1; maximum length 64 |
 | `date` | `--date` | string \| null | no | yes | null | — |
+| `again` | `--again` | boolean | no | no | false | Enter it although the scheduled slot for this date has already been entered (a deliberate second entry). Without it, or a preview's fingerprint, that is refused. |
 | `expected_facts_fingerprint` | `--expected-facts-fingerprint` | string \| null | no | yes | null | The facts_fingerprint of the preview: the revision that will post. A template changed since is refused with E_PREVIEW_STALE. |
 
 ### Command and context options
