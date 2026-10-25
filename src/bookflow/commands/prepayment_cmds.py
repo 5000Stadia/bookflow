@@ -59,18 +59,18 @@ def _write(verb, model, description, planner, apply, *, positional=(), errors=()
 
 prepayment_receive = _write(
     'receive', PrepaymentReceiveInput,
-    _SYNONYMS + ' Take one: name the customer or job, or the document it is for (an accepted estimate or a work order, as '
-    '"estimate 1001" or "work-order 1002"), the amount, and optionally date, payment method, reference, deposit-to (default '
+    _SYNONYMS + ' Take one: name the customer or job, or the document it is for (an accepted estimate, a work order or a sales order, as '
+    '"estimate 1001", "work-order 1002" or "sales-order 1003"), the amount, and optionally date, payment method, reference, deposit-to (default '
     'Undeposited Funds, banked later with `deposit post`), class and memo. It is an ordinary sales receipt with one '
     'Customer Prepayment line: it prints as the customer\'s receipt and deposits, corrects, voids and deletes as any '
     'sales receipt, while nothing is drawn from it. An invoice made from the document (`estimate invoice`, `work-order '
-    'invoice`) uses it by itself; `prepayment apply` uses it on any invoice. Example: {"document": "work-order 1002", '
+    'invoice`, `sales-order invoice`) uses it by itself; `prepayment apply` uses it on any invoice. Example: {"document": "work-order 1002", '
     '"amount": "200.00", "payment_method": "Check", "reference": "4471"}.',
     plan_receive, prepayments.apply_receive)
 
 prepayment_attach = _write(
     'attach', PrepaymentAttachInput,
-    'Move what a prepayment receipt still holds to one of its customer\'s documents (an accepted estimate or a work order), '
+    'Move what a prepayment receipt still holds to one of its customer\'s documents (an accepted estimate, a work order or a sales order), '
     'or back to the customer when no document is named. What was already drawn stays where it went. The receipt\'s '
     'history keeps every move. Example: {"receipt": "57", "document": "work-order 1002"}.',
     plan_attach, prepayments.apply_attach, positional=['receipt'],

@@ -212,6 +212,8 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
     if summary_only:
         return SalesRevisionSummaryOutput(**values)
     values['billing_sources'] = sale_source_output(s, revision['id'])
+    from bookflow.company.sales_orders import invoice_line_orders
+    orders = invoice_line_orders(s, revision['transaction_id'], values['billing_sources'])
     tax_mapping = [r for r in pending.get('sales_tax_attribution_lines', []) if r['revision_id'] == revision['id']]
     if not tax_mapping:
         tax_mapping = effects.rows(s, c.sales_tax_attribution_lines, c.sales_tax_attribution_lines.c.revision_id == revision['id'])
@@ -226,7 +228,7 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
                 tax=Money(component['tax_minor_units'], currency).to_dict(),
                 taxable=Money(component['taxable_minor_units'], currency).to_dict()))
         from bookflow.company.billing_allocations import quantity_output
-        rendered.append(dict(line, tax_ordinal=tax_ordinals.get(line['id']), item_snapshot=json.loads(line['item_snapshot']), **quantity_output(line),
+        rendered.append(dict(line, tax_ordinal=tax_ordinals.get(line['id']), order=orders.get(line['id']), item_snapshot=json.loads(line['item_snapshot']), **quantity_output(line),
             **shown_amount(line, currency, restored.get(line['position'], 0)),
             unit_price=unit_price.to_dict(unit_price.row_units(line, 'unit_price'), currency) if line['unit_price_minor_units'] is not None else None,
             pricing_basis=line.get('pricing_basis', 'unit'), net=Money(line['net_minor_units'], currency).to_dict(),
@@ -901,6 +903,8 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
     if 'billing_allocations' in plan.data and operation != 'void':
         from bookflow.company.billing_queries import sale_source_output
         plan.preview.revision.billing_sources = sale_source_output(s, revision['id'], plan.data['billing_allocations'])
+        from bookflow.company.sales_orders import attach_invoice_orders
+        attach_invoice_orders(s, plan.preview.revision)
     from bookflow.company.sales_validation import validate
     validate(plan, s, ctx)
     return plan

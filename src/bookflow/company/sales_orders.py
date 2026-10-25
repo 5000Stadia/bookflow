@@ -537,3 +537,69 @@ def prepayment_date_warning(s, header, preview, date):
     return (f'Customer prepayment receipt {", ".join(row["number"] for row in later)} is dated after this invoice '
             f'({date}), so none of it was applied; date the invoice on or after the receipt, or apply it later '
             'with `prepayment apply`.')
+
+
+def invoice_line_orders(s, transaction_id, sources):
+    """Each order-made line of a sale: the order's ordered, previously invoiced and backordered quantities.
+
+    Keyed by the sale line's id. Read from the order and the billing ledger: ordered is the order
+    line's quantity now, previously invoiced is what active sales posted before this one billed of
+    it, and backordered is what was still open after this sale (ordered less cancelled, previously
+    invoiced and this sale's quantity), as the anchor's invoice prints it. Lines not made from a
+    sales order are absent.
+    """
+    from bookflow.company import work
+    from bookflow.company.sales_outputs import SaleLineOrder
+    rows = [source if isinstance(source, dict) else source.model_dump() for source in sources or ()]
+    if not rows:
+        return {}
+    headers = {row['id']: dict(row) for row in s.company.conn.execute(sa.select(c.work_documents).where(
+        c.work_documents.c.id.in_({row['source_document_id'] for row in rows}),
+        c.work_documents.c.kind == 'sales_order')).mappings()}
+    if not headers:
+        return {}
+    t = c.transactions
+    this = s.company.conn.execute(sa.select(t.c.created_at, t.c.id).where(t.c.id == transaction_id)).first()
+    order_lines, out = {}, {}
+    for row in rows:
+        header = headers.get(row['source_document_id'])
+        if header is None:
+            continue
+        if header['id'] not in order_lines:
+            order_lines[header['id']] = {line['line_id']: line for line in work.saved_lines(s, work.revision(s, header))}
+        # The allocation names the order line as it stood in the revision it was billed from; the
+        # line's identity carries it to the order as it stands now.
+        identity = s.company.conn.execute(sa.select(c.work_lines.c.line_id).where(
+            c.work_lines.c.id == row['source_line_id'])).scalar()
+        line = order_lines[header['id']].get(identity)
+        if line is None:
+            continue
+        f = work.line_facts(line)
+        a = c.work_billing_allocations
+        earlier = (sa.select(sa.func.coalesce(sa.func.sum(a.c.quantity_microunits), 0))
+                   .join(t, sa.and_(t.c.id == a.c.transaction_id, t.c.current_revision_id == a.c.revision_id,
+                                    t.c.status == 'posted'))
+                   .where(a.c.root_document_id == row['root_document_id'], a.c.root_line_id == row['root_line_id'],
+                          a.c.transaction_id != transaction_id))
+        if this is not None:
+            earlier = earlier.where(sa.or_(t.c.created_at < this.created_at,
+                                           sa.and_(t.c.created_at == this.created_at, t.c.id < this.id)))
+        previous = s.company.conn.execute(earlier).scalar() or 0
+        billed = row['quantity_microunits'] or 0
+        entry = out.get(row['document_line_id'])
+        if entry is not None:  # one sale line drawing twice on one order line: add this draw
+            billed += entry[3]
+        backordered = max(f.quantity_microunits - f.cancelled_quantity_microunits - previous - billed, 0)
+        out[row['document_line_id']] = (header, f, previous, billed, backordered)
+    return {key: SaleLineOrder(sales_order_id=header['id'], sales_order_number=header['number'],
+                               ordered=_quantity(f.quantity_microunits), previously_invoiced=_quantity(previous),
+                               backordered=_quantity(backordered))
+            for key, (header, f, previous, billed, backordered) in out.items()}
+
+
+def attach_invoice_orders(s, revision):
+    """Set each order-made line's order quantities on a sale revision output from its billing sources."""
+    orders = invoice_line_orders(s, revision.transaction_id, revision.billing_sources)
+    for line in revision.lines:
+        line.order = orders.get(line.id)
+    return revision
