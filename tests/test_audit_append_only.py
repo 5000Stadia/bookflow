@@ -110,10 +110,10 @@ def _add_event(path):
 
 
 @pytest.mark.parametrize('chain, previous, head, migration', (
-    # The company head has since moved on to co0091 (through co0090 timekeeping, co0089 inventory sites, co0088 accountant review, co0092 check printing and co0091 sub-cent unit prices) (statement imports, sales tax adjustments, party
+    # The company head has since moved on to co0094 (through co0094 barcodes, co0090 timekeeping, co0089 inventory sites, co0088 accountant review, co0092 check printing and co0091 sub-cent unit prices) (statement imports, sales tax adjustments, party
     # merges, then payment bounces, vendor credit items, opening 1099 amounts, item conversions, finance charges, vendor refund deposits, budgets, customer prepayments, account and item merges, sales orders, fixed assets and loans, assembly builds and mileage, customer credit transfers, price rules, the pending-builds preference and purchase coverage links and partial purchase order billing, and timekeeping, and accountant review, no audit change); the upgrade
     # from co0064 still passes through co0065 and gains its triggers.
-    ('company', 'co0064', 'co0091', COMPANY_MIGRATION), ('hub', 'hub0014', 'hub0016', HUB_MIGRATION)))
+    ('company', 'co0064', 'co0094', COMPANY_MIGRATION), ('hub', 'hub0014', 'hub0016', HUB_MIGRATION)))
 def test_existing_files_gain_the_triggers_on_upgrade(tmp_path, monkeypatch, chain, previous, head, migration):
     assert HEADS[chain] == head
     old = tmp_path / 'old.db'
