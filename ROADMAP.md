@@ -158,7 +158,7 @@ review cb5fcd7 (gate g96052d).
 - [x] R151 Restore a deleted document from its preserved history
 - [x] R117 Merge duplicates: combine duplicate customers, vendors, items or accounts and move every reference to the survivor. (Customers and vendors 2026-10-09; accounts and items 2026-10-22, with refusals for stocked items and settlement accounts: design/list-merge.md)
 - [~] R180 Quick on real-sized books: built-in performance logging and tracking (timings per command, recorded and reported) to optimise against; measure everyday commands on a company with years of history, and bring posting, deposits and reconciliation of 1,000+ rows down to seconds (Kabe 2026-10-22: "Add and build. We should have a smart performance logging and tracking we can optimize the system against").
-- [~] R101 Sales orders: a non-posting customer order that reserves stock, invoices partly as items ship, tracks backorders, and can raise a purchase order for shortfalls.
+- [x] R101 Sales orders: a non-posting customer order that reserves stock, invoices partly as items ship, tracks backorders, and can raise a purchase order for shortfalls.
 - [x] R102 Reservation-aware stock: stock status shows on hand, committed to open sales orders, on order and available, so buying decisions see real demand.
 - [x] R103 Assembly builds: building a finished item from its bill of materials consumes the components and moves their cost into the assembly.
 - [~] R104 Advanced inventory: multiple sites and bins, transfers, serial and lot numbers, physical counts, a choice of costing method, and allocating a later freight bill to received stock.
