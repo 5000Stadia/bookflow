@@ -244,6 +244,7 @@
 <p id="receipt-update-received-help">If this receipt has ever billed linked work, a correction that changes its gross requires the exact new total received, including tax, even after linked lines are removed. Enter the whole receipt total, not just the additional charge. Leave blank for a same-total or metadata-only correction, or an ordinary receipt with no linked-work history. Any amount you enter must match the new receipt total.</p>
 </section>{% endif %}
 {% if fingerprint_form %}<input type="hidden" name="f:expected_facts_fingerprint" value="{{ sales_fingerprint }}">{% endif %}
+{% if cmd and cmd.name == 'memorized enter' %}<label data-enter-again><input type="checkbox" name="f:again" value="true"{% if attempted.get('f:again') == 'true' %} checked{% endif %}> Enter it again (the slot for this date has already posted; a second entry is posted on purpose)</label>{% endif %}
 {% if noun == 'deposit' and verb == 'post' %}
 <script src="{{ static_urls['exact-json.js'] }}" defer></script><script src="{{ static_urls['deposit-picker.js'] }}" defer></script>
 <p data-deposit-company="{{ company_id }}">Choose a bank and deposit date, select the receipts, then preview and save.</p>

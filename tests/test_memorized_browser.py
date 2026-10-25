@@ -142,3 +142,23 @@ def test_the_accounting_menu_lists_the_memorized_nouns(workbench):
     assert page.status_code == 200
     assert f'href="/c/{workbench.company_id}/memorized"' in page.text
     assert f'href="/c/{workbench.company_id}/memorized-group"' in page.text
+
+
+def test_entering_a_posted_slot_again_needs_the_enter_it_again_checkbox(workbench):
+    """R111: the enter form warns that the slot already posted and saves a second entry only when asked."""
+    company, browser = workbench.company_id, workbench.browser
+    workbench.call('memorized process', {'as_of': '2026-01-31'}, **{'X-Bookflow-Reason': 'Enter what is due'})
+    record = workbench.call('memorized list', {})['items'][0]
+    url = f"/c/{company}/memorized/{record['id']}/enter"
+    form = browser.get(url)
+    assert form.status_code == 200 and 'data-enter-again' in form.text and 'Enter it again' in form.text
+    base = {'f:date': '2026-01-31', 'c:reason': 'By hand'}
+    headers = {'X-Bookflow-Workbench': '1'}
+    preview = browser.post(url, data={**base, 'action': 'preview'}, headers=headers, follow_redirects=True)
+    assert 'already entered as' in preview.text and 'again: true' in preview.text
+    refused = browser.post(url, data={**base, 'action': 'submit'}, headers=headers, follow_redirects=True)
+    assert 'E_VALIDATION' in refused.text or 'already entered as' in refused.text
+    assert len(workbench.call('bill query', {'limit': 10})['items']) == 1
+    again = browser.post(url, data={**base, 'f:again': 'true', 'action': 'submit'}, headers=headers, follow_redirects=True)
+    assert again.status_code == 200, again.text[:400]
+    assert len(workbench.call('bill query', {'limit': 10})['items']) == 2

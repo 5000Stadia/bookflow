@@ -623,7 +623,16 @@ def test_7_2_entering_a_date_whose_slot_already_posted_needs_again(books):
                 run_as(books, 'helperlogin', 'memorized enter', body, on_behalf_of=admin, reason='agent by hand')
         assert refused.value.code == 'E_VALIDATION' and 'was already entered as' in refused.value.message, who
     assert bill_totals(books) == [180000]
-    books.run('memorized enter', {'memorized': 'Rent', 'date': '2026-01-31', 'again': True}, reason='A second, on purpose')
+    # A preview after the post warns, and its fingerprint alone does not let the save through.
+    body = {'memorized': 'Rent', 'date': '2026-01-31'}
+    preview = books.run('memorized enter', body, reason='look', dry_run=True)
+    assert any('already entered as' in w and 'again: true' in w for w in preview['warnings'])
+    with pytest.raises(BookflowError) as refused:
+        books.run('memorized enter', dict(body, expected_facts_fingerprint=preview['facts_fingerprint']), reason='save')
+    assert refused.value.code == 'E_VALIDATION'
+    assert bill_totals(books) == [180000]
+    books.run('memorized enter', dict(body, again=True, expected_facts_fingerprint=preview['facts_fingerprint']),
+              reason='A second, on purpose')
     assert bill_totals(books) == [180000, 180000]
 
 

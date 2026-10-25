@@ -2211,6 +2211,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         fingerprint_form = sales_form or cmd.name in ('memorized process', 'memorized retry', 'memorized enter', 'memorized-group enter')
         if fingerprint_form:
             described = [leaf for leaf in described if leaf['path'] != 'expected_facts_fingerprint']
+        if cmd.name == 'memorized enter':
+            # A second entry of a posted slot is a deliberate act: its own checkbox, below the warning.
+            described = [leaf for leaf in described if leaf['path'] != 'again']
         if noun == 'sales-receipt' and verb == 'update':
             # The dedicated decimal control uses the shared typed form translator.
             described = [leaf for leaf in described if leaf['path'] != 'amount_received']

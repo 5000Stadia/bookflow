@@ -15,6 +15,7 @@ CUSTOMER_GROUPS = (
 )
 
 LABELS = {
+    "again": "Enter it again",
     "name": "Name", "parent_id": "Parent customer or job", "company_name": "Company name",
     "terms_id": "Payment terms", "sales_tax_code_id": "Sales tax code",
     "sales_tax_item_id": "Sales tax item", "sales_rep_id": "Sales representative",

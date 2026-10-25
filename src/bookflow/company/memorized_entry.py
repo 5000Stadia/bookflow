@@ -111,8 +111,8 @@ def prepare_entry(s, ctx, inp, verb):
             # The slot for this date already posted: a second entry is a deliberate act, never a slip.
             ref = waiting['document_number'] or waiting['transaction_id'] or waiting['id']
             said = f"The {slot} slot of {template['name']} was already entered as {ref}."
-            if s.dry_run or inp.expected_facts_fingerprint is not None:
-                data['warnings'].append(said + ' Entering it posts a second entry.')
+            if s.dry_run:
+                data['warnings'].append(said + ' Saving needs again: true ("Enter it again"); it then posts a second entry.')
             else:
                 raise BookflowError('E_VALIDATION', message=said + ' Pass again: true to enter it a second time.',
                                     details={'fields': [{'field': 'again', 'problem': f'the {slot} slot was already entered as {ref}'}],
