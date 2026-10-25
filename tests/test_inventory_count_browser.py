@@ -47,6 +47,7 @@ def test_a_count_entered_and_posted_from_the_count_screen(register_browser, widt
     assert b.evaluate('!!document.querySelector("[data-count-entry] [name=scan]")')
     # The demo's van count left three valves on the van. The scanner types the valve's barcode and Enter,
     # twice, faster than the page answers: the second scan waits for the first entry's page and adds to it.
+    b.wait_for('!!window.bookflowScan && !!document.querySelector("[data-scan-mode=count] [data-scan-input]")')
     b.evaluate('''(() => {
         for (const old of document.querySelectorAll('[data-count-result], [role=alert]')) old.remove();
         for (let n = 0; n < 2; n++) {

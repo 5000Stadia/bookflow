@@ -1,6 +1,8 @@
 // The Scan field (R104 increment 3). A scanner in keyboard mode types the code and Enter; here Enter
 // looks the code up and never submits the form. See templates/scan_field.html for the three modes.
 (() => {
+  // Loaded once per page; a swapped-in page that carries the script again keeps the first install.
+  if (window.bookflowScan) return;
   const QUANTITY = /^\s*(\d+(?:\.\d+)?)\s*\*\s*(.+)$/;
   const escape = value => String(value).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
 
