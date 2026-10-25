@@ -7,7 +7,8 @@ from typing import Annotated, Literal
 from pydantic import Field, model_serializer, model_validator
 
 from bookflow.company.journal_models import _Date
-from bookflow.company.sales_calculations import adjusted_price, base_quantity, extension, tax
+from bookflow.company.sales_calculations import adjusted_price_units, base_quantity, extension_units, tax
+from bookflow.core import unit_price
 from bookflow.company.sales_facts import CommercialProfile, Origin, Reference, SalesLineProfile, TaxRule
 from bookflow.company.sales_models import Address, StrictModel, Text
 from bookflow.company.work_models import Priority, ScopeText, Timestamp
@@ -106,11 +107,23 @@ class WorkLineFacts(StrictModel):
     # when a non-taxable discount left that above the net. Absent on every other line.
     discount_minor_units: MinorUnits | None = None
     taxable_minor_units: MinorUnits | None = None
+    # R150: the unit price's and estimated unit cost's thousandths of a minor unit beyond their
+    # rounded minor units; absent when whole, so every line saved before R150 reads as it did.
+    unit_price_fraction: int | None = Field(default=None, ge=-500, le=500)
+    estimated_unit_cost_fraction: int | None = Field(default=None, ge=-500, le=500)
+
+    @property
+    def price_units(self):
+        return unit_price.join(self.unit_price_minor_units, self.unit_price_fraction)
+
+    @property
+    def cost_units(self):
+        return unit_price.join(self.estimated_unit_cost_minor_units, self.estimated_unit_cost_fraction)
 
     @model_serializer(mode='wrap')
     def legacy_line_facts(self, handler):
         values = handler(self)
-        for key in ('discount_minor_units', 'taxable_minor_units'):
+        for key in ('discount_minor_units', 'taxable_minor_units', 'unit_price_fraction', 'estimated_unit_cost_fraction'):
             if getattr(self, key) is None:
                 values.pop(key, None)
         if not self.cancelled_quantity_microunits:
@@ -135,17 +148,17 @@ class WorkLineFacts(StrictModel):
         if self.pricing_basis == 'amount':
             if self.unit_price_minor_units is not None:
                 raise ValueError('amount pricing has no unit price')
-        elif self.unit_price_minor_units is None or self.net_minor_units != extension(self.quantity_microunits, self.unit_price_minor_units) - (self.discount_minor_units or 0):
+        elif self.unit_price_minor_units is None or self.net_minor_units != extension_units(self.quantity_microunits, self.price_units) - (self.discount_minor_units or 0):
             raise ValueError('net disagrees with quantity and unit price')
         if self.pricing_basis == 'markup':
             if self.markup_percent_millionths is None or self.estimated_unit_cost_minor_units is None:
                 raise ValueError('markup requires known cost and percentage')
-            if self.unit_price_minor_units != adjusted_price(self.estimated_unit_cost_minor_units, self.markup_percent_millionths):
+            if self.price_units != adjusted_price_units(self.cost_units, self.markup_percent_millionths):
                 raise ValueError('markup price disagrees with cost and percentage')
         elif self.markup_percent_millionths is not None:
             raise ValueError('only markup pricing captures a markup percentage')
-        cost = self.estimated_unit_cost_minor_units
-        if self.estimated_cost_minor_units != (extension(self.quantity_microunits, cost) if cost is not None else None):
+        cost = self.cost_units
+        if self.estimated_cost_minor_units != (extension_units(self.quantity_microunits, cost) if cost is not None else None):
             raise ValueError('estimated cost disagrees with quantity and unit cost')
         base = self.net_minor_units if self.taxable_minor_units is None else self.taxable_minor_units
         if any(component.taxable_minor_units != base for component in self.taxes):

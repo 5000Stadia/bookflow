@@ -3,6 +3,7 @@ from fractions import Fraction
 from itertools import zip_longest
 import json
 
+from bookflow.core import unit_price
 from bookflow.company import schema as c, work, billing_allocations as alloc, billing_math as math
 from bookflow.company.work_tax_facts import read_line
 from bookflow.core.errors import BookflowError
@@ -46,7 +47,8 @@ def numeric_projection(s, line, proof):
         exact = Fraction(source*length,d)
         expected = exact.numerator if exact.denominator == 1 else None
         require(line[field] == expected and (expected is None or type(line[field]) is int), 'allocated '+field+' differs')
-    require(line['unit_price_minor_units'] == facts.unit_price_minor_units, 'quoted unit price differs')
+    require(line['unit_price_minor_units'] == facts.unit_price_minor_units
+            and line.get('unit_price_fraction') == facts.unit_price_fraction, 'quoted unit price differs')
     return facts
 
 

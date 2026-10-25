@@ -6,6 +6,7 @@ import json
 import zlib
 import sqlalchemy as sa
 
+from bookflow.core import unit_price
 from bookflow.company import schema as c, journals, document_effects as effects
 from bookflow.company import inventory, inventory_effects
 from bookflow.company import journal_custom_fields as custom, list_service
@@ -227,7 +228,7 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
         from bookflow.company.billing_allocations import quantity_output
         rendered.append(dict(line, tax_ordinal=tax_ordinals.get(line['id']), item_snapshot=json.loads(line['item_snapshot']), **quantity_output(line),
             **shown_amount(line, currency, restored.get(line['position'], 0)),
-            unit_price=Money(line['unit_price_minor_units'], currency).to_dict() if line['unit_price_minor_units'] is not None else None,
+            unit_price=unit_price.to_dict(unit_price.row_units(line, 'unit_price'), currency) if line['unit_price_minor_units'] is not None else None,
             pricing_basis=line.get('pricing_basis', 'unit'), net=Money(line['net_minor_units'], currency).to_dict(),
             tax=Money(line['tax_minor_units'], currency).to_dict(), gross=Money(line['gross_minor_units'], currency).to_dict(), tax_components=taxes))
     snapshot = json.loads(revision['custom_fields_snapshot'])
@@ -386,8 +387,11 @@ def _custom_semantic(snapshot):
 
 def _line_semantic(line):
     profile = line['profile']
-    return {key: line[key] for key in ('line_id', 'item_id', 'description', 'quantity_microunits', 'unit_id',
+    semantic = {key: line[key] for key in ('line_id', 'item_id', 'description', 'quantity_microunits', 'unit_id',
         'unit_factor_nanounits', 'base_quantity_microunits', *MONEY_COLUMNS)} | {'profile': profile.model_dump()}
+    if line.get('unit_price_fraction') is not None:  # R150: a whole-minor line keeps its fingerprint
+        semantic['unit_price_fraction'] = line['unit_price_fraction']
+    return semantic
 
 
 def saved_sites(s, revision):
@@ -830,7 +834,8 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
                     document_line_id=envelope['id'], line_id=identity, tax_ordinal=line['tax_ordinal'], **row_provenance))
             pending['sales_line_profiles'].append(dict(document_line_id=envelope['id'], transaction_id=header['id'],
                 revision_id=revision['id'], **row_provenance, **{k: line[k] for k in ('item_id', 'quantity_microunits', 'unit_id',
-                    'unit_factor_nanounits', 'base_quantity_microunits', *MONEY_COLUMNS)}, item_snapshot=json_text(facts.model_dump()), pricing_basis=facts.pricing_basis))
+                    'unit_factor_nanounits', 'base_quantity_microunits', *MONEY_COLUMNS)}, unit_price_fraction=line.get('unit_price_fraction'),
+                item_snapshot=json_text(facts.model_dump()), pricing_basis=facts.pricing_basis))
             for tax_position, component in enumerate(line['taxes'], 1):
                 rule = component['rule']
                 snapshot = SalesTaxComponent(position=tax_position, tax_item=rule.model_dump(include={'id', 'label', 'version'}),

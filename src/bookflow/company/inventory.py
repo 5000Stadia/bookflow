@@ -50,6 +50,7 @@ from dataclasses import dataclass, field
 
 import sqlalchemy as sa
 
+from bookflow.core import unit_price
 from bookflow.company import accounts, items as item_service, journals, list_service, placements, schema as c
 from bookflow.company.document_effects import allocate
 from bookflow.company.inventory_costing import StockRefusal, replay, shortfall_warning
@@ -100,18 +101,26 @@ def movements(s, *, item_id=None, transaction_id=None, as_of=None):
 
 
 def fallback_cost(s, item_id, currency):
-    """The item's purchase cost per base unit, captured on an issue as its provisional fallback.
+    """The item's purchase cost per base unit, captured on an issue as its provisional fallback,
+    exactly, in R150 price units (thousandths of a minor unit): 0.004 is a cost, not none.
 
     ``None`` when the item records no purchase cost -- a stocked item must record one, so in
     practice that is a cost of zero -- or one in another currency: a stock value is always home
     currency and Bookflow never converts one implicitly.
     """
-    row = s.company.conn.execute(sa.select(c.items.c.cost_minor_units, c.items.c.cost_currency)
+    row = s.company.conn.execute(sa.select(c.items.c.cost_minor_units, c.items.c.cost_currency,
+                                           c.items.c.cost_fraction)
                                  .where(c.items.c.id == item_id)).first()
-    if row is None or row.cost_minor_units is None or row.cost_currency != currency \
-            or int(row.cost_minor_units) <= 0:
+    if row is None or row.cost_minor_units is None or row.cost_currency != currency:
         return None
-    return int(row.cost_minor_units)
+    units = unit_price.join(int(row.cost_minor_units), row.cost_fraction)
+    return units if units > 0 else None
+
+
+def fallback_columns(s, item_id, currency, kind):
+    """The two movement columns an issue captures its fallback cost in (both None otherwise)."""
+    minor, fraction = unit_price.split(fallback_cost(s, item_id, currency) if kind == 'issue' else None)
+    return dict(fallback_unit_cost_minor_units=minor, fallback_unit_cost_fraction=fraction)
 
 
 def item_name(s, item_id):
@@ -326,12 +335,17 @@ def value_at(rows, date):
 
 def movement_values(*, item_id, kind, quantity, value, date, sequence, currency, asset_id, offset_id, class_id,
                     position='before', fallback=None):
-    """A new input movement's columns, before its document gives it posting identities."""
+    """A new input movement's columns, before its document gives it posting identities.
+
+    ``fallback`` is the item's purchase cost in R150 price units (``fallback_cost``), stored as minor
+    units and their fraction.
+    """
     return dict(id=new_id(), item_id=item_id, kind=kind, quantity_microunits=quantity, value_minor_units=value,
                 effective_date=date, sequence=sequence, currency=currency, asset_account_id=asset_id,
                 offset_account_id=offset_id, class_id=class_id, corrects_movement_id=None,
                 reverses_movement_id=None, returns_movement_id=None, filled_by_movement_id=None,
-                fallback_unit_cost_minor_units=fallback, count_position=position)
+                count_position=position, **dict(zip(('fallback_unit_cost_minor_units', 'fallback_unit_cost_fraction'),
+                                                    unit_price.split(fallback))))
 
 
 def reversal_values(row, sequence):
@@ -570,7 +584,7 @@ def correction_documents(s, change, sequence):
                 corrects_movement_id=target['id'], reverses_movement_id=None,
                 returns_movement_id=None,
                 filled_by_movement_id=correction.filled_by['id'] if true_up else None,
-                fallback_unit_cost_minor_units=None,
+                fallback_unit_cost_minor_units=None, fallback_unit_cost_fraction=None,
                 count_position=target.get('count_position') or 'before'),
                 line_index=len(lines) - 1))
             sequence += 1
@@ -708,7 +722,9 @@ def _summary(s, change, corrections):
         quantity_change=format_quantity_micro_units(change.quantity_microunits),
         value_change=Money(change.value_minor_units, change.currency).to_dict(),
         quantity_on_hand=format_quantity_micro_units(state.quantity_microunits),
-        average_cost=Money(state.average_cost_minor_units, change.currency).to_dict(),
+        # R150: an average is a unit cost, shown to the price scale as the valuation report shows it.
+        average_cost=unit_price.to_dict(unit_price.average(state.value_minor_units, state.quantity_microunits),
+                                        change.currency),
         inventory_value=Money(state.value_minor_units, change.currency).to_dict(),
         asset_account_id=change.asset_account_id, adjustment_account_id=change.offset_account_id,
         movement_kind=change.movement_kind, corrections=corrections, lines=_line_summaries(s, change))

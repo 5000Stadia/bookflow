@@ -238,16 +238,17 @@ def _item_references(db, merged: str, survivor: str) -> list[Reference]:
             refs.append(Reference("item_members", row_id, "component_item_id", "end", "item", owner, label,
                                   "summed into the survivor's own row"))
     # Price-level rows naming M.
-    for row_id, level, price, cur, pct, basis in db.raw.execute(
-            "SELECT id, price_level_id, price_minor_units, price_currency, percent_millionths, adjustment_basis "
+    for row_id, level, price, cur, pct, basis, frac in db.raw.execute(
+            "SELECT id, price_level_id, price_minor_units, price_currency, percent_millionths, adjustment_basis, "
+            "price_fraction "
             "FROM price_level_items WHERE item_id=? AND active=1 ORDER BY price_level_id, position, id", (merged,)):
         label = f"price level {_owner_name(db, 'price_level', level)}: per-item price"
-        own = db.raw.execute("SELECT price_minor_units, price_currency, percent_millionths, adjustment_basis "
+        own = db.raw.execute("SELECT price_minor_units, price_currency, percent_millionths, adjustment_basis, price_fraction "
                              "FROM price_level_items WHERE price_level_id=? AND item_id=? AND active=1",
                              (level, survivor)).fetchone()
         if own is None:
             refs.append(Reference("price_level_items", row_id, "item_id", "repoint", "price_level", level, label))
-        elif tuple(own) != (price, cur, pct, basis):
+        elif tuple(own) != (price, cur, pct, basis, frac):
             raise _refuse(f"price level {_owner_name(db, 'price_level', level)} gives the two items different prices; "
                           "make them agree or remove one first", price_level_id=level)
         else:

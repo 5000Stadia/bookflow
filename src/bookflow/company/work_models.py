@@ -10,7 +10,7 @@ from pydantic import BeforeValidator, Field, model_validator, model_serializer
 from bookflow.company.custom_fields import CustomFieldKindExpectations, CustomFieldValuePatch
 from bookflow.company.journal_models import _Date, _Number, _Version
 from bookflow.company.sales_models import (
-    Address, Fingerprint, Quantity, SalesLineInput, SalesMoneyInput, SalesPageInput,
+    Address, Fingerprint, Quantity, SalesLineInput, SalesMoneyInput, SalesPriceInput, SalesPageInput,
     Selector, StrictModel, Text, _default_conflicts,
 )
 from bookflow.core.exact import (
@@ -83,7 +83,7 @@ Markup = Annotated[str, BeforeValidator(_markup)]
 
 
 class WorkLineInput(SalesLineInput):
-    estimated_unit_cost: str | SalesMoneyInput | None = None
+    estimated_unit_cost: str | SalesPriceInput | None = None
     markup_percent: Markup | None = None
     net_amount: str | SalesMoneyInput | None = None
     completed_quantity: CompletedQuantity = '0'
@@ -510,7 +510,7 @@ class TimeActivityFields(StrictModel):
     item: Selector = Field(description='Required. The service item this time is charged as: it carries the rate, the income account the labour lands in and the tax code the invoice needs. Time with no item has nowhere to post, so there is no default and no way to leave it out.')
     note: Text | None = Field(default=None, description='What was done. It becomes the line description a customer reads on the invoice.')
     billable: bool = Field(default=True, description='Whether this time can be carried into an invoice. Non-billable time is recorded against the job and never billed.')
-    rate: str | SalesMoneyInput | None = Field(default=None, description='Charge per hour, overriding the service item price.')
+    rate: str | SalesPriceInput | None = Field(default=None, description='Charge per hour, overriding the service item price.')
     class_id: Selector | None = None
     number: _Number | None = None
     custom_fields: CustomFieldValuePatch = Field(default_factory=lambda: CustomFieldValuePatch({}))

@@ -179,6 +179,8 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0083 = importlib.import_module("bookflow.storage.company_migrations.versions.0083_mileage")
     co0093 = importlib.import_module("bookflow.storage.company_migrations.versions.0093_inventory_counts")
 
+    co0091 = importlib.import_module("bookflow.storage.company_migrations.versions.0091_subcent_unit_prices")
+
     def older(conn):
         # co0093's: the four count tables, and its own text on the rebuilt movement and document tables run
         # backwards (both are empty here); the placements table goes with co0089's below.
@@ -189,6 +191,8 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
             for old_text, new_text in co0093.REWIND[table]:
                 assert conn.execute("UPDATE sqlite_schema SET sql = replace(sql, ?, ?) WHERE name = ?", (new_text, old_text, table)).rowcount == 1
         conn.execute("PRAGMA writable_schema=OFF")
+        for table, column in co0091.FRACTIONS:
+            conn.execute(f"ALTER TABLE {table} DROP COLUMN {column}")  # co0091's sub-cent fractions
         for table in ("check_print_outcomes", "check_spoiled_numbers", "check_print_run_items", "check_print_runs",
                       "check_print_marks", "check_print_settings"):
             conn.execute(f"DROP TABLE {table}")  # co0092's six tables, with their indexes and guards

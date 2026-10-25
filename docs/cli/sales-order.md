@@ -796,6 +796,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.price_rule.offset_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].facts.profile.price_rule.percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_rule.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.price_rule.fixed_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_rule.adjustment_basis` | literal["standard_price", "cost", "current_custom_price"] | no | no | "standard_price" | — |
 | `revision.lines[].facts.profile.price_rule.matched` | boolean | no | no | true | — |
 | `revision.lines[].facts.profile.pricing_rule` | object \| null | no | yes | null | — |
@@ -809,12 +810,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.pricing_rule.rounding` | literal["cent", "x.99", "x.95", "dollar"] | yes | no | — | — |
 | `revision.lines[].facts.profile.pricing_rule.value` | integer | yes | no | — | — |
 | `revision.lines[].facts.profile.pricing_rule.base_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.base_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.pricing_rule.price_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].facts.profile.pricing_rule.conflict_policy` | literal["lowest_price", "priority"] | yes | no | — | — |
 | `revision.lines[].facts.profile.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_basis_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.standard_price_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.price_basis_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.origins` | object[string, object] | no | no | {} | — |
 | `revision.lines[].facts.profile.pricing_basis` | literal["unit", "amount", "allocated"] | no | no | "unit" | — |
 | `revision.lines[].facts.profile.net_amount_minor_units` | integer \| null | no | yes | null | — |
@@ -883,6 +888,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.taxes[].tax_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].facts.discount_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.taxable_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.unit_price_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.estimated_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].quantity` | string | yes | no | — | — |
 | `revision.lines[].completed_quantity` | string | yes | no | — | — |
 | `revision.lines[].cancelled_quantity` | string \| null | no | yes | null | Sales orders and work orders: the cancelled part of this line. |
@@ -1684,6 +1691,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.price_rule.offset_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].facts.profile.price_rule.percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_rule.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.price_rule.fixed_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_rule.adjustment_basis` | literal["standard_price", "cost", "current_custom_price"] | no | no | "standard_price" | — |
 | `revision.lines[].facts.profile.price_rule.matched` | boolean | no | no | true | — |
 | `revision.lines[].facts.profile.pricing_rule` | object \| null | no | yes | null | — |
@@ -1697,12 +1705,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.pricing_rule.rounding` | literal["cent", "x.99", "x.95", "dollar"] | yes | no | — | — |
 | `revision.lines[].facts.profile.pricing_rule.value` | integer | yes | no | — | — |
 | `revision.lines[].facts.profile.pricing_rule.base_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.base_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.pricing_rule.price_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].facts.profile.pricing_rule.conflict_policy` | literal["lowest_price", "priority"] | yes | no | — | — |
 | `revision.lines[].facts.profile.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_basis_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.standard_price_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.price_basis_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.origins` | object[string, object] | no | no | {} | — |
 | `revision.lines[].facts.profile.pricing_basis` | literal["unit", "amount", "allocated"] | no | no | "unit" | — |
 | `revision.lines[].facts.profile.net_amount_minor_units` | integer \| null | no | yes | null | — |
@@ -1771,6 +1783,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.taxes[].tax_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].facts.discount_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.taxable_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.unit_price_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.estimated_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].quantity` | string | yes | no | — | — |
 | `revision.lines[].completed_quantity` | string | yes | no | — | — |
 | `revision.lines[].cancelled_quantity` | string \| null | no | yes | null | Sales orders and work orders: the cancelled part of this line. |
@@ -2761,6 +2775,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].gross.currency` | string | yes | no | — | — |
 | `revision.lines[].gross.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].unit_price_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.lines[].unit_price_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].net_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].tax_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].gross_minor_units` | integer | yes | no | — | — |
@@ -2820,6 +2835,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.price_rule.offset_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].item_snapshot.price_rule.percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.price_rule.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.price_rule.fixed_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.price_rule.adjustment_basis` | literal["standard_price", "cost", "current_custom_price"] | no | no | "standard_price" | — |
 | `revision.lines[].item_snapshot.price_rule.matched` | boolean | no | no | true | — |
 | `revision.lines[].item_snapshot.pricing_rule` | object \| null | no | yes | null | — |
@@ -2833,12 +2849,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.pricing_rule.rounding` | literal["cent", "x.99", "x.95", "dollar"] | yes | no | — | — |
 | `revision.lines[].item_snapshot.pricing_rule.value` | integer | yes | no | — | — |
 | `revision.lines[].item_snapshot.pricing_rule.base_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.pricing_rule.base_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.pricing_rule.price_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].item_snapshot.pricing_rule.conflict_policy` | literal["lowest_price", "priority"] | yes | no | — | — |
 | `revision.lines[].item_snapshot.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.price_basis_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.standard_price_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.price_basis_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.origins` | object[string, object] | no | no | {} | — |
 | `revision.lines[].item_snapshot.pricing_basis` | literal["unit", "amount", "allocated"] | no | no | "unit" | — |
 | `revision.lines[].item_snapshot.net_amount_minor_units` | integer \| null | no | yes | null | — |
@@ -3801,6 +3821,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `purchase_order.revision.lines[].rate.currency` | string | yes | no | — | — |
 | `purchase_order.revision.lines[].rate.minor_units` | integer | yes | no | — | — |
 | `purchase_order.revision.lines[].rate_minor_units` | integer \| null | yes | yes | — | — |
+| `purchase_order.revision.lines[].rate_fraction` | integer \| null | no | yes | null | — |
 | `purchase_order.revision.lines[].amount` | object | yes | no | — | — |
 | `purchase_order.revision.lines[].amount.amount` | string | yes | no | — | — |
 | `purchase_order.revision.lines[].amount.currency` | string | yes | no | — | — |
@@ -4622,6 +4643,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.price_rule.offset_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].facts.profile.price_rule.percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_rule.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.price_rule.fixed_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_rule.adjustment_basis` | literal["standard_price", "cost", "current_custom_price"] | no | no | "standard_price" | — |
 | `revision.lines[].facts.profile.price_rule.matched` | boolean | no | no | true | — |
 | `revision.lines[].facts.profile.pricing_rule` | object \| null | no | yes | null | — |
@@ -4635,12 +4657,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.pricing_rule.rounding` | literal["cent", "x.99", "x.95", "dollar"] | yes | no | — | — |
 | `revision.lines[].facts.profile.pricing_rule.value` | integer | yes | no | — | — |
 | `revision.lines[].facts.profile.pricing_rule.base_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.base_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.pricing_rule.price_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].facts.profile.pricing_rule.conflict_policy` | literal["lowest_price", "priority"] | yes | no | — | — |
 | `revision.lines[].facts.profile.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_basis_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.standard_price_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.price_basis_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.origins` | object[string, object] | no | no | {} | — |
 | `revision.lines[].facts.profile.pricing_basis` | literal["unit", "amount", "allocated"] | no | no | "unit" | — |
 | `revision.lines[].facts.profile.net_amount_minor_units` | integer \| null | no | yes | null | — |
@@ -4709,6 +4735,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.taxes[].tax_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].facts.discount_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.taxable_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.unit_price_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.estimated_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].quantity` | string | yes | no | — | — |
 | `revision.lines[].completed_quantity` | string | yes | no | — | — |
 | `revision.lines[].cancelled_quantity` | string \| null | no | yes | null | Sales orders and work orders: the cancelled part of this line. |
@@ -5493,6 +5521,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.price_rule.offset_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].facts.profile.price_rule.percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_rule.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.price_rule.fixed_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_rule.adjustment_basis` | literal["standard_price", "cost", "current_custom_price"] | no | no | "standard_price" | — |
 | `revision.lines[].facts.profile.price_rule.matched` | boolean | no | no | true | — |
 | `revision.lines[].facts.profile.pricing_rule` | object \| null | no | yes | null | — |
@@ -5506,12 +5535,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.pricing_rule.rounding` | literal["cent", "x.99", "x.95", "dollar"] | yes | no | — | — |
 | `revision.lines[].facts.profile.pricing_rule.value` | integer | yes | no | — | — |
 | `revision.lines[].facts.profile.pricing_rule.base_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.base_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.pricing_rule.price_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].facts.profile.pricing_rule.conflict_policy` | literal["lowest_price", "priority"] | yes | no | — | — |
 | `revision.lines[].facts.profile.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_basis_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.standard_price_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.price_basis_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.origins` | object[string, object] | no | no | {} | — |
 | `revision.lines[].facts.profile.pricing_basis` | literal["unit", "amount", "allocated"] | no | no | "unit" | — |
 | `revision.lines[].facts.profile.net_amount_minor_units` | integer \| null | no | yes | null | — |
@@ -5580,6 +5613,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.taxes[].tax_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].facts.discount_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.taxable_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.unit_price_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.estimated_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].quantity` | string | yes | no | — | — |
 | `revision.lines[].completed_quantity` | string | yes | no | — | — |
 | `revision.lines[].cancelled_quantity` | string \| null | no | yes | null | Sales orders and work orders: the cancelled part of this line. |
@@ -6323,6 +6358,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.price_rule.offset_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].facts.profile.price_rule.percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_rule.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.price_rule.fixed_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_rule.adjustment_basis` | literal["standard_price", "cost", "current_custom_price"] | no | no | "standard_price" | — |
 | `revision.lines[].facts.profile.price_rule.matched` | boolean | no | no | true | — |
 | `revision.lines[].facts.profile.pricing_rule` | object \| null | no | yes | null | — |
@@ -6336,12 +6372,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.pricing_rule.rounding` | literal["cent", "x.99", "x.95", "dollar"] | yes | no | — | — |
 | `revision.lines[].facts.profile.pricing_rule.value` | integer | yes | no | — | — |
 | `revision.lines[].facts.profile.pricing_rule.base_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.pricing_rule.base_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.pricing_rule.price_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].facts.profile.pricing_rule.conflict_policy` | literal["lowest_price", "priority"] | yes | no | — | — |
 | `revision.lines[].facts.profile.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_basis_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.standard_price_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.price_basis_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.origins` | object[string, object] | no | no | {} | — |
 | `revision.lines[].facts.profile.pricing_basis` | literal["unit", "amount", "allocated"] | no | no | "unit" | — |
 | `revision.lines[].facts.profile.net_amount_minor_units` | integer \| null | no | yes | null | — |
@@ -6410,6 +6450,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.taxes[].tax_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].facts.discount_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.taxable_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.unit_price_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.estimated_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].quantity` | string | yes | no | — | — |
 | `revision.lines[].completed_quantity` | string | yes | no | — | — |
 | `revision.lines[].cancelled_quantity` | string \| null | no | yes | null | Sales orders and work orders: the cancelled part of this line. |

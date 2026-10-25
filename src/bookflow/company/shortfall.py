@@ -126,16 +126,18 @@ def _preferred_vendor(s, item_id):
 
 
 def _rate(s, item_id, vendor_id, currency):
-    """The purchase order's own cost: this vendor's purchase cost for the item, else the item's cost."""
+    """The purchase order's own cost, in R150 price units: this vendor's purchase cost for the
+    item, else the item's cost."""
+    from bookflow.core import unit_price
     p = c.item_vendor_profiles
-    row = s.company.conn.execute(sa.select(p.c.purchase_cost_minor_units, p.c.purchase_cost_currency).where(
+    row = s.company.conn.execute(sa.select(p.c.purchase_cost_minor_units, p.c.purchase_cost_currency, p.c.purchase_cost_fraction).where(
         p.c.item_id == item_id, p.c.vendor_id == vendor_id, p.c.active.is_(True))).first()
     if row is not None and row[0] is not None and row[1] == currency:
-        return row[0]
-    item = s.company.conn.execute(sa.select(c.items.c.cost_minor_units, c.items.c.cost_currency).where(
+        return unit_price.join(row[0], row[2])
+    item = s.company.conn.execute(sa.select(c.items.c.cost_minor_units, c.items.c.cost_currency, c.items.c.cost_fraction).where(
         c.items.c.id == item_id)).first()
     if item is not None and item[0] is not None and item[1] == currency:
-        return item[0]
+        return unit_price.join(item[0], item[2])
     return None
 
 
@@ -204,7 +206,8 @@ def purchase_input(s, inp, header, vendor, lines):
         rate = _rate(s, item, vendor, currency)
         if rate is None:
             raise _invalid(f'lines.{index}', 'the item has no purchase cost for this vendor or on its record; set one on the item')
-        rows.append(dict(item=item, quantity=_plain(quantity), rate=Money(rate, currency).to_dict()['amount']))
+        from bookflow.core import unit_price
+        rows.append(dict(item=item, quantity=_plain(quantity), rate=unit_price.text(rate, currency)))
     values = dict(vendor=vendor, date=inp.date, lines=rows,
                   memo=inp.memo or f'For {header["kind"].replace("_", " ")} {header["number"]}')
     if inp.expected_date:

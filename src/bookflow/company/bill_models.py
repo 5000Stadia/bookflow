@@ -28,7 +28,7 @@ from bookflow.company.journal_models import (
     MoneyInput, _Date, _Input, _Number, _Selector, _Version,
 )
 from bookflow.company.journal_outputs import CreatedOutput, JournalBatchOutput, JournalMoneyOutput
-from bookflow.company.sales_models import Quantity, SalesMoneyInput
+from bookflow.company.sales_models import Quantity, SalesMoneyInput, SalesPriceInput
 from bookflow.core.models import WriteOutput
 
 MoneyOutput = JournalMoneyOutput
@@ -106,7 +106,7 @@ class BillItemInput(_Input):
     item: _Selector
     description: Text | None = None
     quantity: Quantity = '1'
-    unit_cost: str | SalesMoneyInput | None = None
+    unit_cost: str | SalesPriceInput | None = None
     amount: str | SalesMoneyInput | None = None
     customer: _Selector | None = None
     billable: bool = False
@@ -162,7 +162,7 @@ class ReceiptBillingInput(_Input):
     receipt_line: _Selector
     expected_receipt_version: _Version
     quantity: Quantity
-    unit_cost: str | SalesMoneyInput | None = Field(default=None, description='Product unit cost only, excluding retained receipt shipping.')
+    unit_cost: str | SalesPriceInput | None = Field(default=None, description='Product unit cost only, excluding retained receipt shipping.')
     amount: str | SalesMoneyInput | None = Field(default=None, description='Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value.')
 
     @model_validator(mode='after')
@@ -181,7 +181,7 @@ class OrderLineSelection(_Input):
     """
     line: Annotated[str, Field(min_length=1, max_length=64)]
     quantity: Quantity | None = None
-    unit_cost: str | SalesMoneyInput | None = None
+    unit_cost: str | SalesPriceInput | None = None
     amount: str | SalesMoneyInput | None = None
 
     @model_validator(mode='after')
@@ -366,6 +366,9 @@ class BillItemOutput(CreatedOutput):
     quantity_microunits: int
     unit_cost: MoneyOutput | None
     unit_cost_minor_units: int | None
+    # R150: the unit cost's thousandths of a minor unit beyond unit_cost_minor_units (its nearest
+    # minor unit); absent when whole. ``unit_cost.amount`` is exact.
+    unit_cost_fraction: int | None = Field(default=None, exclude_if=lambda v: v is None)
     amount: MoneyOutput
     amount_minor_units: int
     currency: str

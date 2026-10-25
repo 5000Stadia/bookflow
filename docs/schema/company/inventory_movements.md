@@ -35,3 +35,4 @@ Database: `company`.
 | `fallback_unit_cost_minor_units` | BIGINT | yes | — | — | — | — | Item purchase cost per base unit captured when this issue or found quantity was recorded, its cost if the item has never held stock; null except on an issue or a found quantity. |
 | `count_position` | VARCHAR(8) | no | "before" | — | — | — | Where the movement sits against its date's physical counts: before (the default), count (a count's own difference) or after. |
 | `landed_on_movement_id` | VARCHAR(26) | yes | — | — | — | inventory_movements.id | Receipt a landed cost is allocated to; null except on a landed movement (reserved for landed cost). |
+| `fallback_unit_cost_fraction` | BIGINT | yes | — | — | — | — | Captured fallback unit cost beyond its rounded minor units, in signed thousandths of a minor unit (price = fallback_unit_cost_minor_units + fraction/1000); null when the price is whole minor units. |

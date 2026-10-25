@@ -300,7 +300,7 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
             currency=row['currency'], asset_account_id=row['asset_account_id'],
             offset_account_id=row['offset_account_id'], class_id=row['class_id'],
             corrects_movement_id=None, reverses_movement_id=row['id'], returns_movement_id=None,
-            filled_by_movement_id=None, fallback_unit_cost_minor_units=None,
+            filled_by_movement_id=None, fallback_unit_cost_minor_units=None, fallback_unit_cost_fraction=None,
             count_position=row.get('count_position') or 'before',
             transaction_id=row['transaction_id'], revision_id=row['revision_id'], document_line_id=row['document_line_id'],
             posting_line_id=None, posting_batch_id=None)
@@ -326,8 +326,7 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
             asset_account_id=entry.asset_account_id, offset_account_id=entry.offset_account_id,
             class_id=entry.class_id, corrects_movement_id=None, reverses_movement_id=None,
             returns_movement_id=entry.returns_movement_id, filled_by_movement_id=None,
-            fallback_unit_cost_minor_units=(inventory.fallback_cost(s, entry.item_id, currency)
-                                            if entry.kind == 'issue' else None),
+            **inventory.fallback_columns(s, entry.item_id, currency, entry.kind),
             count_position=count_position or 'before')
         if entry.kind == 'issue' or entry.returns_movement_id is not None:
             # What it is worth is costing's answer, not the caller's, so the value is read off
@@ -367,7 +366,7 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
             sequence=sequence, currency=currency, asset_account_id=target['asset_account_id'],
             offset_account_id=target['offset_account_id'], class_id=target['class_id'],
             corrects_movement_id=target['id'], reverses_movement_id=None, returns_movement_id=None,
-            filled_by_movement_id=None, fallback_unit_cost_minor_units=None,
+            filled_by_movement_id=None, fallback_unit_cost_minor_units=None, fallback_unit_cost_fraction=None,
             count_position=target.get('count_position') or 'before')
         rows(target['item_id']).append(values)
         change.corrections.append(Correction(target['effective_date'], 'Receipt purchase-price correction',
@@ -424,7 +423,7 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
                 corrects_movement_id=target['id'], reverses_movement_id=None,
                 returns_movement_id=None,
                 filled_by_movement_id=correction.filled_by['id'] if true_up else None,
-                fallback_unit_cost_minor_units=None,
+                fallback_unit_cost_minor_units=None, fallback_unit_cost_fraction=None,
                 count_position=target.get('count_position') or 'before'),
                 line_index=len(lines) - 1))
             sequence += 1

@@ -65,6 +65,8 @@ cannot say which, and a stored kind is the only thing that can be right.
 
 import sqlalchemy as sa
 
+from bookflow.company.unit_price_schema import fraction_column
+
 # The documents that write movements, in their stored spelling. ``count`` is a physical count's
 # posted difference (R104 increment 2); ``landed_cost`` is reserved for increment 6.
 DOCUMENT_KINDS = ('adjustment', 'recost', 'count', 'landed_cost')
@@ -131,6 +133,7 @@ def define_tables(metadata, column, table):
         C('count_position', sa.String(8), "Where the movement sits against its date's physical counts: before (the default), count (a count's own difference) or after.",
           nullable=False, default='before', server_default='before'),
         C('landed_on_movement_id', sa.String(26), 'Receipt a landed cost is allocated to; null except on a landed movement (reserved for landed cost).', nullable=True),
+        fraction_column('fallback_unit_cost', 'Captured fallback unit cost'),
         sa.ForeignKeyConstraint(['transaction_id', 'posting_batch_id'],
                                 ['posting_batches.transaction_id', 'posting_batches.id'],
                                 name='fk_inventory_movement_batch'),
