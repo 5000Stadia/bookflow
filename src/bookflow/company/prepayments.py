@@ -595,7 +595,7 @@ def customer_note(s, customer_id, context):
     if context == 'invoice':
         return (f'{name} has {_plain(held, currency)} held in customer prepayments (receipt '
                 f'{", ".join(row["number"] for row in rows)}). Use it on this invoice with `prepayment apply --invoice <number>`; '
-                'an invoice made from the estimate or work order (`<kind> invoice`) applies it by itself.')
+                'an invoice made from the estimate, work order or sales order (`<kind> invoice`) applies it by itself.')
     if context == 'payment':
         return (f'{name} has {_plain(held, currency)} held in customer prepayments. If it should pay an invoice, use it '
                 'first with `prepayment apply --invoice <number>`, then receive only what is still owed.')

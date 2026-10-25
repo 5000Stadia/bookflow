@@ -181,6 +181,15 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0091 = importlib.import_module("bookflow.storage.company_migrations.versions.0091_subcent_unit_prices")
 
     def older(conn):
+        # Newest first: co0085 (on co0094), then co0094, then co0092 and co0091.
+        for table in ("todos", "overdue_notices", "scheduled_revision_authority", "scheduled_group_authority", "scheduled_holds"):
+            conn.execute(f"DROP TABLE {table}")  # co0085's five tables
+        for column in ("scheduler_catch_up_days", "overdue_notice_days", "overdue_notice_frequency",
+                       "overdue_notice_minimum", "overdue_notice_template"):
+            conn.execute(f"ALTER TABLE company_info DROP COLUMN {column}")  # co0085's five preferences
+        for index in ("ix_items_barcode", "ix_inventory_bins_barcode"):
+            conn.execute(f"DROP INDEX {index}")  # co0094's two indexes
+        conn.execute("DELETE FROM sequences WHERE name = 'barcode'")  # and its code counter
         for table, column in co0091.FRACTIONS:
             conn.execute(f"ALTER TABLE {table} DROP COLUMN {column}")  # co0091's sub-cent fractions
         for table in ("check_print_outcomes", "check_spoiled_numbers", "check_print_run_items", "check_print_runs",
@@ -267,14 +276,6 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
                        "finance_charge_account_id", "finance_charge_on_overdue_charges", "finance_charge_from",
                        "finance_charge_mark_to_print"):
             conn.execute(f"ALTER TABLE company_info DROP COLUMN {column}")  # co0074's seven preferences
-        for table in ("todos", "overdue_notices", "scheduled_revision_authority", "scheduled_group_authority", "scheduled_holds"):
-            conn.execute(f"DROP TABLE {table}")  # co0085's five tables
-        for index in ("ix_items_barcode", "ix_inventory_bins_barcode"):
-            conn.execute(f"DROP INDEX IF EXISTS {index}")  # co0094's two barcode indexes
-        conn.execute("DELETE FROM sequences WHERE name = 'barcode'")  # and co0094's barcode counter
-        for column in ("scheduler_catch_up_days", "overdue_notice_days", "overdue_notice_frequency",
-                       "overdue_notice_minimum", "overdue_notice_template"):
-            conn.execute(f"ALTER TABLE company_info DROP COLUMN {column}")  # co0085's five preferences
         conn.execute("DROP TABLE assembly_builds")  # co0079's, with its triggers
         conn.execute("DROP TRIGGER " + co0079.REPLACED)  # co0079 widened one guard; put co0057's back
         conn.execute(co0079.OLD_GUARD)

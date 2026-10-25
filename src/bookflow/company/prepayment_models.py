@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 _DATE = r'^\d{4}-\d{2}-\d{2}$'
 _SELECTOR = dict(min_length=1, max_length=1000)
 _DOCUMENT = ('The customer-work document the money is held on: its id, or its kind and number such as '
-             '"estimate 1001" or "work-order 1002" (a bare number works when only one document carries it). '
+             '"estimate 1001", "work-order 1002" or "sales-order 1003" (a bare number works when only one document carries it). '
              'An estimate must be accepted.')
 
 

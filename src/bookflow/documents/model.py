@@ -173,10 +173,21 @@ def _ship_party(profile: Mapping[str, Any]) -> Party:
     return Party("Ship to", None, tuple(address_block(profile.get("shipping_address"))))
 
 
+def _from_order(revision: Mapping[str, Any]) -> bool:
+    return any(line.get("order") for line in revision["lines"])
+
+
 def _sales_columns(revision: Mapping[str, Any]) -> tuple[Column, ...]:
     taxed = any(line["tax"]["minor_units"] for line in revision["lines"])
-    columns = [Column("Item", 1.5, wrap=True), Column("Description", 3.4, wrap=True),
-               Column("Qty", 0.8, align="right"), Column("Rate", 1.0, align="right")]
+    if _from_order(revision):
+        # Made from a sales order: the anchor's invoice prints the order's quantities beside what it bills.
+        columns = [Column("Item", 1.2, wrap=True), Column("Description", 1.4, wrap=True),
+                   Column("Ordered", 1.05, align="right"), Column("Prev. invoiced", 1.0, align="right"),
+                   Column("Backordered", 1.4, align="right"), Column("Invoiced", 0.95, align="right"),
+                   Column("Rate", 0.85, align="right")]
+    else:
+        columns = [Column("Item", 1.5, wrap=True), Column("Description", 3.4, wrap=True),
+                   Column("Qty", 0.8, align="right"), Column("Rate", 1.0, align="right")]
     if taxed:
         columns.append(Column("Tax", 0.9, align="right"))
     columns.append(Column("Amount", 1.1, align="right"))
@@ -205,6 +216,7 @@ def _money_sum(values, currency: str) -> str:
 def _sales_rows(revision: Mapping[str, Any], columns) -> tuple[tuple[str, ...], ...]:
     """One row per line; a group whose members do not print is one row at the group's total."""
     taxed = any(column.label == "Tax" for column in columns)
+    ordered = any(column.label == "Ordered" for column in columns)
     rows = []
     lines = list(revision["lines"])
     index = 0
@@ -217,7 +229,7 @@ def _sales_rows(revision: Mapping[str, Any], columns) -> tuple[tuple[str, ...], 
             while (index + len(members) < len(lines)
                    and (lines[index + len(members)]["item_snapshot"].get("group") or {}).get("item") == group["item"]):
                 members.append(lines[index + len(members)])
-            row = [_label(group["item"]) or "", group.get("description") or "", "", ""]
+            row = [_label(group["item"]) or "", group.get("description") or "", "", ""] + (["", "", ""] if ordered else [])
             if taxed:
                 row.append(_money_sum((member["tax"] for member in members), revision["currency"]))
             row.append(_money_sum((_shown(member) for member in members), revision["currency"]))
@@ -232,7 +244,11 @@ def _sales_rows(revision: Mapping[str, Any], columns) -> tuple[tuple[str, ...], 
                     else "Quoted" if line.get("pricing_basis") == "allocated" else "")
             unit = _label(snapshot.get("unit"))
             quantity = str(line["quantity"]) + (f" {unit}" if unit else "")
-        row = [_label(snapshot["item"]) or "", line.get("description") or "", quantity, rate]
+        row = [_label(snapshot["item"]) or "", line.get("description") or ""]
+        if ordered:
+            figures = line.get("order") or {}
+            row += [figures.get("ordered", ""), figures.get("previously_invoiced", ""), figures.get("backordered", "")]
+        row += [quantity, rate]
         if taxed:
             row.append(line["tax"]["amount"])
         row.append(_shown(line)["amount"])

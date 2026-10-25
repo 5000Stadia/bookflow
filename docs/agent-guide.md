@@ -451,8 +451,9 @@ bounce: unapply and void it.
 
 A deposit, down payment or retainer is a customer prepayment: money paid before the work bills,
 held on the Customer Prepayments liability (set up on first use) and never income. Take it with
-`prepayment receive`, naming the accepted estimate or work order it is for (or the customer when
-it is for no document yet). Do not post it with `sales-receipt post` or `payment receive`: those
+`prepayment receive`, naming the accepted estimate, work order or sales order it is for (as
+`"sales-order 1003"`; or the customer when it is for no document yet), so the invoice made from
+that document uses it by itself. Do not post it with `sales-receipt post` or `payment receive`: those
 make it a sale or a receivable credit, and both commands say so when the customer holds money.
 
 <!-- bookflow-example: illustrative -->
@@ -810,8 +811,15 @@ false. A retry with the same key returns the same invoice.
 
 Voiding, deleting or updating away an order-made invoice line reopens that quantity on the order
 by default; pass `release_to_order cancel` to cancel it on the order instead. The preview says
-which. A credit memo never changes the order. `invoice post`, `sales-receipt post` and
-`payment receive` warn when the customer has an open order and give the command to use instead.
+which. A credit memo never changes the order. `invoice post`, `sales-receipt post`, `payment
+receive` and every other `<kind> invoice` (estimate, work order, time) warn when the customer has
+an open order and give the command to use instead.
+
+Before typing an invoice for a customer, check `report open-sales-orders --customer <name>`: if
+the goods are on an open order, bill the order with `sales-order invoice` rather than retyping its
+lines, or the order stays open, its stock stays committed and its deposit is not used. Each
+order-made invoice line shows the order's ordered, previously invoiced and backordered quantities
+(`order` on the line in `invoice show`, and on the printed invoice).
 
 ## Ordering what an order is short
 
