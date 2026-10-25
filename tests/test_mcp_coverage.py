@@ -68,7 +68,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # export/status/cancel/changes/preview/import, report accountant-review and accountant-changes.
     # +9 check printing (R152): check print-queue, print, print-confirm, print-cancel, reprint, print-run, print-pdf,
     # print-setup and print-alignment.
-    assert len(rows) == 675
+    # +2 barcodes (R104 increment 3): barcode lookup and barcode generate.
+    assert len(rows) == 677
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -310,7 +311,9 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 3557 -> 3574 (R152, check printing), measured: +17 from the nine check print commands' optional fields
     # (account, first_number, style, checks, failed_from, failed, new_number, offsets, expected_version null branches)
     # and to_be_printed on check post, check update and bill pay. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==3574
+    # 3574 -> 3576 (R104 increment 3, barcodes), measured: barcode lookup's optional as_of and barcode
+    # generate's optional items -- their null branches. No existing command moved. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==3576
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.
