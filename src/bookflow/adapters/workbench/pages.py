@@ -752,6 +752,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     from bookflow.adapters.workbench import timekeeping_pages as TimekeepingPages
     TimekeepingPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                            role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
+    # R152: Print Checks -- the queue, a print run, "Did checks print OK?", reprints and alignment.
+    from bookflow.adapters.workbench import check_print_pages as CheckPrintPages
+    CheckPrintPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                          role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R118: Enter Vehicle Mileage with the Vehicle List and Mileage Rates on one page.
     from bookflow.adapters.workbench import mileage_pages as MileagePages
     MileagePages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
@@ -768,6 +772,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     from bookflow.adapters.workbench import pricing_rule_pages as PricingRulePages
     PricingRulePages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                            role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
+    # R121: the accountant's copy (export, preview, import, cancel) and the period review checklist.
+    from bookflow.adapters.workbench import accountant_pages as AccountantPages
+    AccountantPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                          role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R109: the Set Up Budgets grid, Memorize on any report, and opening a memorized report.
     from bookflow.adapters.workbench import budget_pages as BudgetPages
     BudgetPages.mount(app, render=render, run=run, credential=credential, page_error=page_error)

@@ -24,7 +24,7 @@ import importlib
 from alembic import op
 
 revision = 'co0093'
-down_revision = 'co0089'
+down_revision = 'co0092'
 branch_labels = depends_on = None
 
 NEW_TABLES = ('inventory_counts', 'inventory_count_lines', 'inventory_count_entries', 'inventory_count_postings')

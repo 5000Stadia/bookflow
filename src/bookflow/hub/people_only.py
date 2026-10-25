@@ -25,8 +25,13 @@ ACT_SUBJECTS = {
     'vendor merge': 'Merging vendors', 'vendor unmerge': 'Undoing a vendor merge',
     'item convert': 'Converting an item to an inventory part',
     'account merge': 'Merging accounts', 'account unmerge': 'Undoing an account merge',
+    # check-printing-v1: what happened to paper in a printer is known to the person at it.
+    'check print-confirm': 'Confirming which checks printed', 'check print-cancel': 'Cancelling a check print run',
+    'check reprint': 'Reprinting a check',
     'item merge': 'Merging items', 'item unmerge': 'Undoing an item merge',
     'clock link': "Linking a person's login to an employee",
+    'accountant add': 'Making someone the external accountant', 'accountant remove': 'Ending an external accountant designation',
+    'accountant-copy cancel': "Cancelling an accountant's copy", 'accountant-copy import': "Importing an accountant's changes",
 }
 
 

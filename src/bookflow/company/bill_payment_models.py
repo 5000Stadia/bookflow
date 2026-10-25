@@ -70,6 +70,10 @@ class BillPayInput(_Input):
     funding_account: _Selector
     method: _Selector
     check_number: CheckNumber | None = None
+    to_be_printed: bool = Field(default=False, description=(
+        'To be printed: write each payment\'s cheque with no number yet and put it in the funding bank '
+        'account\'s print queue; `check print` numbers it when it prints. Needs a check method on a bank '
+        'account, and no check_number.'))
     reference: Reference | None = None
     memo: Text | None = None
     number: _Number | None = None

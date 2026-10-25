@@ -129,7 +129,7 @@ class CheckUse(StrictModel):
 
 class MissingChecksRow(StrictModel):
     """A hole in one bank account's sequence, a number two checks carry, or one given up."""
-    kind: Literal["gap", "duplicate", "retired"]
+    kind: Literal["gap", "duplicate", "retired", "spoiled", "printing"]
     account_id: str
     current_account_label: str
     current_account_name: str
@@ -141,6 +141,11 @@ class MissingChecksRow(StrictModel):
     duplicate_number: int | None = None
     times_used: int | None = None
     retired_number: int | None = None
+    spoiled_number: int | None = Field(default=None, description=(
+        "A spoiled or printing row's number: paper thrown away (spoiled), or in a print run still waiting "
+        'for "Did checks print OK?" (printing).'))
+    spoiled_reason: Literal["misprinted", "reprinted"] | None = None
+    printed_for: str | None = Field(default=None, description="The cheque the paper was printed for (transaction ID).")
     legacy_uncertain: bool = False
     before: CheckUse | None = None
     after: CheckUse | None = None
@@ -158,6 +163,8 @@ class MissingChecksTotals(StrictModel):
     duplicate_numbers: int = Field(ge=0)
     duplicate_checks: int = Field(ge=0)
     retired_numbers: int = Field(default=0, ge=0)
+    spoiled_numbers: int = Field(default=0, ge=0)
+    numbers_in_printer: int = Field(default=0, ge=0)
     legacy_uncertain_gaps: int = Field(default=0, ge=0)
     checks_numbered_before_the_upgrade: int = Field(default=0, ge=0)
 
@@ -219,11 +226,36 @@ WITH dated AS (
    AND (:account IS NULL OR v.account_id=:account)
    AND NOT EXISTS (SELECT 1 FROM check_instruments h
                    WHERE h.account_id=v.account_id AND h.check_sequence=v.check_sequence)
+   AND NOT EXISTS (SELECT 1 FROM check_spoiled_numbers z
+                   WHERE z.account_id=v.account_id AND z.check_sequence=v.check_sequence)
  GROUP BY v.account_id, v.check_sequence
+), paper AS (
+ -- Numbers the print layer put on paper and no cheque carries now (R152): spoiled by a
+ -- misprint or a reprint under a new number, or in a print run nobody has confirmed yet.
+ -- Each is accounted for, so it is explained rather than counted as a hole.
+ SELECT x.account_id AS account_id, x.seq AS seq, min(x.kind) AS kind, min(x.reason) AS reason,
+        min(x.tx) AS tx
+ FROM (
+   SELECT z.account_id AS account_id, z.check_sequence AS seq, 'spoiled' AS kind, z.reason AS reason,
+          z.transaction_id AS tx
+   FROM check_spoiled_numbers z
+   UNION ALL
+   SELECT r.account_id, i.check_sequence, 'printing', NULL, i.transaction_id
+   FROM check_print_run_items i JOIN check_print_runs r ON r.id=i.run_id
+   WHERE NOT EXISTS (SELECT 1 FROM check_print_outcomes o WHERE o.item_id=i.id)
+ ) x
+ JOIN transactions pt ON pt.id=x.tx
+ JOIN transaction_revisions pr ON pr.id=pt.current_revision_id
+ WHERE pr.date<=:as_of AND (:account IS NULL OR x.account_id=:account)
+   AND NOT EXISTS (SELECT 1 FROM check_instruments h
+                   WHERE h.account_id=x.account_id AND h.check_sequence=x.seq)
+ GROUP BY x.account_id, x.seq
 ), accounted AS (
  SELECT account_id, seq FROM per_number
  UNION
  SELECT account_id, seq FROM retired
+ UNION
+ SELECT account_id, seq FROM paper
 ), legacy AS (
  -- How far up this account's book the shared document series reached. Read from every
  -- examined cheque rather than only the ones still drawn on it: where a number came from is
@@ -239,18 +271,24 @@ WITH dated AS (
         s.seq-s.previous-1 AS missing_count, s.previous AS before_seq, s.seq AS after_seq,
         NULL AS duplicate_number, NULL AS times_used, NULL AS retired_number,
         CASE WHEN s.previous+1 <= coalesce(l.high_water, 0) THEN 1 ELSE 0 END AS legacy_uncertain,
-        s.previous+1 AS sort_key
+        s.previous+1 AS sort_key, NULL AS paper_number, NULL AS paper_reason, NULL AS paper_tx
  FROM sequenced s LEFT JOIN legacy l ON l.account_id=s.account_id
  WHERE s.previous IS NOT NULL AND s.seq>s.previous+1
  UNION ALL
- SELECT account_id, 'duplicate', NULL, NULL, 0, NULL, NULL, seq, uses, NULL, 0, seq
+ SELECT account_id, 'duplicate', NULL, NULL, 0, NULL, NULL, seq, uses, NULL, 0, seq, NULL, NULL, NULL
  FROM per_number WHERE uses>1
  UNION ALL
  SELECT r.account_id, 'retired', NULL, NULL, 0,
         (SELECT max(p.seq) FROM accounted p WHERE p.account_id=r.account_id AND p.seq<r.seq),
         (SELECT min(p.seq) FROM accounted p WHERE p.account_id=r.account_id AND p.seq>r.seq),
-        NULL, NULL, r.seq, 0, r.seq
+        NULL, NULL, r.seq, 0, r.seq, NULL, NULL, NULL
  FROM retired r
+ UNION ALL
+ SELECT q.account_id, q.kind, NULL, NULL, 0,
+        (SELECT max(p.seq) FROM accounted p WHERE p.account_id=q.account_id AND p.seq<q.seq),
+        (SELECT min(p.seq) FROM accounted p WHERE p.account_id=q.account_id AND p.seq>q.seq),
+        NULL, NULL, NULL, 0, q.seq, q.seq, q.reason, q.tx
+ FROM paper q
 ), selected AS (
  SELECT f.*, a.full_name AS account_full_name, a.name AS account_name,
         a.number AS account_number, a.full_name_key AS account_full_name_key
@@ -334,7 +372,7 @@ def missing_checks(inp: MissingChecksInput, s, *, principal_id=None) -> MissingC
             (SELECT count(*) FROM examined),
             (SELECT count(*) FROM used), (SELECT count(*) FROM drawn),
             (SELECT count(*) FROM examined WHERE origin='{LEGACY_ORIGIN}')""", params).fetchone()
-        gaps = missing = duplicates = duplicate_checks = retired = uncertain = 0
+        gaps = missing = duplicates = duplicate_checks = retired = uncertain = spoiled = printing = 0
         # Stream every finding, including those past this page, so a page boundary can
         # never hide a hole from the count a person reads at the top.
         for kind, missing_count, times_used, legacy in raw.execute(
@@ -344,6 +382,10 @@ def missing_checks(inp: MissingChecksInput, s, *, principal_id=None) -> MissingC
                 uncertain += 1 if legacy else 0
             elif kind == "duplicate":
                 duplicates, duplicate_checks = duplicates + 1, duplicate_checks + times_used
+            elif kind == "spoiled":
+                spoiled += 1
+            elif kind == "printing":
+                printing += 1
             else:
                 retired += 1
         totals = MissingChecksTotals(
@@ -351,6 +393,7 @@ def missing_checks(inp: MissingChecksInput, s, *, principal_id=None) -> MissingC
             unnumbered_checks=drawn - numbered, checks_off_a_bank_account=examined - drawn,
             gaps=gaps, missing_numbers=missing, duplicate_numbers=duplicates,
             duplicate_checks=duplicate_checks, retired_numbers=retired,
+            spoiled_numbers=spoiled, numbers_in_printer=printing,
             legacy_uncertain_gaps=uncertain, checks_numbered_before_the_upgrade=carried)
         page = _rows(raw.execute(_CHECKS + f"""SELECT * FROM selected
             ORDER BY {account_order("account_")}, sort_key, kind
@@ -387,6 +430,8 @@ def missing_checks(inp: MissingChecksInput, s, *, principal_id=None) -> MissingC
                 first_missing=row["first_missing"], last_missing=row["last_missing"],
                 missing_count=row["missing_count"], duplicate_number=row["duplicate_number"],
                 times_used=row["times_used"], retired_number=row["retired_number"],
+                spoiled_number=row["paper_number"], spoiled_reason=row["paper_reason"],
+                printed_for=row["paper_tx"],
                 legacy_uncertain=bool(row["legacy_uncertain"]),
                 before=before[-1] if before else None, after=after[0] if after else None,
                 checks=found(row["duplicate_number"]) + carried_by))

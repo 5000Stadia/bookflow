@@ -135,7 +135,7 @@ def member_ids(db, kind: str, entry_id: str) -> list[str]:
 
 def refuse_while_merged(db, kind: str, entry_id: str, verb: str) -> None:
     """An entry merged away changes only by undoing its merge (as `customer activate` refuses)."""
-    if not db.raw.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='list_merges'").fetchone():
+    if not db.conn.exec_driver_sql("SELECT 1 FROM sqlite_master WHERE type='table' AND name='list_merges'").first():
         return
     merge = live_merge(db, kind, entry_id)
     if merge is not None:

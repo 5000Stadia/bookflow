@@ -375,6 +375,7 @@ The same example as complete `bookflow_run` arguments:
 | `funding_account` | `--funding-account` | string | yes | no | — | minimum length 1 |
 | `method` | `--method` | string | yes | no | — | minimum length 1 |
 | `check_number` | `--check-number` | string \| null | no | yes | null | — |
+| `to_be_printed` | `--to-be-printed` | boolean | no | no | false | To be printed: write each payment's cheque with no number yet and put it in the funding bank account's print queue; `check print` numbers it when it prints. Needs a check method on a bank account, and no check_number. |
 | `reference` | `--reference` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `number` | `--number` | string \| null | no | yes | null | — |

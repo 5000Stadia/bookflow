@@ -169,8 +169,11 @@ def _document(s, ctx, payments, data, document, currency, operation):
     # name, and one that records a number the payment does not carry is two cheques' worth of
     # evidence for one piece of paper.
     instrument = document.get('instrument')
-    require(bool(instrument) == (captured.payment_method.kind == 'check'
-                                 and profile['funding_kind'] == 'bank_cash'),
+    # A cheque saved to be printed (R152) is the one cheque with no number yet: its print mark
+    # is the record that it is owed one, and printing it writes the chequebook row.
+    require(bool(instrument or document.get('print_mark')) == (captured.payment_method.kind == 'check'
+                                 and profile['funding_kind'] == 'bank_cash')
+            and not (instrument and document.get('print_mark')),
             'a cheque without a chequebook number, or a number on what is not a cheque')
     if instrument:
         written, projected = instrument['revision'], instrument['instrument']

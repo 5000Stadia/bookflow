@@ -2281,6 +2281,52 @@ MATRIX['report quantity-by-site'] = {
     'E_VALUE_RANGE': 'a limit beyond supported bounds',
     'E_VALIDATION': 'an unknown site name',
 }
+# Accountant review (R121).
+_ACCT_TAIL = {'E_DIRECTIVE_NOT_FOUND': 'unknown --directive', 'E_DIRECTIVE_INACTIVE': 'deactivated --directive'}
+_ACCT_KEY = {'E_IDEMPOTENCY_MISMATCH': 'same key, different input'}
+_ACCT_PERSON = {'E_PERMISSION': 'an agent: a person\'s act'}
+_ACCT_ONLY = {'E_PERMISSION': 'not the designated external accountant, and not working in an accountant\'s copy'}
+_ACCT_JOURNAL = {'E_RECORD_NOT_FOUND': 'unknown transaction or account', 'E_UNBALANCED_ENTRY': 'the entry does not balance',
+                 'E_PERIOD_CLOSED': 'dated in a closed period, after the review period or dividing date, or on or before the dividing date while a copy is out',
+                 'E_DUPLICATE_NUMBER': 'the entry number is taken', 'E_INACTIVE_REFERENCE': 'an account, name or class is inactive',
+                 'E_VALUE_RANGE': 'an amount beyond supported bounds', 'E_AMOUNT_PRECISION': 'an amount finer than the currency allows'}
+MATRIX['accountant add'] = {'E_RECORD_NOT_FOUND': 'unknown user', 'E_VALIDATION': 'an agent, an inactive user, or a role on the company other than standard (none, read-only, admin or owner)'} | _ACCT_PERSON | _ACCT_KEY | _ACCT_TAIL
+MATRIX['accountant remove'] = {'E_RECORD_NOT_FOUND': 'unknown user, or never designated'} | _ACCT_PERSON | _ACCT_KEY | _ACCT_TAIL
+MATRIX['accountant list'] = {}
+MATRIX['accountant reclassify'] = _ACCT_JOURNAL | {'E_VALIDATION': 'a voided entry, the same account twice, an entry posting nothing to from_account, or an amount over what it posts there'} | _ACCT_ONLY | _ACCT_KEY | _ACCT_TAIL
+MATRIX['accountant mark-entry'] = {'E_RECORD_NOT_FOUND': 'unknown transaction', 'E_VALIDATION': 'not on the entries-to-review list'} | {'E_PERMISSION': 'an agent, or not the external accountant'} | _ACCT_KEY | _ACCT_TAIL
+MATRIX['accountant reviewed-through'] = {'E_VALIDATION': 'after the review period end or the dividing date'} | _ACCT_ONLY | _ACCT_KEY | _ACCT_TAIL
+MATRIX['accountant-copy export'] = {'E_VALIDATION': 'a copy is already out, the dividing date is on or before the closing date, or no single designated accountant',
+                                    'E_PERMISSION': "these books are an accountant's copy", 'E_IO': 'the archive could not be written',
+                                    'E_BACKUP_INVALID': 'the written archive did not verify'} | _ACCT_TAIL
+MATRIX['accountant-copy status'] = {}
+MATRIX['accountant-copy cancel'] = {'E_RECORD_NOT_FOUND': 'no copy is out', 'E_REASON_REQUIRED': 'no reason given'} | _ACCT_PERSON | _ACCT_TAIL
+MATRIX['accountant-copy changes'] = {'E_PERMISSION': "these books are not an accountant's copy", 'E_IO': 'the change file could not be written'} | _ACCT_TAIL
+MATRIX['accountant-copy preview'] = {'E_VALIDATION': "no such file, not a change file, another company's, an unknown copy, tampered, its copy cancelled or returned, or its key not in these books"}
+MATRIX['accountant-copy import'] = _ACCT_JOURNAL | {'E_VALIDATION': "the file is refused (see preview), a chosen change is unknown or cannot be taken, or it takes nothing without close_copy"} | _ACCT_PERSON | _ACCT_TAIL
+MATRIX['report accountant-review'] = {'E_VALIDATION': 'as_of is not a date'}
+MATRIX['report accountant-changes'] = {}
+# Check printing (R152): the print queue, print runs, "Did checks print OK?", reprints and alignment.
+_PRINT_TAIL = {'E_IDEMPOTENCY_MISMATCH': 'same key, different input', 'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+               'E_DIRECTIVE_INACTIVE': 'deactivated --directive'}
+MATRIX['check print-queue'] = {'E_RECORD_NOT_FOUND': 'unknown account', 'E_VALIDATION': 'not a bank account'}
+MATRIX['check print'] = {'E_RECORD_NOT_FOUND': 'unknown account', 'E_VALIDATION': 'nothing queued, a check not queued on the account, or a partial first sheet of voucher checks',
+                         'E_DUPLICATE_NUMBER': 'a number in the run is already used, retired, spoiled or in the printer',
+                         'E_PERIOD_CLOSED': 'a queued check dated on or before the closing date',
+                         'E_VALUE_RANGE': 'the run would pass the largest check number'} | _PRINT_TAIL
+MATRIX['check print-confirm'] = {'E_RECORD_NOT_FOUND': 'unknown run', 'E_VALIDATION': 'already answered, or a failed number not in the run',
+                                 'E_PERMISSION': 'an agent: what printed is a person\'s to say'} | _PRINT_TAIL
+MATRIX['check print-cancel'] = {'E_RECORD_NOT_FOUND': 'unknown run', 'E_VALIDATION': 'already answered',
+                                'E_PERMISSION': 'an agent'} | _PRINT_TAIL
+MATRIX['check reprint'] = {'E_RECORD_NOT_FOUND': 'not a check or bill payment', 'E_VALIDATION': 'no number yet, voided, or in a print run',
+                           'E_DUPLICATE_NUMBER': 'the new number is used on the account', 'E_PERIOD_CLOSED': 'a new number for a closed-period check',
+                           'E_VERSION_CONFLICT': 'stale expected_version', 'E_VALUE_RANGE': 'past the largest check number',
+                           'E_PERMISSION': 'an agent'} | _PRINT_TAIL
+MATRIX['check print-run'] = {'E_RECORD_NOT_FOUND': 'unknown run'}
+MATRIX['check print-pdf'] = {'E_RECORD_NOT_FOUND': 'unknown run'}
+MATRIX['check print-setup'] = {'E_RECORD_NOT_FOUND': 'unknown account', 'E_VALIDATION': 'not a bank account, or an offset beyond 2 inches',
+                               'E_VERSION_CONFLICT': 'stale expected_version'} | _PRINT_TAIL
+MATRIX['check print-alignment'] = {'E_RECORD_NOT_FOUND': 'unknown account', 'E_VALIDATION': 'not a bank account, or a partial voucher sheet'}
 # Physical counts (R104 increment 2).
 MATRIX['inventory-count create'] = {
     'E_VALIDATION': 'an unknown site (the sites are listed), a non-stock item, bins or cycle (later increments), or nothing to count',

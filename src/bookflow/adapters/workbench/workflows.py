@@ -23,6 +23,7 @@ LABELS = {
     "preferred_ship_method_id": "Preferred shipping method", "price_level_id": "Price level",
     "customer_type_id": "Customer type", "job_type_id": "Job type",
     "contact_mode": "Contact source", "address_mode": "Shipping address source",
+    "to_be_printed": "Print later",
 }
 
 

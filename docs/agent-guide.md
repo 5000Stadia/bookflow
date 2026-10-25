@@ -616,6 +616,26 @@ schedule entries and the work orders he is assigned that day; `customer` instead
 {"command": "schedule calendar", "input": {"employee": "Dave Brazer", "view": "day", "date": "2026-10-25"}}
 ```
 
+## Printing checks: "print this week's checks"
+
+Write the checks with `to_be_printed: true` (on `check post`, or on `bill pay` by check from a bank
+account) and leave `number` out: they wait in the bank account's print queue with no number
+(`check print-queue`). `check print` gives them numbers in order from `first_number`, the number on
+the first check loaded in the printer, and `check print-pdf --run` returns the PDF to print. A number
+already used on the account is refused, never skipped.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "check print", "reason": "Print this week's checks",
+ "input": {"account": "Checking", "first_number": "1001", "style": "voucher"}}
+```
+
+Then ask the person "Did the checks print OK?" and stop: only they know what came out of the printer,
+so `check print-confirm` (all fine, or `failed_from` the first bad number), `check print-cancel` and
+`check reprint` are a person's act and refused to an agent. Misprinted checks go back to the queue for
+new numbers and their numbers are recorded as spoiled, which `report missing-checks` shows. A printed
+check's amount, payee and bank account cannot be changed: void it and write a new one.
+
 ## Special prices: "give Acme 10% off pipe fittings through December"
 
 A price rule changes the price a sales line defaults to when its conditions hold: items or
@@ -638,6 +658,31 @@ company preference picks the lowest price (the default) or the first rule by `pr
 (`price-rule set-preferences`). A line priced by a rule carries it in `item_snapshot.pricing_rule`; a typed
 `unit_price` overrides it. Saved documents never change when a rule does; end a deal early with
 `price-rule deactivate`.
+
+## Handing the books to the outside accountant
+
+An agent can prepare the accountant's hand-off but never accepts an import: designating an external
+accountant (`accountant add`), cancelling a copy and `accountant-copy import` are a person's steps.
+
+Before a review, read `report accountant-review` (as_of the period end): entries to review, what waits in
+the Uncategorized accounts, bank and card accounts not reconciled through the date, open receivables,
+payables and undeposited funds, and the accountant's reviewed-through mark. Tell the owner what is open.
+
+When the owner asks for an accountant's copy (for the designated external accountant; the copy's changes come
+back as theirs), `accountant-copy export` with the dividing date writes an
+archive and a small manifest into the company folder's exports/; Bookflow sends it nowhere, so tell the
+owner the file name to hand over. While it is out, a posting dated on or before the dividing date, an
+account edit or a list merge is refused (E_PERIOD_CLOSED with `reason` accountant_copy_out, or E_PERMISSION):
+date the work after the dividing date, or wait. `accountant-copy status` says whether a copy is out.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "accountant-copy export", "reason": "Q3 review by our accountant", "input": {"through": "2026-09-30"}}
+```
+
+When the accountant's change file arrives, `accountant-copy preview` (its full path) lists each change as
+new, imported or refused, and why; show that to the owner and let them import. Each imported change is
+posted as the accountant, and `report accountant-changes` lists everything an accountant changed.
 
 ## How are we doing against budget?
 
