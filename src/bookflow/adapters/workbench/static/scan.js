@@ -87,8 +87,18 @@
     item.value = answer.item_name;
     q.value = want.quantity;
     if (mode) mode.checked = !want.set;
+    // The entry posts and the page is swapped for the answer (R104 increment 2). The next scan in the
+    // queue waits for the new page, and then finds the new form rather than the one that was replaced.
+    const swapped = new Promise(resolve => {
+      const done = () => { document.removeEventListener('htmx:afterSettle', done); clearTimeout(timer); resolve(); };
+      const timer = setTimeout(done, 15000);
+      document.addEventListener('htmx:afterSettle', done);
+    });
     form.requestSubmit(form.querySelector('[type="submit"]') || undefined);
-    return want.quantity;
+    return swapped.then(() => {
+      document.querySelector('[data-scan][data-scan-mode="count"] [data-scan-input]')?.focus();
+      return want.quantity;
+    });
   }
 
   const MODES = {lines: intoLines, rows: intoRows, count: intoCount};
@@ -105,6 +115,11 @@
 
   async function look(field, input, text) {
     if (text === undefined) { text = input.value; input.value = ''; }
+    if (!field.isConnected) {
+      // The page was swapped while this scan waited its turn (a count entry): use the field that replaced it.
+      const current = document.querySelector(`[data-scan][data-scan-mode="${field.dataset.scanMode || 'lines'}"]`);
+      if (current) { field = current; input = current.querySelector('[data-scan-input]'); }
+    }
     if (!text.trim()) return;
     const want = parse(text);
     const keepTyped = () => {
@@ -136,7 +151,15 @@
       keepTyped();
       return;
     }
-    const placed = MODES[field.dataset.scanMode || 'lines'](field, answer, want);
+    let placed = MODES[field.dataset.scanMode || 'lines'](field, answer, want);
+    if (placed && typeof placed.then === 'function') {
+      placed = await placed;
+      if (!field.isConnected) {
+        field = document.querySelector('[data-scan][data-scan-mode="count"]') || field;
+        if (answer.message || answer.item_name) say(field, escape(answer.message || answer.item_name) + ' Quantity ' + escape(placed) + '.', 'ok');
+        return;
+      }
+    }
     if (placed === false) {
       say(field, 'There is no free line for ' + escape(answer.item_name) + '.', 'error');
       keepTyped();

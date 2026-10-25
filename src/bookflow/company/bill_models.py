@@ -523,6 +523,7 @@ class BillSummaryOutput(CommonOut):
 
 class BillOutput(BillSummaryOutput):
     revision: BillRevisionOutput
+    count_position: Literal['before', 'after'] = Field('before', description="Where the document's stock stands against a physical count of its site on its date (R104).")
     duplicate_references: list[DuplicateReferenceOutput] = Field(default_factory=list)
 
 

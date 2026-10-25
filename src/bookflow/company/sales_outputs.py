@@ -237,6 +237,7 @@ def sales_tax_applied(profile, tax, issuer_id):
 
 class SalesOutput(SalesSummaryOutput):
     revision: SalesRevisionOutput
+    count_position: Literal['before', 'after'] = Field('before', description="Where the document's stock stands against a physical count of its site on its date (R104).")
     settlement_current: InvoiceSettlementOutput | None = None
     sales_tax: SalesTaxApplied | None = Field(default=None, description=(
         'Which sales tax item and rate this sale charged and where that choice came from.'))

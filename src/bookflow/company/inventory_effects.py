@@ -250,8 +250,26 @@ def own_movements(s, transaction_id):
     return [row for row in rows if row['kind'] in INPUT_KINDS and row['id'] not in retired]
 
 
+def position_moves(s, transaction_id, stated):
+    """Whether a correction stating ``stated`` moves the document against its date's counts (R104).
+
+    A correction that states no position keeps the one its stock was placed at, as a line keeps its site.
+    """
+    if stated is None or transaction_id is None:
+        return False
+    own = own_movements(s, transaction_id)
+    return bool(own) and any((row.get('count_position') or 'before') != stated for row in own
+                             if row['kind'] != 'recost')
+
+
+def document_position(s, transaction_id):
+    """The position a document's stock stands at against its date's counts: before, unless it says after."""
+    own = own_movements(s, transaction_id) if transaction_id else []
+    return 'after' if any(row.get('count_position') == 'after' for row in own) else 'before'
+
+
 def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequence=None, repricing=(),
-         count_position='before'):
+         count_position=None):
     """Every movement and every correction this document implies, and nothing written yet.
 
     ``reversing`` is what the previous revision moved, from ``own_movements``; ``entries`` is
@@ -291,6 +309,12 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
                 if identity:
                     prior_sites.setdefault(identity, places[0]['site_id'])
                 prior_item_sites.setdefault(row['item_id'], places[0]['site_id'])
+    # A correction that states no position keeps the one its stock stood at (R104 increment 2).
+    stated = count_position
+    if count_position is None:
+        count_position = next((row.get('count_position') for row in reversing
+                               if row['kind'] in INPUT_KINDS and row.get('count_position') in ('before', 'after')),
+                              'before')
     for row in reversing:
         values = dict(
             id=new_id(), item_id=row['item_id'], kind='reversal',
@@ -313,6 +337,23 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
         item_conversions.require_stock_date(s, entry.item_id, entry.item_name, date, field)
         history = rows(entry.item_id)
         identity = new_id()
+        position = count_position
+        if entry.returns_movement_id is not None:
+            # A return follows the sale it gives back: on the sale's own date it takes the sale's position,
+            # so it never replays ahead of what it returns.
+            issue = s.company.conn.execute(sa.select(c.inventory_movements.c.effective_date,
+                                                     c.inventory_movements.c.count_position).where(
+                c.inventory_movements.c.id == entry.returns_movement_id)).first()
+            if issue is not None and issue.effective_date == date:
+                rank = {'before': 0, 'count': 1, 'after': 2}
+                if stated is not None and rank[stated] < rank[issue.count_position]:
+                    raise BookflowError('E_VALIDATION', message=(
+                        f'A return of {entry.item_name} follows its sale, which is placed {issue.count_position} '
+                        f"the count on {date}; leave count_position out, or say {issue.count_position}."),
+                        details={'fields': [{'field': 'count_position', 'problem': (
+                            f'a return follows its sale, which is placed {issue.count_position} the count')}]})
+                if stated is None:
+                    position = issue.count_position
         signed = (entry.quantity_microunits if entry.kind == 'receipt'
                   else -entry.quantity_microunits)
         values = dict(
@@ -327,7 +368,7 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
             class_id=entry.class_id, corrects_movement_id=None, reverses_movement_id=None,
             returns_movement_id=entry.returns_movement_id, filled_by_movement_id=None,
             **inventory.fallback_columns(s, entry.item_id, currency, entry.kind),
-            count_position=count_position or 'before')
+            count_position=position)
         if entry.kind == 'issue' or entry.returns_movement_id is not None:
             # What it is worth is costing's answer, not the caller's, so the value is read off
             # a first replay and written back before the corrections are worked out. An issue

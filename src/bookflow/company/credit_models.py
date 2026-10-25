@@ -330,6 +330,7 @@ class CreditMemoSummaryOutput(CommonOut):
 
 class CreditMemoOutput(CreditMemoSummaryOutput):
     revision: CreditRevisionOutput
+    count_position: Literal['before', 'after'] = Field('before', description="Where the document's stock stands against a physical count of its site on its date (R104).")
     source_current: CreditSourceOutput
 
 

@@ -315,7 +315,7 @@ def prepare(s, ctx, inp, operation):
             selected_items = landed_items
         journal.data['purchase_funding'] = {'account_id': profile.ap_account.id}
         _, stock, _ = check_items.attach(s, journal, selected_items,
-                                        count_position=getattr(inp, 'count_position', None) or 'before')
+                                        count_position=getattr(inp, 'count_position', None))
         header['transaction_id'] = journal.data['header']['id']
         financial_revision = journal.preview.revision.id
         if operation != 'void':

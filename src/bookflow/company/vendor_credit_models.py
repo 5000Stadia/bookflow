@@ -455,6 +455,7 @@ class VendorCreditSummaryOutput(CommonOut):
 
 class VendorCreditOutput(VendorCreditSummaryOutput):
     revision: VendorCreditRevisionOutput
+    count_position: Literal['before', 'after'] = Field('before', description="Where the document's stock stands against a physical count of its site on its date (R104).")
     applications: list[BillApplicationOutput] = Field(default_factory=list)
 
 

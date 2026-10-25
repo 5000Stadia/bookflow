@@ -275,7 +275,8 @@ def show(s, inp, document_type):
     if document_type in SETTLEABLE_RECEIVABLE_TYPES:
         from bookflow.company.payment_queries import invoice_current
         settlement = invoice_current(s, header['id'])
-    return SalesOutput(**_visible_summary(s, header, revision, profile_row(s, revision), getattr(inp, 'include_deleted', False)), revision=revision_output(s, revision), settlement_current=settlement)
+    return SalesOutput(**_visible_summary(s, header, revision, profile_row(s, revision), getattr(inp, 'include_deleted', False)), revision=revision_output(s, revision), settlement_current=settlement,
+                       count_position=inventory_effects.document_position(s, header['id']))
 
 
 def _settlement_condition(t, r, settlement):
@@ -791,6 +792,8 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
         changed_fields = _changes(_saved_semantic(s, old_revision), resolved['semantic']) if old_revision else []
         if old_revision and saved_sites(s, old_revision) != resolved_sites(resolved['lines']):
             changed_fields.append('lines.site')   # a line moved to another inventory site (R104)
+        if old_revision and inventory_effects.position_moves(s, old_header['id'], getattr(inp, 'count_position', None)):
+            changed_fields.append('count_position')   # moved against its date's counts (R104 increment 2)
         if old_revision and not changed_fields and not resolved['custom_plan'].changed:
             return Plan(SalesWriteOutput(**summary(old_header, old_revision, profile_row(s, old_revision)),
                 revision=revision_output(s, old_revision), facts_fingerprint=fingerprint, changed=False, warnings=warnings),
@@ -857,7 +860,7 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
         s, entries=[] if operation == 'void' else _stock_entries(pending, resolved['lines'] if resolved else None),
         reversing=inventory_effects.own_movements(s, old_header['id']) if old_header else (),
         date=revision['date'], currency=revision['currency'],
-        count_position=getattr(inp, 'count_position', None) or 'before')
+        count_position=getattr(inp, 'count_position', None))
     inventory_effects.open_dates(s, stock)
     current_batch = None
     if old_header:

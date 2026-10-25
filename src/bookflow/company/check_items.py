@@ -65,7 +65,7 @@ def changed(s, header, items):
     return items != stored(s, lines)
 
 
-def attach(s, fresh, items, *, count_position='before'):
+def attach(s, fresh, items, *, count_position=None):
     """Bind captured facts and stock movements to this exact journal revision's legs."""
     if not fresh.data['changed']:
         return [], None, []
@@ -92,7 +92,7 @@ def attach(s, fresh, items, *, count_position='before'):
         outputs.append(output(item, line['line_id'], line['currency']))
     stock = inventory_effects.plan(s, entries=entries,
         reversing=inventory_effects.own_movements(s, header['id']) if d['before'] else (),
-        date=revision.date, currency=revision.currency, field='items', count_position=count_position or 'before')
+        date=revision.date, currency=revision.currency, field='items', count_position=count_position)
     inventory_effects.open_dates(s, stock)
     sources = {source['document_line_id']: source['posting_line_id']
                for source in pending['posting_line_sources'] if source['reversed_source_id'] is None}

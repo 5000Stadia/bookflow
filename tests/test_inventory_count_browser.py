@@ -45,10 +45,22 @@ def test_a_count_entered_and_posted_from_the_count_screen(register_browser, widt
     text = _notice(b)
     assert 'started' in text, text
     assert b.evaluate('!!document.querySelector("[data-count-entry] [name=scan]")')
-    # The demo's van count left three valves on the van; the scanner types the valve's barcode.
-    _submit(b, '[data-count-entry]', {'scan': '100000000050', 'quantity': '2'}, '[data-count-enter]')
+    # The demo's van count left three valves on the van. The scanner types the valve's barcode and Enter,
+    # twice, faster than the page answers: the second scan waits for the first entry's page and adds to it.
+    b.evaluate('''(() => {
+        for (const old of document.querySelectorAll('[data-count-result], [role=alert]')) old.remove();
+        for (let n = 0; n < 2; n++) {
+            const input = document.querySelector('[data-scan-mode=count] [data-scan-input]');
+            input.focus();
+            input.value = '100000000050';
+            input.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}));
+        }
+        return true; })()''')
+    b.wait_for('!!document.querySelector("[data-count-result]") && '
+               'document.querySelector("[data-count-result]").innerText.includes("counted 2")', timeout=60)
     text = _notice(b)
     assert 'Brass Shutoff Valve: counted 2, expected 3, difference -1' in text, text
+    assert b.evaluate('document.querySelectorAll("[data-line]").length') == 1
     if width == 390:
         assert b.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1')
         top = b.evaluate('document.querySelector("[data-count-entry] [name=scan]").getBoundingClientRect().right')

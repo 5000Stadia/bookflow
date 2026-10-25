@@ -1101,6 +1101,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `sales_tax` | object \| null | no | yes | null | Which sales tax item and rate this sale charged and where that choice came from. |
 | `sales_tax.item` | string \| null | yes | yes | — | The sales tax item or tax group on the sale; null when none applies |
 | `sales_tax.item_id` | string \| null | no | yes | null | — |
@@ -1569,6 +1570,7 @@ Example JSON output:
   "billing_progress": [],
   "changed": true,
   "changed_fields": [],
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -2580,6 +2582,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `sales_tax` | object \| null | no | yes | null | Which sales tax item and rate this sale charged and where that choice came from. |
 | `sales_tax.item` | string \| null | yes | yes | — | The sales tax item or tax group on the sale; null when none applies |
 | `sales_tax.item_id` | string \| null | no | yes | null | — |
@@ -2601,6 +2604,7 @@ Example JSON output:
 
 ```json
 {
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -3476,6 +3480,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `sales_tax` | object \| null | no | yes | null | Which sales tax item and rate this sale charged and where that choice came from. |
 | `sales_tax.item` | string \| null | yes | yes | — | The sales tax item or tax group on the sale; null when none applies |
 | `sales_tax.item_id` | string \| null | no | yes | null | — |
@@ -3944,6 +3949,7 @@ Example JSON output:
   "billing_progress": [],
   "changed": true,
   "changed_fields": [],
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -4786,6 +4792,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `sales_tax` | object \| null | no | yes | null | Which sales tax item and rate this sale charged and where that choice came from. |
 | `sales_tax.item` | string \| null | yes | yes | — | The sales tax item or tax group on the sale; null when none applies |
 | `sales_tax.item_id` | string \| null | no | yes | null | — |
@@ -5254,6 +5261,7 @@ Example JSON output:
   "billing_progress": [],
   "changed": true,
   "changed_fields": [],
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",

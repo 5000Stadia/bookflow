@@ -1229,6 +1229,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.obligation.components[].amount_minor_units` | integer | yes | no | — | — |
 | `revision.obligation.components[].currency` | string | yes | no | — | — |
 | `revision.obligation.components[].audit_event_id` | string | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `duplicate_references` | array[object] | no | no | [] | — |
 | `duplicate_references[].bill_id` | string | yes | no | — | — |
 | `duplicate_references[].number` | string | yes | no | — | — |
@@ -1250,6 +1251,7 @@ Example JSON output:
   "ap_account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "changed": true,
   "changed_fields": [],
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -2059,6 +2061,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.obligation.components[].amount_minor_units` | integer | yes | no | — | — |
 | `revision.obligation.components[].currency` | string | yes | no | — | — |
 | `revision.obligation.components[].audit_event_id` | string | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `duplicate_references` | array[object] | no | no | [] | — |
 | `duplicate_references[].bill_id` | string | yes | no | — | — |
 | `duplicate_references[].number` | string | yes | no | — | — |
@@ -2076,6 +2079,7 @@ Example JSON output:
 ```json
 {
   "ap_account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -2724,6 +2728,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.obligation.components[].amount_minor_units` | integer | yes | no | — | — |
 | `revision.obligation.components[].currency` | string | yes | no | — | — |
 | `revision.obligation.components[].audit_event_id` | string | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `duplicate_references` | array[object] | no | no | [] | — |
 | `duplicate_references[].bill_id` | string | yes | no | — | — |
 | `duplicate_references[].number` | string | yes | no | — | — |
@@ -2745,6 +2750,7 @@ Example JSON output:
   "ap_account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "changed": true,
   "changed_fields": [],
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -3367,6 +3373,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.obligation.components[].amount_minor_units` | integer | yes | no | — | — |
 | `revision.obligation.components[].currency` | string | yes | no | — | — |
 | `revision.obligation.components[].audit_event_id` | string | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `duplicate_references` | array[object] | no | no | [] | — |
 | `duplicate_references[].bill_id` | string | yes | no | — | — |
 | `duplicate_references[].number` | string | yes | no | — | — |
@@ -3388,6 +3395,7 @@ Example JSON output:
   "ap_account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "changed": true,
   "changed_fields": [],
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",

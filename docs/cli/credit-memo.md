@@ -1006,6 +1006,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].amount.amount` | string | yes | no | — | — |
 | `revision.lines[].amount.currency` | string | yes | no | — | — |
 | `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `source_current` | object | yes | no | — | — |
 | `source_current.credit_source_key_id` | string | yes | no | — | — |
 | `source_current.party_id` | string | yes | no | — | — |
@@ -1043,6 +1044,7 @@ Example JSON output:
   "ar_account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "changed": true,
   "changed_fields": [],
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -2015,6 +2017,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].amount.amount` | string | yes | no | — | — |
 | `revision.lines[].amount.currency` | string | yes | no | — | — |
 | `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `source_current` | object | yes | no | — | — |
 | `source_current.credit_source_key_id` | string | yes | no | — | — |
 | `source_current.party_id` | string | yes | no | — | — |
@@ -2046,6 +2049,7 @@ Example JSON output:
 ```json
 {
   "ar_account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -2858,6 +2862,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].amount.amount` | string | yes | no | — | — |
 | `revision.lines[].amount.currency` | string | yes | no | — | — |
 | `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `source_current` | object | yes | no | — | — |
 | `source_current.credit_source_key_id` | string | yes | no | — | — |
 | `source_current.party_id` | string | yes | no | — | — |
@@ -2895,6 +2900,7 @@ Example JSON output:
   "ar_account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "changed": true,
   "changed_fields": [],
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -3695,6 +3701,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].amount.amount` | string | yes | no | — | — |
 | `revision.lines[].amount.currency` | string | yes | no | — | — |
 | `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `source_current` | object | yes | no | — | — |
 | `source_current.credit_source_key_id` | string | yes | no | — | — |
 | `source_current.party_id` | string | yes | no | — | — |
@@ -3732,6 +3739,7 @@ Example JSON output:
   "ar_account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "changed": true,
   "changed_fields": [],
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",

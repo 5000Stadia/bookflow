@@ -7,13 +7,13 @@
 {% set url = '/c/' ~ company_id ~ '/inventory/counts/' ~ (count.number|urlencode) %}
 {% if count.status == 'open' and can_enter %}
 <form method="post" action="{{ url }}" hx-post="{{ url }}" hx-target="body" hx-swap="outerHTML" class="count-entry" data-count-entry>
-<label class="scan">Scan or type an item <input name="scan" autofocus autocomplete="off" list="count-items" placeholder="Item name or barcode" value="{{ values.get('scan', '') }}"></label>
+{% from "scan_field.html" import scan_field %}{{ scan_field(company_id, 'count') }}<input type="hidden" name="scan" value="{{ values.get('scan', '') }}">
 <label class="qty">Quantity <input name="quantity" inputmode="decimal" autocomplete="off" value="{{ values.get('quantity', '') }}" placeholder="1"></label>
 <label class="mode"><input type="checkbox" name="mode" value="add" {% if values.get('mode') == 'add' %}checked{% endif %}> Add to it</label>
 <input type="hidden" name="action" value="enter">
 <button type="submit" data-count-enter>Enter</button>
-<datalist id="count-items">{% for l in count.lines %}<option value="{{ l.item_name }}">{% endfor %}</datalist>
 </form>
+<script src="{{ static_urls['scan.js'] }}" defer></script>
 {% endif %}
 <section class="workspace-card" aria-label="Lines">
 <h2>Lines</h2>

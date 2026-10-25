@@ -608,13 +608,16 @@ def build_change(s, ctx, count, derived, *, purpose, account_id, class_id):
     posted_lines = {row['id']: row['posting_line_id'] for entry in derived.values() for row in entry.live_movements}
     memo = f'Physical count {count["number"]}' + (', derived again' if purpose == 'rederive' else '')
 
-    def document_for(group, members):
+    def valued(item_id):
+        return item_id in planned and int(planned[item_id]['value_minor_units']) != 0
+
+    def document_for(group, members, skip=(), extra=()):
         lines, moved, placed = [], [], []
         for item_id in members:
             for values in reversals.get(item_id, ()):
                 moved.append(inventory._Movement(values, None, posted_lines.get(values['reverses_movement_id'])))
             placed += placements.for_movements(s, reversals.get(item_id, []))
-        for item_id in members:
+        for item_id in [m for m in members if m not in skip] + list(extra):
             values = planned.get(item_id)
             if values is None:
                 continue
@@ -627,10 +630,6 @@ def build_change(s, ctx, count, derived, *, purpose, account_id, class_id):
                 index = len(lines) - 1
             moved.append(inventory._Movement(values, index, None))
             placed += explicit[item_id]
-        if any(item_id in planned for item_id in members) and not lines:
-            raise _invalid('count', f'count {count["number"]} would move stock worth nothing at the average cost, and '
-                                    'Bookflow posts no zero-amount entry; give the items a cost first',
-                           count=count['number'])
         live = standing.get(group) if group else None
         document = None
         if live is not None and lines:
@@ -655,13 +654,33 @@ def build_change(s, ctx, count, derived, *, purpose, account_id, class_id):
             document.placements = placed
         return document
 
-    documents = []
-    for group in sorted(touched):
-        documents.append(document_for(group, [item_id for item_id in restated if group_of[item_id] == group]))
+    groups = [(group, [item_id for item_id in restated if group_of[item_id] == group]) for group in sorted(touched)]
     fresh = [item_id for item_id in restated if group_of[item_id] is None and item_id in planned]
-    for start in range(0, len(fresh), ITEMS_PER_ENTRY):
-        documents.append(document_for(None, fresh[start:start + ITEMS_PER_ENTRY]))
+    groups += [(None, fresh[start:start + ITEMS_PER_ENTRY]) for start in range(0, len(fresh), ITEMS_PER_ENTRY)]
+    # A difference worth nothing (no average and no purchase cost) has no journal line. It rides in an entry
+    # that has one; an entry of nothing but such differences cannot exist, so they move to another entry of
+    # this change, and only when none posts anything are they left unrecorded, with a warning.
+    skips, homeless = {}, []
+    for index, (group, members) in enumerate(groups):
+        if not any(valued(item_id) for item_id in members):
+            skips[index] = {item_id for item_id in members if item_id in planned}
+            homeless += [item_id for item_id in members if item_id in planned]
+    target = next((index for index, (_, members) in enumerate(groups)
+                   if any(valued(item_id) for item_id in members)), None)
+    documents = [document_for(group, members, skips.get(index, ()), homeless if index == target else ())
+                 for index, (group, members) in enumerate(groups)]
     documents = [document for document in documents if document is not None]
+    zero_warnings = []
+    for item_id in [m for m in restated if m in planned and not valued(m)]:
+        name = items[item_id]['full_name']
+        if target is None:
+            zero_warnings.append(
+                f'Count {count["number"]}: the difference for {name} is worth nothing at the average cost (it has no '
+                'cost on record) and nothing else in the count posts, so it is not recorded yet; give the item a cost '
+                'and the count is derived again with the next stock change it reaches.')
+        else:
+            zero_warnings.append(f'Count {count["number"]}: the difference for {name} is worth nothing at the average '
+                                 'cost; its quantity is recorded with no journal line.')
     warnings = []
     for item_id, state in states.items():
         own = {planned[item_id]['id']} if item_id in planned else set()
@@ -670,7 +689,7 @@ def build_change(s, ctx, count, derived, *, purpose, account_id, class_id):
         warnings += inventory.found_warnings(items[item_id], state, own)
     first_item = items[restated[0]]
     change = inventory._Change(documents, first_item, states.get(first_item['id']), currency,
-                               items=items, states=states, warnings=warnings)
+                               items=items, states=states, warnings=warnings + zero_warnings)
     change.placements = [row for document in documents for row in document.placements]
     change.loose_placements = loose
     if documents:
@@ -966,9 +985,12 @@ def settle_in_command(s, ctx, mark):
         for item_id, entry, _ in differences:
             if entry.desired == entry.live:
                 continue        # restated unchanged with the entry's new revision
+            name = names.get(item_id, {}).get('full_name', item_id)
             warnings.append(
+                f'Count {count["number"]} of {site} on {count["count_date"]} was derived again for {name}, so the '
+                'shelf stays as counted.' if count['blind'] else
                 f'Count {count["number"]} of {site} on {count["count_date"]} was derived again: '
-                f'{names.get(item_id, {}).get("full_name", item_id)} now differs by {_q(sum(entry.desired.values()))} '
+                f'{name} now differs by {_q(sum(entry.desired.values()))} '
                 f'(was {_q(before.get(item_id, 0))}), so the shelf stays as counted.')
         warnings.extend(change.warnings)
         # What this re-derivation wrote can reach a later count of the same place.

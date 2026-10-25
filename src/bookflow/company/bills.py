@@ -771,6 +771,7 @@ def show(s, inp):
                            order_ids(s, [header['id']]).get(header['id'])),
                            getattr(inp, 'include_deleted', False)),
         revision=revision_output(s, header, requested),
+        count_position=inventory_effects.document_position(s, header['id']),
         duplicate_references=duplicate_references(
             s, profile['vendor_id'], profile['supplier_reference_key'], header['id']))
 
@@ -1250,6 +1251,8 @@ def prepare(s, ctx, inp, operation):
     if operation != 'void':
         resolved = commercial(s, entry, old_header, old_revision, document_id=header['id'], received=received)
         changed_fields = _changes(_saved_semantic(s, old_revision), resolved['semantic']) if old_revision else []
+        if old_revision and inventory_effects.position_moves(s, old_header['id'], getattr(inp, 'count_position', None)):
+            changed_fields.append('count_position')   # moved against its date's counts (R104 increment 2)
         if old_revision and not changed_fields and not resolved['custom_plan'].changed and not (received and 'receipts' in inp.model_fields_set):
             return unchanged(old_header, old_revision)
         journals.open_dates(s, [resolved['date']] + ([old_revision['date']] if old_revision else []))
@@ -1320,7 +1323,7 @@ def prepare(s, ctx, inp, operation):
             pending, resolved['profile'], resolved['lines'], _header_site(s, inp)),
         reversing=inventory_effects.own_movements(s, old_header['id']) if old_header else (),
         date=revision['date'], currency=revision['currency'], field='items',
-        count_position=getattr(inp, 'count_position', None) or 'before')
+        count_position=getattr(inp, 'count_position', None))
     inventory_effects.open_dates(s, stock)
 
     current_batch = None

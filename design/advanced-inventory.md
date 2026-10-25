@@ -733,13 +733,21 @@ jobs at night; the van ends as counted.
   derived again". A dry run does not show the re-derivation; the saved result does.
 - **`count_position` on documents.** Invoices, sales receipts, credit memos, bills, item receipts, vendor
   credits, transfers and `inventory adjust` take it; checks, card charges and assembly builds place before
-  (their headers gained no field). A correction that changes only `count_position` is not seen as a change.
+  (their headers gained no field). A correction that states no position keeps the one its stock stood at; one
+  that changes only `count_position` is a change, and each document's `show` says its position. A return that
+  names its sale takes the sale's position when dated the sale's day, so it never replays ahead of it; stating a
+  position that would put it first is refused.
 - **A count line is the item at the site, unassigned,** until bins, lots and serial numbers arrive; `bins`,
   `cycle` and place fields on entries are refused with that said. Lines and placements already carry bin, lot
   and serial columns, and a count whose places cancel moves stock by placements alone.
 - **Two counts of one place on one date** cannot both be recorded; the second is refused naming the first.
-- **Differences worth nothing** (an item with no average and no purchase cost) cannot post, since Bookflow
-  posts no zero-amount entry; the post is refused naming the count.
+- **Differences worth nothing** (an item with no average and no purchase cost) record their quantity with no
+  journal line, riding in an entry of the count that has one, with a warning naming the count. A count with
+  nothing else to post leaves them unrecorded, says so, and is derived again by the next stock change it reaches;
+  neither a post nor a re-derivation refuses anyone's write for it. A blind count's re-derivation names the
+  count and the items, never quantities.
+- **Found units fill a shortfall** as a receipt does, owing the short sale its true-up dated at the found
+  quantity; co0093 widens co0059's true-up guard to admit them.
 - **Permissions:** create, enter and cancel are `item` (standard), post and void `ledger.post` (standard);
   reads are `item` member and the two reports `reports` member (layer `inventory-counts-v1`).
 - **`inventory adjust`**: `lines` (1-200) with `new_quantity` (the quantity at the line's site on the date,

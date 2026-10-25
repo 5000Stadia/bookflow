@@ -536,6 +536,7 @@ def show(s, inp):
                   settlement_output(header, current, source,
                                     0 if header['status'] == 'voided' else applied)),
         revision=revision_output(s, header, requested, edges),
+        count_position=inventory_effects.document_position(s, header['id']),
         applications=_applications(s, edges, current['currency'],
                                                        bill_payments._bill_numbers(
                                                            s, sorted({row['obligation_transaction_id']
@@ -934,7 +935,7 @@ def _compose(s, ctx, inp, resolved, previous=None):
         s, entries=_stock_entries(pending, profile, resolved['lines']),
         reversing=inventory_effects.own_movements(s, old_header['id']) if previous else (),
         date=revision['date'], currency=currency, field='items',
-        count_position=getattr(inp, 'count_position', None) or 'before')
+        count_position=getattr(inp, 'count_position', None))
     inventory_effects.open_dates(s, stock)
     old_batch = source_key = None
     if previous:
@@ -1035,7 +1036,8 @@ def prepare_update(s, ctx, inp):
     if not (inp.model_fields_set - {'credit', 'expected_version'}):
         return _unchanged_plan(s, inp, previous)
     resolved = commercial(s, inp, previous)
-    if resolved_semantic(resolved) == saved_semantic(s, previous['revision']):
+    if resolved_semantic(resolved) == saved_semantic(s, previous['revision']) and not inventory_effects.position_moves(
+            s, previous['header']['id'], getattr(inp, 'count_position', None)):
         return _unchanged_plan(s, inp, previous)
     # A correction always releases and retakes capacity that bills are standing on, so it
     # always says why, the way every other write that moves somebody else's residue does.
