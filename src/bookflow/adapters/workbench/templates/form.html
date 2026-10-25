@@ -102,7 +102,7 @@
 {% if control.structured_schema %} data-math-structured="object"{% endif %}
 {% if math %}
 {% if math.scale is defined %} data-math-scale="{{ math.scale }}"{% endif %}
-{% if math.currency %} data-math-currency="{{ math.currency }}"{% if noun == 'price-level' %} data-math-currency-field="f:currency"{% endif %}{% endif %}
+{% if math.currency %} data-math-currency="{{ math.currency }}"{% if noun == 'price-level' %} data-math-currency-field="f:currency"{% endif %}{% endif %}{% if math.extra_places %} data-math-extra-places="{{ math.extra_places }}"{% endif %}
  data-math-clear="clear:{{ name[2:] if name.startswith('f:') else name }}"
 {% if math.active %} data-math-active='{{ math.active | tojson }}'{% endif %}
 {% if name.startswith('c:lines:') and sales_form %} data-math-line-field="{{ control.name }}" data-math-price-mode="price-mode:{{ name[2:].rsplit(':', 1)[0] }}" data-math-defaults-prefix="c:{{ name[2:].rsplit(':', 1)[0] }}:use_defaults:"{% endif %}

@@ -94,15 +94,15 @@ def _validate(plan, s, ctx):
             require(header['kind'] in ('work_order', 'sales_order') or lf.cancelled_quantity_microunits == 0, 'cancellation on quote')
             require(lf.base_quantity_microunits == calc.base_quantity(lf.quantity_microunits, lf.unit_factor_nanounits), 'wrong base quantity')
             if lf.pricing_basis == 'amount':
-                require(lf.unit_price_minor_units is None and lf.markup_percent_millionths is None, 'amount mode has a competing rate')
+                require(lf.unit_price_minor_units is None and lf.unit_price_fraction is None and lf.markup_percent_millionths is None, 'amount mode has a competing rate')
             else:
-                require(lf.unit_price_minor_units is not None and lf.net_minor_units == calc.extension(lf.quantity_microunits, lf.unit_price_minor_units) - (lf.discount_minor_units or 0), 'wrong rate extension')
+                require(lf.unit_price_minor_units is not None and lf.net_minor_units == calc.extension_units(lf.quantity_microunits, lf.price_units) - (lf.discount_minor_units or 0), 'wrong rate extension')
                 if lf.pricing_basis == 'markup':
                     require(lf.estimated_unit_cost_minor_units is not None and lf.markup_percent_millionths is not None, 'markup has no basis')
-                    require(lf.unit_price_minor_units == calc.adjusted_price(lf.estimated_unit_cost_minor_units, lf.markup_percent_millionths), 'wrong cost markup')
+                    require(lf.price_units == calc.adjusted_price_units(lf.cost_units, lf.markup_percent_millionths), 'wrong cost markup')
                 else:
                     require(lf.markup_percent_millionths is None, 'unused markup in other mode')
-            expected_cost = calc.extension(lf.quantity_microunits, lf.estimated_unit_cost_minor_units) if lf.estimated_unit_cost_minor_units is not None else None
+            expected_cost = calc.extension_units(lf.quantity_microunits, lf.cost_units) if lf.estimated_unit_cost_minor_units is not None else None
             require(lf.estimated_cost_minor_units == expected_cost, 'wrong estimated cost extension')
             taxable = f.profile.preferences.sales_tax_enabled and bool(lf.profile.tax_code and lf.profile.tax_code.taxable)
             exempt = f.profile.customer_tax_code is not None and not f.profile.customer_tax_code.taxable

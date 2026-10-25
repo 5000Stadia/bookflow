@@ -31,6 +31,7 @@ import json
 
 import sqlalchemy as sa
 
+from bookflow.core import unit_price
 from bookflow.company import schema as c
 from bookflow.company.restoration_models import RestoreOutput
 from bookflow.core import audit, clock
@@ -215,7 +216,7 @@ def invoice_input(s, header, rev, inp):
         if facts.pricing_basis == 'amount':
             value['net_amount'] = _money(facts.net_amount_minor_units, currency)
         elif line['unit_price_minor_units'] is not None:
-            value['unit_price'] = _money(line['unit_price_minor_units'], currency)
+            value['unit_price'] = unit_price.text(unit_price.row_units(line, 'unit_price'), currency)  # R150: exact
         if facts.class_id is not None:
             value['class_id'] = facts.class_id.id
         if facts.tax_code is not None:

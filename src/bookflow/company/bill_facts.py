@@ -16,6 +16,7 @@ from pydantic import Field
 
 from typing import Literal
 
+from bookflow.core import unit_price
 from bookflow.company.items import TRACKED_TYPES
 from bookflow.company.sales_facts import Account, Origin, Reference, Term
 from bookflow.company.sales_models import StrictModel
@@ -83,6 +84,14 @@ class BillItemProfile(StrictModel):
     receipt_product_minor_units: int | None = Field(default=None, exclude_if=lambda v: v is None)
     receipt_shipping_minor_units: int | None = Field(default=None, exclude_if=lambda v: v is None)
     receipt_product_unit_cost_minor_units: int | None = Field(default=None, exclude_if=lambda v: v is None)
+    # R150: each cost's thousandths of a minor unit beyond its rounded minor units; absent when whole.
+    unit_cost_fraction: int | None = Field(default=None, ge=-500, le=500, exclude_if=lambda v: v is None)
+    standard_cost_fraction: int | None = Field(default=None, ge=-500, le=500, exclude_if=lambda v: v is None)
+    receipt_product_unit_cost_fraction: int | None = Field(default=None, ge=-500, le=500, exclude_if=lambda v: v is None)
+
+    def units(self, prefix: str) -> int | None:
+        """R150: the exact cost ``prefix`` (unit_cost, standard_cost, receipt_product_unit_cost) in price units."""
+        return unit_price.join(getattr(self, prefix + '_minor_units'), getattr(self, prefix + '_fraction'))
 
     class_id: Reference | None = None
     customer: Reference | None = None

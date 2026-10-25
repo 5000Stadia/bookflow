@@ -178,7 +178,11 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0079 = importlib.import_module("bookflow.storage.company_migrations.versions.0079_assembly_builds")
     co0083 = importlib.import_module("bookflow.storage.company_migrations.versions.0083_mileage")
 
+    co0091 = importlib.import_module("bookflow.storage.company_migrations.versions.0091_subcent_unit_prices")
+
     def older(conn):
+        for table, column in co0091.FRACTIONS:
+            conn.execute(f"ALTER TABLE {table} DROP COLUMN {column}")  # co0091's sub-cent fractions
         for table in ("check_print_outcomes", "check_spoiled_numbers", "check_print_run_items", "check_print_runs",
                       "check_print_marks", "check_print_settings"):
             conn.execute(f"DROP TABLE {table}")  # co0092's six tables, with their indexes and guards
@@ -273,7 +277,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))
     restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older",
                                               "organization": "Older Books Organization"})
-    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0092"
+    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0091"
     folder = _folder(client, restored["company_id"])
     # The migration took its verified backup of the restored database first, as every migration does.
     assert list((folder / "backups").glob("*-from-co0062.db"))

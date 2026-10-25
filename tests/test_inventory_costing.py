@@ -294,7 +294,9 @@ def test_stock_taken_below_zero_warns_and_so_does_a_void_that_leaves_a_sale_shor
     assert short["adjustment"]["inventory_value"]["amount"] == "-20.00"
     assert short["warnings"] == [
         "Takes Costing Test Valve to -2 on 2026-03-01; its cost is provisional, at the average "
-        "cost, until a receipt brings the item back up and trues it up."]
+        "cost, until a receipt brings the item back up and trues it up.",
+        # Below-zero by place (R104 increment 1): the one site says so too.
+        "Warehouse now shows -2 Costing Test Valve; no other site holds any."]
     assert valuation("2026-03-31") == "-20.00"
     voided = client.run("inventory void", {"adjustment": purchase["id"]}, company=COMPANY, reason="mistake")
     assert [(x["effective_date"], x["delta"]["amount"]) for x in voided["adjustment"]["corrections"]] == \

@@ -8,7 +8,7 @@ every barcode already recorded stays, duplicates included (only a new or changed
 from alembic import op
 
 revision = 'co0094'
-down_revision = 'co0092'
+down_revision = 'co0091'
 branch_labels = depends_on = None
 INDEXES = ('CREATE INDEX ix_items_barcode ON items (barcode)',
            'CREATE INDEX ix_inventory_bins_barcode ON inventory_bins (barcode)')

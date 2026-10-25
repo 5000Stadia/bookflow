@@ -990,6 +990,12 @@ def variant_policies():
              'there is no Pay Bills form, so no browser case reaches it and the four-surface witness '
              'is the only executable evidence']),
         ('anyOf', ('SalesMoneyInput', 'null', 'string')): ([money, 'tests/test_mcp_money_gui_browser.py::test_top_level_money_object_nullable_branch_and_complete_calculation', 'tests/test_mcp_sales_money_origin_browser.py::test_sales_line_money_object_null_rejection_and_current_default_origin'], []),
+        # R150: a unit price or cost, exact to three places past the minor unit. The sales-line
+        # witness drives its null and integer-object branches; the sub-cent browser case submits
+        # 3.459 as text through the real hx-post form.
+        ('anyOf', ('SalesPriceInput', 'null', 'string')): ([
+            'tests/test_mcp_sales_money_origin_browser.py::test_sales_line_money_object_null_rejection_and_current_default_origin',
+            'tests/test_subcent_prices_browser.py::test_a_sub_cent_rate_typed_in_the_invoice_window_posts_exactly'], []),
         ('anyOf', ('SignedMoney', 'string')): ([
             'tests/test_mcp_registry_deposits.py::test_deposit_lifecycle_full_documents_and_exact_ledger'],
             ['the deposit witnesses enter signed decimal strings; the structured signed-money object has no dedicated browser case yet']),

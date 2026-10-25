@@ -103,7 +103,7 @@ def _scalar_descriptor(
         "required": required,
         "nullable": nullable,
         "annotation": annotation,
-        "math": numeric_metadata(name, base, extra),
+        "math": numeric_metadata(name, base, extra, annotation),
     }
 
 
@@ -255,7 +255,7 @@ def leaves(model: type[BaseModel], prefix: str = "") -> list[dict[str, Any]]:
                     "description": f.description or "", "default": default,
                     "required": f.is_required(), "nullable": nullable,
                     "date": is_date(f.annotation, field=f, model=model, name=name),
-                    "annotation": f.annotation, "math": numeric_metadata(name, base, extra),
+                    "annotation": f.annotation, "math": numeric_metadata(name, base, extra, f.annotation),
                     # A field hint, not a name match: `multiline` asks for a text area (pasted
                     # text keeps its line breaks); `text_file` also offers choosing a file to read in.
                     "multiline": bool(extra.get("multiline")), "text_file": extra.get("text_file", "")})

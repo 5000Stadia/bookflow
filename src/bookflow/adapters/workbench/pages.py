@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from bookflow.core import unit_price
 from bookflow.adapters.workbench import date_defaults as DateDefaults
 
 import json
@@ -282,7 +283,7 @@ def _editable_values(noun: str, shown: dict[str, Any]) -> dict[str, Any]:
             ap_account=shown['profile']['ap_account']['id'], memo=shown['memo'], reference=shown['reference'], shipping=shown['shipping']['amount'],
             items=[dict(line_id=line['line_id'], item=line['profile']['item']['id'],
                 quantity=line['quantity'], description=line['description'],
-                **({'unit_cost': Money(line['profile']['unit_cost_minor_units'], shown['total']['currency']).to_dict()['amount']} if line['profile']['unit_cost_minor_units'] is not None else {'amount': line['product_amount']['amount']}),
+                **({'unit_cost': unit_price.text(unit_price.row_units(line['profile'], 'unit_cost'), shown['total']['currency'])} if line['profile']['unit_cost_minor_units'] is not None else {'amount': line['product_amount']['amount']}),
                 order_line_id=line.get('order_line_id')) for line in shown['items']])
     if noun == "custom-field":
         return {**shown, "scopes": [scope["record_type"] for scope in shown["scopes"]]}

@@ -21,6 +21,7 @@ Database: `company`.
 | `unit_factor_nanounits` | BIGINT | no | — | — | — | — | Positive captured base units per selected unit in billionths. |
 | `base_quantity_microunits` | BIGINT | no | — | — | — | — | Exact credited base quantity in millionths. |
 | `unit_price_minor_units` | BIGINT | yes | — | — | — | — | Home-currency price per selected unit; null when the net is taken rather than priced. |
+| `unit_price_fraction` | BIGINT | yes | — | — | — | — | Unit price beyond its rounded minor units, in signed thousandths of a minor unit (price = unit_price_minor_units + fraction/1000); null when the price is whole minor units. |
 | `pricing_basis` | VARCHAR(16) | no | — | — | — | — | Authoritative unit or amount pricing mode. |
 | `net_minor_units` | BIGINT | no | — | — | — | — | Home-currency line net before tax. |
 | `tax_minor_units` | BIGINT | no | — | — | — | — | Home-currency sum of this line tax components. |

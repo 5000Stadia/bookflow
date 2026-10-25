@@ -65,6 +65,8 @@ cannot say which, and a stored kind is the only thing that can be right.
 
 import sqlalchemy as sa
 
+from bookflow.company.unit_price_schema import fraction_column
+
 # The documents that write movements, in their stored spelling.
 DOCUMENT_KINDS = ('adjustment', 'recost')
 
@@ -113,6 +115,7 @@ def define_tables(metadata, column, table):
         C('returns_movement_id', sa.String(26), 'Issue this receipt gives back; null except on a return.', nullable=True),
         C('filled_by_movement_id', sa.String(26), 'Receipt whose arrival trued up the provisional cost of the issue this recost corrects; null except on a true-up.', nullable=True),
         C('fallback_unit_cost_minor_units', sa.BigInteger, "Item purchase cost per base unit captured when this issue was recorded, the provisional cost if the item has never held stock; null except on an issue.", nullable=True),
+        fraction_column('fallback_unit_cost', 'Captured fallback unit cost'),
         sa.ForeignKeyConstraint(['transaction_id', 'posting_batch_id'],
                                 ['posting_batches.transaction_id', 'posting_batches.id'],
                                 name='fk_inventory_movement_batch'),
