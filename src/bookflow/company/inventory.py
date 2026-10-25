@@ -176,6 +176,7 @@ class _Document:
     extra_placements: list = field(default_factory=list)   # a count's own, moving no quantity
     after_persist: object = None      # callback(fresh, rows, provenance) -> extra persist entries
     reason: str | None = None         # a generated void's reason, when the caller gave none
+    placements: list | None = None    # its own movements' placements, worked out when planned
 
 
 @dataclass
@@ -790,7 +791,8 @@ def persist_change(s, ctx, change, *, command_name, persist, nouns=None):
             if document.after_persist is not None:
                 extra.extend(document.after_persist(fresh, rows, provenance))
             # Placed before the movements, which the database refuses unless their placements sum to them (R104).
-            planned = change.placements if position == 0 else None
+            planned = document.placements if document.placements is not None else (
+                change.placements if position == 0 else None)
             placed = placements.placements_for_rows(s, rows, change.sites, planned)
             placed += placements.with_provenance(document.extra_placements, **provenance)
             extra.append(placements.extra(placed))

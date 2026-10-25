@@ -88,7 +88,9 @@ def test_counted_at_four_jobs_entered_at_nine_leave_the_van_as_counted(van):
     shown = run('inventory-count show', dict(count='C-1'))
     assert {line['item_name']: line['difference'] for line in shown['lines']} == {
         'Widget': '-1', 'Elbow': '-1', 'Valve': '1'}
-    assert len(shown['documents']) == 1      # one entry, corrected by revision
+    # The recorded entry (Widget and Elbow) was corrected by revision; the Valve, which had no difference
+    # when the count was recorded, posts in an entry of its own.
+    assert [d['purpose'] for d in shown['documents']] == ['record', 'rederive']
     _tie_every_date(books)
     # The asset ties to the valuation.
     valuation = run('report inventory-valuation', dict(as_of='2017-12-31'))
@@ -326,3 +328,21 @@ def test_the_worksheet_and_the_valuation_detail_read_the_count(van):
                     ('movement', 'issue', 'after', '-1', '-5.00', '6', '30.00'),
                     ('closing', None, None, None, None, '6', '30.00')]
     assert detail['totals']['asset_value']['amount'] == '30.00'
+
+
+def test_a_long_count_posts_in_several_entries_and_a_late_sale_corrects_only_its_own(van, monkeypatch):
+    """A journal entry holds at most 200 lines, so a count posts at most ITEMS_PER_ENTRY items per entry
+    (99 in use; one here, so three items make three entries)."""
+    from bookflow.company import inventory_counts
+    monkeypatch.setattr(inventory_counts, 'ITEMS_PER_ENTRY', 1)
+    books, run, shrinkage = van['books'], van['run'], van['shrinkage']
+    count = run('inventory-count create', dict(site='Van 1', date='2017-03-03'), reason='Count')
+    _, recorded = _record(run, count, shrinkage, Widget=4, Elbow=3, Valve=1)
+    entries = recorded['documents']
+    assert len(entries) == 3
+    versions = {d['transaction_id']: run('journal show', dict(journal=d['transaction_id']))['version'] for d in entries}
+    _jobs(run, books, Widget=1)
+    after = {d['transaction_id']: run('journal show', dict(journal=d['transaction_id']))['version'] for d in entries}
+    assert sum(after[key] != versions[key] for key in versions) == 1          # only the Widget entry was corrected
+    assert _held(books, '2017-03-03')[('Widget', 'Van 1')] == '4'
+    assert _shrinkage(books, shrinkage) == 100 + 500                           # an Elbow and a Valve; the Widget was sold

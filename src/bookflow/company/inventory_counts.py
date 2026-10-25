@@ -532,13 +532,20 @@ def _place_ids(key):
     return dict(bin_id=bin_id, lot_id=lot_id, serial_number_id=serial_id)
 
 
-def build_change(s, ctx, count, derived, *, purpose, account_id, class_id):
-    """The count's one journal entry, posted, corrected or voided so it carries what ``derived`` says.
+# A journal entry carries at most 200 lines, so a count posts its differences in entries of at most this
+# many items, two lines each (R104 increment 2: a 500-line count posts in several).
+ITEMS_PER_ENTRY = 99
 
-    A count's differences post as one journal entry; deriving them again corrects that entry the way a
-    sale's correction does -- its old movements reversed exactly in its own transaction, every item's
-    difference restated at the count's date and position -- and a count left with no difference voids it.
-    Returns ``(change, differences)``; ``change`` is None when what is posted already stands.
+
+def build_change(s, ctx, count, derived, *, purpose, account_id, class_id):
+    """The count's journal entries, posted, corrected or voided so they carry what ``derived`` says.
+
+    A count's differences post in journal entries of at most ``ITEMS_PER_ENTRY`` items. Deriving them
+    again corrects only the entries holding an item whose difference moved, the way a sale's correction
+    does -- that entry's movements reversed exactly in its own transaction and its items' differences
+    restated at the count's date and position -- and an entry left with no difference is voided. Items
+    with no posted difference yet post in new entries. Returns ``(change, differences)``; ``change`` is
+    None when what is posted already stands.
     """
     currency = inventory._home(s)
     sequence = inventory.next_sequence(s)
@@ -546,16 +553,23 @@ def build_change(s, ctx, count, derived, *, purpose, account_id, class_id):
     if purpose == 'void':
         for entry in derived.values():
             entry.desired = {}
-    if all(entry.desired == entry.live for entry in derived.values()):
+    changed = [item_id for item_id, entry in derived.items() if entry.desired != entry.live]
+    if not changed:
         return None, []
-    live = live_posting(s, count)
-    items = {item_id: item_service.resolve_item(s.company, item_id) for item_id in derived}
-    reversals, planned, explicit, loose = [], [], [], []
-    for item_id, entry in derived.items():
-        if live is not None:
-            for row in entry.live_movements:
-                reversals.append(inventory.reversal_values(row, sequence))
-                sequence += 1
+    standing = {row['transaction_id']: row for row in postings(s, count['id']) if row['status'] != 'voided'}
+    group_of = {item_id: next((row['transaction_id'] for row in entry.live_movements), None)
+                for item_id, entry in derived.items()}
+    touched = {group_of[item_id] for item_id in changed if group_of[item_id] is not None}
+    restated = [item_id for item_id in derived if group_of[item_id] in touched
+                or (group_of[item_id] is None and item_id in changed)]
+    items = {item_id: item_service.resolve_item(s.company, item_id) for item_id in restated}
+    site_name = placements.site_names(s).get(count['site_id'], '')
+    reversals, planned, explicit, loose = {}, {}, {}, []
+    for item_id in restated:
+        entry = derived[item_id]
+        for row in entry.live_movements:
+            reversals.setdefault(item_id, []).append(inventory.reversal_values(row, sequence))
+            sequence += 1
         if entry.desired != entry.live:
             for row in entry.live_line_placements:
                 loose.append(dict(row, id=new_id(), quantity_microunits=-int(row['quantity_microunits']),
@@ -569,12 +583,12 @@ def build_change(s, ctx, count, derived, *, purpose, account_id, class_id):
                 sequence=sequence, currency=currency, asset_id=asset['id'], offset_id=account_id, class_id=class_id,
                 position='count', fallback=inventory.fallback_cost(s, item_id, currency))
             sequence += 1
-            planned.append(values)
-            for key, difference in sorted(entry.desired.items()):
-                explicit.append(dict(id=new_id(), item_id=item_id, site_id=count['site_id'], **_place_ids(key),
-                                     quantity_microunits=difference, effective_date=date, count_position='count',
-                                     sequence=values['sequence'], source='movement', movement_id=values['id'],
-                                     transfer_revision_id=None, source_line_id=None, reverses_placement_id=None))
+            planned[item_id] = values
+            explicit[item_id] = [dict(id=new_id(), item_id=item_id, site_id=count['site_id'], **_place_ids(key),
+                                      quantity_microunits=difference, effective_date=date, count_position='count',
+                                      sequence=values['sequence'], source='movement', movement_id=values['id'],
+                                      transfer_revision_id=None, source_line_id=None, reverses_placement_id=None)
+                                 for key, difference in sorted(entry.desired.items())]
         elif entry.desired and entry.desired != entry.live:
             # The places cancel: stock was misplaced, not lost. Placements alone move it.
             for key, difference in sorted(entry.desired.items()):
@@ -586,63 +600,80 @@ def build_change(s, ctx, count, derived, *, purpose, account_id, class_id):
 
     def refuse(refusal, item):
         return inventory.refuse_stock(refusal, item, quantity_field='entries', value_field='entries')
+    flat_reversals = [values for rows in reversals.values() for values in rows]
     # Reversals first, so each new difference replays on the shelf without the old one.
-    working, states = inventory.value_movements(s, reversals + planned, items, refuse) if reversals or planned \
-        else ({}, {})
-    by_item = {values['item_id']: values for values in planned}
-    differences = [(item_id, entry, by_item.get(item_id)) for item_id, entry in derived.items()
-                   if entry.desired != entry.live or item_id in by_item]
-    lines, moved = [], []
-    for values in reversals:
-        moved.append(inventory._Movement(values, None, next(
-            (row['posting_line_id'] for entry in derived.values() for row in entry.live_movements
-             if row['id'] == values['reverses_movement_id']), None)))
-    for values in planned:
-        index = None
-        if int(values['value_minor_units']):
-            item = items[values['item_id']]
-            lines.extend(inventory.pair(
-                values['asset_account_id'], values['offset_account_id'], values['value_minor_units'], currency,
-                values['class_id'], f'Count {count["number"]}: {item["full_name"]} '
-                                    f'{_q(values["quantity_microunits"])} at {placements.site_names(s).get(count["site_id"], "")}'))
-            index = len(lines) - 1
-        moved.append(inventory._Movement(values, index, None))
-    if planned and not lines:
-        raise _invalid('count', f'count {count["number"]} would move stock worth nothing at the average cost, and '
-                                'Bookflow posts no zero-amount entry; give the items a cost first',
-                       count=count['number'])
+    working, states = inventory.value_movements(s, flat_reversals + list(planned.values()), items, refuse) \
+        if flat_reversals or planned else ({}, {})
+    differences = [(item_id, derived[item_id], planned.get(item_id)) for item_id in restated]
+    posted_lines = {row['id']: row['posting_line_id'] for entry in derived.values() for row in entry.live_movements}
+    memo = f'Physical count {count["number"]}' + (', derived again' if purpose == 'rederive' else '')
+
+    def document_for(group, members):
+        lines, moved, placed = [], [], []
+        for item_id in members:
+            for values in reversals.get(item_id, ()):
+                moved.append(inventory._Movement(values, None, posted_lines.get(values['reverses_movement_id'])))
+            placed += placements.for_movements(s, reversals.get(item_id, []))
+        for item_id in members:
+            values = planned.get(item_id)
+            if values is None:
+                continue
+            index = None
+            if int(values['value_minor_units']):
+                lines.extend(inventory.pair(
+                    values['asset_account_id'], values['offset_account_id'], values['value_minor_units'], currency,
+                    values['class_id'], f'Count {count["number"]}: {items[item_id]["full_name"]} '
+                                        f'{_q(values["quantity_microunits"])} at {site_name}'))
+                index = len(lines) - 1
+            moved.append(inventory._Movement(values, index, None))
+            placed += explicit[item_id]
+        if any(item_id in planned for item_id in members) and not lines:
+            raise _invalid('count', f'count {count["number"]} would move stock worth nothing at the average cost, and '
+                                    'Bookflow posts no zero-amount entry; give the items a cost first',
+                           count=count['number'])
+        live = standing.get(group) if group else None
+        document = None
+        if live is not None and lines:
+            document = inventory._Document(JournalUpdateInput(
+                journal=live['transaction_id'], expected_version=live['version'], date=date, memo=memo, lines=lines),
+                'update', 'count', moved)
+        elif live is not None and moved:
+            document = inventory._Document(JournalVoidInput(journal=live['transaction_id'],
+                                                            expected_version=live['version']), 'void', 'count', moved)
+            document.journal_date = date
+            document.reason = (f'Count {count["number"]} voided' if purpose == 'void'
+                               else f'Count {count["number"]}: no difference remains')
+        elif lines:
+            document = inventory._Document(JournalPostInput(date=date, memo=memo, lines=lines), 'post', 'count', moved)
+
+            def after(fresh, rows, provenance):
+                return [('inventory_count_postings', 'inventory_count_posting', 'transaction_id', [dict(
+                    transaction_id=fresh.data['header']['id'], count_id=count['id'],
+                    purpose='record' if purpose == 'record' else 'rederive', **provenance)])]
+            document.after_persist = after
+        if document is not None:
+            document.placements = placed
+        return document
+
+    documents = []
+    for group in sorted(touched):
+        documents.append(document_for(group, [item_id for item_id in restated if group_of[item_id] == group]))
+    fresh = [item_id for item_id in restated if group_of[item_id] is None and item_id in planned]
+    for start in range(0, len(fresh), ITEMS_PER_ENTRY):
+        documents.append(document_for(None, fresh[start:start + ITEMS_PER_ENTRY]))
+    documents = [document for document in documents if document is not None]
     warnings = []
     for item_id, state in states.items():
-        own = {values['id'] for values in planned if values['item_id'] == item_id}
+        own = {planned[item_id]['id']} if item_id in planned else set()
         history = [row for row in working[item_id] if row['id'] not in own]
         warnings += inventory._warnings(items[item_id], history, state, own)
         warnings += inventory.found_warnings(items[item_id], state, own)
-    memo = f'Physical count {count["number"]}' + (', derived again' if purpose == 'rederive' else '')
-    document = None
-    if live is not None and lines:
-        document = inventory._Document(JournalUpdateInput(
-            journal=live['transaction_id'], expected_version=live['version'], date=date, memo=memo, lines=lines),
-            'update', 'count', moved)
-    elif live is not None and reversals:
-        document = inventory._Document(JournalVoidInput(journal=live['transaction_id'],
-                                                        expected_version=live['version']), 'void', 'count', moved)
-        document.journal_date = date
-        document.reason = (f'Count {count["number"]} voided' if purpose == 'void'
-                           else f'Count {count["number"]}: no difference remains')
-    elif lines:
-        document = inventory._Document(JournalPostInput(date=date, memo=memo, lines=lines), 'post', 'count', moved)
-
-        def after(fresh, rows, provenance, purpose=purpose):
-            return [('inventory_count_postings', 'inventory_count_posting', 'transaction_id', [dict(
-                transaction_id=fresh.data['header']['id'], count_id=count['id'],
-                purpose='record' if purpose == 'record' else 'rederive', **provenance)])]
-        document.after_persist = after
-    first_item = items[(planned or reversals or [dict(item_id=next(iter(items)))])[0]['item_id']]
-    change = inventory._Change([document] if document else [], first_item, states.get(first_item['id']), currency,
+    first_item = items[restated[0]]
+    change = inventory._Change(documents, first_item, states.get(first_item['id']), currency,
                                items=items, states=states, warnings=warnings)
-    change.placements = placements.for_movements(s, reversals) + explicit
+    change.placements = [row for document in documents for row in document.placements]
     change.loose_placements = loose
-    if document is not None:
+    if documents:
         inventory.complete(s, change)
     return change, differences
 
@@ -725,8 +756,8 @@ def _post(s, ctx, inp, *, persist):
                                        class_id=klass['id'] if klass else None)
     currency = inventory._home(s)
     stamp = fingerprint(count, differences, account['id'], klass['id'] if klass else None)
-    all_differences = [(item_id, entry, next((v for i, e, v in differences if i == item_id), None))
-                       for item_id, entry in derived.items()]
+    valued = {item_id: values for item_id, _, values in differences}
+    all_differences = [(item_id, entry, valued.get(item_id)) for item_id, entry in derived.items()]
     total = sum(int(values['value_minor_units']) for _, _, values in differences if values)
     warnings = list(dict.fromkeys(change.warnings)) if change else []
     status = 'will_record'

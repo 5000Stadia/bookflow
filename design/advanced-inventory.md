@@ -718,11 +718,14 @@ jobs at night; the van ends as counted.
 - **The count's own position is `count`.** Movements and placements carry `count_position` `before`, `count`
   or `after`; a count's differences sit at `count`, between that date's documents placed before it and those
   stated after. Replay orders by date, this rank, then sequence. Every stored row is `before`.
-- **One standing journal entry per count.** A count posts its differences in one journal entry marked
-  `count`. Deriving it again corrects that entry by a new revision (its old movements reversed exactly in its
-  own transaction, every counted item restated at the count's date and position), as a sale's correction
-  does; a count left with no difference voids its entry, and a later difference posts a new one. So "reverses
-  that loss" is exact, not a found quantity at a rounded average. Voiding a count voids its entry.
+- **A count's differences post in journal entries of at most 99 items** (a journal entry holds 200 lines), marked
+  `count`. Deriving them again corrects only the entries holding an item whose difference moved, by a new revision
+  (its old movements reversed exactly in its own transaction, its items restated at the count's date and
+  position), as a sale's correction does; an entry left with no difference is voided, and an item that had none
+  when recorded posts in a new entry. So "reverses that loss" is exact, not a found quantity at a rounded
+  average. Voiding a count voids its entries. Measured on a 500-item count (334 differences, four entries): create
+  0.18 s, enter 500 entries 0.79 s, post preview 0.52 s, post 2.07 s, a late same-day sale that derives one entry
+  again 0.98 s, a sale after the count date 0.28 s, sheet 0.10 s.
 - **Re-derivation runs inside every company write.** Dispatch takes the stock sequence before a command
   applies and, after it, derives again every recorded count whose site and items the command's placements
   reached on or before its date (`inventory_counts.settle_in_command`), in date order so a re-derived count
