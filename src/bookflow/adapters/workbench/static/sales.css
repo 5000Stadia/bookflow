@@ -15,6 +15,10 @@
 .billing-selection select, .billing-selection input:not([type="checkbox"]) { box-sizing: border-box; width: 100%; min-width: 0; }
 .billing-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: .75rem; }
 .billing-line { margin: .8rem 0; }
+/* A sales order's Create invoice: on hand by default, available when the switch is on. */
+.billing-selection [data-stock-available] { display: none; }
+.billing-selection:has([data-stock-switch]:checked) [data-stock-available] { display: inline; }
+.billing-selection:has([data-stock-switch]:checked) [data-stock-on-hand] { display: none; }
 
 /* Sales document window: header band, line grid, footer band.
    The grid scrolls inside its own container; the page never scrolls sideways. */

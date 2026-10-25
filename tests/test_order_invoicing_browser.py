@@ -38,6 +38,14 @@ def test_create_invoice_from_an_order(register_browser):
         b.wait_for('!window.invoiceForm || !window.invoiceForm.isConnected', timeout=30)
         b.wait_for('document.readyState === "complete"')
 
+    # Each line shows the order's quantities and its item's stock: on hand, or available with the switch.
+    figures = b.evaluate('document.querySelector("[data-order-figures]").innerText')
+    assert 'Ordered 10' in figures and 'Backordered 8' in figures and 'On hand' in figures, figures
+    assert not b.evaluate('document.querySelector("[data-stock-available]").checkVisibility()')
+    b.evaluate('document.querySelector("[data-stock-switch]").click()')
+    assert b.evaluate('document.querySelector("[data-stock-available]").checkVisibility()')
+    assert not b.evaluate('document.querySelector("[data-stock-on-hand]").checkVisibility()')
+    _shot(b, 'create-invoice-available')
     act('preview')
     b.wait_for('!!document.querySelector("[data-order-invoice]")', timeout=30)
     panel = b.evaluate('document.querySelector("[data-order-invoice]").innerText')
@@ -56,3 +64,38 @@ def test_create_invoice_from_an_order(register_browser):
         time.sleep(0.5)
     # Everything still open shipped; the two valves cancelled earlier make it read closed, not invoiced in full.
     assert shown['order']['progress'] == 'closed' and not shown['order']['is_open'], shown['order']
+    # The invoice it made shows the order's quantities on its page, and its print carries them too.
+    billing = run('sales-order.billing', {'sales_order': order['id']})
+    invoice = billing['destinations'][-1]
+    b.navigate(f'{env.site.base_url}/c/{env.site.company_id}/invoice/{invoice["id"]}')
+    b.wait_for('!!document.querySelector("[data-line-order]")', timeout=30)
+    line = b.evaluate('document.querySelector("[data-line-order]").innerText')
+    assert 'ordered 10' in line and 'previously invoiced 0' in line and 'backordered 0' in line, line
+    _shot(b, 'invoice-from-order')
+    printed = b.evaluate(f'''fetch("/c/{env.site.company_id}/invoice/{invoice["id"]}/print").then(async r =>
+        [r.status, r.headers.get("content-type"), btoa(String.fromCharCode(...new Uint8Array(await r.arrayBuffer())))])''',
+        await_promise=True, timeout=30)
+    assert printed[0] == 200 and 'pdf' in printed[1], printed[:2]
+    if SHOTS:
+        import base64
+        (SHOTS / 'invoice-from-order-print.pdf').write_bytes(base64.b64decode(printed[2]))
+
+
+SHOTS = None
+if __import__('os').environ.get('BF_SHOTS'):
+    from pathlib import Path
+    SHOTS = Path(__import__('os').environ['BF_SHOTS'])
+    SHOTS.mkdir(parents=True, exist_ok=True)
+
+
+def _shot(b, name):
+    """Full-length screenshots at 1440 and 390 when BF_SHOTS names a folder; nothing otherwise."""
+    if not SHOTS:
+        return
+    import base64
+    for width in (1440, 390):
+        b.viewport(width, 900)
+        assert b.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1'), (name, width)
+        data = b.call('Page.captureScreenshot', {'format': 'png', 'captureBeyondViewport': True})['data']
+        (SHOTS / f'{name}-{width}.png').write_bytes(base64.b64decode(data))
+    b.viewport(1440, 900)
