@@ -269,6 +269,9 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
             conn.execute(f"ALTER TABLE company_info DROP COLUMN {column}")  # co0074's seven preferences
         for table in ("todos", "overdue_notices", "scheduled_revision_authority", "scheduled_group_authority", "scheduled_holds"):
             conn.execute(f"DROP TABLE {table}")  # co0085's five tables
+        for index in ("ix_items_barcode", "ix_inventory_bins_barcode"):
+            conn.execute(f"DROP INDEX IF EXISTS {index}")  # co0094's two barcode indexes
+        conn.execute("DELETE FROM sequences WHERE name = 'barcode'")  # and co0094's barcode counter
         for column in ("scheduler_catch_up_days", "overdue_notice_days", "overdue_notice_frequency",
                        "overdue_notice_minimum", "overdue_notice_template"):
             conn.execute(f"ALTER TABLE company_info DROP COLUMN {column}")  # co0085's five preferences

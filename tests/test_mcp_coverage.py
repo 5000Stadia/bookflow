@@ -317,10 +317,10 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # and to_be_printed on check post, check update and bill pay. No new variant kind.
     # 3574 -> 3576 (R104 increment 3, barcodes), measured: barcode lookup's optional as_of and barcode
     # generate's optional items -- their null branches. No existing command moved. No new variant kind.
-    # 3576 -> 3612 (R111): the eleven todo, notice and reminders commands' optional inputs, company update's five
+    # 3576 -> 3611 (R111): the eleven todo, notice and reminders commands' optional inputs, company update's five
     # scheduler and overdue notice preferences, the optional expected_facts_fingerprint on memorized process, retry,
-    # skip, enter and memorized-group enter, and memorized enter's again, their null branches. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==3612
+    # skip, enter and memorized-group enter, their null branches (memorized enter's again is a defaulted flag and adds none). No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==3611
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.
