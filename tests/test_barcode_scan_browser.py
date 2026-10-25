@@ -77,3 +77,58 @@ def test_scanning_on_the_invoice_screen(register_browser):
     assert b.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1')
     box = json.loads(b.evaluate("JSON.stringify(document.querySelector('[data-scan-input]').getBoundingClientRect())"))
     assert box['width'] > 200 and box['right'] <= 391, box
+
+
+def _settle(b):
+    """Wait until every queued scan has answered."""
+    b.wait_for("document.querySelector('[data-scan-status]').dataset.kind !== 'busy' && window.pending === 0", timeout=20)
+
+
+def test_scans_while_a_look_up_is_in_flight(register_browser):
+    env, b = register_browser, register_browser.browser
+    base = f'{env.site.base_url}/c/{env.site.company_id}'
+    b.viewport(1440, 900)
+    _open(b, base)
+    # Every look-up answers 400 ms late, as on a slow phone connection.
+    b.evaluate("""(() => { const real = window.fetch; window.pending = 0;
+      window.fetch = (...args) => { window.pending++;
+        return new Promise(r => setTimeout(r, 400)).then(() => real(...args)).finally(() => { window.pending--; }); };
+      return true; })()""")
+    focus = "document.querySelector('[data-scan-input]').focus()"
+    # Two different codes scanned back to back, the second while the first is still being looked up.
+    b.evaluate(focus)
+    _type(b, COUPLING)
+    _key(b, 'Enter')
+    assert b.evaluate("document.querySelector('[data-scan-input]').value") == ''   # cleared at once
+    _type(b, '0036000291452')
+    _key(b, 'Enter')
+    _settle(b)
+    assert b.evaluate(LINES) == [['Copper Coupling', '1'], ['Service Call Kit', '1']]
+    # A double Enter on one scan counts once; two scans typed count twice.
+    _type(b, COUPLING)
+    _key(b, 'Enter')
+    _key(b, 'Enter')
+    _settle(b)
+    assert b.evaluate(LINES) == [['Copper Coupling', '2'], ['Service Call Kit', '1']]
+    _type(b, COUPLING)
+    _key(b, 'Enter')
+    _type(b, COUPLING)
+    _key(b, 'Enter')
+    _settle(b)
+    assert b.evaluate(LINES) == [['Copper Coupling', '4'], ['Service Call Kit', '1']]
+    # Focus moved away mid-scan stays where the person put it.
+    _type(b, COUPLING)
+    _key(b, 'Enter')
+    b.evaluate("document.querySelector('[name=\"label:f:customer\"]').focus()")
+    _settle(b)
+    assert b.evaluate("document.activeElement.name") == 'label:f:customer'
+    assert b.evaluate(LINES) == [['Copper Coupling', '5'], ['Service Call Kit', '1']]
+    # 0* adds nothing and is refused with a message; what was typed stays.
+    b.evaluate(focus)
+    _type(b, '0*' + COUPLING)
+    _key(b, 'Enter')
+    _settle(b)
+    assert 'above 0' in b.evaluate("document.querySelector('[data-scan-status]').innerText")
+    assert b.evaluate("document.querySelector('[data-scan-input]').value") == '0*' + COUPLING
+    assert b.evaluate(LINES) == [['Copper Coupling', '5'], ['Service Call Kit', '1']]
+    assert b.evaluate('window.submits') == 0

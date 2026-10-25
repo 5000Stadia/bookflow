@@ -732,10 +732,20 @@ jobs at night; the van ends as counted.
   there in their increments.
 - **The Scan field** is one partial (`scan_field.html`) and one script (`scan.js`), with three modes:
   document grids (invoice, sales receipt, bill, item receipt), fixed rows (the transfer form) and the count
-  screen's entry form. It asks `GET /c/{company}/barcode/lookup` (a barcode, else an item id or name).
+  screen's entry form. It asks `GET /c/{company}/barcode/lookup` (a barcode, then an item id, then a name).
   A repeat scan adds 1 to the last line for that item; `6*` before a code sets that line to 6. "Assign to
   an item" opens the item list in a new window, so nothing typed is lost. The field has no form name and
   never travels with the form.
+- **Coming back active.** An item becoming active again (`item activate`, an undone deactivation or
+  cascade) with a code another active item now holds is refused with E_VALIDATION naming the holder (an
+  undo surfaces it as E_UNDO_CONFLICT); `item unmerge` refuses with its own E_MERGE_REFUSED. Clear one code
+  first.
+- **The Scan route reads codes first:** barcode, then id, then name (a scanner sends codes), unlike an
+  `item` field. Where a code and another item's name collide it takes the code and says "matched code X
+  on <item>; an item named X also exists". Enter takes the typed text and clears the field at once; scans
+  queue and resolve in order, focus is never pulled back, and `0*` is refused.
+- **UPC-A and EAN-13 are not equated:** a 12-digit UPC-A scan matches only if it is stored as those 12
+  digits (not as the 13-digit EAN with a leading 0).
 - **Demo codes.** Copper Coupling 0012345678905, Two-Valve Kit 2000000000015 (so the generator's first
   code is 2000000000022), Service Call Kit 0036000291452, Received Shipping Kit 4006381333931; the Brass
   Shutoff Valve keeps its 100000000050. No oracle moves: codes change no quantity or amount.

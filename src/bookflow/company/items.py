@@ -1147,10 +1147,13 @@ def _validate_type_change(db: Database, current: Mapping[str, Any], target_type:
         raise BookflowError("E_TYPE_CHANGE", details={"record_id": current["id"], "from": old_type, "to": target_type, "hierarchy": True})
 
 
-def assert_barcode_available(db: Database, barcode: str | None, *, exclude_id: str | None = None) -> None:
+def assert_barcode_available(db: Database, barcode: str | None, *, exclude_id: str | None = None,
+                             reactivating: str | None = None) -> None:
     """A new or changed barcode another active item carries is refused, naming that item (R104 §7).
 
     Duplicates kept from before codes were checked stay; only the write that would add one is refused.
+    ``reactivating`` names an item becoming active again (activate, unmerge, an undone deactivation):
+    it may not bring a code back while another active item holds it.
     """
     if not barcode:
         return
@@ -1160,8 +1163,11 @@ def assert_barcode_available(db: Database, barcode: str | None, *, exclude_id: s
         query = query.where(schema.items.c.id != exclude_id)
     taken = db.conn.execute(query.order_by(schema.items.c.full_name)).first()
     if taken is not None:
-        raise _validation("barcode", f"barcode {barcode!r} is already on {taken.full_name}",
-                          item_id=taken.id, item=taken.full_name)
+        problem = f"barcode {barcode!r} is already on {taken.full_name}"
+        if reactivating is not None:
+            problem = (f"{reactivating} carries barcode {barcode!r}, which the active item {taken.full_name} now holds; "
+                       f"clear the code on one of them first")
+        raise _validation("barcode", problem, item_id=taken.id, item=taken.full_name)
 
 
 def plan_item_create(
@@ -1450,6 +1456,17 @@ def plan_item_active_change(
         dependents = _member_dependents(db, [str(row["id"]) for row in rows])
         if dependents:
             raise BookflowError("E_RECORD_IN_USE", details={"record_id": record_id, "dependents": list(dependents)})
+    else:
+        claimed: dict[str, str] = {}
+        for row in rows:
+            code = row.get("barcode")
+            if not code or row.get("active"):
+                continue
+            if code in claimed:
+                raise _validation("barcode", f"{row['full_name']} and {claimed[code]} both carry barcode {code!r}; "
+                                  "clear the code on one of them first", item=claimed[code])
+            claimed[code] = str(row["full_name"])
+            assert_barcode_available(db, code, exclude_id=str(row["id"]), reactivating=str(row["full_name"]))
     timestamp = at or now_iso()
     mutations: list[ItemMutation] = []
     for row in rows:

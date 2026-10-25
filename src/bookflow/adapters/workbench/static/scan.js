@@ -6,6 +6,7 @@
 
   function parse(text) {
     const m = QUANTITY.exec(text);
+    if (m && !(Number(m[1]) > 0)) return {code: m[2].trim(), quantity: m[1], set: true, refused: true};
     return m ? {code: m[2].trim(), quantity: m[1], set: true} : {code: text.trim(), quantity: '1', set: false};
   }
   function say(field, html, kind) {
@@ -92,10 +93,30 @@
 
   const MODES = {lines: intoLines, rows: intoRows, count: intoCount};
 
-  async function look(field, input) {
-    const text = input.value;
+  // One scan at a time, in the order they were typed: a scanner can send the next code before the
+  // last look-up has answered, and each must land on its own line.
+  const queues = new WeakMap();
+  function enqueue(field, input, text) {
+    const previous = queues.get(field) || Promise.resolve();
+    const next = previous.then(() => look(field, input, text)).catch(() => {});
+    queues.set(field, next);
+    return next;
+  }
+
+  async function look(field, input, text) {
+    if (text === undefined) { text = input.value; input.value = ''; }
     if (!text.trim()) return;
     const want = parse(text);
+    const keepTyped = () => {
+      // Nothing typed is lost: the code goes back in the field unless something new is already there.
+      if (!input.value) input.value = text;
+      if (document.activeElement === input) input.select();
+    };
+    if (want.refused) {
+      say(field, 'A quantity of ' + escape(want.quantity) + ' adds nothing. Type a quantity above 0 before the *.', 'error');
+      keepTyped();
+      return;
+    }
     say(field, 'Looking up ' + escape(want.code) + '…', 'busy');
     let answer;
     try {
@@ -104,6 +125,7 @@
       answer = await response.json();
     } catch (error) {
       say(field, 'The look-up could not be done. Nothing was changed; try again.', 'error');
+      keepTyped();
       return;
     }
     if (!answer.found) {
@@ -111,27 +133,29 @@
         ? ` <a href="${escape(answer.assign_url)}" target="_blank" rel="noopener" data-scan-assign>Assign to an item</a> (open the item, Edit, and enter ${escape(want.code)} as its Barcode), then scan again.`
         : '';
       say(field, escape(answer.message || 'Unknown code.') + assign, 'unknown');
-      input.select();
+      keepTyped();
       return;
     }
     const placed = MODES[field.dataset.scanMode || 'lines'](field, answer, want);
     if (placed === false) {
       say(field, 'There is no free line for ' + escape(answer.item_name) + '.', 'error');
+      keepTyped();
       return;
     }
-    say(field, escape(answer.item_name) + ' · quantity ' + escape(placed), 'ok');
-    input.value = '';
-    input.focus();
+    say(field, escape(answer.message || answer.item_name) + ' Quantity ' + escape(placed) + '.', 'ok');
   }
 
   // Enter in the Scan field is a look-up. Caught before anything else sees the key, so the form's
-  // implicit submission never happens.
+  // implicit submission never happens. The typed text is taken and the field cleared at once, so the
+  // next scan starts clean while this one is looked up.
   document.addEventListener('keydown', event => {
     const input = event.target.closest?.('[data-scan-input]');
     if (!input || event.key !== 'Enter') return;
     event.preventDefault();
     event.stopPropagation();
-    look(input.closest('[data-scan]'), input);
+    const text = input.value;
+    input.value = '';
+    if (text.trim()) enqueue(input.closest('[data-scan]'), input, text);
   }, true);
   // Belt and braces: a submit started from the Scan field is refused.
   document.addEventListener('submit', event => {
@@ -140,5 +164,5 @@
       event.stopImmediatePropagation();
     }
   }, true);
-  window.bookflowScan = {parse, look};
+  window.bookflowScan = {parse, look: (field, input) => { const text = input.value; input.value = ''; return enqueue(field, input, text); }};
 })();

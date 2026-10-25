@@ -126,3 +126,64 @@ def test_generate_numbers_items_without_a_code_and_never_changes_one(client):
     nxt = _run(client, 'barcode generate', {'items': [later['id']]}, reason='One more')
     assert nxt['assigned'][0]['barcode'] not in codes and barcodes.is_ean13(nxt['assigned'][0]['barcode'])
     assert nxt['next_number'] > done['next_number'] - 1
+
+
+def _event(client, command, record_id):
+    return client.audit.list(company=CO, command=command, record_id=record_id)['items'][0]['id']
+
+
+def test_coming_back_active_may_not_bring_a_held_code_back(client):
+    """Activate, unmerge, undo of a deactivation, and undo of a cascade: each refused naming the holder."""
+    # item activate
+    old = _part(client, 'Old Elbow', barcode='R-1')
+    _run(client, 'item deactivate', {'item': old['id']}, reason='Retire')
+    _part(client, 'New Elbow', barcode='R-1')                     # free while Old Elbow is inactive
+    with pytest.raises(BookflowError) as activated:
+        _run(client, 'item activate', {'item': old['id']}, reason='Back')
+    assert activated.value.code == 'E_VALIDATION'
+    problem = activated.value.details['fields'][0]['problem']
+    assert 'New Elbow' in problem and 'clear the code' in problem, problem
+    # undo of the deactivation
+    with pytest.raises(BookflowError) as undone:
+        _run(client, 'undo', {'event_id': _event(client, 'item deactivate', old['id'])}, reason='Oops')
+    assert undone.value.code in ('E_UNDO_CONFLICT', 'E_VALIDATION') and 'New Elbow' in str(undone.value.details)
+    # undo of a cascade: a sub-item deactivated with its parent comes back only if its code is free
+    parent = _part(client, 'Fittings Group')
+    child = client.item.create(company=CO, name='Kid Tee', parent_id=parent['id'], type='non_inventory_part',
+                               price='3.00', description='Kid Tee', barcode='R-2',
+                               income_account_id=next(r['id'] for r in client.account.query(company=CO, limit=200)['items']
+                                                      if r['type'] == 'income'))
+    _run(client, 'item deactivate', {'item': parent['id'], 'cascade': True}, reason='Retire group')
+    _part(client, 'Adult Tee', barcode='R-2')
+    with pytest.raises(BookflowError) as cascaded:
+        _run(client, 'undo', {'event_id': _event(client, 'item deactivate', parent['id'])}, reason='Oops')
+    assert cascaded.value.code in ('E_UNDO_CONFLICT', 'E_VALIDATION') and 'Adult Tee' in str(cascaded.value.details)
+    assert _run(client, 'item show', {'item': child['id']})['active'] is False
+    # item unmerge
+    merged = _part(client, 'Merged Union', barcode='R-3')
+    _part(client, 'Kept Union')
+    _run(client, 'item merge', {'merged': 'Merged Union', 'into': 'Kept Union'}, reason='Same thing')
+    _part(client, 'Fresh Union', barcode='R-3')
+    with pytest.raises(BookflowError) as unmerged:
+        _run(client, 'item unmerge', {'merged': merged['id']}, reason='Not the same')
+    assert unmerged.value.code == 'E_MERGE_REFUSED' and 'Fresh Union' in unmerged.value.message
+    # With the holder's code cleared, each comes back.
+    _run(client, 'item update', {'item': 'New Elbow', 'barcode': None}, reason='Relabel')
+    assert _run(client, 'item activate', {'item': old['id']}, reason='Back')['active'] is True
+    assert _run(client, 'item show', {'item': 'R-1'})['id'] == old['id']
+
+
+def test_the_scan_route_reads_codes_first_and_says_when_a_name_collides(client):
+    from bookflow.adapters.workbench import barcode_pages
+
+    def call(name, raw):
+        return _run(client, name, raw)
+    named = _part(client, '7777777777777')
+    coded = _part(client, 'Coded Elbow', barcode='7777777777777')
+    seen = barcode_pages.answer(call, 'C', '7777777777777')
+    assert seen['item_id'] == coded['id']                         # a scanner sends codes: code first
+    assert seen['message'] == 'Matched code 7777777777777 on Coded Elbow; an item named 7777777777777 also exists.'
+    assert barcode_pages.answer(call, 'C', named['id'])['item_id'] == named['id']      # then id
+    assert barcode_pages.answer(call, 'C', 'Coded Elbow')['item_id'] == coded['id']    # then name
+    unknown = barcode_pages.answer(call, 'C', '2999999999999')
+    assert not unknown['found'] and unknown['assign_url'] == '/c/C/item'
