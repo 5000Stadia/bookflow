@@ -1,8 +1,9 @@
-"""Barcodes (R104 increment 3): look-up indexes and the code counter.
+"""Barcodes (R104 increment 3): look-up indexes.
 
 Two indexes, ``ix_items_barcode`` and ``ix_inventory_bins_barcode``, so a scanned code finds its item
-or bin without a table scan, and a ``sequences`` row named ``barcode`` from which `barcode generate`
-numbers new EAN-13 codes in the restricted-circulation range (prefix 2). Nothing existing changes:
+or bin without a table scan. The ``barcode`` counter that `barcode generate` numbers new EAN-13 codes
+from (restricted-circulation prefix 2) is a ``sequences`` row the first generate creates, so the
+migration changes no existing table's rows. Nothing existing changes:
 every barcode already recorded stays, duplicates included (only a new or changed one is checked).
 """
 from alembic import op
@@ -22,7 +23,6 @@ def upgrade():
         raise RuntimeError('co0094 reserved object already exists')
     for statement in INDEXES:
         connection.exec_driver_sql(statement)
-    connection.exec_driver_sql("INSERT INTO sequences (name, next_number, prefix) VALUES ('barcode', 1, '')")
 
 
 def downgrade():
