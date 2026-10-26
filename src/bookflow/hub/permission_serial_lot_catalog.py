@@ -13,7 +13,7 @@ import json
 from . import permission_performance_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = '8e5fca59c51098622ad6b21e7fdc2968655cd313'
+SOURCE_COMMIT = 'a9e4f82c0dcddad7d96f43f38d3562c5e21ae593'
 _OWNER = 'bookflow.commands.serial_lot_cmds.{}|src/bookflow/commands/serial_lot_cmds.py'
 # (name, capability, threshold, planner)
 _ADDED = (

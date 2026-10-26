@@ -112,10 +112,14 @@ RESOURCE_PAIRS = {
     'payment_authority.readable_predicate': {('customer-work', 'member')},
     'payment_preparation.payment_page': {('customer-work', 'member')},
     'payment_recovery.readable_selection': {('customer-work', 'member')},
+    # scheduling-v1: each Reminders heading shows only to a reader its list command admits.
+    'reminders._may': {('customer', 'member'), ('ledger.read', 'member'), ('note', 'member'), ('reports', 'member')},
     'reconciliation_adapters.authority': {('ledger.read', 'member')},
     'reconciliation_adapters.population': {('ledger.read', 'member')},
     'reconciliation_adapters.prepare_prospective': {('customer-work', 'member')},
     'reconciliation_proposals.preview': {('ledger.post', 'standard')},
+    # transaction-find-v1: a family is searched only for a caller its own `show` admits.
+    'transaction_find._withheld': {('customer-work', 'member'), ('ledger.read', 'member')},
     'transaction_deletion_facts.admit': {('ledger.read', 'member'), ('transaction.invoice.delete', 'standard'), ('transaction.journal_entry.delete', 'standard'), ('transaction.payment.delete', 'standard'), ('transaction.sales_receipt.delete', 'standard')},
     'transaction_deletion_facts.load': {('customer-work', 'standard')},
 }

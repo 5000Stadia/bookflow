@@ -4,7 +4,7 @@ Visibility is governed by memberships, not installation administration. Record
 and conditional source owners still perform their complete target graph checks.
 """
 from collections import OrderedDict
-from dataclasses import asdict, replace
+from dataclasses import asdict, fields, replace
 import hashlib
 import json
 import sqlite3
@@ -131,32 +131,32 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.BOUNCED_CHECK_POLICY_VERSION: '0b6616e4040e1986f3b010f4f2d8c92276ba12d741c28b474539755fa65ed68e',
     c.CUTOVER_REST_POLICY_VERSION: 'eec55b86544f824349e62bbdeb9c20a63c6873c4e6073f97ade1a3b0ebe9d084',
     c.ATTACHMENT_TEXT_POLICY_VERSION: 'b482f8ec802d32fa21f3793759791333dd0aefce88dc5d9dabc5d6a79743a284',
-    c.TRANSACTION_FIND_POLICY_VERSION: '4bf7553ae0a1b9ed30d2dbee6db99535ea5771f0af7d8fefcbcab7318f136ba1',
-    c.ITEM_CONVERT_POLICY_VERSION: '4be2f03bfecebbdbe31b204013a584f656dec7c0b6b3d45243d375685e4692a4',
-    c.FINANCE_CHARGE_POLICY_VERSION: '0d405b6942cebc2417d67bac56a4994b5aa3270c67dc8d321332911fe0b46cfe',
-    c.VENDOR_REFUND_POLICY_VERSION: 'cd67230a272b7a89633ecd7bf3f55e34093555a9e967263967210dca4bb4ff2f',
-    c.BUDGET_POLICY_VERSION: 'bb0f3730a24467da0e2444497083f518b77b9c678c077c0d9fb9b653e67ddaa9',
-    c.CUSTOMER_PREPAYMENT_POLICY_VERSION: 'bdd817c279494b1effb7328cce5295bc6553b84b16acf192b9de6a58ce1e1f49',
-    c.LIST_MERGE_POLICY_VERSION: 'cafa50ec4b47552c9b3f0a44fb347ff1bae5100d69bb31169d31d479a8e017e0',
-    c.SALES_ORDER_POLICY_VERSION: '8e7fd4b7628b8a2225e253afd557c357753128a8ea97b848e03c7d24e9912e89',
-    c.FIXED_ASSET_POLICY_VERSION: '8cbc2ff3c763c7f02843e4b3791f74b2835e6977d8119beb7be8c3a65f4a29fc',
-    c.ASSEMBLY_BUILD_POLICY_VERSION: 'af2fbfe5206703ee024d3bc72cdd1500c6c317b0c203e58626d0c1a64ba03dd2',
-    c.COMMITTED_STOCK_POLICY_VERSION: 'cbe33f0cae7bdb77afb2b0391a9481905dc82fb312c0b4897edb3c3a0c02aae5',
-    c.MILEAGE_POLICY_VERSION: '0e94aaf9fd034fc485390bb4e42454c3884fc7762c2b352a23dde8f0e3b4ed24',
-    c.COLLECTIONS_POLICY_VERSION: '3fc95151d4ef65c3c659a16dbe3fd1148bea6713687665c54e933fbc69b0dd5c',
-    c.PRICING_RULES_POLICY_VERSION: 'b7ba664cc3cd27208e2c9caacc5b8f5157cc460345ff642ff34d646ab41f54f2',
-    c.ORDER_INVOICING_POLICY_VERSION: '7c9cc756a85b84b858a23f66ce80bd67b9cecc575d453cfcad3053c050e17531',
-    c.SHORTFALL_PO_POLICY_VERSION: 'f402b4ddc9f1cf1ef50280384df98265b6539a8f6d7c6490f4e0c6ef32163374',
-    c.PARTIAL_PO_POLICY_VERSION: '3655588af34a0376dddb2027c8e8669876525ff7cd92e915f2613191098940bb',
-    c.TIMESHEETS_POLICY_VERSION: '05105fd69f67ec464bc21bbb42a91b26b18961f4630d21385f01a01d9d31e357',
-    c.INVENTORY_SITES_POLICY_VERSION: '6b52f7a61a5e4cc9d7eee36318abb8803d39742e4fd2c4883394b4dd34b23529',
-    c.ACCOUNTANT_REVIEW_POLICY_VERSION: '1ee5b051d410ea9b481203ec6812a9bdd9b6784ededa18b6f02e25daa6b1eb21',
-    c.CHECK_PRINTING_POLICY_VERSION: 'a4c3dc284228e3321e3b9fe710ec73488a84800195a5bae91896dd9324979522',
-    c.BARCODES_POLICY_VERSION: 'f2e8e164a17a2a43960e2af90d3382579423e8ef8b03902bc9d36ee07e23058a',
-    c.INVENTORY_COUNTS_POLICY_VERSION: '5af62281b43f9d583b58533c6dc155c4b8eb95fcc8ef9b7ebc7c994e8963e250',
-    c.SCHEDULING_POLICY_VERSION: '16f34e115a6e90fbb5d8377c225ca118c864719d654bb6656991d0c94ef659be',
-    c.PERFORMANCE_POLICY_VERSION: 'f7dff2bccde0245a0a551c224df697de196e5607bacefd605d988ac0ddd56017',
-    c.SERIAL_LOT_POLICY_VERSION: '41cf9e8f2ebd29fd7a453375e047d373e496473365079b35324b590b04802a8e',
+    c.TRANSACTION_FIND_POLICY_VERSION: 'aec5cc4879ba82b57cf1d22791abc6d1f6f01477724ed521efad854045cb8531',
+    c.ITEM_CONVERT_POLICY_VERSION: 'baa8f52bccb7c70240df1fc3a0117d0b5d9b7555ee2c57abf5a05bbe8cce52e1',
+    c.FINANCE_CHARGE_POLICY_VERSION: 'ec3bf5ce4476e78dcdd55e3f4b24a8c06c76c759e1e045e803107292e4cc4160',
+    c.VENDOR_REFUND_POLICY_VERSION: '150e3626256eef7e05ebe0ca2a602a90d1646ca6ac5a9400625ce9b150f6df7d',
+    c.BUDGET_POLICY_VERSION: 'b635577d72c1463d55aa938880609d4fabf2ed5ec416f6ca98201fec91725615',
+    c.CUSTOMER_PREPAYMENT_POLICY_VERSION: '24bbfec464495318237c0b6d2e81538fdd267344af67d2698efbbe12302ff1f2',
+    c.LIST_MERGE_POLICY_VERSION: '061fdabeacdb8b45e62d3d50554cb717fef704c75d8f5366bda50423e2045a4b',
+    c.SALES_ORDER_POLICY_VERSION: '2d5b06b100b2f2c07809b723578b8b769f8d0dc9b2db3a18fc94014271f1a481',
+    c.FIXED_ASSET_POLICY_VERSION: 'ba2c43a29b9d4a3c5966c054b82f103ca93fa5cf3c5a297f2126244106ff6b94',
+    c.ASSEMBLY_BUILD_POLICY_VERSION: '980e4483d64de9d252b152dd4d0b51e40c7c68735227c00a59c9ce09251bd10e',
+    c.COMMITTED_STOCK_POLICY_VERSION: '7f632304aab96f6f20d91b08ee6cc8c34f77d3bb3066935390b155c0bf4bdba8',
+    c.MILEAGE_POLICY_VERSION: '357335f1d1d8fff71c0e0029deff5bea7be9186b9cfcd556d326c5a4b4898770',
+    c.COLLECTIONS_POLICY_VERSION: 'a4a42a893faf487946db8c4536c8e470af9b2d398d7fff6aa6237e1eaf89d380',
+    c.PRICING_RULES_POLICY_VERSION: '2223cf7fa5490ca8b42c102b2c41ae2c7c12a5c031c146c254a9856d7e105651',
+    c.ORDER_INVOICING_POLICY_VERSION: '7452c4b9233d80fe00ac1d14aecb164e94c82035cebbc682c4e61171d1b1cc14',
+    c.SHORTFALL_PO_POLICY_VERSION: 'ce572b26ff407657374ea07f8bc8833a4f2e19225f4d5fd52e956917b886dc51',
+    c.PARTIAL_PO_POLICY_VERSION: '0d545843f9a3705ce88d87928760dcceb645632178e41e9a4a4ccc5539632eb1',
+    c.TIMESHEETS_POLICY_VERSION: '6ae1c2d2ca67063b62f849f5130ce721beded5ac7ac41977e406d799eb3b10a5',
+    c.INVENTORY_SITES_POLICY_VERSION: 'f5445ed06cfd12459d81305a84717f78481ee7679c348910567a092d28801266',
+    c.ACCOUNTANT_REVIEW_POLICY_VERSION: 'fdb82ff38e630d7667ff5570da3dfbda017bfeb7a705bcb6a190f5b77ac0cf2a',
+    c.CHECK_PRINTING_POLICY_VERSION: 'ea6368e6f2957858e0013e2c53453b4b70981395cf0c1f316224bf55e7d6abed',
+    c.BARCODES_POLICY_VERSION: 'cc3a5ccc83813d3705e9e55753bbb1e1a52b983755fa0c9ced8305c84a4f5ccd',
+    c.INVENTORY_COUNTS_POLICY_VERSION: 'cbf2b5f35092aa7691fde5b0abb64a0f7c72ea55cf02820051a2649d44d639f5',
+    c.SCHEDULING_POLICY_VERSION: '445b102fcbce9835b1edceafe75f8d5dc573d18f03c0db73c83085ad1ceb7568',
+    c.PERFORMANCE_POLICY_VERSION: '4e60dbb727be31efe9804b77a51cf36648ec37efde2dae1b6e323739504ea6a4',
+    c.SERIAL_LOT_POLICY_VERSION: '4b340c8c2715584586326a1ee9698cc097af5993ab61cf68b25644a859768d03',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -239,8 +239,8 @@ class _MembershipVisibility:
 VISIBILITY = _MembershipVisibility()
 
 
-def known_catalog(version):
-    """Accepted explicit policy versions; never substitute the current build."""
+def _full_known():
+    """Import and verify every accepted version: the full check (see known_catalog)."""
     from . import permission_activation_catalog, permission_setup_catalog
     from . import permission_deletion_catalog, permission_sales_deletion_catalog
     from . import permission_payment_deletion_catalog, permission_bill_deletion_catalog
@@ -352,7 +352,157 @@ def known_catalog(version):
     # a handful of string comparisons, once per process, and no descriptor is hashed for
     # it. See ACCEPTED_DESCRIPTOR_SHA256 for why it is not done at module scope.
     _verify_accepted(known)
-    return known.get(version)
+    return known
+
+
+class _CachedLayer:
+    """One accepted version read back from the sealed cache: what known_catalog's callers use
+    of a layer module (CATALOG, MANIFEST, SOURCE_COMMIT, catalog_bundle()), nothing more."""
+    __slots__ = ('CATALOG', 'MANIFEST', 'SOURCE_COMMIT', '_bundle')
+
+    def __init__(self, catalog, manifest, source_commit, bundle):
+        self.CATALOG, self.MANIFEST, self.SOURCE_COMMIT, self._bundle = catalog, manifest, source_commit, bundle
+
+    def catalog_bundle(self):
+        return self._bundle
+
+
+class _CachedChain:
+    """The verified chain as a sealed file recorded it. Each version is decoded on first use
+    and must still validate and hash to its pin; any failure is a fallback, never a pass."""
+    def __init__(self, sealed):
+        self._sealed, self._layers = sealed, {}
+
+    def get(self, version):
+        if version in self._layers:
+            return self._layers[version]
+        if version not in self._sealed.index:
+            return None
+        with _known_lock:
+            if version not in self._layers:
+                self._layers[version] = self._decode(version)
+            return self._layers[version]
+
+    def _decode(self, version):
+        entry = self._sealed.index[version]
+        catalog = s._decode(s._parse(self._sealed.blob(version), 'catalog'), c.Catalog, 'catalog')
+        standalone = s._decode(entry['standalone'], tuple[str, ...], 'standalone')
+        manifest = c.catalog_manifest(catalog, standalone)
+        exclusions = s._decode(entry['bundle_exclusions'], tuple[str, ...], 'exclusions')
+        if (catalog.version != version or manifest.descriptor_sha256 != ACCEPTED_DESCRIPTOR_SHA256.get(version)
+                or manifest.standalone_names != standalone or type(entry['source_commit']) is not str
+                or type(entry['bundle_source_commit']) is not str or type(entry['bundle_digest']) is not str):
+            raise ValueError('cached version %r does not reproduce its pin' % version)
+        bundle = s.CatalogBundle(entry['bundle_source_commit'], catalog, exclusions, entry['bundle_digest'])
+        return _CachedLayer(catalog, manifest, entry['source_commit'], bundle)
+
+
+_known = None  # dict of verified modules, or a _CachedChain; decided once per process
+_known_lock = Lock()
+
+
+def _cache_key():
+    from . import permission_catalog_cache as cache
+    return cache.compute_key(ACCEPTED_DESCRIPTOR_SHA256, ACCEPTED_ANCESTOR_SHA256)
+
+
+def _json_fragment(value, memo):
+    """JSON for a descriptor value, as asdict() would give it. The layers share most of their
+    descriptor objects, so each one is encoded once (keyed by identity while all are alive)."""
+    kind = type(value)
+    if kind is tuple or kind in _DESCRIPTOR_FIELDS:
+        found = memo.get(id(value))
+        if found is not None and found[0] is value:
+            return found[1]
+        if kind is tuple:
+            text = '[' + ','.join(_json_fragment(x, memo) for x in value) + ']'
+        else:
+            text = '{' + ','.join(json.dumps(name) + ':' + _json_fragment(getattr(value, name), memo)
+                                  for name in _DESCRIPTOR_FIELDS[kind]) + '}'
+        memo[id(value)] = (value, text)
+        return text
+    if kind in (str, int, bool, type(None)):
+        return json.dumps(value, ensure_ascii=False, allow_nan=False)
+    raise TypeError('not a descriptor value')
+
+
+_DESCRIPTOR_FIELDS = {kind: tuple(sorted(f.name for f in fields(kind))) for kind in (
+    c.Catalog, c.CommandDescriptor, c.CapabilitySpec, c.DefaultEntry, c.CompanyAction,
+    c.AdminAction, c.ResourceSource, c.Requirement)}
+
+
+def _cache_entries(known):
+    entries, memo = {}, {}
+    for version, module in known.items():
+        bundle = module.catalog_bundle()
+        if bundle.descriptor != module.CATALOG:
+            return None  # a layer whose bundle is not its CATALOG: never cached
+        entries[version] = dict(
+            catalog=_json_fragment(module.CATALOG, memo),
+            meta=dict(standalone=list(module.MANIFEST.standalone_names), source_commit=module.SOURCE_COMMIT,
+                      bundle_source_commit=bundle.source_commit, bundle_exclusions=list(bundle.exclusions),
+                      bundle_digest=bundle.source_inventory_digest))
+    return entries
+
+
+def verify_full():
+    """Run the full check in this process, whatever the cache holds, and refresh the cache.
+
+    `permission show` and `permission activate` call this: they are the self-check."""
+    global _known
+    with _known_lock:
+        known = _full_known()
+        fresh, _known = type(_known) is not dict, known
+    if fresh:
+        _write_cache(known)  # once per process: a warm server's self-checks never rewrite it
+    return known
+
+
+def _write_cache(known):
+    from . import permission_catalog_cache as cache
+    if cache.cache_dir() is None:
+        return
+    try:
+        entries = _cache_entries(known)
+        if entries is not None:
+            cache.store(_cache_key(), entries)
+    except Exception:
+        pass  # the cache is an optimisation; a failed write costs the next process time only
+
+
+def _chain():
+    global _known
+    known = _known
+    if known is not None:
+        return known
+    from . import permission_catalog_cache as cache
+    with _known_lock:
+        if _known is None and cache.cache_dir() is not None and not cache.forced_full():
+            try:
+                sealed = cache.load(_cache_key())
+            except Exception:
+                sealed = None
+            if sealed is not None and set(sealed.index) == set(ACCEPTED_DESCRIPTOR_SHA256):
+                _known = _CachedChain(sealed)
+        if _known is not None:
+            return _known
+    return verify_full()
+
+
+def known_catalog(version):
+    """Accepted explicit policy versions; never substitute the current build.
+
+    The first call in a process either verifies the whole chain (_full_known) or, when this
+    exact code version already did so and sealed the result under the data root, reads that
+    back (permission_catalog_cache). Any doubt about the sealed copy means the full check.
+    """
+    known = _chain()
+    if type(known) is dict:
+        return _full_known().get(version)
+    try:
+        return known.get(version)
+    except Exception:
+        return verify_full().get(version)
 
 
 def current_catalog():

@@ -304,7 +304,10 @@ def test_counts_count_by_serial_number_and_lot(shop):
     _number_ties(books)
 
 
-SEEDS = (21, 22, 23, 24, 25)
+# Five seeds of 30 steps in an ordinary run; BF_SERIAL_SEEDS and BF_SERIAL_STEPS widen it (the review ran 60 x 40).
+import os as _os
+SEEDS = tuple(range(21, 21 + int(_os.environ.get('BF_SERIAL_SEEDS', '5'))))
+STEPS = int(_os.environ.get('BF_SERIAL_STEPS', '30'))
 DATES = ('2017-03-01', '2017-03-02', '2017-03-03', '2017-03-04')
 
 
@@ -321,7 +324,7 @@ def test_seeded_numbered_paperwork_keeps_every_number_tie(shop, seed):
     sites, lots = ['Warehouse', 'Van 1'], ['L-1', 'L-2', 'L-3']
     serials = [f'WH-{n}' for n in range(1, 9)]
     sales, counts = [], []
-    for step in range(30):
+    for step in range(STEPS):
         op = rnd.choice(['receive', 'receive', 'sell', 'sell', 'transfer', 'assign', 'return', 'count', 'void',
                          'lot_in', 'lot_out'])
         date = rnd.choice(DATES)
