@@ -184,9 +184,13 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
 
     co0095 = importlib.import_module("bookflow.storage.company_migrations.versions.0095_serial_lot_numbers")
     co0097 = importlib.import_module("bookflow.storage.company_migrations.versions.0097_bins_cycle_counts")
+    co0099 = importlib.import_module("bookflow.storage.company_migrations.versions.0099_deposit_indexes")
 
     def older(conn):
-        # Newest first: co0097 (on co0095): its guards, items.cycle_class_id and cycle_classes.
+        # Newest first: co0099 (on co0097): its three deposit lookup indexes.
+        for index in co0099.INDEX_NAMES:
+            conn.execute(f"DROP INDEX {index}")
+        # Then co0097 (on co0095): its guards, items.cycle_class_id and cycle_classes.
         for trigger in co0097.TRIGGERS:
             conn.execute(f"DROP TRIGGER {trigger}")
         conn.execute("ALTER TABLE items DROP COLUMN cycle_class_id")
@@ -321,7 +325,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))
     restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older",
                                               "organization": "Older Books Organization"})
-    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0097"
+    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0099"
     folder = _folder(client, restored["company_id"])
     # The migration took its verified backup of the restored database first, as every migration does.
     assert list((folder / "backups").glob("*-from-co0062.db"))

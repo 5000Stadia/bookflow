@@ -293,9 +293,44 @@ def bundle(s,ctx,kind,header,previous,result,event,*,originals=None):
     return kind,header,previous,revision,result,inserts
 
 
-def final_foreign_keys(s):
-    if s.company.raw.execute('PRAGMA main.foreign_key_check').fetchone() is not None:
-        raise BookflowError('E_VALIDATION',details={'reason':'deposit_draft_foreign_key'})
+_WRITTEN=__import__('re').compile(r'^\s*(?:(?:INSERT|REPLACE)(?:\s+OR\s+\w+)?\s+INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM)\s+(?:main\.)?"?(\w+)"?',2)
+
+
+class written_tables:
+    """The tables a deposit write's own statements wrote, collected while it runs (a set)."""
+    def __init__(self,s):self.conn=s.company.conn;self.names=set()
+    def _seen(self,conn,cursor,statement,parameters,context,executemany):
+        found=_WRITTEN.match(statement)
+        if found:self.names.add(found.group(1))
+    def __enter__(self):
+        sa.event.listen(self.conn,'before_cursor_execute',self._seen);return self.names
+    def __exit__(self,*exc):sa.event.remove(self.conn,'before_cursor_execute',self._seen)
+
+
+def final_foreign_keys(s,written=()):
+    """Refuse the write if it leaves a foreign key broken, before its savepoint is released.
+
+    With foreign keys on (both callers require it), an immediate key is enforced by every
+    statement, so the only keys a write can leave broken are deferred ones, which SQLite would
+    otherwise only refuse at COMMIT, outside the savepoint and with no deposit error. So every
+    table holding a deferred key is checked, whatever the write touched, and so is every table
+    the write wrote (`written`), which keeps the refusal for a broken key already stored there.
+    This replaced a check of the whole company database (R180 increment 3): what it no longer
+    reports is a key broken before this write in a table this write did not write, which no
+    deposit write reads through this check and which `company check` still reports.
+    """
+    raw=s.company.raw
+    if raw.execute('PRAGMA defer_foreign_keys').fetchone()[0]:
+        # Every key is deferred for this transaction: only the whole check is exact.
+        if raw.execute('PRAGMA main.foreign_key_check').fetchone() is not None:
+            raise BookflowError('E_VALIDATION',details={'reason':'deposit_draft_foreign_key'})
+        return
+    # Read from the file itself, not the metadata: a table is checked when its stored definition
+    # can defer a key at all (a stray match only adds a table to check).
+    stored={name:'DEFERRABLE' in (sql or '').upper() for name,sql in raw.execute("SELECT name,sql FROM main.sqlite_schema WHERE type='table'")}
+    for name in sorted({n for n,deferrable in stored.items() if deferrable}|(set(written)&set(stored))):
+        if raw.execute(f'PRAGMA main.foreign_key_check("{name}")').fetchone() is not None:
+            raise BookflowError('E_VALIDATION',details={'reason':'deposit_draft_foreign_key'})
 
 
 def persist(s,ctx,bundles,event,command):
@@ -307,16 +342,17 @@ def persist(s,ctx,bundles,event,command):
         for table,row in inserts:touched.append(Touched(table.name[:-1] if table.name.endswith('s') else table.name,row.get('id',row.get('row_id')),'create',None,1,row,db='company'))
     s.company.raw.execute('SAVEPOINT bookflow_deposit_draft')
     try:
-        audit.write_event_to(s.company,ctx,command,command,touched,actor_id=s.actor.id,actor_kind=s.actor.kind,event_id=event)
-        for kind,header,old,revision,result,inserts in bundles:
-            table=c.deposit_drafts if kind=='draft' else c.deposit_selections
-            if old:
-                count=s.company.conn.execute(table.update().where(table.c.id==old['id'],table.c.version==old['version'],table.c.state=='open').values(**header)).rowcount
-                if count!=1:raise BookflowError('E_VERSION_CONFLICT')
-            else:s.company.conn.execute(table.insert().values(**header))
-            for table,row in inserts:s.company.conn.execute(table.insert().values(**row))
+        with written_tables(s) as written:
+            audit.write_event_to(s.company,ctx,command,command,touched,actor_id=s.actor.id,actor_kind=s.actor.kind,event_id=event)
+            for kind,header,old,revision,result,inserts in bundles:
+                table=c.deposit_drafts if kind=='draft' else c.deposit_selections
+                if old:
+                    count=s.company.conn.execute(table.update().where(table.c.id==old['id'],table.c.version==old['version'],table.c.state=='open').values(**header)).rowcount
+                    if count!=1:raise BookflowError('E_VERSION_CONFLICT')
+                else:s.company.conn.execute(table.insert().values(**header))
+                for table,row in inserts:s.company.conn.execute(table.insert().values(**row))
         # Deferred reciprocal heads are now all present, including both accept sides.
-        final_foreign_keys(s)
+        final_foreign_keys(s,written)
         for kind,header,old,revision,result,inserts in bundles:v.decode_revision(s,header,revision,kind)
         s.company.raw.execute('RELEASE bookflow_deposit_draft')
     except BaseException:

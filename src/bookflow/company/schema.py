@@ -1244,3 +1244,7 @@ sa.Index("ix_inventory_placements_lot", inventory_placements.c.lot_id)
 from bookflow.company import bin_cycle_schema as _bin_cycle_schema
 globals().update(_bin_cycle_schema.define_tables(metadata, _column, _table, _common))
 items.append_column(_bin_cycle_schema.cycle_class_column(_column))
+# Deposit lookup indexes (co0099, R180 increment 3): membership and operations by transaction.
+sa.Index("ix_deposit_memberships_source", deposit_memberships.c.source_transaction_id)
+sa.Index("ix_deposit_memberships_transaction", deposit_memberships.c.transaction_id)
+sa.Index("ix_deposit_operations_transaction", deposit_operations.c.transaction_id)
