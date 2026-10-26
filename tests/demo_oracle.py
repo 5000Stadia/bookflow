@@ -68,6 +68,16 @@ CUTOVER_SEED_EDITS = (
 )
 
 
+# R104's barcodes gave two of the demo's earliest items a barcode in place, so a scan in the
+# demo finds them; nothing else on those lines moved.
+BARCODE_SEED_EDITS = (
+    (b'input = { name = "Copper Coupling", type = "non_inventory_part"',
+     b'input = { name = "Copper Coupling", barcode = "0012345678905", type = "non_inventory_part"'),
+    (b'input = { name = "Two-Valve Kit", type = "inventory_assembly"',
+     b'input = { name = "Two-Valve Kit", barcode = "2000000000015", type = "inventory_assembly"'),
+)
+
+
 # The one in-place edit the reference year took when the seeds stopped reading the wall clock: the
 # reference is written as of its year end (its `[calendar] as_of`), when alternative B's estimate has
 # expired, so its acceptance acknowledges that, exactly as the demo seed's has since R83.
@@ -80,7 +90,7 @@ REFERENCE_CLOCK_EDITS = (
 def as_edited_by_r83(old, resource):
     """Frozen bytes of a demo resource as they read after the deliberate in-place edits.
 
-    seed.toml took R83's and the move-in's edits; reference.toml took only the one its fixed
+    seed.toml took R83's, the move-in's and R104 barcodes' edits; reference.toml took only the one its fixed
     working day needed (REFERENCE_CLOCK_EDITS).
     """
     if resource == 'reference.toml':
@@ -89,7 +99,7 @@ def as_edited_by_r83(old, resource):
         return old
     if resource != 'seed.toml':
         return old
-    for before, after in (*R83_SEED_EDITS, *CUTOVER_SEED_EDITS):
+    for before, after in (*R83_SEED_EDITS, *CUTOVER_SEED_EDITS, *BARCODE_SEED_EDITS):
         old = old.replace(before, after)
     return old
 

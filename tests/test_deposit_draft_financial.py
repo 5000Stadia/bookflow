@@ -593,7 +593,8 @@ def test_inline_caps_remain_bounded_and_resolved_documents_are_not_caller_inputs
     from bookflow.core.errors import BookflowError
     from pydantic import ValidationError
     bank=client.account.create(name='Bounded inline bank',type='bank',company=COMPANY)['id']
-    sources=[dict(source_type='payment',source=str(index).zfill(26),expected_version=1) for index in range(1,202)]
+    # One past MAX_ROWS (2,000 since R153).
+    sources=[dict(source_type='payment',source=str(index).zfill(26),expected_version=1) for index in range(1,2002)]
     with pytest.raises(ValidationError):InlineDocument.model_validate(dict(mode='inline',date='2026-06-03',deposit_to=bank,sources=sources))
     def check(s,ctx):
         draft=drafts.run(s,ctx,m.DraftCreate(header=m.HeaderPatch(date='2026-06-03',deposit_to=bank)),'create')
