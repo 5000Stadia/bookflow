@@ -349,10 +349,19 @@ def _draw(facts, wanted, remaining=None):
 # ---------------------------------------------------------------- reads
 
 
-def summary(header, revision, profile):
+def _printing(s, header, profile):
+    """The number it printed with (R152), over the none it was saved with, and where it is in printing."""
+    from bookflow.company import check_printing
+    if not s.company.conn.execute(sa.select(c.transactions.c.id).where(c.transactions.c.id == header['id'])).first():
+        return {}
+    return dict(check_number=check_printing.shown_number(s, header['id'], profile['check_number']),
+                print_status=check_printing.print_status(s, header['id']))
+
+
+def summary(header, revision, profile, s=None):
     currency = revision['currency']
     captured = CustomerRefundProfile.model_validate_json(profile['profile_snapshot'])
-    return dict(header, date=revision['date'], customer_id=profile['party_id'],
+    out = dict(header, date=revision['date'], customer_id=profile['party_id'],
                 customer_name=captured.customer.label, ar_account_id=profile['ar_account_id'],
                 funding_account_id=profile['funding_account_id'],
                 payment_method_id=profile['payment_method_id'],
@@ -361,6 +370,9 @@ def summary(header, revision, profile):
                 memo=revision['memo'], currency=currency,
                 total_minor_units=revision['total_minor_units'],
                 total=Money(revision['total_minor_units'], currency).to_dict())
+    if s is not None:
+        out.update(_printing(s, header, profile))
+    return out
 
 
 def _consumption_output(s, rows, numbers):
@@ -437,7 +449,7 @@ def _output(s, header, revision, profile, pending=None, *, model=CustomerRefundO
                          c.customer_refund_consumptions.c.transaction_id == header['id'],
                          order=c.customer_refund_consumptions.c.id)
     labels = _source_labels(s, rows)
-    return model(**summary(header, revision, profile),
+    return model(**summary(header, revision, profile, s),
                  revision=revision_output(s, header, revision, profile, pending),
                  consumptions=_consumption_output(s, sorted(rows, key=lambda row: row['id']), labels),
                  **extra)
@@ -480,7 +492,9 @@ def page(s, ctx, inp):
     if inp.number:
         query = query.where(t.c.number.contains(inp.number, autoescape=True))
     if inp.check_number:
-        query = query.where(p.c.check_number == inp.check_number)
+        printed = sa.select(c.check_instruments.c.transaction_id).where(
+            c.check_instruments.c.check_number == inp.check_number)
+        query = query.where(sa.or_(p.c.check_number == inp.check_number, t.c.id.in_(printed)))
     order = (r.c.date, t.c.id)
     query = query.order_by(*([column.desc() for column in order] if inp.direction == 'desc' else order))
     found = [dict(row) for row in s.company.conn.execute(
@@ -499,7 +513,7 @@ def page(s, ctx, inp):
             c.customer_refund_profiles.c.revision_id.in_(revision_ids))).mappings()} if found else {}
     items = [CustomerRefundSummaryOutput(**summary(
         header, revisions[header['current_revision_id']],
-        profiles[header['current_revision_id']])) for header in ordered]
+        profiles[header['current_revision_id']], s)) for header in ordered]
     return CustomerRefundPageOutput(items=items, count=len(found), has_more=more,
                                     next_cursor=continuation(state, len(found), more),
                                     audit_watermark=state.sequence)
@@ -644,6 +658,13 @@ def _resolve(s, inp, *, previous=None, released=None):
     funding = _funding(s, funding_selector, currency)
     method = _method(s, method_selector)
     check_number = _check_number(check, method)
+    from bookflow.company import check_printing
+    if previous:
+        if 'check_number' in fields:
+            check_printing.guard_typed_number(s, previous['header'], inp.check_number)
+    else:
+        check_printing.may_print(getattr(inp, 'to_be_printed', False), method_kind=method.kind, bank=True,
+                                 typed_number=check_number)
     klass = (_reference(_list_row(s, 'class', c.classes, class_selector, 'class_id', 'class'))
              if class_selector else None)
     # Both dates have to be open on a correction: the revision being reversed is undone where
@@ -781,16 +802,26 @@ def _compose(s, ctx, inp, resolved, previous=None):
                 transaction_id=header['id'], revision_id=revision['id'],
                 **_source_columns(row['facts'], component), amount_minor_units=share,
                 currency=currency, effective_date=resolved['date']))
+    from bookflow.company import check_printing
+    mark = instrument = None
+    if previous:
+        # A printed refund keeps its number on the corrected revision: the paper did not change.
+        instrument = check_printing.carry_forward(s, ctx, header, revision, at=at, event=event)
+    elif getattr(inp, 'to_be_printed', False):
+        mark = check_printing.mark_row(header['id'], DOCUMENT_TYPE, at=at, actor_id=s.actor.id,
+                                       interface=ctx.interface.value, event=event)
     operation = 'update' if previous else 'post'
     changed_fields = _changed_fields(s, previous, header, revision,
                                      pending['customer_refund_profiles'][0])
     preview = _output(s, header, revision, pending['customer_refund_profiles'][0], pending,
                       model=CustomerRefundWriteOutput, changed_fields=changed_fields)
+    if mark:
+        preview = preview.model_copy(update={'print_status': 'queued'})
     return Plan(preview, dict(input=inp, operation=operation, header=header,
                               before=previous['header'] if previous else None,
                               previous=previous, revision=revision, pending=pending, event=event,
                               at=at, sequence=resolved['sequence'], currency=currency,
-                              changed=True, sources=sources))
+                              changed=True, sources=sources, print_mark=mark, instrument=instrument))
 
 
 # Everything a reader of the summary would see move; the rest is who wrote it and when.
@@ -842,6 +873,16 @@ def prepare_update(s, ctx, inp):
     if not (inp.model_fields_set - {'refund', 'expected_version'}):
         return _unchanged_plan(s, inp, previous)
     resolved = _resolve(s, inp, previous=previous)
+    from bookflow.company import check_printing
+    # In a print run, nothing changes until the run is answered; once printed, the payee, the
+    # amount and the bank account are on paper (R152).
+    check_printing.guard_correction(
+        s, header,
+        before=dict(amount_minor_units=previous['profile']['amount_minor_units'],
+                    account_id=previous['profile']['funding_account_id'], name_type='customer',
+                    name_id=previous['profile']['party_id']),
+        after=dict(amount_minor_units=resolved['total'], account_id=resolved['funding'].id,
+                   name_type='customer', name_id=resolved['customer'].id))
     captured = captured_profile(previous['profile'])
     if ((resolved['date'], resolved['number'], resolved['memo']) ==
             (revision['date'], revision['number'], revision['memo'])
@@ -868,6 +909,8 @@ def prepare_void(s, ctx, inp):
         raise BookflowError('E_APPLICATION_INACTIVE', details={
             'refund_id': header['id'], 'status': header['status'],
             'next': 'A voided refund paid nothing and cannot be voided again.'})
+    from bookflow.company import check_printing
+    check_printing.guard_correction(s, header, before=None, after=None, voiding=True)
     if not ctx.reason or not ctx.reason.strip():
         raise BookflowError('E_REASON_REQUIRED')
     if len(ctx.reason.strip()) > 140:
@@ -924,6 +967,12 @@ def apply(plan, ctx, s):
     for table, kind, identity in TABLE_KINDS:
         touched.extend(Touched(kind, row[identity], 'create', None, 1, effects.decoded(row), db='company')
                        for row in pending[table])
+    mark, instrument = data.get('print_mark'), data.get('instrument')
+    if mark:
+        touched.append(Touched('check_print_mark', header['id'], 'create', None, 1, mark, db='company'))
+    if instrument:
+        from bookflow.company import check_numbers
+        touched.extend(check_numbers.touches(instrument))
     command_name = 'customer-refund ' + operation
     summary_text = f"{operation} customer refund {header['number']}"
     audit.write_event_to(s.company, ctx, command_name, summary_text, touched,
@@ -937,6 +986,11 @@ def apply(plan, ctx, s):
     for table, _, _ in TABLE_KINDS:
         if pending[table]:
             s.company.conn.execute(getattr(c, table).insert(), pending[table])
+    if mark:
+        s.company.conn.execute(c.check_print_marks.insert().values(**mark))
+    if instrument:
+        from bookflow.company import check_numbers
+        check_numbers.write(s, instrument)
     if data['sequence']:
         from sqlalchemy.dialects.sqlite import insert
         statement = insert(c.sequences).values(**data['sequence'])

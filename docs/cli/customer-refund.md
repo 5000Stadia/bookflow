@@ -319,6 +319,7 @@ The same example as complete `bookflow_run` arguments:
 | `funding_account` | `--funding-account` | string | yes | no | — | minimum length 1 |
 | `method` | `--method` | string | yes | no | — | minimum length 1 |
 | `check_number` | `--check-number` | string \| null | no | yes | null | — |
+| `to_be_printed` | `--to-be-printed` | boolean | no | no | false | Print later: save the check with no number and put it in the funding bank account's print queue; `check print` numbers it when it prints. Needs a check method on a bank account, and no check_number. |
 | `reference` | `--reference` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `number` | `--number` | string \| null | no | yes | null | — |
@@ -395,6 +396,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total.minor_units` | integer | yes | no | — | — |
 | `total_minor_units` | integer | yes | no | — | — |
 | `currency` | string | yes | no | — | — |
+| `print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -785,6 +787,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].total.minor_units` | integer | yes | no | — | — |
 | `items[].total_minor_units` | integer | yes | no | — | — |
 | `items[].currency` | string | yes | no | — | — |
+| `items[].print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -922,6 +925,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total.minor_units` | integer | yes | no | — | — |
 | `total_minor_units` | integer | yes | no | — | — |
 | `currency` | string | yes | no | — | — |
+| `print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -1312,6 +1316,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total.minor_units` | integer | yes | no | — | — |
 | `total_minor_units` | integer | yes | no | — | — |
 | `currency` | string | yes | no | — | — |
+| `print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -1708,6 +1713,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total.minor_units` | integer | yes | no | — | — |
 | `total_minor_units` | integer | yes | no | — | — |
 | `currency` | string | yes | no | — | — |
+| `print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |

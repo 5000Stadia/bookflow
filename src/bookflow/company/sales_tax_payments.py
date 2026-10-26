@@ -240,12 +240,12 @@ def _amount(inp, currency, owed, agency):
 # ---------------------------------------------------------------- reads
 
 
-def summary(header, revision, profile):
+def summary(header, revision, profile, s=None):
     currency = revision['currency']
     captured = SalesTaxPaymentProfile.model_validate_json(profile['profile_snapshot'])
     posted = header['status'] == 'posted'
     remitted = revision['total_minor_units'] if posted else 0
-    return dict(header, date=revision['date'], through_date=profile['through_date'],
+    out = dict(header, date=revision['date'], through_date=profile['through_date'],
                 agency_id=profile['agency_id'], agency_name=captured.agency.label,
                 liability_account_id=profile['liability_account_id'],
                 funding_account_id=profile['funding_account_id'],
@@ -258,6 +258,18 @@ def summary(header, revision, profile):
                 total=Money(revision['total_minor_units'], currency).to_dict(),
                 liability_at_posting=Money(captured.liability_minor_units, currency).to_dict(),
                 remainder_at_posting=Money(captured.liability_minor_units - remitted, currency).to_dict())
+    if s is not None:
+        out.update(_printing(s, header, profile))
+    return out
+
+
+def _printing(s, header, profile):
+    """The number it printed with (R152), over the none it was saved with, and where it is in printing."""
+    from bookflow.company import check_printing
+    if not s.company.conn.execute(sa.select(c.transactions.c.id).where(c.transactions.c.id == header['id'])).first():
+        return {}
+    return dict(check_number=check_printing.shown_number(s, header['id'], profile['check_number']),
+                print_status=check_printing.print_status(s, header['id']))
 
 
 def revision_output(s, header, revision, profile, pending=None):
@@ -289,7 +301,7 @@ def revision_output(s, header, revision, profile, pending=None):
 
 
 def _output(s, header, revision, profile, pending=None, *, model=SalesTaxPaymentOutput, **extra):
-    return model(**summary(header, revision, profile),
+    return model(**summary(header, revision, profile, s),
                  revision=revision_output(s, header, revision, profile, pending), **extra)
 
 
@@ -330,7 +342,9 @@ def page(s, ctx, inp):
     if inp.number:
         query = query.where(t.c.number.contains(inp.number, autoescape=True))
     if inp.check_number:
-        query = query.where(p.c.check_number == inp.check_number)
+        printed = sa.select(c.check_instruments.c.transaction_id).where(
+            c.check_instruments.c.check_number == inp.check_number)
+        query = query.where(sa.or_(p.c.check_number == inp.check_number, t.c.id.in_(printed)))
     order = (r.c.date, t.c.id)
     query = query.order_by(*([column.desc() for column in order] if inp.direction == 'desc' else order))
     found = [dict(row) for row in s.company.conn.execute(
@@ -349,7 +363,7 @@ def page(s, ctx, inp):
             c.sales_tax_payment_profiles.c.revision_id.in_(revision_ids))).mappings()} if found else {}
     items = [SalesTaxPaymentSummaryOutput(**summary(
         header, revisions[header['current_revision_id']],
-        profiles[header['current_revision_id']])) for header in ordered]
+        profiles[header['current_revision_id']], s)) for header in ordered]
     return SalesTaxPaymentPageOutput(items=items, count=len(found), has_more=more,
                                      next_cursor=continuation(state, len(found), more),
                                      audit_watermark=state.sequence)
@@ -381,6 +395,9 @@ def prepare_pay(s, ctx, inp):
     funding, funding_kind = _funding(s, inp.funding_account, currency)
     method = _method(s, inp.method)
     check_number = _check_number(inp, method, funding_kind)
+    from bookflow.company import check_printing
+    check_printing.may_print(inp.to_be_printed, method_kind=method.kind, bank=funding_kind == 'bank_cash',
+                             typed_number=check_number)
     klass = (_reference(_list_row(s, 'class', c.classes, inp.class_id, 'class_id', 'class'))
              if inp.class_id else None)
     liability = _account_facts(_liability_account(s))
@@ -464,9 +481,15 @@ def prepare_pay(s, ctx, inp):
         profile_snapshot=json_text(profile.model_dump())))
     preview = _output(s, header, revision, pending['sales_tax_payment_profiles'][0], pending,
                       model=SalesTaxPaymentWriteOutput, changed_fields=[])
+    mark = None
+    if inp.to_be_printed:
+        # Saved to be printed (R152): no number now; `check print` numbers it from the paper loaded.
+        mark = check_printing.mark_row(header['id'], DOCUMENT_TYPE, at=at, actor_id=s.actor.id,
+                                       interface=ctx.interface.value, event=event)
+        preview = preview.model_copy(update={'print_status': 'queued'})
     return Plan(preview, dict(input=inp, operation='pay', header=header, before=None,
                               revision=revision, pending=pending, event=event, at=at,
-                              sequence=sequence, currency=currency, changed=True))
+                              sequence=sequence, currency=currency, changed=True, print_mark=mark))
 
 
 def prepare_void(s, ctx, inp):
@@ -478,6 +501,8 @@ def prepare_void(s, ctx, inp):
         raise BookflowError('E_APPLICATION_INACTIVE', details={
             'payment_id': header['id'], 'status': header['status'],
             'next': 'A voided remittance moved nothing and cannot be voided again.'})
+    from bookflow.company import check_printing
+    check_printing.guard_correction(s, header, before=None, after=None, voiding=True)
     if not ctx.reason or not ctx.reason.strip():
         raise BookflowError('E_REASON_REQUIRED')
     if len(ctx.reason.strip()) > 140:
@@ -526,6 +551,9 @@ def apply(plan, ctx, s):
     for table, kind, key in TABLE_KINDS:
         touched.extend(Touched(kind, row[key], 'create', None, 1, effects.decoded(row), db='company')
                        for row in pending[table])
+    mark = data.get('print_mark')
+    if mark:
+        touched.append(Touched('check_print_mark', header['id'], 'create', None, 1, mark, db='company'))
     command_name = 'sales-tax ' + ('pay' if operation == 'pay' else 'payment void')
     summary_text = f"{operation} sales tax payment {header['number']}"
     audit.write_event_to(s.company, ctx, command_name, summary_text, touched,
@@ -539,6 +567,8 @@ def apply(plan, ctx, s):
     for table, _, _ in TABLE_KINDS:
         if pending[table]:
             s.company.conn.execute(getattr(c, table).insert(), pending[table])
+    if mark:
+        s.company.conn.execute(c.check_print_marks.insert().values(**mark))
     if data['sequence']:
         from sqlalchemy.dialects.sqlite import insert
         statement = insert(c.sequences).values(**data['sequence'])

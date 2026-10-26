@@ -180,8 +180,16 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0093 = importlib.import_module("bookflow.storage.company_migrations.versions.0093_inventory_counts")
 
     co0091 = importlib.import_module("bookflow.storage.company_migrations.versions.0091_subcent_unit_prices")
+    co0096 = importlib.import_module("bookflow.storage.company_migrations.versions.0096_check_print_more")
 
     def older(conn):
+        # co0096 widened two CHECKs; check_print_marks goes with co0092's tables below, so only the
+        # chequebook's own CHECK is put back.
+        conn.execute("PRAGMA writable_schema=ON")
+        for old_text, new_text in co0096.REPLACEMENTS["check_instruments"]:
+            assert conn.execute("UPDATE sqlite_schema SET sql = replace(sql, ?, ?) WHERE name = 'check_instruments'",
+                                (new_text, old_text)).rowcount == 1
+        conn.execute("PRAGMA writable_schema=OFF")
         # co0093's: the four count tables, and its own text on the rebuilt movement and document tables run
         # backwards (both are empty here); the placements table goes with co0089's below.
         for table in ("inventory_count_postings", "inventory_count_entries", "inventory_count_lines", "inventory_counts"):
@@ -292,7 +300,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))
     restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older",
                                               "organization": "Older Books Organization"})
-    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0093"
+    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0096"
     folder = _folder(client, restored["company_id"])
     # The migration took its verified backup of the restored database first, as every migration does.
     assert list((folder / "backups").glob("*-from-co0062.db"))

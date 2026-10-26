@@ -9,7 +9,7 @@ Database: `company`.
 | Column | SQL type | Nullable | Default | Key | Indexes | References | Meaning |
 |---|---|---|---|---|---|---|---|
 | `transaction_id` | VARCHAR(26) | no | — | primary key 1 | — | transactions.id | Cheque saved to be printed. |
-| `type` | VARCHAR(32) | no | — | — | — | transactions.type | Transaction type of the cheque: journal_entry (a check) or bill_payment. |
+| `type` | VARCHAR(32) | no | — | — | — | transactions.type | Transaction type of the cheque: journal_entry (a check), bill_payment, sales_tax_payment or customer_refund (co0096). |
 | `created_at` | VARCHAR(32) | no | — | — | — | — | UTC time the row was written. |
 | `created_by` | VARCHAR(26) | no | — | — | — | — | Company principal that wrote it. |
 | `created_via` | VARCHAR(16) | no | — | — | — | — | Interface it was written through. |

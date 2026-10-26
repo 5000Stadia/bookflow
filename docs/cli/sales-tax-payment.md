@@ -105,6 +105,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].total.minor_units` | integer | yes | no | — | — |
 | `items[].total_minor_units` | integer | yes | no | — | — |
 | `items[].currency` | string | yes | no | — | — |
+| `items[].print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 | `items[].liability_at_posting` | object | yes | no | — | — |
 | `items[].liability_at_posting.amount` | string | yes | no | — | — |
 | `items[].liability_at_posting.currency` | string | yes | no | — | — |
@@ -251,6 +252,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total.minor_units` | integer | yes | no | — | — |
 | `total_minor_units` | integer | yes | no | — | — |
 | `currency` | string | yes | no | — | — |
+| `print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 | `liability_at_posting` | object | yes | no | — | — |
 | `liability_at_posting.amount` | string | yes | no | — | — |
 | `liability_at_posting.currency` | string | yes | no | — | — |
@@ -615,6 +617,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total.minor_units` | integer | yes | no | — | — |
 | `total_minor_units` | integer | yes | no | — | — |
 | `currency` | string | yes | no | — | — |
+| `print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 | `liability_at_posting` | object | yes | no | — | — |
 | `liability_at_posting.amount` | string | yes | no | — | — |
 | `liability_at_posting.currency` | string | yes | no | — | — |

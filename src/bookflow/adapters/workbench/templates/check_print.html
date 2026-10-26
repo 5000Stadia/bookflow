@@ -40,7 +40,7 @@
 {% for q in current.checks %}<tr data-queued="{{ q.transaction_id }}">
 <td data-label="Print"><input type="checkbox" name="pick:{{ q.transaction_id }}" value="yes" {% if not values or values.get('pick:' ~ q.transaction_id) %}checked{% endif %} aria-label="Print the check to {{ q.payee_name or 'no payee' }} for {{ q.amount.amount }}"></td>
 <td data-label="Date">{{ q.date }}</td><td data-label="Payee">{{ q.payee_name or '' }}</td><td data-label="Amount">{{ display_money(q.amount) }}</td>
-<td data-label="From">{% if q.document_type == 'bill_payment' %}<a href="/c/{{ company_id }}/bill-payment/{{ q.transaction_id }}">Pay bills</a>{% else %}<a href="/c/{{ company_id }}/check/{{ q.transaction_id }}">Write checks</a>{% endif %}</td>
+<td data-label="From">{% if q.document_type == 'bill_payment' %}<a href="/c/{{ company_id }}/bill-payment/{{ q.transaction_id }}">Pay bills</a>{% elif q.document_type == 'sales_tax_payment' %}<a href="/c/{{ company_id }}/sales-tax-payment/{{ q.transaction_id }}">Pay sales tax</a>{% elif q.document_type == 'customer_refund' %}<a href="/c/{{ company_id }}/customer-refund/{{ q.transaction_id }}">Refund</a>{% else %}<a href="/c/{{ company_id }}/check/{{ q.transaction_id }}">Write checks</a>{% endif %}</td>
 <td data-label="Memo">{{ q.memo or '' }}</td></tr>{% endfor %}
 </tbody></table></div>
 <p>{{ current.checks|length }} check(s) waiting, {{ display_money(current.total) }} in all.</p>
@@ -54,7 +54,7 @@
 <p class="muted">Make sure the first check loaded in the printer carries the first check number. Standard and wallet checks come three to a sheet; a partial sheet goes in top edge first. Alignment: horizontal {{ current.settings.offset_x_hundredths }}, vertical {{ current.settings.offset_y_hundredths }} hundredths of an inch.</p>
 <div class="actions"><button type="submit" name="action" value="print" data-print>Print</button></div>
 {% endif %}
-{% else %}<p data-queue-empty>No checks are waiting to be printed on this account. Save a check with Print later, or pay bills To be printed.</p>{% endif %}
+{% else %}<p data-queue-empty>No checks are waiting to be printed on this account. Save a check, a bill payment, a sales tax payment or a refund with Print later.</p>{% endif %}
 </section>
 </form>
 

@@ -76,6 +76,9 @@ class CustomerRefundPostInput(_Input):
     funding_account: _Selector
     method: _Selector
     check_number: CheckNumber | None = None
+    to_be_printed: bool = Field(default=False, description=(
+        'Print later: save the check with no number and put it in the funding bank account\'s print queue; '
+        '`check print` numbers it when it prints. Needs a check method on a bank account, and no check_number.'))
     reference: Reference | None = None
     memo: Text | None = None
     number: _Number | None = None
@@ -241,6 +244,9 @@ class CustomerRefundSummaryOutput(CommonOut):
     total: MoneyOutput
     total_minor_units: int
     currency: str
+    print_status: Literal['queued', 'in_run', 'printed'] | None = Field(default=None, exclude_if=lambda value: value is None, description=(
+        'For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting '
+        '"Did checks print OK?") or printed.'))
 
 
 class CustomerRefundOutput(CustomerRefundSummaryOutput):
