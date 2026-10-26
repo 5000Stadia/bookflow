@@ -184,8 +184,8 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].item` | inside `--lines` JSON array | string | yes | no | — | Inventory part or assembly to move, by id or name.; minimum length 1; maximum length 1004 |
 | `lines[].quantity` | inside `--lines` JSON array | string | yes | no | — | Quantity to move in the item base unit, a positive decimal.; minimum length 1; maximum length 40 |
 | `lines[].description` | inside `--lines` JSON array | string \| null | no | yes | null | — |
-| `lines[].from_bin` | inside `--lines` JSON array | string \| null | no | yes | null | Bin the stock leaves at the from site (a site that tracks bins), by id, full name or label; omitted, the item's default bin there, else no bin. |
-| `lines[].to_bin` | inside `--lines` JSON array | string \| null | no | yes | null | Bin the stock arrives in at the to site; omitted, the item's default bin there, else no bin. Moving between two bins of one site names the same site as from_site and to_site. |
+| `lines[].from_bin` | inside `--lines` JSON array | string \| null | no | yes | null | Bin the stock leaves at the from site (a site that tracks bins), by id, full name or label; "(no bin)" names the units outside every bin. Omitted, the units leave from where they are: the item's default bin when it holds them, else no bin, else the bins holding them. |
+| `lines[].to_bin` | inside `--lines` JSON array | string \| null | no | yes | null | Bin the stock arrives in at the to site; "(no bin)" puts it outside every bin; omitted, the item's default bin there, else no bin. Moving between two bins of one site names the same site as from_site and to_site. |
 | `lines[].lot` | inside `--lines` JSON array | string \| null | no | yes | null | Lot moved, of a lot-tracked item; omitted, the units move unassigned. |
 | `lines[].serial_numbers` | inside `--lines` JSON array | array[string] \| null | no | yes | null | Serial numbers moved, one per unit, of a serial-tracked item; each must be at the from site on the date. Units left unnumbered move unassigned. |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
@@ -639,8 +639,8 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].item` | inside `--lines` JSON array | string | yes | no | — | Inventory part or assembly to move, by id or name.; minimum length 1; maximum length 1004 |
 | `lines[].quantity` | inside `--lines` JSON array | string | yes | no | — | Quantity to move in the item base unit, a positive decimal.; minimum length 1; maximum length 40 |
 | `lines[].description` | inside `--lines` JSON array | string \| null | no | yes | null | — |
-| `lines[].from_bin` | inside `--lines` JSON array | string \| null | no | yes | null | Bin the stock leaves at the from site (a site that tracks bins), by id, full name or label; omitted, the item's default bin there, else no bin. |
-| `lines[].to_bin` | inside `--lines` JSON array | string \| null | no | yes | null | Bin the stock arrives in at the to site; omitted, the item's default bin there, else no bin. Moving between two bins of one site names the same site as from_site and to_site. |
+| `lines[].from_bin` | inside `--lines` JSON array | string \| null | no | yes | null | Bin the stock leaves at the from site (a site that tracks bins), by id, full name or label; "(no bin)" names the units outside every bin. Omitted, the units leave from where they are: the item's default bin when it holds them, else no bin, else the bins holding them. |
+| `lines[].to_bin` | inside `--lines` JSON array | string \| null | no | yes | null | Bin the stock arrives in at the to site; "(no bin)" puts it outside every bin; omitted, the item's default bin there, else no bin. Moving between two bins of one site names the same site as from_site and to_site. |
 | `lines[].lot` | inside `--lines` JSON array | string \| null | no | yes | null | Lot moved, of a lot-tracked item; omitted, the units move unassigned. |
 | `lines[].serial_numbers` | inside `--lines` JSON array | array[string] \| null | no | yes | null | Serial numbers moved, one per unit, of a serial-tracked item; each must be at the from site on the date. Units left unnumbered move unassigned. |
 | `memo` | `--memo` | string \| null | no | yes | null | — |

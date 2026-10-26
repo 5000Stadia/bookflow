@@ -63,6 +63,21 @@ def from_line(line):
                    bin=bin_ or None)
 
 
+def for_line(line, stocked, field='lines'):
+    """The ``Numbers`` a document line carries, or None. On a line that moves no stock an empty or blank
+    serial_numbers or lot is no number at all (a form's empty column, an agent's ``[]``); only a real one is
+    refused."""
+    numbers = from_line(line)
+    if numbers is None:
+        return None
+    if not stocked:
+        if numbers.lot or numbers.serial_numbers:
+            raise _invalid(field + ('.lot' if numbers.lot else '.serial_numbers'),
+                           'only stocked lines carry lot or serial numbers')
+        return None
+    return numbers
+
+
 def number_key(text):
     return unicodedata.normalize('NFC', unicodedata.normalize('NFC', str(text).strip()).casefold())
 

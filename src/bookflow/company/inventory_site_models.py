@@ -94,16 +94,16 @@ class TransferLineInput(_Strict):
     item: Selector = Field(description='Inventory part or assembly to move, by id or name.')
     quantity: str = Field(min_length=1, max_length=40, description='Quantity to move in the item base unit, a positive decimal.')
     description: str | None = Field(None, max_length=2000)
-    from_bin: Selector | None = Field(None, description=(
+    from_bin: _SL.LineBin = Field(None, description=(
         "Bin the stock leaves at the from site (a site that tracks bins), by id, full name or label; \"(no bin)\" "
         "names the units outside every bin. Omitted, the units leave from where they are: the item's default bin "
         "when it holds them, else no bin, else the bins holding them."))
-    to_bin: Selector | None = Field(None, description=(
+    to_bin: _SL.LineBin = Field(None, description=(
         "Bin the stock arrives in at the to site; \"(no bin)\" puts it outside every bin; omitted, the item's "
         "default bin there, else no bin. Moving between two bins of one site names the same site as from_site and "
         "to_site."))
-    lot: _SL.Number | None = Field(None, description='Lot moved, of a lot-tracked item; omitted, the units move unassigned.')
-    serial_numbers: list[_SL.Number] | None = Field(None, max_length=10000, description=(
+    lot: _SL.LineLot = Field(None, description='Lot moved, of a lot-tracked item; omitted, the units move unassigned.')
+    serial_numbers: _SL.LineSerials = Field(None, max_length=10000, description=(
         'Serial numbers moved, one per unit, of a serial-tracked item; each must be at the from site on the date. '
         'Units left unnumbered move unassigned.'))
 

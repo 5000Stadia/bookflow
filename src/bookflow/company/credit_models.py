@@ -54,10 +54,10 @@ class CreditLineInput(StrictModel):
     use_defaults: list[LineDefault] = Field(default_factory=list, max_length=6)
     site: Selector | None = Field(default=None, description=(
         "Inventory site a returned stocked line goes back to, by id or name; omitted, where its sale took it from."))
-    bin: _SL.Selector | None = Field(default=None, description=_SL.BIN_HELP)
-    lot: _SL.Number | None = Field(default=None, description=_SL.LOT_HELP)
+    bin: _SL.LineBin = Field(default=None, description=_SL.BIN_HELP)
+    lot: _SL.LineLot = Field(default=None, description=_SL.LOT_HELP)
     lot_expiry: _SL.IsoDate | None = Field(default=None, description=_SL.EXPIRY_HELP)
-    serial_numbers: list[_SL.Number] | None = Field(default=None, max_length=10000, description=_SL.SERIAL_HELP)
+    serial_numbers: _SL.LineSerials = Field(default=None, max_length=10000, description=_SL.SERIAL_HELP)
 
     @model_serializer(mode="wrap")
     def unset_site(self, handler):

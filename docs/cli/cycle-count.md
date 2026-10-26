@@ -91,10 +91,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].issued_cost.minor_units` | integer | yes | no | — | — |
 | `rows[].cumulative_share` | string | yes | no | — | Share of the period's issued cost up to and including this item, percent. |
 | `rows[].current_class` | string \| null | yes | yes | — | — |
-| `rows[].proposed_class` | string | yes | no | — | — |
+| `rows[].proposed_class` | string \| null | yes | yes | — | The class proposed; null when nothing was issued and the item has none. |
 | `rows[].changes` | boolean | yes | no | — | — |
 | `changes` | integer | yes | no | — | — |
 | `applied` | boolean | no | no | false | — |
+| `message` | string \| null | no | yes | null | Why nothing changes, when nothing was issued in the period. |
 
 Example JSON output:
 
@@ -104,6 +105,7 @@ Example JSON output:
   "changes": 1,
   "date_from": "value",
   "date_to": "value",
+  "message": null,
   "rows": [],
   "total_issued_cost": {
     "amount": "value",
@@ -148,7 +150,7 @@ Example JSON output:
 
 ## `cycle-count due`
 
-What should we count this week? The items due for a cycle count at a site: an item is due when its class interval has passed since its last recorded count there, or it has never been counted there (unclassified items never are). Most overdue first, A before B before C. Count the first ones with `inventory-count create --site <site> --cycle --limit 25`. Example: `bookflow cycle-count due --site Warehouse`.
+What should we count this week? The items due for a cycle count at a site: an item is due when its class interval has passed since its last recorded count there, or it has never been counted there (unclassified items never are) -- then it has been due since it was first stocked there. Ranked by days overdue over the class interval, so a late A item comes before an equally late C item. A count of bins counts an item only when every bin holding it was counted. Count the first ones with `inventory-count create --site <site> --cycle --limit 25`; places left over take items falling due within the next six days. Example: `bookflow cycle-count due --site Warehouse`.
 
 | Contract | Value |
 |---|---|
@@ -215,8 +217,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].cycle_class` | string | yes | no | — | — |
 | `rows[].interval_days` | integer | yes | no | — | — |
 | `rows[].last_counted` | string \| null | yes | yes | — | Date of its last recorded count at the site; null when never counted there. |
-| `rows[].due_date` | string \| null | yes | yes | — | When it falls due (last count plus the interval); null when never counted. |
-| `rows[].days_overdue` | integer \| null | yes | yes | — | Days past its due date; null when never counted (the most overdue). |
+| `rows[].due_date` | string \| null | yes | yes | — | When it fell due: last count plus the interval, or its first stock date there when never counted. |
+| `rows[].days_overdue` | integer \| null | yes | yes | — | Days past its due date. Rows rank by this over the class interval. |
 | `rows[].on_hand` | string | yes | no | — | — |
 | `due` | integer | yes | no | — | — |
 | `not_due` | integer | yes | no | — | Classified items at the site that are not yet due. |
