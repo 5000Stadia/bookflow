@@ -349,6 +349,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.inventory_site_cmds": ["inventory-site", "inventory-transfer", "report"],
     "bookflow.commands.inventory_count_cmds": ["inventory-count", "report"],
     "bookflow.commands.serial_lot_cmds": ["inventory", "lot", "serial-number", "report"],
+    "bookflow.commands.landed_cost_cmds": ["landed-cost"],
     "bookflow.commands.item_convert_cmds": ["item"],
     "bookflow.commands.prepayment_cmds": ["prepayment", "report"],
     "bookflow.commands.rate_cmds": ["rate"],

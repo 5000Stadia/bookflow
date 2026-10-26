@@ -165,6 +165,12 @@ class ItemInput(StrictModel):
     tax_percent: str | None = None
     tax_agency_vendor_id: str | None = Field(default=None, min_length=26, max_length=26)
     assembly_build_point: str | None = None
+    unit_weight: str | None = Field(default=None, description=(
+        "Weight of one base unit, in whatever weight unit the company uses for freight, for landed cost by weight "
+        "(R104 increment 6); null for none."))
+    unit_volume: str | None = Field(default=None, description=(
+        "Volume of one base unit, in whatever volume unit the company uses for freight, for landed cost by volume; "
+        "null for none."))
     asset_number: str | None = Field(default=None, max_length=128)
     purchase_date: str | None = None
     original_cost: Any | None = None
@@ -193,7 +199,7 @@ class ItemInput(StrictModel):
         return value or None
 
     @field_validator(
-        "reorder_point_min", "reorder_point_max", "assembly_build_point",
+        "reorder_point_min", "reorder_point_max", "assembly_build_point", "unit_weight", "unit_volume",
     )
     @classmethod
     def _nonnegative_quantities(cls, value: str | None, info) -> str | None:
@@ -329,6 +335,8 @@ class ItemOutput(StrictModel):
     tax_percent: str | None
     tax_agency_vendor_id: str | None
     assembly_build_point: str | None
+    unit_weight: str | None = None
+    unit_volume: str | None = None
     asset_number: str | None
     purchase_date: str | None
     original_cost: MoneyOutput | None
@@ -374,7 +382,7 @@ _IDENTITY = frozenset({"name", "type", "parent_id", "category_id", "default_clas
 _SALES = frozenset({"description", "sales_enabled", "price", "income_account_id", "sales_tax_code_id"})
 _PURCHASE = frozenset({"purchase_description", "purchase_enabled", "cost", "expense_account_id", "preferred_vendor_id", "vendor_profiles"})
 _INVENTORY_PURCHASE = frozenset({"purchase_description", "purchase_enabled", "cost", "preferred_vendor_id", "vendor_profiles"})
-_STOCK = frozenset({"cogs_account_id", "asset_account_id", "manufacturer_part_number", "barcode", "tracking", "unit_of_measure_set_id", "reorder_point_min", "reorder_point_max"})
+_STOCK = frozenset({"cogs_account_id", "asset_account_id", "manufacturer_part_number", "barcode", "tracking", "unit_of_measure_set_id", "reorder_point_min", "reorder_point_max", "unit_weight", "unit_volume"})
 _FIXED = frozenset({
     "asset_number", "purchase_date", "original_cost", "vendor_id", "location", "serial_number",
     "warranty_expiration", "disposal_status", "disposal_date", "disposal_proceeds",
@@ -423,6 +431,8 @@ _QUANTITY_FIELDS = {
     "reorder_point_min": "reorder_point_min_microunits",
     "reorder_point_max": "reorder_point_max_microunits",
     "assembly_build_point": "assembly_build_point_microunits",
+    "unit_weight": "unit_weight_microunits",   # landed cost by weight and volume (R104 increment 6)
+    "unit_volume": "unit_volume_microunits",
 }
 _DIRECT_FIELDS = (
     "category_id", "description", "purchase_description", "income_account_id",
@@ -822,6 +832,9 @@ def _owner_values(db: Database, parsed: ItemInput, *, supplied: set[str], refere
     for field, column in _QUANTITY_FIELDS.items():
         raw = getattr(parsed, field)
         values[column] = None if raw is None else parse_quantity_micro_units(raw, field=field)
+    for field in ("unit_weight", "unit_volume"):
+        if values[_QUANTITY_FIELDS[field]] == 0:
+            raise _validation(field, "must be more than zero; leave it out for none")
     if values["reorder_point_min_microunits"] is not None and values["reorder_point_max_microunits"] is not None and values["reorder_point_max_microunits"] < values["reorder_point_min_microunits"]:
         raise _validation("reorder_point_max", "cannot be below reorder_point_min")
 
@@ -1984,6 +1997,8 @@ def project_item(
         discount_percent=(None if owner["discount_percent_millionths"] is None else format_percentage_millionths(owner["discount_percent_millionths"])),
         tax_percent=(None if owner["tax_percent_millionths"] is None else format_percentage_millionths(owner["tax_percent_millionths"])),
         assembly_build_point=(None if owner["assembly_build_point_microunits"] is None else format_quantity_micro_units(owner["assembly_build_point_microunits"])),
+        unit_weight=(None if owner.get("unit_weight_microunits") is None else format_quantity_micro_units(owner["unit_weight_microunits"])),
+        unit_volume=(None if owner.get("unit_volume_microunits") is None else format_quantity_micro_units(owner["unit_volume_microunits"])),
         original_cost=_money_output(owner, "original_cost"), disposal_proceeds=_money_output(owner, "disposal_proceeds"),
         disposal_costs=_money_output(owner, "disposal_costs"), book_basis=_money_output(owner, "book_basis"),
         tax_basis=_money_output(owner, "tax_basis"),

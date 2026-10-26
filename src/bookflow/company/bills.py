@@ -103,7 +103,7 @@ EXPENSE_ACCOUNTS = frozenset({'expense', 'other_expense', 'cost_of_goods_sold',
 # the deposit owner's, Inventory Asset is the item owner's. Cost of Goods Sold is the exception
 # -- it carries a role but it is an ordinary purchase account a bookkeeper picks by hand, and
 # refusing it would refuse freight in and subcontracted cost.
-LINE_ROLES = frozenset({'cost_of_goods_sold'})
+LINE_ROLES = frozenset({'cost_of_goods_sold', 'landed_cost_clearing'})   # a freight charge (R104 increment 6)
 # The one account an item that is sold but never bought has. Buying such an item back debits
 # the income it is sold out of, which is what the anchor product does with it and what the
 # item record itself allows -- an income account on an item is `income` or `other_income` and

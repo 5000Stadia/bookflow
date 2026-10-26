@@ -234,7 +234,7 @@ class Change:
 
     def rows(self, *, created_at, created_by, created_via, audit_event_id):
         """The document's own movement rows, ready to insert."""
-        return [dict(movement.values, created_at=created_at, created_by=created_by,
+        return [dict({'landed_on_movement_id': None}, **movement.values, created_at=created_at, created_by=created_by,
                      created_via=created_via, audit_event_id=audit_event_id)
                 for movement in self.movements]
 
@@ -280,6 +280,10 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
     negative-stock check sees the net effect rather than a transient the caller never asked
     for.
     """
+    if reversing:
+        # A receipt a landed-cost allocation lands on is not voided or changed under it (R104 increment 6).
+        from bookflow.company import landed_costs
+        landed_costs.check_targets(s, reversing)
     sequence = inventory.next_sequence(s) if sequence is None else sequence
     working: dict[str, list] = {}
     stored: dict[str, list] = {}
@@ -449,21 +453,18 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
     # a person reads in the journal is the kind its memo says it is.
     by_date: dict[tuple, list] = {}
     for item_id, correction in owed:
-        by_date.setdefault((correction.effective_date, correction.filled_by is not None),
+        by_date.setdefault((correction.effective_date, correction_kind(correction)),
                            []).append((item_id, correction))
-    for affected, true_up in sorted(by_date):
+    for affected, kind in sorted(by_date):
+        true_up = kind != 0
         lines, movements = [], []
-        for item_id, correction in by_date[(affected, true_up)]:
+        for item_id, correction in by_date[(affected, kind)]:
             target = correction.target_movement
-            description = (f'Provisional cost true-up for movement {target["id"]} dated '
-                           f'{target["effective_date"]}, filled by receipt movement '
-                           f'{correction.filled_by["id"]}' if true_up else
-                           f'Weighted-average cost correction for movement {target["id"]} '
-                           f'dated {target["effective_date"]}')
+            description = correction_description(correction)
             lines.extend(inventory.pair(
                 target['asset_account_id'], target['offset_account_id'],
                 correction.delta_minor_units, currency, target['class_id'], description))
-            partner = partners.get(target['id']) if not true_up else None
+            partner = partners.get((target['id'], correction.filled_by['id'] if correction.filled_by is not None else None))
             movements.append(Movement(dict(
                 id=new_id(), item_id=item_id, kind=CORRECTION_KIND,
                 quantity_microunits=0, value_minor_units=correction.delta_minor_units,
@@ -482,9 +483,7 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
                 partner['sequence'] = sequence
                 movements.append(Movement(partner, line_index=len(lines)))
                 sequence += 1
-        change.corrections.append(Correction(
-            affected, 'Provisional cost true-up' if true_up else 'Weighted-average cost correction',
-            lines, movements))
+        change.corrections.append(Correction(affected, CORRECTION_MEMOS[kind], lines, movements))
     from bookflow.company import serial_lots
     numbering = serial_lots.Numbering(s)
     change.placements = placements.for_movements(s, [movement.values for movement in change.movements], change.sites,
@@ -492,6 +491,31 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
     change.warnings.extend(placements.warnings(s, change.placements, names))
     change.warnings.extend(w for w in numbering.warnings if w not in change.warnings)
     return change
+
+
+# A correction document holds one kind of correction, so its memo says what each line is: a correction at a
+# movement's own date, a provisional cost's true-up at the receipt that filled it, or a landed cost's forward
+# true-up at the allocation (R104 increment 6).
+CORRECTION_MEMOS = ('Weighted-average cost correction', 'Provisional cost true-up', 'Landed cost true-up')
+
+
+def correction_kind(correction):
+    if correction.filled_by is None:
+        return 0
+    return 2 if correction.filled_by['kind'] == 'landed' else 1
+
+
+def correction_description(correction):
+    """One correction line's description: what it corrects, and what filled or landed on it."""
+    target = correction.target_movement
+    kind = correction_kind(correction)
+    if kind == 2:
+        return (f'Landed cost true-up for movement {target["id"]} dated {target["effective_date"]}, '
+                f'landed cost movement {correction.filled_by["id"]}')
+    if kind == 1:
+        return (f'Provisional cost true-up for movement {target["id"]} dated {target["effective_date"]}, '
+                f'filled by receipt movement {correction.filled_by["id"]}')
+    return f'Weighted-average cost correction for movement {target["id"]} dated {target["effective_date"]}'
 
 
 def open_dates(s, change, dates=()):
@@ -583,7 +607,7 @@ def write_corrections(s, ctx, change, *, command_name, created_at=None):
                           audit_event_id=fresh.data['event'])
         marker = dict(transaction_id=fresh.data['header']['id'], type='journal_entry',
                       kind=CORRECTION_KIND, **provenance)
-        rows = [dict(movement.values, **provenance) for movement in correction.movements]
+        rows = [dict({'landed_on_movement_id': None}, **movement.values, **provenance) for movement in correction.movements]
         applied = journals.persist_prepared(
             fresh, ctx, s, command_name=command_name,
             extra=(('inventory_documents', 'inventory_document', 'transaction_id', [marker]),

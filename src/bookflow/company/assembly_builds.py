@@ -145,8 +145,9 @@ def replay_items(s, working, load, refuse):
     ``working`` maps item id to its movement rows, planned ones included; ``load(item_id)`` returns
     (creating if needed) that list for an item not yet in it; ``refuse(refusal, item_id)`` turns a
     ``StockRefusal`` into the caller's error. Returns the ``(item_id, Replay)`` pairs in the order they
-    were replayed, and ``partners``: for each correction of a build's component issue, the cost
-    correction of that build's assembly receipt that carries the other side of it.
+    were replayed, and ``partners``: for each correction of a build's component issue, keyed by (issue id,
+    filling movement id or None), the cost correction -- or, for a landed cost's forward true-up, the landed
+    cost -- of that build's assembly receipt that carries the other side of it.
     """
     builds = build_transactions(s)
     order, partners = [], {}
@@ -194,16 +195,21 @@ def replay_items(s, working, load, refuse):
                     'Assembly builds consume one another in a cycle, so the cost of one cannot be settled before the '
                     'other. Void one of the builds that made an assembly from an item it was itself built into, then '
                     'enter this change again.'), details={'reason': 'assembly_cycle', 'item_id': receipt['item_id']})
+            # A landed cost's forward true-up of a component issue (R104 increment 6) is carried by a landed
+            # cost of the assembly receipt at the same date, so the assembly's own forward true-ups follow;
+            # any other correction by a cost correction of the assembly receipt, at the receipt's position.
+            landed = correction.filled_by is not None and correction.filled_by['kind'] == 'landed'
             partner = dict(
-                id=new_id(), item_id=receipt['item_id'], kind='recost', quantity_microunits=0,
+                id=new_id(), item_id=receipt['item_id'], kind='landed' if landed else 'recost', quantity_microunits=0,
                 value_minor_units=-correction.delta_minor_units, effective_date=correction.effective_date,
                 sequence=0, currency=receipt['currency'], asset_account_id=receipt['asset_account_id'],
                 offset_account_id=receipt['offset_account_id'], class_id=receipt['class_id'],
-                corrects_movement_id=receipt['id'], reverses_movement_id=None, returns_movement_id=None,
+                corrects_movement_id=None if landed else receipt['id'], reverses_movement_id=None,
+                returns_movement_id=None, landed_on_movement_id=receipt['id'] if landed else None,
                 filled_by_movement_id=None, fallback_unit_cost_minor_units=None, fallback_unit_cost_fraction=None,
                 count_position=receipt.get('count_position') or 'before')
             load(receipt['item_id']).append(partner)
-            partners[target['id']] = partner
+            partners[(target['id'], correction.filled_by['id'] if correction.filled_by is not None else None)] = partner
             waiting.add(receipt['item_id'])
         order.append((item_id, state))
         done.add(item_id)

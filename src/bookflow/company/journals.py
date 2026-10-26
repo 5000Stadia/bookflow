@@ -27,7 +27,10 @@ TABLES = ('transaction_revisions', 'document_line_identities', 'document_lines',
 # owning ledger cannot explain -- the inventory asset on the balance sheet would stop being
 # the total of the stock reports -- so the journal editor is refused here and only the owner
 # may write it. `owner` is threaded from `prepare` for exactly this.
-OWNED_SYSTEM_ROLES = {'inventory_asset': 'inventory', 'customer_prepayments': 'customer prepayment'}
+OWNED_SYSTEM_ROLES = {'inventory_asset': 'inventory', 'customer_prepayments': 'customer prepayment',
+                      # Charged by the purchase documents' expense lines (which post as the inventory owner) and
+                      # cleared only by `landed-cost post` (R104 increment 6).
+                      'landed_cost_clearing': 'inventory'}
 TYPES = ('transaction_revision', 'document_line_identity', 'document_line',
          'posting_batch', 'posting_line', 'posting_line_source')
 
@@ -189,6 +192,10 @@ def line_values(s, inp, currency, old=None, refresh=False, *, date=None, rate=No
         raise invalid('account', 'must be a posting account')
     role = account.get('system_role')
     if role in OWNED_SYSTEM_ROLES and owner != OWNED_SYSTEM_ROLES[role]:
+        if role == 'landed_cost_clearing':
+            raise invalid('account', f'"{account["name"]}" holds freight and duty waiting to be spread over the stock '
+                                     'it came with; charge it on a bill, check, card charge or vendor credit expense '
+                                     'line, and clear it with `landed-cost post`')
         if role == 'customer_prepayments':
             raise invalid('account', f'"{account["name"]}" is written by the customer prepayment ledger that '
                                      'owns it, which records what each receipt holds; take a deposit with '

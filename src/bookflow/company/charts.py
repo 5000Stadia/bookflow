@@ -40,6 +40,9 @@ SYSTEM_ROLE_TYPES = {
     "reconciliation_discrepancies": "expense",
     # Made on first use by the first customer prepayment (R124); the prepayment ledger owns it.
     "customer_prepayments": "other_current_liability",
+    # Made on first use by landed cost (R104 increment 6); bill, check, card and vendor-credit expense lines
+    # charge it, and only `landed-cost post` clears it.
+    "landed_cost_clearing": "other_current_asset",
 }
 _NUMBER = re.compile(r"^[0-9]{1,7}$")
 
