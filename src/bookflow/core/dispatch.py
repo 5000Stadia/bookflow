@@ -423,8 +423,9 @@ def execute(cmd: Command, raw_input: dict[str, Any], ctx: Context, s: Session, *
             _complete_pending_organizations(s, ctx)
         return run_in_session(cmd, inp, ctx, s, company_selector=company_selector, company_source=company_source, dry_run=dry_run, _recovery_checked=True)
     call = timings.begin()
+    from bookflow.core.config import load_scope
     try:
-        with performance.span("command.execute", command=cmd.name):
+        with performance.span("command.execute", command=cmd.name), load_scope():
             result = guard(body, s.is_hub_admin)
     except BaseException as e:
         timings.end(call, command=cmd.name, ctx=ctx, session=s, raw_input=raw_input, error=e)

@@ -439,16 +439,89 @@ def _company_pairs(value):
     return tuple(sorted({Requirement(c.name,t) for p in (value.old,value.new) for c in p.catalog.capabilities for t in c.company_thresholds},key=_req_key))
 
 
-def admissions(value: ValidatedComparison, *, phase: Literal['old', 'new'],
-               subject: str, scope: ScopeKey) -> tuple[Admission, ...]:
+# R180: one comparison asks the same questions of the same phase facts for every subject and
+# scope (an organisation of 200 companies is 401 scopes), so the facts are indexed once per
+# comparison instead of rescanned per question. Each indexed helper below answers exactly as
+# the scanning helper above it does on a validated comparison (the only kind they are given);
+# tests/permission_policy_oracle.py keeps the scanning implementation as the oracle.
+
+class _PhaseIndex:
+    __slots__=('p','organizations','companies','visible','members','current','defaults','admin')
+
+    def __init__(self,p):
+        self.p=p
+        self.organizations={x.id:x.present for x in p.organizations}
+        self.companies={x.id:x for x in p.companies}
+        self.visible={(v.subject,v.scope):v.visible for v in p.visibility}
+        members={}
+        for m in p.memberships:
+            if m.value is not None:
+                members.setdefault(m.subject,[]).append((m.scope,m.value))
+        self.members=members
+        self.current=frozenset(Requirement(c.name,t) for c in p.catalog.capabilities for t in c.company_thresholds)
+        self.defaults=frozenset((d.role,d.requirement) for d in p.catalog.defaults)
+        self.admin={a.key:a for a in p.catalog.admin_actions}
+
+    def present(self,scope):
+        if scope.kind == 'hub':
+            return scope.id == 'root'
+        if scope.kind in ('organization', 'future_company'):
+            return self.organizations[scope.id]
+        return self.companies[scope.id].present
+
+    def member_rows(self,subject,scope):
+        if scope.kind in ('organization', 'future_company'):
+            targets=(ScopeKey('organization', scope.id),)
+        elif scope.kind == 'company':
+            row=self.companies[scope.id]
+            targets=(ScopeKey('organization',row.organization), scope) if row.present else ()
+        else:
+            targets=()
+        return tuple((k,v) for k,v in self.members.get(subject,()) if k in targets)
+
+    def role(self,identifier,subject,scope,members):
+        role=max((m.role for _,m in members),key=ROLES.index,default=None)
+        admin=bool(subject and subject.hub_admin)
+        if self.p.semantics == 'scoped_v1' and scope.kind != 'hub':
+            admin=False
+        return RoleFacts(role,tuple(sorted((s for s,m in members if m.role==role),key=_scope_key)),admin,'hub_admin' if admin else role)
+
+    def base_reasons(self,identifier,subject,scope):
+        result=[]
+        if subject is None:result.append(Reason.subject_absent)
+        elif not subject.active:result.append(Reason.subject_inactive)
+        if not self.present(scope):result.append(Reason.scope_absent)
+        if not self.visible[(identifier,scope)]:result.append(Reason.scope_hidden)
+        return result
+
+
+class _Index:
+    __slots__=('value','phases','company_pairs','admin_keys')
+
+    def __init__(self,value):
+        self.value=value
+        self.phases={'old':_PhaseIndex(value.old),'new':_PhaseIndex(value.new)}
+        self.company_pairs=_company_pairs(value)
+        domains={}
+        for pp in (value.old,value.new):
+            for a in pp.catalog.admin_actions:
+                domains.setdefault(a.key,set()).add(a.domain)
+        # Both old and new domains are included if an action's domain changes.
+        self.admin_keys={kind:tuple(k for k in sorted(domains) if kind in domains[k])
+                         for kind in ('hub','organization','company','future_company')}
+
+
+def _admissions(value,ix,phase,subject,scope):
     _check(scope, ScopeKey, 'scope')
     p,s=_select(value,phase,subject,scope)
     if scope.kind not in ('company','future_company'):_fail('invalid_reference','scope')
-    role=_role(p,subject,s,scope);members=_members(p,subject,scope)
-    current={Requirement(c.name,t) for c in p.catalog.capabilities for t in c.company_thresholds}
-    defaults={(d.role,d.requirement) for d in p.catalog.defaults}
+    if ix is None:ix=_Index(value)
+    x=ix.phases[phase]
+    members=x.member_rows(subject,scope);role=x.role(subject,s,scope,members)
+    current,defaults=x.current,x.defaults
+    base=x.base_reasons(subject,s,scope)
     result=[]
-    for requirement in _company_pairs(value):
+    for requirement in ix.company_pairs:
         present=requirement in current
         grants=tuple(k for k,m in members if requirement.capability in m.policy.grants) if present else ()
         denies=tuple(k for k,m in members if requirement.capability in m.policy.denies) if present else ()
@@ -459,7 +532,7 @@ def admissions(value: ValidatedComparison, *, phase: Literal['old', 'new'],
             default=present and requirement.capability not in (*DELETE_NAMES,
                 *('transaction.'+family+'.delete' for family in PURCHASE_DELETE_FAMILIES))
             grants=denies=()
-        reasons=_base_reasons(p,subject,s,scope)
+        reasons=list(base)
         if not _floor(role,requirement.threshold):reasons.append(Reason.role_floor)
         if not (default or grants):reasons.append(Reason.no_grant)
         if denies:reasons.append(Reason.explicit_deny)
@@ -467,26 +540,36 @@ def admissions(value: ValidatedComparison, *, phase: Literal['old', 'new'],
     return tuple(result)
 
 
-def signature(value: ValidatedComparison, *, phase: Literal['old', 'new'],
-              subject: str) -> AuthoritySignature:
+def admissions(value: ValidatedComparison, *, phase: Literal['old', 'new'],
+               subject: str, scope: ScopeKey) -> tuple[Admission, ...]:
+    return _admissions(value,None,phase,subject,scope)
+
+
+def _signature(value,ix,phase,subject):
     p,s=_select(value,phase,subject)
-    current={a.key:a for a in p.catalog.admin_actions}
-    all_admin={a.key:a for pp in (value.old,value.new) for a in pp.catalog.admin_actions}
+    if ix is None:ix=_Index(value)
+    x=ix.phases[phase]
+    current=x.admin
+    human=bool(s and s.kind=='human')
     scopes=[]
     for scope in value.scopes:
-        role=_role(p,subject,s,scope)
+        members=x.member_rows(subject,scope)
+        role=x.role(subject,s,scope,members)
+        visible=not x.base_reasons(subject,s,scope)
         bits=[]
-        # Both old and new domains are included if an action's domain changes.
-        for key in sorted(all_admin):
-            domains={a.domain for pp in (value.old,value.new) for a in pp.catalog.admin_actions if a.key==key}
-            if scope.kind not in domains:continue
+        for key in ix.admin_keys[scope.kind]:
             action=current.get(key)
-            admitted=bool(action and action.domain==scope.kind and not _base_reasons(p,subject,s,scope) and _floor(role,action.threshold) and (not action.human_only or (s and s.kind=='human')))
+            admitted=bool(action and action.domain==scope.kind and visible and _floor(role,action.threshold) and (not action.human_only or human))
             bits.append((key,admitted))
-        company=tuple((a.requirement,a.admitted) for a in admissions(value,phase=phase,subject=subject,scope=scope)) if scope.kind in ('company','future_company') else ()
-        scopes.append(ScopeSignature(scope,_present(p,scope),not _base_reasons(p,subject,s,scope),role.membership_role,
+        company=tuple((a.requirement,a.admitted) for a in _admissions(value,ix,phase,subject,scope)) if scope.kind in ('company','future_company') else ()
+        scopes.append(ScopeSignature(scope,x.present(scope),visible,role.membership_role,
             role.hub_admin if scope.kind == 'hub' or p.semantics == 'prepared_v1' else False,company,tuple(bits)))
     return AuthoritySignature(subject,s is not None,bool(s and s.active),tuple(scopes))
+
+
+def signature(value: ValidatedComparison, *, phase: Literal['old', 'new'],
+              subject: str) -> AuthoritySignature:
+    return _signature(value,None,phase,subject)
 
 
 def company_action(value: ValidatedComparison, *, phase: Literal['old', 'new'],
@@ -510,7 +593,8 @@ def execution(value: ValidatedComparison, *, phase: Literal['old', 'new'],
     _check(bound_human, str | None, 'bound_human')
     _check(requirement, Requirement, 'requirement')
     p,s=_select(value,phase,actor,scope)
-    atoms={a.requirement:a for a in admissions(value,phase=phase,subject=actor,scope=scope)}
+    ix=_Index(value)
+    atoms={a.requirement:a for a in _admissions(value,ix,phase,actor,scope)}
     if requirement not in atoms:_fail('unexpected_key','requirement')
     own=atoms[requirement].admitted;other=None;eligible=True;unsuspended=True;reasons=[]
     if not own:reasons.append(Reason.actor_denied)
@@ -523,7 +607,7 @@ def execution(value: ValidatedComparison, *, phase: Literal['old', 'new'],
         if bound_human is not None:
             person=next(x.value for x in p.subjects if x.id==bound_human)
             if person and person.kind=='human' and person.active:
-                other=next(a.admitted for a in admissions(value,phase=phase,subject=bound_human,scope=scope) if a.requirement==requirement)
+                other=next(a.admitted for a in _admissions(value,ix,phase,bound_human,scope) if a.requirement==requirement)
         if not eligible:reasons.append(Reason.binding_ineligible)
         if not unsuspended:reasons.append(Reason.agent_suspended)
         if not other:reasons.append(Reason.principal_denied)
@@ -546,10 +630,22 @@ def _loss(old,new):
     return False
 
 
+# The last comparison and its answer. compare is a pure function of its validated input, so an
+# equal input (a preview's facts read again in the apply's write transaction) has the same
+# answer: the apply still validates and compares its own freshly read facts, it only skips
+# recomputing an answer it already holds for exactly those facts.
+_LAST: tuple[ValidatedComparison, Comparison] | None = None
+
+
 def compare(value: ValidatedComparison) -> Comparison:
+    global _LAST
     if type(value) is not ValidatedComparison:_fail('invalid_type','comparison')
-    old={i:signature(value,phase='old',subject=i) for i in value.subjects}
-    new={i:signature(value,phase='new',subject=i) for i in value.subjects}
+    last=_LAST
+    if last is not None and (last[0] is value or last[0]==value):
+        return last[1]
+    ix=_Index(value)
+    old={i:_signature(value,ix,'old',i) for i in value.subjects}
+    new={i:_signature(value,ix,'new',i) for i in value.subjects}
     left={a.id:a.value for a in value.old.agents};right={a.id:a.value for a in value.new.agents};result=[]
     for agent in value.agents:
         a,b=left[agent],right[agent];before=set(a.eligible_humans if a else ());after=set(b.eligible_humans if b else ())
@@ -563,4 +659,6 @@ def compare(value: ValidatedComparison) -> Comparison:
         for condition,reason in ((own_loss,Reason.own_authority_loss),(human_loss,Reason.principal_authority_loss),(binding_loss,Reason.binding_loss),(not equal,Reason.principal_set_unequal),(not after,Reason.empty_principal_set),(suspended,Reason.already_suspended)):
             if condition:reasons.append(reason)
         result.append(AgentTransition(agent,needed,suspended or needed,equal,bool(after),_reasons(reasons)))
-    return Comparison(tuple(old.values()),tuple(new.values()),tuple(result))
+    answer=Comparison(tuple(old.values()),tuple(new.values()),tuple(result))
+    _LAST=(value,answer)
+    return answer
