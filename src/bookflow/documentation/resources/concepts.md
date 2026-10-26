@@ -112,6 +112,8 @@ What Bookflow does and what you do: Bookflow writes read-only files and the chec
 
 Every public failure has the JSON shape `{"code": "E_...", "message": "...", "details": {}}`. Programs branch on the stable `code` and use `details` for structured recovery; message text is for people. HTTP maps authentication, permission, missing-record, conflict, validation, and internal failures to the corresponding 4xx or 5xx status while preserving that document. The CLI exits `0` on success, `2` for `E_USAGE`, `3` for `E_INTERNAL`, and `1` for other named errors.
 
+`E_GUARD_REFUSED` means a safety check built into the database itself (a guard that keeps history immutable, documents consistent and the books balanced) refused a write that Bookflow's own command checks had let through. The whole write rolled back, so nothing was saved. It is a Bookflow bug, not a problem with the input or the disk: `details.guard` is the check's own message, `details.tables` the tables it guards, and `details.command` and `details.request_id` identify the request; report those. HTTP returns it as 500. Retrying with the same idempotency key runs the command again and meets the same check. A genuine filesystem or database-file failure (disk full, unreadable, locked) stays `E_IO`.
+
 
 HTTP context headers support Unicode through `X-Bookflow-Context-Encoding:
 percent-utf8`. When present, encode every supplied reason, source reference,

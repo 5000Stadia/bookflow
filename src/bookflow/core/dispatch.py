@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,7 +25,7 @@ from bookflow.core.registry import Command, Plan, Touched
 from bookflow.core.session import Actor, Session
 from bookflow.hub import access, schema as h
 from bookflow.hub.audit import write_event
-from bookflow.storage.engine import io_error, open_database
+from bookflow.storage.engine import guard_refusal_text, guard_refused, guard_tables, io_error, open_database
 from bookflow.storage.migrate import HEADS, backup, classify, current_revision_open, current_revision_raw, migrate_to_head
 from bookflow.storage.paths import name_key, resolve_data_root
 
@@ -78,6 +79,9 @@ def parse_when(value: str, zone: str | None, end: bool = False) -> str:
     except (ValueError, KeyError) as e:
         raise BookflowError("E_VALIDATION", details={"fields": [{"field": "since/until", "problem": f"not a date or timestamp: {value!r}"}]})
     return dt.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+_log = logging.getLogger("bookflow.dispatch")
 
 
 def redact_error(err: BookflowError, allowed: bool) -> BookflowError:
@@ -379,10 +383,13 @@ def _close(s: Session) -> None:
                 s._hub_cm = None  # type: ignore[attr-defined]
 
 
-def guard(fn, allowed=False):
+def guard(fn, allowed=False, refusal_facts=None):
     """The one error boundary: named errors redacted for non-admins; OS and SQLite failures become E_IO.
 
     ``allowed`` may be a callable evaluated when the error happens, since the actor is known only part-way through run().
+    A write refused by one of Bookflow's own guard triggers is not an I/O failure: it becomes E_GUARD_REFUSED with the
+    trigger's message, plus whatever ``refusal_facts(message)`` adds (the guarded tables, the request), and is logged
+    so the disagreement between the application's check and the schema's can be reported.
     """
     def ok() -> bool:
         return bool(allowed()) if callable(allowed) else bool(allowed)
@@ -390,10 +397,33 @@ def guard(fn, allowed=False):
         return fn()
     except BookflowError as e:
         raise redact_error(e, ok())
+    except (sqlite3.IntegrityError, sa.exc.IntegrityError) as e:
+        message = guard_refusal_text(e)
+        if message is None:
+            inner = e.orig if isinstance(e, sa.exc.DBAPIError) and isinstance(e.orig, sqlite3.Error) else e
+            raise redact_error(io_error("command", inner, getattr(inner, "filename", None)), ok())
+        facts: dict[str, Any] = {}
+        if refusal_facts is not None:
+            try:
+                facts = refusal_facts(message) or {}
+            except Exception:  # the lookup only enriches the report; it must never mask the refusal
+                facts = {}
+        _log.error("guard trigger refused a write: guard=%r facts=%r", message, facts, exc_info=True)
+        raise redact_error(guard_refused(message, facts), ok()) from None
     except (OSError, sqlite3.Error) as e:
         raise redact_error(io_error("command", e, getattr(e, "filename", None)), ok())
     except sa.exc.DBAPIError as e:
         raise redact_error(io_error("command", e.orig if isinstance(e.orig, sqlite3.Error) else e), ok())
+
+
+def _refusal_facts(s: Session, cmd: Command, ctx: Context, message: str) -> dict[str, Any]:
+    """What a guard refusal report needs: the command, the request and the tables whose guard says this."""
+    tables: list[str] = []
+    for db in (s.company, s.hub):
+        raw = getattr(db, "raw", None) if db is not None else None
+        if raw is not None:
+            tables += [t for t in guard_tables(raw, message) if t not in tables]
+    return {"command": cmd.name, "request_id": ctx.request_id, "tables": tables}
 
 
 def execute(cmd: Command, raw_input: dict[str, Any], ctx: Context, s: Session, *, company_selector: str | None = None,
@@ -426,7 +456,7 @@ def execute(cmd: Command, raw_input: dict[str, Any], ctx: Context, s: Session, *
     from bookflow.core.config import load_scope
     try:
         with performance.span("command.execute", command=cmd.name), load_scope():
-            result = guard(body, s.is_hub_admin)
+            result = guard(body, s.is_hub_admin, lambda message: _refusal_facts(s, cmd, ctx, message))
     except BaseException as e:
         timings.end(call, command=cmd.name, ctx=ctx, session=s, raw_input=raw_input, error=e)
         raise
@@ -895,7 +925,7 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
                     if s.hub.write_transaction:
                         s.hub.raw.execute("ROLLBACK")
                     durable = sorted({t.record_type for t in co_entries})
-                    raise BookflowError("E_PARTIAL_WRITE", message=f"Saved {', '.join(durable)}; the registry copy was not updated and will be on the next write.", details={"durable": durable, "request_id": ctx.request_id, "cause": getattr(e, "code", "E_IO")})
+                    raise BookflowError("E_PARTIAL_WRITE", message=f"Saved {', '.join(durable)}; the registry copy was not updated and will be on the next write.", details={"durable": durable, "request_id": ctx.request_id, "cause": getattr(e, "code", "E_GUARD_REFUSED" if guard_refusal_text(e) else "E_IO")})
             else:
                 if hub_tx and not applied.audited and changed:
                     write_event_to(s.hub, ctx, cmd.name, applied.summary, hub_entries, actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code)
