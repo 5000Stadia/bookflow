@@ -310,7 +310,9 @@ def _step_ties(shop):
     every date (`landed-cost charges` refuses otherwise), and the journal balancing."""
     books = shop['books']
     _tie_every_date(books)
-    net = _net(books)
+    with sqlite3.connect(_db(books)) as conn:   # the ledger's own rows, every one (a report page holds 200)
+        net = {account: int(value) for account, value in conn.execute(
+            'SELECT account_id, sum(debit_minor_units - credit_minor_units) FROM posting_lines GROUP BY account_id')}
     valuation = shop['run']('report inventory-valuation', dict(as_of='2017-12-31'))
     assert valuation['totals']['asset_value']['minor_units'] == net.get(_asset(books), 0)
     assert sum(net.values()) == 0

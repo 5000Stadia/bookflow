@@ -271,7 +271,7 @@ def document_position(s, transaction_id):
 
 
 def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequence=None, repricing=(),
-         count_position=None):
+         count_position=None, assembly_key=None):
     """Every movement and every correction this document implies, and nothing written yet.
 
     ``reversing`` is what the previous revision moved, from ``own_movements``; ``entries`` is
@@ -469,9 +469,17 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
     # Components before the assemblies built from them (R103): a correction of a build's component
     # issue carries a partner correction of the build's assembly receipt, and the assembly is then
     # replayed with it. With no builds in the company this is one replay per item, as before.
+    # A build being written (``assembly_key`` names its assembly receipt entry): its own component issues are a
+    # build's too, so a landed cost's forward true-up of one is carried by its new assembly receipt (R104 inc 6).
+    planned = {}
+    if assembly_key is not None:
+        made = next((m.values for m in change.movements if m.key == assembly_key), None)
+        if made is not None:
+            planned = {m.values['id']: made for m in change.movements
+                       if m.values['kind'] == 'issue' and m.key != assembly_key}
     states, partners = assembly_builds.replay_items(
         s, working, rows, lambda refusal, item_id: refuse(
-            refusal, item_id, names.get(item_id) or inventory.item_name(s, item_id)))
+            refusal, item_id, names.get(item_id) or inventory.item_name(s, item_id)), planned=planned)
     for item_id, state in states:
         owed.extend((item_id, correction) for correction in state.corrections)
         if state.shortfalls:

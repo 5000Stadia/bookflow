@@ -139,7 +139,7 @@ def _depths(s):
     return depth
 
 
-def replay_items(s, working, load, refuse):
+def replay_items(s, working, load, refuse, planned=None):
     """Replay every item in ``working``, components before the assemblies built from them.
 
     ``working`` maps item id to its movement rows, planned ones included; ``load(item_id)`` returns
@@ -150,8 +150,9 @@ def replay_items(s, working, load, refuse):
     cost -- of that build's assembly receipt that carries the other side of it.
     """
     builds = build_transactions(s)
+    planned = planned or {}
     order, partners = [], {}
-    if not builds:
+    if not builds and not planned:
         for item_id in list(working):
             try:
                 order.append((item_id, replay(working[item_id])))
@@ -170,7 +171,7 @@ def replay_items(s, working, load, refuse):
         except StockRefusal as refusal:
             raise refuse(refusal, item_id) from None
         issues = {row['id']: row for row in history
-                  if row['kind'] == 'issue' and row.get('transaction_id') in builds}
+                  if row['kind'] == 'issue' and (row.get('transaction_id') in builds or row['id'] in planned)}
         for shortfall in state.shortfalls:
             if shortfall.movement['id'] in issues:
                 row = shortfall.movement
@@ -185,8 +186,10 @@ def replay_items(s, working, load, refuse):
             target = correction.target_movement
             if target['id'] not in issues:
                 continue
-            key = (target['transaction_id'], target['revision_id'])
-            if key not in receipts:
+            key = (target.get('transaction_id'), target.get('revision_id'))
+            if target['id'] in planned:
+                receipts[key] = planned[target['id']]
+            elif key not in receipts:
                 receipts[key] = next(row for row in inventory.movements(s, transaction_id=target['transaction_id'])
                                      if row['kind'] == 'receipt' and row['revision_id'] == target['revision_id'])
             receipt = receipts[key]
@@ -445,7 +448,7 @@ def _plan(s, item, components, quantity, date, *, reversing=(), exclude=None, si
                                           offset_account_id=item['asset_account_id'], value_minor_units=max(provisional, 0),
                                           site_id=site_id)
     first = inventory_effects.plan(s, entries=issues + [placeholder], reversing=reversing, date=date, currency=currency,
-                                   field='quantity')
+                                   field='quantity', assembly_key='assembly')
     total = 0
     for index, entry in enumerate(build.rows):
         if entry['component']['kind'] == 'stock':
@@ -475,7 +478,7 @@ def _plan(s, item, components, quantity, date, *, reversing=(), exclude=None, si
                                       offset_account_id=offset, value_minor_units=total, site_id=site_id,
                                       numbers=numbers.get('assembly'))
     build.change = inventory_effects.plan(s, entries=issues + [receipt], reversing=reversing, date=date,
-                                          currency=currency, field='quantity')
+                                          currency=currency, field='quantity', assembly_key='assembly')
     for index, entry in enumerate(build.rows):
         if entry['component']['kind'] == 'stock' and build.change.costs.get(f'c{index}', 0) != -entry['cost']:
             raise BookflowError('E_INTERNAL', message='A build component was costed two ways.')
@@ -552,7 +555,8 @@ def _output(s, build, *, status, current=None, number=None, transaction_id=None,
         assembly_quantity_on_hand=format_quantity_micro_units(build.on_hand_after),
         posts_to_ledger=bool(build.lines) and _posts_to_ledger(build),
         corrections=[AssemblyCorrectionOutput(item_id=values['item_id'], effective_date=values['effective_date'],
-                                              corrects_movement_id=values['corrects_movement_id'],
+                                              corrects_movement_id=values['corrects_movement_id']
+                                              or values.get('landed_on_movement_id') or '',
                                               delta=money(int(values['value_minor_units']), currency))
                      for values in corrections],
         reason=current.get('reason') if current else None, warnings=list(dict.fromkeys(warnings)),
