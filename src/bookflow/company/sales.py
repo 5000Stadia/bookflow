@@ -559,10 +559,8 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
             resolved['site_semantic'] = placements.semantic_site(s, site)
         # Lot and serial numbers a stocked line names (R104 increment 4).
         from bookflow.company import serial_lots
-        numbers = serial_lots.from_line(line)
+        numbers = serial_lots.for_line(line, resolved['profile'].item_type in inventory.TRACKED_TYPES)
         if numbers is not None:
-            if resolved['profile'].item_type not in inventory.TRACKED_TYPES:
-                raise _invalid('lines.serial_numbers', 'only stocked lines carry lot or serial numbers')
             resolved['numbers'] = numbers
         lines.append(resolved)
         warnings.extend(w for w in line_warnings if w not in warnings)

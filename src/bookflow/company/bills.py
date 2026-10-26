@@ -526,7 +526,7 @@ def _item_line(s, line, header_class, currency, index, noun='bill'):
     from bookflow.company import placements
     site_id = placements.site_id_for(s, getattr(line, 'site', None), field=field + '.site')
     from bookflow.company import serial_lots
-    numbers = serial_lots.from_line(line)
+    numbers = serial_lots.for_line(line, row['type'] in inventory.TRACKED_TYPES, field)
     return dict(line_id=None, family='item', amount_minor_units=amount, memo=memo, profile=profile,
                 **({'site_id': site_id} if site_id else {}), **({'numbers': numbers} if numbers else {}))
 

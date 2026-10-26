@@ -10,6 +10,20 @@ Number = Annotated[str, Field(min_length=1, max_length=128), BeforeValidator(lam
 from bookflow.company.journal_models import _Date as IsoDate  # noqa: E402
 Selector = Annotated[str, Field(min_length=1, max_length=1004), BeforeValidator(lambda v: v.strip() if isinstance(v, str) else v)]
 
+
+
+def _blank_is_none(value):
+    return None if isinstance(value, str) and not value.strip() else value
+
+
+def _drop_blanks(value):
+    return [n for n in value if not (isinstance(n, str) and not n.strip())] if isinstance(value, list) else value
+
+
+# On a stock line a blank lot, or a blank entry among serial numbers (a form's empty cell), is no number at all.
+LineLot = Annotated[Number | None, BeforeValidator(_blank_is_none)]
+LineSerials = Annotated[list[Number] | None, BeforeValidator(_drop_blanks)]
+
 NUMBER_FIELDS = ('lot', 'lot_expiry', 'serial_numbers')
 LOT_HELP = ("Lot number of a lot-tracked item: the lot an incoming line receives into (made when new), or the lot an "
             "outgoing line takes from. Omitted on an outgoing line, the units leave unassigned and the result names "
