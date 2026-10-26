@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from bookflow.core import unit_price
 from bookflow.adapters.workbench import date_defaults as DateDefaults
 
 import json
@@ -282,7 +283,7 @@ def _editable_values(noun: str, shown: dict[str, Any]) -> dict[str, Any]:
             ap_account=shown['profile']['ap_account']['id'], memo=shown['memo'], reference=shown['reference'], shipping=shown['shipping']['amount'],
             items=[dict(line_id=line['line_id'], item=line['profile']['item']['id'],
                 quantity=line['quantity'], description=line['description'],
-                **({'unit_cost': Money(line['profile']['unit_cost_minor_units'], shown['total']['currency']).to_dict()['amount']} if line['profile']['unit_cost_minor_units'] is not None else {'amount': line['product_amount']['amount']}),
+                **({'unit_cost': unit_price.text(unit_price.row_units(line['profile'], 'unit_cost'), shown['total']['currency'])} if line['profile']['unit_cost_minor_units'] is not None else {'amount': line['product_amount']['amount']}),
                 order_line_id=line.get('order_line_id')) for line in shown['items']])
     if noun == "custom-field":
         return {**shown, "scopes": [scope["record_type"] for scope in shown["scopes"]]}
@@ -601,7 +602,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js", "timekeeping.css")
+        for name in ("workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js", "timekeeping.css", "scan.js", "counts.css")
     }
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
@@ -754,14 +755,25 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     from bookflow.adapters.workbench import timekeeping_pages as TimekeepingPages
     TimekeepingPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                            role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
+    # R152: Print Checks -- the queue, a print run, "Did checks print OK?", reprints and alignment.
+    from bookflow.adapters.workbench import check_print_pages as CheckPrintPages
+    CheckPrintPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                          role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R118: Enter Vehicle Mileage with the Vehicle List and Mileage Rates on one page.
     from bookflow.adapters.workbench import mileage_pages as MileagePages
     MileagePages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                        role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
+    # R104 increment 3: the Scan field's look-up (a barcode, else an item id or name).
+    from bookflow.adapters.workbench import barcode_pages as BarcodePages
+    BarcodePages.mount(app, run=run)
     # R104: sites and transfers, where stock is and moving it.
     from bookflow.adapters.workbench import inventory_site_pages as InventorySitePages
     InventorySitePages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                              role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
+    # R104 increment 2: physical counts, the Counts list and the count screen.
+    from bookflow.adapters.workbench import inventory_count_pages as InventoryCountPages
+    InventoryCountPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                              role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R110: the price rule list and form, the conflict preference and a price check.
     from bookflow.adapters.workbench import pricing_rule_pages as PricingRulePages
     PricingRulePages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
@@ -779,6 +791,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     # R153: bill part of a purchase order, or close its lines by hand.
     from bookflow.adapters.workbench import purchase_order_billing_pages as PartialOrderPages
     PartialOrderPages.mount(app, render=render, run=run, credential=credential, page_error=page_error)
+    # R111: Reminders, the to-do list and the overdue notice queue.
+    from bookflow.adapters.workbench import scheduling_pages as SchedulingPages
+    SchedulingPages.mount(app, render=render, run=run, credential=credential, page_error=page_error)
 
     @app.get("/static/{name}")
     @permission_read_package(host)
@@ -2198,8 +2213,13 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             for leaf in described:
                 if leaf['path'] in labels:
                     leaf['label'] = labels[leaf['path']]
-        if sales_form:
+        # A memorized entry posts the template as it is now: its form carries the preview's fingerprint, as sales forms do (R111).
+        fingerprint_form = sales_form or cmd.name in ('memorized process', 'memorized retry', 'memorized enter', 'memorized-group enter')
+        if fingerprint_form:
             described = [leaf for leaf in described if leaf['path'] != 'expected_facts_fingerprint']
+        if cmd.name == 'memorized enter':
+            # A second entry of a posted slot is a deliberate act: its own checkbox, below the warning.
+            described = [leaf for leaf in described if leaf['path'] != 'again']
         if noun == 'sales-receipt' and verb == 'update':
             # The dedicated decimal control uses the shared typed form translator.
             described = [leaf for leaf in described if leaf['path'] != 'amount_received']
@@ -2444,7 +2464,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                           home=(getattr(request.state, 'workbench_company', None) or {}).get('home_currency'),
                           resolve=result_names(request, company_id, authorized_company))
                           if not cmd.is_write and not preview and noun != 'report' and not billing else None,
-                      sales_form=sales_form, sales_scope=cred.token_id,
+                      sales_form=sales_form, fingerprint_form=fingerprint_form, sales_scope=cred.token_id,
                       deposit_receipts=([{**row, "display_amount": Money(row["amount"]["minor_units"], row["amount"]["currency"]).to_dict()["amount"]} for row in result.get("receipts", [])] if noun == "deposit" and result else []),
                       deposit_bank_total=(Money(result["deposit"]["bank_total"]["minor_units"], result["deposit"]["bank_total"]["currency"]).to_dict()["amount"] if noun == "deposit" and result and "deposit" in result else None),
                       sales_fingerprint=(result.get('facts_fingerprint', '') if preview and result else

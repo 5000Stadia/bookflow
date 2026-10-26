@@ -77,7 +77,11 @@ ACCEPTED = {
     'timesheets-v1': (637, '05105fd69f67ec464bc21bbb42a91b26b18961f4630d21385f01a01d9d31e357'),
     'inventory-sites-v1': (650, '6b52f7a61a5e4cc9d7eee36318abb8803d39742e4fd2c4883394b4dd34b23529'),
     'accountant-review-v1': (664, '1ee5b051d410ea9b481203ec6812a9bdd9b6784ededa18b6f02e25daa6b1eb21'),
-    'performance-v1': (666, '362ea8b6763e4acb3aa5d804755ddc65f842e303525a04ea13921514277b381a'),
+    'check-printing-v1': (673, 'a4c3dc284228e3321e3b9fe710ec73488a84800195a5bae91896dd9324979522'),
+    'barcodes-v1': (675, 'f2e8e164a17a2a43960e2af90d3382579423e8ef8b03902bc9d36ee07e23058a'),
+    'inventory-counts-v1': (685, '5af62281b43f9d583b58533c6dc155c4b8eb95fcc8ef9b7ebc7c994e8963e250'),
+    'scheduling-v1': (696, '16f34e115a6e90fbb5d8377c225ca118c864719d654bb6656991d0c94ef659be'),
+    'performance-v1': (698, 'f7dff2bccde0245a0a551c224df697de196e5607bacefd605d988ac0ddd56017'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -170,6 +174,15 @@ CHAIN_ADDITIONS = {
                              'accountant-copy changes', 'accountant-copy export', 'accountant-copy import',
                              'accountant-copy preview', 'accountant-copy status', 'report accountant-changes',
                              'report accountant-review'},
+    'check-printing-v1': {'check print', 'check print-alignment', 'check print-cancel', 'check print-confirm',
+                          'check print-pdf', 'check print-queue', 'check print-run', 'check print-setup', 'check reprint'},
+    'barcodes-v1': {'barcode generate', 'barcode lookup'},
+    'inventory-counts-v1': {'inventory-count cancel', 'inventory-count create', 'inventory-count enter',
+                            'inventory-count post', 'inventory-count query', 'inventory-count sheet',
+                            'inventory-count show', 'inventory-count void', 'report inventory-valuation-detail',
+                            'report physical-inventory-worksheet'},
+    'scheduling-v1': {'todo create', 'todo update', 'todo complete', 'todo show', 'todo list', 'notice generate',
+                      'notice list', 'notice show', 'notice mark-sent', 'notice dismiss', 'reminders'},
     'performance-v1': {'perf report', 'perf settings'},
 }
 

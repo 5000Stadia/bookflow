@@ -45,6 +45,7 @@ from datetime import date as calendar_date
 
 import sqlalchemy as sa
 
+from bookflow.core import unit_price
 from bookflow.company import accounts, charts, journals, list_service, schema as c
 from bookflow.company import document_effects as effects
 from bookflow.company import inventory, inventory_effects
@@ -64,7 +65,7 @@ from bookflow.company.journal_models import checked_sum, parse_domestic_amount
 from bookflow.company.lists import get_list_definition
 from bookflow.company.parties import resolve_party
 from bookflow.company.profiles import TermInput, compute_term_dates
-from bookflow.company.sales_calculations import extension
+from bookflow.company.sales_calculations import extension, extension_units
 from bookflow.core import audit, clock
 from bookflow.core.errors import BookflowError
 from bookflow.core.exact import (
@@ -201,7 +202,8 @@ def merged_line(envelope, profile, family):
         merged.update(item_id=profile['item_id'],
                       quantity_microunits=profile['quantity_microunits'],
                       quantity=format_quantity_micro_units(profile['quantity_microunits']),
-                      unit_cost_minor_units=profile['unit_cost_minor_units'])
+                      unit_cost_minor_units=profile['unit_cost_minor_units'],
+                      unit_cost_fraction=profile.get('unit_cost_fraction'))
     return merged
 
 
@@ -490,15 +492,15 @@ def _item_line(s, line, header_class, currency, index, noun='bill'):
     else:
         basis = 'unit_cost'
         if line.unit_cost is not None:
-            unit_cost = sales_money(line.unit_cost, currency, field + '.unit_cost').minor_units
+            unit_cost = unit_price.parse(line.unit_cost, currency, field + '.unit_cost')
         elif row['cost_minor_units'] is not None:
-            unit_cost = int(row['cost_minor_units'])
+            unit_cost = unit_price.row_units(row, 'cost')
         else:
             raise _invalid(field + '.unit_cost',
                            f'"{row["full_name"]}" has no standard cost; give a unit cost or an amount')
         if unit_cost < 0:
             raise _invalid(field + '.unit_cost', 'must not be negative')
-        amount = extension(quantity, unit_cost)
+        amount = extension_units(quantity, unit_cost)
     if amount < 0:
         raise _invalid(field + '.amount', 'an item amount must not be negative')
     customer = (_reference(_list_row(s, 'customer', c.customers, line.customer, field + '.customer', 'customer'))
@@ -506,9 +508,10 @@ def _item_line(s, line, header_class, currency, index, noun='bill'):
     profile = BillItemProfile(
         item=_reference(row), item_type=row['type'], account=_account_facts(account),
         account_basis=account_basis,
-        quantity_microunits=quantity, unit_cost_minor_units=unit_cost, amount_basis=basis,
-        standard_cost_minor_units=(None if row['cost_minor_units'] is None
-                                   else int(row['cost_minor_units'])),
+        quantity_microunits=quantity, unit_cost_minor_units=unit_price.split(unit_cost)[0],
+        unit_cost_fraction=unit_price.split(unit_cost)[1], amount_basis=basis,
+        standard_cost_minor_units=unit_price.split(unit_price.row_units(row, 'cost'))[0],
+        standard_cost_fraction=unit_price.split(unit_price.row_units(row, 'cost'))[1],
         class_id=_line_class(s, line, header_class, field), customer=customer,
         billable=line.billable,
         origins={'class_id': Origin(kind='explicit' if line.class_mode == 'value' else 'default'),
@@ -730,7 +733,7 @@ def revision_output(s, header, revision, pending=None, *, summary_only=False):
                   for line in by_family(lines, 'expense')],
         items=[dict(line, amount=Money(line['amount_minor_units'], currency).to_dict(),
                     unit_cost=(None if line['unit_cost_minor_units'] is None else
-                               Money(line['unit_cost_minor_units'], currency).to_dict()),
+                               unit_price.to_dict(unit_price.row_units(line, 'unit_cost'), currency)),
                     line_snapshot=json.loads(line['line_snapshot']))
                for line in by_family(lines, 'item')])
 
@@ -768,6 +771,7 @@ def show(s, inp):
                            order_ids(s, [header['id']]).get(header['id'])),
                            getattr(inp, 'include_deleted', False)),
         revision=revision_output(s, header, requested),
+        count_position=inventory_effects.document_position(s, header['id']),
         duplicate_references=duplicate_references(
             s, profile['vendor_id'], profile['supplier_reference_key'], header['id']))
 
@@ -1247,6 +1251,8 @@ def prepare(s, ctx, inp, operation):
     if operation != 'void':
         resolved = commercial(s, entry, old_header, old_revision, document_id=header['id'], received=received)
         changed_fields = _changes(_saved_semantic(s, old_revision), resolved['semantic']) if old_revision else []
+        if old_revision and inventory_effects.position_moves(s, old_header['id'], getattr(inp, 'count_position', None)):
+            changed_fields.append('count_position')   # moved against its date's counts (R104 increment 2)
         if old_revision and not changed_fields and not resolved['custom_plan'].changed and not (received and 'receipts' in inp.model_fields_set):
             return unchanged(old_header, old_revision)
         journals.open_dates(s, [resolved['date']] + ([old_revision['date']] if old_revision else []))
@@ -1300,7 +1306,7 @@ def prepare(s, ctx, inp, operation):
             if line['family'] == 'item':
                 pending['purchase_item_lines'].append(dict(
                     shared, item_id=facts.item.id, quantity_microunits=facts.quantity_microunits,
-                    unit_cost_minor_units=facts.unit_cost_minor_units))
+                    unit_cost_minor_units=facts.unit_cost_minor_units, unit_cost_fraction=facts.unit_cost_fraction))
             else:
                 pending['purchase_expense_lines'].append(shared)
     else:
@@ -1316,7 +1322,8 @@ def prepare(s, ctx, inp, operation):
         s, entries=[] if operation == 'void' or received else _stock_entries(
             pending, resolved['profile'], resolved['lines'], _header_site(s, inp)),
         reversing=inventory_effects.own_movements(s, old_header['id']) if old_header else (),
-        date=revision['date'], currency=revision['currency'], field='items')
+        date=revision['date'], currency=revision['currency'], field='items',
+        count_position=getattr(inp, 'count_position', None))
     inventory_effects.open_dates(s, stock)
 
     current_batch = None

@@ -1523,6 +1523,33 @@ EXAMPLES.update({
     'report quantity-by-site': Example('bookflow report quantity-by-site --as-of 2026-12-31 --site "Van 1"' + _C + ' --json',
                                        {'as_of': '2026-12-31', 'site': 'Van 1'}),
 })
+# Physical counts (R104 increment 2).
+EXAMPLES.update({
+    'inventory-count create': Example('bookflow inventory-count create --site "Van 1"' + _C
+                                      + ' --reason "Monday van count" --json', {'site': 'Van 1'}),
+    'inventory-count enter': Example(
+        'bookflow inventory-count enter C-1 --entries \'[{"item":"Widget","quantity":"12"}]\'' + _C
+        + ' --reason "Counted the van" --json', {'count': 'C-1', 'entries': [{'item': 'Widget', 'quantity': '12'}]}),
+    'inventory-count post': Example(
+        'bookflow inventory-count post C-1 --expected-version 1 --adjustment-account "Cost of Goods Sold"'
+        ' --preview-fingerprint 0f3c9a1e5b7d2c4e6a8b0d1f3e5c7a9b' + _C + ' --reason "Van count" --json',
+        {'count': 'C-1', 'expected_version': 1, 'adjustment_account': 'Cost of Goods Sold',
+         'preview_fingerprint': '0f3c9a1e5b7d2c4e6a8b0d1f3e5c7a9b'}),
+    'inventory-count cancel': Example('bookflow inventory-count cancel C-1 --expected-version 1' + _C
+                                      + ' --reason "Not today" --json', {'count': 'C-1', 'expected_version': 1}),
+    'inventory-count void': Example('bookflow inventory-count void C-1 --expected-version 2' + _C
+                                    + ' --reason "Counted the wrong van" --json', {'count': 'C-1', 'expected_version': 2}),
+    'inventory-count show': Example('bookflow inventory-count show C-1' + _C + ' --json', {'count': 'C-1'}),
+    'inventory-count sheet': Example('bookflow inventory-count sheet C-1' + _C + ' --json', {'count': 'C-1'}),
+    'inventory-count query': Example('bookflow inventory-count query --site "Van 1" --status recorded' + _C + ' --json',
+                                     {'site': 'Van 1', 'status': 'recorded'}),
+    'report physical-inventory-worksheet': Example(
+        'bookflow report physical-inventory-worksheet --as-of 2026-12-31 --site "Van 1"' + _C + ' --json',
+        {'as_of': '2026-12-31', 'site': 'Van 1'}),
+    'report inventory-valuation-detail': Example(
+        'bookflow report inventory-valuation-detail --date-from 2026-12-01 --date-to 2026-12-31' + _C + ' --json',
+        {'date_from': '2026-12-01', 'date_to': '2026-12-31'}),
+})
 # Accountant review (R121): the external accountant, the accountant's copy and what comes back, the checklist.
 _ACCT_CO = ' --company "Demo Plumbing Co" --json'
 _CHANGES = '/home/owner/Downloads/Demo Plumbing Co accountant changes 2026-10-14-091500.json'
@@ -1559,4 +1586,54 @@ EXAMPLES.update({
                           {'template': '/srv/bench/bench-large-s180-co0088', 'name': 'before'}),
     'perf compare': Example('bookflow perf compare --run after --baseline before --threshold 25 --json',
                             {'run': 'after', 'baseline': 'before', 'threshold': 25}),
+})
+# R152: Print Checks.
+_PRINT_CO = ' --company "Demo Plumbing Co" --json'
+EXAMPLES.update({
+    'check print-queue': Example('bookflow check print-queue --account Checking' + _PRINT_CO, {'account': 'Checking'}),
+    'check print': Example('bookflow check print --account Checking --first-number 1001 --style voucher'
+                           ' --reason "Print this week\'s checks"' + _PRINT_CO,
+                           {'account': 'Checking', 'first_number': '1001', 'style': 'voucher'}),
+    'check print-pdf': Example(f'bookflow check print-pdf {ID} --company "Demo Plumbing Co"', {'run': ID}),
+    'check print-confirm': Example(f'bookflow check print-confirm {ID} --failed-from 1003 --reason "Jammed at 1003"'
+                                   + _PRINT_CO, {'run': ID, 'failed_from': '1003'}),
+    'check print-cancel': Example(f'bookflow check print-cancel {ID} --reason "Wrong paper loaded"' + _PRINT_CO, {'run': ID}),
+    'check print-run': Example(f'bookflow check print-run {ID}' + _PRINT_CO, {'run': ID}),
+    'check reprint': Example(f'bookflow check reprint {ID} --new-number 1010 --reason "Coffee on check 1004"' + _PRINT_CO,
+                             {'check': ID, 'new_number': '1010'}),
+    'check print-setup': Example('bookflow check print-setup --account Checking --style standard --offset-x-hundredths 5'
+                                 ' --offset-y-hundredths -3 --reason "Fine alignment"' + _PRINT_CO,
+                                 {'account': 'Checking', 'style': 'standard', 'offset_x_hundredths': 5,
+                                  'offset_y_hundredths': -3}),
+    'check print-alignment': Example('bookflow check print-alignment --account Checking --offset-x-hundredths 5'
+                                     ' --company "Demo Plumbing Co"', {'account': 'Checking', 'offset_x_hundredths': 5}),
+})
+# R104 increment 3: barcodes. A scanned code also works as `item` on any line, with no command at all.
+EXAMPLES.update({
+    'barcode lookup': Example('bookflow barcode lookup --code 0012345678905 --company "Demo Plumbing Co" --json',
+                              {'code': '0012345678905'}),
+    'barcode generate': Example('bookflow barcode generate --items \'["Brass Shutoff Valve","Copper Coupling"]\''
+                                ' --reason "Label the parts shelf" --company "Demo Plumbing Co" --json',
+                                {'items': ['Brass Shutoff Valve', 'Copper Coupling']}),
+})
+# R111: to-dos, overdue notices and the Reminders list.
+EXAMPLES.update({
+    "todo create": Example(
+        'bookflow todo create --title "Call Rivera about the deposit" --due-date 2026-11-03 --assignee night-agent --priority high --link-type customer --link "Rivera Construction"' + _C,
+        {"title": "Call Rivera about the deposit", "due_date": "2026-11-03", "assignee": "night-agent", "priority": "high",
+         "link_type": "customer", "link": "Rivera Construction"}),
+    "todo update": Example('bookflow todo update 01JTODO0000000000000000000 --due-date 2026-11-05 --expected-version 1' + _C,
+                           {"todo": "01JTODO0000000000000000000", "due_date": "2026-11-05", "expected_version": 1}),
+    "todo complete": Example('bookflow todo complete 01JTODO0000000000000000000' + _C, {"todo": "01JTODO0000000000000000000"}),
+    "todo show": Example('bookflow todo show 01JTODO0000000000000000000' + _C, {"todo": "01JTODO0000000000000000000"}),
+    "todo list": Example('bookflow todo list --mine' + _C, {"mine": True}),
+    "notice generate": Example('bookflow notice generate --as-of 2026-11-01 --reason "Monthly collection notices"' + _C,
+                               {"as_of": "2026-11-01"}),
+    "notice list": Example('bookflow notice list --status ready' + _C, {"status": "ready"}),
+    "notice show": Example('bookflow notice show 01JNOTICE00000000000000000' + _C, {"notice": "01JNOTICE00000000000000000"}),
+    "notice mark-sent": Example('bookflow notice mark-sent 01JNOTICE00000000000000000 --method email' + _C,
+                                {"notice": "01JNOTICE00000000000000000", "method": "email"}),
+    "notice dismiss": Example('bookflow notice dismiss 01JNOTICE00000000000000000 --note "Called; paying Friday"' + _C,
+                              {"notice": "01JNOTICE00000000000000000", "note": "Called; paying Friday"}),
+    "reminders": Example('bookflow reminders --mine' + _C, {"mine": True}),
 })

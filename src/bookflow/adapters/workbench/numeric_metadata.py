@@ -1,17 +1,30 @@
 """Explicit arithmetic-entry precision for editable command fields."""
 
 MONEY_FIELDS = frozenset('amount amount_received price cost purchase_cost unit_cost unit_price estimated_unit_cost net_amount price_basis_amount credit_limit discount_amount original_cost disposal_proceeds disposal_costs book_basis tax_basis rounding_increment rounding_offset minimum_net maximum_net'.split())
+# R150: unit prices and costs carry three places beyond the currency's minor unit.
+PRICE_FIELDS = frozenset('price cost purchase_cost unit_cost unit_price estimated_unit_cost price_basis_amount'.split())
 QUANTITY_FIELDS = frozenset('quantity completed_quantity minimum_quantity reorder_point_min reorder_point_max assembly_build_point source_quantity target_quantity'.split())
 PERCENT_FIELDS = frozenset('percent percentage discount_percent charge_percent tax_percent markup_percent'.split())
 
 
-def metadata(name, base, extra=None):
+def _price_typed(annotation):
+    """Whether a field takes a unit price or cost (its type admits SalesPriceInput)."""
+    import typing
+    if getattr(annotation, '__name__', None) == 'SalesPriceInput':
+        return True
+    return any(_price_typed(arg) for arg in typing.get_args(annotation))
+
+
+def metadata(name, base, extra=None, annotation=None):
     """Field metadata may explicitly override or disable the conventional meaning."""
     extra = extra if isinstance(extra, dict) else {}
     if 'math' in extra:
         return dict(extra['math']) if extra['math'] else {}
     if base is int:
         return {'scale': 0}
+    # A purchase-order line's `rate` is a unit cost, not an exchange rate: its type says so.
+    if name in PRICE_FIELDS or _price_typed(annotation):
+        return {'currency': 'company', 'extra_places': 3}
     if name in MONEY_FIELDS:
         return {'currency': 'company'}
     if name in QUANTITY_FIELDS or name in PERCENT_FIELDS:

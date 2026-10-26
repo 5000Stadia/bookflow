@@ -375,6 +375,7 @@ The same example as complete `bookflow_run` arguments:
 | `funding_account` | `--funding-account` | string | yes | no | — | minimum length 1 |
 | `method` | `--method` | string | yes | no | — | minimum length 1 |
 | `check_number` | `--check-number` | string \| null | no | yes | null | — |
+| `to_be_printed` | `--to-be-printed` | boolean | no | no | false | To be printed: write each payment's cheque with no number yet and put it in the funding bank account's print queue; `check print` numbers it when it prints. Needs a check method on a bank account, and no check_number. |
 | `reference` | `--reference` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `number` | `--number` | string \| null | no | yes | null | — |
@@ -795,6 +796,7 @@ The same example as complete `bookflow_run` arguments:
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `class_id` | `--class-id` | string \| null | no | yes | null | — |
 | `site` | `--site` | string \| null | no | yes | null | Inventory site the stocked item lines are received at where a line names none; omitted, the default site. |
+| `count_position` | `--count-position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
@@ -1149,6 +1151,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].unit_cost.currency` | string | yes | no | — | — |
 | `revision.items[].unit_cost.minor_units` | integer | yes | no | — | — |
 | `revision.items[].unit_cost_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.items[].unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `revision.items[].amount` | object | yes | no | — | — |
 | `revision.items[].amount.amount` | string | yes | no | — | — |
 | `revision.items[].amount.currency` | string | yes | no | — | — |
@@ -1184,6 +1187,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id` | object \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id.id` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.class_id.label` | string | yes | no | — | — |
@@ -1223,6 +1229,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.obligation.components[].amount_minor_units` | integer | yes | no | — | — |
 | `revision.obligation.components[].currency` | string | yes | no | — | — |
 | `revision.obligation.components[].audit_event_id` | string | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `duplicate_references` | array[object] | no | no | [] | — |
 | `duplicate_references[].bill_id` | string | yes | no | — | — |
 | `duplicate_references[].number` | string | yes | no | — | — |
@@ -1244,6 +1251,7 @@ Example JSON output:
   "ap_account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "changed": true,
   "changed_fields": [],
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -1975,6 +1983,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].unit_cost.currency` | string | yes | no | — | — |
 | `revision.items[].unit_cost.minor_units` | integer | yes | no | — | — |
 | `revision.items[].unit_cost_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.items[].unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `revision.items[].amount` | object | yes | no | — | — |
 | `revision.items[].amount.amount` | string | yes | no | — | — |
 | `revision.items[].amount.currency` | string | yes | no | — | — |
@@ -2010,6 +2019,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id` | object \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id.id` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.class_id.label` | string | yes | no | — | — |
@@ -2049,6 +2061,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.obligation.components[].amount_minor_units` | integer | yes | no | — | — |
 | `revision.obligation.components[].currency` | string | yes | no | — | — |
 | `revision.obligation.components[].audit_event_id` | string | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `duplicate_references` | array[object] | no | no | [] | — |
 | `duplicate_references[].bill_id` | string | yes | no | — | — |
 | `duplicate_references[].number` | string | yes | no | — | — |
@@ -2066,6 +2079,7 @@ Example JSON output:
 ```json
 {
   "ap_account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -2283,6 +2297,7 @@ The same example as complete `bookflow_run` arguments:
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `class_id` | `--class-id` | string \| null | no | yes | null | — |
 | `site` | `--site` | string \| null | no | yes | null | Inventory site the stocked item lines are received at where a line names none; omitted, the default site. |
+| `count_position` | `--count-position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `receipts[].receipt_line` | inside `--receipts` JSON array | string | yes | no | — | minimum length 1 |
@@ -2635,6 +2650,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].unit_cost.currency` | string | yes | no | — | — |
 | `revision.items[].unit_cost.minor_units` | integer | yes | no | — | — |
 | `revision.items[].unit_cost_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.items[].unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `revision.items[].amount` | object | yes | no | — | — |
 | `revision.items[].amount.amount` | string | yes | no | — | — |
 | `revision.items[].amount.currency` | string | yes | no | — | — |
@@ -2670,6 +2686,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id` | object \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id.id` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.class_id.label` | string | yes | no | — | — |
@@ -2709,6 +2728,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.obligation.components[].amount_minor_units` | integer | yes | no | — | — |
 | `revision.obligation.components[].currency` | string | yes | no | — | — |
 | `revision.obligation.components[].audit_event_id` | string | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `duplicate_references` | array[object] | no | no | [] | — |
 | `duplicate_references[].bill_id` | string | yes | no | — | — |
 | `duplicate_references[].number` | string | yes | no | — | — |
@@ -2730,6 +2750,7 @@ Example JSON output:
   "ap_account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "changed": true,
   "changed_fields": [],
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -3274,6 +3295,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].unit_cost.currency` | string | yes | no | — | — |
 | `revision.items[].unit_cost.minor_units` | integer | yes | no | — | — |
 | `revision.items[].unit_cost_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.items[].unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `revision.items[].amount` | object | yes | no | — | — |
 | `revision.items[].amount.amount` | string | yes | no | — | — |
 | `revision.items[].amount.currency` | string | yes | no | — | — |
@@ -3309,6 +3331,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id` | object \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id.id` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.class_id.label` | string | yes | no | — | — |
@@ -3348,6 +3373,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.obligation.components[].amount_minor_units` | integer | yes | no | — | — |
 | `revision.obligation.components[].currency` | string | yes | no | — | — |
 | `revision.obligation.components[].audit_event_id` | string | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `duplicate_references` | array[object] | no | no | [] | — |
 | `duplicate_references[].bill_id` | string | yes | no | — | — |
 | `duplicate_references[].number` | string | yes | no | — | — |
@@ -3369,6 +3395,7 @@ Example JSON output:
   "ap_account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "changed": true,
   "changed_fields": [],
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",

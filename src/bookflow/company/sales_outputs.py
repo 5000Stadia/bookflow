@@ -32,8 +32,22 @@ class TaxComponentOutput(CreatedOutput):
     component_snapshot: SalesTaxComponent
 
 
+class SaleLineOrder(StrictModel):
+    """A sale line made from a sales order: where that order line stood, as the anchor's invoice prints it."""
+    sales_order_id: str
+    sales_order_number: str = Field(description="The order the line was billed from.")
+    ordered: str = Field(description="The order line's quantity, as the order stands now.")
+    previously_invoiced: str = Field(description="What active invoices posted before this one billed of the order line.")
+    backordered: str = Field(description=(
+        "What was still open on the order line after this sale: ordered less cancelled, previously invoiced and "
+        "this line's quantity; never below 0."))
+
+
 class SalesLineOutput(CreatedOutput):
     tax_ordinal: int | None = None
+    order: SaleLineOrder | None = Field(default=None, description=(
+        "Present on a line made from a sales order (sales-order invoice): the order, its ordered quantity, what "
+        "earlier invoices billed and what stayed backordered. Absent on every other line."))
     line_kind: Literal["item", "subtotal", "discount", "charge"] | None = Field(default=None, description=(
         "Present on a subtotal, discount or percentage-charge line, and on a line a discount reduced. "
         "Absent on every other line, which is an ordinary item line."))
@@ -44,7 +58,7 @@ class SalesLineOutput(CreatedOutput):
     @model_serializer(mode='wrap')
     def preserve_legacy_tax_order(self, handler):
         result = handler(self)
-        for key in ('tax_ordinal', 'line_kind', 'amount'):
+        for key in ('tax_ordinal', 'line_kind', 'amount', 'order'):
             if getattr(self, key) is None:
                 result.pop(key, None)
         return result
@@ -71,6 +85,9 @@ class SalesLineOutput(CreatedOutput):
     tax: MoneyOutput
     gross: MoneyOutput
     unit_price_minor_units: int | None
+    # R150: the unit price's thousandths of a minor unit beyond unit_price_minor_units (its
+    # nearest minor unit); absent when the price is whole. ``unit_price.amount`` is exact.
+    unit_price_fraction: int | None = Field(default=None, exclude_if=lambda v: v is None)
     net_minor_units: int
     tax_minor_units: int
     gross_minor_units: int
@@ -234,6 +251,7 @@ def sales_tax_applied(profile, tax, issuer_id):
 
 class SalesOutput(SalesSummaryOutput):
     revision: SalesRevisionOutput
+    count_position: Literal['before', 'after'] = Field('before', description="Where the document's stock stands against a physical count of its site on its date (R104).")
     settlement_current: InvoiceSettlementOutput | None = None
     sales_tax: SalesTaxApplied | None = Field(default=None, description=(
         'Which sales tax item and rate this sale charged and where that choice came from.'))

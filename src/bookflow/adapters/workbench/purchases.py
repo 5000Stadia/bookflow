@@ -2,6 +2,7 @@
 from copy import deepcopy
 import json
 
+from bookflow.core import unit_price
 from bookflow.core.errors import BookflowError
 from bookflow.core.money import Money
 
@@ -64,7 +65,7 @@ def editable_values(record):
         if profile['amount_basis'] == 'amount':
             row['amount'] = item['amount']['amount']
         else:
-            row['unit_cost'] = Money(profile['unit_cost_minor_units'], document['currency']).to_dict()['amount']
+            row['unit_cost'] = unit_price.text(unit_price.row_units(profile, 'unit_cost'), document['currency'])
         values['items'].append(row)
     return values
 
@@ -77,7 +78,7 @@ def detail_context(record):
         funding['account_snapshot'] = json.loads(funding['account_snapshot'])
     return dict(document=document, funding=funding, revision=record['revision'],
         title='Check' if document['kind'] == 'check' else 'Credit card charge',
-        items=[dict(item, unit_cost=Money(item['profile']['unit_cost_minor_units'], document['currency']).to_dict()
+        items=[dict(item, unit_cost=unit_price.to_dict(unit_price.row_units(item['profile'], 'unit_cost'), document['currency'])
                     if item['profile']['unit_cost_minor_units'] is not None else None)
                for item in document['items']],
         expenses=[line for line in record['revision']['lines'][1:] if line['line_id'] not in ids])

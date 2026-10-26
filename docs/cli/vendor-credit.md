@@ -317,6 +317,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].unit_cost.currency` | string | yes | no | — | — |
 | `revision.items[].unit_cost.minor_units` | integer | yes | no | — | — |
 | `revision.items[].unit_cost_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.items[].unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `revision.items[].amount` | object | yes | no | — | — |
 | `revision.items[].amount.amount` | string | yes | no | — | — |
 | `revision.items[].amount.currency` | string | yes | no | — | — |
@@ -352,6 +353,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id` | object \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id.id` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.class_id.label` | string | yes | no | — | — |
@@ -397,6 +401,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.source.components[].applied.amount` | string | yes | no | — | — |
 | `revision.source.components[].applied.currency` | string | yes | no | — | — |
 | `revision.source.components[].applied.minor_units` | integer | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `applications` | array[object] | no | no | [] | — |
 | `applications[].id` | string | yes | no | — | — |
 | `applications[].created_at` | string | yes | no | — | — |
@@ -436,6 +441,7 @@ Example JSON output:
   "applications": [],
   "changed": true,
   "changed_fields": [],
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -872,6 +878,7 @@ The same example as complete `bookflow_run` arguments:
 | `supplier_reference` | `--supplier-reference` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `class_id` | `--class-id` | string \| null | no | yes | null | — |
+| `count_position` | `--count-position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 
 ### Command and context options
 
@@ -1146,6 +1153,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].unit_cost.currency` | string | yes | no | — | — |
 | `revision.items[].unit_cost.minor_units` | integer | yes | no | — | — |
 | `revision.items[].unit_cost_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.items[].unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `revision.items[].amount` | object | yes | no | — | — |
 | `revision.items[].amount.amount` | string | yes | no | — | — |
 | `revision.items[].amount.currency` | string | yes | no | — | — |
@@ -1181,6 +1189,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id` | object \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id.id` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.class_id.label` | string | yes | no | — | — |
@@ -1226,6 +1237,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.source.components[].applied.amount` | string | yes | no | — | — |
 | `revision.source.components[].applied.currency` | string | yes | no | — | — |
 | `revision.source.components[].applied.minor_units` | integer | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `applications` | array[object] | no | no | [] | — |
 | `applications[].id` | string | yes | no | — | — |
 | `applications[].created_at` | string | yes | no | — | — |
@@ -1265,6 +1277,7 @@ Example JSON output:
   "applications": [],
   "changed": true,
   "changed_fields": [],
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -2088,6 +2101,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].unit_cost.currency` | string | yes | no | — | — |
 | `revision.items[].unit_cost.minor_units` | integer | yes | no | — | — |
 | `revision.items[].unit_cost_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.items[].unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `revision.items[].amount` | object | yes | no | — | — |
 | `revision.items[].amount.amount` | string | yes | no | — | — |
 | `revision.items[].amount.currency` | string | yes | no | — | — |
@@ -2123,6 +2137,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id` | object \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id.id` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.class_id.label` | string | yes | no | — | — |
@@ -2168,6 +2185,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.source.components[].applied.amount` | string | yes | no | — | — |
 | `revision.source.components[].applied.currency` | string | yes | no | — | — |
 | `revision.source.components[].applied.minor_units` | integer | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `applications` | array[object] | no | no | [] | — |
 | `applications[].id` | string | yes | no | — | — |
 | `applications[].created_at` | string | yes | no | — | — |
@@ -2203,6 +2221,7 @@ Example JSON output:
 {
   "ap_account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "applications": [],
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -2677,6 +2696,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].unit_cost.currency` | string | yes | no | — | — |
 | `revision.items[].unit_cost.minor_units` | integer | yes | no | — | — |
 | `revision.items[].unit_cost_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.items[].unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `revision.items[].amount` | object | yes | no | — | — |
 | `revision.items[].amount.amount` | string | yes | no | — | — |
 | `revision.items[].amount.currency` | string | yes | no | — | — |
@@ -2712,6 +2732,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id` | object \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id.id` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.class_id.label` | string | yes | no | — | — |
@@ -2757,6 +2780,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.source.components[].applied.amount` | string | yes | no | — | — |
 | `revision.source.components[].applied.currency` | string | yes | no | — | — |
 | `revision.source.components[].applied.minor_units` | integer | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `applications` | array[object] | no | no | [] | — |
 | `applications[].id` | string | yes | no | — | — |
 | `applications[].created_at` | string | yes | no | — | — |
@@ -2796,6 +2820,7 @@ Example JSON output:
   "applications": [],
   "changed": true,
   "changed_fields": [],
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -3025,6 +3050,7 @@ The same example as complete `bookflow_run` arguments:
 | `supplier_reference` | `--supplier-reference` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `class_id` | `--class-id` | string \| null | no | yes | null | — |
+| `count_position` | `--count-position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `vendor` | `--vendor` | string \| null | no | yes | null | Optional guard: the vendor you expect this credit to be from. The correction is refused when it belongs to anyone else. |
 | `ap_account` | `--ap-account` | string \| null | no | yes | null | Optional guard: the Accounts Payable account you expect this credit to be credited against. The correction is refused when it is another one. |
 
@@ -3301,6 +3327,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].unit_cost.currency` | string | yes | no | — | — |
 | `revision.items[].unit_cost.minor_units` | integer | yes | no | — | — |
 | `revision.items[].unit_cost_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.items[].unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `revision.items[].amount` | object | yes | no | — | — |
 | `revision.items[].amount.amount` | string | yes | no | — | — |
 | `revision.items[].amount.currency` | string | yes | no | — | — |
@@ -3336,6 +3363,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id` | object \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id.id` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.class_id.label` | string | yes | no | — | — |
@@ -3381,6 +3411,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.source.components[].applied.amount` | string | yes | no | — | — |
 | `revision.source.components[].applied.currency` | string | yes | no | — | — |
 | `revision.source.components[].applied.minor_units` | integer | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `applications` | array[object] | no | no | [] | — |
 | `applications[].id` | string | yes | no | — | — |
 | `applications[].created_at` | string | yes | no | — | — |
@@ -3420,6 +3451,7 @@ Example JSON output:
   "applications": [],
   "changed": true,
   "changed_fields": [],
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -3906,6 +3938,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].unit_cost.currency` | string | yes | no | — | — |
 | `revision.items[].unit_cost.minor_units` | integer | yes | no | — | — |
 | `revision.items[].unit_cost_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.items[].unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `revision.items[].amount` | object | yes | no | — | — |
 | `revision.items[].amount.amount` | string | yes | no | — | — |
 | `revision.items[].amount.currency` | string | yes | no | — | — |
@@ -3941,6 +3974,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id` | object \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id.id` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.class_id.label` | string | yes | no | — | — |
@@ -3986,6 +4022,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.source.components[].applied.amount` | string | yes | no | — | — |
 | `revision.source.components[].applied.currency` | string | yes | no | — | — |
 | `revision.source.components[].applied.minor_units` | integer | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `applications` | array[object] | no | no | [] | — |
 | `applications[].id` | string | yes | no | — | — |
 | `applications[].created_at` | string | yes | no | — | — |
@@ -4025,6 +4062,7 @@ Example JSON output:
   "applications": [],
   "changed": true,
   "changed_fields": [],
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",

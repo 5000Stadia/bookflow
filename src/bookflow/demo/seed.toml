@@ -485,7 +485,7 @@ input = { item = "${inventory_item_initial.id}", expected_version = "${inventory
 [[commands]]
 command = "item create"
 capture = "noninventory_item"
-input = { name = "Copper Coupling", type = "non_inventory_part", category_id = "${parts_category.id}", description = "Nonstock fitting", sales_enabled = true, price = "5.50", income_account_id = "${income_account.id}", sales_tax_code_id = "${tax_code.id}" }
+input = { name = "Copper Coupling", barcode = "0012345678905", type = "non_inventory_part", category_id = "${parts_category.id}", description = "Nonstock fitting", sales_enabled = true, price = "5.50", income_account_id = "${income_account.id}", sales_tax_code_id = "${tax_code.id}" }
 
 [[commands]]
 command = "item create"
@@ -530,7 +530,7 @@ input = { name = "Combined Sales Tax", type = "sales_tax_group", members = [{ co
 [[commands]]
 command = "item create"
 capture = "assembly_item"
-input = { name = "Two-Valve Kit", type = "inventory_assembly", description = "Assembled valve kit", purchase_description = "Valve assembly components", sales_enabled = true, purchase_enabled = true, price = "49.95", cost = "22.80", income_account_id = "${income_account.id}", cogs_account_id = "${cogs_account.id}", asset_account_id = "${inventory_account.id}", sales_tax_code_id = "${tax_code.id}", assembly_build_point = "3", members = [{ component_item_id = "${inventory_item.id}", quantity = "2" }] }
+input = { name = "Two-Valve Kit", barcode = "2000000000015", type = "inventory_assembly", description = "Assembled valve kit", purchase_description = "Valve assembly components", sales_enabled = true, purchase_enabled = true, price = "49.95", cost = "22.80", income_account_id = "${income_account.id}", cogs_account_id = "${cogs_account.id}", asset_account_id = "${inventory_account.id}", sales_tax_code_id = "${tax_code.id}", assembly_build_point = "3", members = [{ component_item_id = "${inventory_item.id}", quantity = "2" }] }
 
 [[commands]]
 command = "item create"
@@ -2231,7 +2231,7 @@ input = { "operation_key" = "DEMO-BANK-DEPOSIT-1", "document" = { "mode" = "inli
 [[commands]]
 command = "item create"
 capture = "purchase_demo_item"
-input = { name = "Service Call Kit", type = "inventory_part", description = "Complimentary service-kit sample", purchase_description = "Service kits for service calls", sales_enabled = true, purchase_enabled = true, price = "0.00", cost = "10.00", income_account_id = "${income_account.id}", cogs_account_id = "${cogs_account.id}", asset_account_id = "${inventory_account.id}" }
+input = { name = "Service Call Kit", barcode = "0036000291452", type = "inventory_part", description = "Complimentary service-kit sample", purchase_description = "Service kits for service calls", sales_enabled = true, purchase_enabled = true, price = "0.00", cost = "10.00", income_account_id = "${income_account.id}", cogs_account_id = "${cogs_account.id}", asset_account_id = "${inventory_account.id}" }
 
 [[commands]]
 command = "check post"
@@ -2304,7 +2304,7 @@ input = { receipt = "${purchase_demo_receipt.id}" }
 [[commands]]
 command = "item create"
 capture = "shipping_demo_item"
-input = { name = "Received Shipping Kit", type = "inventory_part", description = "Shipping kit", purchase_description = "Received shipping kit", income_account_id = "${income_account.id}", cogs_account_id = "${cogs_account.id}", price = "12.00", cost = "8.00" }
+input = { name = "Received Shipping Kit", barcode = "4006381333931", type = "inventory_part", description = "Shipping kit", purchase_description = "Received shipping kit", income_account_id = "${income_account.id}", cogs_account_id = "${cogs_account.id}", price = "12.00", cost = "8.00" }
 reason = "Separate product and received shipping example"
 
 [[commands]]
@@ -2555,3 +2555,44 @@ command = "work-order create"
 capture = "demo_stocked_work_order"
 reason = "Replace two shutoff valves on site"
 input = { customer = "${customer.id}", date = "2026-10-21", number = "DEMO-SO-WO-1", title = "Replace two shutoff valves", lines = [{ item = "${inventory_item.id}", quantity = "2" }, { item = "${service_item.id}", quantity = "1" }] }
+
+# Physical counts (R104 increment 2): the van restocked and counted at the end of the day. The count
+# finds a valve short, a shipping kit over and the half service kit gone. The slip for the morning,
+# entered after the count, shows the half kit went back to the warehouse, so the count is derived
+# again: the kit was misplaced, not lost, and only the valve and the shipping kit post (to Cost of
+# Goods Sold, each at its average).
+[[commands]]
+command = "inventory-transfer post"
+capture = "van_restock"
+input = { date = "2026-12-12", number = "DEMO-VAN-RESTOCK", from_site = "Warehouse", to_site = "Van 1", lines = [{ item = "${inventory_item.id}", quantity = "4" }, { item = "${shipping_demo_item.id}", quantity = "2" }], memo = "Restock the van" }
+reason = "Restock the van for the next day's calls"
+
+[[commands]]
+command = "inventory-count create"
+capture = "van_count"
+input = { site = "Van 1", date = "2026-12-12", number = "DEMO-VAN-COUNT", items = ["${inventory_item.id}", "${shipping_demo_item.id}", "${purchase_demo_item.id}"], memo = "End-of-day van count" }
+reason = "Count the van at the end of the day"
+
+[[commands]]
+command = "inventory-count enter"
+input = { count = "DEMO-VAN-COUNT", entries = [{ code = "100000000050", quantity = "3" }, { item = "${shipping_demo_item.id}", quantity = "3" }, { item = "${purchase_demo_item.id}", quantity = "0" }] }
+reason = "Counted the van shelves"
+
+[[commands]]
+command = "inventory-count post"
+capture = "van_count_preview"
+dry_run = true
+input = { count = "DEMO-VAN-COUNT", expected_version = 1, adjustment_account = "${cogs_account.id}" }
+reason = "Record the van count"
+
+[[commands]]
+command = "inventory-count post"
+capture = "van_count_recorded"
+input = { count = "DEMO-VAN-COUNT", expected_version = 1, adjustment_account = "${cogs_account.id}", preview_fingerprint = "${van_count_preview.preview_fingerprint}" }
+reason = "Record the van count"
+
+[[commands]]
+command = "inventory-transfer post"
+capture = "van_unload"
+input = { date = "2026-12-12", number = "DEMO-VAN-UNLOAD", from_site = "Van 1", to_site = "Warehouse", lines = [{ item = "${purchase_demo_item.id}", quantity = "0.5" }], memo = "Half kit taken back to the shelf before the count" }
+reason = "The slip for the half kit moved back this morning"

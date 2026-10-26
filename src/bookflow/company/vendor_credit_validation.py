@@ -17,6 +17,7 @@ import json
 
 from pydantic import ValidationError
 
+from bookflow.core import unit_price
 from bookflow.company import bill_payment_validation as settlement
 from bookflow.company import document_effects as effects, schema as c
 from bookflow.company.vendor_credit_facts import BillExpenseProfile, BillItemProfile, VendorCreditProfile
@@ -106,7 +107,8 @@ def _item(line, facts):
             'an item row names a family a credit cannot return')
     require(facts.quantity_microunits == line['quantity_microunits'] > 0,
             'an item row has no positive quantity')
-    require(facts.unit_cost_minor_units == line['unit_cost_minor_units'],
+    require(facts.unit_cost_minor_units == line['unit_cost_minor_units']
+            and facts.unit_cost_fraction == line.get('unit_cost_fraction'),
             'the captured unit cost disagrees with the column')
     require(facts.billable == bool(line['billable']), 'the captured billable mark disagrees with the column')
     allowed, _ = bills.ACCOUNT_BASES[facts.account_basis]
@@ -115,10 +117,10 @@ def _item(line, facts):
         from bookflow.company.sales_calculations import extension
         require(line['unit_cost_minor_units'] is not None
                 and line['amount_minor_units'] == extension(line['quantity_microunits'],
-                                                            line['unit_cost_minor_units']),
+                                                            line['unit_cost_minor_units'], line.get('unit_cost_fraction')),
                 'a derived amount is not quantity times cost')
     else:
-        require(line['unit_cost_minor_units'] is None,
+        require(line['unit_cost_minor_units'] is None and line.get('unit_cost_fraction') is None,
                 'an entered amount carries a unit cost it was not derived from')
 
 

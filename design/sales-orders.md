@@ -521,6 +521,43 @@ order", "bill Acme for what shipped today", "the rest came in; bill it"), does e
 its first attempt. One more run starts in the browser, where a person enters the order and the
 deposit, and an agent finishes it from the same prompts.
 
+### As built: the last pieces and the closing trial (2026-10-25)
+
+- **Create invoice dialog.** Each order line shows Ordered, Previously invoiced, Cancelled (when
+  any) and Backordered from `sales-order show`, and its item's On hand; the switch "Show quantity
+  available instead of quantity on hand" shows Available instead. It is display only (no form
+  field), so the submitted selection is unchanged.
+- **Order quantities on the invoice.** Each order-made sale line carries `order` (sales order,
+  ordered, previously invoiced, backordered) in `invoice show`, its preview and its result.
+  Previously invoiced counts active sales posted before this one, so an earlier invoice keeps reading
+  as it was made; a void of an earlier invoice drops it from later ones. Backordered is ordered less
+  cancelled, previously invoiced and this line, never below zero. The invoice page shows the line
+  under its quantity; the printed invoice has Ordered, Prev. invoiced, Backordered and Invoiced
+  columns when any line came from an order, and prints as before otherwise.
+- **Steering.** `estimate invoice`, `work-order invoice` and `time-activity invoice` previews and
+  results carry the open-order note with the exact `sales-order invoice` command, as `invoice post`
+  does; their help and `invoice post`'s say to bill the order instead of retyping its lines. The
+  agent guide says so under "Billing what shipped on an order".
+- **Closing trial.** Fresh `claude -p` (sonnet), no tools but Bookflow's three MCP tools
+  (list_commands, help, run), a demo company plus Acme Corp and a Widget item (12 on hand,
+  preferred vendor Central Supply), the agent token, one session resumed per prompt. The prompts
+  were "Acme wants 20 widgets but we only have 12 – take the order", "Acme sent $200 toward their
+  order by check #4410", "Ship what we have", "Order more widgets for Acme's backorder" and "The
+  rest came in today. Bill them for it". First run: the order was right (one recovered name
+  slip), but the deposit went on the customer, not the order, because `prepayment receive`'s help
+  named only estimates and work orders as targets. **Finding fixed:** the receive, attach and
+  document-field help, the invoice note and the agent guide now name sales orders
+  (`"sales-order 1003"`). Rerun from a fresh agent and fresh books: every prompt was done
+  correctly on its first attempt. The order was 20 widgets. The $200 was held on sales order 1.
+  "Ship what we have" was `sales-order invoice` by default: 12 billed, 8 backordered, $194.85
+  drawn from the deposit (one recovered field-name guess). "Order more" was `sales-order
+  purchase-order`: a purchase order for 8 from Central Supply, linked to the order. "The rest came
+  in" received that purchase order with `item-receipt post`, then invoiced the 8 (the $5.15
+  left of the deposit applied, $124.75 due). Checked afterwards as the person: the order is
+  invoiced (20 of 20), invoice 1 reads ordered 20 / previously 0 / backordered 8, invoice 3 reads
+  20 / 12 / 0, the widget is at 0 on hand, nothing is held, and the purchase order is closed. Not
+  run: the browser-start variant, where a person enters the order and the deposit in the browser.
+
 ## 9. Open questions
 
 Each default stands if nobody decides.

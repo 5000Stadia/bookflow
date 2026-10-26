@@ -1,6 +1,7 @@
 """Match bills to received intervals; transfer AP without receiving goods twice."""
 import json
 import sqlalchemy as sa
+from bookflow.core import unit_price
 from bookflow.company import bills, document_effects as effects, inventory_effects, journals, receiving, schema as c
 from bookflow.company.bill_facts import BillItemProfile
 from bookflow.company.bill_models import ReceiptBillingInput, ReceiptBillingOutput
@@ -36,8 +37,9 @@ def source(s, inp, operation, old_header, old_revision):
             header = receiving.resolve(s, receipt_line['receipt_id'])
             freight = sum(c['shipping_minor_units'] for c in claims)
             facts = json.loads(line['line_snapshot'])
-            rate = facts.get('receipt_product_unit_cost_minor_units') if freight else line['unit_cost_minor_units']
-            cost = {'unit_cost': {'minor_units': rate, 'currency': old_revision['currency']}} if rate is not None else {'amount': {'minor_units': line['amount_minor_units'] - freight, 'currency': old_revision['currency']}}
+            rate = (unit_price.join(facts.get('receipt_product_unit_cost_minor_units'), facts.get('receipt_product_unit_cost_fraction'))
+                    if freight else unit_price.row_units(line, 'unit_cost'))
+            cost = {'unit_cost': unit_price.to_dict(rate, old_revision['currency'])} if rate is not None else {'amount': {'minor_units': line['amount_minor_units'] - freight, 'currency': old_revision['currency']}}
             selections.append(ReceiptBillingInput(receipt_line=receipt_line['id'], expected_receipt_version=header['version'],
                 quantity=format_quantity_micro_units(sum(claim['end_microunits'] - claim['start_microunits'] for claim in claims)),
                 **cost))
@@ -80,8 +82,8 @@ def source(s, inp, operation, old_header, old_revision):
         shipping = sum(freight for _, _, _, freight in spans)
         product_original = original - shipping
         if selection.unit_cost is not None:
-            rate = money(selection.unit_cost, currency).minor_units
-            amount = bills.extension(qty, rate)
+            rate = unit_price.parse(selection.unit_cost, currency)
+            amount = bills.extension_units(qty, rate)
         elif selection.amount is not None:
             rate = None
             amount = money(selection.amount, currency).minor_units
@@ -89,12 +91,14 @@ def source(s, inp, operation, old_header, old_revision):
             rate, amount = None, product_original
         view = json.loads(line['snapshot'])
         facts = BillItemProfile.model_validate(view['profile']).model_copy(update={
-            'quantity_microunits': qty, 'unit_cost_minor_units': rate,
+            'quantity_microunits': qty, 'unit_cost_minor_units': unit_price.split(rate)[0],
+            'unit_cost_fraction': unit_price.split(rate)[1],
             'amount_basis': 'unit_cost' if rate is not None else 'amount'})
         if shipping:
-            facts = facts.model_copy(update=dict(amount_basis='amount', unit_cost_minor_units=None,
+            facts = facts.model_copy(update=dict(amount_basis='amount', unit_cost_minor_units=None, unit_cost_fraction=None,
                 receipt_product_minor_units=amount, receipt_shipping_minor_units=shipping,
-                receipt_product_unit_cost_minor_units=rate))
+                receipt_product_unit_cost_minor_units=unit_price.split(rate)[0],
+                receipt_product_unit_cost_fraction=unit_price.split(rate)[1]))
         stable_id = prior_lines[list(kept)[index]]['line_id'] if kept else None
         items.append(dict(line_id=stable_id, family='item', amount_minor_units=amount + shipping,
             memo=view['description'], profile=facts))
@@ -157,7 +161,7 @@ def attach(s, ctx, plan, received):
     inventory_effects.check(s, stock, [line for inverse in inverses for line in inverse.data['pending']['posting_lines']])
     plan.preview.revision.receipts = [ReceiptBillingOutput(receipt_line=x['line']['id'], bill_line_id=item['document_line_id'], item=json.loads(item['line_snapshot'])['item'],
         expected_receipt_version=x['header']['version'], quantity=format_quantity_micro_units(x['quantity']),
-        **({'unit_cost': Money(x['rate'], revision['currency']).to_dict()} if x['rate'] is not None else {'amount': Money(x['product_amount'], revision['currency']).to_dict()}),
+        **({'unit_cost': unit_price.to_dict(x['rate'], revision['currency'])} if x['rate'] is not None else {'amount': Money(x['product_amount'], revision['currency']).to_dict()}),
         product_amount=Money(x['product_amount'], revision['currency']).to_dict(), shipping=Money(x['shipping'], revision['currency']).to_dict(),
         total=Money(x['amount'], revision['currency']).to_dict()) for x, item in zip(received['sources'], items, strict=True)]
     received.update(claims=claims, releases=[dict(id=new_id(), claim_id=claim['id'], **provenance) for claim in received['prior']],
@@ -251,10 +255,11 @@ def selections_for_revision(s, revision):
         product = sum(x['billed_minor_units'] for x in claims) - shipping
         captured = effects.rows(s, c.purchase_item_lines, c.purchase_item_lines.c.document_line_id == line_id)[0]
         facts = json.loads(captured['line_snapshot'])
-        rate = facts.get('receipt_product_unit_cost_minor_units') if shipping else captured['unit_cost_minor_units']
+        rate = (unit_price.join(facts.get('receipt_product_unit_cost_minor_units'), facts.get('receipt_product_unit_cost_fraction'))
+                if shipping else unit_price.row_units(captured, 'unit_cost'))
         found.append(ReceiptBillingOutput(receipt_line=line['id'], bill_line_id=line_id, item=facts['item'], expected_receipt_version=header['version'],
             quantity=format_quantity_micro_units(sum(x['end_microunits']-x['start_microunits'] for x in claims)),
-            **({'unit_cost': Money(rate, revision['currency']).to_dict()} if rate is not None else {'amount': Money(product, revision['currency']).to_dict()}),
+            **({'unit_cost': unit_price.to_dict(rate, revision['currency'])} if rate is not None else {'amount': Money(product, revision['currency']).to_dict()}),
             product_amount=Money(product, revision['currency']).to_dict(), shipping=Money(shipping, revision['currency']).to_dict(),
             total=Money(product + shipping, revision['currency']).to_dict()))
     return found

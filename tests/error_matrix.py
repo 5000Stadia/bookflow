@@ -522,7 +522,7 @@ MATRIX['report stock-status'] = {
 MATRIX['inventory adjust'] = {
     'E_RECORD_NOT_FOUND': 'unknown item, adjustment account or class',
     'E_INACTIVE_REFERENCE': 'inactive item, account or class',
-    'E_VALIDATION': 'an item that carries no stock, no change at all, a quantity increase with no value, a quantity decrease carrying one, stock left worth nothing, or a movement worth nothing at the current average',
+    'E_VALIDATION': 'an item that carries no stock, no change at all, a quantity decrease carrying a value, a line already at its new_quantity, stock left worth nothing, or a movement worth nothing at the current average',
     'E_VALUE_RANGE': 'quantity or value outside signed 64-bit storage',
     'E_AMOUNT_PRECISION': 'value_change with more decimal places than the currency allows',
     'E_UNBALANCED_ENTRY': 'the generated posting does not balance',
@@ -2306,3 +2306,115 @@ MATRIX['accountant-copy preview'] = {'E_VALIDATION': "no such file, not a change
 MATRIX['accountant-copy import'] = _ACCT_JOURNAL | {'E_VALIDATION': "the file is refused (see preview), a chosen change is unknown or cannot be taken, or it takes nothing without close_copy"} | _ACCT_PERSON | _ACCT_TAIL
 MATRIX['report accountant-review'] = {'E_VALIDATION': 'as_of is not a date'}
 MATRIX['report accountant-changes'] = {}
+# Check printing (R152): the print queue, print runs, "Did checks print OK?", reprints and alignment.
+_PRINT_TAIL = {'E_IDEMPOTENCY_MISMATCH': 'same key, different input', 'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+               'E_DIRECTIVE_INACTIVE': 'deactivated --directive'}
+MATRIX['check print-queue'] = {'E_RECORD_NOT_FOUND': 'unknown account', 'E_VALIDATION': 'not a bank account'}
+MATRIX['check print'] = {'E_RECORD_NOT_FOUND': 'unknown account', 'E_VALIDATION': 'nothing queued, a check not queued on the account, or a partial first sheet of voucher checks',
+                         'E_DUPLICATE_NUMBER': 'a number in the run is already used, retired, spoiled or in the printer',
+                         'E_PERIOD_CLOSED': 'a queued check dated on or before the closing date',
+                         'E_VALUE_RANGE': 'the run would pass the largest check number'} | _PRINT_TAIL
+MATRIX['check print-confirm'] = {'E_RECORD_NOT_FOUND': 'unknown run', 'E_VALIDATION': 'already answered, or a failed number not in the run',
+                                 'E_PERMISSION': 'an agent: what printed is a person\'s to say'} | _PRINT_TAIL
+MATRIX['check print-cancel'] = {'E_RECORD_NOT_FOUND': 'unknown run', 'E_VALIDATION': 'already answered',
+                                'E_PERMISSION': 'an agent'} | _PRINT_TAIL
+MATRIX['check reprint'] = {'E_RECORD_NOT_FOUND': 'not a check or bill payment', 'E_VALIDATION': 'no number yet, voided, or in a print run',
+                           'E_DUPLICATE_NUMBER': 'the new number is used on the account', 'E_PERIOD_CLOSED': 'a new number for a closed-period check',
+                           'E_VERSION_CONFLICT': 'stale expected_version', 'E_VALUE_RANGE': 'past the largest check number',
+                           'E_PERMISSION': 'an agent'} | _PRINT_TAIL
+MATRIX['check print-run'] = {'E_RECORD_NOT_FOUND': 'unknown run'}
+MATRIX['check print-pdf'] = {'E_RECORD_NOT_FOUND': 'unknown run'}
+MATRIX['check print-setup'] = {'E_RECORD_NOT_FOUND': 'unknown account', 'E_VALIDATION': 'not a bank account, or an offset beyond 2 inches',
+                               'E_VERSION_CONFLICT': 'stale expected_version'} | _PRINT_TAIL
+MATRIX['check print-alignment'] = {'E_RECORD_NOT_FOUND': 'unknown account', 'E_VALIDATION': 'not a bank account, or a partial voucher sheet'}
+# Barcodes (R104 increment 3): what a code names, and numbering items that have none.
+MATRIX['barcode lookup'] = {'E_VALIDATION': 'no code, or as_of is not a date'}
+MATRIX['barcode generate'] = {'E_RECORD_NOT_FOUND': 'a named item is unknown', 'E_INACTIVE_REFERENCE': 'a named item is inactive',
+                              'E_VALIDATION': 'a named code is on two items', 'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+                              'E_DIRECTIVE_NOT_FOUND': 'unknown --directive', 'E_DIRECTIVE_INACTIVE': 'deactivated --directive'}
+# Physical counts (R104 increment 2).
+MATRIX['inventory-count create'] = {
+    'E_VALIDATION': 'an unknown site (the sites are listed), a non-stock item, bins or cycle (later increments), or nothing to count',
+    'E_RECORD_NOT_FOUND': 'item or category absent from selected company',
+    'E_INACTIVE_REFERENCE': 'an inactive site',
+    'E_PERIOD_CLOSED': 'a count date on or before the closing date',
+    'E_DUPLICATE_NUMBER': 'the count number is already used',
+    **_SITE_COMMON}
+MATRIX['inventory-count enter'] = {
+    'E_VALIDATION': 'a count that is not open, a non-stock item, an unknown or ambiguous code, a negative quantity, or a bin, lot or serial number',
+    'E_RECORD_NOT_FOUND': 'count or item absent from selected company',
+    **_SITE_COMMON}
+MATRIX['inventory-count post'] = {
+    'E_VALIDATION': 'a count that is not open, nothing counted, an unusable adjustment account, a place another recorded count of that date counted, or differences worth nothing',
+    'E_RECORD_NOT_FOUND': 'count, account or class absent from selected company',
+    'E_INACTIVE_REFERENCE': 'an inactive account or class',
+    'E_PERIOD_CLOSED': 'a count date on or before the closing date',
+    'E_VERSION_CONFLICT': 'the count changed since expected_version',
+    'E_PREVIEW_STALE': 'no preview_fingerprint, or what would post changed since the dry run',
+    'E_UNBALANCED_ENTRY': 'never in practice: the difference entry balances by construction',
+    **_SITE_COMMON}
+MATRIX['inventory-count cancel'] = {
+    'E_VALIDATION': 'a count that is not open',
+    'E_RECORD_NOT_FOUND': 'count absent from selected company',
+    'E_VERSION_CONFLICT': 'the count changed since expected_version',
+    'E_REASON_REQUIRED': 'no reason given',
+    **_SITE_COMMON}
+MATRIX['inventory-count void'] = MATRIX['inventory-count cancel'] | {
+    'E_VALIDATION': 'a count that is not recorded',
+    'E_PERIOD_CLOSED': 'a count date on or before the closing date'}
+for _verb in ('show', 'sheet'):
+    MATRIX[f'inventory-count {_verb}'] = {'E_RECORD_NOT_FOUND': 'count absent from selected company',
+                                          'E_VALIDATION': 'a malformed selector'}
+MATRIX['inventory-count query'] = {'E_RECORD_NOT_FOUND': 'site absent from selected company', 'E_VALIDATION': 'an unknown site name or a malformed date'}
+MATRIX['report physical-inventory-worksheet'] = {
+    'E_QUERY_STALE': 'the books changed between pages',
+    'E_VALUE_RANGE': 'a limit beyond supported bounds',
+    'E_VALIDATION': 'an unknown site name',
+}
+MATRIX['report inventory-valuation-detail'] = {
+    'E_QUERY_STALE': 'the books changed between pages',
+    'E_VALUE_RANGE': 'a limit beyond supported bounds',
+    'E_VALIDATION': 'a malformed date',
+    'E_RECORD_NOT_FOUND': 'item absent from selected company',
+}
+# Unattended scheduling and reminders (R111): to-dos, overdue notices and the Reminders list.
+_SCHED_TAIL = {
+    'E_REASON_REQUIRED': 'an agent/system write supplies neither reason nor directive',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+MATRIX['todo create'] = {
+    'E_VALIDATION': 'a blank title, an assignee who is not a member of the company, or link without link_type',
+    'E_RECORD_NOT_FOUND': 'unknown assignee or linked record',
+    **_SCHED_TAIL,
+}
+MATRIX['todo update'] = {
+    'E_VALIDATION': 'a blank title, a null due date, nothing to change, or an assignee who is not a member',
+    'E_RECORD_NOT_FOUND': 'unknown to-do, assignee or linked record',
+    'E_VERSION_CONFLICT': 'stale expected_version',
+    **_SCHED_TAIL,
+}
+MATRIX['todo complete'] = {
+    'E_VALIDATION': 'the to-do is already done',
+    'E_RECORD_NOT_FOUND': 'unknown to-do',
+    'E_VERSION_CONFLICT': 'stale expected_version',
+    **_SCHED_TAIL,
+}
+MATRIX['todo show'] = {'E_VALIDATION': 'malformed selector', 'E_RECORD_NOT_FOUND': 'unknown to-do'}
+MATRIX['todo list'] = {'E_VALIDATION': 'link without link_type', 'E_RECORD_NOT_FOUND': 'unknown assignee or linked record'}
+MATRIX['notice generate'] = {'E_VALIDATION': 'overdue notices are off (no overdue_notice_days)', **_SCHED_TAIL}
+MATRIX['notice list'] = {'E_VALIDATION': 'malformed filter', 'E_RECORD_NOT_FOUND': 'unknown customer'}
+MATRIX['notice show'] = {'E_VALIDATION': 'malformed selector', 'E_RECORD_NOT_FOUND': 'unknown notice'}
+_NOTICE_WRITE = {
+    'E_VALIDATION': 'the notice is not ready to send (already sent or dismissed)',
+    'E_RECORD_NOT_FOUND': 'unknown notice',
+    'E_VERSION_CONFLICT': 'stale expected_version',
+    **_SCHED_TAIL,
+}
+MATRIX['notice mark-sent'] = dict(_NOTICE_WRITE)
+MATRIX['notice dismiss'] = dict(_NOTICE_WRITE)
+MATRIX['reminders'] = {'E_VALIDATION': 'a malformed as_of date'}
+# R111 review X6: a person's entry names the revision it will post; a template changed since the preview is refused.
+for _name in ('memorized enter', 'memorized process', 'memorized retry', 'memorized-group enter'):
+    MATRIX[_name]['E_PREVIEW_STALE'] = 'a template was changed after the preview that named the revision to post'

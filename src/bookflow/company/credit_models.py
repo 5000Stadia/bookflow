@@ -13,7 +13,7 @@ from bookflow.company.journal_models import _Date, _Number, _Version
 from bookflow.company.journal_outputs import CreatedOutput, JournalBatchOutput, JournalMoneyOutput
 from bookflow.company.sales_facts import SalesLineProfile, SalesProfile, SalesTaxComponent
 from bookflow.company.sales_models import (
-    Fingerprint, LineDefault, Quantity, SalesMoneyInput, Selector, StrictModel, Text,
+    Fingerprint, LineDefault, Quantity, SalesMoneyInput, SalesPriceInput, Selector, StrictModel, Text,
 )
 from bookflow.company.tax_attribution import TaxDetails
 from bookflow.company.tax_policy import Policy
@@ -45,7 +45,7 @@ class CreditLineInput(StrictModel):
     source_line: Selector | None = None
     quantity: Quantity = "1"
     unit: Selector | None = None
-    unit_price: str | SalesMoneyInput | None = None
+    unit_price: str | SalesPriceInput | None = None
     net_amount: str | SalesMoneyInput | None = None
     description: Text | None = None
     class_id: Selector | None = None
@@ -98,8 +98,11 @@ class _CreditMemoFields(StrictModel):
         values = handler(self)
         if "sales_tax_calculation" not in self.model_fields_set:
             values.pop("sales_tax_calculation", None)
+        if "count_position" not in self.model_fields_set:
+            values.pop("count_position", None)
         return values
 
+    count_position: Literal["before", "after"] | None = Field(None, description="Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after.")
     date: _Date | None = Field(default=None, description="Accounting date. Omitted, it is today in the company's timezone.")
     customer: Selector
     lines: CreditLines
@@ -327,6 +330,7 @@ class CreditMemoSummaryOutput(CommonOut):
 
 class CreditMemoOutput(CreditMemoSummaryOutput):
     revision: CreditRevisionOutput
+    count_position: Literal['before', 'after'] = Field('before', description="Where the document's stock stands against a physical count of its site on its date (R104).")
     source_current: CreditSourceOutput
 
 

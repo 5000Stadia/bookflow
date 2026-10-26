@@ -263,8 +263,10 @@ def test_a_template_edit_does_not_mint_a_second_occurrence_for_an_entered_slot(b
     assert edited['occurrences'][0]['revision_id'] == template['current_revision_id']
 
 
-def test_a_retry_replays_the_captured_revision_and_not_a_newer_one(books):
-    """A retry must never silently substitute a newly edited template."""
+def test_a_retry_enters_the_template_as_it_is_now_and_says_so(books):
+    """A slot that never posted enters the memorized transaction as it stands (the anchor's behaviour,
+    R111 review R2): a retry after an edit posts the edit, never a superseded payload in the retrier's
+    name, and the re-pointing is on the audit trail."""
     memorize(books)
     account = books.run('account show', {'account': 'Office Rent'})
     books.run('account deactivate', {'account': account['id'], 'expected_version': account['version']},
@@ -281,13 +283,16 @@ def test_a_retry_replays_the_captured_revision_and_not_a_newer_one(books):
     books.run('account activate', {'account': account['id'], 'expected_version': account['version'] + 1},
               reason='Reopen the account')
 
-    retried = books.run('memorized retry', {'occurrence': occurrence['id'],
-                                            'expected_version': occurrence['version']}, reason='Try again')
+    preview = books.run('memorized retry', {'occurrence': occurrence['id'], 'expected_version': occurrence['version']},
+                        reason='Look first', dry_run=True)
+    retried = books.run('memorized retry', {'occurrence': occurrence['id'], 'expected_version': occurrence['version'],
+                                            'expected_facts_fingerprint': preview['facts_fingerprint']}, reason='Try again')
     assert retried['occurrence']['status'] == 'entered'
-    assert retried['occurrence']['revision_id'] == captured
+    current = books.run('memorized show', {'memorized': 'Monthly office rent'})['current_revision_id']
+    assert retried['occurrence']['revision_id'] == current != captured
     assert retried['occurrence']['slot_date'] == '2026-01-31'
     bill = books.run('bill show', {'bill': retried['occurrence']['transaction_id']})
-    assert bill['revision']['total']['amount'] == RENT, 'the retry replayed what was due, not the edit'
+    assert bill['revision']['total']['amount'] == '9999.00', 'the retry entered the template as it is now'
 
 
 # ---------------------------------------------------------------- failure

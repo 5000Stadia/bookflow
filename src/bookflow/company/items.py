@@ -14,13 +14,13 @@ from typing import Any, Literal, Mapping, Sequence
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 import sqlalchemy as sa
 
+from bookflow.core import unit_price
 from bookflow.company import custom_fields, list_service, schema, units
 from bookflow.company.lists import get_list_definition, hierarchy_projection, normalize_display_name
 from bookflow.core.errors import BookflowError
 from bookflow.core.exact import (
     INT64_MAX,
     INT64_MIN,
-    bom_component_extension_minor_units,
     convert_quantity_micro_units,
     format_percentage_millionths,
     format_quantity_micro_units,
@@ -182,6 +182,11 @@ class ItemInput(StrictModel):
     members: list[ItemMemberInput] | None = None
     vendor_profiles: list[ItemVendorProfileInput] | None = None
     custom_fields: dict[str, Any | None] | None = None
+
+    @field_validator("barcode")
+    @classmethod
+    def _blank_barcode_is_none(cls, value: str | None) -> str | None:
+        return value or None
 
     @field_validator(
         "reorder_point_min", "reorder_point_max", "assembly_build_point",
@@ -534,7 +539,23 @@ def _home_currency(db: Database) -> str:
     return str(_info(db)["home_currency"])
 
 
+# R150: unit prices and costs may carry three places beyond the minor unit (five for USD).
+_PRICE_FIELDS = frozenset({"price", "cost", "purchase_cost"})
+
+
 def _money(value: Any | None, db: Database, field: str) -> dict[str, Any]:
+    if field in _PRICE_FIELDS:
+        if value is None:
+            return {f"{field}_minor_units": None, f"{field}_currency": None, f"{field}_fraction": None}
+        home = _home_currency(db)
+        if isinstance(value, str) and value.strip()[-3:].isalpha() and value.strip()[-3:] != home:
+            raise _validation(field, "must use the company home currency")
+        if isinstance(value, dict) and value.get("currency", home) != home:
+            raise _validation(field, "must use the company home currency")
+        units = unit_price.parse(dict(value, currency=home) if isinstance(value, dict) and "currency" not in value
+                                 else value, home, field)
+        minor, fraction = unit_price.split(units)
+        return {f"{field}_minor_units": minor, f"{field}_currency": home, f"{field}_fraction": fraction}
     if value is None:
         return {f"{field}_minor_units": None, f"{field}_currency": None}
     result = Money.parse(value, _home_currency(db))
@@ -550,7 +571,9 @@ def _money(value: Any | None, db: Database, field: str) -> dict[str, Any]:
 def _money_output(row: Mapping[str, Any], field: str) -> MoneyOutput | None:
     minor = row.get(f"{field}_minor_units")
     currency = row.get(f"{field}_currency")
-    return None if minor is None else MoneyOutput(**Money(int(minor), str(currency)).to_dict())
+    if minor is None:
+        return None
+    return MoneyOutput(**unit_price.to_dict(unit_price.join(int(minor), row.get(f"{field}_fraction")), str(currency)))
 
 
 def _reference(db: Database, table: sa.Table, record_id: str, *, field: str, record_type: str, active: bool) -> dict[str, Any]:
@@ -970,6 +993,7 @@ def _normalize_vendor_ranks(
             "vendor_item_name": None,
             "purchase_cost_minor_units": None,
             "purchase_cost_currency": None,
+            "purchase_cost_fraction": None,
             "minimum_quantity_microunits": None,
             "lead_time_days": None,
             "manufacturer_part_number": None,
@@ -1123,6 +1147,29 @@ def _validate_type_change(db: Database, current: Mapping[str, Any], target_type:
         raise BookflowError("E_TYPE_CHANGE", details={"record_id": current["id"], "from": old_type, "to": target_type, "hierarchy": True})
 
 
+def assert_barcode_available(db: Database, barcode: str | None, *, exclude_id: str | None = None,
+                             reactivating: str | None = None) -> None:
+    """A new or changed barcode another active item carries is refused, naming that item (R104 §7).
+
+    Duplicates kept from before codes were checked stay; only the write that would add one is refused.
+    ``reactivating`` names an item becoming active again (activate, unmerge, an undone deactivation):
+    it may not bring a code back while another active item holds it.
+    """
+    if not barcode:
+        return
+    query = sa.select(schema.items.c.id, schema.items.c.full_name).where(
+        schema.items.c.barcode == barcode, schema.items.c.active.is_(True))
+    if exclude_id is not None:
+        query = query.where(schema.items.c.id != exclude_id)
+    taken = db.conn.execute(query.order_by(schema.items.c.full_name)).first()
+    if taken is not None:
+        problem = f"barcode {barcode!r} is already on {taken.full_name}"
+        if reactivating is not None:
+            problem = (f"{reactivating} carries barcode {barcode!r}, which the active item {taken.full_name} now holds; "
+                       f"clear the code on one of them first")
+        raise _validation("barcode", problem, item_id=taken.id, item=taken.full_name)
+
+
 def plan_item_create(
     db: Database,
     payload: Mapping[str, Any],
@@ -1151,6 +1198,7 @@ def plan_item_create(
         preferred_supplied="preferred_vendor_id" in supplied,
     ) if parsed.type in {"service", "non_inventory_part", "inventory_part", "inventory_assembly", "other_charge"} else ()
     owner_values["preferred_vendor_id"] = _preferred_from_profiles(vendor_rows)
+    assert_barcode_available(db, owner_values.get("barcode"))
     custom_plan = custom_fields.plan_owner_value_patch(
         db,
         record_type=ITEM_RECORD_TYPE,
@@ -1302,7 +1350,9 @@ def plan_item_update(
         "name": ("name", "full_name"), "parent_id": ("parent_id", "full_name"),
         "type": ("type",), "sales_enabled": ("sales_enabled",),
         "purchase_enabled": ("purchase_enabled",), "preferred_vendor_id": ("preferred_vendor_id",),
-        **{field: (f"{field}_minor_units", f"{field}_currency") for field in _MONEY_FIELDS},
+        **{field: (f"{field}_minor_units", f"{field}_currency")
+           # R150: a price or cost may change only below the cent.
+           + ((f"{field}_fraction",) if field in _PRICE_FIELDS else ()) for field in _MONEY_FIELDS},
         **{field: (column,) for field, column in _PERCENT_FIELDS.items()},
         **{field: (column,) for field, column in _QUANTITY_FIELDS.items()},
     }
@@ -1322,6 +1372,8 @@ def plan_item_update(
         changed_fields.update(".".join(path) for path in custom_plan.logical_paths)
     if not changed_fields:
         return ItemUpdatePlan(None, (), ())
+    if "barcode" in changed_fields:
+        assert_barcode_available(db, after_candidate.get("barcode"), exclude_id=record_id)
     after = {
         **after_candidate,
         **list_service.update_metadata(current, actor_id, via, at=at or now_iso()),
@@ -1404,6 +1456,17 @@ def plan_item_active_change(
         dependents = _member_dependents(db, [str(row["id"]) for row in rows])
         if dependents:
             raise BookflowError("E_RECORD_IN_USE", details={"record_id": record_id, "dependents": list(dependents)})
+    else:
+        claimed: dict[str, str] = {}
+        for row in rows:
+            code = row.get("barcode")
+            if not code or row.get("active"):
+                continue
+            if code in claimed:
+                raise _validation("barcode", f"{row['full_name']} and {claimed[code]} both carry barcode {code!r}; "
+                                  "clear the code on one of them first", item=claimed[code])
+            claimed[code] = str(row["full_name"])
+            assert_barcode_available(db, code, exclude_id=str(row["id"]), reactivating=str(row["full_name"]))
     timestamp = at or now_iso()
     mutations: list[ItemMutation] = []
     for row in rows:
@@ -1760,7 +1823,7 @@ def _bom_cost(
         if not member["active"]:
             continue
         component = _cached_item(db, str(member["component_item_id"]), cache)
-        cost = int(component["cost_minor_units"] or 0)
+        cost = unit_price.join(int(component["cost_minor_units"] or 0), component.get("cost_fraction"))
         quantity = int(member["quantity_microunits"])
         if member["unit_id"] is not None:
             source = (
@@ -1804,7 +1867,7 @@ def _bom_cost(
                 int(source["base_factor_nanounits"]),
                 int(target["base_factor_nanounits"]),
             )
-        extension = bom_component_extension_minor_units(quantity, cost)
+        extension = unit_price.extension(quantity, cost)  # R150: exact cost, rounded once
         total += extension
         if not INT64_MIN <= total <= INT64_MAX:
             raise _validation("bill_of_material_cost", "does not fit signed 64-bit storage", code="E_VALUE_RANGE")
@@ -1859,7 +1922,7 @@ def project_item(
                            else _stock(db, [owner_id]).get(owner_id, (0, 0)))
     else:
         quantity, value = 0, 0
-    average = 0 if quantity <= 0 else round_ratio_half_even(value * 10 ** 6, quantity)
+    average = unit_price.average(value, quantity)  # R150: price units, shown to the price scale
     committed = on_order = builds = 0
     deducts = deducts_builds = True
     if stocked:
@@ -1907,7 +1970,7 @@ def project_item(
         quantity_committed=format_quantity_micro_units(committed),
         quantity_on_order=format_quantity_micro_units(on_order),
         quantity_pending_build=format_quantity_micro_units(builds),
-        average_cost=MoneyOutput(**Money(average, currency).to_dict()) if stocked else zero_money,
+        average_cost=MoneyOutput(**unit_price.to_dict(average, currency)) if stocked else zero_money,
         inventory_value=MoneyOutput(**Money(value, currency).to_dict()) if stocked else zero_money,
         inventory_values_available=stocked,
         bill_of_material_cost=_bom_cost(db, members, cache) if owner["type"] == "inventory_assembly" else None,
@@ -1923,12 +1986,16 @@ def aggregate_snapshot(
 ) -> dict[str, Any]:
     logical = dict(owner)
     for field in _MONEY_FIELDS:
+        # R150: a price or cost is recorded exactly (its fraction folded into the amount text);
+        # a whole-cent one reads exactly as it always did, with no fraction key.
         logical[field] = (
             None if logical.get(f"{field}_minor_units") is None
-            else Money(int(logical[f"{field}_minor_units"]), str(logical[f"{field}_currency"])).to_dict()
+            else unit_price.to_dict(unit_price.join(int(logical[f"{field}_minor_units"]), logical.get(f"{field}_fraction")),
+                                    str(logical[f"{field}_currency"]))
         )
         logical.pop(f"{field}_minor_units", None)
         logical.pop(f"{field}_currency", None)
+        logical.pop(f"{field}_fraction", None)
     for field, column in _PERCENT_FIELDS.items():
         logical[field] = None if logical.get(column) is None else format_percentage_millionths(logical[column])
         logical.pop(column, None)
@@ -1951,7 +2018,8 @@ def aggregate_snapshot(
             "vendor_item_name": row["vendor_item_name"],
             "purchase_cost": (
                 None if row["purchase_cost_minor_units"] is None
-                else Money(int(row["purchase_cost_minor_units"]), str(row["purchase_cost_currency"])).to_dict()
+                else unit_price.to_dict(unit_price.join(int(row["purchase_cost_minor_units"]), row.get("purchase_cost_fraction")),
+                                        str(row["purchase_cost_currency"]))
             ),
             "minimum_quantity": (
                 None if row["minimum_quantity_microunits"] is None
@@ -2058,8 +2126,8 @@ def item_query_options(
             "$custom-searchable": sa.func.lower(sa.func.coalesce(custom_search, "")),
         },
         sort_expressions={
-            "price": owner.c.price_minor_units,
-            "cost": owner.c.cost_minor_units,
+            "price": owner.c.price_minor_units * unit_price.SCALE + sa.func.coalesce(owner.c.price_fraction, 0),
+            "cost": owner.c.cost_minor_units * unit_price.SCALE + sa.func.coalesce(owner.c.cost_fraction, 0),
             "quantity_on_hand": quantity_on_hand_expression(owner),
             "preferred_vendor": preferred,
             "category": category,

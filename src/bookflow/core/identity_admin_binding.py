@@ -7,6 +7,7 @@ Hosted entry is writer-only, after dequeue. Local entry obtains RootLock itself.
 from contextlib import contextmanager
 from pathlib import Path
 from threading import current_thread
+import weakref
 
 from bookflow.hub import identity_admin as b, credentials, permission_runtime as runtime
 from bookflow.hub.agent_authority import fail
@@ -14,6 +15,27 @@ from bookflow.storage.engine import open_database
 from .config import os_login, _parse
 from .locks import RootLock
 from .publication import OSBinding
+
+
+# The host writer threads, registered by each Host as it is built: the only threads on which the
+# scheduler may build a ScheduledBinding. Identity, not a thread name anyone can give a thread.
+SCHEDULER_THREADS: "weakref.WeakSet" = weakref.WeakSet()
+
+
+class ScheduledBinding:
+    """The host's scheduler acting for the owner of a memorized transaction (R111).
+
+    It only ever reads authority -- `require_company`, the owner's current permissions
+    intersected as for any request -- and can never preview or apply an administration edit.
+    It is built only on the host's writer thread, by ``company/scheduler.py``, for an active
+    user; no request, token or JSON body can produce one.
+    """
+    __slots__ = ('user_id', 'on_behalf_of', 'authority_epoch')
+
+    def __init__(self, user_id, on_behalf_of=None, authority_epoch=None):
+        if current_thread() not in SCHEDULER_THREADS or type(user_id) is not str:
+            fail('invalid_input', 'binding')
+        self.user_id, self.on_behalf_of, self.authority_epoch = user_id, on_behalf_of, authority_epoch
 
 
 def _file(root):
@@ -57,6 +79,13 @@ class BoundOperation:
     def _binding(self, purpose):
         self._guard.validate(self._tx, self._guard.request_id, purpose)
         b._require_tx(self._tx, purpose == 'apply')
+        if type(self._admitted) is ScheduledBinding:
+            # The checks a bearer token gets, read now: active, and for an agent its assignment to the
+            # person it acts for, no suspension, and the same authority epoch it held when it saved.
+            eligible, epoch = credentials._binding(self._tx, self._admitted.user_id, self._admitted.on_behalf_of)
+            if purpose != 'preview' or not eligible or epoch != self._admitted.authority_epoch:
+                fail('not_administrator', 'binding')
+            return None
         if type(self._admitted) is OSBinding:
             mapped = _os_current(self._tx, self._admitted, self._file)
             return b.OSBinding(self._guard, self._admitted.user_id, mapped)
@@ -68,6 +97,8 @@ class BoundOperation:
         return self._admitted
 
     def preview(self, intent):
+        if type(self._admitted) is ScheduledBinding:
+            fail('not_administrator', 'binding')
         binding = self._binding('preview')
         return b.preview_edit(self._tx, binding=binding, intent=intent,
                               catalog=runtime.catalog_for_root(self._tx), visibility=runtime.VISIBILITY,
@@ -83,7 +114,7 @@ class BoundOperation:
     def require_company(self, company, requirement):
         self._binding(self._guard.purpose)
         admitted = self._admitted
-        principal = admitted.on_behalf_of if type(admitted) is OSBinding else admitted.principal_id
+        principal = admitted.on_behalf_of if type(admitted) in (OSBinding, ScheduledBinding) else admitted.principal_id
         return runtime.require_company(self._tx, actor=admitted.user_id, principal=principal,
                                        company=company, requirement=requirement)
 
@@ -138,6 +169,8 @@ def session_operation(session, ctx, *, purpose):
     admitted = session.credential
     if admitted is None:
         admitted = OSBinding.from_session(session, ctx.on_behalf_of)
+    elif type(admitted) is ScheduledBinding:
+        pass
     elif type(admitted) is not OSBinding:
         from bookflow.adapters.http.app import Credential
         if type(admitted) is not Credential:

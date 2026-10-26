@@ -214,7 +214,7 @@ DEMO_POSITION = {
     'balances': {
         'Checking': 651945,                # 657295 - 3850 DEMO-ASK-1 - 1500 DEMO-BOUNCE-1 (the bank's 15.00 fee; the 200.00 came and went)
         'Accounts Receivable': 84121,      # 61621 + 20000 (DEMO-BOUNCE-INV-1 reopened) + 2500 (DEMO-BOUNCE-FEE-1)
-        'Inventory Asset': 36184,
+        'Inventory Asset': 36289,          # 36184 + 105 DEMO-VAN-COUNT: a valve short (-10.95), a shipping kit over (+12.00)
         'Accounts Payable': -7810,
         'Sales Tax Payable': -7856,         # -7646 - 210 DEMO-STADJ-1
         'Opening Balance Equity': -500000,
@@ -223,7 +223,7 @@ DEMO_POSITION = {
         # DEMO-LINE-KINDS (R147): 456.00 sold less the 15.60 discount = 441.40 income, 36.42
         # tax, 477.82 still owed (it is unpaid, so it is in Accounts Receivable above).
         'Service Income': -309770,         # -215630 - 50000 - 44140
-        'Cost of Goods Sold': 523,
+        'Cost of Goods Sold': 418,         # 523 - 105 DEMO-VAN-COUNT
         'Professional Fees': 369823,       # 339823 + 30000
         'Business Credit Card': -20000,
         'Discounts Given': 1000,
@@ -240,9 +240,12 @@ DEMO_POSITION = {
         'Bad Debt': 15000,
     },
     'trial_balance': 1164156,              # 1047664 + 30000 + 1000 + 47782 + 210 (DEMO-STADJ-1) + 37500 (DEMO-BOUNCE-, DEMO-WO-: receivable +22500, Bank Fees +1500, Bad Debt +15000, Checking -1500)
-    'journal_entries': 21,                # + DEMO-ASK-1, + the bank's fee entry of DEMO-BOUNCE-1
-    'net_income': -26036,                  # -106716 + 50000 - 1000 - 30000 + 600 + 44140 - 3850 (DEMO-ASK-1) - 210 (DEMO-STADJ-1) + 21000 (DEMO-BOUNCE-/DEMO-WO-: income 375.00 less 15.00 bank fee and 150.00 bad debt)
-    'total_equity': 473964,                # 393284 + 19600 + 44140 - 3850 (DEMO-ASK-1) - 210 (DEMO-STADJ-1) + 21000 (DEMO-BOUNCE-/DEMO-WO-)
+    'journal_entries': 22,                # + the DEMO-VAN-COUNT differences (journal 10)
+                   # + DEMO-ASK-1, + the bank's fee entry of DEMO-BOUNCE-1
+    'net_income': -25931,                  # + 105 DEMO-VAN-COUNT
+                     # -106716 + 50000 - 1000 - 30000 + 600 + 44140 - 3850 (DEMO-ASK-1) - 210 (DEMO-STADJ-1) + 21000 (DEMO-BOUNCE-/DEMO-WO-: income 375.00 less 15.00 bank fee and 150.00 bad debt)
+    'total_equity': 474069,                # + 105 DEMO-VAN-COUNT
+                   # 393284 + 19600 + 44140 - 3850 (DEMO-ASK-1) - 210 (DEMO-STADJ-1) + 21000 (DEMO-BOUNCE-/DEMO-WO-)
 }
 
 # Every namespace of posting documents the demo seeds, and the arc that owns it. A document
@@ -297,6 +300,7 @@ DEMO_ARCS = {
     '7': 'the purchase-price correction the service-kit bill makes to the received cost',
     '8': 'shipping-kit receipt: three units and their allocated shipping',
     '9': "the bank's fee for the returned check of DEMO-BOUNCE-1",
+    '10': 'the van count DEMO-VAN-COUNT: a valve short and a shipping kit over (the half kit was misplaced)',
 }
 
 # Arcs that deliberately post nothing. They are declared because they exist and are seeded, and

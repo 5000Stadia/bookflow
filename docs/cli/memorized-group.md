@@ -361,6 +361,7 @@ The same example as complete `bookflow_run` arguments:
 |---|---|---|---|---|---|---|
 | `memorized_group` | `MEMORIZED_GROUP` | string | yes | no | — | minimum length 1; maximum length 64 |
 | `date` | `--date` | string \| null | no | yes | null | — |
+| `expected_facts_fingerprint` | `--expected-facts-fingerprint` | string \| null | no | yes | null | The facts_fingerprint of the preview: which revision of each member will post. A member changed since is refused with E_PREVIEW_STALE; required when a waiting slot would post a newer revision than the one it was listed with. |
 
 ### Command and context options
 
@@ -420,6 +421,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `entered[].attempt_count` | integer | yes | no | — | — |
 | `entered[].group_run_id` | string \| null | yes | yes | — | — |
 | `entered[].group_ordinal` | integer \| null | yes | yes | — | — |
+| `entered[].replays_author_id` | string \| null | no | yes | null | Who saved the revision this entry posts (or would post). |
+| `entered[].replays_author` | string \| null | no | yes | null | — |
+| `entered[].waiting_reason` | string \| null | no | yes | null | Why the scheduler held this entry for a person, when it did. |
 | `blocked` | array[object] | no | no | [] | — |
 | `blocked[].id` | string | yes | no | — | — |
 | `blocked[].version` | integer | yes | no | — | — |
@@ -439,6 +443,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `blocked[].attempt_count` | integer | yes | no | — | — |
 | `blocked[].group_run_id` | string \| null | yes | yes | — | — |
 | `blocked[].group_ordinal` | integer \| null | yes | yes | — | — |
+| `blocked[].replays_author_id` | string \| null | no | yes | null | Who saved the revision this entry posts (or would post). |
+| `blocked[].replays_author` | string \| null | no | yes | null | — |
+| `blocked[].waiting_reason` | string \| null | no | yes | null | Why the scheduler held this entry for a person, when it did. |
 | `pending` | array[object] | no | no | [] | — |
 | `pending[].id` | string | yes | no | — | — |
 | `pending[].version` | integer | yes | no | — | — |
@@ -458,9 +465,13 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `pending[].attempt_count` | integer | yes | no | — | — |
 | `pending[].group_run_id` | string \| null | yes | yes | — | — |
 | `pending[].group_ordinal` | integer \| null | yes | yes | — | — |
+| `pending[].replays_author_id` | string \| null | no | yes | null | Who saved the revision this entry posts (or would post). |
+| `pending[].replays_author` | string \| null | no | yes | null | — |
+| `pending[].waiting_reason` | string \| null | no | yes | null | Why the scheduler held this entry for a person, when it did. |
 | `entered_count` | integer | no | no | 0 | — |
 | `blocked_count` | integer | no | no | 0 | — |
 | `pending_count` | integer | no | no | 0 | — |
+| `facts_fingerprint` | string \| null | no | yes | null | Which revision of each template this run posts; send it back as expected_facts_fingerprint. |
 | `idempotent_replay` | boolean | no | no | false | — |
 
 Example JSON output:
@@ -473,6 +484,7 @@ Example JSON output:
   "dry_run": false,
   "entered": [],
   "entered_count": 0,
+  "facts_fingerprint": null,
   "idempotent_replay": false,
   "pending": [],
   "pending_count": 0,
@@ -503,6 +515,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
+| `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
 | `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
@@ -738,6 +751,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `runs[].members[].attempt_count` | integer | yes | no | — | — |
 | `runs[].members[].group_run_id` | string \| null | yes | yes | — | — |
 | `runs[].members[].group_ordinal` | integer \| null | yes | yes | — | — |
+| `runs[].members[].replays_author_id` | string \| null | no | yes | null | Who saved the revision this entry posts (or would post). |
+| `runs[].members[].replays_author` | string \| null | no | yes | null | — |
+| `runs[].members[].waiting_reason` | string \| null | no | yes | null | Why the scheduler held this entry for a person, when it did. |
 
 Example JSON output:
 

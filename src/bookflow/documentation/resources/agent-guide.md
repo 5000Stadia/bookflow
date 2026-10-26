@@ -451,8 +451,9 @@ bounce: unapply and void it.
 
 A deposit, down payment or retainer is a customer prepayment: money paid before the work bills,
 held on the Customer Prepayments liability (set up on first use) and never income. Take it with
-`prepayment receive`, naming the accepted estimate or work order it is for (or the customer when
-it is for no document yet). Do not post it with `sales-receipt post` or `payment receive`: those
+`prepayment receive`, naming the accepted estimate, work order or sales order it is for (as
+`"sales-order 1003"`; or the customer when it is for no document yet), so the invoice made from
+that document uses it by itself. Do not post it with `sales-receipt post` or `payment receive`: those
 make it a sale or a receivable credit, and both commands say so when the customer holds money.
 
 <!-- bookflow-example: illustrative -->
@@ -615,6 +616,26 @@ schedule entries and the work orders he is assigned that day; `customer` instead
 ```json
 {"command": "schedule calendar", "input": {"employee": "Dave Brazer", "view": "day", "date": "2026-10-25"}}
 ```
+
+## Printing checks: "print this week's checks"
+
+Write the checks with `to_be_printed: true` (on `check post`, or on `bill pay` by check from a bank
+account) and leave `number` out: they wait in the bank account's print queue with no number
+(`check print-queue`). `check print` gives them numbers in order from `first_number`, the number on
+the first check loaded in the printer, and `check print-pdf --run` returns the PDF to print. A number
+already used on the account is refused, never skipped.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "check print", "reason": "Print this week's checks",
+ "input": {"account": "Checking", "first_number": "1001", "style": "voucher"}}
+```
+
+Then ask the person "Did the checks print OK?" and stop: only they know what came out of the printer,
+so `check print-confirm` (all fine, or `failed_from` the first bad number), `check print-cancel` and
+`check reprint` are a person's act and refused to an agent. Misprinted checks go back to the queue for
+new numbers and their numbers are recorded as spoiled, which `report missing-checks` shows. A printed
+check's amount, payee and bank account cannot be changed: void it and write a new one.
 
 ## Special prices: "give Acme 10% off pipe fittings through December"
 
@@ -797,8 +818,15 @@ false. A retry with the same key returns the same invoice.
 
 Voiding, deleting or updating away an order-made invoice line reopens that quantity on the order
 by default; pass `release_to_order cancel` to cancel it on the order instead. The preview says
-which. A credit memo never changes the order. `invoice post`, `sales-receipt post` and
-`payment receive` warn when the customer has an open order and give the command to use instead.
+which. A credit memo never changes the order. `invoice post`, `sales-receipt post`, `payment
+receive` and every other `<kind> invoice` (estimate, work order, time) warn when the customer has
+an open order and give the command to use instead.
+
+Before typing an invoice for a customer, check `report open-sales-orders --customer <name>`: if
+the goods are on an open order, bill the order with `sales-order invoice` rather than retyping its
+lines, or the order stays open, its stock stays committed and its deposit is not used. Each
+order-made invoice line shows the order's ordered, previously invoiced and backordered quantities
+(`order` on the line in `invoice show`, and on the printed invoice).
 
 ## Ordering what an order is short
 
@@ -923,6 +951,8 @@ Use `<noun> query options` with `kind` of `columns`, `filters` or `sorts`. Disco
 
 For example, `bookflow customer query --columns '["full_name","email"]' --company "Demo Plumbing Co" --json` returns stable row identity plus `values`, ordered `columns` descriptors, page-size `count`, and a separate `matching_total`. Omitting `columns` retains the previous summary/reference output shape. Reference projections do not accept selected columns. Public catalogs expand declared aliases and stored fields; they do not expose arbitrary database columns. Monetary values contain exact decimal strings and currency; do not convert them through floating point.
 
+Unit prices and costs (an item's price, cost and vendor purchase cost, a per-item price-level price, and every line's `unit_price`, `unit_cost`, `rate` or `estimated_unit_cost`) may carry up to three places beyond the currency's minor unit: five decimal places in USD, such as fuel at `3.459` or a screw at `0.0125`. More is refused with `E_AMOUNT_PRECISION` (`allowed_places`). The line amount is quantity times the exact price, rounded once to the cent, half to even: 12.5 x 3.459 = 43.24. In output, a price's `amount` is exact text and its `minor_units` is only the nearest cent, so read the `amount` (stored rows add a `<prefix>_fraction` column, thousandths of a minor unit, null when the price is whole). Line amounts and totals are always whole minor units.
+
 Pass typed custom criteria through `custom_filters`, for example `[{"definition":"<definition-id>","kind":"bool","operator":"eq","value":false}]`. Text supports `eq`, `ne`, `contains`; number/date also support `lt`, `lte`, `gt`, `gte`; bool/choice support `eq`, `ne`. Numbers are canonical decimal strings with at most nine fractional digits and signed-64-bit nano-unit range. Dates are canonical ISO dates. Choice values are stable choice IDs belonging to the definition, not labels. Text equality is literal and case-sensitive; containment uses normalized Unicode search. A retired choice never acquires matches from a later option reusing its label. Existing in-use choice rename/retirement rules remain unchanged.
 
 For absence, use `{"definition":"<definition-id>","kind":"presence","operator":"is_missing"}` or `is_present`, with no value. Every criterion combines by AND with ordinary filters. `ne` excludes missing values. Empty text, false and zero are present values. Cleared values are absent; values of inactive definitions remain readable, searchable, selectable and filterable without being reactivated.
@@ -1026,6 +1056,69 @@ work-order and purchase-order lines) takes `site`; a document may name one `site
 Leave it out and the line uses the default site; a return goes back where its sale took from, and a
 receipt against a purchase-order line arrives where that line said. `report quantity-by-site` and
 `report stock-status --site` read stock by site.
+## What needs doing today?
+
+Start with `reminders`: one heading per kind of work with its count and total -- memorized
+transactions due (reminder slots, and missed automatic ones the company left for a person),
+memorized entries that need a person (blocked: a closed period, an inactive account, an owner who
+lost the right to post), to-dos due, overdue notices ready to send, overdue invoices and bills to
+pay. Then `todo list --mine`: the to-dos assigned to you, soonest first.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "todo list", "input": {"mine": true, "due_by": "2026-11-03"}}
+```
+
+Do each one, then `todo complete TODO`. A to-do whose `source_ref` begins `memorized-occurrence:`
+was assigned by the scheduler because an automatic entry failed: its notes carry the error; fix
+the cause and `memorized retry OCCURRENCE`, or `memorized skip OCCURRENCE` if the owner says it
+should not be entered. Leave work for a person with `todo create --assignee USERNAME` and a
+reason, linked to the customer, vendor, document or memorized transaction it is about.
+
+The host enters automatic memorized transactions and prepares overdue notices by itself while
+`bookflow serve` runs: do not run `memorized process` just because it is a new day. Overdue notices
+are never sent by Bookflow. `notice list` shows the ones ready, each with `print_path` (its PDF)
+and the letter text; sending one is the owner's decision. Once a person (or a delivery step the
+owner set up) has sent it, `notice mark-sent NOTICE --method email`; if the owner says not to,
+`notice dismiss NOTICE --note "why"`. A dismissed notice is not prepared again until the next
+notice period.
+
+## A scanned barcode
+
+Pass a scanned code as `item`: every `item` field resolves an id, then a name, then a barcode, so
+`{"item": "0012345678905", "quantity": "2"}` on an invoice line bills the item carrying that code, with
+no other syntax. A code two active items share is refused naming both; name the item instead. For
+anything else about a code (what it is, where it is, which line fields to use) call `barcode lookup
+--code`; an unknown code is not an error, and the answer says how to assign it (`item update <item>
+--barcode <code>`). `barcode generate` gives items without a code an EAN-13 of the company's own
+(prefix 2); existing codes never change, and a code already on another active item is refused.
+
+## I counted the van: 12 widgets and 3 elbows
+
+A stocktake is a count document, never a hand-worked `inventory adjust`: the count keeps what was
+counted, and the difference from the books is worked out for you at the count's place in its day.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "inventory-count create", "reason": "Van count", "input": {"site": "Van 1"}}
+{"command": "inventory-count enter", "reason": "Counted the van",
+ "input": {"count": "C-1", "entries": [{"item": "Widget", "quantity": "12"}, {"item": "Elbow", "quantity": "3"}]}}
+{"command": "inventory-count post", "reason": "Van count", "dry_run": true,
+ "input": {"count": "C-1", "expected_version": 1, "adjustment_account": "Inventory Shrinkage"}}
+```
+
+`create` lists what the books hold at the site (name `items` or a `category` to count fewer). `enter`
+appends; a person scanning and you typing can count the same count at once, and an item not on the
+sheet adds a found line. Uncounted lines are no part of the count, so enter 0 for a place that is
+empty. The dry run of `post` shows each item's difference and its value at the average and gives a
+`preview_fingerprint`; post again with it. Less posts as an issue, more as found stock at the average.
+Paperwork for that day entered later -- the jobs you bill at night -- needs nothing more: it lands
+before the count, which is derived again, so the van stays as counted and only the true shrinkage
+posts. A sale that really happened after the count says `"count_position": "after"`. A count that was
+wrong is voided (`inventory-count void`), never adjusted around. `inventory adjust` takes `lines`
+(1-200, each with `quantity_change` or `new_quantity`) for many items at once; an increase with no
+value is valued at the running average. `report physical-inventory-worksheet` prints a blank sheet
+and `report inventory-valuation-detail` shows each movement's effect on quantity and value.
 
 ## Stock sent back to a vendor
 

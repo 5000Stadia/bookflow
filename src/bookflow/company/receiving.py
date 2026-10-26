@@ -254,9 +254,10 @@ def prepare(s, ctx, inp, operation):
         item['shipping_minor_units'] = allocated
         facts = item['profile']
         if allocated:
-            facts = facts.model_copy(update=dict(amount_basis='amount', unit_cost_minor_units=None,
+            facts = facts.model_copy(update=dict(amount_basis='amount', unit_cost_minor_units=None, unit_cost_fraction=None,
                 receipt_product_minor_units=item['amount_minor_units'], receipt_shipping_minor_units=allocated,
-                receipt_product_unit_cost_minor_units=facts.unit_cost_minor_units))
+                receipt_product_unit_cost_minor_units=facts.unit_cost_minor_units,
+                receipt_product_unit_cost_fraction=facts.unit_cost_fraction))
         landed_items.append(dict(item, amount_minor_units=item['amount_minor_units'] + allocated, profile=facts))
     if sum(i['shipping_minor_units'] for i in items) != shipping:
         raise BookflowError('E_INTERNAL', details={'problem': 'receipt shipping does not conserve the header cost'})
@@ -313,7 +314,8 @@ def prepare(s, ctx, inp, operation):
             journal = journals.prepare(s, ctx, typed, 'update' if old else 'post', owner='inventory', force_revision=bool(old), purchase_items=landed_items)
             selected_items = landed_items
         journal.data['purchase_funding'] = {'account_id': profile.ap_account.id}
-        _, stock, _ = check_items.attach(s, journal, selected_items)
+        _, stock, _ = check_items.attach(s, journal, selected_items,
+                                        count_position=getattr(inp, 'count_position', None))
         header['transaction_id'] = journal.data['header']['id']
         financial_revision = journal.preview.revision.id
         if operation != 'void':

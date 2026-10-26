@@ -713,6 +713,90 @@ jobs at night; the van ends as counted.
   stock left; discounts and other adjusting lines are not split by site.
 - Transfer lines are in base units; moving between bins of one site waits for bins (increment 5).
 
+## As built: increment 2
+
+- **The count's own position is `count`.** Movements and placements carry `count_position` `before`, `count`
+  or `after`; a count's differences sit at `count`, between that date's documents placed before it and those
+  stated after. Replay orders by date, this rank, then sequence. Every stored row is `before`.
+- **A count's differences post in journal entries of at most 99 items** (a journal entry holds 200 lines), marked
+  `count`. Deriving them again corrects only the entries holding an item whose difference moved, by a new revision
+  (its old movements reversed exactly in its own transaction, its items restated at the count's date and
+  position), as a sale's correction does; an entry left with no difference is voided, and an item that had none
+  when recorded posts in a new entry. So "reverses that loss" is exact, not a found quantity at a rounded
+  average. Voiding a count voids its entries. Measured on a 500-item count (334 differences, four entries): create
+  0.18 s, enter 500 entries 0.79 s, post preview 0.52 s, post 2.07 s, a late same-day sale that derives one entry
+  again 0.98 s, a sale after the count date 0.28 s, sheet 0.10 s.
+- **Re-derivation runs inside every company write.** Dispatch takes the stock sequence before a command
+  applies and, after it, derives again every recorded count whose site and items the command's placements
+  reached on or before its date (`inventory_counts.settle_in_command`), in date order so a re-derived count
+  reaches a later one. The result says "Placed before count C-3 of Van 1 on ..." and "Count C-3 ... was
+  derived again". A dry run does not show the re-derivation; the saved result does.
+- **`count_position` on documents.** Invoices, sales receipts, credit memos, bills, item receipts, vendor
+  credits, transfers and `inventory adjust` take it; checks, card charges and assembly builds place before
+  (their headers gained no field). A correction that states no position keeps the one its stock stood at; one
+  that changes only `count_position` is a change, and each document's `show` says its position. A return that
+  names its sale takes the sale's position when dated the sale's day, so it never replays ahead of it; stating a
+  position that would put it first is refused.
+- **A count line is the item at the site, unassigned,** until bins, lots and serial numbers arrive; `bins`,
+  `cycle` and place fields on entries are refused with that said. Lines and placements already carry bin, lot
+  and serial columns, and a count whose places cancel moves stock by placements alone.
+- **Two counts of one place on one date** cannot both be recorded; the second is refused naming the first.
+- **Differences worth nothing** (an item with no average and no purchase cost) record their quantity with no
+  journal line, riding in an entry of the count that has one, with a warning naming the count. A count with
+  nothing else to post leaves them unrecorded, says so, and is derived again by the next stock change it reaches;
+  neither a post nor a re-derivation refuses anyone's write for it. A blind count's re-derivation names the
+  count and the items, never quantities.
+- **A count whose only differences are worth nothing** is recorded but moves no stock until the next stock change
+  its date reaches; the post warns, and it heals at that change.
+- **Found units fill a shortfall** as a receipt does, owing the short sale its true-up dated at the found
+  quantity; co0093 widens co0059's true-up guard to admit them.
+- **Permissions:** create, enter and cancel are `item` (standard), post and void `ledger.post` (standard);
+  reads are `item` member and the two reports `reports` member (layer `inventory-counts-v1`).
+- **`inventory adjust`**: `lines` (1-200) with `new_quantity` (the quantity at the line's site on the date,
+  before any count that day) and `new_value` (the item's whole value on the date); a line already holding
+  what it says is skipped. An increase with no value is `found`; its basis (average, purchase cost or none)
+  is on each line of the result.
+- **Entries resolve `code` by `items.barcode`** only; the full barcode lookup is increment 3.
+- **The count screen's keypad is the phone's number keypad** (`inputmode="decimal"`), and the item field is
+  pinned on top; scanning proper (Enter as look-up) is increment 3.
+
+## As built: increment 3
+
+- **One resolver.** Every `item` field already went through `list_service.resolve_selector`; a list
+  definition now names an optional code column (`code_field`, items: `barcode`) that the selector tries
+  after id and name. A code matches exactly (trimmed). One active holder wins; with none active, the one
+  inactive holder is returned for the caller's own inactive rule; two active holders refuse with
+  E_VALIDATION listing both (`details.candidates`).
+- **Duplicates.** A create or a changed barcode another active item carries is refused (E_VALIDATION on
+  `barcode`, `details.item`); an item saved without changing its code is not re-checked, so kept
+  duplicates stay editable. A blank barcode is stored as none.
+- **`barcode generate`** numbers from the `sequences` row `barcode` (co0094): `2` + an 11-digit serial +
+  the check digit, skipping any code already on an item or bin. With no `items` it numbers every active
+  inventory part, assembly and non-inventory part without a code; named items that have one are skipped
+  and listed. Each assignment is an ordinary item update in the item's history.
+- **`barcode lookup`** answers an unknown code without an error (`found: false`, a message saying how to
+  assign it). Its look-up list (`barcodes._KINDS`) holds items only; bins, serial numbers and lots slot in
+  there in their increments.
+- **The Scan field** is one partial (`scan_field.html`) and one script (`scan.js`), with three modes:
+  document grids (invoice, sales receipt, bill, item receipt), fixed rows (the transfer form) and the count
+  screen's entry form. It asks `GET /c/{company}/barcode/lookup` (a barcode, then an item id, then a name).
+  A repeat scan adds 1 to the last line for that item; `6*` before a code sets that line to 6. "Assign to
+  an item" opens the item list in a new window, so nothing typed is lost. The field has no form name and
+  never travels with the form.
+- **Coming back active.** An item becoming active again (`item activate`, an undone deactivation or
+  cascade) with a code another active item now holds is refused with E_VALIDATION naming the holder (an
+  undo surfaces it as E_UNDO_CONFLICT); `item unmerge` refuses with its own E_MERGE_REFUSED. Clear one code
+  first.
+- **The Scan route reads codes first:** barcode, then id, then name (a scanner sends codes), unlike an
+  `item` field. Where a code and another item's name collide it takes the code and says "matched code X
+  on <item>; an item named X also exists". Enter takes the typed text and clears the field at once; scans
+  queue and resolve in order, focus is never pulled back, and `0*` is refused.
+- **UPC-A and EAN-13 are not equated:** a 12-digit UPC-A scan matches only if it is stored as those 12
+  digits (not as the 13-digit EAN with a leading 0).
+- **Demo codes.** Copper Coupling 0012345678905, Two-Valve Kit 2000000000015 (so the generator's first
+  code is 2000000000022), Service Call Kit 0036000291452, Received Shipping Kit 4006381333931; the Brass
+  Shutoff Valve keeps its 100000000050. No oracle moves: codes change no quantity or amount.
+
 ## 10. Open questions
 
 Each default stands if nobody decides.

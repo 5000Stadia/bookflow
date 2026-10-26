@@ -23,6 +23,7 @@ class ReceiptPostInput(_Input):
     shipping: str | SalesMoneyInput | None = Field(default=None, description='Shipping charged by this receipt vendor, allocated only over received quantities. Product costs exclude shipping. Omit to retain on edits; enter 0 to clear.')
     items: list[ReceiptItemInput] = Field(min_length=1, max_length=100)
     site: _Selector | None = Field(default=None, description="Inventory site the stock arrives at where a line names none; omitted, the purchase-order line's site, else the default site.")
+    count_position: Literal['before', 'after'] | None = Field(None, description="Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after.")
 
     @model_validator(mode='after')
     def selection(self):

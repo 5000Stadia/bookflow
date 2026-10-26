@@ -6,6 +6,7 @@ import json
 import zlib
 import sqlalchemy as sa
 
+from bookflow.core import unit_price
 from bookflow.company import schema as c, journals, document_effects as effects
 from bookflow.company import inventory, inventory_effects
 from bookflow.company import journal_custom_fields as custom, list_service
@@ -211,6 +212,8 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
     if summary_only:
         return SalesRevisionSummaryOutput(**values)
     values['billing_sources'] = sale_source_output(s, revision['id'])
+    from bookflow.company.sales_orders import invoice_line_orders
+    orders = invoice_line_orders(s, revision['transaction_id'], values['billing_sources'])
     tax_mapping = [r for r in pending.get('sales_tax_attribution_lines', []) if r['revision_id'] == revision['id']]
     if not tax_mapping:
         tax_mapping = effects.rows(s, c.sales_tax_attribution_lines, c.sales_tax_attribution_lines.c.revision_id == revision['id'])
@@ -225,9 +228,9 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
                 tax=Money(component['tax_minor_units'], currency).to_dict(),
                 taxable=Money(component['taxable_minor_units'], currency).to_dict()))
         from bookflow.company.billing_allocations import quantity_output
-        rendered.append(dict(line, tax_ordinal=tax_ordinals.get(line['id']), item_snapshot=json.loads(line['item_snapshot']), **quantity_output(line),
+        rendered.append(dict(line, tax_ordinal=tax_ordinals.get(line['id']), order=orders.get(line['id']), item_snapshot=json.loads(line['item_snapshot']), **quantity_output(line),
             **shown_amount(line, currency, restored.get(line['position'], 0)),
-            unit_price=Money(line['unit_price_minor_units'], currency).to_dict() if line['unit_price_minor_units'] is not None else None,
+            unit_price=unit_price.to_dict(unit_price.row_units(line, 'unit_price'), currency) if line['unit_price_minor_units'] is not None else None,
             pricing_basis=line.get('pricing_basis', 'unit'), net=Money(line['net_minor_units'], currency).to_dict(),
             tax=Money(line['tax_minor_units'], currency).to_dict(), gross=Money(line['gross_minor_units'], currency).to_dict(), tax_components=taxes))
     snapshot = json.loads(revision['custom_fields_snapshot'])
@@ -274,7 +277,8 @@ def show(s, inp, document_type):
     if document_type in SETTLEABLE_RECEIVABLE_TYPES:
         from bookflow.company.payment_queries import invoice_current
         settlement = invoice_current(s, header['id'])
-    return SalesOutput(**_visible_summary(s, header, revision, profile_row(s, revision), getattr(inp, 'include_deleted', False)), revision=revision_output(s, revision), settlement_current=settlement)
+    return SalesOutput(**_visible_summary(s, header, revision, profile_row(s, revision), getattr(inp, 'include_deleted', False)), revision=revision_output(s, revision), settlement_current=settlement,
+                       count_position=inventory_effects.document_position(s, header['id']))
 
 
 def _settlement_condition(t, r, settlement):
@@ -386,8 +390,11 @@ def _custom_semantic(snapshot):
 
 def _line_semantic(line):
     profile = line['profile']
-    return {key: line[key] for key in ('line_id', 'item_id', 'description', 'quantity_microunits', 'unit_id',
+    semantic = {key: line[key] for key in ('line_id', 'item_id', 'description', 'quantity_microunits', 'unit_id',
         'unit_factor_nanounits', 'base_quantity_microunits', *MONEY_COLUMNS)} | {'profile': profile.model_dump()}
+    if line.get('unit_price_fraction') is not None:  # R150: a whole-minor line keeps its fingerprint
+        semantic['unit_price_fraction'] = line['unit_price_fraction']
+    return semantic
 
 
 def saved_sites(s, revision):
@@ -787,6 +794,8 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
         changed_fields = _changes(_saved_semantic(s, old_revision), resolved['semantic']) if old_revision else []
         if old_revision and saved_sites(s, old_revision) != resolved_sites(resolved['lines']):
             changed_fields.append('lines.site')   # a line moved to another inventory site (R104)
+        if old_revision and inventory_effects.position_moves(s, old_header['id'], getattr(inp, 'count_position', None)):
+            changed_fields.append('count_position')   # moved against its date's counts (R104 increment 2)
         if old_revision and not changed_fields and not resolved['custom_plan'].changed:
             return Plan(SalesWriteOutput(**summary(old_header, old_revision, profile_row(s, old_revision)),
                 revision=revision_output(s, old_revision), facts_fingerprint=fingerprint, changed=False, warnings=warnings),
@@ -830,7 +839,8 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
                     document_line_id=envelope['id'], line_id=identity, tax_ordinal=line['tax_ordinal'], **row_provenance))
             pending['sales_line_profiles'].append(dict(document_line_id=envelope['id'], transaction_id=header['id'],
                 revision_id=revision['id'], **row_provenance, **{k: line[k] for k in ('item_id', 'quantity_microunits', 'unit_id',
-                    'unit_factor_nanounits', 'base_quantity_microunits', *MONEY_COLUMNS)}, item_snapshot=json_text(facts.model_dump()), pricing_basis=facts.pricing_basis))
+                    'unit_factor_nanounits', 'base_quantity_microunits', *MONEY_COLUMNS)}, unit_price_fraction=line.get('unit_price_fraction'),
+                item_snapshot=json_text(facts.model_dump()), pricing_basis=facts.pricing_basis))
             for tax_position, component in enumerate(line['taxes'], 1):
                 rule = component['rule']
                 snapshot = SalesTaxComponent(position=tax_position, tax_item=rule.model_dump(include={'id', 'label', 'version'}),
@@ -851,7 +861,8 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
     stock = inventory_effects.plan(
         s, entries=[] if operation == 'void' else _stock_entries(pending, resolved['lines'] if resolved else None),
         reversing=inventory_effects.own_movements(s, old_header['id']) if old_header else (),
-        date=revision['date'], currency=revision['currency'])
+        date=revision['date'], currency=revision['currency'],
+        count_position=getattr(inp, 'count_position', None))
     inventory_effects.open_dates(s, stock)
     current_batch = None
     if old_header:
@@ -892,6 +903,8 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
     if 'billing_allocations' in plan.data and operation != 'void':
         from bookflow.company.billing_queries import sale_source_output
         plan.preview.revision.billing_sources = sale_source_output(s, revision['id'], plan.data['billing_allocations'])
+        from bookflow.company.sales_orders import attach_invoice_orders
+        attach_invoice_orders(s, plan.preview.revision)
     from bookflow.company.sales_validation import validate
     validate(plan, s, ctx)
     return plan

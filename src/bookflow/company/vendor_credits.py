@@ -44,6 +44,7 @@ import json
 
 import sqlalchemy as sa
 
+from bookflow.core import unit_price
 from bookflow.company import ap_settlement, bill_payments, bills, journals, schema as c
 from bookflow.company import document_effects as effects
 from bookflow.company import inventory_effects
@@ -138,7 +139,8 @@ def merged_line(envelope, profile, family='expense'):
         merged.update(item_id=profile['item_id'], billable=bool(profile['billable']),
                       quantity_microunits=profile['quantity_microunits'],
                       quantity=format_quantity_micro_units(profile['quantity_microunits']),
-                      unit_cost_minor_units=profile['unit_cost_minor_units'])
+                      unit_cost_minor_units=profile['unit_cost_minor_units'],
+                      unit_cost_fraction=profile.get('unit_cost_fraction'))
     return merged
 
 
@@ -494,7 +496,7 @@ def revision_output(s, header, revision, edges, pending=None, *, summary_only=Fa
         items=[VendorCreditItemOutput(
             **dict(line, amount=Money(line['amount_minor_units'], currency).to_dict(),
                    unit_cost=None if line['unit_cost_minor_units'] is None
-                   else Money(line['unit_cost_minor_units'], currency).to_dict(),
+                   else unit_price.to_dict(unit_price.row_units(line, 'unit_cost'), currency),
                    line_snapshot=json.loads(line['line_snapshot'])))
             for line in by_family(lines, 'item')])
 
@@ -534,6 +536,7 @@ def show(s, inp):
                   settlement_output(header, current, source,
                                     0 if header['status'] == 'voided' else applied)),
         revision=revision_output(s, header, requested, edges),
+        count_position=inventory_effects.document_position(s, header['id']),
         applications=_applications(s, edges, current['currency'],
                                                        bill_payments._bill_numbers(
                                                            s, sorted({row['obligation_transaction_id']
@@ -919,7 +922,8 @@ def _compose(s, ctx, inp, resolved, previous=None):
         if line['family'] == 'item':
             pending['vendor_credit_item_lines'].append(dict(
                 shared, item_id=facts.item.id, quantity_microunits=facts.quantity_microunits,
-                unit_cost_minor_units=facts.unit_cost_minor_units, billable=facts.billable))
+                unit_cost_minor_units=facts.unit_cost_minor_units, unit_cost_fraction=facts.unit_cost_fraction,
+                billable=facts.billable))
         else:
             pending['vendor_credit_expense_lines'].append(shared)
     # What this write does to stock, decided in full before any of it is built: the previous
@@ -930,7 +934,8 @@ def _compose(s, ctx, inp, resolved, previous=None):
     stock = inventory_effects.plan(
         s, entries=_stock_entries(pending, profile, resolved['lines']),
         reversing=inventory_effects.own_movements(s, old_header['id']) if previous else (),
-        date=revision['date'], currency=currency, field='items')
+        date=revision['date'], currency=currency, field='items',
+        count_position=getattr(inp, 'count_position', None))
     inventory_effects.open_dates(s, stock)
     old_batch = source_key = None
     if previous:
@@ -1031,7 +1036,8 @@ def prepare_update(s, ctx, inp):
     if not (inp.model_fields_set - {'credit', 'expected_version'}):
         return _unchanged_plan(s, inp, previous)
     resolved = commercial(s, inp, previous)
-    if resolved_semantic(resolved) == saved_semantic(s, previous['revision']):
+    if resolved_semantic(resolved) == saved_semantic(s, previous['revision']) and not inventory_effects.position_moves(
+            s, previous['header']['id'], getattr(inp, 'count_position', None)):
         return _unchanged_plan(s, inp, previous)
     # A correction always releases and retakes capacity that bills are standing on, so it
     # always says why, the way every other write that moves somebody else's residue does.

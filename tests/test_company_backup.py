@@ -177,11 +177,39 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0077 = importlib.import_module("bookflow.storage.company_migrations.versions.0077_sales_orders")
     co0079 = importlib.import_module("bookflow.storage.company_migrations.versions.0079_assembly_builds")
     co0083 = importlib.import_module("bookflow.storage.company_migrations.versions.0083_mileage")
+    co0093 = importlib.import_module("bookflow.storage.company_migrations.versions.0093_inventory_counts")
+
+    co0091 = importlib.import_module("bookflow.storage.company_migrations.versions.0091_subcent_unit_prices")
 
     def older(conn):
+        # Newest first: co0085 (on co0093), then co0093, then co0094, then co0092 and co0091.
+        for table in ("todos", "overdue_notices", "scheduled_revision_authority", "scheduled_group_authority", "scheduled_holds"):
+            conn.execute(f"DROP TABLE {table}")  # co0085's five tables
+        for column in ("scheduler_catch_up_days", "overdue_notice_days", "overdue_notice_frequency",
+                       "overdue_notice_minimum", "overdue_notice_template"):
+            conn.execute(f"ALTER TABLE company_info DROP COLUMN {column}")  # co0085's five preferences
+        # co0093's: the four count tables, and its own text on the rebuilt movement and document tables run
+        # backwards (both are empty here); the placements table goes with co0089's below.
+        for table in ("inventory_count_postings", "inventory_count_entries", "inventory_count_lines", "inventory_counts"):
+            conn.execute(f"DROP TABLE {table}")
+        conn.execute("PRAGMA writable_schema=ON")
+        for table in ("inventory_movements", "inventory_documents"):
+            for old_text, new_text in co0093.REWIND[table]:
+                assert conn.execute("UPDATE sqlite_schema SET sql = replace(sql, ?, ?) WHERE name = ?", (new_text, old_text, table)).rowcount == 1
+        conn.execute("PRAGMA writable_schema=OFF")
+        conn.execute("DROP TRIGGER inventory_movements_true_up_link")   # co0093 widened co0059's guard
+        conn.execute(co0093.TRUE_UP_GUARD[0])
+        for index in ("ix_items_barcode", "ix_inventory_bins_barcode"):
+            conn.execute(f"DROP INDEX {index}")  # co0094's two indexes
+        conn.execute("DELETE FROM sequences WHERE name = 'barcode'")  # and its code counter
+        for table, column in co0091.FRACTIONS:
+            conn.execute(f"ALTER TABLE {table} DROP COLUMN {column}")  # co0091's sub-cent fractions
+        for table in ("check_print_outcomes", "check_spoiled_numbers", "check_print_run_items", "check_print_runs",
+                      "check_print_marks", "check_print_settings"):
+            conn.execute(f"DROP TABLE {table}")  # co0092's six tables, with their indexes and guards
         for table in ("accountant_review_marks", "accountant_adjustments", "accountant_imports", "accountant_copies",
                       "accountant_designations"):
-            conn.execute(f"DROP TABLE {table}")  # co0088's (the newest, so first), with its index
+            conn.execute(f"DROP TABLE {table}")  # co0088's (next newest), with its index
         # co0089's: the guard on inventory_movements, the nine site tables, and three site_id columns.
         conn.execute("DROP TRIGGER inventory_movements_placed")
         for table in ("inventory_placements", "inventory_transfer_lines", "inventory_transfer_revisions",
@@ -270,7 +298,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))
     restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older",
                                               "organization": "Older Books Organization"})
-    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0088"
+    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0085"
     folder = _folder(client, restored["company_id"])
     # The migration took its verified backup of the restored database first, as every migration does.
     assert list((folder / "backups").glob("*-from-co0062.db"))

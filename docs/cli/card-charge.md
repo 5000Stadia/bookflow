@@ -325,6 +325,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].document.items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `items[].document.items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `items[].document.items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `items[].document.items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `items[].document.items[].profile.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `items[].document.items[].profile.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `items[].document.items[].profile.class_id` | object \| null | no | yes | null | — |
 | `items[].document.items[].profile.class_id.id` | string | yes | no | — | — |
 | `items[].document.items[].profile.class_id.label` | string | yes | no | — | — |
@@ -336,6 +339,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].document.items[].profile.billable` | boolean | no | no | false | — |
 | `items[].document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `items[].document.check_number` | string \| null | no | yes | null | — |
+| `items[].document.print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -687,6 +691,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `document.items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `document.items[].profile.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `document.items[].profile.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `document.items[].profile.class_id` | object \| null | no | yes | null | — |
 | `document.items[].profile.class_id.id` | string | yes | no | — | — |
 | `document.items[].profile.class_id.label` | string | yes | no | — | — |
@@ -698,6 +705,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.billable` | boolean | no | no | false | — |
 | `document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `document.check_number` | string \| null | no | yes | null | — |
+| `document.print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 
 Example JSON output:
 
@@ -1008,6 +1016,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].document.items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `items[].document.items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `items[].document.items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `items[].document.items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `items[].document.items[].profile.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `items[].document.items[].profile.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `items[].document.items[].profile.class_id` | object \| null | no | yes | null | — |
 | `items[].document.items[].profile.class_id.id` | string | yes | no | — | — |
 | `items[].document.items[].profile.class_id.label` | string | yes | no | — | — |
@@ -1019,6 +1030,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].document.items[].profile.billable` | boolean | no | no | false | — |
 | `items[].document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `items[].document.check_number` | string \| null | no | yes | null | — |
+| `items[].document.print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -1322,6 +1334,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `document.items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `document.items[].profile.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `document.items[].profile.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `document.items[].profile.class_id` | object \| null | no | yes | null | — |
 | `document.items[].profile.class_id.id` | string | yes | no | — | — |
 | `document.items[].profile.class_id.label` | string | yes | no | — | — |
@@ -1333,6 +1348,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.billable` | boolean | no | no | false | — |
 | `document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `document.check_number` | string \| null | no | yes | null | — |
+| `document.print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 
 Example JSON output:
 
@@ -1769,6 +1785,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `document.items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `document.items[].profile.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `document.items[].profile.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `document.items[].profile.class_id` | object \| null | no | yes | null | — |
 | `document.items[].profile.class_id.id` | string | yes | no | — | — |
 | `document.items[].profile.class_id.label` | string | yes | no | — | — |
@@ -1780,6 +1799,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.billable` | boolean | no | no | false | — |
 | `document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `document.check_number` | string \| null | no | yes | null | — |
+| `document.print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 
 Example JSON output:
 
@@ -2203,6 +2223,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `document.items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `document.items[].profile.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `document.items[].profile.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `document.items[].profile.class_id` | object \| null | no | yes | null | — |
 | `document.items[].profile.class_id.id` | string | yes | no | — | — |
 | `document.items[].profile.class_id.label` | string | yes | no | — | — |
@@ -2214,6 +2237,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.billable` | boolean | no | no | false | — |
 | `document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `document.check_number` | string \| null | no | yes | null | — |
+| `document.print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 
 Example JSON output:
 

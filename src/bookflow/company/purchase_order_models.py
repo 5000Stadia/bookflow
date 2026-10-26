@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import Annotated, Literal, Self
 
 from pydantic import Field, model_serializer, model_validator
+from bookflow.company.sales_models import SalesPriceInput
 
 from bookflow.commands.common import CommonOut
 from bookflow.company.journal_custom_fields import SnapshotField
@@ -59,7 +60,7 @@ class PurchaseOrderLineInput(_Input):
     account: _Selector | None = None
     description: Text | None = None
     quantity: Quantity | None = None
-    rate: str | MoneyInput | None = None
+    rate: str | SalesPriceInput | None = None
     amount: str | MoneyInput | None = None
     customer: _Selector | None = None
     billable: bool = False
@@ -203,6 +204,8 @@ class PurchaseOrderLineOutput(CreatedOutput):
     quantity_microunits: int | None
     rate: MoneyOutput | None
     rate_minor_units: int | None
+    # R150: thousandths of a minor unit beyond rate_minor_units; absent when whole.
+    rate_fraction: int | None = Field(default=None, exclude_if=lambda v: v is None)
     amount: MoneyOutput
     amount_minor_units: int
     currency: str

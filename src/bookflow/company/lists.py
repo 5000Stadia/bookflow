@@ -129,6 +129,8 @@ class ListDefinition:
     collection_actions: tuple[str, ...]
     record_actions: tuple[str, ...]
     runtime_field_provider: str | None = None
+    #: A scannable code column a selector falls back to after id and name (items: ``barcode``).
+    code_field: str | None = None
 
     @property
     def query_command(self) -> str:
@@ -267,6 +269,7 @@ def _define(
     dependents: tuple[str, ...] = (),
     aggregates: tuple[str, ...] = (),
     custom_fields: bool = False,
+    code: str | None = None,
 ) -> ListDefinition:
     group, order = _UI_LOCATION[noun]
     commands = tuple(f"{noun} {verb}" for verb in ("create", "show", "list", "update", "activate", "deactivate"))
@@ -298,6 +301,7 @@ def _define(
         collection_actions=(commands[0], commands[2]),
         record_actions=(commands[1], commands[3], commands[4], commands[5]),
         runtime_field_provider="custom-fields" if custom_fields else None,
+        code_field=code,
     )
 
 
@@ -367,6 +371,7 @@ _add(_define(
     additional_columns=("category", "tax_code", "all-account-references", "reorder_points", "unit_set", "manufacturer_part_number", "barcode", "default_class", "average_cost", "inventory_value", "inventory_values_available", "$custom", "$common", "$stored"),
     references=_refs(("parent_id", "item", "hard"), ("category_id", "item-category", "soft"), ("sales_tax_code_id", "sales-tax-code", "soft"), ("preferred_vendor_id", "vendor", "hard"), ("payment_method_id", "payment-method", "soft"), ("tax_agency_vendor_id", "vendor", "hard"), ("vendor_id", "vendor", "soft"), ("unit_of_measure_set_id", "unit-of-measure", "hard"), ("default_class_id", "class", "soft"), ("account_ids", "account", "hard", True), ("member_item_ids", "item", "hard", True), ("members.component_item_id", "item", "hard"), ("members.unit_id", "unit-of-measure", "hard", False, True), ("vendor_profiles.vendor_id", "vendor", "soft")),
     dependents=("item", "price-level"), aggregates=("members", "vendor_profiles", "custom_fields"), custom_fields=True,
+    code="barcode",
 ))
 
 

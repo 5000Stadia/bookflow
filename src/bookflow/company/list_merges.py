@@ -238,16 +238,17 @@ def _item_references(db, merged: str, survivor: str) -> list[Reference]:
             refs.append(Reference("item_members", row_id, "component_item_id", "end", "item", owner, label,
                                   "summed into the survivor's own row"))
     # Price-level rows naming M.
-    for row_id, level, price, cur, pct, basis in db.raw.execute(
-            "SELECT id, price_level_id, price_minor_units, price_currency, percent_millionths, adjustment_basis "
+    for row_id, level, price, cur, pct, basis, frac in db.raw.execute(
+            "SELECT id, price_level_id, price_minor_units, price_currency, percent_millionths, adjustment_basis, "
+            "price_fraction "
             "FROM price_level_items WHERE item_id=? AND active=1 ORDER BY price_level_id, position, id", (merged,)):
         label = f"price level {_owner_name(db, 'price_level', level)}: per-item price"
-        own = db.raw.execute("SELECT price_minor_units, price_currency, percent_millionths, adjustment_basis "
+        own = db.raw.execute("SELECT price_minor_units, price_currency, percent_millionths, adjustment_basis, price_fraction "
                              "FROM price_level_items WHERE price_level_id=? AND item_id=? AND active=1",
                              (level, survivor)).fetchone()
         if own is None:
             refs.append(Reference("price_level_items", row_id, "item_id", "repoint", "price_level", level, label))
-        elif tuple(own) != (price, cur, pct, basis):
+        elif tuple(own) != (price, cur, pct, basis, frac):
             raise _refuse(f"price level {_owner_name(db, 'price_level', level)} gives the two items different prices; "
                           "make them agree or remove one first", price_level_id=level)
         else:
@@ -590,6 +591,13 @@ def plan_unmerge(db, kind: str, merged_selector: str) -> UnmergePlan:
         if last is None or last["merged_id"] != merged["id"]:
             raise _refuse(f"this {kind} is not merged into another one", merged_id=merged["id"])
         return UnmergePlan(kind, merged, None, last)
+    if kind == "item" and (merge["deactivated_merged"] or merged.get("active")) and merged.get("barcode"):
+        from bookflow.company import items  # R104: unmerging may not bring back a code another item now holds
+        try:
+            items.assert_barcode_available(db, merged["barcode"], exclude_id=merged["id"], reactivating=merged["full_name"])
+        except BookflowError as exc:  # unmerge refuses with its own declared code, naming the holder
+            raise _refuse(exc.details["fields"][0]["problem"], merged_id=merged["id"], item_id=exc.details["item_id"],
+                          item=exc.details["item"]) from None
     restores, kept = [], []
     for ref in db.conn.execute(sa.select(schema.list_merge_references).where(
             schema.list_merge_references.c.merge_id == merge["id"]).order_by(

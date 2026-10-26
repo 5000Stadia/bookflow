@@ -26,6 +26,7 @@ envelope, so an item line becomes a component with no schema change at all.
 """
 
 import sqlalchemy as sa
+from bookflow.company.unit_price_schema import fraction_column
 
 
 def define_tables(metadata, column, table):
@@ -116,6 +117,7 @@ def define_tables(metadata, column, table):
         identifier('account_id', "Account debited by this line, captured from the item's own purchase account.", 'accounts.id'),
         C('quantity_microunits', sa.BigInteger, 'Positive quantity bought, in millionths of one unit.', nullable=False),
         C('unit_cost_minor_units', sa.BigInteger, 'Home-currency cost of one unit; null when the amount was entered outright.', nullable=True),
+        fraction_column('unit_cost', 'Unit cost'),
         integer('amount_minor_units', 'Nonnegative home-currency amount debited to the account.'),
         identifier('customer_id', 'Customer or job this cost is attributed to; null when unattributed.', 'customers.id', nullable=True),
         C('billable', sa.Boolean, 'Whether this cost is marked for rebilling to the named customer or job.', nullable=False),

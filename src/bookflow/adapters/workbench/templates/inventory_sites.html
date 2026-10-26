@@ -23,6 +23,7 @@
 <label>From site <select name="from_site" required>{% for s in sites if s.active %}<option value="{{ s.name }}" {% if values.get('from_site', default_from) == s.name %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></label>
 <label>To site <select name="to_site" required>{% for s in sites if s.active %}<option value="{{ s.name }}" {% if values.get('to_site', default_to) == s.name %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></label>
 <label>Date <input type="date" name="date" value="{{ values.get('date', today) }}"></label>
+{% from "scan_field.html" import scan_field %}{{ scan_field(company_id, 'rows') }}<script src="{{ static_urls['scan.js'] }}" defer></script>
 <div class="table-wrap"><table class="list-table" data-transfer-lines><thead><tr><th>Item</th><th>Quantity</th></tr></thead><tbody>
 {% for n in range(lines) %}<tr><td data-label="Item"><input name="item_{{ n }}" list="site-items" value="{{ values.get('item_' ~ n, '') }}" aria-label="Item {{ n + 1 }}"></td><td data-label="Quantity"><input name="quantity_{{ n }}" inputmode="decimal" size="8" value="{{ values.get('quantity_' ~ n, '') }}" aria-label="Quantity {{ n + 1 }}"></td></tr>{% endfor %}
 </tbody></table></div>

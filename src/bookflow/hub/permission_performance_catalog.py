@@ -12,10 +12,10 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_accountant_review_catalog as previous, permission_catalog as c
+from . import permission_scheduling_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = '04812c19e9fc16aec760bffc90438190273de629'
+SOURCE_COMMIT = '529a2fdb34a615b5a22bf49bc8d5b742e480ca38'
 ADDED_COMMANDS = (
     c.CommandDescriptor('perf report', 'hub', 'hub', 'authenticated', (), True, None, False, False,
                         'any signed-in person or agent; installation administrators see every company, '

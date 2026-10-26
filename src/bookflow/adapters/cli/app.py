@@ -410,6 +410,9 @@ def _build_command(cmd: registry.Command):
             if not as_json and is_text_document(out):
                 # A text document (a report's CSV) is printed as itself, byte for byte.
                 typer.echo(out["content"], nl=False)
+            elif not as_json and is_pdf_document(out):
+                # A PDF (a check print run) is saved beside the caller under its own name.
+                typer.echo(save_pdf_document(out))
             elif curated is not None and not as_json:
                 typer.echo(render_output(out, False, columns=chosen_columns(cmd, curated, table_columns, out)))
             else:
@@ -420,6 +423,26 @@ def _build_command(cmd: registry.Command):
     run.__doc__ = cmd.description
     run.__epilog__ = _help_epilog(cmd)  # type: ignore[attr-defined]
     return run
+
+
+def is_pdf_document(out: Any) -> bool:
+    """An output that is a PDF file (base64 content plus application/pdf), saved rather than printed."""
+    return (isinstance(out, dict) and isinstance(out.get("content_base64"), str)
+            and out.get("media_type") == "application/pdf" and isinstance(out.get("filename"), str))
+
+
+def save_pdf_document(out: dict[str, Any]) -> str:
+    """Write the PDF into the current folder under its filename, never over an existing file."""
+    import base64
+    from pathlib import Path
+    name = Path(out["filename"]).name
+    target = Path.cwd() / name
+    stem, suffix, n = target.stem, target.suffix, 1
+    while target.exists():
+        n += 1
+        target = Path.cwd() / f"{stem}-{n}{suffix}"
+    target.write_bytes(base64.b64decode(out["content_base64"]))
+    return f"saved {target} ({out.get('pages', '?')} page(s))"
 
 
 def is_text_document(out: Any) -> bool:

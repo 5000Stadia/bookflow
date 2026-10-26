@@ -325,6 +325,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].document.items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `items[].document.items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `items[].document.items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `items[].document.items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `items[].document.items[].profile.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `items[].document.items[].profile.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `items[].document.items[].profile.class_id` | object \| null | no | yes | null | — |
 | `items[].document.items[].profile.class_id.id` | string | yes | no | — | — |
 | `items[].document.items[].profile.class_id.label` | string | yes | no | — | — |
@@ -336,6 +339,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].document.items[].profile.billable` | boolean | no | no | false | — |
 | `items[].document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `items[].document.check_number` | string \| null | no | yes | null | — |
+| `items[].document.print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -448,6 +452,7 @@ The same example as complete `bookflow_run` arguments:
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
 | `number` | `--number` | string \| null | no | yes | null | The number written on the face of the cheque, which belongs to this bank account and not to the shared document series. Leave it out to take the next number from the account's own next check number, skipping any it has already issued. A number below that pointer is accepted and does not move it backwards; a number already on another cheque drawn on the same account is refused. Leading zeros are kept as typed, and 01001 and 1001 are one number. A number that is not a plain run of digits is a real cheque number with no place in the sequence. |
+| `to_be_printed` | `--to-be-printed` | boolean | no | no | false | Print Later: save the check with no number yet and put it in its bank account's print queue; `check print` gives it a number when it is printed. Leave `number` out. |
 
 ### Command and context options
 
@@ -688,6 +693,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `document.items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `document.items[].profile.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `document.items[].profile.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `document.items[].profile.class_id` | object \| null | no | yes | null | — |
 | `document.items[].profile.class_id.id` | string | yes | no | — | — |
 | `document.items[].profile.class_id.label` | string | yes | no | — | — |
@@ -699,6 +707,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.billable` | boolean | no | no | false | — |
 | `document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `document.check_number` | string \| null | no | yes | null | — |
+| `document.print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 
 Example JSON output:
 
@@ -846,6 +855,1155 @@ Example JSON output:
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
+## `check print`
+
+Print the queued cheques of one bank account. `first_number` is the number on the first check loaded in the printer (default: the account's next check number); each cheque takes the next number in order, and a number already used on the account is refused rather than skipped. Choose a `style` (voucher, standard, wallet) and, for standard or wallet sheets, `checks_on_first_page` for a partial first sheet. The run and its numbers are recorded and the numbers held until someone answers `check print-confirm`; get the PDF with `check print-pdf`. A cheque dated in a closed period is refused. An agent may prepare a run; confirming it is a person's act.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | ledger.post |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/check.print` |
+| External binary body | none |
+
+### CLI
+
+`bookflow check print --account Checking --first-number 1001 --style voucher --reason "Print this week's checks" --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "check print", "input": {"account": "Checking", "first_number": "1001", "style": "voucher"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `account` | `--account` | string | yes | no | — | Bank account ID or canonical full name whose chequebook the cheques are drawn on.; minimum length 1; maximum length 1000 |
+| `first_number` | `--first-number` | string \| null | no | yes | null | The number on the first check loaded in the printer; the rest print in order after it. Omit to use the account's next check number. Every number in the run must be free on this account. |
+| `style` | `--style` | literal["voucher", "standard", "wallet"] \| null | no | yes | null | Check style; omit for the account's printer setup (voucher by default). |
+| `checks` | `--checks` | array[string] \| null | no | yes | null | Print only these queued cheques (transaction IDs), in queue order; omit for every cheque queued on the account. |
+| `checks_on_first_page` | `--checks-on-first-page` | integer | no | no | 3 | Standard and wallet checks: how many checks are left on a partial first sheet (1-3; 3 is a full sheet). The partial sheet goes in top edge first.; minimum 1; maximum 3 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/check.print`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `id` | string | yes | no | — | — |
+| `kind` | literal["batch", "reprint"] | yes | no | — | — |
+| `account_id` | string | yes | no | — | — |
+| `account_name` | string | yes | no | — | — |
+| `style` | literal["voucher", "standard", "wallet"] | yes | no | — | — |
+| `first_number` | string | yes | no | — | — |
+| `checks_on_first_page` | integer | yes | no | — | — |
+| `offset_x_hundredths` | integer | yes | no | — | — |
+| `offset_y_hundredths` | integer | yes | no | — | — |
+| `status` | literal["awaiting_confirmation", "confirmed", "cancelled"] | yes | no | — | — |
+| `created_at` | string | yes | no | — | — |
+| `created_by` | string | yes | no | — | — |
+| `items` | array[object] | yes | no | — | — |
+| `items[].item_id` | string | yes | no | — | — |
+| `items[].position` | integer | yes | no | — | — |
+| `items[].transaction_id` | string | yes | no | — | — |
+| `items[].document_type` | literal["check", "bill_payment"] | yes | no | — | — |
+| `items[].check_number` | string | yes | no | — | — |
+| `items[].date` | string | yes | no | — | — |
+| `items[].payee_name` | string \| null | yes | yes | — | — |
+| `items[].amount` | object | yes | no | — | — |
+| `items[].amount.amount` | string | yes | no | — | — |
+| `items[].amount.currency` | string | yes | no | — | — |
+| `items[].amount.minor_units` | integer | yes | no | — | — |
+| `items[].amount_in_words` | string | yes | no | — | — |
+| `items[].outcome` | literal["pending", "printed", "failed", "cancelled"] | yes | no | — | — |
+| `total` | object | yes | no | — | — |
+| `total.amount` | string | yes | no | — | — |
+| `total.currency` | string | yes | no | — | — |
+| `total.minor_units` | integer | yes | no | — | — |
+| `spoiled_numbers` | array[string] | no | no | [] | Numbers this run left on spoiled paper. |
+| `pdf` | string | yes | no | — | The command that returns this run as a PDF. |
+| `skipped` | array[object] | no | no | [] | Queued cheques a run over the whole queue left waiting, with why: dated on or before the closing date. |
+| `skipped[].transaction_id` | string | yes | no | — | — |
+| `skipped[].document_type` | literal["check", "bill_payment"] | yes | no | — | — |
+| `skipped[].reference` | string | yes | no | — | — |
+| `skipped[].date` | string | yes | no | — | — |
+| `skipped[].payee_name` | string \| null | yes | yes | — | — |
+| `skipped[].reason` | string | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "account_name": "value",
+  "checks_on_first_page": 1,
+  "created_at": "2026-01-01T00:00:00Z",
+  "created_by": "value",
+  "dry_run": false,
+  "first_number": "value",
+  "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "items": [],
+  "kind": "batch",
+  "offset_x_hundredths": 1,
+  "offset_y_hundredths": 1,
+  "pdf": "value",
+  "skipped": [],
+  "spoiled_numbers": [],
+  "status": "awaiting_confirmation",
+  "style": "voucher",
+  "total": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
+## `check print-alignment`
+
+Print an alignment sample: one check of made-up figures, marked as a sample, at the account's saved offsets or at offsets being tried, in any style and on a partial first sheet.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | ledger.read |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/check.print-alignment` |
+| External binary body | none |
+
+### CLI
+
+`bookflow check print-alignment --account Checking --offset-x-hundredths 5 --company "Demo Plumbing Co"`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "check print-alignment", "input": {"account": "Checking", "offset_x_hundredths": 5}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `account` | `--account` | string | yes | no | — | Bank account ID or canonical full name whose chequebook the cheques are drawn on.; minimum length 1; maximum length 1000 |
+| `style` | `--style` | literal["voucher", "standard", "wallet"] \| null | no | yes | null | — |
+| `offset_x_hundredths` | `--offset-x-hundredths` | integer \| null | no | yes | null | Try an offset before saving it; omit for the saved one. |
+| `offset_y_hundredths` | `--offset-y-hundredths` | integer \| null | no | yes | null | Try an offset before saving it; omit for the saved one. |
+| `checks_on_first_page` | `--checks-on-first-page` | integer | no | no | 3 | minimum 1; maximum 3 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/check.print-alignment`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `filename` | string | yes | no | — | — |
+| `media_type` | literal["application/pdf"] | yes | no | — | — |
+| `pages` | integer | yes | no | — | — |
+| `checks` | integer | yes | no | — | — |
+| `content_base64` | string | yes | no | — | The PDF, base64-encoded. The CLI saves it as `filename` in the current folder. |
+
+Example JSON output:
+
+```json
+{
+  "checks": 1,
+  "content_base64": "value",
+  "filename": "value",
+  "media_type": "application/pdf",
+  "pages": 1
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
+## `check print-cancel`
+
+Cancel a print run that never reached paper: its cheques go back to the queue and its numbers are released unspoiled. A person's act.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | ledger.post |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/check.print-cancel` |
+| External binary body | none |
+
+### CLI
+
+`bookflow check print-cancel 01ARZ3NDEKTSV4RRFFQ69G5FAV --reason "Wrong paper loaded" --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "check print-cancel", "input": {"run": "01ARZ3NDEKTSV4RRFFQ69G5FAV"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `run` | `RUN` | string | yes | no | — | Print run ID.; minimum length 1; maximum length 64 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/check.print-cancel`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `id` | string | yes | no | — | — |
+| `kind` | literal["batch", "reprint"] | yes | no | — | — |
+| `account_id` | string | yes | no | — | — |
+| `account_name` | string | yes | no | — | — |
+| `style` | literal["voucher", "standard", "wallet"] | yes | no | — | — |
+| `first_number` | string | yes | no | — | — |
+| `checks_on_first_page` | integer | yes | no | — | — |
+| `offset_x_hundredths` | integer | yes | no | — | — |
+| `offset_y_hundredths` | integer | yes | no | — | — |
+| `status` | literal["awaiting_confirmation", "confirmed", "cancelled"] | yes | no | — | — |
+| `created_at` | string | yes | no | — | — |
+| `created_by` | string | yes | no | — | — |
+| `items` | array[object] | yes | no | — | — |
+| `items[].item_id` | string | yes | no | — | — |
+| `items[].position` | integer | yes | no | — | — |
+| `items[].transaction_id` | string | yes | no | — | — |
+| `items[].document_type` | literal["check", "bill_payment"] | yes | no | — | — |
+| `items[].check_number` | string | yes | no | — | — |
+| `items[].date` | string | yes | no | — | — |
+| `items[].payee_name` | string \| null | yes | yes | — | — |
+| `items[].amount` | object | yes | no | — | — |
+| `items[].amount.amount` | string | yes | no | — | — |
+| `items[].amount.currency` | string | yes | no | — | — |
+| `items[].amount.minor_units` | integer | yes | no | — | — |
+| `items[].amount_in_words` | string | yes | no | — | — |
+| `items[].outcome` | literal["pending", "printed", "failed", "cancelled"] | yes | no | — | — |
+| `total` | object | yes | no | — | — |
+| `total.amount` | string | yes | no | — | — |
+| `total.currency` | string | yes | no | — | — |
+| `total.minor_units` | integer | yes | no | — | — |
+| `spoiled_numbers` | array[string] | no | no | [] | Numbers this run left on spoiled paper. |
+| `pdf` | string | yes | no | — | The command that returns this run as a PDF. |
+| `skipped` | array[object] | no | no | [] | Queued cheques a run over the whole queue left waiting, with why: dated on or before the closing date. |
+| `skipped[].transaction_id` | string | yes | no | — | — |
+| `skipped[].document_type` | literal["check", "bill_payment"] | yes | no | — | — |
+| `skipped[].reference` | string | yes | no | — | — |
+| `skipped[].date` | string | yes | no | — | — |
+| `skipped[].payee_name` | string \| null | yes | yes | — | — |
+| `skipped[].reason` | string | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "account_name": "value",
+  "checks_on_first_page": 1,
+  "created_at": "2026-01-01T00:00:00Z",
+  "created_by": "value",
+  "dry_run": false,
+  "first_number": "value",
+  "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "items": [],
+  "kind": "batch",
+  "offset_x_hundredths": 1,
+  "offset_y_hundredths": 1,
+  "pdf": "value",
+  "skipped": [],
+  "spoiled_numbers": [],
+  "status": "awaiting_confirmation",
+  "style": "voucher",
+  "total": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
+## `check print-confirm`
+
+Answer "Did checks print OK?" for a print run. With nothing else, every check printed and carries its number from now on. `failed_from` names the first check that did not print correctly -- it and every later one go back to the queue for a fresh number -- or `failed` lists the ones that did not; their numbers are recorded as spoiled, so `report missing-checks` explains them and they are never handed out again. A person's act: it says what happened to paper in the printer.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | ledger.post |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/check.print-confirm` |
+| External binary body | none |
+
+### CLI
+
+`bookflow check print-confirm 01ARZ3NDEKTSV4RRFFQ69G5FAV --failed-from 1003 --reason "Jammed at 1003" --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "check print-confirm", "input": {"run": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "failed_from": "1003"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `run` | `RUN` | string | yes | no | — | Print run ID, from `check print`.; minimum length 1; maximum length 64 |
+| `failed_from` | `--failed-from` | string \| null | no | yes | null | The number of the first check that did not print correctly; it and every later check in the run go back to the queue for a fresh number, and their numbers are recorded as spoiled. Omit when every check printed. |
+| `failed` | `--failed` | array[string] \| null | no | yes | null | The numbers of the checks that did not print correctly, when they are not one run to the end. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/check.print-confirm`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `id` | string | yes | no | — | — |
+| `kind` | literal["batch", "reprint"] | yes | no | — | — |
+| `account_id` | string | yes | no | — | — |
+| `account_name` | string | yes | no | — | — |
+| `style` | literal["voucher", "standard", "wallet"] | yes | no | — | — |
+| `first_number` | string | yes | no | — | — |
+| `checks_on_first_page` | integer | yes | no | — | — |
+| `offset_x_hundredths` | integer | yes | no | — | — |
+| `offset_y_hundredths` | integer | yes | no | — | — |
+| `status` | literal["awaiting_confirmation", "confirmed", "cancelled"] | yes | no | — | — |
+| `created_at` | string | yes | no | — | — |
+| `created_by` | string | yes | no | — | — |
+| `items` | array[object] | yes | no | — | — |
+| `items[].item_id` | string | yes | no | — | — |
+| `items[].position` | integer | yes | no | — | — |
+| `items[].transaction_id` | string | yes | no | — | — |
+| `items[].document_type` | literal["check", "bill_payment"] | yes | no | — | — |
+| `items[].check_number` | string | yes | no | — | — |
+| `items[].date` | string | yes | no | — | — |
+| `items[].payee_name` | string \| null | yes | yes | — | — |
+| `items[].amount` | object | yes | no | — | — |
+| `items[].amount.amount` | string | yes | no | — | — |
+| `items[].amount.currency` | string | yes | no | — | — |
+| `items[].amount.minor_units` | integer | yes | no | — | — |
+| `items[].amount_in_words` | string | yes | no | — | — |
+| `items[].outcome` | literal["pending", "printed", "failed", "cancelled"] | yes | no | — | — |
+| `total` | object | yes | no | — | — |
+| `total.amount` | string | yes | no | — | — |
+| `total.currency` | string | yes | no | — | — |
+| `total.minor_units` | integer | yes | no | — | — |
+| `spoiled_numbers` | array[string] | no | no | [] | Numbers this run left on spoiled paper. |
+| `pdf` | string | yes | no | — | The command that returns this run as a PDF. |
+| `skipped` | array[object] | no | no | [] | Queued cheques a run over the whole queue left waiting, with why: dated on or before the closing date. |
+| `skipped[].transaction_id` | string | yes | no | — | — |
+| `skipped[].document_type` | literal["check", "bill_payment"] | yes | no | — | — |
+| `skipped[].reference` | string | yes | no | — | — |
+| `skipped[].date` | string | yes | no | — | — |
+| `skipped[].payee_name` | string \| null | yes | yes | — | — |
+| `skipped[].reason` | string | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "account_name": "value",
+  "checks_on_first_page": 1,
+  "created_at": "2026-01-01T00:00:00Z",
+  "created_by": "value",
+  "dry_run": false,
+  "first_number": "value",
+  "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "items": [],
+  "kind": "batch",
+  "offset_x_hundredths": 1,
+  "offset_y_hundredths": 1,
+  "pdf": "value",
+  "skipped": [],
+  "spoiled_numbers": [],
+  "status": "awaiting_confirmation",
+  "style": "voucher",
+  "total": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
+## `check print-pdf`
+
+The PDF of a print run, laid out for preprinted check stock with the alignment the run used: payee, date, amount in figures and words, address window and memo, and for voucher checks two stubs listing the bills paid (with discounts) or the expense lines. Returned base64-encoded; the CLI saves it as `filename`.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | ledger.read |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/check.print-pdf` |
+| External binary body | none |
+
+### CLI
+
+`bookflow check print-pdf 01ARZ3NDEKTSV4RRFFQ69G5FAV --company "Demo Plumbing Co"`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "check print-pdf", "input": {"run": "01ARZ3NDEKTSV4RRFFQ69G5FAV"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `run` | `RUN` | string | yes | no | — | Print run ID.; minimum length 1; maximum length 64 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/check.print-pdf`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `filename` | string | yes | no | — | — |
+| `media_type` | literal["application/pdf"] | yes | no | — | — |
+| `pages` | integer | yes | no | — | — |
+| `checks` | integer | yes | no | — | — |
+| `content_base64` | string | yes | no | — | The PDF, base64-encoded. The CLI saves it as `filename` in the current folder. |
+
+Example JSON output:
+
+```json
+{
+  "checks": 1,
+  "content_base64": "value",
+  "filename": "value",
+  "media_type": "application/pdf",
+  "pages": 1
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
+## `check print-queue`
+
+List the cheques waiting to be printed, by bank account, as the anchor's Select Checks to Print does: checks saved with `to_be_printed` and bill payments by check paid `to_be_printed`, oldest first, with the first check number Print would propose, the printer setup, and any print run still waiting for "Did checks print OK?".
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | ledger.read |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/check.print-queue` |
+| External binary body | none |
+
+### CLI
+
+`bookflow check print-queue --account Checking --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "check print-queue", "input": {"account": "Checking"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `account` | `--account` | string \| null | no | yes | null | Bank account ID or canonical full name whose chequebook the cheques are drawn on. Omit for every bank account with cheques waiting. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/check.print-queue`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `accounts` | array[object] | yes | no | — | — |
+| `accounts[].account_id` | string | yes | no | — | — |
+| `accounts[].account_name` | string | yes | no | — | — |
+| `accounts[].next_check_number` | string \| null | yes | yes | — | The number Print Checks proposes as the first check number. |
+| `accounts[].settings` | object | yes | no | — | — |
+| `accounts[].settings.account_id` | string | yes | no | — | — |
+| `accounts[].settings.style` | literal["voucher", "standard", "wallet"] | yes | no | — | — |
+| `accounts[].settings.offset_x_hundredths` | integer | yes | no | — | — |
+| `accounts[].settings.offset_y_hundredths` | integer | yes | no | — | — |
+| `accounts[].settings.version` | integer \| null | yes | yes | — | Settings version; null when the account still has the defaults. |
+| `accounts[].checks` | array[object] | yes | no | — | — |
+| `accounts[].checks[].transaction_id` | string | yes | no | — | — |
+| `accounts[].checks[].document_type` | literal["check", "bill_payment"] | yes | no | — | check (Write Checks) or bill_payment (Pay Bills). |
+| `accounts[].checks[].reference` | string | yes | no | — | The document's own reference from its series; not a check number. |
+| `accounts[].checks[].account_id` | string | yes | no | — | — |
+| `accounts[].checks[].date` | string | yes | no | — | — |
+| `accounts[].checks[].payee_name` | string \| null | yes | yes | — | — |
+| `accounts[].checks[].amount` | object | yes | no | — | — |
+| `accounts[].checks[].amount.amount` | string | yes | no | — | — |
+| `accounts[].checks[].amount.currency` | string | yes | no | — | — |
+| `accounts[].checks[].amount.minor_units` | integer | yes | no | — | — |
+| `accounts[].checks[].memo` | string \| null | yes | yes | — | — |
+| `accounts[].total` | object | yes | no | — | — |
+| `accounts[].total.amount` | string | yes | no | — | — |
+| `accounts[].total.currency` | string | yes | no | — | — |
+| `accounts[].total.minor_units` | integer | yes | no | — | — |
+| `count` | integer | yes | no | — | Cheques waiting to be printed across the accounts shown. |
+| `awaiting_confirmation` | array[string] | no | no | [] | Print runs on these accounts still waiting for "Did checks print OK?" (check print-confirm). |
+
+Example JSON output:
+
+```json
+{
+  "accounts": [],
+  "awaiting_confirmation": [],
+  "count": 0
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
+## `check print-run`
+
+Show a print run: its account, style, first number, alignment, each cheque with the number it took and what became of it (pending, printed, failed, cancelled), and the numbers it left spoiled.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | ledger.read |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/check.print-run` |
+| External binary body | none |
+
+### CLI
+
+`bookflow check print-run 01ARZ3NDEKTSV4RRFFQ69G5FAV --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "check print-run", "input": {"run": "01ARZ3NDEKTSV4RRFFQ69G5FAV"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `run` | `RUN` | string | yes | no | — | Print run ID.; minimum length 1; maximum length 64 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/check.print-run`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `id` | string | yes | no | — | — |
+| `kind` | literal["batch", "reprint"] | yes | no | — | — |
+| `account_id` | string | yes | no | — | — |
+| `account_name` | string | yes | no | — | — |
+| `style` | literal["voucher", "standard", "wallet"] | yes | no | — | — |
+| `first_number` | string | yes | no | — | — |
+| `checks_on_first_page` | integer | yes | no | — | — |
+| `offset_x_hundredths` | integer | yes | no | — | — |
+| `offset_y_hundredths` | integer | yes | no | — | — |
+| `status` | literal["awaiting_confirmation", "confirmed", "cancelled"] | yes | no | — | — |
+| `created_at` | string | yes | no | — | — |
+| `created_by` | string | yes | no | — | — |
+| `items` | array[object] | yes | no | — | — |
+| `items[].item_id` | string | yes | no | — | — |
+| `items[].position` | integer | yes | no | — | — |
+| `items[].transaction_id` | string | yes | no | — | — |
+| `items[].document_type` | literal["check", "bill_payment"] | yes | no | — | — |
+| `items[].check_number` | string | yes | no | — | — |
+| `items[].date` | string | yes | no | — | — |
+| `items[].payee_name` | string \| null | yes | yes | — | — |
+| `items[].amount` | object | yes | no | — | — |
+| `items[].amount.amount` | string | yes | no | — | — |
+| `items[].amount.currency` | string | yes | no | — | — |
+| `items[].amount.minor_units` | integer | yes | no | — | — |
+| `items[].amount_in_words` | string | yes | no | — | — |
+| `items[].outcome` | literal["pending", "printed", "failed", "cancelled"] | yes | no | — | — |
+| `total` | object | yes | no | — | — |
+| `total.amount` | string | yes | no | — | — |
+| `total.currency` | string | yes | no | — | — |
+| `total.minor_units` | integer | yes | no | — | — |
+| `spoiled_numbers` | array[string] | no | no | [] | Numbers this run left on spoiled paper. |
+| `pdf` | string | yes | no | — | The command that returns this run as a PDF. |
+| `skipped` | array[object] | no | no | [] | Queued cheques a run over the whole queue left waiting, with why: dated on or before the closing date. |
+| `skipped[].transaction_id` | string | yes | no | — | — |
+| `skipped[].document_type` | literal["check", "bill_payment"] | yes | no | — | — |
+| `skipped[].reference` | string | yes | no | — | — |
+| `skipped[].date` | string | yes | no | — | — |
+| `skipped[].payee_name` | string \| null | yes | yes | — | — |
+| `skipped[].reason` | string | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "account_name": "value",
+  "checks_on_first_page": 1,
+  "created_at": "2026-01-01T00:00:00Z",
+  "created_by": "value",
+  "first_number": "value",
+  "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "items": [],
+  "kind": "batch",
+  "offset_x_hundredths": 1,
+  "offset_y_hundredths": 1,
+  "pdf": "value",
+  "skipped": [],
+  "spoiled_numbers": [],
+  "status": "awaiting_confirmation",
+  "style": "voucher",
+  "total": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
+## `check print-setup`
+
+Set a bank account's check printer setup: the default `style` and the fine alignment, in hundredths of an inch (horizontal: positive moves right; vertical: positive moves up). Try offsets first with `check print-alignment`.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | ledger.post |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/check.print-setup` |
+| External binary body | none |
+
+### CLI
+
+`bookflow check print-setup --account Checking --style standard --offset-x-hundredths 5 --offset-y-hundredths -3 --reason "Fine alignment" --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "check print-setup", "input": {"account": "Checking", "style": "standard", "offset_x_hundredths": 5, "offset_y_hundredths": -3}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `account` | `--account` | string | yes | no | — | Bank account ID or canonical full name whose chequebook the cheques are drawn on.; minimum length 1; maximum length 1000 |
+| `style` | `--style` | literal["voucher", "standard", "wallet"] \| null | no | yes | null | Default check style for this account. |
+| `offset_x_hundredths` | `--offset-x-hundredths` | integer \| null | no | yes | null | Fine alignment in hundredths of an inch, -200 to 200: horizontal moves the whole form right (negative left), vertical moves it up the page (negative down). |
+| `offset_y_hundredths` | `--offset-y-hundredths` | integer \| null | no | yes | null | Fine alignment in hundredths of an inch, -200 to 200: horizontal moves the whole form right (negative left), vertical moves it up the page (negative down). |
+| `expected_version` | `--expected-version` | integer \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/check.print-setup`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `account_id` | string | yes | no | — | — |
+| `style` | literal["voucher", "standard", "wallet"] | yes | no | — | — |
+| `offset_x_hundredths` | integer | yes | no | — | — |
+| `offset_y_hundredths` | integer | yes | no | — | — |
+| `version` | integer \| null | yes | yes | — | Settings version; null when the account still has the defaults. |
+| `changed` | boolean | no | no | true | — |
+
+Example JSON output:
+
+```json
+{
+  "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "changed": true,
+  "dry_run": false,
+  "offset_x_hundredths": 1,
+  "offset_y_hundredths": 1,
+  "style": "voucher",
+  "version": null,
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
 
 ## `check query`
 
@@ -1009,6 +2167,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].document.items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `items[].document.items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `items[].document.items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `items[].document.items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `items[].document.items[].profile.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `items[].document.items[].profile.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `items[].document.items[].profile.class_id` | object \| null | no | yes | null | — |
 | `items[].document.items[].profile.class_id.id` | string | yes | no | — | — |
 | `items[].document.items[].profile.class_id.label` | string | yes | no | — | — |
@@ -1020,6 +2181,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].document.items[].profile.billable` | boolean | no | no | false | — |
 | `items[].document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `items[].document.check_number` | string \| null | no | yes | null | — |
+| `items[].document.print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -1065,6 +2227,187 @@ Example JSON output:
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
+
+## `check reprint`
+
+Print one numbered check or bill payment cheque again. Without `new_number` it prints with the number it has and nothing about it changes. With `new_number` it prints on a new check: the old number is recorded as spoiled and the cheque carries the new one (refused for a cheque dated in a closed period). Get the PDF with `check print-pdf --run`. A person's act.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | ledger.post |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/check.reprint` |
+| External binary body | none |
+
+### CLI
+
+`bookflow check reprint 01ARZ3NDEKTSV4RRFFQ69G5FAV --new-number 1010 --reason "Coffee on check 1004" --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "check reprint", "input": {"check": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "new_number": "1010"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `check` | `CHECK` | string | yes | no | — | The printed cheque: its transaction ID.; minimum length 1; maximum length 1000 |
+| `new_number` | `--new-number` | string \| null | no | yes | null | Print it on a new check with this number; the number it carried is recorded as spoiled. Omit to reprint it with the number it has. |
+| `style` | `--style` | literal["voucher", "standard", "wallet"] \| null | no | yes | null | — |
+| `checks_on_first_page` | `--checks-on-first-page` | integer | no | no | 3 | minimum 1; maximum 3 |
+| `expected_version` | `--expected-version` | integer \| null | no | yes | null | Version of the cheque document, when the reprint must not race a correction. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/check.reprint`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `id` | string | yes | no | — | — |
+| `kind` | literal["batch", "reprint"] | yes | no | — | — |
+| `account_id` | string | yes | no | — | — |
+| `account_name` | string | yes | no | — | — |
+| `style` | literal["voucher", "standard", "wallet"] | yes | no | — | — |
+| `first_number` | string | yes | no | — | — |
+| `checks_on_first_page` | integer | yes | no | — | — |
+| `offset_x_hundredths` | integer | yes | no | — | — |
+| `offset_y_hundredths` | integer | yes | no | — | — |
+| `status` | literal["awaiting_confirmation", "confirmed", "cancelled"] | yes | no | — | — |
+| `created_at` | string | yes | no | — | — |
+| `created_by` | string | yes | no | — | — |
+| `items` | array[object] | yes | no | — | — |
+| `items[].item_id` | string | yes | no | — | — |
+| `items[].position` | integer | yes | no | — | — |
+| `items[].transaction_id` | string | yes | no | — | — |
+| `items[].document_type` | literal["check", "bill_payment"] | yes | no | — | — |
+| `items[].check_number` | string | yes | no | — | — |
+| `items[].date` | string | yes | no | — | — |
+| `items[].payee_name` | string \| null | yes | yes | — | — |
+| `items[].amount` | object | yes | no | — | — |
+| `items[].amount.amount` | string | yes | no | — | — |
+| `items[].amount.currency` | string | yes | no | — | — |
+| `items[].amount.minor_units` | integer | yes | no | — | — |
+| `items[].amount_in_words` | string | yes | no | — | — |
+| `items[].outcome` | literal["pending", "printed", "failed", "cancelled"] | yes | no | — | — |
+| `total` | object | yes | no | — | — |
+| `total.amount` | string | yes | no | — | — |
+| `total.currency` | string | yes | no | — | — |
+| `total.minor_units` | integer | yes | no | — | — |
+| `spoiled_numbers` | array[string] | no | no | [] | Numbers this run left on spoiled paper. |
+| `pdf` | string | yes | no | — | The command that returns this run as a PDF. |
+| `skipped` | array[object] | no | no | [] | Queued cheques a run over the whole queue left waiting, with why: dated on or before the closing date. |
+| `skipped[].transaction_id` | string | yes | no | — | — |
+| `skipped[].document_type` | literal["check", "bill_payment"] | yes | no | — | — |
+| `skipped[].reference` | string | yes | no | — | — |
+| `skipped[].date` | string | yes | no | — | — |
+| `skipped[].payee_name` | string \| null | yes | yes | — | — |
+| `skipped[].reason` | string | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "account_name": "value",
+  "checks_on_first_page": 1,
+  "created_at": "2026-01-01T00:00:00Z",
+  "created_by": "value",
+  "dry_run": false,
+  "first_number": "value",
+  "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "items": [],
+  "kind": "batch",
+  "offset_x_hundredths": 1,
+  "offset_y_hundredths": 1,
+  "pdf": "value",
+  "skipped": [],
+  "spoiled_numbers": [],
+  "status": "awaiting_confirmation",
+  "style": "voucher",
+  "total": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
 
 ## `check show`
 
@@ -1323,6 +2666,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `document.items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `document.items[].profile.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `document.items[].profile.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `document.items[].profile.class_id` | object \| null | no | yes | null | — |
 | `document.items[].profile.class_id.id` | string | yes | no | — | — |
 | `document.items[].profile.class_id.label` | string | yes | no | — | — |
@@ -1334,6 +2680,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.billable` | boolean | no | no | false | — |
 | `document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `document.check_number` | string \| null | no | yes | null | — |
+| `document.print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 
 Example JSON output:
 
@@ -1530,6 +2877,7 @@ The same example as complete `bookflow_run` arguments:
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
 | `check` | `CHECK` | string | yes | no | — | minimum length 1 |
 | `number` | `--number` | string \| null | no | yes | null | A different number for this cheque. Leave it out to keep the one it has, including when the cheque moves to another bank account. The number it had stays on the revision that carried it, so history and printing keep reading what was issued, and it is never handed out again automatically. |
+| `to_be_printed` | `--to-be-printed` | boolean \| null | no | yes | null | For a check waiting to be printed: false takes it out of the print queue and gives it the next number now, as a hand-written check. A check that already has a number is reprinted with `check reprint`, not queued again. |
 
 ### Command and context options
 
@@ -1771,6 +3119,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `document.items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `document.items[].profile.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `document.items[].profile.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `document.items[].profile.class_id` | object \| null | no | yes | null | — |
 | `document.items[].profile.class_id.id` | string | yes | no | — | — |
 | `document.items[].profile.class_id.label` | string | yes | no | — | — |
@@ -1782,6 +3133,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.billable` | boolean | no | no | false | — |
 | `document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `document.check_number` | string \| null | no | yes | null | — |
+| `document.print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 
 Example JSON output:
 
@@ -2205,6 +3557,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `document.items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `document.items[].profile.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `document.items[].profile.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `document.items[].profile.class_id` | object \| null | no | yes | null | — |
 | `document.items[].profile.class_id.id` | string | yes | no | — | — |
 | `document.items[].profile.class_id.label` | string | yes | no | — | — |
@@ -2216,6 +3571,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.billable` | boolean | no | no | false | — |
 | `document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `document.check_number` | string \| null | no | yes | null | — |
+| `document.print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
 
 Example JSON output:
 

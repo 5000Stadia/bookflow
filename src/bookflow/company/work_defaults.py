@@ -4,7 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from bookflow.company import sales_defaults
-from bookflow.company.sales_calculations import adjusted_price, extension, selected_price
+from bookflow.company.sales_calculations import adjusted_price_units, extension_units, selected_price_units
+from bookflow.core import unit_price
 from bookflow.company.sales_facts import Origin
 from bookflow.company.sales_models import SalesLineInput, _invalid, money
 from bookflow.company.work_facts import WorkLineFacts, WorkProfile
@@ -27,8 +28,9 @@ def resolve_header(s, inp, kind, previous=None, old_date=None):
 
 
 def _cost(s, inp, profile, factor, currency, previous, refresh, warnings):
+    """The estimated cost per selected unit in R150 price units (thousandths of a minor unit)."""
     if 'estimated_unit_cost' in inp.model_fields_set:
-        value = (money(inp.estimated_unit_cost, currency, 'estimated_unit_cost').minor_units
+        value = (unit_price.parse(inp.estimated_unit_cost, currency, 'estimated_unit_cost')
                  if inp.estimated_unit_cost is not None else None)
         return value, Origin(kind='explicit')
     dependent = previous is None or previous.item_id != profile.item.id or previous.profile.unit != profile.unit
@@ -37,18 +39,18 @@ def _cost(s, inp, profile, factor, currency, previous, refresh, warnings):
         if previous.estimated_cost_origin.kind == 'explicit':
             if dependent:
                 warnings.append('estimated_unit_cost: explicit cost retained per selected unit')
-            return previous.estimated_unit_cost_minor_units, previous.estimated_cost_origin
+            return previous.cost_units, previous.estimated_cost_origin
         if not dependent and not refresh:
-            return previous.estimated_unit_cost_minor_units, previous.estimated_cost_origin
+            return previous.cost_units, previous.estimated_cost_origin
     if previous is not None:
         warnings.append('estimated_unit_cost: defaults resolved again')
-    cost = profile.cost_minor_units
+    cost = profile.units('cost')
     if reset and not refresh:
         item = sales_defaults._row(s.company, 'item', profile.item.id)
-        cost = item['cost_minor_units']
+        cost = unit_price.row_units(item, 'cost')
         if cost is not None and item['cost_currency'] != currency:
             raise _invalid('estimated_unit_cost', 'catalog cost must use home currency')
-    return (selected_price(cost, factor) if cost is not None else None), Origin(kind='default', source_id=profile.item.id)
+    return (selected_price_units(cost, factor) if cost is not None else None), Origin(kind='default', source_id=profile.item.id)
 
 
 @dataclass
@@ -71,7 +73,7 @@ class _OverridePrice:
             return None
         if self.cost is None:
             raise _invalid('estimated_unit_cost', 'markup pricing requires a known cost')
-        return adjusted_price(self.cost, self.markup)
+        return adjusted_price_units(self.cost, self.markup)
 
 
 def resolve_line(s, inp, header, previous: WorkLineFacts | None = None,
@@ -110,7 +112,8 @@ def resolve_line(s, inp, header, previous: WorkLineFacts | None = None,
     saved = None
     if previous:
         saved = dict(quantity_microunits=previous.quantity_microunits, description=previous.description,
-                     unit_price_minor_units=previous.unit_price_minor_units, item_snapshot=previous.profile.model_dump())
+                     unit_price_minor_units=previous.unit_price_minor_units, unit_price_fraction=previous.unit_price_fraction,
+                     item_snapshot=previous.profile.model_dump())
     override = _OverridePrice(s, inp, currency, previous, refresh, warnings, mode, markup) if mode in ('markup', 'amount') else None
     resolved, shared_warnings = sales_defaults.resolve_line(
         s, sales_input, header, previous=saved, previous_header=previous_header, refresh=refresh,
@@ -155,7 +158,7 @@ def resolve_line(s, inp, header, previous: WorkLineFacts | None = None,
     from bookflow.company.work_tax_facts import WorkLineFacts2
     model = WorkLineFacts2 if document_tax else WorkLineFacts
     return model(**resolved, completed_quantity_microunits=completed, cancelled_quantity_microunits=cancelled,
-        estimated_unit_cost_minor_units=cost,
-        estimated_cost_minor_units=extension(resolved['quantity_microunits'], cost) if cost is not None else None,
+        estimated_unit_cost_minor_units=unit_price.split(cost)[0], estimated_unit_cost_fraction=unit_price.split(cost)[1],
+        estimated_cost_minor_units=extension_units(resolved['quantity_microunits'], cost) if cost is not None else None,
         estimated_cost_origin=origin, pricing_basis=mode, markup_percent_millionths=markup,
         billable=inp.billable if 'billable' in inp.model_fields_set else previous.billable if previous else True), warnings

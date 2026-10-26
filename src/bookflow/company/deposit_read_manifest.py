@@ -313,6 +313,11 @@ FIELDS = {
         'finance_charge_from': ('str', False, False, 'dependency_field'),
         'finance_charge_mark_to_print': ('bool', False, False, 'dependency_field'),
         'negative_number_style': ('str', False, False, 'dependency_field'),
+        'scheduler_catch_up_days': ('int', True, False, 'dependency_field'),
+        'overdue_notice_days': ('int', True, False, 'dependency_field'),
+        'overdue_notice_frequency': ('str', False, False, 'dependency_field'),
+        'overdue_notice_minimum': ('str', True, False, 'dependency_field'),
+        'overdue_notice_template': ('str', False, False, 'dependency_field'),
     },
     'custom_field_defs': {
         'active': ('bool', False, False, 'dependency_field'),
@@ -768,6 +773,7 @@ FIELDS = {
         'cogs_account_id': ('str', True, False, 'dependency_field'),
         'cost_currency': ('str', True, False, 'dependency_field'),
         'cost_minor_units': ('int', True, False, 'dependency_field'),
+        'cost_fraction': ('int', True, False, 'dependency_field'),
         'created_at': ('str', False, False, 'outside_output'),
         'created_by': ('str', False, False, 'outside_output'),
         'created_via': ('str', False, False, 'outside_output'),
@@ -807,6 +813,7 @@ FIELDS = {
         'preferred_vendor_id': ('str', True, False, 'dependency_field'),
         'price_currency': ('str', True, False, 'dependency_field'),
         'price_minor_units': ('int', True, False, 'dependency_field'),
+        'price_fraction': ('int', True, False, 'dependency_field'),
         'print_members': ('bool', True, False, 'dependency_field'),
         'purchase_date': ('str', True, False, 'dependency_field'),
         'purchase_description': ('str', True, False, 'dependency_field'),
@@ -1029,6 +1036,7 @@ FIELDS = {
         'unit_factor_nanounits': ('int', False, False, 'dependency_field'),
         'base_quantity_microunits': ('int', True, False, 'dependency_field'),
         'unit_price_minor_units': ('int', True, False, 'dependency_field'),
+        'unit_price_fraction': ('int', True, False, 'dependency_field'),
         'pricing_basis': ('str', False, False, 'dependency_field'),
         'net_minor_units': ('int', False, False, 'dependency_field'),
         'tax_minor_units': ('int', False, False, 'dependency_field'),
@@ -1320,10 +1328,12 @@ FIELDS = {
         'unit_factor_nanounits': ('int', False, False, 'dependency_field'),
         'base_quantity_microunits': ('int', False, False, 'dependency_field'),
         'unit_price_minor_units': ('int', True, False, 'dependency_field'),
+        'unit_price_fraction': ('int', True, False, 'dependency_field'),
         'net_minor_units': ('int', False, False, 'dependency_field'),
         'tax_minor_units': ('int', False, False, 'dependency_field'),
         'gross_minor_units': ('int', False, False, 'dependency_field'),
         'estimated_unit_cost_minor_units': ('int', True, False, 'dependency_field'),
+        'estimated_unit_cost_fraction': ('int', True, False, 'dependency_field'),
         'estimated_cost_minor_units': ('int', True, False, 'dependency_field'),
         'pricing_basis': ('str', False, False, 'dependency_field'),
         'markup_percent_millionths': ('int', True, False, 'dependency_field'),
@@ -1668,7 +1678,8 @@ DEPOSIT_TABLES = ('transaction_revisions', 'deposit_profiles', 'document_line_id
 # R110: Effect, LifecycleOutput, CoordinateOutput and Manifest rehashed for SalesLineProfile.pricing_rule.
 # R101 increments 4-5 merged over R110: CoordinateOutput recomputed on the merged models.
 # CoordinateOutput moved with R104: the sales request it carries gained an optional inventory `site` (header and line).
-CODECS = {'CoordinateOutput': '9604f8cedbbea6a3f8c68b9f8c837e2dd66ee059c33d9267603975f39c75fc87', 'Effect': '7808ba1b94a7b285d8af46fa5abfe6bc6c1bc65945932115d572fa3678d217fb', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': 'd1a97fd2438cd733e29a83cc6bee5ea293c42c562f9e99406ec9c19e519307d1', 'Manifest': 'cd41072899be327b0f41199b18c243edbfd61361ba7be55bb1e0defee22a0a4c', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
+# R150 rehashed Effect, LifecycleOutput, CoordinateOutput and Manifest on the merged models: sub-cent fractions on SalesLineProfile and SalesPriceInput. R104 increment 2 rehashed CoordinateOutput: count_position on the sales request.
+CODECS = {'CoordinateOutput': 'a4358fff73a5c4e31587c2f63d05984a698e30714221215bce75220e6b273abe', 'Effect': '8ffca29d972ff6c16c908f308f2de9fe90cba21ca8fc1b76556c138f44e3a9fc', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': '0978349e0bf8b78e4412ad989130dfbb26b877ea41b3fb1e596daeeb034c1014', 'Manifest': 'd59bfa3ea08d7ea878ba0fff911102085ec8dfdd6d154c9f81e850ba730dfbb8', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
 
 # Explicit dependency inspection registry closure, separate from disclosure.
 DEPENDENCY_OWNERS = {'account': ('accounts',

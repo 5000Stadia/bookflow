@@ -33,8 +33,10 @@ Database: `company`.
 | `purchase_enabled` | BOOLEAN | no | false | — | — | — | Whether the purchase profile is enabled. |
 | `price_minor_units` | BIGINT | yes | — | — | — | — | Standard sales price as signed integer minor units; null with its currency. |
 | `price_currency` | VARCHAR(3) | yes | — | — | — | — | ISO 4217 currency for standard sales price; null with its amount. |
+| `price_fraction` | BIGINT | yes | — | — | — | — | Standard sales price beyond its rounded minor units, in signed thousandths of a minor unit (price = price_minor_units + fraction/1000); null when the price is whole minor units. |
 | `cost_minor_units` | BIGINT | yes | — | — | — | — | Standard purchase cost as signed integer minor units; null with its currency. |
 | `cost_currency` | VARCHAR(3) | yes | — | — | — | — | ISO 4217 currency for standard purchase cost; null with its amount. |
+| `cost_fraction` | BIGINT | yes | — | — | — | — | Standard purchase cost beyond its rounded minor units, in signed thousandths of a minor unit (price = cost_minor_units + fraction/1000); null when the price is whole minor units. |
 | `income_account_id` | VARCHAR(26) | yes | — | — | ix_items_income_account_id | accounts.id | Active income account id; null when the type does not use one. |
 | `expense_account_id` | VARCHAR(26) | yes | — | — | ix_items_expense_account_id | accounts.id | Active expense account id; null when the type does not use one. |
 | `cogs_account_id` | VARCHAR(26) | yes | — | — | ix_items_cogs_account_id | accounts.id | Active cost-of-goods-sold account id; null when the type does not use one. |
@@ -44,7 +46,7 @@ Database: `company`.
 | `default_class_id` | VARCHAR(26) | yes | — | — | ix_items_default_class_id | classes.id | Default active class id; null when unset. |
 | `sales_tax_code_id` | VARCHAR(26) | yes | — | — | ix_items_sales_tax_code_id | sales_tax_codes.id | Default active sales-tax code id; null when unset. |
 | `manufacturer_part_number` | VARCHAR(128) | yes | — | — | — | — | Manufacturer part number; null when not recorded. |
-| `barcode` | VARCHAR(128) | yes | — | — | — | — | Barcode value; null when not recorded. |
+| `barcode` | VARCHAR(128) | yes | — | — | ix_items_barcode | — | Barcode value; null when not recorded. |
 | `unit_of_measure_set_id` | VARCHAR(26) | yes | — | — | ix_items_unit_of_measure_set_id | units_of_measure.id | Active unit-of-measure set id; null when units are disabled or unset. |
 | `reorder_point_min_microunits` | BIGINT | yes | — | — | — | — | Minimum reorder point in quantity micro-units; null when unset. |
 | `reorder_point_max_microunits` | BIGINT | yes | — | — | — | — | Maximum reorder point in quantity micro-units; null when unset. |

@@ -43,6 +43,7 @@ import json
 
 import sqlalchemy as sa
 
+from bookflow.core import unit_price
 from bookflow.company import inventory, inventory_effects, items as item_service, journals, placements, schema as c
 from bookflow.company.assembly_build_models import (
     AssemblyBuildListOutput, AssemblyBuildListRow, AssemblyBuildOutput, AssemblyComponentOutput,
@@ -199,7 +200,8 @@ def replay_items(s, working, load, refuse):
                 sequence=0, currency=receipt['currency'], asset_account_id=receipt['asset_account_id'],
                 offset_account_id=receipt['offset_account_id'], class_id=receipt['class_id'],
                 corrects_movement_id=receipt['id'], reverses_movement_id=None, returns_movement_id=None,
-                filled_by_movement_id=None, fallback_unit_cost_minor_units=None)
+                filled_by_movement_id=None, fallback_unit_cost_minor_units=None, fallback_unit_cost_fraction=None,
+                count_position=receipt.get('count_position') or 'before')
             load(receipt['item_id']).append(partner)
             partners[target['id']] = partner
             waiting.add(receipt['item_id'])
@@ -322,13 +324,18 @@ def capture(s, item, currency):
             captured.append(dict(item_id=component['id'], kind='stock', quantity_microunits=per,
                                  account_id=component['asset_account_id']))
         else:
-            cost = component.get('cost_minor_units')
-            usable = cost is not None and component.get('cost_currency') == currency and int(cost) > 0 \
+            # R150: the exact cost, so 0.004 is a cost (rounded alone it would be 0 cents).
+            cost = unit_price.row_units(component, 'cost')
+            usable = cost is not None and component.get('cost_currency') == currency and cost > 0 \
                 and component.get('expense_account_id') is not None
-            captured.append(dict(item_id=component['id'], kind='cost', quantity_microunits=per,
-                                 unit_cost_minor_units=int(cost) if usable else 0,
-                                 account_id=component.get('expense_account_id') if usable else None))
-    if not any(row['kind'] == 'stock' or row['unit_cost_minor_units'] for row in captured):
+            minor, fraction = unit_price.split(cost) if usable else (0, None)
+            row = dict(item_id=component['id'], kind='cost', quantity_microunits=per,
+                       unit_cost_minor_units=minor,
+                       account_id=component.get('expense_account_id') if usable else None)
+            if fraction:
+                row['unit_cost_fraction'] = fraction  # only when sub-cent, so whole-cent captures keep their shape
+            captured.append(row)
+    if not any(row['kind'] == 'stock' or unit_price.row_units(row, 'unit_cost') for row in captured):
         raise _invalid('item', 'this assembly has no components with stock or a cost to build it from; '
                                'add its bill of materials with `item update --members`')
     return captured
@@ -432,7 +439,7 @@ def _plan(s, item, components, quantity, date, *, reversing=(), exclude=None, si
                         'stock is worth with `inventory adjust --value-change`, then build.'),
                         item_id=entry['item']['id'], reason='component_without_value')
         else:
-            cost = round_ratio_half_even(entry['component']['unit_cost_minor_units'] * entry['need'], MICRO)
+            cost = unit_price.extension(entry['need'], unit_price.row_units(entry['component'], 'unit_cost'))
         entry['cost'] = cost
         total += cost
     if total <= 0:
@@ -827,7 +834,8 @@ def show(s, inp):
                 int(row['value_minor_units']) for row in inventory.movements(s, item_id=component['item_id'])
                 if row['kind'] == 'recost' and issue and row['corrects_movement_id'] == issue[0]['id'])
             if component['kind'] == 'cost':
-                cost = round_ratio_half_even(component['unit_cost_minor_units'] * _need(component['quantity_microunits'], build.quantity), MICRO)
+                cost = unit_price.extension(_need(component['quantity_microunits'], build.quantity),
+                                            unit_price.row_units(component, 'unit_cost'))
             build.rows.append(dict(component=component, item=component_item,
                                    need=_need(component['quantity_microunits'], build.quantity),
                                    on_hand=_on_hand(inventory.movements(s, item_id=component['item_id']), build.date),

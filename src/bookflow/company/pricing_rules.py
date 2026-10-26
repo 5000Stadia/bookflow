@@ -38,6 +38,7 @@ from typing import Any, Callable
 
 import sqlalchemy as sa
 
+from bookflow.core import unit_price
 from bookflow.company import schema as c
 from bookflow.company.list_service import resolve_selector
 from bookflow.company.lists import get_list_definition, normalize_display_name
@@ -135,6 +136,10 @@ def _rounded(moved: int, percent: int, increment: int, offset: int, mode: str) -
 def rule_price(rule: dict, base: int | None, value: int, currency: str) -> int | None:
     """One rule's price per base unit from its basis price, exactly; None when the rule must not apply.
 
+    R150: ``base`` and the result are price units (thousandths of a minor unit), so a sub-cent
+    basis is exact; ``value`` stays as stored (millionths of a percent, or minor units). Every
+    rounding a rule offers is a cent or coarser, so its price is always whole minor units.
+
     A rule never makes a line free and never turns a discount into an increase (or a markup into a
     cut): a cost basis of zero or less is no basis; a result at or below zero, before rounding or
     after rounding to the cent or dollar, is skipped, never clamped; a down rule's x.99/x.95 rounds
@@ -150,17 +155,18 @@ def rule_price(rule: dict, base: int | None, value: int, currency: str) -> int |
         if percent <= -100_000_000:
             return None
     else:
-        percent, moved = 0, base + sign * value
+        percent, moved = 0, base + sign * value * unit_price.SCALE
         if moved <= 0:
             return None
     increment, offset, mode = rounding_steps(rule['rounding'], currency)
+    increment, offset = increment * unit_price.SCALE, offset * unit_price.SCALE
     if down and rule['rounding'] in ('x.99', 'x.95'):
         mode = 'down'
     rounded = _rounded(moved, percent, increment, offset, mode)
     if rounded <= 0 and rule['rounding'] in ('cent', 'dollar'):
         return None  # free is never a rule's price
     if rounded <= 0 or (rounded > base if down else rounded < base):
-        rounded = _rounded(moved, percent, 1, 0, 'nearest')
+        rounded = _rounded(moved, percent, unit_price.SCALE, 0, 'nearest')
     return rounded if rounded > 0 else None
 
 
@@ -647,7 +653,8 @@ def capture(chosen: dict, currency: str, policy: str):
     return AppliedPriceRule(
         id=rule['id'], label=rule['name'], version=rule['version'], priority=rule['priority'],
         kind=rule['adjustment_kind'], direction=rule['direction'], basis=rule['basis'], rounding=rule['rounding'],
-        value=chosen['value'], base_minor_units=chosen['base'], price_minor_units=chosen['price'],
+        value=chosen['value'], base_minor_units=unit_price.split(chosen['base'])[0],
+        base_fraction=unit_price.split(chosen['base'])[1], price_minor_units=unit_price.nearest_minor(chosen['price']),
         conflict_policy=policy, summary=f"price from rule {rule['name']}: {summary(one, currency)}")
 
 
@@ -682,11 +689,12 @@ def _kept(previous, rules, facts, profile, old_base_qty, currency):
         return None
     captured = dict(adjustment_kind=previous.kind, direction=previous.direction, rounding=previous.rounding,
                     basis=previous.basis)
-    base = profile.standard_price_minor_units if previous.basis == 'sales_price' else profile.cost_minor_units
+    base = profile.units('standard_price') if previous.basis == 'sales_price' else profile.units('cost')
     price = rule_price(captured, base, previous.value, currency)
     if price is None:
         return None
-    return price, previous.model_copy(update=dict(base_minor_units=base, price_minor_units=price))
+    return price, previous.model_copy(update=dict(base_minor_units=unit_price.split(base)[0], base_fraction=unit_price.split(base)[1],
+                                                  price_minor_units=unit_price.nearest_minor(price)))
 
 
 def line_price(s, profile, header, base_qty: int, date: str | None, level_price: Callable[[], int], *,
@@ -714,7 +722,7 @@ def line_price(s, profile, header, base_qty: int, date: str | None, level_price:
     except BookflowError as exc:
         level, failure = None, exc
     level_priced = bool(profile.price_rule and profile.price_rule.matched)
-    price, chosen, _ = choose(rules, facts, standard=profile.standard_price_minor_units, cost=profile.cost_minor_units,
+    price, chosen, _ = choose(rules, facts, standard=profile.units('standard_price'), cost=profile.units('cost'),
                               level=level, level_priced=level_priced, policy=policy, currency=currency,
                               level_explicit=level_explicit)
     if chosen is None:
@@ -732,7 +740,7 @@ def preview(s, inp) -> PricePreviewOutput:
     the job's sales rep and price level, the item's or customer's default class, units), with sales
     tax left out because it does not touch the price, and then lists the candidates it chose among."""
     from bookflow.company import sales_defaults
-    from bookflow.company.sales_calculations import selected_price
+    from bookflow.company.sales_calculations import selected_price_units
     from bookflow.core import registry
     db = s.company
     date = inp.date or _today(s)
@@ -745,11 +753,11 @@ def preview(s, inp) -> PricePreviewOutput:
     untaxed = header.model_copy(update=dict(preferences=header.preferences.model_copy(update=dict(sales_tax_enabled=False))))
     resolved, _ = sales_defaults.resolve_line(s, entered.lines[0], untaxed, date=date, defer_tax=True, line_kinds=True)
     profile, factor = resolved['profile'], resolved['unit_factor_nanounits']
-    if profile.adjustment is not None or resolved['unit_price_minor_units'] is None:
+    if profile.adjustment is not None or resolved['unit_price_minor_units'] is None:  # noqa: R150 presence only
         raise _invalid('item', 'only a sold item has a price to preview')
     currency, policy = _home(db), conflict_policy(db)
-    shown = lambda units: Money(selected_price(units, factor), currency).amount  # noqa: E731
-    standard, cost = profile.standard_price_minor_units, profile.cost_minor_units
+    shown = lambda units: unit_price.text(selected_price_units(units, factor), currency)  # noqa: E731
+    standard, cost = profile.units('standard_price'), profile.units('cost')
     level_priced = bool(profile.price_rule and profile.price_rule.matched)
     level = None
     if level_priced:
@@ -776,7 +784,7 @@ def preview(s, inp) -> PricePreviewOutput:
     return PricePreviewOutput(item=profile.item.label, customer=header.customer.label,
                               quantity=format_quantity_micro_units(resolved['quantity_microunits']),
                               date=date, conflict_policy=policy,
-                              unit_price=Money(resolved['unit_price_minor_units'], currency).amount, currency=currency,
+                              unit_price=unit_price.text(unit_price.row_units(resolved, 'unit_price'), currency), currency=currency,
                               source=source, rule=Named(id=chosen_id, label=profile.pricing_rule.label) if chosen_id else None,
                               note=note, candidates=rows)
 

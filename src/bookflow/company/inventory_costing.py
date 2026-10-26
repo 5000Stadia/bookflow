@@ -134,7 +134,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
-from bookflow.company.inventory_schema import INPUT_KINDS
+from bookflow.company.inventory_schema import INPUT_KINDS, POSITION_RANK
 from bookflow.core.exact import (
     QUANTITY_SCALE, endpoint_share, format_quantity_micro_units, round_ratio_half_even,
 )
@@ -182,6 +182,15 @@ class Shortfall:
 
 
 @dataclass(frozen=True)
+class Found:
+    """One ``found`` quantity and the basis replay valued it on: ``average``, ``purchase_cost`` or ``none``."""
+
+    movement: Mapping
+    value_minor_units: int
+    basis: str
+
+
+@dataclass(frozen=True)
 class Replay:
     quantity_microunits: int
     value_minor_units: int
@@ -189,6 +198,7 @@ class Replay:
     corrections: tuple[Correction, ...] = ()
     shortfalls: tuple[Shortfall, ...] = ()
     true_ups: dict = field(default_factory=dict)   # (issue id, receipt id) -> target delta
+    found: tuple[Found, ...] = ()
 
     @property
     def average_cost_minor_units(self) -> int:
@@ -198,9 +208,34 @@ class Replay:
         return round_ratio_half_even(self.value_minor_units * MICRO, self.quantity_microunits)
 
 
+def order_key(row: Mapping):
+    """Date, then where the row sits against that date's counts, then recorded order (R104 increment 2).
+
+    A row written before counts existed carries no position and is ``before``, so nothing moves.
+    """
+    return (row['effective_date'], POSITION_RANK[row.get('count_position') or 'before'],
+            int(row['sequence']), row['id'])
+
+
 def ordered(rows: Iterable[Mapping]) -> list[Mapping]:
     """One item's movements in the order replay and every report must read them."""
-    return sorted(rows, key=lambda row: (row['effective_date'], int(row['sequence']), row['id']))
+    return sorted(rows, key=order_key)
+
+
+def found_value(quantity_microunits: int, value_minor_units: int, rate, fallback, units: int):
+    """What ``units`` found at this point in the walk are worth, and on which basis.
+
+    The running average while stock is on hand; at or below zero the last average the item had;
+    never stocked, the purchase cost captured on the movement; else nothing (design §6).
+    """
+    if quantity_microunits > 0:
+        return round_ratio_half_even(value_minor_units * units, quantity_microunits), 'average'
+    if rate is not None:
+        return round_ratio_half_even(rate[0] * units, rate[1]), 'average'
+    if fallback is not None:
+        # The captured cost in thousandths of a minor unit (R150), so it is rounded once, at the total.
+        return round_ratio_half_even(int(fallback) * units, MICRO * 1000), 'purchase_cost'
+    return 0, 'none'
 
 
 def consumed_value(value_minor_units: int, quantity_microunits: int, issued_microunits: int) -> int:
@@ -253,14 +288,24 @@ def replay(rows: Iterable[Mapping]) -> Replay:
     given_back: dict[str, int] = {}     # issue id -> quantity its returns have taken back
     cancelled_worth: dict[str, int] = {}  # issue id -> provisional value its returns cancelled
     stale: set[str] = set()             # returns this walk cannot speak for
+    found: list[Found] = []
     for row in rows:
         if row['kind'] not in INPUT_KINDS or row['id'] in retired:
             continue
         change = int(row['quantity_microunits'])
-        if row['kind'] == 'receipt':
-            issue_id = row.get('returns_movement_id')
+        if row['kind'] in ('receipt', 'found'):
+            issue_id = row.get('returns_movement_id') if row['kind'] == 'receipt' else None
             cancelled = cancelled_value = 0     # units handed straight back to their own sale
-            if issue_id is None:
+            if row['kind'] == 'found':
+                # Found on a count, or an increase entered with no value: worth what the average
+                # says here, as an issue is, so a purchase backdated in front of it recosts it.
+                captured = row.get('fallback_unit_cost_minor_units')
+                worth, basis = found_value(quantity, value, rate, None if captured is None else
+                                           int(captured) * 1000 + int(row.get('fallback_unit_cost_fraction') or 0),
+                                           change)
+                targets[row['id']] = worth
+                found.append(Found(row, worth, basis))
+            elif issue_id is None:
                 # Receipt-targeted purchase-price corrections belong at acquisition,
                 # even when a bill is recorded after intervening issues.
                 worth = int(row['value_minor_units']) + posted.get(row['id'], 0)
@@ -390,7 +435,12 @@ def replay(rows: Iterable[Mapping]) -> Replay:
                 elif rate is not None:
                     basis, basis_rate = 'average', rate
                 elif row.get('fallback_unit_cost_minor_units') is not None:
-                    basis, basis_rate = 'purchase_cost', (int(row['fallback_unit_cost_minor_units']), MICRO)
+                    # R150: the exact captured cost (minor units plus its fraction, in thousandths),
+                    # so the shortfall's provisional is rounded once at its total. An old row has
+                    # no fraction and gives exactly the ratio it always did.
+                    basis, basis_rate = 'purchase_cost', (
+                        int(row['fallback_unit_cost_minor_units']) * 1000 + int(row.get('fallback_unit_cost_fraction') or 0),
+                        MICRO * 1000)
                 else:
                     basis, basis_rate = 'none', None
                 provisional = 0 if basis_rate is None else round_ratio_half_even(
@@ -418,7 +468,7 @@ def replay(rows: Iterable[Mapping]) -> Replay:
 
     corrections = []
     for row in rows:
-        owns_cost = row['kind'] == 'issue' or (
+        owns_cost = row['kind'] in ('issue', 'found') or (
             row['kind'] == 'receipt' and row.get('returns_movement_id') is not None
             and row['id'] not in stale)
         if not owns_cost:
@@ -436,7 +486,7 @@ def replay(rows: Iterable[Mapping]) -> Replay:
             corrections.append(Correction(by_id[key[0]], delta, receipt['effective_date'], receipt))
     corrections.sort(key=lambda correction: (correction.effective_date, int(correction.target_movement['sequence'])))
     return Replay(quantity, value, targets, tuple(corrections), tuple(shortfalls),
-                  {key: delta for key, delta in true_ups.items()})
+                  {key: delta for key, delta in true_ups.items()}, tuple(found))
 
 
 def totals(rows: Iterable[Mapping]) -> tuple[int, int]:

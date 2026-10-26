@@ -66,9 +66,15 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +13 inventory-site, inventory-transfer and report quantity-by-site (R104 increment 1).
     # +14 accountant review (R121): accountant add/remove/list/reclassify/mark-entry/reviewed-through, accountant-copy
     # export/status/cancel/changes/preview/import, report accountant-review and accountant-changes.
+    # +9 check printing (R152): check print-queue, print, print-confirm, print-cancel, reprint, print-run, print-pdf,
+    # print-setup and print-alignment.
+    # +2 barcodes (R104 increment 3): barcode lookup and barcode generate.
     # +5 performance tracking (R180): perf report and perf settings (routed), perf generate, bench and compare
     # (standalone local tools, three more local lifecycle rows).
-    assert len(rows) == 671
+    assert len(rows) == 703
+    # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
+    # report physical-inventory-worksheet and inventory-valuation-detail.
+    # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 8
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -141,7 +147,10 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     rows=[{'command':cmd.name,'url':'inventory-only','schema_variants':schema_variants(cmd.input_model.model_json_schema())}
           for cmd in registry.routed_commands()]
     mapped=workbench_variant_map(rows)
-    assert len(mapped)==len(variant_policies())==26
+    # 26 -> 27 (R150): unit prices and costs take SalesPriceInput, the shape of SalesMoneyInput with an
+    # amount exact to three places past the minor unit. Measured per command on both trees: the same
+    # 3430 paths, now split across one more variant kind.
+    assert len(mapped)==len(variant_policies())==27
     # The census of material schema nodes. It moves whenever a routed command gains input
     # shape. Measured from the merged tree on every merge -- no branch's number survives
     # another branch landing.
@@ -307,9 +316,19 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 3549 -> 3557 (R121), measured per command: accountant reclassify 3 (amount, date, memo), accountant add,
     # mark-entry and reviewed-through 1 each (note), accountant-copy import 1 (changes), accountant-copy export 1 (accountant) -- their null branches.
     # No existing command moved. No new variant kind.
-    # 3557 -> 3560 (R180), measured per command: perf report 2 (command, surface), perf settings 1 (recording)
+    # 3557 -> 3574 (R152, check printing), measured: +17 from the nine check print commands' optional fields
+    # (account, first_number, style, checks, failed_from, failed, new_number, offsets, expected_version null branches)
+    # and to_be_printed on check post, check update and bill pay. No new variant kind.
+    # 3574 -> 3576 (R104 increment 3, barcodes), measured: barcode lookup's optional as_of and barcode
+    # generate's optional items -- their null branches. No existing command moved. No new variant kind.
+    # 3576 -> 3622 (R104 increment 2, physical counts): +46 from the count commands and reports, the adjustment's lines
+    # and count_position on the stock documents.
+    # 3622 -> 3657 (R111): the eleven todo, notice and reminders commands' optional inputs, company update's five
+    # scheduler and overdue notice preferences and the optional expected_facts_fingerprint on memorized process, retry,
+    # skip, enter and memorized-group enter, their null branches (memorized enter's again adds none). No new variant kind.
+    # 3657 -> 3660 (R180), measured per command: perf report 2 (command, surface), perf settings 1 (recording)
     # -- their null branches. No existing command moved. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==3560
+    assert sum(len(group["paths"]) for group in mapped)==3660
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

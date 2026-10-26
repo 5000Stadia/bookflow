@@ -21,7 +21,7 @@ Database: `company`.
 | `document_line_id` | VARCHAR(26) | no | — | — | — | document_lines.id | Entered line this movement is attributed to. |
 | `effective_date` | VARCHAR(10) | no | — | — | ix_inventory_movements_item | — | Accounting date reports value this movement on. |
 | `sequence` | BIGINT | no | — | unique | ix_inventory_movements_document, ix_inventory_movements_item | — | Company-wide recorded order; decides same-day replay order. |
-| `kind` | VARCHAR(16) | no | — | — | — | — | Movement kind: receipt, issue, value, vendor_return, recost or reversal. |
+| `kind` | VARCHAR(16) | no | — | — | — | — | Movement kind: receipt, issue, value, vendor_return, found, landed, recost or reversal. |
 | `quantity_microunits` | BIGINT | no | — | — | — | — | Signed quantity change in micro-units. |
 | `value_minor_units` | BIGINT | no | — | — | — | — | Signed inventory asset value change in minor units. |
 | `currency` | VARCHAR(3) | no | — | — | — | — | Home currency of this movement value. |
@@ -30,6 +30,9 @@ Database: `company`.
 | `class_id` | VARCHAR(26) | yes | — | — | — | classes.id | Class captured on the original posting; null when unclassified. |
 | `corrects_movement_id` | VARCHAR(26) | yes | — | — | ix_inventory_movements_corrects | inventory_movements.id | Issue whose effective cost this delta corrects; null except on recost. |
 | `reverses_movement_id` | VARCHAR(26) | yes | — | unique | — | inventory_movements.id | Movement this row exactly retires; null except on reversal. |
-| `returns_movement_id` | VARCHAR(26) | yes | — | — | ix_inventory_movements_returns | inventory_movements.id | Issue this receipt gives back; null except on a return. |
+| `returns_movement_id` | VARCHAR(26) | yes | — | — | ix_inventory_movements_returns | inventory_movements.id | Issue this receipt gives back, or receipt this vendor return sends back; null otherwise. |
 | `filled_by_movement_id` | VARCHAR(26) | yes | — | — | ix_inventory_movements_filled_by | inventory_movements.id | Receipt whose arrival trued up the provisional cost of the issue this recost corrects; null except on a true-up. |
-| `fallback_unit_cost_minor_units` | BIGINT | yes | — | — | — | — | Item purchase cost per base unit captured when this issue was recorded, the provisional cost if the item has never held stock; null except on an issue. |
+| `fallback_unit_cost_minor_units` | BIGINT | yes | — | — | — | — | Item purchase cost per base unit captured when this issue or found quantity was recorded, its cost if the item has never held stock; null except on an issue or a found quantity. |
+| `count_position` | VARCHAR(8) | no | "before" | — | — | — | Where the movement sits against its date's physical counts: before (the default), count (a count's own difference) or after. |
+| `landed_on_movement_id` | VARCHAR(26) | yes | — | — | — | inventory_movements.id | Receipt a landed cost is allocated to; null except on a landed movement (reserved for landed cost). |
+| `fallback_unit_cost_fraction` | BIGINT | yes | — | — | — | — | Captured fallback unit cost beyond its rounded minor units, in signed thousandths of a minor unit (price = fallback_unit_cost_minor_units + fraction/1000); null when the price is whole minor units. |

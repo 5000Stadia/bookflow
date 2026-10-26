@@ -26,7 +26,8 @@ def test_manifest_matches_the_reachable_private_graph_exactly():
     # adjustment and group to SalesLineProfile and the 9 + 3 + 3 fields of its three new models,
     # every one private like the rest of the sales line profile.
     # 424: R110 added SalesLineProfile.pricing_rule and the thirteen fields of AppliedPriceRule.
-    assert sum(len(fields) for fields in manifest.FIELDS.values()) == 424
+    # 429: R150 added three sub-cent fractions to SalesLineProfile, one to PriceRule, one to AppliedPriceRule.
+    assert sum(len(fields) for fields in manifest.FIELDS.values()) == 429
 
 
 def test_every_field_carries_exactly_one_known_disposition():

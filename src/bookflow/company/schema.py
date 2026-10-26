@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlalchemy as sa
+from bookflow.company.unit_price_schema import fraction_column
 
 metadata = sa.MetaData()
 
@@ -219,6 +220,11 @@ company_info = _table(
     _column("finance_charge_from", sa.String(12), "Whether finance charges count days from the due_date or the invoice_date.", sa.CheckConstraint("finance_charge_from IN ('due_date','invoice_date')", name="ck_company_finance_charge_from"), nullable=False, server_default="due_date"),
     _column("finance_charge_mark_to_print", sa.Boolean, "Whether assessed finance charges are marked to be printed.", nullable=False, server_default="0"),
     _column("negative_number_style", sa.String(12), "How negative amounts are shown to people: minus (-40.00) or parentheses ((40.00)); exports and data keep the minus sign.", sa.CheckConstraint("negative_number_style IN ('minus','parentheses')", name="ck_company_negative_number_style"), nullable=False, server_default="minus"),
+    _column("scheduler_catch_up_days", sa.Integer, "Missed automatic memorized entries older than this many days are left for a person instead of entered by the scheduler; null enters every missed one, as the anchor does.", sa.CheckConstraint("scheduler_catch_up_days IS NULL OR scheduler_catch_up_days BETWEEN 0 AND 3650", name="ck_company_scheduler_catch_up_days"), nullable=True),
+    _column("overdue_notice_days", sa.Integer, "Overdue notices: days past due a customer's oldest open document must be before a notice is generated; null turns notices off.", sa.CheckConstraint("overdue_notice_days IS NULL OR overdue_notice_days BETWEEN 1 AND 3650", name="ck_company_overdue_notice_days"), nullable=True),
+    _column("overdue_notice_frequency", sa.String(12), "Overdue notices: how often the scheduler generates them, weekly or monthly.", sa.CheckConstraint("overdue_notice_frequency IN ('weekly','monthly')", name="ck_company_overdue_notice_frequency"), nullable=False, server_default="monthly"),
+    _column("overdue_notice_minimum", sa.String(24), "Overdue notices: least overdue balance that earns a notice, home-currency decimal text; null for any amount.", nullable=True),
+    _column("overdue_notice_template", sa.String(12), "Overdue notices: what each notice is, a statement or a short letter.", sa.CheckConstraint("overdue_notice_template IN ('statement','letter')", name="ck_company_overdue_notice_template"), nullable=False, server_default="statement"),
     description="Authoritative company identity, contact, calendar, currency, and accounting settings.",
 )
 
@@ -735,7 +741,9 @@ items = _table(
     _column("sales_enabled", sa.Boolean, "Whether the sales profile is enabled.", nullable=False, default=False),
     _column("purchase_enabled", sa.Boolean, "Whether the purchase profile is enabled.", nullable=False, default=False),
     *_money("price", "Standard sales price"),
+    fraction_column("price", "Standard sales price"),
     *_money("cost", "Standard purchase cost"),
+    fraction_column("cost", "Standard purchase cost"),
     _column("income_account_id", sa.String(26), "Active income account id; null when the type does not use one.", sa.ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=True),
     _column("expense_account_id", sa.String(26), "Active expense account id; null when the type does not use one.", sa.ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=True),
     _column("cogs_account_id", sa.String(26), "Active cost-of-goods-sold account id; null when the type does not use one.", sa.ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=True),
@@ -825,6 +833,7 @@ item_vendor_profiles = _table(
     _column("preferred_rank", sa.Integer, "Positive preference rank; rank one is the derived preferred vendor.", nullable=False),
     _column("vendor_item_name", sa.String(200), "Vendor-specific item name; null when not recorded.", nullable=True),
     *_money("purchase_cost", "Vendor purchase cost"),
+    fraction_column("purchase_cost", "Vendor purchase cost"),
     _column("minimum_quantity_microunits", sa.BigInteger, "Nonnegative vendor minimum quantity in micro-units; null when unset.", nullable=True),
     _column("lead_time_days", sa.Integer, "Nonnegative vendor lead time in days; null when unset.", nullable=True),
     _column("manufacturer_part_number", sa.String(128), "Vendor-specific manufacturer part number; null when unset.", nullable=True),
@@ -867,6 +876,7 @@ price_level_items = _table(
     *_owned_child("price_level_id", "price_levels"),
     _column("item_id", sa.String(26), "Item receiving this per-item adjustment.", sa.ForeignKey("items.id", ondelete="RESTRICT"), nullable=False),
     *_money("price", "Per-item fixed price"),
+    fraction_column("price", "Per-item fixed price"),
     _column("percent_millionths", sa.BigInteger, "Per-item signed adjustment percent in millionths of one percentage point; null for fixed price.", nullable=True),
     _column("adjustment_basis", sa.String(20), "Adjustment basis: standard_price, cost, or current_custom_price.", nullable=False),
     _money_pair_check("price"),
@@ -1215,3 +1225,12 @@ from bookflow.company.inventory_site_schema import define_tables as _define_inve
 globals().update(_define_inventory_site_tables(metadata, _column, _table, _common))
 from bookflow.company.accountant_review_schema import define_tables as _define_accountant_review_tables
 globals().update(_define_accountant_review_tables(metadata, _column, _table, _common))
+from bookflow.company.check_print_schema import define_tables as _define_check_print_tables
+globals().update(_define_check_print_tables(metadata, _column, _table, _common))
+# Barcodes (co0094, R104 increment 3): a scanned code finds its item or bin by index.
+sa.Index("ix_items_barcode", items.c.barcode)
+sa.Index("ix_inventory_bins_barcode", inventory_bins.c.barcode)
+from bookflow.company.inventory_count_schema import define_tables as _define_inventory_count_tables
+globals().update(_define_inventory_count_tables(metadata, _column, _table, _common))
+from bookflow.company.scheduling_schema import define_tables as _define_scheduling_tables
+globals().update(_define_scheduling_tables(metadata, _column, _table, _common))

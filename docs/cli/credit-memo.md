@@ -420,6 +420,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
+| `count_position` | `--count-position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `date` | `--date` | string \| null | no | yes | null | Accounting date. Omitted, it is today in the company's timezone. |
 | `customer` | `--customer` | string | yes | no | — | minimum length 1; maximum length 1004 |
 | `lines[].line_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
@@ -876,6 +877,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.price_rule.offset_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].item_snapshot.price_rule.percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.price_rule.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.price_rule.fixed_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.price_rule.adjustment_basis` | literal["standard_price", "cost", "current_custom_price"] | no | no | "standard_price" | — |
 | `revision.lines[].item_snapshot.price_rule.matched` | boolean | no | no | true | — |
 | `revision.lines[].item_snapshot.pricing_rule` | object \| null | no | yes | null | — |
@@ -889,12 +891,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.pricing_rule.rounding` | literal["cent", "x.99", "x.95", "dollar"] | yes | no | — | — |
 | `revision.lines[].item_snapshot.pricing_rule.value` | integer | yes | no | — | — |
 | `revision.lines[].item_snapshot.pricing_rule.base_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.pricing_rule.base_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.pricing_rule.price_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].item_snapshot.pricing_rule.conflict_policy` | literal["lowest_price", "priority"] | yes | no | — | — |
 | `revision.lines[].item_snapshot.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.price_basis_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.standard_price_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.price_basis_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.origins` | object[string, object] | no | no | {} | — |
 | `revision.lines[].item_snapshot.pricing_basis` | literal["unit", "amount", "allocated"] | no | no | "unit" | — |
 | `revision.lines[].item_snapshot.net_amount_minor_units` | integer \| null | no | yes | null | — |
@@ -1000,6 +1006,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].amount.amount` | string | yes | no | — | — |
 | `revision.lines[].amount.currency` | string | yes | no | — | — |
 | `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `source_current` | object | yes | no | — | — |
 | `source_current.credit_source_key_id` | string | yes | no | — | — |
 | `source_current.party_id` | string | yes | no | — | — |
@@ -1037,6 +1044,7 @@ Example JSON output:
   "ar_account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "changed": true,
   "changed_fields": [],
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -1880,6 +1888,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.price_rule.offset_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].item_snapshot.price_rule.percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.price_rule.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.price_rule.fixed_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.price_rule.adjustment_basis` | literal["standard_price", "cost", "current_custom_price"] | no | no | "standard_price" | — |
 | `revision.lines[].item_snapshot.price_rule.matched` | boolean | no | no | true | — |
 | `revision.lines[].item_snapshot.pricing_rule` | object \| null | no | yes | null | — |
@@ -1893,12 +1902,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.pricing_rule.rounding` | literal["cent", "x.99", "x.95", "dollar"] | yes | no | — | — |
 | `revision.lines[].item_snapshot.pricing_rule.value` | integer | yes | no | — | — |
 | `revision.lines[].item_snapshot.pricing_rule.base_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.pricing_rule.base_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.pricing_rule.price_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].item_snapshot.pricing_rule.conflict_policy` | literal["lowest_price", "priority"] | yes | no | — | — |
 | `revision.lines[].item_snapshot.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.price_basis_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.standard_price_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.price_basis_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.origins` | object[string, object] | no | no | {} | — |
 | `revision.lines[].item_snapshot.pricing_basis` | literal["unit", "amount", "allocated"] | no | no | "unit" | — |
 | `revision.lines[].item_snapshot.net_amount_minor_units` | integer \| null | no | yes | null | — |
@@ -2004,6 +2017,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].amount.amount` | string | yes | no | — | — |
 | `revision.lines[].amount.currency` | string | yes | no | — | — |
 | `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `source_current` | object | yes | no | — | — |
 | `source_current.credit_source_key_id` | string | yes | no | — | — |
 | `source_current.party_id` | string | yes | no | — | — |
@@ -2035,6 +2049,7 @@ Example JSON output:
 ```json
 {
   "ar_account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -2258,6 +2273,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
+| `count_position` | `--count-position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `date` | `--date` | string \| null | no | yes | null | — |
 | `customer` | `--customer` | string \| null | no | yes | null | — |
 | `lines[].line_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
@@ -2717,6 +2733,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.price_rule.offset_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].item_snapshot.price_rule.percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.price_rule.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.price_rule.fixed_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.price_rule.adjustment_basis` | literal["standard_price", "cost", "current_custom_price"] | no | no | "standard_price" | — |
 | `revision.lines[].item_snapshot.price_rule.matched` | boolean | no | no | true | — |
 | `revision.lines[].item_snapshot.pricing_rule` | object \| null | no | yes | null | — |
@@ -2730,12 +2747,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.pricing_rule.rounding` | literal["cent", "x.99", "x.95", "dollar"] | yes | no | — | — |
 | `revision.lines[].item_snapshot.pricing_rule.value` | integer | yes | no | — | — |
 | `revision.lines[].item_snapshot.pricing_rule.base_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.pricing_rule.base_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.pricing_rule.price_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].item_snapshot.pricing_rule.conflict_policy` | literal["lowest_price", "priority"] | yes | no | — | — |
 | `revision.lines[].item_snapshot.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.price_basis_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.standard_price_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.price_basis_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.origins` | object[string, object] | no | no | {} | — |
 | `revision.lines[].item_snapshot.pricing_basis` | literal["unit", "amount", "allocated"] | no | no | "unit" | — |
 | `revision.lines[].item_snapshot.net_amount_minor_units` | integer \| null | no | yes | null | — |
@@ -2841,6 +2862,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].amount.amount` | string | yes | no | — | — |
 | `revision.lines[].amount.currency` | string | yes | no | — | — |
 | `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `source_current` | object | yes | no | — | — |
 | `source_current.credit_source_key_id` | string | yes | no | — | — |
 | `source_current.party_id` | string | yes | no | — | — |
@@ -2878,6 +2900,7 @@ Example JSON output:
   "ar_account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "changed": true,
   "changed_fields": [],
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -3549,6 +3572,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.price_rule.offset_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].item_snapshot.price_rule.percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.price_rule.fixed_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.price_rule.fixed_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.price_rule.adjustment_basis` | literal["standard_price", "cost", "current_custom_price"] | no | no | "standard_price" | — |
 | `revision.lines[].item_snapshot.price_rule.matched` | boolean | no | no | true | — |
 | `revision.lines[].item_snapshot.pricing_rule` | object \| null | no | yes | null | — |
@@ -3562,12 +3586,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.pricing_rule.rounding` | literal["cent", "x.99", "x.95", "dollar"] | yes | no | — | — |
 | `revision.lines[].item_snapshot.pricing_rule.value` | integer | yes | no | — | — |
 | `revision.lines[].item_snapshot.pricing_rule.base_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.pricing_rule.base_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.pricing_rule.price_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].item_snapshot.pricing_rule.conflict_policy` | literal["lowest_price", "priority"] | yes | no | — | — |
 | `revision.lines[].item_snapshot.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.price_basis_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.standard_price_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.cost_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.price_basis_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.origins` | object[string, object] | no | no | {} | — |
 | `revision.lines[].item_snapshot.pricing_basis` | literal["unit", "amount", "allocated"] | no | no | "unit" | — |
 | `revision.lines[].item_snapshot.net_amount_minor_units` | integer \| null | no | yes | null | — |
@@ -3673,6 +3701,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].amount.amount` | string | yes | no | — | — |
 | `revision.lines[].amount.currency` | string | yes | no | — | — |
 | `revision.lines[].amount.minor_units` | integer | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `source_current` | object | yes | no | — | — |
 | `source_current.credit_source_key_id` | string | yes | no | — | — |
 | `source_current.party_id` | string | yes | no | — | — |
@@ -3710,6 +3739,7 @@ Example JSON output:
   "ar_account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "changed": true,
   "changed_fields": [],
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",

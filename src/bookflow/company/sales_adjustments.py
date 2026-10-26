@@ -229,7 +229,7 @@ def own_amount(row, facts) -> int:
     """A stored line's amount before discounts, from its captured pricing alone."""
     from bookflow.company.sales_calculations import extension
     if facts.pricing_basis == 'unit':
-        return extension(row['quantity_microunits'], row['unit_price_minor_units'])
+        return extension(row['quantity_microunits'], row['unit_price_minor_units'], row.get('unit_price_fraction'))
     if facts.pricing_basis == 'amount':
         return facts.net_amount_minor_units
     return row['net_minor_units']

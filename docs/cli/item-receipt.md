@@ -182,6 +182,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `items[].items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `items[].items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `items[].items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `items[].items[].profile.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `items[].items[].profile.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `items[].items[].profile.class_id` | object \| null | no | yes | null | — |
 | `items[].items[].profile.class_id.id` | string | yes | no | — | — |
 | `items[].items[].profile.class_id.label` | string | yes | no | — | — |
@@ -286,6 +289,7 @@ The same example as complete `bookflow_run` arguments:
 | `items[].site` | inside `--items` JSON array | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
 | `items[].order_line_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
 | `site` | `--site` | string \| null | no | yes | null | Inventory site the stock arrives at where a line names none; omitted, the purchase-order line's site, else the default site. |
+| `count_position` | `--count-position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 
 ### Command and context options
 
@@ -444,6 +448,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `items[].profile.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `items[].profile.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `items[].profile.class_id` | object \| null | no | yes | null | — |
 | `items[].profile.class_id.id` | string | yes | no | — | — |
 | `items[].profile.class_id.label` | string | yes | no | — | — |
@@ -753,6 +760,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `items[].items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `items[].items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `items[].items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `items[].items[].profile.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `items[].items[].profile.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `items[].items[].profile.class_id` | object \| null | no | yes | null | — |
 | `items[].items[].profile.class_id.id` | string | yes | no | — | — |
 | `items[].items[].profile.class_id.label` | string | yes | no | — | — |
@@ -987,6 +997,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `items[].profile.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `items[].profile.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `items[].profile.class_id` | object \| null | no | yes | null | — |
 | `items[].profile.class_id.id` | string | yes | no | — | — |
 | `items[].profile.class_id.label` | string | yes | no | — | — |
@@ -1312,6 +1325,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `items[].profile.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `items[].profile.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `items[].profile.class_id` | object \| null | no | yes | null | — |
 | `items[].profile.class_id.id` | string | yes | no | — | — |
 | `items[].profile.class_id.label` | string | yes | no | — | — |
@@ -1629,6 +1645,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
+| `items[].profile.standard_cost_fraction` | integer \| null | no | yes | null | — |
+| `items[].profile.receipt_product_unit_cost_fraction` | integer \| null | no | yes | null | — |
 | `items[].profile.class_id` | object \| null | no | yes | null | — |
 | `items[].profile.class_id.id` | string | yes | no | — | — |
 | `items[].profile.class_id.label` | string | yes | no | — | — |

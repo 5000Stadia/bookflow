@@ -151,7 +151,11 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.TIMESHEETS_POLICY_VERSION: '05105fd69f67ec464bc21bbb42a91b26b18961f4630d21385f01a01d9d31e357',
     c.INVENTORY_SITES_POLICY_VERSION: '6b52f7a61a5e4cc9d7eee36318abb8803d39742e4fd2c4883394b4dd34b23529',
     c.ACCOUNTANT_REVIEW_POLICY_VERSION: '1ee5b051d410ea9b481203ec6812a9bdd9b6784ededa18b6f02e25daa6b1eb21',
-    c.PERFORMANCE_POLICY_VERSION: '362ea8b6763e4acb3aa5d804755ddc65f842e303525a04ea13921514277b381a',
+    c.CHECK_PRINTING_POLICY_VERSION: 'a4c3dc284228e3321e3b9fe710ec73488a84800195a5bae91896dd9324979522',
+    c.BARCODES_POLICY_VERSION: 'f2e8e164a17a2a43960e2af90d3382579423e8ef8b03902bc9d36ee07e23058a',
+    c.INVENTORY_COUNTS_POLICY_VERSION: '5af62281b43f9d583b58533c6dc155c4b8eb95fcc8ef9b7ebc7c994e8963e250',
+    c.SCHEDULING_POLICY_VERSION: '16f34e115a6e90fbb5d8377c225ca118c864719d654bb6656991d0c94ef659be',
+    c.PERFORMANCE_POLICY_VERSION: 'f7dff2bccde0245a0a551c224df697de196e5607bacefd605d988ac0ddd56017',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -278,6 +282,10 @@ def known_catalog(version):
     from . import permission_timesheets_catalog
     from . import permission_inventory_sites_catalog
     from . import permission_accountant_review_catalog
+    from . import permission_check_printing_catalog
+    from . import permission_barcodes_catalog
+    from . import permission_inventory_counts_catalog
+    from . import permission_scheduling_catalog
     from . import permission_performance_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
@@ -331,6 +339,10 @@ def known_catalog(version):
         c.TIMESHEETS_POLICY_VERSION: permission_timesheets_catalog,
         c.INVENTORY_SITES_POLICY_VERSION: permission_inventory_sites_catalog,
         c.ACCOUNTANT_REVIEW_POLICY_VERSION: permission_accountant_review_catalog,
+        c.CHECK_PRINTING_POLICY_VERSION: permission_check_printing_catalog,
+        c.BARCODES_POLICY_VERSION: permission_barcodes_catalog,
+        c.INVENTORY_COUNTS_POLICY_VERSION: permission_inventory_counts_catalog,
+        c.SCHEDULING_POLICY_VERSION: permission_scheduling_catalog,
         c.PERFORMANCE_POLICY_VERSION: permission_performance_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is

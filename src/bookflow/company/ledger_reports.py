@@ -501,7 +501,8 @@ def _state(s, inp, report, principal_id, account_id, *, account_scoped=True, fil
     # Stock rows are items, and what a reader sees on one is its hierarchy name, its type,
     # its reorder points and whether it is still active -- so all of that is what stales a
     # continuation when it changes, exactly as an account rename does on the statements.
-    stock = report in {"inventory-valuation", "stock-status", "quantity-by-site"}
+    stock = report in {"inventory-valuation", "stock-status", "quantity-by-site", "physical-inventory-worksheet",
+                       "inventory-valuation-detail"}
     if stock:
         label_query = ("SELECT id, full_name, full_name_key, name, type, active, description, "
                        "reorder_point_min_microunits, reorder_point_max_microunits, "

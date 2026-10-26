@@ -117,6 +117,11 @@ def resolve_selector(
     if row is not None:
         return dict(row)
 
+    if definition.code_field is not None and isinstance(trimmed, str):
+        row = _resolve_code(connection, table, definition, base, trimmed)
+        if row is not None:
+            return row
+
     display = table.c[selector_field]
     candidates = [str(value) for value in connection.execute(base.with_only_columns(display).order_by(table.c[definition.identifier])).scalars()]
     error = _not_found(selector)
@@ -127,6 +132,52 @@ def resolve_selector(
     error.message = (f"No {definition.singular_label.lower()} matches {str(trimmed)!r}; "
                      f"`{definition.noun} list` shows them all.")
     raise error
+
+
+def code_matches(
+    db_or_connection: Any,
+    table: sa.Table,
+    definition: ListDefinition,
+    code: str,
+    *,
+    visible: sa.ColumnElement[bool] | None = None,
+) -> list[dict[str, Any]]:
+    """Every row whose scannable code is exactly ``code`` (trimmed), active ones first."""
+    if definition.code_field is None or not isinstance(code, str) or not code.strip():
+        return []
+    column = table.c[definition.code_field]
+    query = _visible_query(table, visible).where(column == code.strip())
+    order = [table.c[definition.identifier]]
+    if "active" in table.c:
+        order.insert(0, table.c.active.desc())
+    return [dict(row) for row in _connection(db_or_connection).execute(query.order_by(*order)).mappings()]
+
+
+def _resolve_code(connection: sa.Connection, table: sa.Table, definition: ListDefinition,
+                  base: sa.Select, code: str) -> dict[str, Any] | None:
+    """The third step of a selector: a scanned code (items: ``barcode``), after id and name.
+
+    One active row carrying the code wins; with none active, the only inactive one is returned so
+    the caller's own inactive-reference rule applies. Two or more active rows sharing a code (a
+    duplicate kept from before codes were checked) make the code ambiguous: the refusal names them.
+    """
+    column = table.c[definition.code_field]
+    rows = [dict(row) for row in connection.execute(base.where(column == code).order_by(table.c[definition.identifier])).mappings()]
+    if not rows:
+        return None
+    active = [row for row in rows if row.get("active", True)]
+    if len(active) == 1 or (not active and len(rows) == 1):
+        return (active or rows)[0]
+    shown = active or rows
+    display = _selector_field(definition)
+    names = [str(row[display]) for row in shown]
+    raise BookflowError("E_VALIDATION", message=(
+        f"{definition.code_field.replace('_', ' ').capitalize()} {code!r} is on {len(shown)} "
+        f"{definition.plural_label.lower()}: {', '.join(names)}; name the {definition.singular_label.lower()} instead."),
+        details={"selector": code, "ambiguous": True,
+                 "candidates": [{"id": row[definition.identifier], "name": row[display]} for row in shown],
+                 "fields": [{"field": definition.noun, "problem": f"{definition.code_field} {code!r} is on more than one "
+                             f"{definition.singular_label.lower()}: {', '.join(names)}"}]})
 
 
 def assert_name_available(

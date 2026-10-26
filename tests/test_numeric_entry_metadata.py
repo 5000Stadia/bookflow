@@ -34,10 +34,15 @@ def test_exact_precision_contracts_and_recursive_models():
 
 
 def test_money_meanings_include_untyped_inputs_and_collections():
-    for field in ('price', 'cost', 'discount_amount', 'original_cost', 'disposal_proceeds', 'disposal_costs', 'book_basis', 'tax_basis'):
+    # R150: a unit price or cost carries three places beyond the currency's minor unit.
+    price = {'currency': 'company', 'extra_places': 3}
+    for field in ('price', 'cost'):
+        assert descriptors('item create')[field]['math'] == price
+    for field in ('discount_amount', 'original_cost', 'disposal_proceeds', 'disposal_costs', 'book_basis', 'tax_basis'):
         assert descriptors('item create')[field]['math'] == {'currency': 'company'}
-    assert children('item create', 'vendor_profiles')['purchase_cost']['math'] == {'currency': 'company'}
-    assert children('invoice post', 'lines')['price_basis_amount']['math'] == {'currency': 'company'}
+    assert children('item create', 'vendor_profiles')['purchase_cost']['math'] == price
+    assert children('invoice post', 'lines')['price_basis_amount']['math'] == price
+    assert children('invoice post', 'lines')['unit_price']['math'] == price
     assert descriptors('customer create')['credit_limit']['math'] == {'currency': 'company'}
     assert descriptors('price-level create')['rounding_increment']['math'] == {'currency': 'company'}
 
@@ -96,7 +101,7 @@ def test_remaining_decimal_families_and_identity_exclusions():
     assert descriptors('term create')['discount_percent']['math'] == {'scale': 6}
     for name in ('completed_quantity', 'markup_percent'):
         assert children('estimate create', 'lines')[name]['math'] == {'scale': 6}
-    assert children('estimate create', 'lines')['estimated_unit_cost']['math'] == {'currency': 'company'}
+    assert children('estimate create', 'lines')['estimated_unit_cost']['math'] == {'currency': 'company', 'extra_places': 3}  # R150
     for name in ('minimum_net', 'maximum_net'):
         assert descriptors('estimate query')[name]['math'] == {'currency': 'company'}
     assert descriptors('sales-receipt update')['amount_received']['math'] == {'currency': 'company'}

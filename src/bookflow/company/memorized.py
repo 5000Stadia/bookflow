@@ -163,6 +163,32 @@ def _capture(s, command_name, payload, *, warnings):
     return command, payload, index, reference_schema
 
 
+SCHEDULE_DECISION = ('mode', 'frequency', 'start_date', 'days_in_advance', 'stop_date', 'anchor_day', 'status')
+
+
+def past_slots_warning(s, fields, previous, warnings):
+    """Say how many slots dated before today an automatic schedule set now leaves for a person.
+
+    The scheduler never enters unattended a slot dated before the moment its schedule was set or last
+    changed (R111): such slots wait on Reminders for a person to enter or skip.
+    """
+    fields = dict(fields, status=fields.get('status') or (previous or {}).get('status') or 'active')
+    if (fields.get('mode') != 'enter_automatically' or fields.get('frequency', 'never') == 'never'
+            or fields['status'] != 'active'):
+        return
+    if previous and all(previous.get(k) == fields.get(k) for k in SCHEDULE_DECISION):
+        return
+    today_ = schedule.today(s.company_tz)
+    if not fields.get('next_date') or fields['next_date'] > today_:
+        return
+    past = schedule.slots_due(fields['frequency'], fields['next_date'], fields.get('anchor_day'), fields.get('stop_date'),
+                              fields.get('remaining_count'), 0, today_, 1000)
+    if past:
+        warnings.append(f"{len(past)} slot{'s' if len(past) != 1 else ''} dated today or earlier (from {past[0]}) will "
+                        'wait for a person: the scheduler never enters unattended a slot dated on or before the day '
+                        'its schedule was set.')
+
+
 def _schedule_fields(inp, previous=None, *, warnings):
     """Build the stored schedule from the input, keeping whatever the input did not name."""
     previous = previous or {}
@@ -206,11 +232,15 @@ def prepare(s, ctx, inp, verb):
     data: dict[str, Any] = {'verb': verb, 'warnings': warnings}
     if verb == 'create':
         display, key = _name_key(inp.name)
-        if _one(s, c.memorized_transactions, c.memorized_transactions.c.name_key == key,
-                c.memorized_transactions.c.status != 'deleted'):
-            raise BookflowError('E_NAME_TAKEN', details={'name': display})
+        taken = _one(s, c.memorized_transactions, c.memorized_transactions.c.name_key == key)
+        if taken:
+            # A deleted template keeps its name: its history still answers to it.
+            raise BookflowError('E_NAME_TAKEN', message=(
+                'A deleted memorized transaction keeps that name; choose another.' if taken['status'] == 'deleted' else None),
+                details={'name': display, 'field': 'name'})
         command, payload, index, reference_schema = _capture(s, inp.command, inp.payload, warnings=warnings)
         fields = _schedule_fields(inp, warnings=warnings)
+        past_slots_warning(s, fields, None, warnings)
         group = _resolve_group(s, inp.group) if inp.group else None
         _check_group_pairing(group, fields, inp.group_ordinal, bool(inp.group))
         data.update(command=command.name, payload=payload, index=index, name=display, name_key=key,
@@ -223,9 +253,8 @@ def prepare(s, ctx, inp, verb):
         _version_conflict(row, inp.expected_version, 'memorized_transaction')
         revision = _one(s, c.memorized_transaction_revisions, c.memorized_transaction_revisions.c.id == row['current_revision_id'])
         display, key = _name_key(inp.name) if inp.name else (row['name'], row['name_key'])
-        if key != row['name_key'] and _one(s, c.memorized_transactions, c.memorized_transactions.c.name_key == key,
-                                           c.memorized_transactions.c.status != 'deleted'):
-            raise BookflowError('E_NAME_TAKEN', details={'name': display})
+        if key != row['name_key'] and _one(s, c.memorized_transactions, c.memorized_transactions.c.name_key == key):
+            raise BookflowError('E_NAME_TAKEN', details={'name': display, 'field': 'name'})
         if inp.payload is not None:
             command, payload, index, reference_schema = _capture(s, row['command'], inp.payload, warnings=warnings)
         else:
@@ -237,6 +266,7 @@ def prepare(s, ctx, inp, verb):
         fields = _schedule_fields(inp, row, warnings=warnings)
         if inp.status:
             fields['status'] = inp.status
+        past_slots_warning(s, fields, row, warnings)
         if 'group' in inp.model_fields_set:
             # `--clear group` names the field with no value, which is how a template leaves
             # its group; naming no field at all leaves it where it is.
@@ -256,6 +286,11 @@ def prepare(s, ctx, inp, verb):
         row = _resolve_template(s, inp.memorized)
         _version_conflict(row, inp.expected_version, 'memorized_transaction')
         data.update(row=row)
+        # Deleting sets the waiting slots aside: a slot held for a person is a person's to set aside.
+        from bookflow.company.memorized_entry import _refuse_held_for_agents
+        _refuse_held_for_agents(s, [o['id'] for o in _rows(s, c.memorized_occurrences,
+                                                           c.memorized_occurrences.c.template_id == row['id'],
+                                                           c.memorized_occurrences.c.status == 'pending')], 'skip')
         revision = _one(s, c.memorized_transaction_revisions, c.memorized_transaction_revisions.c.id == row['current_revision_id'])
         fields = dict(_schedule_out(row), status='deleted', next_date=None)
         preview = _template_write_preview(s, ctx, row, row['name'], row['command'], fields, [],
@@ -300,12 +335,28 @@ def apply_write(plan, ctx, s):
         after = dict(row, status='deleted', next_date=None, version=row['version'] + 1,
                      updated_at=at, updated_by=s.actor.id, updated_via=ctx.interface.value)
         touched.append(Touched('memorized_transaction', row['id'], 'delete', row['version'], after['version'], after, row, db='company'))
+        # A deleted template owes nothing more: the slots still waiting are set aside, on the record
+        # as skipped, so neither a person's run nor the host's scheduler can enter them later.
+        waiting = _rows(s, c.memorized_occurrences, c.memorized_occurrences.c.template_id == row['id'],
+                        c.memorized_occurrences.c.status == 'pending')
+        for occurrence in waiting:
+            skipped = dict(occurrence, status='skipped', version=occurrence['version'] + 1, updated_at=at,
+                           updated_by=s.actor.id, updated_via=ctx.interface.value)
+            touched.append(Touched('memorized_occurrence', occurrence['id'], 'update', occurrence['version'],
+                                   skipped['version'], skipped, occurrence, db='company'))
         summary = f"deleted memorized transaction {row['name']}"
         _audit(s, ctx, data['command_name'], summary, touched, event)
         s.company.conn.execute(c.memorized_transactions.update()
             .where(c.memorized_transactions.c.id == row['id'])
             .values(status='deleted', next_date=None, version=after['version'],
                     updated_at=at, updated_by=s.actor.id, updated_via=ctx.interface.value))
+        for occurrence in waiting:
+            s.company.conn.execute(c.memorized_occurrences.update().where(c.memorized_occurrences.c.id == occurrence['id'])
+                .values(status='skipped', version=occurrence['version'] + 1, updated_at=at,
+                        updated_by=s.actor.id, updated_via=ctx.interface.value))
+        if waiting:
+            from bookflow.company.memorized_entry import release_holds
+            release_holds(s, ctx, data['command_name'], [o['id'] for o in waiting], 'set aside, deleting the template,')
         revision = _one(s, c.memorized_transaction_revisions, c.memorized_transaction_revisions.c.id == row['current_revision_id'])
         out = _row_write_output(s, after, revision, [], warnings, deleted=True)
         return Applied(out, touched, summary, audited=True)
@@ -336,7 +387,8 @@ def apply_write(plan, ctx, s):
         previous_revision_id=before['current_revision_id'] if before else None,
         command=row['command'], payload=edges.canonical(data['payload']),
         payload_hash=edges.digest(data['payload']),
-        schedule_snapshot=edges.canonical({k: fields[k] for k in sorted(fields)}),
+        # The status in force is part of the schedule decision: a resume is a schedule set anew (R111).
+        schedule_snapshot=edges.canonical({**{k: fields[k] for k in sorted(fields)}, 'status': row['status']}),
         reference_schema=data['reference_schema'], **_created(s, ctx, at), audit_event_id=event)
 
     touched.append(Touched('memorized_transaction', row['id'], 'create' if before is None else 'update',
@@ -351,6 +403,13 @@ def apply_write(plan, ctx, s):
             .where(c.memorized_transactions.c.id == row['id'])
             .values(**{k: row[k] for k in row if k not in ('id', 'created_at', 'created_by', 'created_via')}))
     s.company.conn.execute(c.memorized_transaction_revisions.insert().values(**revision))
+    if s.actor.kind == 'agent':
+        # The scheduler replays an agent's revision only while the agent still holds the authority it
+        # saved it with -- the checks a bearer token gets: assignment, suspension and epoch (R111).
+        from bookflow.hub.credentials import _binding
+        _, epoch = _binding(s.hub, s.actor.id, ctx.on_behalf_of)
+        s.company.conn.execute(c.scheduled_revision_authority.insert().values(
+            revision_id=revision_id, agent_id=s.actor.id, principal_id=ctx.on_behalf_of, authority_epoch=epoch, created_at=at))
     for edge in index:
         s.company.conn.execute(c.memorized_references.insert().values(
             id=new_id(), template_id=row['id'], revision_id=revision_id, created_at=at,
@@ -381,6 +440,7 @@ def prepare_group(s, ctx, inp, verb):
         if _one(s, c.memorized_groups, c.memorized_groups.c.name_key == key, c.memorized_groups.c.status != 'deleted'):
             raise BookflowError('E_NAME_TAKEN', details={'name': display})
         fields = _schedule_fields(inp, warnings=warnings)
+        past_slots_warning(s, fields, None, warnings)
         data.update(name=display, name_key=key, fields=fields)
         preview = _group_write_preview(s, ctx, None, display, fields, 0, warnings)
     elif verb == 'update':
@@ -393,6 +453,7 @@ def prepare_group(s, ctx, inp, verb):
         fields = _schedule_fields(inp, row, warnings=warnings)
         if inp.status:
             fields['status'] = inp.status
+        past_slots_warning(s, fields, row, warnings)
         members = _members(s, row['id'])
         if fields['frequency'] != 'never' and any(m['frequency'] != 'never' for m in members):
             raise BookflowError('E_VALIDATION', details={'fields': [{'field': 'frequency', 'problem':
@@ -464,6 +525,8 @@ def apply_group_write(plan, ctx, s):
                        before['version'] if before else None, row['version'], row, before, db='company')]
     summary = ('memorized group ' if before is None else 'updated memorized group ') + row['name']
     _audit(s, ctx, data['command_name'], summary, touched, event)
+    if before is None or any(before.get(k) != row.get(k) for k in _SCHEDULE_KEYS):
+        _record_group_setter(s, ctx, row['id'], at)
     if before is None:
         s.company.conn.execute(c.memorized_groups.insert().values(**row))
     else:
@@ -472,6 +535,21 @@ def apply_group_write(plan, ctx, s):
     out = MemorizedGroupWriteOutput(**_group_out_fields(row), schedule=_schedule_out(row),
                                     member_count=member_count, warnings=list(warnings))
     return Applied(out, touched, summary, audited=True)
+
+
+_SCHEDULE_KEYS = ('status', 'mode', 'frequency', 'anchor_day', 'start_date', 'next_date', 'stop_date',
+                  'remaining_count', 'days_in_advance')
+
+
+def _record_group_setter(s, ctx, group_id, at):
+    """Who set this group's schedule, mode or status: the scheduler enters a member only while the
+    setter may too, and names the setter on the posting (R111)."""
+    from bookflow.hub.credentials import _binding
+    epoch = _binding(s.hub, s.actor.id, ctx.on_behalf_of)[1] if s.actor.kind == 'agent' else None
+    s.company.conn.execute(c.scheduled_group_authority.delete().where(c.scheduled_group_authority.c.group_id == group_id))
+    s.company.conn.execute(c.scheduled_group_authority.insert().values(
+        group_id=group_id, set_by=s.actor.id, principal_id=ctx.on_behalf_of if s.actor.kind == 'agent' else None,
+        authority_epoch=epoch, set_at=at))
 
 
 def _group_out_fields(row):

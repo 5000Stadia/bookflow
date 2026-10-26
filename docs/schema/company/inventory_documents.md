@@ -10,7 +10,7 @@ Database: `company`.
 |---|---|---|---|---|---|---|---|
 | `transaction_id` | VARCHAR(26) | no | — | primary key 1 | ix_inventory_documents_kind | transactions.id | The posted journal entry this inventory document was written as. |
 | `type` | VARCHAR(32) | no | — | — | — | transactions.type | Transaction type of the marked document; always journal_entry. |
-| `kind` | VARCHAR(16) | no | — | — | ix_inventory_documents_kind | — | Document a person or the recalculation wrote: adjustment or recost. |
+| `kind` | VARCHAR(16) | no | — | — | ix_inventory_documents_kind | — | Document a person or the recalculation wrote: adjustment, recost, count or landed_cost. |
 | `created_at` | VARCHAR(32) | no | — | — | — | — | UTC time this document marker was written. |
 | `created_by` | VARCHAR(26) | no | — | — | — | — | Company principal the document is attributed to. |
 | `created_via` | VARCHAR(16) | no | — | — | — | — | Interface the document was written through. |
