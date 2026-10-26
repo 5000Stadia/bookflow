@@ -84,6 +84,7 @@ ACCEPTED = {
     'performance-v1': (698, '4e60dbb727be31efe9804b77a51cf36648ec37efde2dae1b6e323739504ea6a4'),
     'serial-lot-v1': (708, '4b340c8c2715584586326a1ee9698cc097af5993ab61cf68b25644a859768d03'),
     'bins-v1': (723, '5b61fdbac14da296bfe5c87ba003b4acaf6fbec991d31b1675acb87a66209b91'),
+    'landed-cost-v1': (729, '1031c961c6bd10b761157ec1c255240324aaa2237f06f96f168bf26b7c4f5350'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -193,6 +194,8 @@ CHAIN_ADDITIONS = {
                 'cycle-class activate', 'cycle-class create', 'cycle-class deactivate', 'cycle-class list',
                 'cycle-class show', 'cycle-class update', 'cycle-count classify', 'cycle-count due',
                 'report items-by-bin'},
+    'landed-cost-v1': {'landed-cost charges', 'landed-cost post', 'landed-cost query', 'landed-cost setup',
+                       'landed-cost show', 'landed-cost void'},
 }
 
 _ANCESTOR_EDIT = """

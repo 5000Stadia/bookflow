@@ -821,6 +821,8 @@ FIELDS = {
         'purchase_description': ('str', True, False, 'dependency_field'),
         'purchase_enabled': ('bool', False, False, 'dependency_field'),
         'reorder_point_max_microunits': ('int', True, False, 'dependency_field'),
+        'unit_weight_microunits': ('int', True, False, 'dependency_field'),
+        'unit_volume_microunits': ('int', True, False, 'dependency_field'),
         'reorder_point_min_microunits': ('int', True, False, 'dependency_field'),
         'sales_enabled': ('bool', False, False, 'dependency_field'),
         'sales_tax_code_id': ('str', True, False, 'dependency_field'),

@@ -2476,3 +2476,25 @@ MATRIX['cycle-count classify'] = {
     'E_VALIDATION': 'a share outside 0-100, shares passing 100, a period that ends before it starts, or an unknown class',
     'E_RECORD_NOT_FOUND': 'class absent', 'E_INACTIVE_REFERENCE': 'an inactive class', **_SITE_COMMON}
 MATRIX['cycle-count due'] = {'E_VALIDATION': 'an unknown site or a malformed date', 'E_RECORD_NOT_FOUND': 'site absent from selected company'}
+
+# Landed cost (R104 increment 6).
+_LANDED_WRITE = {
+    'E_VALIDATION': 'no clearing account, a charge or target not found among what may take part, nothing left to '
+                    'allocate, more than is unallocated, charges and credits mixed, a target weighing nothing, a date '
+                    'before a target receipt, a freight credit taking a receipt below zero, stock that cannot stand',
+    'E_RECORD_NOT_FOUND': 'unknown allocation, item or account',
+    'E_INACTIVE_REFERENCE': 'inactive clearing or target account',
+    'E_PERIOD_CLOSED': 'the allocation date or a true-up or void date falls in a closed period',
+    'E_WORK_DEPENDENCY': 'voiding an allocation a later freight credit needs',
+    'E_DUPLICATE_NUMBER': 'the supplied allocation number is already used',
+    'E_REASON_REQUIRED': 'a write without --reason',
+    'E_VALUE_RANGE': 'an amount outside signed 64-bit storage',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+}
+MATRIX['landed-cost setup'] = {'E_VALIDATION': 'invalid input', 'E_REASON_REQUIRED': 'a write without --reason'}
+MATRIX['landed-cost charges'] = {'E_VALIDATION': 'the clearing account does not equal the unallocated charges on a date',
+                                 'E_RECORD_NOT_FOUND': 'unknown vendor'}
+MATRIX['landed-cost post'] = dict(_LANDED_WRITE)
+MATRIX['landed-cost void'] = dict(_LANDED_WRITE)
+MATRIX['landed-cost show'] = {'E_RECORD_NOT_FOUND': 'unknown allocation', 'E_VALIDATION': 'invalid input'}
+MATRIX['landed-cost query'] = {'E_RECORD_NOT_FOUND': 'unknown document', 'E_VALIDATION': 'invalid input'}
