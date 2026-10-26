@@ -281,11 +281,38 @@ def _field_types(annotation):
     return tuple(get_type_hints(annotation).items())
 
 
+@lru_cache(maxsize=1024)
+def _shape(annotation):
+    # How _check reads an annotation: fixed declaration metadata, computed once per
+    # annotation (R180: the first catalog build checked millions of values and spent most
+    # of its time in get_origin, get_args and is_dataclass). Never a value or an answer.
+    origin, args = get_origin(annotation), get_args(annotation)
+    if origin in (Union, UnionType):
+        return 'union', args
+    if origin is Literal:
+        return 'literal', args
+    if origin is tuple:
+        return 'tuple', args
+    if is_dataclass(annotation):
+        return 'dataclass', args
+    if isinstance(annotation, type) and issubclass(annotation, Enum):
+        return 'enum', args
+    return 'plain', args
+
+
 def _check(value, annotation, field='input'):
     if annotation is Catalog and _validated_descriptor(value):
         return
-    origin, args = get_origin(annotation), get_args(annotation)
-    if origin in (Union, UnionType):
+    try:
+        kind, args = _shape(annotation)
+    except TypeError:  # an unhashable annotation: read it afresh
+        kind, args = _shape.__wrapped__(annotation)
+    if kind == 'union':
+        # An option of exactly the value's own plain type admits it as _check(value, option)
+        # would (str still needs its own check), so try that first: any admitting option
+        # answers the union, and the failed attempts before it only cost exceptions.
+        if type(value) in args and type(value) is not str and _shape(type(value))[0] == 'plain':
+            return
         for option in args:
             try:
                 _check(value, option, field)
@@ -293,10 +320,10 @@ def _check(value, annotation, field='input'):
             except PolicyInputError:
                 pass
         _fail('invalid_type', field)
-    elif origin is Literal:
+    elif kind == 'literal':
         if not any(type(value) is type(a) and value == a for a in args):
             _fail('invalid_type', field)
-    elif origin is tuple:
+    elif kind == 'tuple':
         if type(value) is not tuple:
             _fail('invalid_type', field)
         if len(args) == 2 and args[1] is Ellipsis:
@@ -307,12 +334,12 @@ def _check(value, annotation, field='input'):
                 _fail('invalid_type', field)
             for item, kind in zip(value, args):
                 _check(item, kind, field)
-    elif is_dataclass(annotation):
+    elif kind == 'dataclass':
         if type(value) is not annotation:
             _fail('invalid_type', field)
         for key, kind in _field_types(annotation):
             _check(getattr(value, key), kind, key)
-    elif isinstance(annotation, type) and issubclass(annotation, Enum):
+    elif kind == 'enum':
         if type(value) is not annotation:
             _fail('invalid_type', field)
     elif type(value) is not annotation:
