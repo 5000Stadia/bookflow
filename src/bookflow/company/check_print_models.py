@@ -33,7 +33,7 @@ class CheckPrintQueueInput(_Strict):
 
 class QueuedCheck(_Strict):
     transaction_id: str
-    document_type: Literal['check', 'bill_payment'] = Field(description='check (Write Checks) or bill_payment (Pay Bills).')
+    document_type: Literal['check', 'bill_payment', 'sales_tax_payment', 'customer_refund'] = Field(description='check (Write Checks), bill_payment (Pay Bills), sales_tax_payment (Pay Sales Tax) or customer_refund (a refund by check).')
     reference: str = Field(description="The document's own reference from its series; not a check number.")
     account_id: str
     date: str
@@ -90,7 +90,7 @@ class CheckPrintInput(_Strict):
 
 class SkippedCheck(_Strict):
     transaction_id: str
-    document_type: Literal['check', 'bill_payment']
+    document_type: Literal['check', 'bill_payment', 'sales_tax_payment', 'customer_refund']
     reference: str
     date: str
     payee_name: str | None
@@ -101,7 +101,7 @@ class PrintRunItem(_Strict):
     item_id: str
     position: int
     transaction_id: str
-    document_type: Literal['check', 'bill_payment']
+    document_type: Literal['check', 'bill_payment', 'sales_tax_payment', 'customer_refund']
     check_number: str
     date: str
     payee_name: str | None

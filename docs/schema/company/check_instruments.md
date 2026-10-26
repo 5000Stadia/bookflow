@@ -9,7 +9,7 @@ Database: `company`.
 | Column | SQL type | Nullable | Default | Key | Indexes | References | Meaning |
 |---|---|---|---|---|---|---|---|
 | `transaction_id` | VARCHAR(26) | no | — | primary key 1 | — | check_instrument_revisions.transaction_id, transactions.id | The check this cheque identity currently belongs to. |
-| `type` | VARCHAR(32) | no | — | — | — | transactions.type | Transaction type of the document this cheque was written on: the journal entry a check posts as, or the bill payment Pay Bills writes. |
+| `type` | VARCHAR(32) | no | — | — | — | transactions.type | Transaction type of the document this cheque was written on: the journal entry a check posts as, the bill payment Pay Bills writes, or a sales tax payment or customer refund printed from the queue (co0096). |
 | `revision_id` | VARCHAR(26) | no | — | — | — | check_instrument_revisions.revision_id | Revision whose cheque identity this projects. |
 | `account_id` | VARCHAR(26) | no | — | — | ix_check_instruments_sequence, uq_check_instrument_number | accounts.id | Bank account whose chequebook this number belongs to. |
 | `check_number` | VARCHAR(64) | no | — | — | — | — | Number as it is written on the face of the cheque. |

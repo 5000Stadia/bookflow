@@ -425,7 +425,7 @@ def test_co0095_on_a_populated_company_changes_no_existing_row_and_matches_the_m
         conn.execute('DROP TABLE inventory_assignments')
         conn.execute('UPDATE items SET tracking = \'none\'')
         conn.execute('ALTER TABLE items DROP COLUMN tracking')
-        conn.execute("UPDATE alembic_version SET version_num='co0085'")
+        conn.execute("UPDATE alembic_version SET version_num='co0096'")
         conn.commit()
         names = [r[0] for r in conn.execute("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' "
                                             "AND name != 'alembic_version'")]

@@ -180,17 +180,26 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0093 = importlib.import_module("bookflow.storage.company_migrations.versions.0093_inventory_counts")
 
     co0091 = importlib.import_module("bookflow.storage.company_migrations.versions.0091_subcent_unit_prices")
+    co0096 = importlib.import_module("bookflow.storage.company_migrations.versions.0096_check_print_more")
 
     co0095 = importlib.import_module("bookflow.storage.company_migrations.versions.0095_serial_lot_numbers")
 
     def older(conn):
-        # Newest first: co0095 (on co0085), co0085 (on co0093), then co0093, then co0094, then co0092 and co0091.
+        # Newest first: co0095 (on co0096), then co0096 (on co0085), co0085 (on co0093), co0093, co0094, co0092 and co0091.
         for trigger in co0095.TRIGGERS:
             conn.execute(f"DROP TRIGGER {trigger}")  # co0095's guards
         for index in co0095.INDEX_NAMES:
             conn.execute(f"DROP INDEX {index}")  # its two placement indexes
         conn.execute("DROP TABLE inventory_assignments")  # its table, with its indexes
         conn.execute("ALTER TABLE items DROP COLUMN tracking")  # and items.tracking
+        # co0096 (on co0085) widened two CHECKs; check_print_marks goes with co0092's tables below, so only the
+        # chequebook's own CHECK is put back.
+        conn.execute("PRAGMA writable_schema=ON")
+        for old_text, new_text in co0096.REPLACEMENTS["check_instruments"]:
+            assert conn.execute("UPDATE sqlite_schema SET sql = replace(sql, ?, ?) WHERE name = 'check_instruments'",
+                                (new_text, old_text)).rowcount == 1
+        conn.execute("PRAGMA writable_schema=OFF")
+        # Then co0085 (on co0093), co0093, co0094, co0092 and co0091.
         for table in ("todos", "overdue_notices", "scheduled_revision_authority", "scheduled_group_authority", "scheduled_holds"):
             conn.execute(f"DROP TABLE {table}")  # co0085's five tables
         for column in ("scheduler_catch_up_days", "overdue_notice_days", "overdue_notice_frequency",
