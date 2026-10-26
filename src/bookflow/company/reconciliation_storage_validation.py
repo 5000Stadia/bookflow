@@ -631,8 +631,17 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None, m
         require(actual==expected,'event_transition_coverage')
 
 
-def _receipts(r,grouped_by):
+def _receipts(r,grouped_by=None):
     from bookflow.company.reconciliation_schema import COMMANDS
+    if grouped_by is None:
+        # Called on its own (tests): the same table-order groups `validate` builds.
+        groups={}
+        def grouped_by(name,field):
+            found=groups.get((name,field))
+            if found is None:
+                found=groups[name,field]={}
+                for v in r[name]: found.setdefault(v[field],[]).append(v)
+            return found
     def owned(name,field,key): return grouped_by(name,field).get(key,())
     first_subtype={}
     for kind in ('member','seed','certificate','proposal'):
