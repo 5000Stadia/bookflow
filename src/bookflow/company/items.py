@@ -386,11 +386,7 @@ _IDENTITY = frozenset({"name", "type", "parent_id", "category_id", "default_clas
 _SALES = frozenset({"description", "sales_enabled", "price", "income_account_id", "sales_tax_code_id"})
 _PURCHASE = frozenset({"purchase_description", "purchase_enabled", "cost", "expense_account_id", "preferred_vendor_id", "vendor_profiles"})
 _INVENTORY_PURCHASE = frozenset({"purchase_description", "purchase_enabled", "cost", "preferred_vendor_id", "vendor_profiles"})
-<<<<<<< HEAD
-_STOCK = frozenset({"cogs_account_id", "asset_account_id", "manufacturer_part_number", "barcode", "tracking", "unit_of_measure_set_id", "reorder_point_min", "reorder_point_max", "unit_weight", "unit_volume"})
-=======
-_STOCK = frozenset({"cogs_account_id", "asset_account_id", "manufacturer_part_number", "barcode", "tracking", "cycle_class_id", "unit_of_measure_set_id", "reorder_point_min", "reorder_point_max"})
->>>>>>> main
+_STOCK = frozenset({"cogs_account_id", "asset_account_id", "manufacturer_part_number", "barcode", "tracking", "cycle_class_id", "unit_of_measure_set_id", "reorder_point_min", "reorder_point_max", "unit_weight", "unit_volume"})
 _FIXED = frozenset({
     "asset_number", "purchase_date", "original_cost", "vendor_id", "location", "serial_number",
     "warranty_expiration", "disposal_status", "disposal_date", "disposal_proceeds",
