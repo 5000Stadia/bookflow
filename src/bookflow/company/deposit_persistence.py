@@ -274,6 +274,20 @@ def preview(s,ctx,fresh):
     return LifecycleOutput.model_validate_json(q.canonical(projected)).model_copy(update={'operation_id':None})
 
 
+def _insert_in_order(s,table,rows):
+    """Insert `rows` in their order, one statement per run of rows naming the same columns.
+
+    Each run is one executemany: SQLite still inserts row by row, in this order, firing every
+    trigger and checking every key per row exactly as one INSERT per row did; only the per-row
+    statement building is saved."""
+    run=[]
+    for row in rows:
+        if run and row.keys()!=run[0].keys():
+            s.company.conn.execute(table.insert(),run);run=[]
+        run.append(row)
+    if run:s.company.conn.execute(table.insert(),run)
+
+
 def _execute(s,ctx,plan,planned_in_write=False):
     """Re-resolve and validate inside caller's already-open writer transaction.
 
@@ -311,8 +325,7 @@ def _execute(s,ctx,plan,planned_in_write=False):
         else:s.company.conn.execute(c.transactions.insert().values(**h))
         for before,after in bundle['source_headers']:
             s.company.conn.execute(c.transactions.update().where(c.transactions.c.id==after['id']).values(**after))
-        for name in TABLES:
-            for row in pending[name]:s.company.conn.execute(getattr(c,name).insert().values(**row))
+        for name in TABLES:_insert_in_order(s,getattr(c,name),pending[name])
         for claim in data['claims']:
             s.company.conn.execute(c.deposit_current_memberships.delete().where(c.deposit_current_memberships.c.membership_id==claim['id']))
         for claim in bundle['claims']:
@@ -326,10 +339,9 @@ def _execute(s,ctx,plan,planned_in_write=False):
             stmt=insert(c.sequences).values(**data['sequence'])
             s.company.conn.execute(stmt.on_conflict_do_update(index_elements=['name'],set_=data['sequence']))
     s.company.conn.execute(c.deposit_operations.insert().values(**operation))
-    for target in targets:s.company.conn.execute(c.deposit_operation_targets.insert().values(operation_id=operation['id'],transaction_id=target))
-    for kind,values in collections.items():
-        for ordinal,value in enumerate(values):
-            s.company.conn.execute(c.deposit_operation_items.insert().values(operation_id=operation['id'],kind=kind,ordinal=ordinal,facts_snapshot=q.canonical(value)))
+    _insert_in_order(s,c.deposit_operation_targets,[dict(operation_id=operation['id'],transaction_id=target) for target in targets])
+    _insert_in_order(s,c.deposit_operation_items,[dict(operation_id=operation['id'],kind=kind,ordinal=ordinal,facts_snapshot=q.canonical(value))
+                                                  for kind,values in collections.items() for ordinal,value in enumerate(values)])
     consumption.persist(s,consumed)
     return output,consumed
 
