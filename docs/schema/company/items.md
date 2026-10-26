@@ -85,3 +85,4 @@ Database: `company`.
 | `book_basis_currency` | VARCHAR(3) | yes | — | — | — | — | ISO 4217 currency for fixed-asset book basis; null with its amount. |
 | `tax_basis_minor_units` | BIGINT | yes | — | — | — | — | Fixed-asset tax basis as signed integer minor units; null with its currency. |
 | `tax_basis_currency` | VARCHAR(3) | yes | — | — | — | — | ISO 4217 currency for fixed-asset tax basis; null with its amount. |
+| `tracking` | VARCHAR(8) | no | "none" | — | — | — | Number tracking of an inventory part or assembly: none, serial or lot. |

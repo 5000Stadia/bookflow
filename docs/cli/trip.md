@@ -1025,6 +1025,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].gross.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].unit_price_minor_units` | integer \| null | yes | yes | — | — |
 | `revision.lines[].unit_price_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].lot` | string \| null | no | yes | null | — |
+| `revision.lines[].lot_expiry` | string \| null | no | yes | null | — |
+| `revision.lines[].serial_numbers` | array[string] \| null | no | yes | null | — |
 | `revision.lines[].net_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].tax_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].gross_minor_units` | integer | yes | no | — | — |
@@ -1478,6 +1481,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "percent"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].site` | string \| null | no | yes | null | Inventory site a stocked line takes from (a sale), gives back to (a return) or commits at (an order), by id or name. Omitted: the document's site, else the source line's, else the default site. Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].lot` | string \| null | no | yes | null | Lot number of a lot-tracked item: the lot an incoming line receives into (made when new), or the lot an outgoing line takes from. Omitted on an outgoing line, the units leave unassigned and the result names the earliest-expiring lot in stock there. Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].lot_expiry` | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers of a serial-tracked item, one per unit, up to the line's quantity; units left unnumbered are unassigned (number them later with `inventory assign`). Never make one up. An outgoing number leaves from where the books hold it; a number never on file is accepted with a warning and shows -1 until its receipt. Omitted on a correction, the line keeps the numbers it had. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.release_to_order` | literal["reopen", "cancel"] | no | no | "reopen" | For lines made from a sales order or work order that this correction takes back: reopen (the default) leaves that quantity open on the order again, committed and billable; cancel cancels it on the order in the same transaction. The preview and result name the order lines either way. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.settlement_versions` | array[object] | no | no | [] | For a changed invoice with active payment applications, supply every funding payment and its current expected_version, or supply settlement_guard instead. Read invoice settlement to review current settlement evidence; do not provide both alternatives. Present in InvoiceUpdatePreviewRequest. |
@@ -2652,6 +2658,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].gross.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].unit_price_minor_units` | integer \| null | yes | yes | — | — |
 | `revision.lines[].unit_price_fraction` | integer \| null | no | yes | null | — |
+| `revision.lines[].lot` | string \| null | no | yes | null | — |
+| `revision.lines[].lot_expiry` | string \| null | no | yes | null | — |
+| `revision.lines[].serial_numbers` | array[string] \| null | no | yes | null | — |
 | `revision.lines[].net_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].tax_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].gross_minor_units` | integer | yes | no | — | — |
@@ -3105,6 +3114,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "percent"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].site` | string \| null | no | yes | null | Inventory site a stocked line takes from (a sale), gives back to (a return) or commits at (an order), by id or name. Omitted: the document's site, else the source line's, else the default site. Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].lot` | string \| null | no | yes | null | Lot number of a lot-tracked item: the lot an incoming line receives into (made when new), or the lot an outgoing line takes from. Omitted on an outgoing line, the units leave unassigned and the result names the earliest-expiring lot in stock there. Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].lot_expiry` | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers of a serial-tracked item, one per unit, up to the line's quantity; units left unnumbered are unassigned (number them later with `inventory assign`). Never make one up. An outgoing number leaves from where the books hold it; a number never on file is accepted with a warning and shows -1 until its receipt. Omitted on a correction, the line keeps the numbers it had. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.release_to_order` | literal["reopen", "cancel"] | no | no | "reopen" | For lines made from a sales order or work order that this correction takes back: reopen (the default) leaves that quantity open on the order again, committed and billable; cancel cancels it on the order in the same transaction. The preview and result name the order lines either way. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.settlement_versions` | array[object] | no | no | [] | For a changed invoice with active payment applications, supply every funding payment and its current expected_version, or supply settlement_guard instead. Read invoice settlement to review current settlement evidence; do not provide both alternatives. Present in InvoiceUpdatePreviewRequest. |

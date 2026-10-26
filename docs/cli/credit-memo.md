@@ -436,6 +436,9 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].tax_code` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].use_defaults` | inside `--lines` JSON array | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level"]] | no | no | [] | — |
 | `lines[].site` | inside `--lines` JSON array | string \| null | no | yes | null | Inventory site a returned stocked line goes back to, by id or name; omitted, where its sale took it from. |
+| `lines[].lot` | inside `--lines` JSON array | string \| null | no | yes | null | Lot number of a lot-tracked item: the lot an incoming line receives into (made when new), or the lot an outgoing line takes from. Omitted on an outgoing line, the units leave unassigned and the result names the earliest-expiring lot in stock there. |
+| `lines[].lot_expiry` | inside `--lines` JSON array | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
+| `lines[].serial_numbers` | inside `--lines` JSON array | array[string] \| null | no | yes | null | Serial numbers of a serial-tracked item, one per unit, up to the line's quantity; units left unnumbered are unassigned (number them later with `inventory assign`). Never make one up. An outgoing number leaves from where the books hold it; a number never on file is accepted with a warning and shows -1 until its receipt. Omitted on a correction, the line keeps the numbers it had. |
 | `ar_account` | `--ar-account` | string \| null | no | yes | null | — |
 | `number` | `--number` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
@@ -817,6 +820,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].net_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].tax_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].lot` | string \| null | no | yes | null | — |
+| `revision.lines[].lot_expiry` | string \| null | no | yes | null | — |
+| `revision.lines[].serial_numbers` | array[string] \| null | no | yes | null | — |
 | `revision.lines[].class_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].class_name` | string \| null | yes | yes | — | — |
 | `revision.lines[].source_transaction_id` | string \| null | yes | yes | — | — |
@@ -1828,6 +1834,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].net_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].tax_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].lot` | string \| null | no | yes | null | — |
+| `revision.lines[].lot_expiry` | string \| null | no | yes | null | — |
+| `revision.lines[].serial_numbers` | array[string] \| null | no | yes | null | — |
 | `revision.lines[].class_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].class_name` | string \| null | yes | yes | — | — |
 | `revision.lines[].source_transaction_id` | string \| null | yes | yes | — | — |
@@ -2289,6 +2298,9 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].tax_code` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].use_defaults` | inside `--lines` JSON array | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level"]] | no | no | [] | — |
 | `lines[].site` | inside `--lines` JSON array | string \| null | no | yes | null | Inventory site a returned stocked line goes back to, by id or name; omitted, where its sale took it from. |
+| `lines[].lot` | inside `--lines` JSON array | string \| null | no | yes | null | Lot number of a lot-tracked item: the lot an incoming line receives into (made when new), or the lot an outgoing line takes from. Omitted on an outgoing line, the units leave unassigned and the result names the earliest-expiring lot in stock there. |
+| `lines[].lot_expiry` | inside `--lines` JSON array | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
+| `lines[].serial_numbers` | inside `--lines` JSON array | array[string] \| null | no | yes | null | Serial numbers of a serial-tracked item, one per unit, up to the line's quantity; units left unnumbered are unassigned (number them later with `inventory assign`). Never make one up. An outgoing number leaves from where the books hold it; a number never on file is accepted with a warning and shows -1 until its receipt. Omitted on a correction, the line keeps the numbers it had. |
 | `ar_account` | `--ar-account` | string \| null | no | yes | null | — |
 | `number` | `--number` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
@@ -2673,6 +2685,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].net_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].tax_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].lot` | string \| null | no | yes | null | — |
+| `revision.lines[].lot_expiry` | string \| null | no | yes | null | — |
+| `revision.lines[].serial_numbers` | array[string] \| null | no | yes | null | — |
 | `revision.lines[].class_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].class_name` | string \| null | yes | yes | — | — |
 | `revision.lines[].source_transaction_id` | string \| null | yes | yes | — | — |
@@ -3512,6 +3527,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].net_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].tax_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].lot` | string \| null | no | yes | null | — |
+| `revision.lines[].lot_expiry` | string \| null | no | yes | null | — |
+| `revision.lines[].serial_numbers` | array[string] \| null | no | yes | null | — |
 | `revision.lines[].class_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].class_name` | string \| null | yes | yes | — | — |
 | `revision.lines[].source_transaction_id` | string \| null | yes | yes | — | — |
