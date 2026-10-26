@@ -557,3 +557,25 @@ def test_the_database_refuses_a_loose_reversal_that_is_not_its_own_counts(shop):
         conn.rollback()
     assert _numbers(shop['books'])[('Water Heater', 'Warehouse', 'WH-1')] == 1
     _number_ties(shop['books'])
+
+
+def test_an_empty_number_on_a_line_that_moves_no_stock_is_no_number(shop):
+    """A form's empty Serial numbers or Lot column, or an agent's `serial_numbers: []`, on a service line is no
+    number at all; only a real one is refused."""
+    books, run = shop['books'], shop['run']
+    labor = books['client'].item.create(company=books['company'], name='Labor', type='service', description='Labor',
+                                        price='80.00', income_account_id=books['income'],
+                                        sales_tax_code_id=next(iter(books['tax_codes'].values())))['id']
+    sale = run('invoice post', dict(customer=shop['acme'], date='2017-03-05', lines=[
+        dict(item=labor, quantity='1', serial_numbers=[], lot=''), dict(item=labor, quantity='2', serial_numbers=[' '])]),
+        reason='Job')
+    shown = run('invoice show', dict(invoice=sale['id']))
+    run('invoice update', dict(invoice=sale['id'], expected_version=shown['version'], lines=[
+        dict(line_id=line['line_id'], item=labor, quantity=line['quantity'], serial_numbers=[], lot='')
+        for line in shown['revision']['lines']], memo='Corrected'), reason='Correct')
+    with pytest.raises(BookflowError) as refused:
+        run('invoice post', dict(customer=shop['acme'], date='2017-03-05', lines=[
+            dict(item=labor, quantity='1', serial_numbers=['WH-1'])]), reason='Job')
+    assert 'only stocked lines' in str(refused.value.details)
+    run('bill post', dict(vendor=books['vendor'], date='2017-03-05', items=[dict(
+        item=books['labor'], quantity='1', serial_numbers=[], lot='')]), reason='Sub')

@@ -19,8 +19,8 @@ _QUANTITY = 'Quantity of the assembly to build, a positive decimal with at most 
 
 class BuildComponentNumbers(_Strict):
     item: _Selector = Field(description='Component item, by id or full name.')
-    lot: _SL.Number | None = Field(None, description='Lot the component is taken from.')
-    serial_numbers: list[_SL.Number] | None = Field(None, max_length=10000, description='Serial numbers of the component units taken.')
+    lot: _SL.LineLot = Field(None, description='Lot the component is taken from.')
+    serial_numbers: _SL.LineSerials = Field(None, max_length=10000, description='Serial numbers of the component units taken.')
 
 
 class AssemblyBuildInput(_Strict):
@@ -32,9 +32,9 @@ class AssemblyBuildInput(_Strict):
                                              'nothing is posted, the components are reserved, and `assembly finalize` builds it later. '
                                              'A build that can be built is built; pending applies only to a shortfall.')
     site: _Selector | None = Field(None, description='Inventory site the components are taken from and the assembly put at, by id or name; omitted, the default site.')
-    lot: _SL.Number | None = Field(None, description='Lot the built assemblies receive into, when the assembly is lot-tracked.')
+    lot: _SL.LineLot = Field(None, description='Lot the built assemblies receive into, when the assembly is lot-tracked.')
     lot_expiry: _SL.IsoDate | None = Field(None, description=_SL.EXPIRY_HELP)
-    serial_numbers: list[_SL.Number] | None = Field(None, max_length=10000, description=(
+    serial_numbers: _SL.LineSerials = Field(None, max_length=10000, description=(
         'Serial numbers of the built units, when the assembly is serial-tracked; the rest are unassigned.'))
     components: list[BuildComponentNumbers] | None = Field(None, max_length=200, description=(
         'Lot or serial numbers the tracked components are taken from, one entry per component item; components '

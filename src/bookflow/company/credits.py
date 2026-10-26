@@ -390,7 +390,8 @@ def commercial(s, inp, *, document_id, pending, previous=None):
                 from bookflow.company import placements
                 resolved['site_id'] = placements.site_id_for(s, entered.site, field='lines.site')
             from bookflow.company import serial_lots
-            numbers = serial_lots.from_line(entered)
+            from bookflow.company import inventory as _stock
+            numbers = serial_lots.for_line(entered, resolved["profile"].item_type in _stock.TRACKED_TYPES)
             if numbers is not None:
                 resolved['numbers'] = numbers
             lines.append(resolved)
