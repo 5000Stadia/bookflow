@@ -522,7 +522,7 @@ MATRIX['report stock-status'] = {
 MATRIX['inventory adjust'] = {
     'E_RECORD_NOT_FOUND': 'unknown item, adjustment account or class',
     'E_INACTIVE_REFERENCE': 'inactive item, account or class',
-    'E_VALIDATION': 'an item that carries no stock, no change at all, a quantity increase with no value, a quantity decrease carrying one, stock left worth nothing, or a movement worth nothing at the current average',
+    'E_VALIDATION': 'an item that carries no stock, no change at all, a quantity decrease carrying a value, a line already at its new_quantity, stock left worth nothing, or a movement worth nothing at the current average',
     'E_VALUE_RANGE': 'quantity or value outside signed 64-bit storage',
     'E_AMOUNT_PRECISION': 'value_change with more decimal places than the currency allows',
     'E_UNBALANCED_ENTRY': 'the generated posting does not balance',
@@ -2332,6 +2332,51 @@ MATRIX['barcode lookup'] = {'E_VALIDATION': 'no code, or as_of is not a date'}
 MATRIX['barcode generate'] = {'E_RECORD_NOT_FOUND': 'a named item is unknown', 'E_INACTIVE_REFERENCE': 'a named item is inactive',
                               'E_VALIDATION': 'a named code is on two items', 'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
                               'E_DIRECTIVE_NOT_FOUND': 'unknown --directive', 'E_DIRECTIVE_INACTIVE': 'deactivated --directive'}
+# Physical counts (R104 increment 2).
+MATRIX['inventory-count create'] = {
+    'E_VALIDATION': 'an unknown site (the sites are listed), a non-stock item, bins or cycle (later increments), or nothing to count',
+    'E_RECORD_NOT_FOUND': 'item or category absent from selected company',
+    'E_INACTIVE_REFERENCE': 'an inactive site',
+    'E_PERIOD_CLOSED': 'a count date on or before the closing date',
+    'E_DUPLICATE_NUMBER': 'the count number is already used',
+    **_SITE_COMMON}
+MATRIX['inventory-count enter'] = {
+    'E_VALIDATION': 'a count that is not open, a non-stock item, an unknown or ambiguous code, a negative quantity, or a bin, lot or serial number',
+    'E_RECORD_NOT_FOUND': 'count or item absent from selected company',
+    **_SITE_COMMON}
+MATRIX['inventory-count post'] = {
+    'E_VALIDATION': 'a count that is not open, nothing counted, an unusable adjustment account, a place another recorded count of that date counted, or differences worth nothing',
+    'E_RECORD_NOT_FOUND': 'count, account or class absent from selected company',
+    'E_INACTIVE_REFERENCE': 'an inactive account or class',
+    'E_PERIOD_CLOSED': 'a count date on or before the closing date',
+    'E_VERSION_CONFLICT': 'the count changed since expected_version',
+    'E_PREVIEW_STALE': 'no preview_fingerprint, or what would post changed since the dry run',
+    'E_UNBALANCED_ENTRY': 'never in practice: the difference entry balances by construction',
+    **_SITE_COMMON}
+MATRIX['inventory-count cancel'] = {
+    'E_VALIDATION': 'a count that is not open',
+    'E_RECORD_NOT_FOUND': 'count absent from selected company',
+    'E_VERSION_CONFLICT': 'the count changed since expected_version',
+    'E_REASON_REQUIRED': 'no reason given',
+    **_SITE_COMMON}
+MATRIX['inventory-count void'] = MATRIX['inventory-count cancel'] | {
+    'E_VALIDATION': 'a count that is not recorded',
+    'E_PERIOD_CLOSED': 'a count date on or before the closing date'}
+for _verb in ('show', 'sheet'):
+    MATRIX[f'inventory-count {_verb}'] = {'E_RECORD_NOT_FOUND': 'count absent from selected company',
+                                          'E_VALIDATION': 'a malformed selector'}
+MATRIX['inventory-count query'] = {'E_RECORD_NOT_FOUND': 'site absent from selected company', 'E_VALIDATION': 'an unknown site name or a malformed date'}
+MATRIX['report physical-inventory-worksheet'] = {
+    'E_QUERY_STALE': 'the books changed between pages',
+    'E_VALUE_RANGE': 'a limit beyond supported bounds',
+    'E_VALIDATION': 'an unknown site name',
+}
+MATRIX['report inventory-valuation-detail'] = {
+    'E_QUERY_STALE': 'the books changed between pages',
+    'E_VALUE_RANGE': 'a limit beyond supported bounds',
+    'E_VALIDATION': 'a malformed date',
+    'E_RECORD_NOT_FOUND': 'item absent from selected company',
+}
 # Unattended scheduling and reminders (R111): to-dos, overdue notices and the Reminders list.
 _SCHED_TAIL = {
     'E_REASON_REQUIRED': 'an agent/system write supplies neither reason nor directive',

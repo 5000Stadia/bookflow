@@ -38,6 +38,8 @@ HEADLINES = {
     "inventory-valuation": ("asset_value", "Inventory value"),
     "stock-status": ("asset_value", "Inventory value"),
     "quantity-by-site": ("asset_value", "Inventory value"),
+    "physical-inventory-worksheet": (None, "Items to count"),
+    "inventory-valuation-detail": ("asset_value", "Inventory value"),
     "unbilled-costs": ("remaining", "To bill"),
     "statement": ("closing", "Balance due"),
     "trial-balance": (None, "Account balances"),

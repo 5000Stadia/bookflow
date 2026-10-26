@@ -152,6 +152,7 @@ class _BillFields(_Input):
     class_id: _Selector | None = None
     site: _Selector | None = Field(default=None, description=(
         'Inventory site the stocked item lines are received at where a line names none; omitted, the default site.'))
+    count_position: Literal['before', 'after'] | None = Field(None, description="Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after.")
     custom_fields: CustomFieldValuePatch = Field(default_factory=lambda: CustomFieldValuePatch({}))
     custom_field_kinds: CustomFieldKindExpectations = Field(
         default_factory=lambda: CustomFieldKindExpectations({}))
@@ -522,6 +523,7 @@ class BillSummaryOutput(CommonOut):
 
 class BillOutput(BillSummaryOutput):
     revision: BillRevisionOutput
+    count_position: Literal['before', 'after'] = Field('before', description="Where the document's stock stands against a physical count of its site on its date (R104).")
     duplicate_references: list[DuplicateReferenceOutput] = Field(default_factory=list)
 
 

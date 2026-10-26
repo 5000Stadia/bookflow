@@ -16,8 +16,8 @@ Database: `company`.
 | `serial_number_id` | VARCHAR(26) | yes | — | — | — | serial_numbers.id | Serial number of the unit; null when unassigned. |
 | `quantity_microunits` | BIGINT | no | — | — | — | — | Signed quantity placed, micro-units; never zero. |
 | `effective_date` | VARCHAR(10) | no | — | — | ix_inventory_placements_item, ix_inventory_placements_site | — | Date the units are there from, YYYY-MM-DD. |
-| `count_position` | VARCHAR(8) | no | — | — | — | — | before or after the counts of its site on its date. |
-| `sequence` | BIGINT | no | — | — | ix_inventory_placements_item | — | Company-wide recorded order, shared with movements. |
+| `count_position` | VARCHAR(8) | no | — | — | — | — | before or after the counts of its site on its date, or count for a count's own difference. |
+| `sequence` | BIGINT | no | — | — | ix_inventory_placements_item, ix_inventory_placements_sequence | — | Company-wide recorded order, shared with movements. |
 | `source` | VARCHAR(16) | no | — | — | — | — | What wrote it: movement, transfer, assignment or count. |
 | `movement_id` | VARCHAR(26) | yes | — | — | ix_inventory_placements_movement | inventory_movements.id | Movement whose quantity this places; null unless the source is a movement. |
 | `transfer_revision_id` | VARCHAR(26) | yes | — | — | ix_inventory_placements_transfer | inventory_transfer_revisions.id | Transfer revision that moved these units; null unless the source is a transfer. |

@@ -69,8 +69,10 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +9 check printing (R152): check print-queue, print, print-confirm, print-cancel, reprint, print-run, print-pdf,
     # print-setup and print-alignment.
     # +2 barcodes (R104 increment 3): barcode lookup and barcode generate.
+    assert len(rows) == 698
+    # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
+    # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
-    assert len(rows) == 688
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
@@ -317,10 +319,12 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # and to_be_printed on check post, check update and bill pay. No new variant kind.
     # 3574 -> 3576 (R104 increment 3, barcodes), measured: barcode lookup's optional as_of and barcode
     # generate's optional items -- their null branches. No existing command moved. No new variant kind.
-    # 3576 -> 3611 (R111): the eleven todo, notice and reminders commands' optional inputs, company update's five
-    # scheduler and overdue notice preferences, the optional expected_facts_fingerprint on memorized process, retry,
-    # skip, enter and memorized-group enter, their null branches (memorized enter's again is a defaulted flag and adds none). No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==3611
+    # 3576 -> 3622 (R104 increment 2, physical counts): +46 from the count commands and reports, the adjustment's lines
+    # and count_position on the stock documents.
+    # 3622 -> 3657 (R111): the eleven todo, notice and reminders commands' optional inputs, company update's five
+    # scheduler and overdue notice preferences and the optional expected_facts_fingerprint on memorized process, retry,
+    # skip, enter and memorized-group enter, their null branches (memorized enter's again adds none). No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==3657
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

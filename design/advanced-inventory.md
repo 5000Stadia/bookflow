@@ -713,6 +713,53 @@ jobs at night; the van ends as counted.
   stock left; discounts and other adjusting lines are not split by site.
 - Transfer lines are in base units; moving between bins of one site waits for bins (increment 5).
 
+## As built: increment 2
+
+- **The count's own position is `count`.** Movements and placements carry `count_position` `before`, `count`
+  or `after`; a count's differences sit at `count`, between that date's documents placed before it and those
+  stated after. Replay orders by date, this rank, then sequence. Every stored row is `before`.
+- **A count's differences post in journal entries of at most 99 items** (a journal entry holds 200 lines), marked
+  `count`. Deriving them again corrects only the entries holding an item whose difference moved, by a new revision
+  (its old movements reversed exactly in its own transaction, its items restated at the count's date and
+  position), as a sale's correction does; an entry left with no difference is voided, and an item that had none
+  when recorded posts in a new entry. So "reverses that loss" is exact, not a found quantity at a rounded
+  average. Voiding a count voids its entries. Measured on a 500-item count (334 differences, four entries): create
+  0.18 s, enter 500 entries 0.79 s, post preview 0.52 s, post 2.07 s, a late same-day sale that derives one entry
+  again 0.98 s, a sale after the count date 0.28 s, sheet 0.10 s.
+- **Re-derivation runs inside every company write.** Dispatch takes the stock sequence before a command
+  applies and, after it, derives again every recorded count whose site and items the command's placements
+  reached on or before its date (`inventory_counts.settle_in_command`), in date order so a re-derived count
+  reaches a later one. The result says "Placed before count C-3 of Van 1 on ..." and "Count C-3 ... was
+  derived again". A dry run does not show the re-derivation; the saved result does.
+- **`count_position` on documents.** Invoices, sales receipts, credit memos, bills, item receipts, vendor
+  credits, transfers and `inventory adjust` take it; checks, card charges and assembly builds place before
+  (their headers gained no field). A correction that states no position keeps the one its stock stood at; one
+  that changes only `count_position` is a change, and each document's `show` says its position. A return that
+  names its sale takes the sale's position when dated the sale's day, so it never replays ahead of it; stating a
+  position that would put it first is refused.
+- **A count line is the item at the site, unassigned,** until bins, lots and serial numbers arrive; `bins`,
+  `cycle` and place fields on entries are refused with that said. Lines and placements already carry bin, lot
+  and serial columns, and a count whose places cancel moves stock by placements alone.
+- **Two counts of one place on one date** cannot both be recorded; the second is refused naming the first.
+- **Differences worth nothing** (an item with no average and no purchase cost) record their quantity with no
+  journal line, riding in an entry of the count that has one, with a warning naming the count. A count with
+  nothing else to post leaves them unrecorded, says so, and is derived again by the next stock change it reaches;
+  neither a post nor a re-derivation refuses anyone's write for it. A blind count's re-derivation names the
+  count and the items, never quantities.
+- **A count whose only differences are worth nothing** is recorded but moves no stock until the next stock change
+  its date reaches; the post warns, and it heals at that change.
+- **Found units fill a shortfall** as a receipt does, owing the short sale its true-up dated at the found
+  quantity; co0093 widens co0059's true-up guard to admit them.
+- **Permissions:** create, enter and cancel are `item` (standard), post and void `ledger.post` (standard);
+  reads are `item` member and the two reports `reports` member (layer `inventory-counts-v1`).
+- **`inventory adjust`**: `lines` (1-200) with `new_quantity` (the quantity at the line's site on the date,
+  before any count that day) and `new_value` (the item's whole value on the date); a line already holding
+  what it says is skipped. An increase with no value is `found`; its basis (average, purchase cost or none)
+  is on each line of the result.
+- **Entries resolve `code` by `items.barcode`** only; the full barcode lookup is increment 3.
+- **The count screen's keypad is the phone's number keypad** (`inputmode="decimal"`), and the item field is
+  pinned on top; scanning proper (Enter as look-up) is increment 3.
+
 ## As built: increment 3
 
 - **One resolver.** Every `item` field already went through `list_service.resolve_selector`; a list

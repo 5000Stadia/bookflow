@@ -289,6 +289,7 @@ The same example as complete `bookflow_run` arguments:
 | `items[].site` | inside `--items` JSON array | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
 | `items[].order_line_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
 | `site` | `--site` | string \| null | no | yes | null | Inventory site the stock arrives at where a line names none; omitted, the purchase-order line's site, else the default site. |
+| `count_position` | `--count-position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 
 ### Command and context options
 

@@ -177,16 +177,28 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0077 = importlib.import_module("bookflow.storage.company_migrations.versions.0077_sales_orders")
     co0079 = importlib.import_module("bookflow.storage.company_migrations.versions.0079_assembly_builds")
     co0083 = importlib.import_module("bookflow.storage.company_migrations.versions.0083_mileage")
+    co0093 = importlib.import_module("bookflow.storage.company_migrations.versions.0093_inventory_counts")
 
     co0091 = importlib.import_module("bookflow.storage.company_migrations.versions.0091_subcent_unit_prices")
 
     def older(conn):
-        # Newest first: co0085 (on co0094), then co0094, then co0092 and co0091.
+        # Newest first: co0085 (on co0093), then co0093, then co0094, then co0092 and co0091.
         for table in ("todos", "overdue_notices", "scheduled_revision_authority", "scheduled_group_authority", "scheduled_holds"):
             conn.execute(f"DROP TABLE {table}")  # co0085's five tables
         for column in ("scheduler_catch_up_days", "overdue_notice_days", "overdue_notice_frequency",
                        "overdue_notice_minimum", "overdue_notice_template"):
             conn.execute(f"ALTER TABLE company_info DROP COLUMN {column}")  # co0085's five preferences
+        # co0093's: the four count tables, and its own text on the rebuilt movement and document tables run
+        # backwards (both are empty here); the placements table goes with co0089's below.
+        for table in ("inventory_count_postings", "inventory_count_entries", "inventory_count_lines", "inventory_counts"):
+            conn.execute(f"DROP TABLE {table}")
+        conn.execute("PRAGMA writable_schema=ON")
+        for table in ("inventory_movements", "inventory_documents"):
+            for old_text, new_text in co0093.REWIND[table]:
+                assert conn.execute("UPDATE sqlite_schema SET sql = replace(sql, ?, ?) WHERE name = ?", (new_text, old_text, table)).rowcount == 1
+        conn.execute("PRAGMA writable_schema=OFF")
+        conn.execute("DROP TRIGGER inventory_movements_true_up_link")   # co0093 widened co0059's guard
+        conn.execute(co0093.TRUE_UP_GUARD[0])
         for index in ("ix_items_barcode", "ix_inventory_bins_barcode"):
             conn.execute(f"DROP INDEX {index}")  # co0094's two indexes
         conn.execute("DELETE FROM sequences WHERE name = 'barcode'")  # and its code counter

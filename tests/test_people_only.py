@@ -36,7 +36,8 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # mileage-v1 adds none: vehicles, rates, trips, trip billing and reimbursement are an agent's to do as a person's.
     # collections-v1 adds none: moving a customer's credit between jobs is bookkeeping.
     # pricing-rules-v1 adds none: price rules are bookkeeping setup, as price levels are.
-    # order-invoicing-v1 adds none, nor does shortfall-po-v1, nor partial-po-v1, nor inventory-sites-v1.
+    # order-invoicing-v1 adds none, nor does shortfall-po-v1, nor partial-po-v1, nor inventory-sites-v1,
+    # nor inventory-counts-v1: counting stock and posting the difference is bookkeeping.
     # timesheets-v1 adds `clock link`: saying which login is which employee is what lets an agent clock a person in.
     # accountant-review-v1 adds designating and removing an external accountant, cancelling an accountant's copy
     # and importing an accountant's changes: who may change the books, and what comes into them, is the owner's call.

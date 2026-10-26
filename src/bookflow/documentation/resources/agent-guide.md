@@ -1086,6 +1086,33 @@ anything else about a code (what it is, where it is, which line fields to use) c
 --barcode <code>`). `barcode generate` gives items without a code an EAN-13 of the company's own
 (prefix 2); existing codes never change, and a code already on another active item is refused.
 
+## I counted the van: 12 widgets and 3 elbows
+
+A stocktake is a count document, never a hand-worked `inventory adjust`: the count keeps what was
+counted, and the difference from the books is worked out for you at the count's place in its day.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "inventory-count create", "reason": "Van count", "input": {"site": "Van 1"}}
+{"command": "inventory-count enter", "reason": "Counted the van",
+ "input": {"count": "C-1", "entries": [{"item": "Widget", "quantity": "12"}, {"item": "Elbow", "quantity": "3"}]}}
+{"command": "inventory-count post", "reason": "Van count", "dry_run": true,
+ "input": {"count": "C-1", "expected_version": 1, "adjustment_account": "Inventory Shrinkage"}}
+```
+
+`create` lists what the books hold at the site (name `items` or a `category` to count fewer). `enter`
+appends; a person scanning and you typing can count the same count at once, and an item not on the
+sheet adds a found line. Uncounted lines are no part of the count, so enter 0 for a place that is
+empty. The dry run of `post` shows each item's difference and its value at the average and gives a
+`preview_fingerprint`; post again with it. Less posts as an issue, more as found stock at the average.
+Paperwork for that day entered later -- the jobs you bill at night -- needs nothing more: it lands
+before the count, which is derived again, so the van stays as counted and only the true shrinkage
+posts. A sale that really happened after the count says `"count_position": "after"`. A count that was
+wrong is voided (`inventory-count void`), never adjusted around. `inventory adjust` takes `lines`
+(1-200, each with `quantity_change` or `new_quantity`) for many items at once; an increase with no
+value is valued at the running average. `report physical-inventory-worksheet` prints a blank sheet
+and `report inventory-valuation-detail` shows each movement's effect on quantity and value.
+
 ## Stock sent back to a vendor
 
 Enter it as one `vendor-credit post` with `items`: one row per thing sent back, each with

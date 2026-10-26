@@ -24,6 +24,8 @@ import sqlalchemy as sa
 
 PLACEMENT_SOURCES = ('movement', 'transfer', 'assignment', 'count')
 COUNT_POSITIONS = ('before', 'after')
+# A placement may also be a count's own difference, between that date's before and after (increment 2).
+PLACEMENT_POSITIONS = ('before', 'count', 'after')
 TRANSFER_STATUSES = ('posted', 'voided')
 TRANSFER_OPERATIONS = ('post', 'update', 'void')
 
@@ -165,7 +167,7 @@ def define_tables(metadata, C, T, common):
         ident('serial_number_id', 'Serial number of the unit; null when unassigned.', 'serial_numbers.id', nullable=True),
         C('quantity_microunits', sa.BigInteger, 'Signed quantity placed, micro-units; never zero.', nullable=False),
         C('effective_date', sa.String(10), 'Date the units are there from, YYYY-MM-DD.', nullable=False),
-        C('count_position', sa.String(8), 'before or after the counts of its site on its date.', nullable=False),
+        C('count_position', sa.String(8), "before or after the counts of its site on its date, or count for a count's own difference.", nullable=False),
         C('sequence', sa.BigInteger, 'Company-wide recorded order, shared with movements.', nullable=False),
         C('source', sa.String(16), 'What wrote it: movement, transfer, assignment or count.', nullable=False),
         ident('movement_id', 'Movement whose quantity this places; null unless the source is a movement.',
@@ -180,7 +182,7 @@ def define_tables(metadata, C, T, common):
         sa.CheckConstraint("typeof(quantity_microunits) = 'integer' AND quantity_microunits != 0 "
                            "AND typeof(sequence) = 'integer' AND sequence > 0", name='ck_inventory_placement_integers'),
         sa.CheckConstraint("effective_date LIKE '____-__-__'", name='ck_inventory_placement_date'),
-        sa.CheckConstraint(f'count_position IN ({quoted(COUNT_POSITIONS)})', name='ck_inventory_placement_position'),
+        sa.CheckConstraint(f'count_position IN ({quoted(PLACEMENT_POSITIONS)})', name='ck_inventory_placement_position'),
         sa.CheckConstraint(f'source IN ({quoted(PLACEMENT_SOURCES)})', name='ck_inventory_placement_source'),
         sa.CheckConstraint("(source = 'movement') = (movement_id IS NOT NULL) AND "
                            "(source = 'transfer') = (transfer_revision_id IS NOT NULL) AND "
@@ -190,6 +192,8 @@ def define_tables(metadata, C, T, common):
         sa.Index('ix_inventory_placements_site', 'site_id', 'item_id', 'effective_date'),
         sa.Index('ix_inventory_placements_movement', 'movement_id'),
         sa.Index('ix_inventory_placements_transfer', 'transfer_revision_id'),
+        # What one command wrote is read back by sequence, after every company write (increment 2).
+        sa.Index('ix_inventory_placements_sequence', 'sequence'),
         description='Immutable quantity-only ledger of where stock is: every movement and transfer placed at a site.')
     return {'inventory_sites': sites, 'inventory_bins': bins, 'lots': lots, 'serial_numbers': serials,
             'item_site_settings': settings, 'inventory_transfers': transfers,

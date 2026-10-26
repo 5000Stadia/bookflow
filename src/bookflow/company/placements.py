@@ -146,7 +146,8 @@ def for_movements(s, rows, sites=None):
         if not quantity:
             continue
         base = dict(item_id=row['item_id'], bin_id=None, lot_id=None, serial_number_id=None,
-                    effective_date=row['effective_date'], count_position='before', sequence=row['sequence'],
+                    effective_date=row['effective_date'], count_position=row.get('count_position') or 'before',
+                    sequence=row['sequence'],
                     source='movement', movement_id=row['id'], transfer_revision_id=None, source_line_id=None)
         if row['kind'] == 'reversal':
             originals = stored.get(row['reverses_movement_id']) or made.get(row['reverses_movement_id'])
@@ -155,6 +156,7 @@ def for_movements(s, rows, sites=None):
                     'A stock reversal names a movement that has no placements to retire.'))
             own = [dict(base, id=new_id(), site_id=original['site_id'], bin_id=original['bin_id'],
                         lot_id=original['lot_id'], serial_number_id=original['serial_number_id'],
+                        count_position=original['count_position'],
                         quantity_microunits=-int(original['quantity_microunits']),
                         reverses_placement_id=original['id']) for original in originals]
         else:
@@ -219,6 +221,38 @@ def on_hand(s, as_of=None, *, item_ids=None, site_id=None):
     if site_id is not None:
         query = query.where(t.c.site_id == site_id)
     return {(item, site): int(quantity) for item, site, quantity in s.company.conn.execute(query) if int(quantity)}
+
+
+def place_key(bin_id=None, lot_id=None, serial_number_id=None):
+    """One place within a site: bin, lot and serial number ids joined (empty for none)."""
+    return f'{bin_id or ""}|{lot_id or ""}|{serial_number_id or ""}'
+
+
+def held(s, item_ids, site_id, date, positions=('before',), *, exclude_movements=(), exclude_lines=()):
+    """``{(item_id, place_key): quantity}`` at one site at a position in ``date`` (R104 increment 2).
+
+    Everything dated before ``date``, and on ``date`` whatever sits at one of ``positions`` (a count
+    reads only what is ``before`` it). ``exclude_movements`` and ``exclude_lines`` leave out a count's
+    own placements -- by the movements it posted, and by its own lines -- when its difference is derived.
+    """
+    t = c.inventory_placements
+    ids = list(dict.fromkeys(item_ids))
+    out = {}
+    for start in range(0, len(ids), 500):
+        query = sa.select(t.c.item_id, t.c.bin_id, t.c.lot_id, t.c.serial_number_id,
+                          sa.func.sum(t.c.quantity_microunits)).where(
+            t.c.site_id == site_id, t.c.item_id.in_(ids[start:start + 500]),
+            sa.or_(t.c.effective_date < date,
+                   sa.and_(t.c.effective_date == date, t.c.count_position.in_(list(positions)))))
+        if exclude_movements:
+            query = query.where(sa.or_(t.c.movement_id.is_(None), t.c.movement_id.not_in(list(exclude_movements))))
+        if exclude_lines:
+            query = query.where(sa.or_(t.c.source_line_id.is_(None), t.c.source_line_id.not_in(list(exclude_lines))))
+        query = query.group_by(t.c.item_id, t.c.bin_id, t.c.lot_id, t.c.serial_number_id)
+        for item, bin_id, lot, serial, quantity in s.company.conn.execute(query):
+            key = (item, place_key(bin_id, lot, serial))
+            out[key] = out.get(key, 0) + int(quantity)
+    return out
 
 
 def by_item(readings, site_id=None):

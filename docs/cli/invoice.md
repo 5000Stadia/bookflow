@@ -450,6 +450,7 @@ The same example as complete `bookflow_run` arguments:
 | `terms` | `--terms` | string \| null | no | yes | null | — |
 | `due_date` | `--due-date` | string \| null | no | yes | null | — |
 | `site` | `--site` | string \| null | no | yes | null | Inventory site the stocked lines take from or give back to, by id or name, where a line names none; omitted, the default site. |
+| `count_position` | `--count-position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `sales_tax_calculation` | `--sales-tax-calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | null | Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects |
 | `number` | `--number` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
@@ -1109,6 +1110,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `sales_tax` | object \| null | no | yes | null | Which sales tax item and rate this sale charged and where that choice came from. |
 | `sales_tax.item` | string \| null | yes | yes | — | The sales tax item or tax group on the sale; null when none applies |
 | `sales_tax.item_id` | string \| null | no | yes | null | — |
@@ -1348,6 +1350,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.terms` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.due_date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.site` | string \| null | no | yes | null | Inventory site the stocked lines take from or give back to, by id or name, where a line names none; omitted, the default site. Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.sales_tax_calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | null | Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.customer_message` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.customer_message_item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
@@ -1576,6 +1579,7 @@ Example JSON output:
   "billing_progress": [],
   "changed": true,
   "changed_fields": [],
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -2907,6 +2911,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `sales_tax` | object \| null | no | yes | null | Which sales tax item and rate this sale charged and where that choice came from. |
 | `sales_tax.item` | string \| null | yes | yes | — | The sales tax item or tax group on the sale; null when none applies |
 | `sales_tax.item_id` | string \| null | no | yes | null | — |
@@ -2928,6 +2933,7 @@ Example JSON output:
 
 ```json
 {
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -3145,6 +3151,7 @@ The same example as complete `bookflow_run` arguments:
 | `terms` | `--terms` | string \| null | no | yes | null | — |
 | `due_date` | `--due-date` | string \| null | no | yes | null | — |
 | `site` | `--site` | string \| null | no | yes | null | Inventory site the stocked lines take from or give back to, by id or name, where a line names none; omitted, the default site. |
+| `count_position` | `--count-position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `sales_tax_calculation` | `--sales-tax-calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | null | Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects |
 | `number` | `--number` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
@@ -3812,6 +3819,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `sales_tax` | object \| null | no | yes | null | Which sales tax item and rate this sale charged and where that choice came from. |
 | `sales_tax.item` | string \| null | yes | yes | — | The sales tax item or tax group on the sale; null when none applies |
 | `sales_tax.item_id` | string \| null | no | yes | null | — |
@@ -4051,6 +4059,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.terms` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.due_date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.site` | string \| null | no | yes | null | Inventory site the stocked lines take from or give back to, by id or name, where a line names none; omitted, the default site. Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.sales_tax_calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | null | Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.customer_message` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.customer_message_item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
@@ -4279,6 +4288,7 @@ Example JSON output:
   "billing_progress": [],
   "changed": true,
   "changed_fields": [],
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -5127,6 +5137,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `count_position` | literal["before", "after"] | no | no | "before" | Where the document's stock stands against a physical count of its site on its date (R104). |
 | `sales_tax` | object \| null | no | yes | null | Which sales tax item and rate this sale charged and where that choice came from. |
 | `sales_tax.item` | string \| null | yes | yes | — | The sales tax item or tax group on the sale; null when none applies |
 | `sales_tax.item_id` | string \| null | no | yes | null | — |
@@ -5366,6 +5377,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.terms` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.due_date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.site` | string \| null | no | yes | null | Inventory site the stocked lines take from or give back to, by id or name, where a line names none; omitted, the default site. Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.sales_tax_calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | null | Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.customer_message` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.customer_message_item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
@@ -5594,6 +5606,7 @@ Example JSON output:
   "billing_progress": [],
   "changed": true,
   "changed_fields": [],
+  "count_position": "before",
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",

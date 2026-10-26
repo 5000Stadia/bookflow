@@ -563,7 +563,9 @@ def prepare(s, ctx, inp, *, previous=None):
     resolved = commercial(s, inp, document_id=header['id'], pending=pending, previous=previous)
     if previous:
         from bookflow.company.credit_corrections import unchanged, unchanged_plan
-        if unchanged(s, previous, resolved):
+        from bookflow.company import inventory_effects
+        if unchanged(s, previous, resolved) and not inventory_effects.position_moves(
+                s, previous['header']['id'], getattr(inp, 'count_position', None)):
             return unchanged_plan(s, inp, previous, resolved['fingerprint'])
     # Past here the document is written. A correction that changes nothing has already returned
     # above without a revision or a posting, so this is the one boundary every posted grid
@@ -626,7 +628,7 @@ def prepare(s, ctx, inp, *, previous=None):
     stock = inventory_effects.plan(
         s, entries=_stock_entries(s, resolved['lines'], date=resolved['date']),
         reversing=inventory_effects.own_movements(s, header['id']) if previous else (),
-        date=resolved['date'], currency=currency)
+        date=resolved['date'], currency=currency, count_position=getattr(inp, 'count_position', None))
     inventory_effects.open_dates(s, stock)
     old_batch = None
     if previous:
@@ -1183,12 +1185,14 @@ def _source_current(s, transaction_id, pending=None):
 
 
 def show(s, inp):
+    from bookflow.company import inventory_effects
     header = resolve(s, inp.credit_memo)
     revision = journals.revision(s, header, inp.revision_number)
     return CreditMemoOutput(
         **_visible_summary(s, header, summary(header, revision, profile_row(s, revision)),
                            getattr(inp, 'include_deleted', False)),
         revision=revision_output(s, revision),
+        count_position=inventory_effects.document_position(s, header['id']),
         source_current=_source_current(s, header['id']))
 
 

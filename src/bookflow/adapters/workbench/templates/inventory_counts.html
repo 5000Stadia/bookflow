@@ -1,0 +1,26 @@
+{% extends "base.html" %}{% block title %}Physical counts{% endblock %}{% block body %}<link rel="stylesheet" href="{{ static_urls['counts.css'] }}"><section id="inventory-counts">
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/items">Items</a> / Physical counts</nav>
+<h1>Physical counts</h1>
+<p class="actions"><a href="/c/{{ company_id }}/report/physical-inventory-worksheet">Physical inventory worksheet</a> <a href="/c/{{ company_id }}/inventory/sites">Sites and transfers</a></p>
+{% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
+{% if can_write %}
+<form method="post" action="/c/{{ company_id }}/inventory/counts" hx-post="/c/{{ company_id }}/inventory/counts" hx-target="body" hx-swap="outerHTML">
+<section class="workspace-card" aria-label="Start a count" data-count-start>
+<h2>Start a count</h2>
+<p>Lists what the books hold at the site on the date. Paperwork for that day entered later lands before the count unless it says it came after.</p>
+<label>Site <select name="site">{% for s in sites %}<option value="{{ s.name }}" {% if values.get('site', '') == s.name or (not values.get('site') and s.is_default) %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></label>
+<label>Date <input type="date" name="date" value="{{ values.get('date', today) }}"></label>
+<label>Only these items (optional, comma separated) <input name="items" value="{{ values.get('items', '') }}"></label>
+<label class="check"><input type="checkbox" name="blind" {% if values.get('blind') %}checked{% endif %}> Blind: hide expected quantities from the counters</label>
+<label>Reason (shown in the audit trail) <input name="ctx:reason" value="{{ values.get('ctx:reason', '') }}" placeholder="Monday van count"></label>
+<div class="actions"><button type="submit" data-count-create>Start count</button></div>
+</section>
+</form>
+{% endif %}
+<section class="workspace-card" aria-label="Counts">
+<h2>Counts</h2>
+{% if counts %}<div class="table-wrap"><table class="list-table" data-count-list><thead><tr><th>Number</th><th>Site</th><th>Date</th><th>Status</th><th>Counted</th></tr></thead><tbody>
+{% for k in counts %}<tr><td data-label="Number"><a href="/c/{{ company_id }}/inventory/counts/{{ k.number|urlencode }}">{{ k.number }}</a></td><td data-label="Site">{{ k.site_name }}</td><td data-label="Date">{{ k.date }}</td><td data-label="Status">{{ k.status }}{% if k.blind %} (blind){% endif %}</td><td data-label="Counted">{{ k.counted_lines }} of {{ k.counted_lines + k.uncounted_lines }}</td></tr>{% endfor %}
+</tbody></table></div>{% else %}<p>No counts yet.</p>{% endif %}
+</section>
+</section>{% endblock %}

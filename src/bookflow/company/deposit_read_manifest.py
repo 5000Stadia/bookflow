@@ -1678,8 +1678,8 @@ DEPOSIT_TABLES = ('transaction_revisions', 'deposit_profiles', 'document_line_id
 # R110: Effect, LifecycleOutput, CoordinateOutput and Manifest rehashed for SalesLineProfile.pricing_rule.
 # R101 increments 4-5 merged over R110: CoordinateOutput recomputed on the merged models.
 # CoordinateOutput moved with R104: the sales request it carries gained an optional inventory `site` (header and line).
-# R150 rehashed Effect, LifecycleOutput, CoordinateOutput and Manifest on the merged models: sub-cent fractions on SalesLineProfile and SalesPriceInput.
-CODECS = {'CoordinateOutput': '0287b302b2f7c9280a1b5645e57ef8a12c8a4f70da92a65d2c3447a354fe1152', 'Effect': '8ffca29d972ff6c16c908f308f2de9fe90cba21ca8fc1b76556c138f44e3a9fc', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': '0978349e0bf8b78e4412ad989130dfbb26b877ea41b3fb1e596daeeb034c1014', 'Manifest': 'd59bfa3ea08d7ea878ba0fff911102085ec8dfdd6d154c9f81e850ba730dfbb8', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
+# R150 rehashed Effect, LifecycleOutput, CoordinateOutput and Manifest on the merged models: sub-cent fractions on SalesLineProfile and SalesPriceInput. R104 increment 2 rehashed CoordinateOutput: count_position on the sales request.
+CODECS = {'CoordinateOutput': 'a4358fff73a5c4e31587c2f63d05984a698e30714221215bce75220e6b273abe', 'Effect': '8ffca29d972ff6c16c908f308f2de9fe90cba21ca8fc1b76556c138f44e3a9fc', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': '0978349e0bf8b78e4412ad989130dfbb26b877ea41b3fb1e596daeeb034c1014', 'Manifest': 'd59bfa3ea08d7ea878ba0fff911102085ec8dfdd6d154c9f81e850ba730dfbb8', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
 
 # Explicit dependency inspection registry closure, separate from disclosure.
 DEPENDENCY_OWNERS = {'account': ('accounts',

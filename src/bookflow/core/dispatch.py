@@ -801,8 +801,18 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
             if co_tx and s.actor is not None and s.actor.kind == "agent":
                 from bookflow.company import entry_review
                 review_before = entry_review.watermark(s)
+            # Stock written by this command can land before a recorded physical count; the count's
+            # difference is then derived again inside this same transaction (R104 increment 2).
+            stock_mark = None
+            if co_tx:
+                from bookflow.company import inventory_counts
+                stock_mark = inventory_counts.watermark(s)
             with performance.span("command.apply", command=cmd.name):
                 applied = cmd.apply(plan, ctx, s)
+            if stock_mark is not None and not applied.finalized:
+                from bookflow.company import inventory_counts, reconciliation_changes
+                applied.output = reconciliation_changes.with_warnings(
+                    applied.output, inventory_counts.settle_in_command(s, ctx, stock_mark))
             # Everything this command posted becomes stored statement effects inside the
             # command's own transaction. The work list is filled by a trigger on
             # `posting_batches`, so a writer added tomorrow is covered without being listed

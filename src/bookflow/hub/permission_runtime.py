@@ -153,7 +153,8 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.ACCOUNTANT_REVIEW_POLICY_VERSION: '1ee5b051d410ea9b481203ec6812a9bdd9b6784ededa18b6f02e25daa6b1eb21',
     c.CHECK_PRINTING_POLICY_VERSION: 'a4c3dc284228e3321e3b9fe710ec73488a84800195a5bae91896dd9324979522',
     c.BARCODES_POLICY_VERSION: 'f2e8e164a17a2a43960e2af90d3382579423e8ef8b03902bc9d36ee07e23058a',
-    c.SCHEDULING_POLICY_VERSION: '606288404b5476afde2ea0c566c4e504fd5a6c3a6bfce943958fad3bbf29858b',
+    c.INVENTORY_COUNTS_POLICY_VERSION: '5af62281b43f9d583b58533c6dc155c4b8eb95fcc8ef9b7ebc7c994e8963e250',
+    c.SCHEDULING_POLICY_VERSION: '16f34e115a6e90fbb5d8377c225ca118c864719d654bb6656991d0c94ef659be',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -282,6 +283,7 @@ def known_catalog(version):
     from . import permission_accountant_review_catalog
     from . import permission_check_printing_catalog
     from . import permission_barcodes_catalog
+    from . import permission_inventory_counts_catalog
     from . import permission_scheduling_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
@@ -337,6 +339,7 @@ def known_catalog(version):
         c.ACCOUNTANT_REVIEW_POLICY_VERSION: permission_accountant_review_catalog,
         c.CHECK_PRINTING_POLICY_VERSION: permission_check_printing_catalog,
         c.BARCODES_POLICY_VERSION: permission_barcodes_catalog,
+        c.INVENTORY_COUNTS_POLICY_VERSION: permission_inventory_counts_catalog,
         c.SCHEDULING_POLICY_VERSION: permission_scheduling_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is

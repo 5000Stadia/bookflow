@@ -1230,5 +1230,7 @@ globals().update(_define_check_print_tables(metadata, _column, _table, _common))
 # Barcodes (co0094, R104 increment 3): a scanned code finds its item or bin by index.
 sa.Index("ix_items_barcode", items.c.barcode)
 sa.Index("ix_inventory_bins_barcode", inventory_bins.c.barcode)
+from bookflow.company.inventory_count_schema import define_tables as _define_inventory_count_tables
+globals().update(_define_inventory_count_tables(metadata, _column, _table, _common))
 from bookflow.company.scheduling_schema import define_tables as _define_scheduling_tables
 globals().update(_define_scheduling_tables(metadata, _column, _table, _common))

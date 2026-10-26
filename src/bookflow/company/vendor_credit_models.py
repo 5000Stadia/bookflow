@@ -93,6 +93,7 @@ class VendorCreditPostInput(_Input):
     supplier_reference: SupplierReference | None = None
     memo: Text | None = None
     class_id: _Selector | None = None
+    count_position: Literal['before', 'after'] | None = Field(None, description="Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after.")
 
     @model_validator(mode='after')
     def new_lines(self) -> Self:
@@ -125,6 +126,7 @@ class VendorCreditUpdateInput(_Input):
     supplier_reference: SupplierReference | None = None
     memo: Text | None = None
     class_id: _Selector | None = None
+    count_position: Literal['before', 'after'] | None = Field(None, description="Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after.")
     vendor: _Selector | None = Field(
         default=None,
         description='Optional guard: the vendor you expect this credit to be from. The '
@@ -147,7 +149,7 @@ class VendorCreditUpdateInput(_Input):
         # idempotency hash is taken from this dump: without this they would collide, and a
         # retry under one key would replay the wrong one.
         values = handler(self)
-        for key in ('supplier_reference', 'memo', 'class_id'):
+        for key in ('supplier_reference', 'memo', 'class_id', 'count_position'):
             if key not in self.model_fields_set:
                 values.pop(key, None)
         return values
@@ -453,6 +455,7 @@ class VendorCreditSummaryOutput(CommonOut):
 
 class VendorCreditOutput(VendorCreditSummaryOutput):
     revision: VendorCreditRevisionOutput
+    count_position: Literal['before', 'after'] = Field('before', description="Where the document's stock stands against a physical count of its site on its date (R104).")
     applications: list[BillApplicationOutput] = Field(default_factory=list)
 
 

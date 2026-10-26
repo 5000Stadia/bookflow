@@ -11,10 +11,10 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_barcodes_catalog as previous, permission_catalog as c
+from . import permission_inventory_counts_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = '71177e15985dadad62d3ed6f31075a1ea092039a'
+SOURCE_COMMIT = 'dcfe53c4460178de66ab86f61f95c512328109a5'
 _OWNER = 'bookflow.commands.scheduling_cmds.{}|src/bookflow/commands/scheduling_cmds.py'
 _ADDED = (
     ('notice dismiss', 'customer', 'standard', '_notice_write.<locals>.planner'),
