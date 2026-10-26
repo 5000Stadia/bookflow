@@ -257,10 +257,10 @@ def check_tie(s, clearing_id):
 
 def charges_report(s, ctx, inp):
     currency = _home(s)
-    as_of = inp.as_of or clock.today_iso()
+    as_of = inp.as_of or '9999-12-31'   # every date, unless the caller asks for one
     account = find_account(s.company)
     if account is None:
-        return Plan(ChargesOutput(as_of=as_of, clearing_account_id=None, clearing_account=None, rows=[],
+        return Plan(ChargesOutput(as_of=inp.as_of or '', clearing_account_id=None, clearing_account=None, rows=[],
                                   total_unallocated=_money(0, currency), clearing_balance=_money(0, currency),
                                   message=(f'No {ACCOUNT_NAME} account yet: `landed-cost setup` makes it; then '
                                            'charge freight and duty to it on bill, check or card charge expense lines.')))
@@ -285,7 +285,7 @@ def charges_report(s, ctx, inp):
                                  unallocated=_money(row['unallocated'], currency)))
     balance = next((b for date, b, _ in reversed(unallocated_by_date(s, account['id'])) if date <= as_of), 0)
     total = sum(row['unallocated'] for row in found.values())
-    return Plan(ChargesOutput(as_of=as_of, clearing_account_id=account['id'], clearing_account=account['full_name'],
+    return Plan(ChargesOutput(as_of=inp.as_of or '', clearing_account_id=account['id'], clearing_account=account['full_name'],
                               rows=rows, total_unallocated=_money(total, currency),
                               clearing_balance=_money(balance, currency)))
 
@@ -708,6 +708,9 @@ def _summary(s, change, *, status=None):
             position=line['position'], charge=line['charge_line_id'], charge_document=charge_labels.get(line['charge_line_id']),
             target_document=_label(documents[target['transaction_id']]) if target and target['kind'] == 'receipt' else None,
             target_movement_id=line['target_movement_id'], item_id=line['item_id'],
+            target_transaction_id=target['transaction_id'] if target and target['kind'] == 'receipt' else None,
+            target_quantity=format_quantity_micro_units(int(target['movement']['quantity_microunits']))
+            if target and target['kind'] == 'receipt' else None,
             item_name=target['item']['full_name'] if target and target['kind'] == 'receipt' else None,
             account_id=line['target_account_id'],
             account_name=target['account']['full_name'] if target and target['kind'] == 'account' else None,

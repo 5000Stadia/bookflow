@@ -79,7 +79,7 @@ class LandedCostQueryInput(_Strict):
 
 
 class LandedCostChargesInput(_Strict):
-    as_of: IsoDate | None = Field(default=None, description='Charges and allocations dated on or before this date; default today.')
+    as_of: IsoDate | None = Field(default=None, description='Charges and allocations dated on or before this date; default every date.')
     vendor: Selector | None = Field(default=None, description='Only this vendor\'s charges.')
     include_allocated: bool = Field(default=False, description='Also list charges with nothing left to allocate.')
 
@@ -120,6 +120,8 @@ class AllocationLineOutput(BaseModel):
     charge_document: str | None
     target_document: str | None
     target_movement_id: str | None
+    target_transaction_id: str | None = None
+    target_quantity: str | None = Field(default=None, description="The target receipt line's base quantity.")
     item_id: str | None
     item_name: str | None
     account_id: str | None

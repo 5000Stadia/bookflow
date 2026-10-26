@@ -801,6 +801,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     from bookflow.adapters.workbench import inventory_site_pages as InventorySitePages
     InventorySitePages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                              role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
+    # R104 increment 6: landed cost, unallocated freight and spreading it.
+    from bookflow.adapters.workbench import landed_cost_pages as LandedCostPages
+    LandedCostPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                          role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R104 increment 2: physical counts, the Counts list and the count screen.
     from bookflow.adapters.workbench import inventory_count_pages as InventoryCountPages
     InventoryCountPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
@@ -1786,8 +1790,13 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                                 'can_assign': _role_allows(registry.get('inventory assign'), role_view, hub_admin=cred.hub_admin)}
             except BookflowError:
                 item_numbers = None
+        landed = None
+        if company_id and command_noun in ('bill', 'item-receipt', 'check', 'card-charge'):
+            # Each stock line's landed cost and landed unit cost, from live allocations (R104 increment 6).
+            from bookflow.adapters.workbench import landed_cost_pages
+            landed = landed_cost_pages.record_panel(request, run, company_id, out, record_id)
         return render("record.html", request, company_id=company_id, noun=noun, record_id=record_id, record=visible_record, record_title=record_title, audit=audit, meta=meta, verbs=verbs,
-                      item_numbers=item_numbers,
+                      item_numbers=item_numbers, landed=landed,
                       details_url=_details_url(request, company_id, noun, record_id),
                       source_report_watermark=_source_watermark(request),
                       master_detail=master_detail,

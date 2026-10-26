@@ -1,0 +1,8 @@
+<section class="workspace-card" aria-label="Landed cost" data-landed-lines>
+<h2>Landed cost</h2>
+<p>Freight and duty spread over this document's stock lines by landed-cost allocations ({{ landed.numbers|join(', ') }}). It is part of the stock's cost, never of the printed bill.</p>
+<div class="table-wrap"><table class="list-table"><thead><tr><th>Line</th><th>Item</th><th>Quantity</th><th>Landed cost</th><th>Landed unit cost</th></tr></thead><tbody>
+{% for r in landed.rows %}<tr><td data-label="Line">{{ loop.index }}</td><td data-label="Item">{{ r.item_name }}</td><td data-label="Quantity">{{ r.quantity }}</td><td data-label="Landed cost">{{ display_money(r.amount) }}</td><td data-label="Landed unit cost">{{ r.unit }}</td></tr>{% endfor %}
+</tbody></table></div>
+<p><a href="/c/{{ company_id }}/inventory/landed-cost">Landed cost</a></p>
+</section>

@@ -563,6 +563,7 @@ SECTIONS: tuple[Section, ...] = (
             _report("Inventory stock status by item", "stock-status"),
             Action("Sites and transfers", READ, ("inventory-site list",), "/inventory/sites"),
             Action("Physical counts", READ, ("inventory-count query",), "/inventory/counts"),
+            Action("Landed cost", READ, ("landed-cost charges",), "/inventory/landed-cost"),
             _report("Physical inventory worksheet", "physical-inventory-worksheet"),
             _report("Inventory valuation detail", "inventory-valuation-detail"),
             _report("Quantity on hand by site", "quantity-by-site"),
