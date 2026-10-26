@@ -2490,8 +2490,12 @@ _LANDED_WRITE = {
     'E_REASON_REQUIRED': 'a write without --reason',
     'E_VALUE_RANGE': 'an amount outside signed 64-bit storage',
     'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
 }
-MATRIX['landed-cost setup'] = {'E_VALIDATION': 'invalid input', 'E_REASON_REQUIRED': 'a write without --reason'}
+MATRIX['landed-cost setup'] = {'E_VALIDATION': 'invalid input', 'E_REASON_REQUIRED': 'a write without --reason',
+                               'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+                               'E_DIRECTIVE_NOT_FOUND': 'unknown --directive', 'E_DIRECTIVE_INACTIVE': 'deactivated --directive'}
 MATRIX['landed-cost charges'] = {'E_VALIDATION': 'the clearing account does not equal the unallocated charges on a date',
                                  'E_RECORD_NOT_FOUND': 'unknown vendor'}
 MATRIX['landed-cost post'] = dict(_LANDED_WRITE)

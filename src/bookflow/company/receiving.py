@@ -254,7 +254,17 @@ def prepare(s, ctx, inp, operation):
         for item in items:
             item[f'unit_{basis}'] = s.company.conn.execute(sa.select(getattr(c.items.c, f'unit_{basis}_microunits')).where(
                 c.items.c.id == item['profile'].item.id)).scalar()
-    shares, measures = landed_costs.receipt_shipping_shares(shipping, items, basis)
+    if basis == 'quantity':
+        # Today's rule exactly, through this module's own cumulative endpoints.
+        shares, measures, position = [], [], 0
+        for item in items:
+            end = position + item['profile'].quantity_microunits
+            shares.append(cumulative(quantities, shipping, end) - cumulative(quantities, shipping, position)
+                          if shipping else 0)
+            measures.append(item['profile'].quantity_microunits)
+            position = end
+    else:
+        shares, measures = landed_costs.receipt_shipping_shares(shipping, items, basis)
     landed_items = []
     for item, allocated, measure in zip(items, shares, measures):
         item['shipping_minor_units'] = allocated
