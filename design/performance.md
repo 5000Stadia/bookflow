@@ -131,7 +131,7 @@ interpreter start), 5 repetitions after one warm-up, on a fresh copy of the gene
 - reads: home (`company show`), register (checking, newest page), customer list, item list,
   A/R aging, profit and loss and balance sheet over the five years;
 - writes: invoice post, bill post, payment receive, a 20-line deposit;
-- the R180 cases: the 1,000-line deposit, reconciliation start and preview over 1,000+
+- the R180 cases: the 1,000-line deposit, reconciliation start, candidates, mark all, preview and finish over 1,000+
   uncleared rows, an invoice post at the end of the five-year history;
 - the known slow case: an organisation-wide `membership grant` over 200 companies.
 
@@ -665,3 +665,172 @@ repetition (a fresh history) compares best: post 24.4 → 14.7 s, void 40.8 → 
   opening its write transactions (BEGIN IMMEDIATE, the materialization drain, the principal
   upserts) before `cmd.plan` for non-dry-run writes. It is a change to every write command, not to
   deposits.
+
+## After increment 2 (2026-10-26)
+
+The closing measurement of R180: the large company regenerated on main 87077028 (lanes A to D),
+with the same profile and seed as the baseline, and the same bench, plus the reconciliation
+steps the baseline could not reach. Machine and method as in the baseline (16 cores, other
+projects running; the 1-minute load is given beside every figure).
+
+### The generated company
+
+`perf generate --profile large --seed 180` (template `bench-large-s180-co0095`): the same
+documents as the baseline, count for count (7,800 invoices with 19,551 lines, 6,490 payments,
+354 deposits, 1,800 bills, 1,500 bill payments; 1,000 payments in Undeposited Funds; 200
+companies).
+
+| | baseline (co0088) | after increment 2 (co0095) |
+|---|---|---|
+| whole run | 22,646 s (6.3 h), load 33 to 45 | **9,648 s (2.7 h)**, load 34 to 57 |
+| history (60 months) | 20,412 s | 7,687 s |
+| six-month block, first / last | 15 min / 51 min | 6.7 min / 16 min |
+| invoice post, first / last tenth | 416 / 583 ms | 218 / 195 ms |
+| the 1,000 undeposited payments | 339 s | 139 s |
+| the 200 companies | 1,673 s | 1,647 s |
+| disk | 2.1 GB (company 927 MB) | 2.2 GB (company 928 MB) |
+
+Posting no longer slows as the history grows: an invoice post costs the same at the end of five
+years as at the start. The six-month blocks still grow (6.7 to 16 min), from the deposits (a
+post's dependency history; see below). Creating the 200 companies did not change, about 8 s a
+company, and is now a sixth of the run.
+
+### Scenario timings
+
+`perf bench` (run `after-inc2-2026-10-26`, stored beside the template), 5 timed repetitions after
+a warm-up except where the reps column says otherwise; the columns are those of the baseline.
+"max" is the largest client wall time over the timed repetitions.
+
+| scenario | command | reps | baseline p50 ms | p50 ms | max ms | stmts | SQL ms (p50) | rows | load |
+|---|---|---|---|---|---|---|---|---|---|
+| home | company show | 5 | 43 | 33 | 33 | 44 | 17 | 7 | 37.6 |
+| register, newest 50 | register query | 5 | 3,552 | 3,013 | 3,055 | 223 | 2,870 | 50 | 37.6 |
+| customer list | customer list | 5 | 170,055 | **672** | 691 | 62 | 30 | 2,001 | 37.6 |
+| item list | item list | 5 | 153 | 114 | 121 | 48 | 21 | 400 | 37.6 |
+| A/R aging | report ar-aging | 5 | 1,180 | 1,163 | 1,200 | 46 | 903 | 50 | 38.0 |
+| profit and loss, 5 years | report profit-and-loss | 5 | 729 | 687 | 890 | 49 | 667 | 7 | 38.0 |
+| balance sheet | report balance-sheet | 5 | 1,024 | 978 | 1,008 | 50 | 952 | 4 | 37.8 |
+| invoice post (2 lines) | invoice post | 5 | 617 | 211 | 9,791 (the first, cold) | 447 | 63 | 2 | 37.8 |
+| bill post | bill post | 5 | 175 | 117 | 134 | 216 | 44 | 1 | 37.8 |
+| payment receive | payment receive | 5 | 346 | 140 | 174 | 253 | 64 | 1 | 37.8 |
+| deposit post, 20 lines | deposit post | 5 | 107,769 | **19,217** | 23,874 | 1,580 | 3,675 | 20 | 37.4 |
+| deposit sources, first page | deposit sources | 5 | 18,698 | 15,941 | 16,371 | 3,215 | 13,897 | 200 | 37.4 |
+| deposit post, 1,005 lines | deposit post | 3 | 184,591 | **84,673** | 109,525 | 34,387 | 12,856 | 1,005 | 43.1 |
+| deposit void, 1,005 lines | deposit void | 3 | 265,643 | **163,318** | 219,684 | 39,944 | 47,811 | 1,005 | 43.1 |
+| reconcile start, 1,859 uncleared rows (after its opening) | reconcile start | 1 | 7,825,364 | **57,852** | 57,852 | 1,476 | 485 | 0 | 44.7 |
+| reconcile candidates, first page | reconcile candidates | 5 | 3,425,318 | **30,223** | 46,101 | 502 | 140 | 200 | 56.1 |
+| reconcile mark all, 1,859 rows (new) | reconcile mark | 5 | not reached | 123,431 | 153,671 | 1,478 | 753 | 1,859 | 49.0 |
+| reconcile preview, 1,859 rows (new) | reconcile preview | 5 | not reached | 18,600 | 24,505 | 502 | 135 | 0 | 40.9 |
+| reconcile finish, 1,859 rows (new) | reconcile finish | 1 | not reached | 95,469 | 95,469 | 1,491 | 751 | 1,859 | 42.3 |
+| membership grant, organisation of 200 | membership grant | 3 | 17,385 | **2,653** | 2,871 | 208 | 14 | 0 | 41.0 |
+| membership revoke, organisation of 200 | membership revoke | 3 | 16,984 | 2,697 | 2,703 | 210 | 10 | 0 | 41.0 |
+
+The bench now enters checking's real balance as the statement's ending balance, ends mark all
+on a mark, and certifies the draft with `reconcile finish`, so the whole 1,000+ row
+reconciliation is measured: start 58 s, mark all 123 s, preview 19 s and finish 95 s, about
+5 minutes for the statement, against more than 16 hours that did not reach the end in the
+baseline. The 1,859 rows are 354 deposits and 1,500 bill payments over five years, plus the
+bench's own five 20-line deposits.
+
+### Reconciling the five years monthly
+
+The baseline company was never reconciled. A copy of the template
+(`bench-large-s180-co0095-reconciled`) had its checking account reconciled for each of the 60
+months through the commands (opening start for the first, then start, mark all, preview and
+finish), the ending balance being the ledger's checking balance at each month end. Each month
+has about 31 movements (6 deposits, 25 bill payments). All 60 certified.
+
+| | whole month | start | mark all | preview | finish | load |
+|---|---|---|---|---|---|---|
+| months 1 to 12 (median) | 101 s | 27.8 s | 30.9 s | 9.1 s | 32.0 s | 36 to 48 |
+| months 49 to 60 (median) | 202 s | 50.4 s | 79.7 s | 16.5 s | 55.1 s | 36 to 48 |
+| all 60 months | **9,594 s (2.7 h)** | | | | | 35.5 to 48.2 |
+
+The statement counts stay flat (1,417 to 1,432 for start, mark and finish; 482 for preview), so
+the time is Python, and it doubles over the five years as certificates accumulate, while each
+month marks only 31 rows. A month of 31 rows costs as much as the 1,859-row statement above: the
+cost follows the account's history, not the statement.
+
+### Which scenarios meet "seconds"
+
+Threshold: a p50 of **10 s or less** at this machine's load (37 to 56), for the 1,000-row
+operations and for everything else alike.
+
+- **Meet it:** every read (home, register 3.0 s, customer list 0.7 s, item list, A/R aging
+  1.2 s, profit and loss, balance sheet), the single-document writes (invoice post 0.2 s, bill
+  post, payment receive), and the organisation-wide membership grant and revoke (2.7 s).
+- **Do not:** every deposit and reconciliation scenario.
+  - deposit post, 20 lines: 19 s; deposit sources, a page: 16 s;
+  - deposit post, 1,005 lines: 85 s; its void: 163 s;
+  - reconciliation over 1,859 rows: start 58 s, candidates 30 s, mark all 123 s, preview 19 s,
+    finish 95 s;
+  - a monthly reconciliation of 31 rows: 100 s a month at the start of the history, 200 s at
+    the end.
+
+So the target, "bring posting, deposits and reconciliation of 1,000+ rows down to seconds", is
+met for posting and not yet for deposits or reconciliation. Increment 2 took those from hours to
+minutes (reconciliation start 2.2 h → 58 s; the 1,005-line deposit 185 → 85 s), and the rest is
+named below.
+
+### What remains, and where the time goes
+
+Profiled with the same 20 ms stack sampler, one call each on a fresh copy of the template (load
+37 to 38), and month 61 on a copy of the reconciled company (load 49 to 53).
+
+1. **Reconciliation: every load rebuilds and re-proves the account's whole graph, up to three
+   times per write.** 97% of a start is `reconciliation_loading.load`.
+   - Each write loads in the plan (`reconcile_cmds.py:153` → `_loaded`, `reconcile_cmds.py:82`),
+     again in the apply, and a third time after the write to prove it
+     (`reconcile_cmds.py:112` → `reconciliation_loading.prove_written`,
+     `reconciliation_loading.py:229`). That is about 1,420 statements each time.
+   - Inside each load, `reconciliation_storage_validation.validate` (`:407` → `enumerated`
+     `:233`) calls `reconciliation_adapters.enumerate_graph` (`:393`), which for every deposit
+     ever made to the account decodes and re-validates its stored financial facts:
+     `reconciliation_adapters.py:346` (`Effect.model_validate_json` and
+     `deposit_validation.validate`), with `deposit_models.py:158` (`Dimensions.pairs`) the hottest
+     leaf. That is 35 to 48% of a start, preview or finish on the unreconciled company.
+   - On the reconciled company, certificates add their own share: `population_fingerprint`
+     and `canonical` (`reconciliation_storage_validation.py:553` → `:62`, `:31`) about 11%, and
+     `reconciliation_loading._rows_for` (`:62`) about 10 to 21%.
+   - Fix direction: one load per command (reuse the plan's in the apply; prove the write from
+     what was written, not by reloading everything), and prove a stored deposit's facts once,
+     not on every load (an effect's facts do not change once written; a verified-prefix
+     watermark per account would let a load re-prove only what is new).
+2. **Reconcile mark all, candidates and preview: `Snapshot.current` is rebuilt for every
+   movement.** `reconciliation_queries.py:34` calls `s.current` once per listed movement inside
+   a generator; `current` (`reconciliation_preparation.py:132-134`) is a property that rebuilds
+   `versions` (`:128-130`, a dict of every effect version) and the head map on every access. That
+   is O(movements x versions): 51% of mark all on the unreconciled company (mark all runs it in
+   the plan and again in the apply), 26% on the reconciled one, and part of preview
+   (`whole_selection`, `reconciliation_preparation.py:192`). Fix direction: compute `current` once
+   per snapshot (a cached property; the snapshot is frozen). A small change with a large effect.
+3. **Deposit post and void: the historical read set still reads the whole audit history of the
+   kinds it relates.** As lane C expected, it dominates on five years.
+   - 20-line post: 68% in `deposit_dependency_history.reconstruct` (`:1510`) →
+     `find_owners` (`:1033`) → `_relation_index` (`:1064`) → `_historical_candidates`
+     (`:840-843`), which takes the latest image at the cutoff of every identity of a kind
+     (`_latest`, `:830`) and decodes each one (`core/audit.py:44`, `decode_snapshot`, 34%).
+   - The void of 1,005 lines: the same, plus `prefetch_owners` (`:795`, 25%).
+   - 21.5% of a 20-line post (13.7% of the 1,005-line one) is one statement:
+     `deposit_drafts.py:297`, `final_foreign_keys`, a `PRAGMA main.foreign_key_check` over the
+     **whole** company database after every deposit write. Fix direction: check only the tables
+     the write touched (`PRAGMA foreign_key_check(table)`), or the rows it wrote.
+   - Fix direction for the read set, as lane C named it: an audit-side relation index or the
+     verified-prefix watermark, both a migration.
+4. **Deposit sources, a page: 16 s, 87% of it in one query shape.**
+   `deposit_draft_validation.admit` walks deposit membership and operation targets per frontier
+   group (`deposit_draft_validation.py:68-72`). The operation-targets query at `:72` joins
+   `deposit_operation_targets` to `deposit_operations` on `transaction_id IN (group)`; neither
+   table has an index led by `transaction_id`, so SQLite scans all 6,844 targets and probes each
+   against the IN list. The membership query at `:68` (`source_transaction_id IN ... OR
+   transaction_id IN ...`) has the same problem on `deposit_memberships` (indexes lead with
+   `id`). Fix direction: indexes on `deposit_operations(transaction_id)`,
+   `deposit_memberships(source_transaction_id)` and `(transaction_id)`, a migration.
+5. **Smaller, still worth noting.** The register's newest page is 3.0 s: with no period it still
+   sums the whole history (lane A's fix helps a dated page). Creating a company is about 8 s
+   (unchanged). The first write after a fresh copy pays about 9.6 s cold (invoice post max).
+
+Both templates are kept on the storage drive, `/media/k/Blank/bookflow-scratch/perf/`:
+`bench-large-s180-co0095` (never reconciled, the bench's template, with the run file and logs)
+and `bench-large-s180-co0095-reconciled` (checking reconciled for all 60 months, with each
+month's timings in `recon_monthly.json`). Copy one to the NVMe drive before using it.
