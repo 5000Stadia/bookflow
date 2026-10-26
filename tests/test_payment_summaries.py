@@ -26,7 +26,11 @@ def test_customer_payment_summary_names_paid_owing_credit_and_discount(books):
     assert summary['text'] == (
         'Received 1150.00 USD from Adams Plumbing. It was deposited to Checking. Paid in full: 1 invoice (SUM-1). '
         'Invoice SUM-2: 120.00 USD paid, 180.00 USD still due. Early-payment discount taken: 20.00 USD. '
-        '50.00 USD left as credit for Adams Plumbing.')
+        '50.00 USD left as credit for Adams Plumbing. '
+        # R148: the short and the extra part each name the choice made and the other one.
+        'Underpayment of 180.00 USD left open on SUM-2. To write it off instead, run `next` with the account '
+        'it goes to (an expense account such as Bad Debt). Overpayment of 50.00 USD left as credit to use later. '
+        'To refund it to the customer instead, run `next` with the account the money leaves and the method.')
     # Applying 30.00 of that credit to SUM-2 leaves 150.00 due and 20.00 of credit.
     applied = run('payment apply', dict(payment=paid['id'], expected_version=paid['version'], date='2026-03-09',
                                         operation_key='sum-apply', applications=dict(mode='inline', items=[

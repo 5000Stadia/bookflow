@@ -75,6 +75,19 @@ def _logical(value, mapping):
 
 
 
+def _by_id(s,table,identities):
+    """Rows of `table` by id, read in sets of 400."""
+    identities=sorted({i for i in identities if i is not None});result={}
+    for offset in range(0,len(identities),400):
+        for row in effects.rows(s,table,table.c.id.in_(identities[offset:offset+400])):result[row['id']]=row
+    return result
+
+
+def _one(rows,identity):
+    if identity not in rows:raise IndexError('list index out of range')
+    return rows[identity]
+
+
 def recover(s,ctx,inp,verb,binding,*,posting=True):
     """Exact business replay skips its old guard, never current admission."""
     from bookflow.company import deposit_dependency_history as history
@@ -93,7 +106,16 @@ def recover(s,ctx,inp,verb,binding,*,posting=True):
 
 
 def prepare(s,ctx,inp,verb, *, binding=None, expected_guard=None, posting=True):
-    """Complete snapshot resolution without DML; prospective IDs remain private."""
+    """Complete snapshot resolution without DML; prospective IDs remain private.
+
+    One preparation scope: what it proves (authority, the current read set) is proven
+    once in it and never carried into another preparation."""
+    from bookflow.company import deposit_dependency_history as history
+    with history.preparation(s):
+        return _prepare(s,ctx,inp,verb,binding=binding,expected_guard=expected_guard,posting=posting)
+
+
+def _prepare(s,ctx,inp,verb, *, binding=None, expected_guard=None, posting=True):
     if verb not in INPUTS:raise ValueError('unsupported private deposit action')
     inp=INPUTS[verb].model_validate_json(inp.model_dump_json(by_alias=True,exclude_unset=True))
     from bookflow.company import deposit_dependency_history as history
@@ -168,8 +190,12 @@ def prepare(s,ctx,inp,verb, *, binding=None, expected_guard=None, posting=True):
                 from bookflow.company.deposit_draft_models import Manifest
                 provider.validate_references(s,resolved,Manifest.model_validate_json(document.pin.snapshot),old['id'] if old else None)
     claim_rows=effects.rows(s,c.deposit_current_memberships,c.deposit_current_memberships.c.transaction_id==identity)
-    current_claims=[effects.rows(s,c.deposit_memberships,c.deposit_memberships.c.id==r['membership_id'])[0] for r in claim_rows]
-    source_headers={source:effects.rows(s,c.transactions,c.transactions.c.id==source)[0] for source in sorted(set(requested)|{r['source_transaction_id'] for r in current_claims})}
+    # Read by id in sets; a missing row fails as the one-by-one read's [0] did.
+    memberships=_by_id(s,c.deposit_memberships,[r['membership_id'] for r in claim_rows])
+    current_claims=[_one(memberships,r['membership_id']) for r in claim_rows]
+    wanted=sorted(set(requested)|{r['source_transaction_id'] for r in current_claims})
+    found=_by_id(s,c.transactions,wanted)
+    source_headers={source:_one(found,source) for source in wanted}
     for source in requested:
         claim=dependencies.active_claim(s,source)
         if claim and claim['transaction_id']!=identity:

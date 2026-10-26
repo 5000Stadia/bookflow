@@ -399,7 +399,7 @@ The fixes:
 
 Left for lane B: admitting deposit sources per row (`deposit_draft_validation.admit`, called again for
 each listed row at the end of `deposit_source_queries.query`, after `candidates` has already admitted
-them) and the dependency history reads.
+them) and the dependency history reads. Both were done in lane C, below.
 
 **The first catalog build, once per process (lane B's finding).**
 - `permission_runtime.known_catalog` is built and verified once per process, not once per command:
@@ -574,3 +574,94 @@ about 0.4 s: the layers share most descriptor objects, so each is encoded once, 
 version is compressed. Each version is stored whole; compressed, the file is 0.86 MB (19 MB
 uncompressed). The timing table above was taken before compression; compression only made
 the load faster (60 ms to 3 ms) and the first write about 0.2 s slower.
+
+## Increment 2, lane C (2026-10-26): deposits read what they prove, once
+
+A deposit command proves its read set (every record and relation its dependency guard covers) in
+three places: the plan's capture, and the apply's comparison of the current read set with the one
+reconstructed at the guard's endpoint. Each read set used to read every row and every audit entry of
+about 28 owner kinds, row by row, and the apply built the current one twice. What each read set
+proves is unchanged; only how it reads changed.
+
+**Bounded reads** (`deposit_dependency_history.History`).
+- A selected record's row and its complete audit history are read by id, in sets of 400
+  (`_KindStore`). `History.raw[kind]` and `History.entries[kind]` keep their meaning: iterating one
+  still reads the whole kind, for callers that need every identity (a selector by name, a predicate
+  with no row bound).
+- Not every owner table is insert-only: transactions, company_info, custom field definitions and
+  deposit drafts are updated in place. So a relation is never inferred from history alone, and
+  nothing assumes an old row cannot change.
+- A current relation (the rows whose field names an owner) is one indexed SQL read, plus every
+  identity that has audit entries but no row, indexed from its latest image exactly as the full
+  scan did. A row never failed that scan, so the first refusal (an undecodable image, a missing
+  field) is the same one, in the same order.
+- `find` takes an optional row bound that its predicate implies (`where={'transaction_id': ...}`),
+  and evaluates only the rows SQL selects by it, plus the audit-only identities. Takes keep their
+  order relative to a refusal.
+- A historical relation still indexes the latest image at the cutoff of every identity of the
+  kind. It cannot be bounded exactly without an audit-side index: an image that does not decode, or
+  that names another owner than its row, must still be met. It now reads only the columns it
+  needs, and decodes each image once per read set.
+
+**Once per preparation.** `deposit_dependency_history.preparation(s)` scopes one DML-free
+preparation (`lifecycle.prepare`, a source page). It holds nothing past its end, and a plan and its
+apply are separate preparations, with principal upserts written between them.
+- Authorization: a set of transactions and events covered by what already passed for the same
+  binding and write level is not checked again. A set's requirements are the union of its members'
+  (ledger access, customer work where any is linked, each event's own). So a set that passed covers
+  its subsets, and two that passed cover their union. The binding is revalidated on every call, and
+  a refusal is always recomputed.
+- Read set: when the comparison's current read set resolved every selector (none fell back to
+  "missing"), capture reuses it. It is the same computation, in the same snapshot. A post now builds
+  three read sets, not four, and a guarded void four, not six.
+- Pure owner chains (projections that depend only on the entries) and decoded commercial revisions
+  are shared by the current and historical readers of one comparison. Each use gets its own copy.
+
+**Admitted once.** `deposit sources` no longer admits each listed receipt again at the end.
+`candidates()` has already admitted every listed receipt, in the same snapshot and binding: either
+the whole set at once (which covers each receipt) or, after a refusal, each receipt on its own. A
+receipt it could not admit is not listed.
+
+**Fetched in sets.** The deposit's current claims, its source headers, capture's root checks and
+the current claim rows are each read with `IN` lists.
+
+**How it is proven.**
+- `tests/deposit_history_oracle.py` keeps the full-scan reader as a test-only oracle.
+- `test_deposit_history_bounded` builds a history with renames, a closing-date change, a void, a
+  draft consumed by a post, an edit draft consumed by an update, and a planted audit-only
+  membership. Both readers must give equal read sets (records, relations, digest, unknowns): current
+  (with and without missing selectors) and historical at several endpoints, for every deposit,
+  payment, sales receipt and a void request: over 60 comparisons.
+- A corruption corpus (a missing owner row, a dangling relation, an undecodable image inside and
+  outside the deposit's graph, an undecodable audit-only image, a tampered draft, a rename behind
+  the books) must give the same outcome under both readers for a void preview, its guarded commit,
+  a source page and a post preview. The outcomes were also recorded with the base build's code and
+  matched it, guard tokens aside.
+
+**Measured** on the medium template (the lane A company, upgraded once to co0096 and copied fresh for
+each run): `perf.bench.run_bench`, 3 timed repetitions. Before is main at db5d39c9.
+
+| scenario | before p50 ms | after p50 ms | before stmts | after stmts | load before / after |
+|---|---|---|---|---|---|
+| deposit post, 20 lines | 12,194 | 3,322 | 2,058 | 1,580 | 43.3 / 40.7 |
+| deposit sources, page of 200 | 2,142 | 617 | 11,958 | 918 | 42.9 / 40.7 |
+| deposit post, all 300 undeposited | 35,401 | 25,624 | 14,492 | 10,765 | 37.7 / 42.7 |
+| deposit void of that deposit | 53,948 | 38,798 | 16,930 | 12,412 | 37.7 / 42.7 |
+
+The 300-line post and void run as three post/void pairs over the same receipts. Each pair adds a
+claim and a release to every receipt's history, and the old deposits stay in each receipt's graph,
+so the repetitions grow: 24.4, 35.4 and 43.1 s before; 14.7, 25.6 and 36.3 s after. The first
+repetition (a fresh history) compares best: post 24.4 → 14.7 s, void 40.8 → 23.2 s.
+
+**What remains.**
+- The historical read set is still O(the audit history of the kinds it relates): about 60,000
+  images decoded on the medium company, about half of a 20-line post now. It will dominate on the
+  large company. Bounding it exactly needs an audit-side relation index, or the verified-prefix
+  watermark; both need a migration.
+- A post's own work (resolution, validation, composition, writes) is now about half of the
+  300-line post. Most of the rest is proof per record (each selected record's chain and current
+  row compared).
+- Reusing the plan's preparation in the apply needs one snapshot for both. That means dispatch
+  opening its write transactions (BEGIN IMMEDIATE, the materialization drain, the principal
+  upserts) before `cmd.plan` for non-dry-run writes. It is a change to every write command, not to
+  deposits.
