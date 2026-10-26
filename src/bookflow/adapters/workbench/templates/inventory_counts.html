@@ -12,23 +12,23 @@
 <label>Date <input type="date" name="date" value="{{ values.get('date', today) }}"></label>
 <label>Only these items (optional, comma separated) <input name="items" value="{{ values.get('items', '') }}"></label>
 {% if any_bins %}<label>Or only these bins (comma separated, e.g. A3) <input name="bins" value="{{ values.get('bins', '') }}" data-count-bins></label>{% endif %}
-<label class="check"><input type="checkbox" name="cycle" {% if values.get('cycle') %}checked{% endif %} data-count-cycle> Cycle count: the next items due</label>
+<div><label class="check"><input type="checkbox" name="cycle" {% if values.get('cycle') %}checked{% endif %} data-count-cycle> Cycle count: the next items due</label></div>
 <label>How many (cycle count) <input name="limit" inputmode="numeric" size="4" value="{{ values.get('limit', '') }}" placeholder="25"></label>
-<label class="check"><input type="checkbox" name="blind" {% if values.get('blind') %}checked{% endif %}> Blind: hide expected quantities from the counters</label>
+<div><label class="check"><input type="checkbox" name="blind" {% if values.get('blind') %}checked{% endif %}> Blind: hide expected quantities from the counters</label></div>
 <label>Reason (shown in the audit trail) <input name="ctx:reason" value="{{ values.get('ctx:reason', '') }}" placeholder="Monday van count"></label>
 <div class="actions"><button type="submit" data-count-create>Start count</button></div>
 </section>
 </form>
 {% endif %}
 {% if due %}<section class="workspace-card" aria-label="Due for a cycle count" data-cycle-due>
-<h2>Due for a cycle count</h2>
+<h2>Due for a cycle count on {{ due[0].as_of }}</h2>
 <p>An item is due when its class interval has passed since its last recorded count at the site, or it was never counted there. <a href="/c/{{ company_id }}/cycle-class">Cycle classes</a></p>
 {% for d in due %}<h3>{{ d.site_name }}: {{ d.due }} due</h3>
 {% if d.rows %}<div class="table-wrap"><table class="list-table" data-due-list><thead><tr><th>Item</th><th>Class</th><th>Last counted</th><th>Overdue</th><th class="num">On hand</th></tr></thead><tbody>
 {% for r in d.rows %}<tr><td data-label="Item">{{ r.item_name }}</td><td data-label="Class">{{ r.cycle_class }}</td><td data-label="Last counted">{{ r.last_counted or 'never' }}</td><td data-label="Overdue">{{ (r.days_overdue ~ ' days') if r.days_overdue is not none else 'never counted' }}</td><td class="num" data-label="On hand">{{ r.on_hand }}</td></tr>{% endfor %}
 </tbody></table></div>
 {% if can_write %}<form method="post" action="/c/{{ company_id }}/inventory/counts" hx-post="/c/{{ company_id }}/inventory/counts" hx-target="body" hx-swap="outerHTML" class="due-count">
-<input type="hidden" name="site" value="{{ d.site_name }}"><input type="hidden" name="cycle" value="on"><input type="hidden" name="ctx:reason" value="Cycle count">
+<input type="hidden" name="site" value="{{ d.site_name }}"><input type="hidden" name="date" value="{{ d.as_of }}"><input type="hidden" name="cycle" value="on"><input type="hidden" name="ctx:reason" value="Cycle count">
 <label>Count the next <input name="limit" inputmode="numeric" size="3" value="{{ [d.due, 25]|min }}"> items</label> <button type="submit" data-count-next>Count the next {{ [d.due, 25]|min }}</button>
 </form>{% endif %}{% else %}<p>Nothing is due; {{ d.not_due }} classified items are within their interval.</p>{% endif %}
 {% endfor %}

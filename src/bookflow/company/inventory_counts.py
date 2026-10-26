@@ -428,7 +428,8 @@ def apply_create(plan, ctx, s) -> Applied:
                          directive_code=getattr(s, 'directive_code', None), event_id=event)
     conn = s.company.conn
     conn.execute(c.inventory_counts.insert().values(**count))
-    conn.execute(c.inventory_count_lines.insert(), lines)
+    if lines:
+        conn.execute(c.inventory_count_lines.insert(), lines)
     if sequence:
         from sqlalchemy.dialects.sqlite import insert
         stmt = insert(c.sequences).values(**sequence)

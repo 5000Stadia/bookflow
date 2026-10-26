@@ -13,7 +13,7 @@ from tests.test_row5_browser_acceptance import CHROME, browser_site  # noqa: F40
 from tests.test_row8_register_browser import _command, _key, _type, register_browser  # noqa: F401
 
 pytestmark = pytest.mark.skipif(not CHROME.exists(), reason='Chrome unavailable')
-COUPLING = '0012345678905'
+KIT = '4006381333931'
 A2_LABEL = '2000000001012'
 
 
@@ -44,9 +44,9 @@ def test_count_a_bin_by_scanning_its_label_and_count_the_next_due(register_brows
     b.viewport(width, 900)
     run = lambda name, payload: _command(b, env.site, name, payload)
     run('inventory-transfer.post', {'date': DEMO_AS_OF, 'from_site': 'Warehouse', 'to_site': 'Warehouse',
-                                    'lines': [{'item': 'Copper Coupling', 'quantity': '1', 'to_bin': 'A2'}]})
+                                    'lines': [{'item': 'Received Shipping Kit', 'quantity': '1', 'to_bin': 'A2'}]})
 
-    b.navigate(f'{base}/inventory/counts')
+    b.navigate(f'{base}/inventory/counts?as_of={DEMO_AS_OF}')
     b.wait_for('!!document.querySelector("[data-count-start]")')
     assert b.evaluate('!!document.querySelector("[data-cycle-due]")'), _text(b)[-1500:]
     if width == 390:
@@ -65,18 +65,18 @@ def test_count_a_bin_by_scanning_its_label_and_count_the_next_due(register_brows
     b.wait_for("document.querySelector('[data-scan-status]').dataset.kind === 'ok'")
     assert b.evaluate('document.querySelector("[data-scan-bin]").value') == 'A2'
     assert 'Current bin: A2' in b.evaluate("document.querySelector('[data-scan-status]').textContent")
-    _scan(b, COUPLING)
-    b.wait_for('!!document.querySelector("[data-count-result]")', timeout=30)
+    _scan(b, KIT)
+    b.wait_for('(document.querySelector("[data-count-result]")?.textContent || "").includes("counted")', timeout=30)
     assert 'in bin A2' in b.evaluate('document.querySelector("[data-count-result]").textContent')
     lines = run('inventory-count.show', {'count': number})['lines']
-    assert ('Copper Coupling', 'A2', '1') in {(l['item_name'], l['bin'], l['counted']) for l in lines}
+    assert ('Received Shipping Kit', 'A2', '1') in {(l['item_name'], l['bin'], l['counted']) for l in lines}
     assert 'Bin A2' in b.evaluate('[...document.querySelectorAll("[data-count-group]")].map(h => h.textContent).join("|")') \
         or len(set(l['bin'] for l in lines)) == 1
     assert b.evaluate('document.querySelector("[data-scan-bin]").value') == 'A2'   # the bin stays for the next scan
     if width == 390:
         _fits(b)
 
-    b.navigate(f'{base}/inventory/counts')
+    b.navigate(f'{base}/inventory/counts?as_of={DEMO_AS_OF}')
     b.wait_for('!!document.querySelector("[data-count-next]")')
     b.evaluate('document.querySelector("[data-count-next]").click()')
     b.wait_for('!!document.querySelector("#inventory-count")', timeout=30)

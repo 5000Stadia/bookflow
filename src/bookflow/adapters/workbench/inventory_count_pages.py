@@ -51,9 +51,10 @@ def mount(app, *, render, run, credential, page_error, role_allows):
         sites = run(request, 'inventory-site list', {}, company_id)['sites']
         counts = run(request, 'inventory-count query', {'limit': 50}, company_id)['counts']
         due = []
+        as_of = (request.query_params.get('as_of') or '').strip() or today_iso()
         for site in sites:
             try:
-                answer = run(request, 'cycle-count due', {'site': site['name'], 'limit': 10}, company_id)
+                answer = run(request, 'cycle-count due', {'site': site['name'], 'limit': 10, 'as_of': as_of}, company_id)
             except BookflowError:
                 continue
             if answer['due'] or answer['not_due']:

@@ -54,7 +54,7 @@
 {% if can_write %}<form method="post" action="/c/{{ company_id }}/inventory/sites" hx-post="/c/{{ company_id }}/inventory/sites" hx-target="body" hx-swap="outerHTML" data-site-form>
 <label>New site <input name="site_name" placeholder="Van 2"></label>
 <label>Description <input name="site_description"></label>
-<label class="check"><input type="checkbox" name="site_bins"> Track bins</label>
+<div><label class="check"><input type="checkbox" name="site_bins"> Track bins</label></div>
 <label>Reason <input name="ctx:reason" placeholder="A new van"></label>
 <div class="actions"><button type="submit" name="action" value="site">Add site</button></div>
 </form>{% endif %}
