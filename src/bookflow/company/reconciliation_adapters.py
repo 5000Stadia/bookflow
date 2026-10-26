@@ -332,9 +332,30 @@ def _offbank(g, header):
     return (), ()
 
 
+# A deposit revision's stored facts, decoded and proved, keyed by the SHA-256 of their exact
+# text. Decoding and `deposit_validation.validate` are a pure function of that text, so a
+# repeat -- the same revision on every load of every account it reaches -- reuses the legs it
+# proved; only a success is kept, so stored facts that do not prove are refused every time.
+_PROVED_LEGS: dict[bytes, tuple] = {}
+_PROVED_LEGS_MAX = 4096
+
+
+def _proved_legs(text):
+    import hashlib
+    key = hashlib.sha256(text.encode()).digest()
+    legs = _PROVED_LEGS.get(key)
+    if legs is None:
+        from bookflow.company.deposit_models import Effect
+        from bookflow.company.deposit_validation import validate
+        financial = Effect.model_validate_json(text); validate(financial)
+        legs = tuple((leg.account_id, leg.signed_debit, leg.key) for leg in financial.legs)
+        if len(_PROVED_LEGS) >= _PROVED_LEGS_MAX:
+            _PROVED_LEGS.clear()
+        _PROVED_LEGS[key] = legs
+    return legs
+
+
 def _deposit(g, header):
-    from bookflow.company.deposit_models import Effect
-    from bookflow.company.deposit_validation import validate
     identity = header['id']
     keys = {r['id']: r for r in g.owned('bank_effect_keys', identity)}
     revisions = g.by_id('transaction_revisions'); batches = g.by_id('posting_batches')
@@ -343,19 +364,19 @@ def _deposit(g, header):
     for row in sorted(g.owned('bank_effect_versions', identity), key=lambda r: (r['version'], r['id'])):
         key = keys[row['key_id']]; batch = batches[row['batch_id']]; revision = revisions[row['revision_id']]
         require(batch['kind'] in ('original', 'replacement') and batch['revision_id'] == revision['id'], 'deposit_business_anchor')
-        financial = Effect.model_validate_json(profiles[revision['id']]['facts_snapshot']); validate(financial)
+        planned_legs = _proved_legs(profiles[revision['id']]['facts_snapshot'])
         legs = []
         if row['active']:
             posted = sorted((r for r in g.owned('posting_lines', identity) if r['batch_id'] == batch['id']), key=lambda r: r['line_no'])
-            require(len(posted) == len(financial.legs), 'deposit_leg_count')
-            for actual, planned in zip(posted, financial.legs):
-                require((actual['account_id'], actual['debit_minor_units']-actual['credit_minor_units']) == (planned.account_id, planned.signed_debit), 'deposit_leg_mapping')
-                if planned.key.startswith('main_bank/'):
+            require(len(posted) == len(planned_legs), 'deposit_leg_count')
+            for actual, (planned_account, planned_debit, planned_key) in zip(posted, planned_legs):
+                require((actual['account_id'], actual['debit_minor_units']-actual['credit_minor_units']) == (planned_account, planned_debit), 'deposit_leg_mapping')
+                if planned_key.startswith('main_bank/'):
                     role, component = 'main_bank', key['row_id']
-                elif planned.key.startswith('cash_back/'):
+                elif planned_key.startswith('cash_back/'):
                     role, component = 'cash_back', key['row_id']
-                elif planned.key.startswith('additional:'):
-                    role, component = 'additional', planned.key.split('/')[0].split(':')[1]
+                elif planned_key.startswith('additional:'):
+                    role, component = 'additional', planned_key.split('/')[0].split(':')[1]
                 else:
                     continue
                 if (role, component) == (key['role'], key['row_id']):

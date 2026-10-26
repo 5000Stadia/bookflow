@@ -274,19 +274,30 @@ def preview(s,ctx,fresh):
     return LifecycleOutput.model_validate_json(q.canonical(projected)).model_copy(update={'operation_id':None})
 
 
-def _execute(s,ctx,plan):
-    """Re-resolve and validate inside caller's already-open writer transaction."""
+def _execute(s,ctx,plan,planned_in_write=False):
+    """Re-resolve and validate inside caller's already-open writer transaction.
+
+    `planned_in_write`: `plan` was prepared inside this same writer transaction, after its drain
+    and principal upsert, with nothing written since (`core.dispatch._plans_in_write`). Then the
+    re-resolution below would read the same rows as `plan` did: `recover` finds nothing (the plan
+    found nothing), the guard comparison matches the guard the plan just computed, and the fresh
+    preparation has the plan's facts fingerprint. So `plan` is used as it stands.
+    """
     if not s.company.raw.in_transaction or s.dry_run:
         raise RuntimeError('Private deposit execution requires an owned writer transaction')
     inp=lifecycle.INPUTS[plan.verb].model_validate_json(plan.input_json)
-    recovered=lifecycle.recover(s,ctx,inp,plan.verb,plan.binding,posting=plan.posting)
-    if recovered is not None:return recovered,None
+    if not planned_in_write:
+        recovered=lifecycle.recover(s,ctx,inp,plan.verb,plan.binding,posting=plan.posting)
+        if recovered is not None:return recovered,None
     if plan.verb!='post' and getattr(inp,'dependency_guard',None) is None:
         raise BookflowError('E_PREVIEW_STALE',details={'reason':'complete deposit guard required'})
-    # Retain the authenticated preview producer, including bearer liveness.
-    # Re-deriving OS identity here would change a hosted agent's admission.
-    fresh=lifecycle.prepare(s,ctx,inp,plan.verb,binding=plan.binding,expected_guard=plan.dependency_guard,posting=plan.posting)
-    if fresh.facts_fingerprint!=plan.facts_fingerprint:raise BookflowError('E_PREVIEW_STALE')
+    if planned_in_write:
+        fresh=plan
+    else:
+        # Retain the authenticated preview producer, including bearer liveness.
+        # Re-deriving OS identity here would change a hosted agent's admission.
+        fresh=lifecycle.prepare(s,ctx,inp,plan.verb,binding=plan.binding,expected_guard=plan.dependency_guard,posting=plan.posting)
+        if fresh.facts_fingerprint!=plan.facts_fingerprint:raise BookflowError('E_PREVIEW_STALE')
     composed=compose(s,ctx,fresh)
     bundle=composed['bundle'];output=composed['output'];touched=composed['touched']
     operation=composed['operation'];targets=composed['targets'];consumed=composed['consumed']
@@ -323,15 +334,16 @@ def _execute(s,ctx,plan):
     return output,consumed
 
 
-def execute(s,ctx,plan):
+def execute(s,ctx,plan,*,planned_in_write=False):
     """One financial rollback boundary, including deferred consumption heads."""
     if not s.company.raw.in_transaction or s.dry_run:
         raise RuntimeError('Private deposit execution requires an owned writer transaction')
     s.company.raw.execute('SAVEPOINT bookflow_deposit_financial')
     try:
-        output,consumed=_execute(s,ctx,plan)
-        from bookflow.company.deposit_drafts import final_foreign_keys
-        final_foreign_keys(s)
+        from bookflow.company.deposit_drafts import final_foreign_keys,written_tables
+        with written_tables(s) as written:
+            output,consumed=_execute(s,ctx,plan,planned_in_write)
+        final_foreign_keys(s,written)
         from bookflow.company import deposit_draft_consumption as consumption
         consumption.validate_persisted(s,consumed)
         s.company.raw.execute('RELEASE bookflow_deposit_financial')

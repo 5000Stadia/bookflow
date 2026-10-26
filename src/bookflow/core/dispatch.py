@@ -714,6 +714,16 @@ def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, co
                     replay["dry_run"] = True
                 return redact_paths(replay, s.is_hub_admin)
     inp = _dated_today(cmd, inp, s)
+    if _plans_in_write(cmd, s, dry_run):
+        # The plan runs inside the write transaction `_apply` opens (BEGIN IMMEDIATE, the drain,
+        # the principal upsert), so the apply may reuse what the plan prepared: nothing can be
+        # written between them. Opt-in per command; every other command keeps the order below.
+        applied = _apply(cmd, None, ctx, s, key=(key_db, ihash), planner=lambda: cmd.plan(inp, ctx, s))
+        with performance.span("command.serialize"):
+            out = applied.output.model_dump(mode="json")
+        if "warnings" in out:
+            out["warnings"] = list(out.get("warnings") or []) + list(s.warnings)
+        return redact_paths(out, s.is_hub_admin)
     with performance.span("command.plan", command=cmd.name):
         plan = cmd.plan(inp, ctx, s)
     if dry_run or not cmd.is_write:
@@ -810,8 +820,22 @@ def _accepts_selector(cmd: Command) -> bool:
     return False
 
 
-def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None)):
-    """Apply with one transaction per database, events where the touched records live, commits in truth order."""
+def _plans_in_write(cmd: Command, s: Session, dry_run: bool) -> bool:
+    """Whether this call plans inside its own write transaction (`plan_in_write`, R180 increment 3).
+
+    Only a real (not dry-run) company-only write that opted in: a preview, a read, an advisory
+    command or one that also writes the hub or config plans before any transaction, as before.
+    """
+    return (getattr(cmd, "plan_in_write", False) and not dry_run and cmd.is_write
+            and cmd.kind != "advisory" and set(cmd.writes) == {"company"} and s.company is not None)
+
+
+def _apply(cmd: Command, plan: Plan | None, ctx: Context, s: Session, key=(None, None), planner=None):
+    """Apply with one transaction per database, events where the touched records live, commits in truth order.
+
+    With `planner` (a command that opted in with `plan_in_write`), the plan is made here, after
+    the transaction is open, drained and the principals upserted, and just before the apply.
+    """
     with s.commits.operation("dispatch.apply", s.hub, s.company):
         from bookflow.core import idempotency
         from bookflow.core.audit import write_event_to
@@ -835,6 +859,13 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
         try:
             if co_tx:
                 _upsert_principals(s, ctx)
+            if planner is not None:
+                s.plan_in_write = True
+                try:
+                    with performance.span("command.plan", command=cmd.name):
+                        plan = planner()
+                finally:
+                    s.plan_in_write = False
             # An agent's write is checked, after it is made, against the owner's review flags
             # (`company/entry_review.py`); a match comes back as a warning and nothing is refused.
             review_before = None
