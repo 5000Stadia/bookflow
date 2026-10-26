@@ -294,6 +294,16 @@ def damaged_rows(rows):
         if not values:
             continue
         if len(values) > 1:
+            for column in values[0]:
+                if values[0][column] != values[1][column]:
+                    # Two rows trading one value: every count and multiset still agrees.
+                    out = {n: list(v) for n, v in rows.items()}
+                    out[name][0] = dict(values[0], **{column: values[1][column]})
+                    out[name][1] = dict(values[1], **{column: values[0][column]})
+                    yield f'{name}.{column} swapped', out
+                    out = {n: list(v) for n, v in rows.items()}
+                    out[name] = [dict(v, **{column: values[0][column]}) for v in values]
+                    yield f'{name}.{column} all the first row\'s', out
             out = {n: list(v) for n, v in rows.items()}; out[name] = out[name][::-1]
             yield f'{name} reversed', out
             out = {n: list(v) for n, v in rows.items()}; out[name] = out[name][:1]
@@ -307,6 +317,7 @@ def damaged_rows(rows):
                 return what, out
             out = {n: list(v) for n, v in rows.items()}; del out[name][index]
             yield f'{name}[{index}] missing', out
+            yield f'{name}[{index}] missing with its dependents', cascade(rows, name, index)
             out = {n: list(v) for n, v in rows.items()}; out[name].append(dict(row))
             yield f'{name}[{index}] duplicated', out
             yield changed(dict(row, r180_extra=1), f'{name} extra column')
@@ -345,6 +356,29 @@ def damaged_rows(rows):
                         yield changed(dict(row, **{column: '2099-12-31'}), f'{name}.{column} moved date')
 
 
+def cascade(rows, name, index):
+    """The rows with one row deleted together with every row that points at it, transitively,
+    through the schema's own foreign keys: damage that keeps every key resolvable."""
+    tables = loading._tables()
+    edges = [(n, [e.parent.name for e in fk.elements], fk.referred_table.name.removeprefix(loading.PREFIX),
+              [e.column.name for e in fk.elements])
+             for n, table in tables.items() for fk in table.foreign_key_constraints
+             if fk.referred_table.name.startswith(loading.PREFIX)]
+    out = {n: list(v) for n, v in rows.items()}
+    doomed = [(name, out[name].pop(index))]
+    while doomed:
+        target, row = doomed.pop()
+        for child, columns, parent, remote in edges:
+            if parent != target or child not in out:
+                continue
+            value = tuple(row.get(c) for c in remote)
+            keep = []
+            for other in out[child]:
+                (doomed.append((child, other)) if tuple(other.get(c) for c in columns) == value else keep.append(other))
+            out[child] = keep
+    return out
+
+
 def kept_variants(item):
     """Damage that keeps a snapshot field's shape: what passes the models and fails later."""
     if type(item) is int and type(item) is not bool:
@@ -376,6 +410,7 @@ def damaged_graphs(g):
 
 def damaged_references(refs):
     for name, values in refs.items():
+        yield f'{name} not supplied', {n: v for n, v in refs.items() if n != name}
         if values:
             yield f'{name} emptied', dict(refs, **{name: []})
             yield f'{name}[0] duplicated', dict(refs, **{name: list(values) + [dict(values[0])]})
@@ -407,6 +442,11 @@ def compare_damage(s, account_id):
         both(what, rows, bad, whole, loading.referenced_rows(db, rows))
     for what, bad in damaged_references(whole):
         both(what, rows, g, bad, bad)
+    for what, kwargs in (('no source graph', dict(source=None)),
+                         ('a capture proof for no capture', dict(captured_graphs={new_id(): g}))):
+        kwargs = dict(dict(source=g, captured_graphs={}, referenced_rows=whole), **kwargs)
+        old = outcome(oracle.validate, rows, **kwargs); assert outcome(indexed_validate, rows, **kwargs) == old
+        seen.setdefault(old, what); RULES.setdefault(old, what)
     return seen, cases
 
 
