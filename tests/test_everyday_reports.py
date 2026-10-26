@@ -44,6 +44,7 @@ CUSTOMER_BALANCES = [
     ("Payment Example Customer:Job A", 2000),
     ("Payment Example Customer:Job B", -1000),
     ("Returned Check Example Customer", 22500),
+    ("Riverside Apartments", 8119),                # DEMO-PIPE-INV-1: five lengths of copper pipe and tax (R104 inc 6)
     ("Tax Rounding Example Customer", 33),
     ("Tax Work Example Customer", 6),
 ]
@@ -65,6 +66,8 @@ CUSTOMER_DETAIL = [
     ("Returned Check Example Customer", "activity", "1", 20000, 20000),
     ("Returned Check Example Customer", "activity", "DEMO-BOUNCE-FEE-1", 2500, 22500),
     ("Returned Check Example Customer", "total", None, 22500, 22500),
+    ("Riverside Apartments", "activity", "DEMO-PIPE-INV-1", 8119, 8119),
+    ("Riverside Apartments", "total", None, 8119, 8119),
     ("Tax Rounding Example Customer", "activity", "DEMO-TAX-LEGACY", 10, 10),
     ("Tax Rounding Example Customer", "activity", "DEMO-TAX-LINE", 12, 22),
     ("Tax Rounding Example Customer", "activity", "DEMO-TAX-TOTAL", 11, 33),
@@ -93,16 +96,19 @@ VENDOR_DETAIL = [
     ("activity", "DEMO-BUY-BILL-1", 30080, 30080),
     ("activity", "DEMO-BUY-PAY-1", -30080, 0),
     ("activity", "DEMO-BUY-CREDIT-1", -2190, -2190),
-    ("activity", "6", 6000, 3810),
-    ("activity", "7", 400, 4210),
-    ("activity", "DEMO-SERIAL-1", 73000, 77210),   # two heaters and two lots of sealant (R104 increment 4)
-    ("activity", "6", -4000, 73210),
-    ("activity", "DEMO-KIT-BILL", 4400, 77610),
-    ("activity", "7", -400, 77210),
-    ("activity", "8", 3600, 80810),
-    ("activity", "8", -2400, 78410),
-    ("activity", "1", 2400, 80810),
-    ("total", None, 80810, 80810),
+    ("activity", "DEMO-PIPE-1", 8000, 5810),        # copper pipe, 10 at 8.00 (R104 increment 6)
+    ("activity", "DEMO-PIPE-2", 16000, 21810),      # copper pipe, 20 at 8.00
+    ("activity", "6", 6000, 27810),
+    ("activity", "7", 400, 28210),
+    ("activity", "DEMO-SERIAL-1", 73000, 101210),   # two heaters and two lots of sealant (R104 increment 4)
+    ("activity", "6", -4000, 97210),
+    ("activity", "DEMO-KIT-BILL", 4400, 101610),
+    ("activity", "7", -400, 101210),
+    ("activity", "DEMO-FREIGHT-1", 3000, 104210),   # the freight on the pipe, on Landed Cost Clearing
+    ("activity", "8", 3600, 107810),
+    ("activity", "8", -2400, 105410),
+    ("activity", "1", 2400, 107810),
+    ("total", None, 107810, 107810),
 ]
 
 
@@ -141,7 +147,7 @@ def test_customer_balance_detail_lists_every_effect_with_a_running_balance(clien
 def test_vendor_balance_summary_and_detail_are_what_central_supply_is_owed(client):
     summary = _run(client, "report vendor-balance-summary", {"as_of": DEMO_AS_OF})
     assert [(row["display_vendor_label"], _minor(row["balance"])) for row in summary["rows"]] == [
-        ("Central Supply", 80810)]
+        ("Central Supply", 107810)]
     assert -_minor(summary["totals"]["balance"]) == DEMO_POSITION["balances"]["Accounts Payable"]
     detail = _run(client, "report vendor-balance-detail", {"as_of": DEMO_AS_OF})
     assert {row["display_vendor_label"] for row in detail["rows"]} == {"Central Supply"}
@@ -197,23 +203,24 @@ YEAR = {"date_from": "2026-01-01", "date_to": DEMO_AS_OF}
 PURCHASES_BY_ITEM = [
     # label, quantity microunits, amount, average cost
     ("Brass Shutoff Valve", 24_000_000, 26280, 1095),
+    ("Copper Pipe", 30_000_000, 24000, 800),        # DEMO-PIPE-1 and -2 (R104 increment 6); freight is an expense line
     ("Pipe Sealant", 10_000_000, 3000, 300),        # DEMO-SERIAL-1: two lots of sealant (R104 increment 4)
     ("Received Shipping Kit", 3_000_000, 3600, 1200),
     ("Service Call Kit", 8_500_000, 9017, 1061),   # 90.17 / 8.5 = 10.608...
     ("Water Heater", 2_000_000, 70000, 35000),      # DEMO-SERIAL-1: WH-1001 and WH-1002
 ]
-PURCHASES_BY_VENDOR = [("Central Supply", 26280 + 6000 + 400 + 3600 + 73000), ("Regional Parts", 617 + 2000)]
+PURCHASES_BY_VENDOR = [("Central Supply", 26280 + 6000 + 400 + 3600 + 73000 + 24000), ("Regional Parts", 617 + 2000)]
 
 
 def test_purchases_by_item_and_by_vendor_are_the_demos_stock_purchases(client):
     by_item = _run(client, "report purchases-by-item", YEAR)
     assert [(row["display_item_label"], row["quantity_microunits"], _minor(row["amount"]),
              _minor(row["average_cost"])) for row in by_item["rows"]] == PURCHASES_BY_ITEM
-    assert _minor(by_item["totals"]["amount"]) == 111897   # 388.97 + 730.00 DEMO-SERIAL-1
+    assert _minor(by_item["totals"]["amount"]) == 135897   # 388.97 + 730.00 DEMO-SERIAL-1 + 240.00 DEMO-PIPE-
     by_vendor = _run(client, "report purchases-by-vendor", YEAR)
     assert [(row["display_vendor_label"], _minor(row["amount"])) for row in by_vendor["rows"]] == PURCHASES_BY_VENDOR
     assert by_vendor["totals"] == by_item["totals"]
-    assert [row["percent_of_total"] for row in by_vendor["rows"]] == ["97.661242", "2.338758"]
+    assert [row["percent_of_total"] for row in by_vendor["rows"]] == ["98.074277", "1.925723"]
     # Before the valves arrived nothing had been bought.
     early = _run(client, "report purchases-by-item", {"date_from": "2026-01-01", "date_to": "2026-11-11"})
     assert early["rows"] == [] and _minor(early["totals"]["amount"]) == 0
@@ -389,13 +396,13 @@ def test_1099_summary_opens_on_the_last_calendar_year():
 # Each page opens already run on the filters its link carries, shows the report's own
 # headline figure, and offers the whole report as print and CSV.
 PAGES = {
-    "customer-balance-summary": ({"f:as_of": DEMO_AS_OF}, "841.21"),
-    "customer-balance-detail": ({"f:as_of": DEMO_AS_OF}, "841.21"),
-    "vendor-balance-summary": ({"f:as_of": DEMO_AS_OF}, "808.10"),
-    "vendor-balance-detail": ({"f:as_of": DEMO_AS_OF}, "808.10"),
+    "customer-balance-summary": ({"f:as_of": DEMO_AS_OF}, "922.40"),
+    "customer-balance-detail": ({"f:as_of": DEMO_AS_OF}, "922.40"),
+    "vendor-balance-summary": ({"f:as_of": DEMO_AS_OF}, "1,078.10"),
+    "vendor-balance-detail": ({"f:as_of": DEMO_AS_OF}, "1,078.10"),
     "open-purchase-orders": ({"f:date_to": DEMO_AS_OF}, "56.00"),
-    "purchases-by-vendor": ({"f:date_from": "2026-01-01", "f:date_to": DEMO_AS_OF}, "1,118.97"),
-    "purchases-by-item": ({"f:date_from": "2026-01-01", "f:date_to": DEMO_AS_OF}, "1,118.97"),
+    "purchases-by-vendor": ({"f:date_from": "2026-01-01", "f:date_to": DEMO_AS_OF}, "1,358.97"),
+    "purchases-by-item": ({"f:date_from": "2026-01-01", "f:date_to": DEMO_AS_OF}, "1,358.97"),
     "deposit-detail": ({"f:date_from": "2026-01-01", "f:date_to": DEMO_AS_OF}, "324.00"),
     "transaction-list-by-date": ({"f:date_from": "2026-11-20", "f:date_to": "2026-12-02"}, "300.80"),
     "vendor-1099-summary": ({"f:date_from": "2026-01-01", "f:date_to": "2026-12-31"}, "2,400.00"),
