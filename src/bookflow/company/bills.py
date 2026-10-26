@@ -903,8 +903,8 @@ def place_item_lines(s, lines, header_site, old_revision):
 def number_lines(s, lines, old_revision):
     """Each stocked line's lot and serial numbers for the "has anything changed" comparison (R104 increment 4):
     what it states, else what the same line identity carried."""
-    from bookflow.company import serial_lots
-    prior = None
+    from bookflow.company import bins, placements, serial_lots
+    prior = places = None
     for line in lines:
         numbers = line.get('numbers')
         if numbers is not None and numbers.stated:
@@ -912,12 +912,27 @@ def number_lines(s, lines, old_revision):
         elif old_revision is not None and line.get('line_id'):
             prior = serial_lots.revision_numbers(s, old_revision['id']) if prior is None else prior
             line['numbers_semantic'] = prior.get(line['line_id'])
+        # The bin (R104 increment 5): what the line names, else where the same line identity stood.
+        bin_id = None
+        if numbers is not None and numbers.bin:
+            bin_id = bins.resolve_bin(s, line.get('site_id') or placements.default_site_id(s), numbers.bin,
+                                      field='items.bin')['id']
+        elif old_revision is not None and line.get('line_id'):
+            places = placements.revision_line_places(s, old_revision['id']) if places is None else places
+            bin_id = (places.get(line['line_id']) or (None, None))[1]
+        if bin_id:
+            line['numbers_semantic'] = {**(line.get('numbers_semantic') or {}), 'bin': bin_id}
     return lines
 
 
 def saved_line_numbers(s, revision):
-    from bookflow.company import serial_lots
-    return serial_lots.revision_numbers(s, revision['id'])
+    """``{line identity: semantic}``: each stored stock line's numbers, and its bin when it has one."""
+    from bookflow.company import placements, serial_lots
+    out = dict(serial_lots.revision_numbers(s, revision['id']))
+    for line_id, (_, bin_id) in placements.revision_line_places(s, revision['id']).items():
+        if bin_id:
+            out[line_id] = {**(out.get(line_id) or {}), 'bin': bin_id}
+    return out
 
 
 def saved_line_sites(s, revision):

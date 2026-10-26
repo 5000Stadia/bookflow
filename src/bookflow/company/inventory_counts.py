@@ -188,8 +188,8 @@ def _names(s, item_ids):
 
 def _place_label(line, names=None):
     """A count line's place in words: unassigned, a lot or a serial number (R104 increment 4)."""
-    if line['place_key'] == UNASSIGNED:
-        return 'unassigned'
+    if not line.get('lot_id') and not line.get('serial_number_id'):
+        return 'unassigned'    # a bin is its own field (R104 increment 5)
     names = names or {}
     if line.get('serial_number_id'):
         return 'serial ' + (names.get(line['serial_number_id']) or {}).get('number', line['serial_number_id'])
@@ -205,8 +205,9 @@ def line_outputs(s, count, lines, counted, *, show_expected, held=None, pending=
     entries = {}
     for entry in list(count_entries(s, count['id'])) + list(pending):
         entries[entry['line_id']] = entries.get(entry['line_id'], 0) + 1
-    from bookflow.company import serial_lots
+    from bookflow.company import bins, serial_lots
     numbers = serial_lots.number_names(s, [line.get('lot_id') for line in lines], [line.get('serial_number_id') for line in lines])
+    bin_name = bins.bin_names(s, [line.get('bin_id') for line in lines])
     out = []
     for line in lines:
         quantity = counted.get(line['id'])
@@ -215,6 +216,7 @@ def line_outputs(s, count, lines, counted, *, show_expected, held=None, pending=
             line_id=line['id'], position=line['position'], item_id=line['item_id'],
             item_name=names.get(line['item_id'], {}).get('full_name', line['item_id']),
             description=names.get(line['item_id'], {}).get('description'),
+            bin=bin_name.get(line.get('bin_id')) if line.get('bin_id') else None,
             place=_place_label(line, numbers), origin=line['origin'],
             expected=_q(books) if show_expected else None,
             counted=None if quantity is None else _q(quantity),
@@ -325,18 +327,36 @@ def _stocked(s, item, field_name):
 
 
 def _selected_items(s, inp, site_id, date):
+    """``(items, selection, named, bin ids)``: what the sheet counts; bin ids is None unless bins are named."""
     if inp.bins is not None:
-        raise _invalid('bins', 'bins arrive with a later increment; until then a count covers the whole site, '
-                               'or the items or category it names')
+        from bookflow.company import bins
+        chosen, ids = [], []
+        for index, selector in enumerate(inp.bins):
+            row = bins.resolve_bin(s, site_id, selector, field=f'bins.{index}')
+            if row['id'] not in chosen:
+                chosen.append(row['id'])
+                ids += [b for b in bins.descendants(s, row['id']) if b not in ids]
+        held = bins.held(s, date, site_id=site_id, bin_ids=ids)
+        item_ids = list(dict.fromkeys(key[0] for key in held))
+        names = _names(s, item_ids)
+        item_ids.sort(key=lambda item_id: (names[item_id]['full_name'].casefold(), item_id))
+        return ([dict(id=i, full_name=names[i]['full_name']) for i in item_ids],
+                {'kind': 'bins', 'bins': chosen}, False, set(ids))
     if inp.cycle:
-        raise _invalid('cycle', 'cycle counts arrive with bins and cycle classes; name items or a category for now')
+        from bookflow.company import cycle_counts
+        due = cycle_counts.next_due_items(s, site_id, date, inp.limit or cycle_counts.DEFAULT_LIMIT)
+        if not due:
+            raise _invalid('cycle', f'no item is due for a cycle count at {placements.site_names(s).get(site_id)} on {date} '
+                                    '(`cycle-count due` lists them; unclassified items are never due)')
+        return due, {'kind': 'cycle', 'items': [item['id'] for item in due],
+                     'limit': inp.limit or cycle_counts.DEFAULT_LIMIT}, False, None
     if inp.items is not None:
         out = []
         for index, selector in enumerate(inp.items):
             item = _stocked(s, resolve_item(s, selector, field_name=f'items.{index}'), f'items.{index}')
             if item['id'] not in {row['id'] for row in out}:
                 out.append(item)
-        return out, {'kind': 'items', 'items': [item['id'] for item in out]}, True
+        return out, {'kind': 'items', 'items': [item['id'] for item in out]}, True, None
     t = c.items
     query = sa.select(t.c.id).where(t.c.type.in_(list(inventory.TRACKED_TYPES)), t.c.active.is_(True))
     if inp.category is not None:
@@ -354,16 +374,18 @@ def _selected_items(s, inp, site_id, date):
     ids = list(s.company.conn.execute(query).scalars())
     names = _names(s, ids)
     ids.sort(key=lambda item_id: (names[item_id]['full_name'].casefold(), item_id))
-    return [dict(id=item_id, full_name=names[item_id]['full_name']) for item_id in ids], selection, False
+    return [dict(id=item_id, full_name=names[item_id]['full_name']) for item_id in ids], selection, False, None
 
 
-def _sheet_lines(s, count, items, *, named):
+def _sheet_lines(s, count, items, *, named, bin_ids=None):
+    from bookflow.company import bins
     held = placements.held(s, [item['id'] for item in items], count['site_id'], count['count_date'], ('before',))
     out = []
     for item in items:
-        places = sorted(key for (each, key), quantity in held.items() if each == item['id'] and quantity)
-        if not places:
-            places = [UNASSIGNED]
+        places = sorted(key for (each, key), quantity in held.items() if each == item['id'] and quantity
+                        and (bin_ids is None or _place_ids(key)['bin_id'] in bin_ids))
+        if not places and bin_ids is None:
+            places = [placements.place_key(bins.default_bin_id(s, item['id'], count['site_id']))]
         for key in places:
             out.append((item['id'], key))
     return out
@@ -373,7 +395,7 @@ def plan_create(s, ctx, inp) -> Plan:
     site = placements.resolve_site(s, inp.site) if inp.site else placements.default_site(s)
     date = inp.date or _today(s)
     journals.open_dates(s, [date])
-    items, selection, named = _selected_items(s, inp, site['id'], date)
+    items, selection, named, bin_ids = _selected_items(s, inp, site['id'], date)
     number, sequence = _number(s, inp.number)
     at = clock.now_iso()
     count = dict(id=new_id(), **common(s.actor.id, ctx.interface.value, at), number=number, status='open',
@@ -384,8 +406,8 @@ def plan_create(s, ctx, inp) -> Plan:
     lines = [dict(id=new_id(), count_id=count['id'], position=position, item_id=item_id,
                   **_place_ids(key), place_key=key, origin='sheet',
                   counted_microunits=None, created_at=at, created_by=s.actor.id, created_via=ctx.interface.value)
-             for position, (item_id, key) in enumerate(_sheet_lines(s, count, items, named=named), 1)]
-    if not lines:
+             for position, (item_id, key) in enumerate(_sheet_lines(s, count, items, named=named, bin_ids=bin_ids), 1)]
+    if not lines and bin_ids is None:
         raise _invalid('site', f'{site["name"]} holds nothing to count on {date}; name the items to count')
     return Plan(count_output(s, count, status='will_create', lines=lines),
                 {'count': count, 'lines': lines, 'sequence': sequence})
@@ -406,7 +428,8 @@ def apply_create(plan, ctx, s) -> Applied:
                          directive_code=getattr(s, 'directive_code', None), event_id=event)
     conn = s.company.conn
     conn.execute(c.inventory_counts.insert().values(**count))
-    conn.execute(c.inventory_count_lines.insert(), lines)
+    if lines:
+        conn.execute(c.inventory_count_lines.insert(), lines)
     if sequence:
         from sqlalchemy.dialects.sqlite import insert
         stmt = insert(c.sequences).values(**sequence)
@@ -441,17 +464,16 @@ def _enter(s, ctx, count, inp, *, persist):
     numbering = serial_lots.Numbering(s)
     for index, entry in enumerate(inp.entries):
         prefix = f'entries.{index}.'
-        if entry.bin is not None:
-            raise _invalid(prefix + 'bin', 'bins arrive with a later increment; count the units at the site')
         item = _stocked(s, resolve_item(s, entry.item, entry.code, field_name=prefix + ('code' if entry.code else 'item')),
                         prefix + 'item')
         lot_id, serial_id = _entry_number(s, numbering, count, item, entry, prefix)
-        place = placements.place_key(None, lot_id, serial_id)
+        bin_id = _entry_bin(s, count, lines + new_lines, item, entry, lot_id, serial_id, prefix)
+        place = placements.place_key(bin_id, lot_id, serial_id)
         key = (item['id'], place)
         line = by_place.get(key)
         if line is None:
             line = dict(id=new_id(), count_id=count['id'], position=len(lines) + len(new_lines) + 1,
-                        item_id=item['id'], bin_id=None, lot_id=lot_id, serial_number_id=serial_id, place_key=place,
+                        item_id=item['id'], bin_id=bin_id, lot_id=lot_id, serial_number_id=serial_id, place_key=place,
                         origin='found', counted_microunits=None, **provenance)
             new_lines.append(line)
             by_place[key] = line
@@ -497,6 +519,25 @@ def _enter(s, ctx, count, inp, *, persist):
         s.company.conn.execute(c.inventory_count_lines.insert(), new_lines)
     s.company.conn.execute(c.inventory_count_entries.insert(), entries)
     return output, touched
+
+
+def _entry_bin(s, count, lines, item, entry, lot_id, serial_id, prefix):
+    """The bin an entry counts (R104 increment 5): the one it names (a scanned bin label), else the one bin a bins
+    count names, else the one bin the sheet lists this item and number in, else no bin."""
+    from bookflow.company import bins
+    if entry.bin is not None:
+        if bins.is_no_bin(entry.bin):
+            return None
+        return bins.resolve_bin(s, count['site_id'], entry.bin, field=prefix + 'bin')['id']
+    selection = json.loads(count['selection'])
+    if selection.get('kind') == 'bins' and len(selection.get('bins') or ()) == 1:
+        return selection['bins'][0]
+    listed = {line['bin_id'] for line in lines if line['item_id'] == item['id']
+              and (line['lot_id'], line['serial_number_id']) == (lot_id, serial_id)}
+    if len(listed) == 1:
+        return next(iter(listed))
+    listed = {line['bin_id'] for line in lines if line['item_id'] == item['id']}
+    return next(iter(listed)) if len(listed) == 1 else None
 
 
 def _number_provenance(provenance):
@@ -761,7 +802,15 @@ def build_change(s, ctx, count, derived, *, purpose, account_id, class_id):
     # Serial numbers stay one unit, never twice in stock or taken twice, through every derivation (R104 increment 4).
     from bookflow.company import serial_lots
     numbering = serial_lots.Numbering(s)
-    serial_lots.check(numbering, [row for document in documents for row in document.placements] + loose, field='entries')
+    try:
+        serial_lots.check(numbering, [row for document in documents for row in document.placements] + loose,
+                          field='entries')
+    except BookflowError as error:
+        if purpose != 'rederive' or error.code != 'E_VALIDATION':
+            raise
+        # The refusal belongs to the count being derived again, not to the change that reached it: name it.
+        raise BookflowError('E_VALIDATION', message=f'Count {count["number"]}, derived again: {error.message}',
+                            details={**(error.details or {}), 'count': count['number']}) from None
     first_item = items[restated[0]]
     change = inventory._Change(documents, first_item, states.get(first_item['id']), currency,
                                items=items, states=states, warnings=warnings + zero_warnings + numbering.warnings)
@@ -1106,3 +1155,19 @@ def _placed_against(s, mark, reach):
             for position in sorted(positions):
                 out.append(f'Placed {position} count {number} of {site} on {date}.')
     return out
+
+
+def covering_count(s, item_id, site_id, bin_id, date, position='before'):
+    """The number of a recorded count that counted ``item_id`` at this place (site and bin) at or after a line
+    dated ``date`` at ``position``, or None (R104 increment 5 review). Moving that line's stock to another place
+    after the fact would leave the count's shelf as counted and the units at the new place too."""
+    rank = {'before': 0, 'count': 1, 'after': 2}
+    k, l = c.inventory_counts, c.inventory_count_lines
+    rows = s.company.conn.execute(sa.select(k.c.number, k.c.count_date).join(l, l.c.count_id == k.c.id).where(
+        k.c.status == 'recorded', k.c.site_id == site_id, l.c.item_id == item_id,
+        l.c.counted_microunits.is_not(None), k.c.count_date >= date,
+        (l.c.bin_id.is_(None) if bin_id is None else l.c.bin_id == bin_id)).order_by(k.c.count_date, k.c.number)).all()
+    for number, count_date in rows:
+        if count_date > date or rank.get(position or 'before', 0) < rank['count']:
+            return number
+    return None

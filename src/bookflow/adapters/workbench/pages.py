@@ -215,11 +215,22 @@ def _presence_types() -> set[str]:
     return set(get_args(ann)) if get_origin(ann) is Literal else set()
 
 
-def _with_tracking(company, tracked):
-    """The company, its info marked when any item tracks serial or lot numbers (R104 increment 4)."""
+def _with_tracking(company, tracked, bins=False):
+    """The company, its info marked when any item tracks serial or lot numbers (R104 increment 4) and when any
+    site tracks bins (increment 5)."""
     if not isinstance(company, dict) or not isinstance(company.get('info'), dict):
         return company
-    return dict(company, info=dict(company['info'], tracks_numbers=tracked))
+    return dict(company, info=dict(company['info'], tracks_numbers=tracked, tracks_bins=bins))
+
+
+def _tracks_bins(request, company_id, run):
+    """Whether any active site tracks bins; unknown reads as no."""
+    if not company_id:
+        return False
+    try:
+        return any(site['tracks_bins'] for site in run(request, 'inventory-site list', {}, company_id)['sites'])
+    except BookflowError:
+        return False
 
 
 def _tracks_numbers(request, company_id, run):
@@ -2546,7 +2557,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                           result=result if result and 'revision' in result else None, preview=preview,
                           record_id=record_id, error=error,
                           base=_document_base(company_id, noun),
-                          hidden=Document.hidden_columns(_with_tracking(authorized_company, _tracks_numbers(request, company_id, run)))) if document_form else None,
+                          hidden=Document.hidden_columns(_with_tracking(authorized_company, _tracks_numbers(request, company_id, run), _tracks_bins(request, company_id, run)))) if document_form else None,
                       form_groups=None if document_form else Work.form_groups(described) if noun in Work.NOUNS and cmd.is_write else W.customer_form_groups(described) if noun == "customer" and verb in ("create", "update") else W.company_form_groups(described) if noun == 'company' and verb in ('new', 'update') else None)
 
     def contact_copy_page(

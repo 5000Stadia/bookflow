@@ -77,6 +77,7 @@ class InventoryAdjustLineInput(_Input):
                                   'is worked out when written. Forbidden with a decrease.')
     negative_value: bool = Field(default=False, description='With value_change: write the value down rather than up.')
     site: _Selector | None = Field(default=None, description="Inventory site of this line; omitted, the adjustment's site, else the default site.")
+    bin: _SL.LineBin = Field(default=None, description=_SL.BIN_HELP)
     lot: _SL.LineLot = Field(default=None, description='Lot the units go into (an increase) or leave from (a decrease), of a lot-tracked item.')
     lot_expiry: _SL.IsoDate | None = Field(default=None, description=_SL.EXPIRY_HELP)
     serial_numbers: _SL.LineSerials = Field(default=None, max_length=10000, description=(
@@ -138,6 +139,7 @@ class InventoryAdjustInput(_Input):
                     'and optionally value_change or new_value. Leave item, quantity_change and value_change out.')
     class_id: _Selector | None = Field(default=None, description='Class captured on both posting lines.')
     site: _Selector | None = Field(default=None, description='Inventory site the quantity change is at, by id or name; omitted, the default site.')
+    bin: _SL.LineBin = Field(default=None, description='One-item form: ' + _SL.BIN_HELP)
     lot: _SL.LineLot = Field(default=None, description='One-item form: lot the units go into or leave from, of a lot-tracked item.')
     lot_expiry: _SL.IsoDate | None = Field(default=None, description=_SL.EXPIRY_HELP)
     serial_numbers: _SL.LineSerials = Field(default=None, max_length=10000, description=(
@@ -183,7 +185,8 @@ class InventoryAdjustInput(_Input):
         return [InventoryAdjustLineInput.model_construct(
             item=self.item, quantity_change=self.quantity_change, new_quantity=None,
             value_change=self.value_change, new_value=None, negative_value=self.negative_value,
-            site=None, class_id=None, description=None)]
+            site=None, class_id=None, description=None, bin=self.bin, lot=self.lot, lot_expiry=self.lot_expiry,
+            serial_numbers=self.serial_numbers)]
 
 
 class InventoryVoidInput(_Input):

@@ -105,6 +105,14 @@
 
   const MODES = {lines: intoLines, rows: intoRows, count: intoCount};
 
+  // The current bin: the form's Bin field (the count screen), else every empty bin field the next lines use.
+  function setBin(field, answer) {
+    field.dataset.bin = answer.bin;
+    const form = field.closest('form') || document;
+    const own = form.querySelector('[data-scan-bin]');
+    if (own) { own.value = answer.bin; fire(own); }
+  }
+
   // One scan at a time, in the order they were typed: a scanner can send the next code before the
   // last look-up has answered, and each must land on its own line.
   const queues = new WeakMap();
@@ -151,6 +159,12 @@
         : '';
       say(field, escape(answer.message || 'Unknown code.') + assign, 'unknown');
       keepTyped();
+      return;
+    }
+    if (answer.kind === 'bin') {
+      // A bin label sets the current bin: the next scans count (or go) there (R104 increment 5).
+      setBin(field, answer);
+      say(field, 'Current bin: ' + escape(answer.bin) + ' at ' + escape(answer.site) + '.', 'ok');
       return;
     }
     let placed = MODES[field.dataset.scanMode || 'lines'](field, answer, want);

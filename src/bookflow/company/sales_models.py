@@ -156,6 +156,7 @@ class SalesLineInput(StrictModel):
     site: Selector | None = Field(default=None, description=(
         "Inventory site a stocked line takes from (a sale), gives back to (a return) or commits at (an order), "
         "by id or name. Omitted: the document's site, else the source line's, else the default site."))
+    bin: _SL.LineBin = Field(default=None, description=_SL.BIN_HELP)
     lot: _SL.LineLot = Field(default=None, description=_SL.LOT_HELP)
     lot_expiry: _SL.IsoDate | None = Field(default=None, description=_SL.EXPIRY_HELP)
     serial_numbers: _SL.LineSerials = Field(default=None, max_length=10000, description=_SL.SERIAL_HELP)

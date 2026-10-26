@@ -183,9 +183,15 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0096 = importlib.import_module("bookflow.storage.company_migrations.versions.0096_check_print_more")
 
     co0095 = importlib.import_module("bookflow.storage.company_migrations.versions.0095_serial_lot_numbers")
+    co0097 = importlib.import_module("bookflow.storage.company_migrations.versions.0097_bins_cycle_counts")
 
     def older(conn):
-        # Newest first: co0095 (on co0096), then co0096 (on co0085), co0085 (on co0093), co0093, co0094, co0092 and co0091.
+        # Newest first: co0097 (on co0095): its guards, items.cycle_class_id and cycle_classes.
+        for trigger in co0097.TRIGGERS:
+            conn.execute(f"DROP TRIGGER {trigger}")
+        conn.execute("ALTER TABLE items DROP COLUMN cycle_class_id")
+        conn.execute("DROP TABLE cycle_classes")
+        # Then co0095 (on co0096), then co0096 (on co0085), co0085 (on co0093), co0093, co0094, co0092 and co0091.
         for trigger in co0095.TRIGGERS:
             conn.execute(f"DROP TRIGGER {trigger}")  # co0095's guards
         for index in co0095.INDEX_NAMES:
@@ -315,7 +321,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))
     restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older",
                                               "organization": "Older Books Organization"})
-    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0095"
+    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0097"
     folder = _folder(client, restored["company_id"])
     # The migration took its verified backup of the restored database first, as every migration does.
     assert list((folder / "backups").glob("*-from-co0062.db"))

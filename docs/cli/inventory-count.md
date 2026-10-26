@@ -81,7 +81,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `site_name` | string | yes | no | — | — |
 | `date` | string | yes | no | — | — |
 | `blind` | boolean | yes | no | — | — |
-| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, or category. |
+| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, category, bins or cycle. |
 | `memo` | string \| null | no | yes | null | — |
 | `adjustment_account_id` | string \| null | no | yes | null | — |
 | `recorded_at` | string \| null | no | yes | null | — |
@@ -93,7 +93,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].item_name` | string | yes | no | — | — |
 | `lines[].description` | string \| null | no | yes | null | — |
 | `lines[].unit` | string \| null | no | yes | null | The item's base unit, where it has one. |
-| `lines[].place` | string | yes | no | — | Where at the site: "unassigned" until bins, lots and serial numbers arrive. |
+| `lines[].bin` | string \| null | no | yes | null | Bin full name of the place; null for no bin. |
+| `lines[].place` | string | yes | no | — | Which units at the bin: "unassigned", "lot L-1" or "serial WH-1". |
 | `lines[].origin` | literal["sheet", "found"] | yes | no | — | — |
 | `lines[].expected` | string \| null | no | yes | null | What the books hold at the place at the count's position; null on a blind sheet. |
 | `lines[].counted` | string \| null | no | yes | null | What was counted; null while nobody has counted the place. |
@@ -202,9 +203,9 @@ The same example as complete `bookflow_run` arguments:
 | `date` | `--date` | string \| null | no | yes | null | Date of the count; omitted, today. Its differences post at this date. |
 | `items` | `--items` | array[string] \| null | no | yes | null | Count only these items (id, name or barcode). |
 | `category` | `--category` | string \| null | no | yes | null | Count only the items in this item category. |
-| `bins` | `--bins` | array[string] \| null | no | yes | null | Count these bins (bins arrive with a later increment). |
-| `cycle` | `--cycle` | boolean | no | no | false | Count the next items due by cycle class (arrives with bins and cycle counts). |
-| `limit` | `--limit` | integer \| null | no | yes | null | With cycle: how many due items to count. |
+| `bins` | `--bins` | array[string] \| null | no | yes | null | Count these bins of the site (id, full name such as A:3, or label), and the bins inside them: the sheet lists exactly what they hold. Entries naming no bin count in the one bin named. |
+| `cycle` | `--cycle` | boolean | no | no | false | Count the next items due by cycle class at the site (`cycle-count due`), most overdue first; recording the count moves their due dates on, so the next cycle count takes the next ones. |
+| `limit` | `--limit` | integer \| null | no | yes | null | With cycle: how many due items to count (default 25). |
 | `blind` | `--blind` | boolean | no | no | false | Hide expected quantities and differences on the sheet; they show only in the post preview. |
 | `memo` | `--memo` | string \| null | no | yes | null | Memo for the count. |
 | `number` | `--number` | string \| null | no | yes | null | Count number; omit for the next (C-1, C-2, ...). |
@@ -253,7 +254,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `site_name` | string | yes | no | — | — |
 | `date` | string | yes | no | — | — |
 | `blind` | boolean | yes | no | — | — |
-| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, or category. |
+| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, category, bins or cycle. |
 | `memo` | string \| null | no | yes | null | — |
 | `adjustment_account_id` | string \| null | no | yes | null | — |
 | `recorded_at` | string \| null | no | yes | null | — |
@@ -265,7 +266,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].item_name` | string | yes | no | — | — |
 | `lines[].description` | string \| null | no | yes | null | — |
 | `lines[].unit` | string \| null | no | yes | null | The item's base unit, where it has one. |
-| `lines[].place` | string | yes | no | — | Where at the site: "unassigned" until bins, lots and serial numbers arrive. |
+| `lines[].bin` | string \| null | no | yes | null | Bin full name of the place; null for no bin. |
+| `lines[].place` | string | yes | no | — | Which units at the bin: "unassigned", "lot L-1" or "serial WH-1". |
 | `lines[].origin` | literal["sheet", "found"] | yes | no | — | — |
 | `lines[].expected` | string \| null | no | yes | null | What the books hold at the place at the count's position; null on a blind sheet. |
 | `lines[].counted` | string \| null | no | yes | null | What was counted; null while nobody has counted the place. |
@@ -375,7 +377,7 @@ The same example as complete `bookflow_run` arguments:
 | `count` | `COUNT` | string | yes | no | — | Count id or number.; minimum length 1; maximum length 1000 |
 | `entries[].item` | inside `--entries` JSON array | string \| null | no | yes | null | Item counted, by id, name or barcode. |
 | `entries[].code` | inside `--entries` JSON array | string \| null | no | yes | null | A scanned barcode naming the item. |
-| `entries[].bin` | inside `--entries` JSON array | string \| null | no | yes | null | Bin counted (bins arrive with a later increment). |
+| `entries[].bin` | inside `--entries` JSON array | string \| null | no | yes | null | Bin counted, by id, full name or label (a scanned bin label sets it). Omitted: the one bin a bins count names, else the one bin the sheet lists the item in, else no bin. |
 | `entries[].lot` | inside `--entries` JSON array | string \| null | no | yes | null | Lot counted, of a lot-tracked item; omitted, the units are counted unassigned. |
 | `entries[].serial_number` | inside `--entries` JSON array | string \| null | no | yes | null | Serial number counted, of a serial-tracked item (quantity 1 when there, 0 when not); units whose number cannot be read are counted without one, unassigned. |
 | `entries[].quantity` | inside `--entries` JSON array | string | yes | no | — | Quantity counted at the place, in the item's base unit; 0 counts it empty.; minimum length 1; maximum length 40 |
@@ -425,7 +427,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `site_name` | string | yes | no | — | — |
 | `date` | string | yes | no | — | — |
 | `blind` | boolean | yes | no | — | — |
-| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, or category. |
+| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, category, bins or cycle. |
 | `memo` | string \| null | no | yes | null | — |
 | `adjustment_account_id` | string \| null | no | yes | null | — |
 | `recorded_at` | string \| null | no | yes | null | — |
@@ -437,7 +439,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].item_name` | string | yes | no | — | — |
 | `lines[].description` | string \| null | no | yes | null | — |
 | `lines[].unit` | string \| null | no | yes | null | The item's base unit, where it has one. |
-| `lines[].place` | string | yes | no | — | Where at the site: "unassigned" until bins, lots and serial numbers arrive. |
+| `lines[].bin` | string \| null | no | yes | null | Bin full name of the place; null for no bin. |
+| `lines[].place` | string | yes | no | — | Which units at the bin: "unassigned", "lot L-1" or "serial WH-1". |
 | `lines[].origin` | literal["sheet", "found"] | yes | no | — | — |
 | `lines[].expected` | string \| null | no | yes | null | What the books hold at the place at the count's position; null on a blind sheet. |
 | `lines[].counted` | string \| null | no | yes | null | What was counted; null while nobody has counted the place. |
@@ -458,7 +461,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `entered[].item_name` | string | yes | no | — | — |
 | `entered[].description` | string \| null | no | yes | null | — |
 | `entered[].unit` | string \| null | no | yes | null | The item's base unit, where it has one. |
-| `entered[].place` | string | yes | no | — | Where at the site: "unassigned" until bins, lots and serial numbers arrive. |
+| `entered[].bin` | string \| null | no | yes | null | Bin full name of the place; null for no bin. |
+| `entered[].place` | string | yes | no | — | Which units at the bin: "unassigned", "lot L-1" or "serial WH-1". |
 | `entered[].origin` | literal["sheet", "found"] | yes | no | — | — |
 | `entered[].expected` | string \| null | no | yes | null | What the books hold at the place at the count's position; null on a blind sheet. |
 | `entered[].counted` | string \| null | no | yes | null | What was counted; null while nobody has counted the place. |
@@ -471,7 +475,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `uncounted[].item_name` | string | yes | no | — | — |
 | `uncounted[].description` | string \| null | no | yes | null | — |
 | `uncounted[].unit` | string \| null | no | yes | null | The item's base unit, where it has one. |
-| `uncounted[].place` | string | yes | no | — | Where at the site: "unassigned" until bins, lots and serial numbers arrive. |
+| `uncounted[].bin` | string \| null | no | yes | null | Bin full name of the place; null for no bin. |
+| `uncounted[].place` | string | yes | no | — | Which units at the bin: "unassigned", "lot L-1" or "serial WH-1". |
 | `uncounted[].origin` | literal["sheet", "found"] | yes | no | — | — |
 | `uncounted[].expected` | string \| null | no | yes | null | What the books hold at the place at the count's position; null on a blind sheet. |
 | `uncounted[].counted` | string \| null | no | yes | null | What was counted; null while nobody has counted the place. |
@@ -619,7 +624,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `site_name` | string | yes | no | — | — |
 | `date` | string | yes | no | — | — |
 | `blind` | boolean | yes | no | — | — |
-| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, or category. |
+| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, category, bins or cycle. |
 | `memo` | string \| null | no | yes | null | — |
 | `adjustment_account_id` | string \| null | no | yes | null | — |
 | `recorded_at` | string \| null | no | yes | null | — |
@@ -631,7 +636,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].item_name` | string | yes | no | — | — |
 | `lines[].description` | string \| null | no | yes | null | — |
 | `lines[].unit` | string \| null | no | yes | null | The item's base unit, where it has one. |
-| `lines[].place` | string | yes | no | — | Where at the site: "unassigned" until bins, lots and serial numbers arrive. |
+| `lines[].bin` | string \| null | no | yes | null | Bin full name of the place; null for no bin. |
+| `lines[].place` | string | yes | no | — | Which units at the bin: "unassigned", "lot L-1" or "serial WH-1". |
 | `lines[].origin` | literal["sheet", "found"] | yes | no | — | — |
 | `lines[].expected` | string \| null | no | yes | null | What the books hold at the place at the count's position; null on a blind sheet. |
 | `lines[].counted` | string \| null | no | yes | null | What was counted; null while nobody has counted the place. |
@@ -809,7 +815,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `counts[].site_name` | string | yes | no | — | — |
 | `counts[].date` | string | yes | no | — | — |
 | `counts[].blind` | boolean | yes | no | — | — |
-| `counts[].selection` | dict | no | no | {} | What the sheet was made from: kind all, items, or category. |
+| `counts[].selection` | dict | no | no | {} | What the sheet was made from: kind all, items, category, bins or cycle. |
 | `counts[].memo` | string \| null | no | yes | null | — |
 | `counts[].adjustment_account_id` | string \| null | no | yes | null | — |
 | `counts[].recorded_at` | string \| null | no | yes | null | — |
@@ -821,7 +827,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `counts[].lines[].item_name` | string | yes | no | — | — |
 | `counts[].lines[].description` | string \| null | no | yes | null | — |
 | `counts[].lines[].unit` | string \| null | no | yes | null | The item's base unit, where it has one. |
-| `counts[].lines[].place` | string | yes | no | — | Where at the site: "unassigned" until bins, lots and serial numbers arrive. |
+| `counts[].lines[].bin` | string \| null | no | yes | null | Bin full name of the place; null for no bin. |
+| `counts[].lines[].place` | string | yes | no | — | Which units at the bin: "unassigned", "lot L-1" or "serial WH-1". |
 | `counts[].lines[].origin` | literal["sheet", "found"] | yes | no | — | — |
 | `counts[].lines[].expected` | string \| null | no | yes | null | What the books hold at the place at the count's position; null on a blind sheet. |
 | `counts[].lines[].counted` | string \| null | no | yes | null | What was counted; null while nobody has counted the place. |
@@ -941,7 +948,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `site_name` | string | yes | no | — | — |
 | `date` | string | yes | no | — | — |
 | `blind` | boolean | yes | no | — | — |
-| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, or category. |
+| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, category, bins or cycle. |
 | `memo` | string \| null | no | yes | null | — |
 | `adjustment_account_id` | string \| null | no | yes | null | — |
 | `recorded_at` | string \| null | no | yes | null | — |
@@ -953,7 +960,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].item_name` | string | yes | no | — | — |
 | `lines[].description` | string \| null | no | yes | null | — |
 | `lines[].unit` | string \| null | no | yes | null | The item's base unit, where it has one. |
-| `lines[].place` | string | yes | no | — | Where at the site: "unassigned" until bins, lots and serial numbers arrive. |
+| `lines[].bin` | string \| null | no | yes | null | Bin full name of the place; null for no bin. |
+| `lines[].place` | string | yes | no | — | Which units at the bin: "unassigned", "lot L-1" or "serial WH-1". |
 | `lines[].origin` | literal["sheet", "found"] | yes | no | — | — |
 | `lines[].expected` | string \| null | no | yes | null | What the books hold at the place at the count's position; null on a blind sheet. |
 | `lines[].counted` | string \| null | no | yes | null | What was counted; null while nobody has counted the place. |
@@ -1088,7 +1096,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `site_name` | string | yes | no | — | — |
 | `date` | string | yes | no | — | — |
 | `blind` | boolean | yes | no | — | — |
-| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, or category. |
+| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, category, bins or cycle. |
 | `memo` | string \| null | no | yes | null | — |
 | `adjustment_account_id` | string \| null | no | yes | null | — |
 | `recorded_at` | string \| null | no | yes | null | — |
@@ -1100,7 +1108,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].item_name` | string | yes | no | — | — |
 | `lines[].description` | string \| null | no | yes | null | — |
 | `lines[].unit` | string \| null | no | yes | null | The item's base unit, where it has one. |
-| `lines[].place` | string | yes | no | — | Where at the site: "unassigned" until bins, lots and serial numbers arrive. |
+| `lines[].bin` | string \| null | no | yes | null | Bin full name of the place; null for no bin. |
+| `lines[].place` | string | yes | no | — | Which units at the bin: "unassigned", "lot L-1" or "serial WH-1". |
 | `lines[].origin` | literal["sheet", "found"] | yes | no | — | — |
 | `lines[].expected` | string \| null | no | yes | null | What the books hold at the place at the count's position; null on a blind sheet. |
 | `lines[].counted` | string \| null | no | yes | null | What was counted; null while nobody has counted the place. |
@@ -1248,7 +1257,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `site_name` | string | yes | no | — | — |
 | `date` | string | yes | no | — | — |
 | `blind` | boolean | yes | no | — | — |
-| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, or category. |
+| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, category, bins or cycle. |
 | `memo` | string \| null | no | yes | null | — |
 | `adjustment_account_id` | string \| null | no | yes | null | — |
 | `recorded_at` | string \| null | no | yes | null | — |
@@ -1260,7 +1269,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].item_name` | string | yes | no | — | — |
 | `lines[].description` | string \| null | no | yes | null | — |
 | `lines[].unit` | string \| null | no | yes | null | The item's base unit, where it has one. |
-| `lines[].place` | string | yes | no | — | Where at the site: "unassigned" until bins, lots and serial numbers arrive. |
+| `lines[].bin` | string \| null | no | yes | null | Bin full name of the place; null for no bin. |
+| `lines[].place` | string | yes | no | — | Which units at the bin: "unassigned", "lot L-1" or "serial WH-1". |
 | `lines[].origin` | literal["sheet", "found"] | yes | no | — | — |
 | `lines[].expected` | string \| null | no | yes | null | What the books hold at the place at the count's position; null on a blind sheet. |
 | `lines[].counted` | string \| null | no | yes | null | What was counted; null while nobody has counted the place. |

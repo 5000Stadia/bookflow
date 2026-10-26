@@ -711,7 +711,7 @@ jobs at night; the van ends as counted.
   site and the lines, as it does for stock still held there.
 - **Inventory Sales by Site** (`report sales-by-item --site`) lists stocked item lines by the site their
   stock left; discounts and other adjusting lines are not split by site.
-- Transfer lines are in base units; moving between bins of one site waits for bins (increment 5).
+- Transfer lines are in base units; moving between bins of one site arrived with bins (increment 5).
 
 ## As built: increment 2
 
@@ -854,6 +854,71 @@ jobs at night; the van ends as counted.
 - **Browser.** Sale and bill item grids gain Serial numbers and Lot columns for a company with a tracked item
   (the controls are in each row's panel otherwise); the item page lists its numbers and unassigned units with
   Assign numbers; the Overview lists unassigned units of tracked items.
+
+## As built: increment 5
+
+- **Migration co0097** adds `cycle_classes` and `items.cycle_class_id` (null everywhere: nothing is due), and
+  guards that each read only their own row and the bin it names, never anything in replay order: a placement
+  names only a bin of its own site; a bin sits in a bin of its own site one level up and never changes site,
+  parent or level; bins and cycle classes are never deleted; an item's default bin at a site is a bin of that
+  site. Bins sum to their site by construction (a placement carries both); the seeded checker asserts it, with
+  the number tie at every bin, on every date. No trigger that counts placements was added or widened.
+- **A correction that moves a line's stock to another bin or site** is refused (E_VALIDATION, naming the count)
+  when a recorded count at or after the line counted the item at the old place: the count keeps that shelf as
+  counted, so the moved units would be counted twice. Record a transfer dated after the count instead. Changes of
+  quantity or price, and voids, go through and derive the count again; a refusal raised while a count is derived
+  again names that count ("Count C-1, derived again: ...").
+- **"(no bin)"** names the units outside every bin on any line, transfer side or count entry. An outgoing line or
+  transfer side that names no bin (and keeps none from a correction or a sale) takes its units from the item's
+  default bin when it holds them all, else from no bin, else from the one bin that does, else from each place
+  holding some (default bin first); only what nothing at the site holds goes below zero, at the default bin,
+  with a warning. A transfer line records the place most of its units left from.
+- **A serial number split over two bins of one site** by late paperwork warns, as one split over two sites does.
+- **A line's bin** is resolved where its site is (`inventory_effects.plan`, `inventory adjust`, transfers,
+  assignments): the line's `bin`, else -- on a correction -- the bin its stock stood in, else a return's sale's
+  bin, both only when at the same site; else the item's default bin at the site (`item update --site-settings
+  [{site, default_bin}]`), else no bin. Naming a bin at a site that does not track bins is refused. A change
+  of bin alone is a change: bills, credits and vendor credits carry the bin in the line's numbers semantic, a
+  sale through `numbers_changed`, and fingerprints carry it only when a line names one, so nothing else moves.
+- **Bins are found** by id, full name at the site (`A3:Top`) or label code; with no site, a name only one site
+  has. A site stops tracking bins only while none of its bins holds stock; a bin is deactivated only while it
+  and the bins inside it hold nothing and no active bin sits inside it. Renaming a bin renames those inside it.
+- **Numbered units in bins.** A serial number leaves from the bin the books hold it in (the result says so when
+  that is not the line's bin), and comes back where it is owed; a transfer of a serial number takes it from its
+  bin at the from site. Lots stay site-wide for the earliest-expiry suggestion.
+- **Transfers** take `from_bin` and `to_bin` per line; the same site as from and to moves between its bins (it
+  must track bins, and each line's bins must differ). A bin taken below zero warns, naming the site's other
+  bins that hold the item.
+- **Counts by bin.** `bins` counts exactly what those bins (and the bins inside them) hold; an entry naming no
+  bin counts in the one bin named, else the one bin the sheet lists the item in, else no bin. Count lines carry
+  `bin` beside `place` (unassigned, lot or serial), so place labels read as before.
+- **Cycle classes are stored on first use** (the first write that names one: `item update --cycle-class`,
+  `cycle-class create`, `cycle-count classify`); `cycle-class list` shows the defaults with empty ids until then.
+  Classify ranks by issued cost (issues net of their reversals and cost corrections, leaving out count
+  differences and inventory adjustments); an item is A while the items before it make less than `a_share`
+  percent, B while less than `a_share + b_share`, and C after or when it issued nothing.
+- **Due** is exactly the interval passed since the last recorded count at the site, among items with stock
+  history there; a never-counted item is due since its first stock date there. A count of bins counts an item
+  only when every bin holding it at the count was counted (a site-wide count needs one counted line). The list
+  ranks by days overdue over the class interval. `inventory-count create --cycle` takes the first `limit`
+  (default 25) and fills places left over with items falling due within the next six days, soonest first: a
+  simulation showed that ranking alone lets a cohort of A items fill a round and push B items a round late
+  every quarter, and the lookahead keeps a 30-item weekly rotation within each interval plus one round.
+- **Classify** over a period with no issued cost proposes no change and says why (`message`).
+- **Barcodes.** `barcode lookup` answers bin labels (kind `bin`, after items, before serial numbers and lots,
+  `line_fields` site and bin); the Scan field takes a bin label as the current bin, which the count screen's Bin
+  field keeps for the next scans. `barcode generate` does not yet number bins (later).
+- **Inventory adjust's one-item form** now passes its own `lot`, `lot_expiry`, `serial_numbers` and `bin` (the
+  one-line form had dropped its lot and serial numbers).
+- **Permissions** (layer `bins-v1`): bin and cycle-class writes and `cycle-count classify` are `item` standard;
+  their reads and `cycle-count due` `item` member; `report items-by-bin` `reports` member.
+- **Browser.** The Sites page lists bins, adds one, turns bin tracking on and off per site, and its transfer form
+  has From bin and To bin per line. The Counts page counts named bins or the next due items, and lists each
+  site's due items with "Count the next N". The count screen groups lines by bin and has a Bin field a scanned
+  bin label fills. Sale and bill item grids gain a Bin column once a site tracks bins.
+- **Demo:** the warehouse tracks bins A1-A3 with labels; WH-1002 and lot S-2702 are put away into A1 and A2 by a
+  bin-to-bin transfer; the heater's home bin is A1 and the sealant's A2; the heater is class A and the sealant B.
+  No oracle moves: nothing posts.
 
 ## 10. Open questions
 

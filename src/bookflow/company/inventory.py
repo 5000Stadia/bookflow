@@ -411,12 +411,17 @@ def _adjustment_change(s, ctx, inp, currency, sequence):
         klass = class_row(s, line.class_id) if line.class_id is not None else header_class
         site_id = placements.site_id_for(s, line.site, field=prefix + 'site') if line.site is not None else header_site
         place = site_id or placements.default_site_id(s)
-        key = (item['id'], place)
+        from bookflow.company import bins
+        bin_id = bins.line_bin(s, item['id'], place, getattr(line, 'bin', None), field=prefix + 'bin')
+        key = (item['id'], place, bin_id)
         if line.new_quantity is not None:
-            # What the place holds on the date, with this adjustment's earlier lines there.
+            # What the place holds on the date, with this adjustment's earlier lines there: the line's bin at a
+            # site that tracks bins (R104 increment 5), else the whole site.
             reading = placements.held(s, [item['id']], place, inp.date,
                                       ('before',) if position == 'before' else ('before', 'count', 'after'))
-            books = sum(quantity for (each, _), quantity in reading.items() if each == item['id'])
+            tracked = bins.site_tracks_bins(s, place)
+            books = sum(quantity for (each, where), quantity in reading.items() if each == item['id']
+                        and (not tracked or (where.split('|')[0] or None) == bin_id))
             target = parse_quantity_micro_units(line.new_quantity, field=prefix + 'new_quantity')
             quantity = target - books - held_cache.get(key, 0)
         else:
@@ -451,7 +456,9 @@ def _adjustment_change(s, ctx, inp, currency, sequence):
             fallback=fallback_cost(s, item['id'], currency) if kind in ('issue', 'found') else None)
         sequence += 1
         planned.append(values)
-        written.append((values, item, site_id, line, 'stated' if stated is not None else None))
+        auto = (quantity < 0 and line.new_quantity is None and getattr(line, 'bin', None) is None
+                and bins.site_tracks_bins(s, place))
+        written.append((values, item, site_id, line, 'stated' if stated is not None else None, (bin_id, auto)))
     if not planned:
         raise invalid('lines', 'every line already holds what it says; this adjustment changes nothing')
 
@@ -465,7 +472,7 @@ def _adjustment_change(s, ctx, inp, currency, sequence):
                       'Bookflow posts no zero-amount entry')
     from bookflow.company import serial_lots
     journal_lines, movements_out, change_lines, sites, numbers = [], [], [], {}, {}
-    for values, item, site_id, line, basis in written:
+    for values, item, site_id, line, basis, (bin_id, auto) in written:
         description = line.description or inp.memo or f'Inventory adjustment for {item["full_name"]}'
         index = None
         if int(values['value_minor_units']):
@@ -476,8 +483,8 @@ def _adjustment_change(s, ctx, inp, currency, sequence):
         if site_id:
             sites[values['id']] = site_id
         stated_numbers = serial_lots.from_line(line)
-        if stated_numbers is not None:
-            numbers[values['id']] = dict(spec=stated_numbers, item_name=item['full_name'], field='lines' if many else 'item')
+        numbers[values['id']] = dict(spec=stated_numbers, item_name=item['full_name'], field='lines' if many else 'item',
+                                     bin_id=bin_id, bin_auto=auto)
         change_lines.append(_Line(item, values['id'], site_id or placements.default_site_id(s),
                                   basis or found_basis.get(values['id'], 'average')))
     warnings = []

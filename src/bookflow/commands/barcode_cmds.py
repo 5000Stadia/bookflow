@@ -27,11 +27,13 @@ class BarcodeLookupInput(_Strict):
 class SiteQuantity(_Strict):
     site_id: str
     site: str
+    item_id: str | None = Field(default=None, exclude_if=lambda v: v is None, description="On a bin label: the item the bin holds.")
+    item: str | None = Field(default=None, exclude_if=lambda v: v is None, description="On a bin label: that item's name.")
     quantity: str
 
 
 class BarcodeMatch(_Strict):
-    kind: str = Field(description="What the code names: `item`, else `serial_number` or `lot` (a scanned unit label); bins join with bins.")
+    kind: str = Field(description="What the code names: `item`, else `bin` (a bin label), else `serial_number` or `lot` (a scanned unit label).")
     id: str
     name: str = Field(description="The record's full name.")
     type: str = Field(description="The item type.")
@@ -45,7 +47,7 @@ class BarcodeLookupOutput(_Strict):
     code: str
     as_of: str
     found: bool = Field(description="True when the code names exactly one record (preferring active ones).")
-    kind: str | None = Field(description="`item`, `serial_number`, `lot`, `ambiguous` when it names more than one, or null when nothing carries it.")
+    kind: str | None = Field(description="`item`, `bin`, `serial_number`, `lot`, `ambiguous` when it names more than one, or null when nothing carries it.")
     match: BarcodeMatch | None = Field(description="The one record the code names; null when none or ambiguous.")
     matches: list[BarcodeMatch] = Field(description="Every record carrying the code, active first: two when a duplicate is kept.")
     ambiguous: bool

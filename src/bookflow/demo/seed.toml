@@ -2624,3 +2624,52 @@ command = "inventory-transfer post"
 capture = "heater_to_van"
 input = { date = "2026-12-06", number = "DEMO-VAN-HEATER", from_site = "Warehouse", to_site = "Van 1", lines = [{ item = "${heater_item.id}", quantity = "1", serial_numbers = ["WH-1001"] }, { item = "${sealant_item.id}", quantity = "2", lot = "S-2611" }], memo = "A heater and sealant for tomorrow's install" }
 reason = "Load the van for the install"
+
+# Bins and cycle counts (R104 increment 5): the warehouse tracks bins A1-A3, each with a label a scanner reads;
+# the heater on the shelf and the sealant are put away into bins (transfers between bins of one site move
+# quantity only), the heater's home bin is A1 and the sealant's A2, and the water heater and sealant get cycle classes A and B (which
+# stores the default classes A 30, B 90 and C 365). No money figure moves.
+[[commands]]
+command = "inventory-site update"
+input = { site = "Warehouse", tracks_bins = true }
+reason = "Shelving with bin labels went in"
+
+[[commands]]
+command = "bin create"
+input = { site = "Warehouse", name = "A1", barcode = "2000000001005", description = "Aisle A, first bay: water heaters" }
+reason = "Label the first bay"
+
+[[commands]]
+command = "bin create"
+input = { site = "Warehouse", name = "A2", barcode = "2000000001012", description = "Aisle A, second bay: sealants and fittings" }
+reason = "Label the second bay"
+
+[[commands]]
+command = "bin create"
+input = { site = "Warehouse", name = "A3", barcode = "2000000001029", description = "Aisle A, third bay: kits" }
+reason = "Label the third bay"
+
+[[commands]]
+command = "inventory-transfer post"
+input = { date = "2026-12-07", number = "DEMO-BIN-PUTAWAY", from_site = "Warehouse", to_site = "Warehouse", lines = [{ item = "${heater_item.id}", quantity = "1", serial_numbers = ["WH-1002"], to_bin = "A1" }, { item = "${sealant_item.id}", quantity = "6", lot = "S-2702", to_bin = "A2" }], memo = "Put away the delivery" }
+reason = "Shelve the heater and the sealant in their bays"
+
+[[commands]]
+command = "item update"
+input = { item = "${sealant_item.id}", site_settings = [{ site = "Warehouse", default_bin = "A2" }] }
+reason = "Sealant lives in A2"
+
+[[commands]]
+command = "item update"
+input = { item = "${heater_item.id}", site_settings = [{ site = "Warehouse", default_bin = "A1" }] }
+reason = "Water heaters live in A1"
+
+[[commands]]
+command = "item update"
+input = { item = "${heater_item.id}", cycle_class = "A" }
+reason = "Water heaters are counted monthly"
+
+[[commands]]
+command = "item update"
+input = { item = "${sealant_item.id}", cycle_class = "B" }
+reason = "Sealant is counted quarterly"
