@@ -295,3 +295,165 @@ def test_receipts_with_shipping_read_as_before_and_their_shares_are_allocation_l
     assert [line['measure'] for line in result['allocation']['lines']] == ['10.00', '8.00']
     assert [t['amount']['minor_units'] for t in result['allocation']['targets']] == [1000, 800]
     _ties(shop)
+
+
+# ---------------------------------------------------------------- the seeded tie checker
+# Five seeds of 25 steps in an ordinary run; BF_LANDED_SEEDS and BF_LANDED_STEPS widen it (the review ran 60 x 40).
+import os as _os
+SEEDS = tuple(range(61, 61 + int(_os.environ.get('BF_LANDED_SEEDS', '5'))))
+STEPS = int(_os.environ.get('BF_LANDED_STEPS', '25'))
+DATES = ('2017-03-01', '2017-03-02', '2017-03-03', '2017-03-04', '2017-03-05')
+
+
+def _step_ties(shop):
+    """After every step: the asset tie, the quantity tie, the clearing account equal to the unallocated charges on
+    every date (`landed-cost charges` refuses otherwise), and the journal balancing."""
+    books = shop['books']
+    _tie_every_date(books)
+    net = _net(books)
+    valuation = shop['run']('report inventory-valuation', dict(as_of='2017-12-31'))
+    assert valuation['totals']['asset_value']['minor_units'] == net.get(_asset(books), 0)
+    assert sum(net.values()) == 0
+    report = shop['run']('landed-cost charges', dict(as_of='2017-12-31', include_allocated=True))
+    assert report['clearing_balance']['minor_units'] == report['total_unallocated']['minor_units'] \
+        == net.get(shop['clearing'], 0)
+
+
+@pytest.mark.parametrize('seed', SEEDS)
+def test_seeded_freight_paperwork_keeps_every_tie(shop, seed):
+    """Receipts, sales, builds, freight bills and credits, allocations in parts and their voids, voids of the
+    freight bills and the receipts, all entered in a random order with random dates around the allocations; after
+    every step every tie holds and no valid paperwork is refused by a guard or internally."""
+    import random
+    books, run = shop['books'], shop['run']
+    rnd = random.Random(seed)
+    kit = books['client'].item.create(company=books['company'], name='Widget Kit', type='inventory_assembly',
+                                      description='Kit', price='90.00', purchase_description='Kit', cost='0.00',
+                                      cogs_account_id=books['cogs'], income_account_id=books['income'],
+                                      members=[dict(component_item_id=shop['widget'], quantity='2')])['id']
+    receipts, charges, allocations = [], [], []
+    done, refused = {}, {}
+    for step in range(STEPS):
+        op = rnd.choice(['buy', 'buy', 'buy', 'sell', 'sell', 'freight', 'freight', 'credit', 'allocate', 'allocate',
+                         'allocate', 'allocate', 'void_allocation', 'void_freight', 'void_receipt', 'build', 'sell_kit'])
+        date = rnd.choice(DATES)
+        try:
+            if op == 'buy':
+                item = rnd.choice([shop['widget'], shop['gadget']])
+                receipts.append(_buy(shop, date, rnd.randint(1, 9), cost=rnd.choice(['3.10', '4.00', '7.25']), item=item))
+            elif op == 'sell':
+                _sell(shop, date, rnd.randint(1, 4), item=rnd.choice(['Widget', 'Gadget']))
+            elif op == 'sell_kit':
+                _sell(shop, date, 1, item='Widget Kit')
+            elif op == 'build':
+                run('assembly build', dict(item=kit, quantity='1', date=date), reason='Kit')
+            elif op == 'freight':
+                charges.append(_freight(shop, date, rnd.choice(['10.00', '33.33', '90.01'])))
+            elif op == 'credit':
+                charges.append(run('vendor-credit post', dict(
+                    vendor=books['vendor'], date=date, ap_account=books['payable'],
+                    expenses=[dict(account=shop['clearing'], amount=rnd.choice(['1.00', '5.55']))]),
+                    reason='Freight credit')['id'])
+            elif op == 'allocate' and charges and receipts:
+                charge = dict(document=rnd.choice(charges))
+                if rnd.random() < .4:
+                    charge['amount'] = rnd.choice(['1.00', '2.50', '7.77'])
+                targets = [dict(document=r) for r in rnd.sample(receipts, rnd.randint(1, min(3, len(receipts))))]
+                extra = dict(basis=rnd.choice(['quantity', 'value']))
+                if rnd.random() < .3:
+                    extra['date'] = rnd.choice(DATES)
+                allocations.append(_post(shop, [charge], targets, **extra)['allocation']['number'])
+            elif op == 'void_allocation' and allocations:
+                run('landed-cost void', dict(allocation=allocations.pop(rnd.randrange(len(allocations)))), reason='Undo')
+            elif op == 'void_freight' and charges:
+                document = rnd.choice(charges)
+                charges.remove(document)
+                try:
+                    bill = run('bill show', dict(bill=document))
+                    run('bill void', dict(bill=document, expected_version=bill['version']), reason='Void freight')
+                except BookflowError as error:
+                    if error.code == 'E_RECORD_NOT_FOUND':
+                        credit = run('vendor-credit show', dict(credit=document))
+                        run('vendor-credit void', dict(credit=document, expected_version=credit['version']),
+                            reason='Void credit')
+                    else:
+                        raise
+            elif op == 'void_receipt' and receipts:
+                document = rnd.choice(receipts)
+                receipts.remove(document)
+                bill = run('bill show', dict(bill=document))
+                run('bill void', dict(bill=document, expected_version=bill['version']), reason='Void stock')
+            done[op] = done.get(op, 0) + 1
+        except BookflowError as error:
+            refused[(op, error.code)] = refused.get((op, error.code), 0) + 1
+            if op == 'void_freight':
+                charges.append(document)
+            if op == 'void_receipt':
+                receipts.append(document)
+            if _os.environ.get('BF_LANDED_DEBUG'):
+                print(op, error.message)
+            # Refusals a person can act on are fine (an allocation naming the document, a closed or short build, a
+            # date before a receipt, nothing left to allocate); a guard trigger or an internal error never is.
+            assert error.code not in ('E_INTERNAL', 'E_IO', 'E_GUARD_REFUSED'), (seed, step, op, error)
+        _step_ties(shop)
+    print('landed seed', seed, done, refused)
+
+
+def test_co0098_on_a_populated_company_changes_no_existing_row_and_records_receipt_shipping(shop):
+    """co0098 upgrades a company with stock: every existing row reads the same, each standing item receipt's
+    shipping shares become allocation lines (the same shares the receipt writes today), and the frozen DDL is the
+    current metadata."""
+    import importlib
+    from sqlalchemy.dialects.sqlite import dialect
+    from sqlalchemy.schema import CreateIndex, CreateTable
+    from bookflow.company import schema as c
+    from tests.test_negative_stock_migration import _at
+    m = importlib.import_module('bookflow.storage.company_migrations.versions.0098_landed_cost')
+    tables = [c.metadata.tables[name] for name in ('landed_cost_allocations', 'landed_cost_allocation_lines')]
+    assert m.DDL == tuple(str(CreateTable(t).compile(dialect=dialect())) for t in tables)
+    assert m.INDEXES == tuple(str(CreateIndex(i).compile(dialect=dialect()))
+                              for t in tables for i in sorted(t.indexes, key=lambda i: i.name))
+    run = shop['run']
+    run('item-receipt post', dict(date='2017-03-01', vendor=shop['books']['vendor'], shipping='10.00', items=[
+        dict(item=shop['widget'], quantity='1', unit_cost='10'), dict(item=shop['gadget'], quantity='2', unit_cost='4')]),
+        reason='Received with freight')
+    voided = run('item-receipt post', dict(date='2017-03-01', vendor=shop['books']['vendor'], shipping='5.00', items=[
+        dict(item=shop['widget'], quantity='1', unit_cost='10')]), reason='Received')
+    run('item-receipt void', dict(receipt=voided['id']), reason='Never came')
+    _sell(shop, '2017-03-02', 1)
+    path = _db(shop['books'])
+    copy = path.parent / 'rewound98.db'
+    with sqlite3.connect(path) as source, sqlite3.connect(copy) as target:
+        source.backup(target)
+    with sqlite3.connect(copy) as conn:
+        made = sorted(conn.execute("SELECT l.target_movement_id, l.amount_minor_units, l.measure FROM "
+                                   "landed_cost_allocation_lines l JOIN landed_cost_allocations a ON a.id = l.allocation_id "
+                                   "WHERE a.status = 'posted' AND l.reverses_line_id IS NULL").fetchall())
+        assert [row[1] for row in made] == sorted([333, 667])
+        conn.execute('PRAGMA foreign_keys=OFF')
+        for trigger in m.TRIGGERS:
+            conn.execute(f'DROP TRIGGER {trigger}')
+        conn.execute('DROP TRIGGER inventory_movements_true_up_link')
+        conn.execute(m.OLD_TRUE_UP_GUARD)
+        for table in m.TABLES:
+            conn.execute(f'DROP TABLE {table}')
+        conn.execute("DELETE FROM accounts WHERE system_role = 'landed_cost_clearing'")
+        for column in m.ITEM_COLUMNS:
+            conn.execute(f'ALTER TABLE items DROP COLUMN {column}')
+        conn.execute("UPDATE alembic_version SET version_num='co0095'")
+        conn.commit()
+        names = [r[0] for r in conn.execute("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' "
+                                            "AND name != 'alembic_version'")]
+        before = {name: sorted(conn.execute(f'SELECT * FROM "{name}"').fetchall(), key=repr) for name in names}
+    _at(copy, 'co0098')
+    with sqlite3.connect(copy) as conn:
+        for name in names:
+            rows = conn.execute(f'SELECT * FROM "{name}"').fetchall()
+            if name == 'items':
+                rows = [row[:-2] for row in rows]
+            assert sorted(rows, key=repr) == before[name], name
+        assert sorted(conn.execute('SELECT target_movement_id, amount_minor_units, measure FROM '
+                                   'landed_cost_allocation_lines').fetchall()) == made
+        assert conn.execute("SELECT count(*), min(kind), min(basis) FROM landed_cost_allocations").fetchone() == (
+            1, 'receipt_shipping', 'quantity')
+        assert conn.execute('PRAGMA foreign_key_check').fetchall() == []

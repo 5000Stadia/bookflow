@@ -975,7 +975,8 @@ def check_targets(s, reversing):
     if named:
         numbers = sorted({line['number'] for line in named})
         raise BookflowError('E_WORK_DEPENDENCY', message=(
-            f'Landed cost {", ".join(numbers)} is allocated to this receipt, so it cannot be voided or changed. Void '
+            f'Landed cost {", ".join(numbers)} {"is" if len(numbers) == 1 else "are"} allocated to this receipt, so it '
+            'cannot be voided or changed. Void '
             f'the allocation first (`landed-cost void {numbers[0]}`), then allocate the freight again afterwards.'),
             details={'allocations': numbers, 'reason': 'landed_cost_target'})
 
@@ -1005,7 +1006,8 @@ def check_charges(s, mark):
                 row['allocated'] < 0 and row['amount'] > row['allocated']):
             numbers = sorted({line['number'] for line in live_lines(s, charge_ids=[row['charge']])})
             raise BookflowError('E_WORK_DEPENDENCY', message=(
-                f'Landed cost {", ".join(numbers)} has allocated {Money(abs(row["allocated"]), _home(s))} of this '
+                f'Landed cost {", ".join(numbers)} {"has" if len(numbers) == 1 else "have"} allocated '
+                f'{Money(abs(row["allocated"]), _home(s))} of this '
                 f'freight charge, so it cannot be voided or reduced below that. Void the allocation first '
                 f'(`landed-cost void {numbers[0]}`).'), details={'allocations': numbers, 'charge': row['charge'],
                                                                   'reason': 'landed_cost_charge'})
