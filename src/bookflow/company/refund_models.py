@@ -76,7 +76,7 @@ class CustomerRefundPostInput(_Input):
     funding_account: _Selector
     method: _Selector
     check_number: CheckNumber | None = None
-    to_be_printed: bool = Field(default=False, description=(
+    to_be_printed: bool = Field(default=False, title='Print later', description=(
         'Print later: save the check with no number and put it in the funding bank account\'s print queue; '
         '`check print` numbers it when it prints. Needs a check method on a bank account, and no check_number.'))
     reference: Reference | None = None
