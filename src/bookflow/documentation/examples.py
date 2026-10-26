@@ -1577,6 +1577,15 @@ EXAMPLES.update({
                                       {'file': _CHANGES}),
     'report accountant-review': Example('bookflow report accountant-review --as-of 2026-09-30' + _ACCT_CO, {'as_of': '2026-09-30'}),
     'report accountant-changes': Example('bookflow report accountant-changes' + _ACCT_CO, {}),
+    # Performance tracking (R180).
+    'perf report': Example('bookflow perf report --since 7d --surface http --json', {'since': '7d', 'surface': 'http'}),
+    'perf settings': Example('bookflow perf settings --recording off --json', {'recording': 'off'}),
+    'perf generate': Example('bookflow perf generate --output /srv/bench --profile large --json',
+                             {'output': '/srv/bench', 'profile': 'large'}),
+    'perf bench': Example('bookflow perf bench --template /srv/bench/bench-large-s180-co0088 --name before --json',
+                          {'template': '/srv/bench/bench-large-s180-co0088', 'name': 'before'}),
+    'perf compare': Example('bookflow perf compare --run after --baseline before --threshold 25 --json',
+                            {'run': 'after', 'baseline': 'before', 'threshold': 25}),
 })
 # R152: Print Checks.
 _PRINT_CO = ' --company "Demo Plumbing Co" --json'
@@ -1606,4 +1615,25 @@ EXAMPLES.update({
     'barcode generate': Example('bookflow barcode generate --items \'["Brass Shutoff Valve","Copper Coupling"]\''
                                 ' --reason "Label the parts shelf" --company "Demo Plumbing Co" --json',
                                 {'items': ['Brass Shutoff Valve', 'Copper Coupling']}),
+})
+# R111: to-dos, overdue notices and the Reminders list.
+EXAMPLES.update({
+    "todo create": Example(
+        'bookflow todo create --title "Call Rivera about the deposit" --due-date 2026-11-03 --assignee night-agent --priority high --link-type customer --link "Rivera Construction"' + _C,
+        {"title": "Call Rivera about the deposit", "due_date": "2026-11-03", "assignee": "night-agent", "priority": "high",
+         "link_type": "customer", "link": "Rivera Construction"}),
+    "todo update": Example('bookflow todo update 01JTODO0000000000000000000 --due-date 2026-11-05 --expected-version 1' + _C,
+                           {"todo": "01JTODO0000000000000000000", "due_date": "2026-11-05", "expected_version": 1}),
+    "todo complete": Example('bookflow todo complete 01JTODO0000000000000000000' + _C, {"todo": "01JTODO0000000000000000000"}),
+    "todo show": Example('bookflow todo show 01JTODO0000000000000000000' + _C, {"todo": "01JTODO0000000000000000000"}),
+    "todo list": Example('bookflow todo list --mine' + _C, {"mine": True}),
+    "notice generate": Example('bookflow notice generate --as-of 2026-11-01 --reason "Monthly collection notices"' + _C,
+                               {"as_of": "2026-11-01"}),
+    "notice list": Example('bookflow notice list --status ready' + _C, {"status": "ready"}),
+    "notice show": Example('bookflow notice show 01JNOTICE00000000000000000' + _C, {"notice": "01JNOTICE00000000000000000"}),
+    "notice mark-sent": Example('bookflow notice mark-sent 01JNOTICE00000000000000000 --method email' + _C,
+                                {"notice": "01JNOTICE00000000000000000", "method": "email"}),
+    "notice dismiss": Example('bookflow notice dismiss 01JNOTICE00000000000000000 --note "Called; paying Friday"' + _C,
+                              {"notice": "01JNOTICE00000000000000000", "note": "Called; paying Friday"}),
+    "reminders": Example('bookflow reminders --mine' + _C, {"mine": True}),
 })

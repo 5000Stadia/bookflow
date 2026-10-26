@@ -466,6 +466,7 @@ SECTIONS: tuple[Section, ...] = (
             _list("Credit memos", "credit-memo query", "/credit-memo"),
             _list("Refunds", "customer-refund query", "/customer-refund"),
             _list("Statement charges", "statement-charge query", "/statement-charge"),
+            _list("Overdue notices", "notice list", "/notice"),
             _list("Proposals", "proposal query", "/proposal"),
             _list("Work orders", "work-order query", "/work-order"),
             _list("Time entries", "time-activity query", "/time-activity"),
@@ -641,8 +642,10 @@ SECTIONS: tuple[Section, ...] = (
             _list("Notes", "note list", "/note"),
             _list("Directives", "directive list", "/directive"),
             _list("Memorized transactions", "memorized list", "/memorized"),
+            _list("To-dos", "todo list", "/todo"),
         ),
         tasks=(
+            Action("Reminders", READ, ("reminders",), "/reminders"),
             Action("Company information", READ, ("company show",), "/company/self"),
             Action("Preferences", WRITE, ("company update",), "/company/self/update"),
             Action("Users and permissions", READ, (), "/users"),
@@ -965,6 +968,17 @@ def overview(company_id: str, today: str, ask: Ask) -> dict[str, Any]:
         attention["review_total"] = flagged["totals"]["entries"]
         attention["reconciliations"] = [dict(row, href=f"{base}/reconcile/mark?" + urlencode({"f:draft": row["draft_id"]}))
                                         for row in flagged["open_reconciliations"]]
+
+    # R111: the Reminders headings and the reader's own to-dos, as the anchor opens its Reminders list.
+    reminders = ask("reminders", {"as_of": today, "limit": 1})
+    if reminders is not None:
+        attention["reminders"] = [dict(section, href=f"{base}/reminders#rem-{section['key']}")
+                                  for section in reminders["sections"] if section["count"]]
+        attention["reminders_href"] = f"{base}/reminders"
+    mine = ask("todo list", {"mine": True, "due_by": week, "limit": ATTENTION_ROWS})
+    if mine is not None:
+        attention["todos"] = [dict(todo, href=f"{base}/todo/{todo['id']}") for todo in mine["items"]]
+        attention["todos_href"] = f"{base}/todo"
 
     events = ask("audit list", {"limit": ATTENTION_ROWS})
     activity = None if events is None else [dict(event, href=f"{base}/audit/{event['id']}") for event in events["items"]]

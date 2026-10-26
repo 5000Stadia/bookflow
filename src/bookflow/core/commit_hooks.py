@@ -58,6 +58,8 @@ OWNERS = {
     "attachments.finish": Impact.CONSERVATIVE,
     "attachments.collect": Impact.CONSERVATIVE,
     "memorized.enter": Impact.CONSERVATIVE,
+    "scheduler.run": Impact.CONSERVATIVE,
+    "scheduler.write": Impact.CONSERVATIVE,
     "cutover.apply": Impact.CONSERVATIVE,
     "config.flush": Impact.PROJECTION,
 }

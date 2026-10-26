@@ -4,6 +4,9 @@ This is not a permission decision or a trace callback. Unknown SQL invalidates;
 only ordinary SELECT and nested savepoint bookkeeping preserve a live token.
 """
 import sqlite3
+from time import perf_counter_ns
+
+from bookflow.core.timings import sql_counter as _sql_counter
 
 
 def _read_or_savepoint(sql):
@@ -41,15 +44,29 @@ class Cursor(sqlite3.Cursor):
         sql = args[0] if args else kwargs.get('sql')
         if not _read_or_savepoint(sql):
             conn._snapshot_epoch += 1
+        counter = _sql_counter()
+        if counter is not None:
+            counter[0] += 1
+            start = perf_counter_ns()
         try:
             return super().execute(*args, **kwargs)
         finally:
+            if counter is not None:
+                counter[1] += perf_counter_ns() - start
             if conn.in_transaction != before:
                 conn._snapshot_epoch += 1
 
     def executemany(self, *args, **kwargs):
         self.connection._snapshot_epoch += 1
-        return super().executemany(*args, **kwargs)
+        counter = _sql_counter()
+        if counter is None:
+            return super().executemany(*args, **kwargs)
+        counter[0] += 1
+        start = perf_counter_ns()
+        try:
+            return super().executemany(*args, **kwargs)
+        finally:
+            counter[1] += perf_counter_ns() - start
 
     def executescript(self, *args, **kwargs):
         self.connection._snapshot_epoch += 1

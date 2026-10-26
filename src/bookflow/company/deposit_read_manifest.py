@@ -313,6 +313,11 @@ FIELDS = {
         'finance_charge_from': ('str', False, False, 'dependency_field'),
         'finance_charge_mark_to_print': ('bool', False, False, 'dependency_field'),
         'negative_number_style': ('str', False, False, 'dependency_field'),
+        'scheduler_catch_up_days': ('int', True, False, 'dependency_field'),
+        'overdue_notice_days': ('int', True, False, 'dependency_field'),
+        'overdue_notice_frequency': ('str', False, False, 'dependency_field'),
+        'overdue_notice_minimum': ('str', True, False, 'dependency_field'),
+        'overdue_notice_template': ('str', False, False, 'dependency_field'),
     },
     'custom_field_defs': {
         'active': ('bool', False, False, 'dependency_field'),

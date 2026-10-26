@@ -90,17 +90,31 @@ class MemorizedListInput(_Input):
 class MemorizedEnterInput(_Input):
     memorized: _Selector
     date: _Date | None = None
+    again: bool = Field(False, description='Enter it although the scheduled slot for this date has already been entered '
+                                           '(a deliberate second entry). Without it, or a preview\'s fingerprint, that is refused.')
+    expected_facts_fingerprint: Annotated[str, Field(pattern=r'^[0-9a-f]{64}$')] | None = Field(
+        None, description='The facts_fingerprint of the preview: the revision that will post. A template changed '
+                          'since is refused with E_PREVIEW_STALE.')
+
+
+_Fingerprint = Annotated[str, Field(pattern=r'^[0-9a-f]{64}$')]
 
 
 class MemorizedProcessInput(_Input):
     memorized: _Selector | None = None
     as_of: _Date | None = None
     limit: Annotated[int, Field(strict=True, ge=1, le=200)] = 50
+    expected_facts_fingerprint: _Fingerprint | None = Field(
+        None, description='The facts_fingerprint of the preview this run was decided from: which revision of each '
+                          'template will post. A template changed since is refused with E_PREVIEW_STALE.')
 
 
 class MemorizedOccurrenceActionInput(_Input):
     occurrence: _Selector
     expected_version: _Version
+    expected_facts_fingerprint: _Fingerprint | None = Field(
+        None, description='retry: the facts_fingerprint of the preview -- the revision that will post. A template '
+                          'changed since is refused with E_PREVIEW_STALE.')
 
 
 # ---------------------------------------------------------------- groups
@@ -148,6 +162,10 @@ class MemorizedGroupListInput(_Input):
 class MemorizedGroupEnterInput(_Input):
     memorized_group: _Selector
     date: _Date | None = None
+    expected_facts_fingerprint: Annotated[str, Field(pattern=r'^[0-9a-f]{64}$')] | None = Field(
+        None, description='The facts_fingerprint of the preview: which revision of each member will post. A member '
+                          'changed since is refused with E_PREVIEW_STALE; required when a waiting slot would post a '
+                          'newer revision than the one it was listed with.')
 
 
 # ---------------------------------------------------------------- outputs
@@ -196,6 +214,9 @@ class OccurrenceOutput(BaseModel):
     attempt_count: int
     group_run_id: str | None
     group_ordinal: int | None
+    replays_author_id: str | None = Field(None, description='Who saved the revision this entry posts (or would post).')
+    replays_author: str | None = None
+    waiting_reason: str | None = Field(None, description='Why the scheduler held this entry for a person, when it did.')
 
 
 class MemorizedSummary(BaseModel):
@@ -263,11 +284,14 @@ class MemorizedEntryOutput(WriteOutput):
     entered_count: int = 0
     blocked_count: int = 0
     pending_count: int = 0
+    facts_fingerprint: str | None = Field(None, description='Which revision of each template this run posts; '
+                                                             'send it back as expected_facts_fingerprint.')
     idempotent_replay: bool = False
 
 
 class OccurrenceWriteOutput(WriteOutput):
     occurrence: OccurrenceOutput
+    facts_fingerprint: str | None = None
     idempotent_replay: bool = False
 
 

@@ -1,0 +1,304 @@
+# Performance logging and tracking (R180)
+
+R180 asks for timings per command, recorded and reported, so the system can be optimised
+against real numbers; then posting, deposits and reconciliation of 1,000+ rows brought down to
+seconds. Increment 1 (this document) builds the instrument and a baseline. Increment 2
+optimises against what increment 1 measures.
+
+## Two instruments, kept apart
+
+Bookflow already has `core/performance.py`: an opt-in developer trace
+(`BOOKFLOW_TRACE_DIR`), one Chrome-format span tree per process, refused inside any data root,
+capped at 60 seconds. It answers "where does the time go inside this one call". It stays as it
+is. The new instrument, `core/timings.py`, is always on (unless switched off) and answers
+"which commands are slow, how often, and is it getting worse". It records one row per command.
+
+## The one hook
+
+Every command that runs against the books passes through `dispatch.execute()`: the offline
+path (`dispatch.run`, used by the CLI and the Python client), the host's HTTP execution
+(`adapters/http/execution.py`, which also carries MCP, since `adapters/mcp/runtime.py` calls
+`run_hosted`), the workbench (an HTTP context with client `bookflow-workbench`) and the
+streaming and transfer paths. Nested commands (demo seeding, memorized entries, cutover) use
+`run_in_session` and are part of their parent's row, not rows of their own. The four public
+deposit reads (`deposit show/items/history/query`) bypass `execute` through
+`publication_deposit.execute_detail`; a second call of the same hook sits there. A forwarded
+CLI call is recorded once, by the host that ran it. Standalone tools (`docs generate`, `mcp`,
+`perf bench`...) are not recorded.
+
+The hook takes `perf_counter_ns` before and after, and sets a context variable that the
+SQLite cursor (`storage/snapshot_sqlite.Cursor.execute/executemany`) increments: statement
+count and time spent in `execute` (SQLite steps to the first row there; later `fetch` steps
+are not counted, so `sql_ms` is a lower bound). That counter costs one context-variable read
+per statement. At the end the hook appends a tuple of numbers and fixed labels to an
+in-memory deque (bounded at 10,000; full means dropped and counted). A daemon thread writes
+the deque to the store every 2 seconds, and an `atexit` handler flushes a one-shot CLI
+process. The store is never touched on the request's thread and never inside its
+transaction: if the store is missing, locked, full or corrupt, the writer drops the batch and
+the command has already succeeded.
+
+Measured overhead (load 37 on 16 cores): 9 us per command for `begin` and `end`, plus 0.55 us per
+SQL statement for the counter (5.1 us to 5.7 us for a trivial `SELECT 1`). An invoice post issues
+about 455 statements, so the hook adds about 0.26 ms to a 250 ms command, 0.1%.
+
+Not recorded: a command refused before `execute` on the offline path (an unknown command, input
+that fails validation before the lock is taken). Those are cheap refusals, not slow work.
+
+## What a row holds, and what it never holds
+
+| field | meaning |
+|---|---|
+| `at` | UTC timestamp (seconds) |
+| `command` | registered command name (a fixed label) |
+| `surface` | `cli`, `python`, `http`, `mcp`, `workbench`, `system` |
+| `principal` | `human`, `agent`, `system` |
+| `outcome` | `ok` or the error code (`E_VALIDATION`...) |
+| `wall_ms` | time inside `execute` (validation, authorization, plan, apply, audit, serialize) |
+| `sql_count`, `sql_ms` | statements executed and time in `execute` calls |
+| `rows_in`, `rows_out` | longest list in the input (lines, sources) and in the output (items) |
+| `company` | opaque: HMAC-SHA256 of the company id under a per-installation random salt, 16 hex |
+| `size_class` | company database size bucket: `<1MB`, `<10MB`, `<100MB`, `<1GB`, `>=1GB` |
+
+Never recorded: argument values, names, amounts, memo text, record ids, users, paths, error
+messages or details. The size class uses the file size (one `stat`) rather than a transaction
+count, which would cost a query per command; it tracks history length closely enough to
+separate a new company from one with five years. The time inside `execute` excludes process
+start, the root lock and hub open on the offline path; those are the same for every command
+and the developer trace covers them.
+
+## The store
+
+`<data root>/telemetry/timings.db`, a SQLite file of its own beside the hub, in WAL mode with
+`synchronous=NORMAL`. It is not part of any company, backup, restore, export or audit. Tables:
+`calls` (raw rows), `daily` (one row per UTC day, command, surface and outcome class: count,
+p50, p95, max, total ms, total statements) and `meta` (salt, enabled flag, sealed days). Bench
+runs are JSON files, not rows here (below).
+
+Retention, applied by the writer at most once a minute: a finished day is rolled up into
+`daily` and sealed (sealed days are never recomputed); raw rows older than 30 days are deleted;
+raw rows beyond 100,000 are deleted oldest first, their days rolled up first; `daily` rows
+older than 730 days are deleted. Measured: 100,000 raw rows (120 commands, 4 surfaces, 29 days)
+plus their 4,137 daily rows make a 14.9 MB file; a daily row costs about 60 bytes, so two full years
+of daily rows for 50 commands on 3 surfaces add about 6.5 MB. Writing 110,000 rows in batches of
+5,000 took 2.6 s; a 7-day report over 26,000 rows takes 0.22 s.
+
+**Off switch.** `perf settings --recording off` (installation administrators) sets the flag in
+the store; the writer reads it before each batch, so nothing more is written within 2 seconds
+in a running host and at once in a new process. `BOOKFLOW_PERF=off` in the environment turns
+the hook into a no-op for that process without opening the store at all.
+
+## Commands
+
+| command | who | what |
+|---|---|---|
+| `perf report` | any authenticated principal; installation administrators see every company, others only rows for companies they can see | p50/p95/max/count/errors per command and surface over a window, and the slowest single calls; filters `command`, `surface`, `since` (date, or `7d`/`24h`) |
+| `perf settings` | installation administrators | show or set recording on/off; shows file size, row counts, caps |
+| `perf generate` | local operator tool (standalone) | build the large demo company into a new data root |
+| `perf bench` | local operator tool (standalone) | run the scenario set against a copy of a generated root, store the result as a named run |
+| `perf compare` | local operator tool (standalone) | a run against a baseline; flags regressions beyond a threshold |
+
+`perf report` and `perf settings` are hub commands on every surface (Python, CLI, HTTP, MCP);
+the workbench has a report page at `/hub/perf` (a table, filter form through htmx). The three
+operator tools are standalone, local-only commands: they never open the installation's books.
+Runs are stored as JSON under `--store` (default `<data root>/telemetry/bench/`); a run file
+holds the scenario timings, the machine's load average and CPU count, the generator profile and
+the Bookflow version.
+
+## The large company
+
+`perf generate` (module `bookflow/perf/generate.py`) builds a company through the ordinary
+commands, in one held session (one lock and hub open, then `dispatch.execute` per command), so
+every invariant of the books holds and the generated history is what users would have posted.
+It is seeded (`random.Random(seed)`), with dates fixed (history 2021-10-01 to 2026-09-30) so a
+rerun gives the same data; record ids are new each time. Demo-style names only.
+
+The `large` profile, a small trade business over five years (about 13 documents a business
+day): 2,000 customers, 400 items, 150 vendors; per month about 130 invoices of 1 to 4 lines, 110 customer payments, 30 bills, 25 bill
+payments and 6 deposits gathering the payments. The R180 cases are added at the end: 1,000
+payments left in Undeposited Funds for a 1,000-line deposit, the checking account never
+reconciled (so a reconciliation sees every deposit and bill payment uncleared), and an
+organisation of 200 companies for the membership grant case. The `small` profile is the same
+shape at one tenth for tests. The figures, generation time and disk size actually measured are
+in the baseline section. Posting through commands is slower than writing rows directly, and
+that is deliberate: the generator's own rate is a benchmark, and it gets faster as increment 2
+lands.
+
+## The bench scenario set
+
+Each scenario runs through the Python client (the full offline path, as the CLI takes it minus
+interpreter start), 5 repetitions after one warm-up, on a fresh copy of the generated root:
+
+- reads: home (`company show`), register (checking, newest page), customer list, item list,
+  A/R aging, profit and loss and balance sheet over the five years;
+- writes: invoice post, bill post, payment receive, a 20-line deposit;
+- the R180 cases: the 1,000-line deposit, reconciliation start and preview over 1,000+
+  uncleared rows, an invoice post at the end of the five-year history;
+- the known slow case: an organisation-wide `membership grant` over 200 companies.
+
+`perf compare` flags a scenario when its p50 is more than the threshold (default 25%) and more
+than 20 ms slower than the baseline's.
+
+**Keeping comparisons fair.** Wall times move with the machine's load: this machine runs other
+projects, and the baseline below was taken at a load average around 45 on 16 cores, which
+inflates every time. Each run records the 1-minute load average and CPU count beside its figures.
+Compare wall times only between runs taken under similar load (within about 20%), and otherwise
+compare the SQL statement counts, which do not depend on load at all: a change that halves a
+command's statements is real whatever the load. `perf compare` shows both columns.
+
+## Baseline (2026-10-25, increment 1, before any optimisation)
+
+All figures were taken on this machine (16 cores) while other projects ran: the 1-minute load
+average is given beside each, and it inflates every wall time. The statement counts do not
+depend on load.
+
+### The generated company
+
+`perf generate --profile large --seed 180` (template `bench-large-s180-co0088`):
+
+- 2,000 customers, 400 items, 150 vendors;
+- 7,800 invoices with 19,551 lines, 6,490 customer payments, 354 deposits with 6,490 lines,
+  1,800 bills and 1,500 bill payments: 17,944 documents over 60 months (2021-10 to 2026-09);
+- 1,000 payments left in Undeposited Funds;
+- an organisation of 200 empty companies.
+
+It took **22,646 s (6.3 h)** at load 33 to 45. The phases were: setup 16 s, lists 201 s, history
+20,412 s, the 1,000 payments 339 s, the 200 companies 1,673 s. It takes **2.1 GB** on disk:
+
+- the company is 927 MB, about 49 KB per document. `audit_entries` alone is 293 MB: 532,677
+  rows, about 30 per document, each with full before and after JSON;
+- `reconciliation_effect_versions` is 52 MB for 1,854 rows, because its
+  `provenance_snapshot` averages 25 KB and reaches 114 KB per bank movement;
+- each empty company is 5.7 MB, so the 200 companies take 1.1 GB.
+
+Posting slows as the history grows. An invoice post averaged 416 ms over the first tenth of the
+invoices and 583 ms over the last tenth. Each block of six months took 15 min at the start and
+51 min at the end.
+
+That is why the profile has 18,000 documents and not 50,000: at today's speed 50,000 would take
+about a day. The generator is resumable (a checkpoint after the lists and every 12 months), and
+it gets faster as increment 2 lands.
+
+### Scenario timings
+
+Measured through the Python client, which is the full offline path a CLI call takes. p50 is the
+client wall time over the timed repetitions. Max is the largest time inside `execute` that the
+timings store recorded, warm-up included (the bench's own run file was not written because the
+run was stopped); "stmts" is SQL statements per call; "rows" is the longest list in or out.
+Five timed repetitions after a warm-up, except where the reps column says otherwise.
+
+| scenario | command | reps | p50 ms | max ms in execute | stmts | SQL ms (p50) | rows | load |
+|---|---|---|---|---|---|---|---|---|
+| home | company show | 5 | 43 | 5,468 (the cold first call after the copy; then 32 to 35) | 45 | 16 | 7 | 34.6 |
+| register, newest 50 | register query | 5 | 3,552 | 4,109 | 224 | 3,390 | 50 | 34.6 |
+| customer list | customer list | 5 | 170,055 | 237,991 | 20,048 | 157,216 | 2,001 | 37.9 |
+| item list | item list | 5 | 153 | 405 | 49 | 21 | 400 | 37.9 |
+| A/R aging | report ar-aging | 5 | 1,180 | 1,214 | 47 | 906 | 50 | 38.1 |
+| profit and loss, 5 years | report profit-and-loss | 5 | 729 | 731 | 50 | 699 | 7 | 38.0 |
+| balance sheet | report balance-sheet | 5 | 1,024 | 1,096 | 51 | 986 | 4 | 37.9 |
+| invoice post (2 lines) on the big history | invoice post | 5 | 617 | 675 | 455 | 420 | 2 | 37.9 |
+| bill post | bill post | 5 | 175 | 510 | 214 | 45 | 1 | 37.9 |
+| payment receive | payment receive | 5 | 346 | 715 | 257 | 203 | 1 | 37.9 |
+| deposit post, 20 lines | deposit post | 5 | 107,769 | 174,472 | 2,056 | 18,553 | 20 | 36.7 |
+| deposit sources, first page | deposit sources | 5 | 18,698 | 19,449 | 14,256 | 12,865 | 200 | 36.7 |
+| deposit sources, a page after a 1,005-line void | deposit sources | 10 | about 517,000 | 549,938 | 37,056 | 499,000 | 200 | 34 |
+| **deposit post, 1,005 lines** | deposit post | 3 | 184,591 | 193,720 | 46,419 | 15,985 | 1,005 | 34.0 |
+| deposit void, 1,005 lines (its preview: 35,131 to 46,319) | deposit void | 3 | 265,643 | 284,277 | 54,128 | 20,943 | 1,005 | 34.0 |
+| reconcile opening start (before any movement) | reconcile opening start | 1 | 5,750,576 | | 26,284 | 740 | 0 | 39.7 |
+| **reconcile start, 1,854 uncleared rows** | reconcile start | 1 | 7,825,364 | | 26,284 | 12,908 | 0 | 39.7 |
+| reconcile candidates, first page | reconcile candidates | 3 | 3,425,318 | 3,594,729 | 8,773 | 1,475 | 200 | 37 |
+| **membership grant, organisation of 200** | membership grant | 3 | 17,385 | 23,031 | 201 | 7 | 0 | 34.8 |
+| membership revoke, organisation of 200 | membership revoke | 3 | 16,984 | 17,276 | 201 | 6 | 0 | 35.3 |
+
+Not measured: `reconcile mark` (all), `reconcile preview` and `reconcile finish` over the
+1,854 rows. Each needs a draft whose `reconcile start` took 2.2 hours, and a page of
+candidates took about an hour, so the bench was stopped after those three calls (16 hours in
+all). They will be measured once the start is fixed.
+
+Two kinds of cost show:
+
+- **SQL-bound** reads (register, the reports, customer list, deposit sources): `sql_ms` is
+  close to the wall time;
+- **Python-bound** work (reconciliation, membership grant, most of a deposit post): `sql_ms` is
+  a small fraction.
+
+Both deposit post and void are well past the "seconds" target. Even a 20-line deposit takes
+almost two minutes on this history, against 1.9 s on the tiny company.
+
+### The five slowest, and where the time goes
+
+Profiled with a stack sampler (every 20 ms, 600 s cap) on a fresh copy of the template, plus the
+statement counts. (cProfile is installed, but it would have made the multi-hour calls longer
+still; py-spy is not installed.)
+
+1. **Reconciliation: opening start 5,751 s, start 7,825 s, a candidates page 3,400 s.** Pure
+   Python: the SQL time is 0.7 to 13 s of it.
+   - Samples: 96% in `reconciliation_storage_validation.validate` (its row and column loop),
+     reached from `reconciliation_preparation.snapshot`, from `reconciliation_loading.load`,
+     from `reconcile_cmds.prepare`.
+   - Every command loads and revalidates the **complete** reconciliation effect storage: every
+     row of every `reconciliation_*` table, every column checked, and each JSON snapshot
+     decoded and `model_validate`d strictly.
+   - That includes `provenance_snapshot`, 25 KB on average and up to 114 KB on each of the
+     1,854 effect versions. Its size grows with the deposits behind each movement.
+   - The work is O(the whole effect history) per command; the candidates page also scans it
+     each time. An opening before the first movement touches nothing, and still costs 1.6 hours.
+   - Fix direction: validate only the rows a command reads or writes, and keep provenance out
+     of the per-command load.
+2. **Customer list 170 s: 20,048 statements, 157 s of them in SQL.** An N+1 that is O(n²).
+   - Samples: 96% in `customer_balances.own_balance`, called once per customer from
+     `parties.project_party_record`, from `party_cmds._public_values`.
+   - `own_balance` selects `balance_expression`, whose `customer_ar_totals` CTE is
+     `MATERIALIZED`. That CTE groups **every** A/R posting line of every customer and then
+     picks one customer.
+   - So 2,001 customers each re-aggregate the whole A/R ledger (about 35,000 lines), about
+     10 statements per customer.
+   - Fix direction: one grouped query for the page, or a WHERE on `name_id` inside the CTE.
+3. **Deposit post: 20 lines 108 s, 1,005 lines 185 s; void of 1,005 lines 266 s.** Mostly
+   Python and row fetching.
+   - Samples (20 lines): 97% in `deposit_lifecycle.prepare` → `deposit_dependency_history._readset`.
+     88% of that is in `load` and `find_owners`; 52% of the time is spent in `fetchone`
+     iterating rows.
+   - `compare`, `capture` and `reconstruct` each walk the dependency history again (it runs
+     twice, in the plan and in the apply).
+   - The cost follows the size of the deposit history, not the deposit's own lines: a 20-line
+     deposit costs over half as much as a 1,005-line one. It reads rows one at a time,
+     including the large provenance JSON.
+   - Fix direction: bound the read set to the selected sources, and stop reading it a second
+     time between plan and apply.
+4. **Deposit sources, one page of 200: 18.7 s and 14,256 statements; 517 s after a
+   1,005-line void.** SQL-bound, about 70 statements per row.
+   - Samples: 93% in `deposit_draft_validation.admit`, called per candidate from
+     `deposit_source_queries.query`. 76% of the time is in its SQL (`candidates`).
+   - Authorization repeats per row: 18% in `deposit_dependency_history._authorize_binding_graph`
+     and `payment_authority.authorize_query`.
+   - `config.load` is called again and again: 12%, each time re-reading `config.toml` and the
+     hub's pending config (`_pending_from_disk`).
+   - After the big void, each source carries a voided history, so the statement count rises to
+     37,056 and SQL time to 499 s.
+   - Fix direction: admit the page in one set-based query, authorize once per request, and load
+     the config once per command.
+5. **Membership grant over an organisation of 200 companies: 17 s at 201 statements, 7 ms of
+   SQL.** Pure Python, O(scopes² × actions).
+   - Samples: 79% in `permission_setup.edit` → `identity_admin._prepare` →
+     `agent_authority.reconcile` → `permission_policy.compare`.
+   - `compare` builds a `signature` for every subject, old and new. A signature walks every
+     scope (each of the 200 companies) × every admin action key.
+   - For each key it rescans every admin action of both catalogs to find its domains.
+   - Each check calls `_base_reasons`, which finds the visibility entry with a linear `next()`
+     over all of `p.visibility` (subjects × scopes). `admissions` repeats this per requirement.
+   - All of it runs twice, in `preview_edit` (plan) and again in `apply_edit`.
+   - Another 20% of a CLI call is first-time imports from `permission_runtime.known_catalog`,
+     which imports and verifies every catalog layer.
+   - Fix direction: index visibility and action domains once per comparison, and reuse the
+     plan's comparison in apply.
+
+Other figures worth acting on:
+
+- **register query 3.6 s** for 50 rows: 97% in `ledger_reports.general_ledger`, which computes
+  the running balance from the start of the account's history.
+- **A/R aging 1.2 s, P&L 0.7 s, balance sheet 1.0 s**: SQL scans of the whole ledger;
+  acceptable for now.
+- **invoice post grew from about 250 ms on an empty company to 617 ms** at the same 455
+  statements, so the cost per statement grows with the tables. About 85 SQLAlchemy compiles
+  per post miss the compile cache (measured on the empty company).
+- **Storage**: 30 audit entries and about 49 KB per document, and 5.7 MB per empty company.

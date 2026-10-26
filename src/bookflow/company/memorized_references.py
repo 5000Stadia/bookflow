@@ -60,7 +60,15 @@ def enterable(command) -> bool:
         # command that takes no date would silently date its entry from somewhere else, which
         # is the one thing a schedule must never do.
         and 'date' in command.input_model.model_fields
+        # A person's act (who may do what, what cannot be undone) is never replayed on a schedule:
+        # the scheduler would make it with no person present.
+        and command.name not in _people_only()
     )
+
+
+def _people_only() -> frozenset[str]:
+    from bookflow.hub.people_only import people_only_commands
+    return people_only_commands()
 
 
 def enterable_commands() -> list[str]:

@@ -425,3 +425,28 @@ projection. Aging, statements, inventory and sales-tax liability retain their
 operational meaning; financial report basis does not change sales-tax timing.
 Cash sales-by-item quantities describe physical activity; average selling price
 is omitted because cash receipts and physical sales may fall in different periods.
+
+## The host's scheduler
+
+While `bookflow serve` runs, its scheduler enters due automatic memorized transactions, assigns
+to-dos for the ones that need a person and prepares overdue notices -- nothing is sent anywhere.
+It looks for due work every `BOOKFLOW_SCHEDULE_CHECK_SECONDS` seconds, an environment variable
+read when the host starts (default 60, at least 1); overdue notices are looked at once an hour at
+most. An automatic entry is made unattended only when the person (or agent) who saved what it
+posts also set the schedule that brings it due; anything else waits for a person on Reminders.
+
+
+A person entering memorized transactions by hand (`memorized process`, `retry`, `enter`,
+`memorized-group enter`) sees in the preview which revision of each template will post and who
+saved it, and gets a `facts_fingerprint`. Sent back as `expected_facts_fingerprint`, it refuses the
+entry if a template changed in between. It is a consistency check -- a guard against a stale
+preview -- not proof that anyone looked at a preview: it is computed from which revisions will
+post, so anyone can compute it. Entries the scheduler held for a person are entered or skipped
+only by a person, and a preview names each one and why it was held.
+
+An automatic template saved today never enters unattended a slot dated today or earlier -- not even
+its first slot when that is today: the scheduler leaves it for a person, and the save warns how many
+wait. The anchor would enter it; Bookflow deliberately does not, for safety (a template deleted and
+made again, or one given a past start, must never post history by itself). A pause and resume counts
+as the schedule being set again. An agent's change to the catch-up window never lets the host reach
+further back than the window a person set.

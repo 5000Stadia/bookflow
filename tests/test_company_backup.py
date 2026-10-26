@@ -183,13 +183,19 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0096 = importlib.import_module("bookflow.storage.company_migrations.versions.0096_check_print_more")
 
     def older(conn):
-        # co0096 widened two CHECKs; check_print_marks goes with co0092's tables below, so only the
+        # Newest first: co0096 (on co0085) widened two CHECKs; check_print_marks goes with co0092's tables below, so only the
         # chequebook's own CHECK is put back.
         conn.execute("PRAGMA writable_schema=ON")
         for old_text, new_text in co0096.REPLACEMENTS["check_instruments"]:
             assert conn.execute("UPDATE sqlite_schema SET sql = replace(sql, ?, ?) WHERE name = 'check_instruments'",
                                 (new_text, old_text)).rowcount == 1
         conn.execute("PRAGMA writable_schema=OFF")
+        # Newest first: co0085 (on co0093), then co0093, then co0094, then co0092 and co0091.
+        for table in ("todos", "overdue_notices", "scheduled_revision_authority", "scheduled_group_authority", "scheduled_holds"):
+            conn.execute(f"DROP TABLE {table}")  # co0085's five tables
+        for column in ("scheduler_catch_up_days", "overdue_notice_days", "overdue_notice_frequency",
+                       "overdue_notice_minimum", "overdue_notice_template"):
+            conn.execute(f"ALTER TABLE company_info DROP COLUMN {column}")  # co0085's five preferences
         # co0093's: the four count tables, and its own text on the rebuilt movement and document tables run
         # backwards (both are empty here); the placements table goes with co0089's below.
         for table in ("inventory_count_postings", "inventory_count_entries", "inventory_count_lines", "inventory_counts"):
