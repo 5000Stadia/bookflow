@@ -111,7 +111,11 @@ def candidates(s,inp:SourceFilter,*,binding=None,ctx=None):
 
 def query(s,inp,*,binding=None,ctx=None):
     filtered=SourceFilter.model_validate(inp.model_dump(exclude={'limit','cursor'}))
-    binding,values,facts=candidates(s,filtered,binding=binding,ctx=ctx)
+    with deposit_dependency_history.preparation(s):
+        binding,values,facts=candidates(s,filtered,binding=binding,ctx=ctx)
     selected,cursor,fp=page(s,binding,'sources',filtered.model_dump(mode='json'),values,inp.limit,inp.cursor,facts=facts)
-    for value in selected:admit(s,ctx,binding,sources=(value.source.transaction_id,))
+    # No second admission of the page: candidates() admitted every listed receipt in this
+    # same snapshot and binding, the whole set at once (a passing set covers each of its
+    # receipts) or, after a refusal, each receipt alone; one it could not admit is not
+    # listed. Admitting the page again re-walked each receipt's deposit graph (R180).
     return SourcePage(items=tuple(selected),total_count=len(values),subtotal=sum(v.source.cash_minor_units for v in values),next_cursor=cursor,facts_fingerprint=fp)

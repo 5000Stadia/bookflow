@@ -4,10 +4,12 @@ Execution bindings are the existing adapter objects. SQL snapshots and history
 are company-owned business evidence, never a substitute for current admission.
 """
 import base64
+import contextvars
 import hashlib
 import hmac
 import json
 import zlib
+from contextlib import contextmanager
 
 import sqlalchemy as sa
 from pydantic import TypeAdapter, ValidationError
@@ -74,13 +76,85 @@ def _resource_denial(error):
             set(details) == {'capability', 'required_role', 'role'})
 
 
+class _Preparation:
+    """What one deposit preparation has already proven in its own snapshot.
+
+    A preparation (lifecycle.prepare, a source page) writes nothing, to the company or
+    the hub, so its authority snapshot and its read sets cannot change while it runs.
+    Nothing here outlives it: a plan and its apply are separate preparations, and
+    _upsert_principals writes between them.
+    """
+    def __init__(self, s):
+        self.s = s
+        self.authorized = {}   # (binding identity, write) -> (transaction ids, event ids)
+        self.readsets = {}     # (binding identity, request) -> current ReadSet
+
+
+_PREPARATION = contextvars.ContextVar('bookflow_deposit_preparation', default=None)
+
+
+@contextmanager
+def preparation(s):
+    """Scope a DML-free preparation; nested scopes for the same session share it."""
+    current = _PREPARATION.get()
+    if current is not None and current.s is s:
+        yield current
+        return
+    token = _PREPARATION.set(_Preparation(s))
+    try:
+        yield _PREPARATION.get()
+    finally:
+        _PREPARATION.reset(token)
+
+
+def _preparation(s):
+    current = _PREPARATION.get()
+    return current if current is not None and current.s is s else None
+
+
 def _authorize_binding_graph(s, binding, transaction_ids, event_ids=(), *, write=False):
     """Run existing resource rules for actor AND its validated fixed human.
 
     These are current authenticated hub rows used only by access checks. No
     historical planner, fabricated database, or granular visibility supplier is
     involved. Do not change the shared transport's missing-principal policy.
+
+    Inside a preparation, a set of transactions and events that is covered by what
+    already passed for the same binding and write level is not checked again: the
+    requirements of a set are the union of its members' (ledger access for every
+    transaction, customer work where any is linked, each event's own), so a set that
+    passed covers every subset, and two sets that passed cover their union. The
+    binding itself is revalidated every time, and a refusal is always recomputed.
     """
+    transaction_ids = tuple(transaction_ids)
+    event_ids = tuple(event_ids)
+    prepared = _preparation(s)
+    if prepared is not None:
+        key = (execution_binding(s, binding), write)
+        done = prepared.authorized.get(key)
+        if done is not None and done[0].issuperset(transaction_ids) and done[1].issuperset(event_ids):
+            return
+    _authorize_binding_graph_now(s, binding, transaction_ids, event_ids, write=write)
+    if prepared is not None:
+        done = prepared.authorized.setdefault(key, (set(), set()))
+        done[0].update(transaction_ids)
+        done[1].update(event_ids)
+
+
+def _remember_readset(s, original, binding, readset):
+    prepared = _preparation(s)
+    if prepared is not None:
+        prepared.readsets[execution_binding(s, binding), canonical(request(original).model_dump(mode='json', by_alias=True, exclude_unset=True))] = readset
+
+
+def _phase_readset(s, original, binding):
+    prepared = _preparation(s)
+    if prepared is None:
+        return None
+    return prepared.readsets.get((execution_binding(s, binding), canonical(request(original).model_dump(mode='json', by_alias=True, exclude_unset=True))))
+
+
+def _authorize_binding_graph_now(s, binding, transaction_ids, event_ids=(), *, write=False):
     from dataclasses import replace
     from bookflow.core.session import Actor
     from bookflow.hub import schema as h, access
@@ -190,6 +264,7 @@ def decode_recipe(s, token, original_request, binding):
 
 # Audit aliases are storage history, not generated English singulars. Keep the
 # accepted co21 spelling alongside the older ledger spelling.
+from collections.abc import Mapping
 from dataclasses import dataclass
 from bookflow.core import audit
 from bookflow.company.deposit_dependency_models import RecordAnchor
@@ -433,10 +508,158 @@ def _project(kind, value, fields=None):
         raise MissingHistory('invalid typed owned snapshot') from exc
 
 
+_CHUNK = 400   # identities per IN list: well inside SQLite's variable limit
+
+
+def _chunks(values):
+    values = list(values)
+    for offset in range(0, len(values), _CHUNK):
+        yield values[offset:offset + _CHUNK]
+
+
+def _entry_query(owner):
+    return sa.select(c.audit_entries, c.audit_events.c.seq, c.audit_events.c.at,
+                     c.audit_events.c.actor_id, c.audit_events.c.actor_kind,
+                     c.audit_events.c.on_behalf_of, c.audit_events.c.interface).join(
+        c.audit_events, c.audit_events.c.id == c.audit_entries.c.event_id).where(
+        c.audit_entries.c.record_type.in_(owner.audit_kinds)).order_by(c.audit_events.c.seq, c.audit_entries.c.id)
+
+
+class _KindStore:
+    """One owner kind's current rows and complete audit entries, read by id in sets.
+
+    Each identity's row and its whole entry list are read together the first time they
+    are needed and then kept: the reader's snapshot does not change while it lives (every
+    command holds the root lock, and a preparation writes nothing). `whole` reads the
+    complete kind, which is what the reader did for every kind before (R180), and is kept
+    for callers that need every identity (a selector by name, a predicate with no row
+    bound). A row or entry list read before `whole` is kept as it was.
+    """
+    def __init__(self, s, kind):
+        self.s, self.kind = s, kind
+        self.owner = OWNERS[kind]
+        self.table = c.metadata.tables[self.owner.table]
+        self.rows = {}      # identity -> row dict, or None when it has no current row
+        self.entries = {}   # identity -> its audit entries in (seq, id) order, maybe empty
+        self.complete = False
+
+    def remember(self, row):
+        identity = row[self.owner.key]
+        if self.rows.get(identity) is None:
+            value = dict(row)
+            if self.kind in SOURCE_OWNERS:
+                value = json.loads(canonical(_source_owner_image(self.s, self.kind, value)))
+            self.rows[identity] = value
+        return identity
+
+    def fetch(self, identities, *, rows=True):
+        if self.complete:
+            return
+        wanted = sorted({identity for identity in identities if type(identity) is str})
+        conn = self.s.company.conn
+        key = self.table.c[self.owner.key]
+        if rows:
+            missing = [identity for identity in wanted if identity not in self.rows]
+            for chunk in _chunks(missing):
+                for identity in chunk:
+                    self.rows.setdefault(identity, None)
+                for row in conn.execute(sa.select(self.table).where(key.in_(chunk))).mappings():
+                    self.remember(row)
+        missing = [identity for identity in wanted if identity not in self.entries]
+        for chunk in _chunks(missing):
+            for identity in chunk:
+                self.entries[identity] = []
+            for row in conn.execute(_entry_query(self.owner).where(c.audit_entries.c.record_id.in_(chunk))).mappings():
+                self.entries[row['record_id']].append(dict(row))
+
+    def whole(self):
+        if self.complete:
+            return
+        conn = self.s.company.conn
+        for row in conn.execute(sa.select(self.table)).mappings():
+            self.remember(row)
+        entries = {}
+        for row in conn.execute(_entry_query(self.owner)).mappings():
+            entries.setdefault(row['record_id'], []).append(dict(row))
+        for identity, rows in entries.items():
+            self.entries.setdefault(identity, rows)
+        self.complete = True
+
+    def row(self, identity):
+        if type(identity) is not str:
+            return None
+        if identity not in self.rows and not self.complete:
+            self.fetch((identity,))
+        return self.rows.get(identity)
+
+    def history(self, identity):
+        if type(identity) is not str:
+            return ()
+        if identity not in self.entries and not self.complete:
+            self.fetch((identity,), rows=False)
+        return self.entries.get(identity) or ()
+
+
+class _RowsView(Mapping):
+    """`History.raw[kind]`: current rows by identity, read on first use."""
+    def __init__(self, store):
+        self.store = store
+
+    def __getitem__(self, identity):
+        value = self.store.row(identity)
+        if value is None:
+            raise KeyError(identity)
+        return value
+
+    def __iter__(self):
+        self.store.whole()
+        return iter([identity for identity, row in self.store.rows.items() if row is not None])
+
+    def __len__(self):
+        self.store.whole()
+        return sum(row is not None for row in self.store.rows.values())
+
+    def __setitem__(self, identity, value):
+        self.store.rows[identity] = value
+
+
+class _EntriesView(Mapping):
+    """`History.entries[kind]`: each identity's complete audit entries, read on first use."""
+    def __init__(self, store):
+        self.store = store
+
+    def __getitem__(self, identity):
+        value = self.store.history(identity)
+        if not value:
+            raise KeyError(identity)
+        return value
+
+    def __iter__(self):
+        self.store.whole()
+        return iter([identity for identity, rows in self.store.entries.items() if rows])
+
+    def __len__(self):
+        self.store.whole()
+        return sum(bool(rows) for rows in self.store.entries.values())
+
+    def __setitem__(self, identity, value):
+        self.store.entries[identity] = value
+
+
 class History:
-    """One immutable reader snapshot; kind loads are complete, never page slices."""
-    def __init__(self, s, endpoint=None, *, historical=False, company_issuer=False):
+    """One immutable reader snapshot. Owner rows and audit entries are read per identity
+    (in sets) when a record is selected; a relation is resolved over the complete kind:
+    by an indexed SQL read of the current rows plus every audit-only identity (current),
+    or over the latest image at the cutoff of every identity (historical)."""
+    def __init__(self, s, endpoint=None, *, historical=False, company_issuer=False, stores=None):
         self.s, self.historical = s, historical
+        # Rows and entries do not depend on the cutoff, so a historical reader in the same
+        # snapshot may share a current reader's stores.
+        self.stores = {} if stores is None else stores
+        self.latest = {}
+        self.owner_rows = {}
+        self.orphan_ids = {}
+        self.missing_selector = False
         self.issuer_events = []
         self.custom_supplied = frozenset()
         self.custom_values = {}
@@ -454,7 +677,10 @@ class History:
         # entry ID keeps different historical cutoffs distinct. No shared cache.
         self.find_images = {}
         self.relation_indexes = {}
-        self.commercial_images = {}
+        # Decoded commercial revisions and proven owner chains are facts of immutable rows
+        # and entries, so readers sharing stores share them (keyed, never authority).
+        self.commercial_images = self.stores.setdefault(('commercial',), {})
+        self.chains = self.stores.setdefault(('chains',), {})
         self.anchors = {}; self.values = {}; self.unknown = set()
         if historical and endpoint is not None:
             self.cutoff = s.company.conn.execute(sa.select(c.audit_events.c.seq).where(c.audit_events.c.id == endpoint)).scalar_one_or_none()
@@ -504,24 +730,98 @@ class History:
                     self.raw[kind][key]=_audit_image(entry['after'])
                     self.entries[kind][key]=[row for row in entries if row['seq']<=entry['seq']]
             return
-        owner = OWNERS[kind]
-        table = c.metadata.tables[owner.table]
-        self.raw[kind] = {row[owner.key]: dict(row) for row in self.s.company.conn.execute(sa.select(table)).mappings()}
-        if kind in SOURCE_OWNERS:
-            self.raw[kind] = {key:json.loads(canonical(_source_owner_image(self.s, kind, value))) for key,value in self.raw[kind].items()}
-        self.entries[kind] = {}
-        # No unbounded ID binding list. These per-kind scans include historical
-        # identities that no longer have a projection; only selected dependencies
-        # contribute to signed facts, authority, endpoints or output.
-        query = sa.select(c.audit_entries, c.audit_events.c.seq, c.audit_events.c.at,
-                          c.audit_events.c.actor_id, c.audit_events.c.actor_kind,
-                          c.audit_events.c.on_behalf_of, c.audit_events.c.interface).join(
-            c.audit_events, c.audit_events.c.id == c.audit_entries.c.event_id).where(
-            c.audit_entries.c.record_type.in_(owner.audit_kinds)).order_by(c.audit_events.c.seq, c.audit_entries.c.id)
-        for row in self.s.company.conn.execute(query).mappings():
-            item = dict(row)
-            self.entries[kind].setdefault(item['record_id'], []).append(item)
-            self.events[item['event_id']] = item
+        store = self._store(kind)
+        self.raw[kind] = _RowsView(store)
+        self.entries[kind] = _EntriesView(store)
+
+    def _store(self, kind):
+        store = self.stores.get(kind)
+        if store is None:
+            store = self.stores[kind] = _KindStore(self.s, kind)
+        return store
+
+    def has(self, kind, identity):
+        """Whether `identity` is one of `identities(kind)`, without reading the whole kind."""
+        self.load(kind)
+        return identity in self.raw[kind] or identity in self.entries[kind]
+
+    def prefetch(self, kind, identities):
+        """Read these records' rows and complete entries in sets before they are taken."""
+        if kind != 'source_price_version':
+            self.load(kind)
+            self._store(kind).fetch(identities)
+
+    def _row_relation(self, kind, field, owners):
+        """Whether a relation on `field` can be read from the current rows by SQL: the
+        candidate of an identity with a row is that row, unchanged."""
+        return (not self.historical and kind not in SOURCE_OWNERS and kind not in ('custom_field', 'source_custom_field')
+                and kind != 'source_price_version' and field in self._store(kind).table.c
+                and all(type(owner) is str for owner in owners))
+
+    def prefetch_owners(self, kind, field, owners):
+        """Read the current rows whose `field` is one of `owners`, in sets (current view only)."""
+        owners = list(owners)
+        if not self._row_relation(kind, field, owners):
+            return
+        self.load(kind)
+        store = self._store(kind)
+        known = self.owner_rows.setdefault((kind, field), {})
+        missing = sorted({owner for owner in owners if owner not in known})
+        column = store.table.c[field]
+        found = []
+        for chunk in _chunks(missing):
+            for owner in chunk:
+                known[owner] = []
+            for row in self.s.company.conn.execute(sa.select(store.table).where(column.in_(chunk))).mappings():
+                identity = store.remember(row)
+                known[row[field]].append(identity)
+                found.append(identity)
+        store.fetch(found)
+
+    def _orphans(self, kind):
+        """Identities with audit entries but no current row, sorted (current view)."""
+        if kind not in self.orphan_ids:
+            store = self._store(kind)
+            entries = c.audit_entries
+            key = store.table.c[store.owner.key]
+            query = sa.select(entries.c.record_id).where(entries.c.record_type.in_(store.owner.audit_kinds),
+                ~sa.exists().where(key == entries.c.record_id)).distinct()
+            identities = sorted(self.s.company.conn.execute(query).scalars())
+            store.fetch(identities)
+            self.orphan_ids[kind] = identities
+        return self.orphan_ids[kind]
+
+    def _latest(self, kind):
+        """Each identity's latest entry at the cutoff (historical view), sorted by identity.
+
+        The same entries the complete per-kind read selects: joined to their event, at or
+        before the cutoff, migration metadata skipped for the company row. Only the columns
+        a relation needs are read here; a selected record still reads its whole history."""
+        key = kind, self.cutoff
+        if key not in self.latest:
+            owner = OWNERS[kind]
+            entries = c.audit_entries
+            query = sa.select(entries.c.record_id, entries.c.id, entries.c.action, entries.c.after, c.audit_events.c.seq).join(
+                c.audit_events, c.audit_events.c.id == entries.c.event_id).where(
+                entries.c.record_type.in_(owner.audit_kinds), c.audit_events.c.seq <= self.cutoff).order_by(
+                c.audit_events.c.seq, entries.c.id)
+            company = kind in ('company_info', 'source_company')
+            latest = {}
+            for record_id, entry_id, action, after, seq in self.s.company.conn.execute(query).all():
+                if company and action == 'migrate':
+                    continue
+                latest[record_id] = {'id': entry_id, 'after': after, 'seq': seq}
+            self.latest[key] = sorted(latest.items())
+        return self.latest[key]
+
+    def _historical_candidates(self, kind):
+        """(identity, latest image at the cutoff) in identity order; an undecodable image
+        raises where the complete scan met it."""
+        for identity, entry in self._latest(kind):
+            image_key = (kind, identity, entry['id'])
+            if image_key not in self.find_images:
+                self.find_images[image_key] = _audit_image(entry['after'])
+            yield identity, self.find_images[image_key]
 
     def identities(self, kind):
         self.load(kind)
@@ -571,12 +871,36 @@ class History:
         return json.loads(self.commercial_images[key][1])
 
     def chain(self, kind, identity):
+        """The owner's distinct projected states up to the cutoff, each with its entry.
+
+        For a kind whose projection depends on nothing but the image (no field inventory,
+        custom-field context or issuer fields), the result is a function of the entries
+        read, so it is kept per (kind, identity, entries read) and shared by the current and
+        historical readers of one comparison; each use gets its own copy."""
         self.load(kind)
+        pure = kind not in SOURCE_OWNERS and kind not in ('company_info', 'custom_field', 'source_custom_field', 'source_price_version')
+        if pure:
+            entries = self.entries[kind].get(identity, ())
+            read = len(entries) if self.cutoff is None else next((i for i, entry in enumerate(entries) if entry['seq'] > self.cutoff), len(entries))
+            key = kind, identity, read
+            cached = self.chains.get(key)
+            if cached is not None:
+                for entry in entries[:read]:
+                    self.events[entry['event_id']] = entry
+                return [(entries[index], json.loads(value)) for index, value in cached]
+            result = self._chain(kind, identity)
+            positions = {id(entry): index for index, entry in enumerate(entries)}
+            self.chains[key] = [(positions[id(entry)], json.dumps(value)) for entry, value in result]
+            return result
+        return self._chain(kind, identity)
+
+    def _chain(self, kind, identity):
         result = []; previous = None; seen = set(); version = None; unit_children = {}
         if kind=='source_price_version':self._price_chain_fields=self.source_fields[kind,identity]
         for entry in self.entries[kind].get(identity, ()):
             if self.cutoff is not None and entry['seq'] > self.cutoff:
                 break
+            self.events[entry['event_id']] = entry
             if kind in ('company_info','source_company') and entry['action'] == 'migrate':
                 continue  # migration metadata is not a company-info row image
             if entry['event_id'] in seen:
@@ -664,40 +988,134 @@ class History:
         The index retains candidate identities only. Every selected row still
         goes through take's ownership/history checks; no authority decision is
         stored. The cutoff is part of the key, and negative relations stay empty.
+
+        Current view: the rows whose `field` is an owner come from one indexed SQL read,
+        and every identity that has audit entries but no row is indexed from its latest
+        image, as the complete scan did (its decoding and missing-field refusals included).
+        A row never fails that scan, so the first refusal is the same. Historical view:
+        the latest image at the cutoff of every identity of the kind is indexed.
         """
-        index_key=(kind,field,self.cutoff,self.historical)
-        if index_key not in self.relation_indexes:
+        owners = list(owners)
+        if self._row_relation(kind, field, owners):
             self.load(kind)
-            indexed={}
-            for identity in self.identities(kind):
-                candidate=self.raw[kind].get(identity)
-                if self.historical:
-                    entries=[entry for entry in self.entries[kind].get(identity,())
-                             if entry['seq']<=self.cutoff and not (kind in ('company_info','source_company') and entry['action']=='migrate')]
-                    if not entries:continue
-                    entry=entries[-1];image_key=(kind,identity,entry['id'])
-                    if image_key not in self.find_images:self.find_images[image_key]=_audit_image(entry['after'])
-                    candidate=self.find_images[image_key]
-                elif candidate is None:
-                    entries=self.entries[kind].get(identity,())
-                    if entries:candidate=_audit_image(entries[-1]['after'])
-                if candidate is None:continue
-                if field not in candidate:raise MissingHistory('incomplete historical relation image')
-                indexed.setdefault(candidate[field],[]).append(identity)
-            self.relation_indexes[index_key]=indexed
-        indexed=self.relation_indexes[index_key]
-        identities=sorted({identity for owner in owners for identity in indexed.get(owner,())})
-        result=[]
+            orphans = self._orphan_index(kind, field)
+            self.prefetch_owners(kind, field, owners)
+            rows = self.owner_rows[kind, field]
+            identities = sorted({identity for owner in owners for identity in (*rows[owner], *orphans.get(owner, ()))})
+        else:
+            indexed = self._relation_index(kind, field)
+            identities = sorted({identity for owner in owners for identity in indexed.get(owner, ())})
+        self.prefetch(kind, identities)
+        result = []
         for identity in identities:
-            value=self.take(kind,identity)
-            if value is not None:result.append(value)
+            value = self.take(kind, identity)
+            if value is not None:
+                result.append(value)
         return result
 
+    def _orphan_index(self, kind, field):
+        index_key = ('orphans', kind, field)
+        if index_key not in self.relation_indexes:
+            store = self._store(kind)
+            indexed = {}
+            for identity in self._orphans(kind):
+                entries = store.history(identity)
+                candidate = _audit_image(entries[-1]['after']) if entries else None
+                if candidate is None:
+                    continue
+                if field not in candidate:
+                    raise MissingHistory('incomplete historical relation image')
+                indexed.setdefault(candidate[field], []).append(identity)
+            self.relation_indexes[index_key] = indexed
+        return self.relation_indexes[index_key]
 
-    def find(self, kind, predicate):
-        """Select using the same old/current view before retaining any owner facts."""
-        result = []
+    def _relation_index(self, kind, field):
+        index_key = (kind, field, self.cutoff, self.historical)
+        if index_key not in self.relation_indexes:
+            if self.historical and kind != 'source_price_version':
+                indexed = {}
+                for identity, candidate in self._historical_candidates(kind):
+                    if candidate is None:
+                        continue
+                    if field not in candidate:
+                        raise MissingHistory('incomplete historical relation image')
+                    indexed.setdefault(candidate[field], []).append(identity)
+                self.relation_indexes[index_key] = indexed
+            else:
+                self.relation_indexes[index_key] = self._scan_index(kind, field)
+        return self.relation_indexes[index_key]
+
+    def _scan_index(self, kind, field):
+        """The complete per-identity scan, for a relation no SQL read can bound."""
         self.load(kind)
+        indexed = {}
+        for identity in self.identities(kind):
+            candidate = self.raw[kind].get(identity)
+            if self.historical:
+                entries = [entry for entry in self.entries[kind].get(identity, ())
+                           if entry['seq'] <= self.cutoff and not (kind in ('company_info', 'source_company') and entry['action'] == 'migrate')]
+                if not entries:
+                    continue
+                entry = entries[-1]; image_key = (kind, identity, entry['id'])
+                if image_key not in self.find_images:
+                    self.find_images[image_key] = _audit_image(entry['after'])
+                candidate = self.find_images[image_key]
+            elif candidate is None:
+                entries = self.entries[kind].get(identity, ())
+                if entries:
+                    candidate = _audit_image(entries[-1]['after'])
+            if candidate is None:
+                continue
+            if field not in candidate:
+                raise MissingHistory('incomplete historical relation image')
+            indexed.setdefault(candidate[field], []).append(identity)
+        return indexed
+
+    def find(self, kind, predicate, where=None):
+        """Select using the same old/current view before retaining any owner facts.
+
+        `where` ({column: values}) is optional and must be implied by the predicate on a
+        current row (a row outside it never satisfies the predicate). With it, the current
+        view evaluates only the rows SQL selects by it plus every audit-only identity; the
+        historical view always evaluates the latest image at the cutoff of every identity.
+        Selected records are read in sets before they are taken; a predicate or decoding
+        refusal is raised where the complete scan met it, after the takes before it."""
+        self.load(kind)
+        if self.historical and kind != 'source_price_version':
+            candidates = self._historical_candidates(kind)
+        elif where is not None and self._row_relation(kind, next(iter(where), ''), [value for values in where.values() for value in values]) \
+                and all(column in self._store(kind).table.c for column in where):
+            candidates = self._bounded_candidates(kind, where)
+        else:
+            candidates = self._scan_candidates(kind)
+        selected = []; failure = None
+        try:
+            for identity, candidate in candidates:
+                if candidate is None:
+                    continue
+                # A custom-field relation includes its active child scope facts.
+                if kind in ('custom_field', 'source_custom_field') and not self.historical:
+                    from bookflow.commands.custom_field_cmds import _snapshot
+                    candidate = _snapshot(self.s.company.conn, identity)
+                try:
+                    chosen = predicate(candidate)
+                except (KeyError, TypeError) as exc:
+                    raise MissingHistory('incomplete historical relation image') from exc
+                if chosen:
+                    selected.append(identity)
+        except Exception as exc:  # noqa: BLE001 - re-raised below, after the takes the scan made first
+            failure = exc
+        self.prefetch(kind, selected)
+        result = []
+        for identity in selected:
+            value = self.take(kind, identity)
+            if value is not None:
+                result.append(value)
+        if failure is not None:
+            raise failure
+        return result
+
+    def _scan_candidates(self, kind):
         for identity in self.identities(kind):
             candidate = self.raw[kind].get(identity)
             if self.historical:
@@ -714,21 +1132,20 @@ class History:
                 entries = self.entries[kind].get(identity, ())
                 if entries:
                     candidate = _audit_image(entries[-1]['after'])
+            yield identity, candidate
+
+    def _bounded_candidates(self, kind, where):
+        store = self._store(kind)
+        query = sa.select(store.table).where(*(store.table.c[column].in_(list(values)) for column, values in where.items()))
+        identities = {store.remember(row) for row in self.s.company.conn.execute(query).mappings()}
+        orphans = self._orphans(kind)
+        for identity in sorted(identities | set(orphans)):
+            candidate = store.row(identity)
             if candidate is None:
-                continue
-            # A custom-field relation includes its active child scope facts.
-            if kind in ('custom_field','source_custom_field') and not self.historical:
-                from bookflow.commands.custom_field_cmds import _snapshot
-                candidate = _snapshot(self.s.company.conn, identity)
-            try:
-                selected = predicate(candidate)
-            except (KeyError, TypeError) as exc:
-                raise MissingHistory('incomplete historical relation image') from exc
-            if selected:
-                value = self.take(kind, identity)
-                if value is not None:
-                    result.append(value)
-        return result
+                entries = store.history(identity)
+                if entries:
+                    candidate = _audit_image(entries[-1]['after'])
+            yield identity, candidate
 
 
 from bookflow.company.deposit_dependency_models import ReadSet, RelationAnchor
@@ -743,13 +1160,13 @@ def _needs_issuer(original):
             original.input.source_action.input.refresh_defaults)
 
 
-def _readset(s, original, *, endpoint=None, historical=False, allow_missing_selectors=False, issuer_entry=None, binding=None):
+def _readset(s, original, *, endpoint=None, historical=False, allow_missing_selectors=False, issuer_entry=None, binding=None, stores=None):
     """Resolve both retained and proposed dependencies from one owned history view."""
     from bookflow.company import deposit_dependencies, payment_authority
     from bookflow.company.list_service import normalize_lookup_key
     original = request(original)
     new_post = not isinstance(original, InspectionRoot) and original.command == 'deposit post'
-    history = History(s, endpoint, historical=historical, company_issuer=new_post)
+    history = History(s, endpoint, historical=historical, company_issuer=new_post, stores=stores)
     history.custom_creating = new_post
     history.allow_missing_selectors = allow_missing_selectors
     document = request_document(original)
@@ -784,7 +1201,7 @@ def _readset(s, original, *, endpoint=None, historical=False, allow_missing_sele
         # list resolution does. Old aliases are resolved from old owner images.
         history.load(kind)
         direct = selector.strip().upper() if isinstance(selector, str) else selector
-        if direct in history.identities(kind):
+        if history.has(kind, direct) if isinstance(direct, str) else direct in history.identities(kind):
             value = history.take(kind, direct)
             if value is not None:
                 return value
@@ -792,6 +1209,7 @@ def _readset(s, original, *, endpoint=None, historical=False, allow_missing_sele
         matches = history.find(kind, lambda row: normalize_lookup_key(row.get('full_name') or row['name']) == normalized)
         relation('selector:' + kind, selector, matches)
         if not matches and allow_missing_selectors:
+            history.missing_selector = True
             return None
         if len(matches) != 1:
             if historical:
@@ -838,7 +1256,8 @@ def _readset(s, original, *, endpoint=None, historical=False, allow_missing_sele
             number=action.input.number if action.input.number is not None else source_header['number'] if source_header else None
             if number is not None:
                 source_type='payment' if action.kind.startswith('payment_') else 'sales_receipt'
-                occupied=history.find('source_number',lambda row:row['type']==source_type and row['id']!=source_identity(action) and row['number']==number)
+                occupied=history.find('source_number',lambda row:row['type']==source_type and row['id']!=source_identity(action) and row['number']==number,
+                                      where={'type':(source_type,),'number':(number,)})
                 relation('source_number_occupancy',source_type+':'+number,occupied)
                 transactions.update(row['id'] for row in occupied)
         if action.kind == 'payment_update':
@@ -857,6 +1276,9 @@ def _readset(s, original, *, endpoint=None, historical=False, allow_missing_sele
     # The historical view independently proves which rows existed at its endpoint.
     visited_deposits = set(); visited_sources = set()
     while deposits - visited_deposits or sources - visited_sources:
+        # Each frontier's rows are read in sets first; the walk below is unchanged.
+        history.prefetch_owners('deposit_membership', 'transaction_id', deposits - visited_deposits)
+        history.prefetch_owners('deposit_membership', 'source_transaction_id', sources - visited_sources)
         for deposit in sorted(deposits - visited_deposits):
             visited_deposits.add(deposit)
             memberships = history.find_owners('deposit_membership','transaction_id',(deposit,))
@@ -867,6 +1289,10 @@ def _readset(s, original, *, endpoint=None, historical=False, allow_missing_sele
             memberships = history.find_owners('deposit_membership','source_transaction_id',(source,))
             relation('source_claims', source, memberships)
             deposits.update(row['transaction_id'] for row in memberships)
+    history.prefetch_owners('deposit_membership', 'source_transaction_id', sources)
+    history.prefetch_owners('application', 'paying_transaction_id', sources)
+    history.prefetch_owners('application_allocation', 'application_id',
+                            [identity for source in sources for identity in history.owner_rows.get(('application', 'paying_transaction_id'), {}).get(source, ())])
     for source in sorted(sources):
         memberships = history.find_owners('deposit_membership','source_transaction_id',(source,))
         relation('source_claims', source, memberships)
@@ -884,10 +1310,17 @@ def _readset(s, original, *, endpoint=None, historical=False, allow_missing_sele
         deposit_dependencies.authorize(s, deposit, sources)
     deposit_dependencies.authorize(s, sources=transactions)
     if sources:
-        relation('uf_account', 'company', history.find('account', lambda row: row['system_role'] == 'undeposited_funds'))
+        relation('uf_account', 'company', history.find('account', lambda row: row['system_role'] == 'undeposited_funds',
+                                                       where={'system_role': ('undeposited_funds',)}))
     transaction_kinds = [kind for kind, owner in OWNERS.items()
                          if kind not in ('transaction', 'application', 'application_allocation', 'deposit_membership', 'deposit_number','deposit_number_operation')
                          and 'transaction_id' in c.metadata.tables[owner.table].c]
+    history.load('transaction')
+    history.prefetch('transaction', transactions)
+    history.prefetch('transaction_revision', [history.raw['transaction'][identity]['current_revision_id']
+                                              for identity in transactions if identity in history.raw['transaction']])
+    for kind in transaction_kinds:
+        history.prefetch_owners(kind, 'transaction_id', transactions)
     for identity in sorted(transactions):
         header = history.take('transaction', identity)
         for kind in transaction_kinds:
@@ -912,16 +1345,18 @@ def _readset(s, original, *, endpoint=None, historical=False, allow_missing_sele
                 history.unknown.add('transaction:' + identity)
     _current_relations(history, sources, deposits, relation)
     # Work ancestry is a distinct complete relation, not a source-profile guess.
-    conversions = history.find('work_billing_conversion', lambda row: row['destination_transaction_id'] in transactions)
+    conversions = history.find('work_billing_conversion', lambda row: row['destination_transaction_id'] in transactions,
+                               where={'destination_transaction_id': transactions})
     relation('work_conversions', 'transactions', conversions)
-    allocations = history.find('work_billing_allocation', lambda row: row['transaction_id'] in transactions)
+    allocations = history.find('work_billing_allocation', lambda row: row['transaction_id'] in transactions,
+                               where={'transaction_id': transactions})
     work_ids = {row['source_document_id'] for row in conversions + allocations}
     work_ids.update(row['root_document_id'] for row in allocations)
     visited_work=set()
     while work_ids-visited_work:
         for identity in sorted(work_ids-visited_work):
             visited_work.add(identity)
-            links=history.find('work_link',lambda row:row['destination_document_id']==identity)
+            links=history.find('work_link',lambda row:row['destination_document_id']==identity,where={'destination_document_id':(identity,)})
             relation('work_ancestry',identity,links)
             for link in links:
                 work_ids.add(link['source_document_id'])
@@ -934,7 +1369,7 @@ def _readset(s, original, *, endpoint=None, historical=False, allow_missing_sele
         for kind, owner in OWNERS.items():
             table = c.metadata.tables[owner.table]
             if owner.table.startswith('work_') and 'document_id' in table.c:
-                relation(kind, identity, history.find(kind, lambda row: row['document_id'] == identity), owner.key)
+                relation(kind, identity, history.find(kind, lambda row: row['document_id'] == identity, where={'document_id': (identity,)}), owner.key)
     deposit_dependencies.reconciliation_status(s.company)
     if document is not None:
         _number_dependencies(history, original, relation, transactions, document)
@@ -978,10 +1413,16 @@ def capture(s, original_request, binding):
         elif document is not None:
             roots.extend((row.source, row.source_type if hasattr(row, 'source_type') else source_kind) for row in document.sources)
     _authorize_binding_graph(s,binding,[identity for identity,_ in roots])
+    # Every root's type in sets; the first root in order that is missing (or of another
+    # type) refuses, as the one-by-one reads did.
+    types={}
+    for chunk in _chunks(sorted({identity for identity,_ in roots if type(identity) is str})):
+        types.update(s.company.conn.execute(sa.select(c.transactions.c.id,c.transactions.c.type).where(c.transactions.c.id.in_(chunk))).all())
     for identity, owner_kind in roots:
-        found=s.company.conn.execute(sa.select(c.transactions.c.id).where(c.transactions.c.id==identity,c.transactions.c.type==owner_kind)).first()
-        if found is None:raise BookflowError('E_RECORD_NOT_FOUND')
-    readset, _ = _readset(s, original,binding=binding)
+        if type(identity) is not str or types.get(identity)!=owner_kind:raise BookflowError('E_RECORD_NOT_FOUND')
+    readset = _phase_readset(s, original, binding)
+    if readset is None:
+        readset, _ = _readset(s, original,binding=binding)
     _authorize_binding_graph(s, binding, readset.transactions)
     return recipe_for_readset(s,original,readset,binding), readset
 
@@ -1037,9 +1478,9 @@ def _fields(before, after, prefix=''):
     return () if type(before) is type(after) and before == after else (prefix or 'presence',)
 
 
-def reconstruct(s, guard, original_request, binding):
+def reconstruct(s, guard, original_request, binding, *, stores=None):
     recipe = decode_recipe(s, guard, original_request, binding)
-    baseline, history = _readset(s, original_request, endpoint=recipe.endpoint, historical=True, issuer_entry=recipe.issuer_entry,binding=binding)
+    baseline, history = _readset(s, original_request, endpoint=recipe.endpoint, historical=True, issuer_entry=recipe.issuer_entry,binding=binding,stores=stores)
     _authorize_binding_graph(s, binding, baseline.transactions)
     if baseline.digest != recipe.read_digest:
         raise MissingHistory('baseline digest disagrees with immutable evidence')
@@ -1064,9 +1505,13 @@ def compare(s, guard, original_request, binding):
         elif document is not None:roots.extend(row.source for row in document.sources)
         _authorize_binding_graph(s,binding,roots)
     current, current_history = _readset(s, original_request, allow_missing_selectors=True,binding=binding)
+    if not current_history.missing_selector:
+        # No selector fell back to "missing", so this is exactly the read set capture
+        # computes in this same snapshot; a capture later in this preparation reuses it.
+        _remember_readset(s, original_request, binding, current)
     _authorize_binding_graph(s, binding, current.transactions)
     try:
-        _, baseline, old_history = reconstruct(s, guard, original_request, binding)
+        _, baseline, old_history = reconstruct(s, guard, original_request, binding, stores=current_history.stores)
     except MissingHistory:
         return DependencyComparison(matches=False, unknown_history=True, unknown_records=(), changes=(), baseline=None, current=current)
     _authorize_binding_graph(s, binding, set(baseline.transactions) | set(current.transactions))
@@ -1259,20 +1704,29 @@ def _number_dependencies(history, original, relation, transactions, document):
                 history.unknown.add('deposit_number_sequence')
         number=str(next_number)
         while True:
-            matches=history.find('deposit_number',lambda row:row['type']=='deposit' and row['id']!=own and row['number']==number)
+            matches=history.find('deposit_number',lambda row:row['type']=='deposit' and row['id']!=own and row['number']==number,
+                                 where={'type':('deposit',),'number':(number,)})
             relation('number_occupancy',number,matches)
             transactions.update(row['id'] for row in matches)
             if not matches:break
             next_number+=1
             number=str(next_number)
     else:
-        matches=history.find('deposit_number',lambda row:row['type']=='deposit' and row['id']!=own and row['number']==number)
+        matches=history.find('deposit_number',lambda row:row['type']=='deposit' and row['id']!=own and row['number']==number,
+                             where={'type':('deposit',),'number':(number,)})
         relation('number_occupancy',number,matches)
         transactions.update(row['id'] for row in matches)
 
 
 def _current_relations(history, sources, deposits, relation):
     """Reconstruct negative/current projections from complete immutable events."""
+    current_rows={}
+    if not history.historical:
+        # The current claim rows of every source in sets; a source with none has none.
+        for chunk in _chunks(sorted(sources)):
+            for row in history.s.company.conn.execute(sa.select(c.deposit_current_memberships).where(
+                    c.deposit_current_memberships.c.source_transaction_id.in_(chunk))).mappings():
+                current_rows.setdefault(row['source_transaction_id'],[]).append(dict(row))
     for source in sorted(sources):
         # The indexed lookup, not a scan of every membership per receipt: a deposit of n
         # receipts otherwise compared n x n rows here.
@@ -1289,11 +1743,11 @@ def _current_relations(history, sources, deposits, relation):
             else:current=None
         relation('active_claim',source,[current] if current else [])
         if not history.historical:
-            rows=history.s.company.conn.execute(sa.select(c.deposit_current_memberships).where(c.deposit_current_memberships.c.source_transaction_id==source)).mappings().all()
+            rows=current_rows.get(source,[])
             expected=[{'source_transaction_id':source,'transaction_id':current['transaction_id'],'membership_id':current['id']}] if current else []
-            if [dict(row) for row in rows]!=expected:history.unknown.add('source_claims:'+source)
+            if rows!=expected:history.unknown.add('source_claims:'+source)
     for deposit in sorted(deposits):
-        versions=history.find('bank_effect_version',lambda row:row['transaction_id']==deposit)
+        versions=history.find('bank_effect_version',lambda row:row['transaction_id']==deposit,where={'transaction_id':(deposit,)})
         keys={row['key_id'] for row in versions}
         for key in sorted(keys):
             rows=sorted((row for row in versions if row['key_id']==key),key=lambda row:row['version'])
@@ -1433,7 +1887,8 @@ def _source_update_dependencies(history, inp, select, relation):
         resolved['_price_version']=(reads.read('source_price_level',price_id,'version')['version'] if 'version' in mask
             else old.price_level.version if old.price_level and old.price_level.id==price_id else None)
     else:resolved['_price_version']=None
-    lines=history.find('document_line',lambda row:row['revision_id']==header['current_revision_id'])
+    lines=history.find('document_line',lambda row:row['revision_id']==header['current_revision_id'],
+                       where={'revision_id':(header['current_revision_id'],)})
     by_line={row['line_id']:row for row in lines}
     submitted=inp.lines
     if submitted is None:
@@ -1631,7 +2086,9 @@ class SourceReads:
             if image is not None and normalize_lookup_key(image.get('full_name') or image.get('name') or image.get('code'))==normalized:
                 found.append(self.read(kind,identity,'full_name' if 'full_name' in image else 'name' if 'name' in image else 'code',*fields))
         self.relation('selector:'+kind,selector,[row for row in found if row is not None])
-        if not found and getattr(h,'allow_missing_selectors',False):return None
+        if not found and getattr(h,'allow_missing_selectors',False):
+            h.missing_selector=True
+            return None
         if len(found)!=1:
             if h.historical:raise MissingHistory('unresolved source selector')
             raise BookflowError('E_RECORD_NOT_FOUND')
