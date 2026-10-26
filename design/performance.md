@@ -466,6 +466,20 @@ and new, one after the other:
 | reconcile finish | 95,493 | 2,744 | 11,717 | 596 | 43 to 52 |
 | the whole month | 411,200 | | 58,500 | | |
 
+The same on lane A's `medium` template (24 months, 600 customers, 1,080 invoices, 874
+payments, 46 deposits, 192 bill payments), reconciled monthly for 23 months with the new code
+and month 24 timed on copies. "Old" here is main after lane A (db5d39c9), so the difference
+is this lane's alone:
+
+| command (month 24, medium) | old ms | old stmts | new ms | new stmts | load |
+|---|---|---|---|---|---|
+| reconcile start | 78,812 | 4,375 | 5,630 | 595 | 38 to 44 |
+| reconcile candidates | 42,984 | 1,468 | 3,504 | 208 | 38 to 47 |
+| reconcile mark (all) | 78,432 | 4,376 | 4,797 | 596 | 39 to 40 |
+| reconcile preview | 23,546 | 1,468 | 1,437 | 208 | 39 |
+| reconcile finish | 70,356 | 4,387 | 5,272 | 607 | 38 |
+| the whole month | 294,200 | | 22,600 | | |
+
 With the new code, building the 24 months took 12 to 21 s a month at load 39 to 43, growing
 slowly with the certificates. A profile of the new month shows one load at about 6.4 s
 (`validate` 3.3 s, now linear in the stored members and certificates). The largest remaining
@@ -476,5 +490,6 @@ On the large template (five years, 1,854 effect versions on checking), the compa
 migrates from co0088 to the head in 14 s, and one reconciliation load of checking takes
 **7.2 s and 404 statements** at load 36. The paper's sum for the same load was about 890 s,
 and the baseline commands that make 1 to 3 such loads took 5,751 to 7,825 s. The commands
-themselves could not be timed there: the template's hub carries a permission catalog this
-branch refuses (`catalog_mismatch`), and `upgrade` does not change it.
+themselves could not be timed there: the template's hub carries a permission catalog stored
+before the layers were re-chained, so every command is refused (`catalog_mismatch`), and
+`upgrade` does not change it.
