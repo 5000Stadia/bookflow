@@ -302,3 +302,69 @@ Other figures worth acting on:
   statements, so the cost per statement grows with the tables. About 85 SQLAlchemy compiles
   per post miss the compile cache (measured on the empty company).
 - **Storage**: 30 audit entries and about 49 KB per document, and 5.7 MB per empty company.
+
+## Increment 2: reconciliation (2026-10-26)
+
+Every reconciliation command loads the account's stored reconciliation rows and re-proves them
+against the ledger. The checks themselves were right; the time came from how they looked
+things up: a scan of a whole table for each row being checked. Increment 2 keeps every check
+and its order, so the same rule is still the first one raised, and replaces each scan with an
+index built once per load:
+
+- `reconciliation_storage_validation.validate`: one set of key tuples per foreign-key target
+  (proved in Python, not with `PRAGMA foreign_key_check`, which would trust a table rebuilt
+  without its key); `by`, `get` and `matching` built once; certificate members grouped by
+  movement; receipts, attempts, events and claims indexed.
+- `reconciliation_adapters.Graph`: rows are frozen when the graph is built (a read-only
+  mapping of tuples), so its document index and id maps cannot go stale. `authority` reads
+  each evidence table once instead of once per payment or deposit operation.
+- `reconciliation_proof.prove`: sources indexed by posting line, legs by batch.
+- `reconciliation_loading`: the closure follows a value index. The ledger tables that only the
+  foreign-key proof reads are fetched for the ids the stored rows point at, not whole, and
+  `load` hands its own fresh arguments to the snapshot without a defensive deep copy.
+- `reconciliation_preparation`: the enumeration and proofs that `validate` makes are kept on
+  the Snapshot for the command that loaded it, so a later `account_population` reuses them.
+
+**Equivalence.** `tests/reconciliation_oracle.py` keeps the old scans for one increment.
+`tests/test_reconciliation_indexed_equivalence.py` runs:
+
+- every mutation case of the storage-validation tests through both, old and new;
+- a damaged-books corpus of about 9,000 variants (rows missing or duplicated, with and without
+  their dependents; each column nulled, dangled, swapped, bumped, set to an odd type; JSON
+  snapshots with repeated or dropped keys and bent fields; ledger rows damaged under the
+  stored rows; referenced tables emptied or withheld), plus a table rebuilt without its
+  foreign key. Old and new give the same first outcome every time; 91 of the 137 storage
+  rules are raised first by some damage. The rest sit behind earlier consistency rules
+  (fingerprints, hashes, balances) and are covered only by the hand-built mutation cases;
+- a demo company reconciled monthly, and a generated company reconciled for 24 months
+  (`BOOKFLOW_R180_ORACLE_ROOT`), where the closure, authority set, `enumerate_graph`,
+  `prove` at every captured cutoff and `validate` agree exactly.
+
+**Measured.** The large bench company was never reconciled, which hides the certificate
+checks, so the commands were timed on a generated company reconciled for real: 25 months
+(200 customers; per month 26 invoices, 22 payments, 15 bills, 12 bill payments, 4 deposits;
+about 1,950 documents and 396 checking movements). Its checking account was reconciled
+monthly for 24 months through the commands, and month 25 was timed on two copies, old code
+and new, one after the other:
+
+| command (month 25) | old ms | old stmts | new ms | new stmts | load |
+|---|---|---|---|---|---|
+| reconcile start | 53,698 | 2,732 | 21,630 (cold imports included) | 584 | 43 to 51 |
+| reconcile candidates | 53,726 | 921 | 5,477 | 205 | 50 to 52 |
+| reconcile mark (all) | 180,065 | 2,733 | 13,777 | 585 | 51 to 52 |
+| reconcile preview | 28,041 | 921 | 5,864 | 205 | 49 to 52 |
+| reconcile finish | 95,493 | 2,744 | 11,717 | 596 | 43 to 52 |
+| the whole month | 411,200 | | 58,500 | | |
+
+With the new code, building the 24 months took 12 to 21 s a month at load 39 to 43, growing
+slowly with the certificates. A profile of the new month shows one load at about 6.4 s
+(`validate` 3.3 s, now linear in the stored members and certificates). The largest remaining
+cost is the permission catalog (`known_catalog`, about 33 s over the five commands), which is
+lane A's work.
+
+On the large template (five years, 1,854 effect versions on checking), the company file
+migrates from co0088 to the head in 14 s, and one reconciliation load of checking takes
+**7.2 s and 404 statements** at load 36. The paper's sum for the same load was about 890 s,
+and the baseline commands that make 1 to 3 such loads took 5,751 to 7,825 s. The commands
+themselves could not be timed there: the template's hub carries a permission catalog this
+branch refuses (`catalog_mismatch`), and `upgrade` does not change it.
