@@ -598,3 +598,8 @@ For the builder, defaults standing unless review finds otherwise:
    a staging bin; the alternative moves them on every pick, which needs a staging bin at every site.
 5. **Tracking links.** *Default:* the tracking number prints as text; a per-ship-method link template
    waits on K1.
+
+## Decided (2026-10-26)
+
+- K1 carrier integration: none. Carrier and tracking are recorded and printed as text only (Kabe, gate gba01e0).
+- K2 cost of shipped-not-invoiced goods: held in Shipped Not Invoiced until the invoice, so cost and income land in the same period (Kabe, gate gae9f98).
