@@ -237,7 +237,35 @@ def _issue_numbers(s, issue_id, made=()):
 
 
 def place(state, row, site_id, spec=None, *, item_name=None, returns_movement_id=None, field='lines', prior=None,
-          bin_id=None):
+          bin_id=None, auto=False):
+    """See ``_place``; with ``auto`` (an outgoing line that named no bin), the units no serial number names leave
+    from where they are at the site (``bins.draw``), never driving a bin negative while they sit elsewhere."""
+    parts = _place(state, row, site_id, spec, item_name=item_name, returns_movement_id=returns_movement_id,
+                   field=field, prior=prior, bin_id=bin_id)
+    if not auto or int(row['quantity_microunits']) >= 0:
+        return parts
+    return drawn(state, row['item_id'], site_id, bin_id, row['effective_date'], row.get('count_position'), parts)
+
+
+def drawn(state, item_id, site_id, home, date, position, parts):
+    """Outgoing ``parts`` at ``home`` that name no serial number, split over the places holding their units."""
+    from bookflow.company import bins
+    kind = state.tracking(item_id)
+    out = []
+    for part in parts:
+        quantity = int(part['quantity_microunits'])
+        if quantity >= 0 or part.get('serial_number_id') or part.get('site_id') != site_id or part.get('bin_id') != home:
+            out.append(part)
+            continue
+        lot = bins.ANY if kind == 'none' else part.get('lot_id')
+        held = bins.available(state.s, item_id, site_id, date, position, lot_id=lot, made=state.made)
+        for place, taken in bins.draw(state.s, home, -quantity, held):
+            out.append(dict(part, bin_id=place, quantity_microunits=-taken))
+    return out
+
+
+def _place(state, row, site_id, spec=None, *, item_name=None, returns_movement_id=None, field='lines', prior=None,
+           bin_id=None):
     """The placements, without provenance, one movement's quantity splits into at ``site_id`` (and ``bin_id``).
 
     ``spec`` is what the line states; ``prior`` what the line it restates carried (kept when it states
@@ -413,6 +441,18 @@ def check(state, rows, *, field='lines'):
                                  for site, quantity in sorted(split.items(), key=lambda kv: kv[1]))
             state.warn(f'{number} of {item} now shows {where}: its paperwork places it at two sites. An '
                        '`inventory-transfer` (or a count) of where the unit really is puts it right.')
+        else:
+            # The same at one site, across two of its bins (R104 increment 5 review).
+            in_bins = {}
+            for row in standing:
+                key = (row['site_id'], row.get('bin_id'))
+                in_bins[key] = in_bins.get(key, 0) + int(row['quantity_microunits'])
+            split = {key: quantity for key, quantity in in_bins.items() if quantity}
+            if len(split) > 1:
+                where = ' and '.join(f'{_q(quantity)} in {place_name(s, key)}'
+                                     for key, quantity in sorted(split.items(), key=lambda kv: kv[1]))
+                state.warn(f'{number} of {item} now shows {where}: its paperwork places it in two bins. A transfer '
+                           'between the bins (or a count) of where the unit really is puts it right.')
     lots = {(row['item_id'], row['site_id'], row['lot_id']) for row in rows
             if row.get('lot_id') and int(row['quantity_microunits']) < 0}
     for item_id, site_id, lot_id in sorted(lots):
@@ -525,6 +565,28 @@ def fingerprint_part(lines):
 
 
 def transfer_parts(state, item, quantity, numbers, from_site, to_site, date, position, sequence, field,
+                   from_bin=None, to_bin=None, from_auto=False):
+    """``transfer_moves``, with the out side of the units no serial number names drawn from where they are when
+    the line named no from_bin (``from_auto``)."""
+    lot_id, parts = transfer_moves(state, item, quantity, numbers, from_site, to_site, date, position, sequence,
+                                   field, from_bin=from_bin, to_bin=to_bin)
+    if not from_auto:
+        return lot_id, parts
+    from bookflow.company import bins
+    kind = state.tracking(item['id'])
+    out = []
+    for site, bin_id, lot, serial, signed, made in parts:
+        if signed >= 0 or serial or site != from_site or bin_id != from_bin:
+            out.append((site, bin_id, lot, serial, signed, made))
+            continue
+        held = bins.available(state.s, item['id'], site, date, position,
+                              lot_id=bins.ANY if kind == 'none' else lot, made=state.made)
+        for index, (place, taken) in enumerate(bins.draw(state.s, from_bin, -signed, held)):
+            out.append((site, place, lot, serial, -taken, made if index == 0 else None))
+    return lot_id, out
+
+
+def transfer_moves(state, item, quantity, numbers, from_site, to_site, date, position, sequence, field,
                    from_bin=None, to_bin=None):
     """``(lot_id, [(site_id, bin_id, lot_id, serial_id, signed quantity, new number row)])`` one transfer line
     moves: each number out of the from place and into the to place, the rest unassigned. A serial number leaves

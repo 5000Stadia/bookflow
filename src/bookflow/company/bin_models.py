@@ -194,7 +194,7 @@ class ClassifyRow(_Strict):
     issued_cost: JournalMoneyOutput
     cumulative_share: str = Field(description='Share of the period\'s issued cost up to and including this item, percent.')
     current_class: str | None
-    proposed_class: str
+    proposed_class: str | None = Field(description='The class proposed; null when nothing was issued and the item has none.')
     changes: bool
 
 
@@ -205,6 +205,7 @@ class ClassifyOutput(_Strict):
     rows: list[ClassifyRow]
     changes: int
     applied: bool = False
+    message: str | None = Field(None, description='Why nothing changes, when nothing was issued in the period.')
 
 
 class DueInput(_Strict):
@@ -219,8 +220,8 @@ class DueRow(_Strict):
     cycle_class: str
     interval_days: int
     last_counted: str | None = Field(description='Date of its last recorded count at the site; null when never counted there.')
-    due_date: str | None = Field(description='When it falls due (last count plus the interval); null when never counted.')
-    days_overdue: int | None = Field(description='Days past its due date; null when never counted (the most overdue).')
+    due_date: str | None = Field(description='When it fell due: last count plus the interval, or its first stock date there when never counted.')
+    days_overdue: int | None = Field(description='Days past its due date. Rows rank by this over the class interval.')
     on_hand: str
 
 

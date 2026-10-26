@@ -32,6 +32,7 @@ from bookflow.hub.users import common
 MAX_DEPTH = 3
 NO_BIN = '(no bin)'
 _DEFAULT = UNSET = object()
+ANY = object()
 
 
 def _invalid(field, problem, message=None, **details):
@@ -148,11 +149,20 @@ def default_bin_id(s, item_id, site_id):
     return row.id
 
 
+def is_no_bin(selector):
+    """Whether a line names "no bin" itself: the token ``(no bin)`` (any case), the place a site's units sit in
+    outside every bin."""
+    return selector is not None and str(selector).strip().casefold() == NO_BIN
+
+
 def line_bin(s, item_id, site_id, selector=None, *, field='bin', fallback=_DEFAULT):
     """The bin a stock line's units go to or leave from at ``site_id`` (design §2, "A line's place").
 
-    ``selector`` is what the line names; ``fallback`` the bin a correction's stock stood in, or a return's
-    issue's (when it is a bin of this site). Else the item's default bin at the site, else no bin."""
+    ``selector`` is what the line names (``(no bin)`` names no bin); ``fallback`` the bin a correction's stock
+    stood in, or a return's issue's (when it is a bin of this site). Else the item's default bin at the site,
+    else no bin."""
+    if is_no_bin(selector):
+        return None
     if selector is not None and str(selector).strip():
         return resolve_bin(s, site_id, selector, field=field)['id']
     if fallback is not _DEFAULT:
@@ -162,6 +172,57 @@ def line_bin(s, item_id, site_id, selector=None, *, field='bin', fallback=_DEFAU
         if row is not None and row['site_id'] == site_id:
             return fallback
     return default_bin_id(s, item_id, site_id)
+
+
+def available(s, item_id, site_id, date, position='before', *, lot_id=ANY, made=()):
+    """``{bin_id or None: quantity}`` of an item at a site's places just before a line at ``date`` and
+    ``position``: every placement dated earlier, and on ``date`` those at or before ``position`` -- plus what
+    this change has already placed (``made``). ``lot_id`` narrows to one lot, or None to the unassigned units
+    (no lot, no serial number); ANY reads every unit."""
+    rank = {'before': 0, 'count': 1, 'after': 2}
+    t = c.inventory_placements
+    positions = [name for name, value in rank.items() if value <= rank.get(position or 'before', 0)]
+    query = sa.select(t.c.bin_id, sa.func.sum(t.c.quantity_microunits)).where(
+        t.c.item_id == item_id, t.c.site_id == site_id,
+        sa.or_(t.c.effective_date < date, sa.and_(t.c.effective_date == date, t.c.count_position.in_(positions))))
+    if lot_id is not ANY:
+        query = query.where(t.c.serial_number_id.is_(None),
+                            t.c.lot_id.is_(None) if lot_id is None else t.c.lot_id == lot_id)
+    out = {b: int(q) for b, q in s.company.conn.execute(query.group_by(t.c.bin_id))}
+    for row in made:
+        if row['item_id'] != item_id or row['site_id'] != site_id:
+            continue
+        if lot_id is not ANY and (row.get('serial_number_id') or row.get('lot_id') != lot_id):
+            continue
+        out[row.get('bin_id')] = out.get(row.get('bin_id'), 0) + int(row['quantity_microunits'])
+    return out
+
+
+def draw(s, home, quantity, held):
+    """``[(bin_id, quantity)]`` an outgoing line naming no bin takes ``quantity`` from (R104 increment 5 review):
+    its home (the item's default bin, or no bin) when that holds them all; else no bin when that does; else the one
+    bin that does; else from each place holding some, home first, then no bin, then the bins by name -- and only
+    what nothing at the site holds is taken from home, below zero (the result warns). So a line never drives a bin
+    negative while the units sit elsewhere at the site."""
+    holding = {b: q for b, q in held.items() if q > 0}
+    for place in (home, None):
+        if holding.get(place, 0) >= quantity:
+            return [(place, quantity)]
+    names = bin_names(s, [b for b in holding if b])
+    others = sorted((b for b in holding if b not in (home, None)), key=lambda b: (names.get(b, '').casefold(), b))
+    whole = [b for b in others if holding[b] >= quantity]
+    if whole:
+        return [(whole[0], quantity)]
+    out, left = [], quantity
+    for place in [home] + ([None] if home is not None else []) + others:
+        take = min(holding.get(place, 0), left)
+        if take > 0:
+            out.append((place, take))
+            left -= take
+    if left:
+        out = [(b, q + left) if b == home else (b, q) for b, q in out] if any(b == home for b, _ in out) \
+            else out + [(home, left)]
+    return out
 
 
 def descendants(s, bin_id):
@@ -435,6 +496,13 @@ def check_tracking_off(s, site):
             f'{site["name"]} still holds stock in its bins (bin {name}, among others); move it to no bin with '
             '`inventory-transfer post` before turning bins off.'),
             details={'record_type': 'inventory_site', 'record_id': site['id'], 'bin': name})
+
+
+def place_words(s, site_id, bin_id):
+    """A place in words for messages: "A1" at a site's bin, "Warehouse (no bin)", or "Van 1 A2" across sites."""
+    site = placements.site_names(s).get(site_id, site_id)
+    name = bin_names(s, [bin_id]).get(bin_id, bin_id) if bin_id else NO_BIN
+    return name if bin_id else f'{site} {name}'
 
 
 def place_label(bin_name, lot=None, serial=None):

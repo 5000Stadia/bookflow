@@ -456,7 +456,9 @@ def _adjustment_change(s, ctx, inp, currency, sequence):
             fallback=fallback_cost(s, item['id'], currency) if kind in ('issue', 'found') else None)
         sequence += 1
         planned.append(values)
-        written.append((values, item, site_id, line, 'stated' if stated is not None else None, bin_id))
+        auto = (quantity < 0 and line.new_quantity is None and getattr(line, 'bin', None) is None
+                and bins.site_tracks_bins(s, place))
+        written.append((values, item, site_id, line, 'stated' if stated is not None else None, (bin_id, auto)))
     if not planned:
         raise invalid('lines', 'every line already holds what it says; this adjustment changes nothing')
 
@@ -470,7 +472,7 @@ def _adjustment_change(s, ctx, inp, currency, sequence):
                       'Bookflow posts no zero-amount entry')
     from bookflow.company import serial_lots
     journal_lines, movements_out, change_lines, sites, numbers = [], [], [], {}, {}
-    for values, item, site_id, line, basis, bin_id in written:
+    for values, item, site_id, line, basis, (bin_id, auto) in written:
         description = line.description or inp.memo or f'Inventory adjustment for {item["full_name"]}'
         index = None
         if int(values['value_minor_units']):
@@ -482,7 +484,7 @@ def _adjustment_change(s, ctx, inp, currency, sequence):
             sites[values['id']] = site_id
         stated_numbers = serial_lots.from_line(line)
         numbers[values['id']] = dict(spec=stated_numbers, item_name=item['full_name'], field='lines' if many else 'item',
-                                     bin_id=bin_id)
+                                     bin_id=bin_id, bin_auto=auto)
         change_lines.append(_Line(item, values['id'], site_id or placements.default_site_id(s),
                                   basis or found_basis.get(values['id'], 'average')))
     warnings = []

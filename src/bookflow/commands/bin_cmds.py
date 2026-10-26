@@ -165,6 +165,8 @@ classify = _write(
 due = _read(
     'cycle-count due', 'What should we count this week? The items due for a cycle count at a site: an item is due when '
     'its class interval has passed since its last recorded count there, or it has never been counted there '
-    '(unclassified items never are). Most overdue first, A before B before C. Count the first ones with '
-    '`inventory-count create --site <site> --cycle --limit 25`. Example: `bookflow cycle-count due --site Warehouse`.',
+    '(unclassified items never are) -- then it has been due since it was first stocked there. Ranked by days overdue '
+    'over the class interval, so a late A item comes before an equally late C item. A count of bins counts an item '
+    'only when every bin holding it was counted. Count the first ones with `inventory-count create --site <site> '
+    '--cycle --limit 25`; places left over take items falling due within the next six days. Example: `bookflow cycle-count due --site Warehouse`.',
     m.DueInput, m.DueOutput, plan_due, errors=['E_VALIDATION', 'E_RECORD_NOT_FOUND'])

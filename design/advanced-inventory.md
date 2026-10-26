@@ -863,6 +863,17 @@ jobs at night; the van ends as counted.
   parent or level; bins and cycle classes are never deleted; an item's default bin at a site is a bin of that
   site. Bins sum to their site by construction (a placement carries both); the seeded checker asserts it, with
   the number tie at every bin, on every date. No trigger that counts placements was added or widened.
+- **A correction that moves a line's stock to another bin or site** is refused (E_VALIDATION, naming the count)
+  when a recorded count at or after the line counted the item at the old place: the count keeps that shelf as
+  counted, so the moved units would be counted twice. Record a transfer dated after the count instead. Changes of
+  quantity or price, and voids, go through and derive the count again; a refusal raised while a count is derived
+  again names that count ("Count C-1, derived again: ...").
+- **"(no bin)"** names the units outside every bin on any line, transfer side or count entry. An outgoing line or
+  transfer side that names no bin (and keeps none from a correction or a sale) takes its units from the item's
+  default bin when it holds them all, else from no bin, else from the one bin that does, else from each place
+  holding some (default bin first); only what nothing at the site holds goes below zero, at the default bin,
+  with a warning. A transfer line records the place most of its units left from.
+- **A serial number split over two bins of one site** by late paperwork warns, as one split over two sites does.
 - **A line's bin** is resolved where its site is (`inventory_effects.plan`, `inventory adjust`, transfers,
   assignments): the line's `bin`, else -- on a correction -- the bin its stock stood in, else a return's sale's
   bin, both only when at the same site; else the item's default bin at the site (`item update --site-settings
@@ -886,10 +897,14 @@ jobs at night; the van ends as counted.
   Classify ranks by issued cost (issues net of their reversals and cost corrections, leaving out count
   differences and inventory adjustments); an item is A while the items before it make less than `a_share`
   percent, B while less than `a_share + b_share`, and C after or when it issued nothing.
-- **Due** is exactly the interval passed since the last recorded count at the site (or never counted), among
-  items with stock history there. So weekly rounds count an item up to six days after it falls due; the
-  rotation test holds every gap to the interval plus one round. `inventory-count create --cycle` takes the
-  first `limit` (default 25).
+- **Due** is exactly the interval passed since the last recorded count at the site, among items with stock
+  history there; a never-counted item is due since its first stock date there. A count of bins counts an item
+  only when every bin holding it at the count was counted (a site-wide count needs one counted line). The list
+  ranks by days overdue over the class interval. `inventory-count create --cycle` takes the first `limit`
+  (default 25) and fills places left over with items falling due within the next six days, soonest first: a
+  simulation showed that ranking alone lets a cohort of A items fill a round and push B items a round late
+  every quarter, and the lookahead keeps a 30-item weekly rotation within each interval plus one round.
+- **Classify** over a period with no issued cost proposes no change and says why (`message`).
 - **Barcodes.** `barcode lookup` answers bin labels (kind `bin`, after items, before serial numbers and lots,
   `line_fields` site and bin); the Scan field takes a bin label as the current bin, which the count screen's Bin
   field keeps for the next scans. `barcode generate` does not yet number bins (later).

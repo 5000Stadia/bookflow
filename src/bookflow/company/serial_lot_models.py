@@ -12,8 +12,11 @@ Selector = Annotated[str, Field(min_length=1, max_length=1004), BeforeValidator(
 
 NUMBER_FIELDS = ('lot', 'lot_expiry', 'serial_numbers', 'bin')
 BIN_HELP = ("Bin at the line's site the units go to or leave from (R104 increment 5), by id, full name such as "
-            "A:3 or label code; the site must track bins. Omitted: the bin the line's stock stood in (a correction), "
-            "its sale's bin (a return), else the item's default bin at the site, else no bin.")
+            "A:3 or label code; the site must track bins. \"(no bin)\" names the units outside every bin. Omitted: the "
+            "bin the line's stock stood in (a correction), its sale's bin (a return), else the item's default bin at "
+            "the site, else no bin -- and an outgoing line takes its units from the default bin when it holds them, "
+            "else from no bin, else from the bins holding them, never driving a bin below zero while the units are "
+            "elsewhere at the site.")
 LOT_HELP = ("Lot number of a lot-tracked item: the lot an incoming line receives into (made when new), or the lot an "
             "outgoing line takes from. Omitted on an outgoing line, the units leave unassigned and the result names "
             "the earliest-expiring lot in stock there.")

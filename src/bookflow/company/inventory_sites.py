@@ -286,6 +286,7 @@ def _resolved_lines(s, lines, date, from_site, to_site):
         out.append(dict(item=item, quantity=quantity, description=(line.description or '').strip() or None,
                         numbers=serial_lots.from_line(line),
                         from_bin=bins.line_bin(s, item['id'], from_site, line.from_bin, field=field + '.from_bin'),
+                        from_auto=line.from_bin is None and bins.site_tracks_bins(s, from_site),
                         to_bin=bins.line_bin(s, item['id'], to_site, line.to_bin, field=field + '.to_bin')))
     return out
 
@@ -347,7 +348,7 @@ def _decide(s, ctx, inp, operation):
                               to_bin=bins.line_bin(s, item['id'], to_site['id'], fallback=kept_to)))
     if same_site:
         for index, line in enumerate(lines):
-            if line['from_bin'] == line['to_bin']:
+            if line['from_bin'] == line['to_bin'] and not line.get('from_auto'):
                 raise _invalid(f'lines.{index}.to_bin', 'moving within one site takes the stock from one bin to another; '
                                                        'name a from_bin and a to_bin that differ')
     memo = inp.memo if 'memo' in inp.model_fields_set else (old_rev['memo'] if old_rev else None)
@@ -381,8 +382,13 @@ def _placements(s, decided, revision_id, line_ids, sequence, state=None):
         lot_id, parts = serial_lots.transfer_parts(
             state, line['item'], line['quantity'], line.get('numbers'), decided['from_site']['id'],
             decided['to_site']['id'], decided['date'], decided['position'], sequence, f'lines.{index}',
-            from_bin=line.get('from_bin'), to_bin=line.get('to_bin'))
+            from_bin=line.get('from_bin'), to_bin=line.get('to_bin'), from_auto=bool(line.get('from_auto')))
         line['lot_id'] = lot_id
+        if line.get('from_auto'):
+            # Where the units really left from: the place giving most of them (R104 increment 5 review).
+            left = [(abs(q), b) for _, b, _, serial, q, _ in parts if q < 0 and not serial]
+            if left:
+                line['from_bin'] = max(left, key=lambda pair: pair[0])[1]
         for site, bin_id, lot, serial, quantity, made in parts:
             row = dict(base, id=new_id(), site_id=site, bin_id=bin_id, lot_id=lot, serial_number_id=serial,
                        quantity_microunits=quantity)
@@ -478,6 +484,7 @@ def _run(s, ctx, inp, operation, *, persist):
                                            numbering)]
     for line, decided_line in zip(lines, decided['lines']):
         line['lot_id'] = decided_line.get('lot_id')
+        line['from_bin_id'] = decided_line.get('from_bin')
     warnings = placements.warnings(s, new_placements) + numbering.warnings
     on_hand_after = _on_hand_after(s, decided, new_placements)
     if operation == 'void':

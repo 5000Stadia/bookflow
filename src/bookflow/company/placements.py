@@ -207,7 +207,8 @@ def for_movements(s, rows, sites=None, numbers=None, state=None):
                 bin_id = bins.default_bin_id(s, row['item_id'], site)
             parts = serial_lots.place(state, row, site, info.get('spec'), item_name=info.get('item_name'),
                                       returns_movement_id=info.get('returns') or row.get('returns_movement_id'),
-                                      field=info.get('field') or 'lines', prior=info.get('prior'), bin_id=bin_id)
+                                      field=info.get('field') or 'lines', prior=info.get('prior'), bin_id=bin_id,
+                                      auto=bool(info.get('bin_auto')))
             own = [dict(base, id=new_id(), reverses_placement_id=None, **part) for part in parts]
             if info.get('returns') or row.get('returns_movement_id'):
                 for placement in own:

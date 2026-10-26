@@ -283,8 +283,15 @@ def classify(s, ctx, inp, *, apply_it=False):
                                 cumulative_share=f'{cumulative.quantize(Decimal("0.01"))}',
                                 current_class=names.get(item['cycle_class_id']) if item['cycle_class_id'] else None,
                                 proposed_class=proposed['name'], changes=differs))
+    message = None
+    if not total:
+        # Nothing was issued: there is nothing to rank, so nothing changes (every item would be C otherwise).
+        changes = []
+        rows = [row.model_copy(update={'proposed_class': row.current_class, 'changes': False}) for row in rows]
+        message = (f'No goods were issued between {date_from} and {date_to}, so there is nothing to rank the items '
+                   'by; no class changes. Choose a period with sales or build issues.')
     out = ClassifyOutput(date_from=date_from, date_to=date_to, total_issued_cost=Money(total, currency).to_dict(),
-                         rows=rows, changes=len(changes), applied=apply_it)
+                         rows=rows, changes=len(changes), applied=apply_it and bool(changes), message=message)
     return out, changes, seed
 
 
@@ -313,45 +320,91 @@ def apply_classify(plan, ctx, s) -> Applied:
 # ---------------------------------------------------------------- due
 
 def last_counted(s, site_id, item_ids=None, as_of=None):
-    """``{item_id: date}`` of each item's last recorded count at the site (on or before ``as_of``)."""
+    """``{item_id: date}`` of each item's last recorded count at the site (on or before ``as_of``).
+
+    An item is counted by a count that is site-wide for it (every stocked item, its items, its category or a cycle
+    count) when a line of it was counted. A count of bins counts it only when every bin holding it at the count
+    (as the count read the shelf) has a counted line of it: counting A1 does not count what sits in A2."""
+    import json
+    from bookflow.company import inventory_counts
     k, l = c.inventory_counts, c.inventory_count_lines
-    query = sa.select(l.c.item_id, sa.func.max(k.c.count_date)).join(k, k.c.id == l.c.count_id).where(
-        k.c.site_id == site_id, k.c.status == 'recorded', l.c.counted_microunits.is_not(None)).group_by(l.c.item_id)
+    query = sa.select(k).where(k.c.site_id == site_id, k.c.status == 'recorded').order_by(k.c.count_date)
     if as_of is not None:
         query = query.where(k.c.count_date <= as_of)
-    if item_ids is not None:
-        query = query.where(l.c.item_id.in_(list(item_ids)))
-    return dict(s.company.conn.execute(query).all())
+    wanted = set(item_ids) if item_ids is not None else None
+    out = {}
+    for count in [dict(row) for row in s.company.conn.execute(query).mappings()]:
+        lines = [dict(row) for row in s.company.conn.execute(sa.select(l).where(l.c.count_id == count['id'])).mappings()]
+        counted = {}
+        for line in lines:
+            if line['counted_microunits'] is not None and (wanted is None or line['item_id'] in wanted):
+                counted.setdefault(line['item_id'], set()).add(line['bin_id'])
+        if not counted:
+            continue
+        if json.loads(count['selection'] or '{}').get('kind') == 'bins':
+            held = inventory_counts.expected(s, count, list(counted), lines=lines)
+            for item_id in list(counted):
+                holding = {placements_bin(key) for (each, key), quantity in held.items() if each == item_id and quantity > 0}
+                if not holding <= counted[item_id]:
+                    del counted[item_id]
+        for item_id in counted:
+            out[item_id] = max(out.get(item_id, ''), count['count_date'])
+    return out
 
 
-def due_rows(s, site_id, as_of):
-    """``(due rows, not due count)`` at the site on ``as_of``, most overdue first."""
+def placements_bin(place_key):
+    return place_key.split('|')[0] or None
+
+
+def first_stocked(s, site_id, item_ids):
+    """``{item_id: date}`` each item first had a placement at the site: a never-counted item is due from then."""
+    t = c.inventory_placements
+    ids = list(item_ids)
+    if not ids:
+        return {}
+    return dict(s.company.conn.execute(sa.select(t.c.item_id, sa.func.min(t.c.effective_date)).where(
+        t.c.site_id == site_id, t.c.item_id.in_(ids)).group_by(t.c.item_id)).all())
+
+
+def due_rows(s, site_id, as_of, *, ahead=0):
+    """``(due rows, not due count)`` at the site on ``as_of``, the most overdue for its class first.
+
+    A counted item falls due its class interval after its last count; a never-counted one is due from its first
+    stock date there. Rows rank by days overdue over the class interval, so an A item a week late outranks a C
+    item a week late, and an overdue A item is never starved by a crowd of never-counted slow movers."""
     t, p = c.items, c.inventory_placements
     classes = {row['id']: row for row in _rows(s)}
     items = [dict(row) for row in s.company.conn.execute(sa.select(t.c.id, t.c.full_name, t.c.cycle_class_id).where(
         t.c.cycle_class_id.is_not(None), t.c.active.is_(True), t.c.type.in_(list(inventory.TRACKED_TYPES)),
         t.c.id.in_(sa.select(p.c.item_id).where(p.c.site_id == site_id, p.c.effective_date <= as_of)))).mappings()]
-    last = last_counted(s, site_id, [item['id'] for item in items], as_of)
-    stock = placements.on_hand(s, as_of, item_ids=[item['id'] for item in items], site_id=site_id)
+    ids = [item['id'] for item in items]
+    last = last_counted(s, site_id, ids, as_of)
+    first = first_stocked(s, site_id, ids)
+    stock = placements.on_hand(s, as_of, item_ids=ids, site_id=site_id)
     day = calendar_date.fromisoformat(as_of)
-    rows, not_due = [], 0
+    ranked, not_due = [], 0
     for item in items:
         klass = classes.get(item['cycle_class_id'])
         if klass is None or not klass['active']:
             continue
         counted = last.get(item['id'])
-        due_date = (calendar_date.fromisoformat(counted) + timedelta(days=klass['interval_days'])).isoformat() if counted else None
-        if due_date is not None and due_date > as_of:
+        if counted:
+            due_date = (calendar_date.fromisoformat(counted) + timedelta(days=klass['interval_days'])).isoformat()
+        else:
+            due_date = first.get(item['id']) or as_of
+        overdue = (day - calendar_date.fromisoformat(due_date)).days
+        if overdue < -ahead:
             not_due += 1
             continue
-        overdue = (day - calendar_date.fromisoformat(due_date)).days if due_date else None
-        rows.append(DueRow(item_id=item['id'], item_name=item['full_name'], cycle_class=klass['name'],
-                           interval_days=klass['interval_days'], last_counted=counted, due_date=due_date,
-                           days_overdue=overdue,
-                           on_hand=format_quantity_micro_units(stock.get((item['id'], site_id), 0))))
-    rows.sort(key=lambda r: (r.days_overdue is not None, -(r.days_overdue or 0), r.interval_days,
-                             r.cycle_class.casefold(), r.item_name.casefold(), r.item_id))
-    return rows, not_due
+        if overdue < 0:
+            not_due += 1          # falls due within ``ahead`` days: listed after every due item, soonest first
+        ranked.append((overdue / klass['interval_days'] if overdue >= 0 else -1 + overdue / 10 ** 6, DueRow(
+            item_id=item['id'], item_name=item['full_name'], cycle_class=klass['name'],
+            interval_days=klass['interval_days'], last_counted=counted, due_date=due_date, days_overdue=overdue,
+            on_hand=format_quantity_micro_units(stock.get((item['id'], site_id), 0)))))
+    ranked.sort(key=lambda pair: (-pair[0], pair[1].interval_days, pair[1].cycle_class.casefold(),
+                                  pair[1].item_name.casefold(), pair[1].item_id))
+    return [row for _, row in ranked], not_due
 
 
 def due(s, inp) -> DueOutput:
@@ -362,7 +415,13 @@ def due(s, inp) -> DueOutput:
                      not_due=not_due)
 
 
+ROUND_AHEAD = 6
+
+
 def next_due_items(s, site_id, date, limit):
-    """The first ``limit`` items due at the site on ``date``: a cycle count's selection."""
-    rows, _ = due_rows(s, site_id, date)
+    """A cycle count's selection: the first ``limit`` items due at the site on ``date``, most overdue for its class
+    first; places left over take items falling due within the next six days, soonest first. Without that, a round
+    whose places a cohort of fast movers fills leaves the slower items it crowds out a round late, again and again
+    (R104 increment 5 review: a 30-item rotation keeps every class within its interval plus one round)."""
+    rows, _ = due_rows(s, site_id, date, ahead=ROUND_AHEAD)
     return [dict(id=row.item_id, full_name=row.item_name) for row in rows[:limit or DEFAULT_LIMIT]]

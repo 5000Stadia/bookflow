@@ -362,11 +362,13 @@ def test_due_dates_on_hand_worked_dates(shop):
     run('item update', dict(item='Z', cycle_class='C'), reason='Slow')
     _count(run, 'Warehouse', '2017-03-01', account, items=['X', 'Y'])
     due = run('cycle-count due', dict(site='Warehouse', as_of='2017-03-31'))
+    # Z was never counted, so it has been due since it was first stocked (88 days, a quarter of C's 365); X fell due
+    # today (0 of A's 30).
     assert [(r['item_name'], r['last_counted'], r['due_date'], r['days_overdue']) for r in due['rows']] == [
-        ('Z', None, None, None), ('X', '2017-03-01', '2017-03-31', 0)]
+        ('Z', None, '2017-01-02', 88), ('X', '2017-03-01', '2017-03-31', 0)]
     assert due['not_due'] == 1        # Y falls due on 2017-05-30; W is unclassified
     assert [r['item_name'] for r in run('cycle-count due', dict(site='Warehouse', as_of='2017-03-30'))['rows']] == ['Z']
-    assert run('cycle-count due', dict(site='Warehouse', as_of='2017-05-30'))['rows'][2]['item_name'] == 'Y'
+    assert 'Y' in [r['item_name'] for r in run('cycle-count due', dict(site='Warehouse', as_of='2017-05-30'))['rows']]
     # An item counted today is not due tomorrow; the van, where nothing ever was, has nothing due.
     _count(run, 'Warehouse', '2017-04-03', account, cycle=True, limit=1)
     assert [r['item_name'] for r in run('cycle-count due', dict(site='Warehouse', as_of='2017-04-04'))['rows']] == ['X']
@@ -387,13 +389,12 @@ def test_weekly_cycle_counts_reach_every_item_within_its_interval(shop):
     counted = {name: [] for name in names}
     day = date(2017, 1, 2)
     for week in range(20):
-        if not run('cycle-count due', dict(site='Warehouse', as_of=day.isoformat()))['rows']:
-            with pytest.raises(BookflowError) as nothing:
-                run('inventory-count create', dict(site='Warehouse', date=day.isoformat(), cycle=True), reason='Round')
-            assert 'no item is due' in str(nothing.value.details)
+        try:
+            made = _count(run, 'Warehouse', day.isoformat(), account, cycle=True, limit=3)
+        except BookflowError as nothing:
+            assert 'no item is due' in str(nothing.details)
             day += timedelta(days=7)
             continue
-        made = _count(run, 'Warehouse', day.isoformat(), account, cycle=True, limit=3)
         assert made['selection']['kind'] == 'cycle'
         for line in made['lines']:
             counted[line['item_name']].append(day)
@@ -583,3 +584,139 @@ def test_seeded_paperwork_with_bins_keeps_every_tie(shop, seed):
         _bin_ties(books)
         valuation = run('report inventory-valuation', dict(as_of='2017-12-31'))
         assert valuation['totals']['asset_value']['minor_units'] == _net(books).get(_asset(books), 0), (seed, step, op)
+
+
+
+# ---------------------------------------------------------------- review fixes (R104 increment 5 review)
+
+def _count_bins(run, account, date, bins_, entries):
+    made = run('inventory-count create', dict(site='Warehouse', date=date, bins=bins_), reason='Count')
+    run('inventory-count enter', dict(count=made['number'], entries=entries), reason='Counted')
+    _post_count(run, made, account)
+    return made
+
+
+def test_a_bin_only_correction_after_a_count_of_that_bin_is_refused(shop):
+    """Bill 5 into A1, count A1 = 5, then move the bill line to A2: the count keeps A1 at 5, so the line's units
+    would be in A2 too and the stock doubles. Refused, naming the count and the transfer to record instead."""
+    run, books = shop['run'], shop['books']
+    account = books['client'].account.create(company=books['company'], name='Shrinkage', type='expense')['id']
+    bill = _receive(shop, shop['widget'], 5, bin='A1')
+    made = _count_bins(run, account, '2017-03-02', ['A1'], [dict(item='Widget', quantity='5', bin='A1')])
+    before = _net(books)
+    shown = run('bill show', dict(bill=bill['id']))
+    line = shown['revision']['items'][0]
+    with pytest.raises(BookflowError) as moved:
+        run('bill update', dict(bill=bill['id'], expected_version=shown['version'], items=[dict(
+            line_id=line['line_id'], item=shop['widget'], quantity='5', unit_cost='2.00', bin='A2')]), reason='Wrong bin')
+    assert moved.value.code == 'E_VALIDATION'
+    assert f"count {made['number']} found these in A1; record a transfer from A1 to A2 dated after the count instead" \
+        in str(moved.value.details)
+    assert _net(books) == before and _bins(books) == {('Widget', 'Warehouse', 'A1', None): 5}
+    # A change of quantity or price is not a move, and goes through (the count is derived again).
+    run('bill update', dict(bill=bill['id'], expected_version=shown['version'], items=[dict(
+        line_id=line['line_id'], item=shop['widget'], quantity='6', unit_cost='2.50')]), reason='Invoice said 6')
+    assert _bins(books) == {('Widget', 'Warehouse', 'A1', None): 5}
+    _bin_ties(books)
+    # The serial variant: the count derived again by a move names itself.
+    heater = _part(books, 'Water Heater', cost='100.00', price='300.00', tracking='serial')
+    bill2 = _receive(shop, heater, 1, bin='A1', serial_numbers=['WH-1'])
+    _count_bins(run, account, '2017-03-03', ['A1'], [dict(item='Water Heater', quantity='1', serial_number='WH-1', bin='A1')])
+    shown = run('bill show', dict(bill=bill2['id']))
+    line = shown['revision']['items'][0]
+    with pytest.raises(BookflowError) as serial:
+        run('bill update', dict(bill=bill2['id'], expected_version=shown['version'], items=[dict(
+            line_id=line['line_id'], item=heater, quantity='1', unit_cost='2.00', serial_numbers=['WH-1'], bin='A2')]),
+            reason='Wrong bin')
+    assert serial.value.code == 'E_VALIDATION' and 'Count C-' in serial.value.message
+    _bin_ties(books)
+
+
+def test_stock_at_no_bin_can_be_named_moved_and_sold_once_a_default_bin_exists(shop):
+    run, books = shop['run'], shop['books']
+    _receive(shop, shop['widget'], 5)                                   # at no bin
+    run('item update', dict(item='Widget', site_settings=[dict(site='Warehouse', default_bin='A3')]), reason='Home bin')
+    # to_bin only: the units leave from where they are (no bin), not from the empty default bin.
+    moved = run('inventory-transfer post', dict(date='2017-03-02', from_site='Warehouse', to_site='Warehouse', lines=[
+        dict(item='Widget', quantity='2', to_bin='A3')]), reason='Shelve')
+    assert moved['lines'][0]['from_bin'] is None and not moved['warnings']
+    named = run('inventory-transfer post', dict(date='2017-03-02', from_site='Warehouse', to_site='Warehouse', lines=[
+        dict(item='Widget', quantity='1', from_bin='(No Bin)', to_bin='A2')]), reason='Shelve')
+    assert named['lines'][0]['from_bin'] is None
+    assert _bins(books) == {('Widget', 'Warehouse', None, None): 2, ('Widget', 'Warehouse', 'A3', None): 2,
+                            ('Widget', 'Warehouse', 'A2', None): 1}
+    # A sale naming no bin: the default bin holds 2, so 2 come from A3; then 3 more must come from no bin and A2,
+    # never driving a bin below zero while units sit elsewhere.
+    sale = _sell(shop, 'Widget', 2, date='2017-03-03')
+    assert _bins(books)[('Widget', 'Warehouse', None, None)] == 2 and ('Widget', 'Warehouse', 'A3', None) not in _bins(books)
+    assert not [w for w in sale.get('warnings', []) if 'now shows -' in w]
+    _sell(shop, 'Widget', 3, date='2017-03-04')
+    assert {k: v for k, v in _bins(books).items() if k[1] == 'Warehouse'} == {}
+    # Nothing left at the site: the next one goes below zero at the default bin, with a warning.
+    short = _sell(shop, 'Widget', 1, date='2017-03-05')
+    assert _bins(books) == {('Widget', 'Warehouse', 'A3', None): -1}
+    assert any('Bin A3 at Warehouse now shows -1 Widget' in w for w in short.get('warnings', []))
+    _bin_ties(books)
+
+
+def test_an_item_counted_in_one_of_its_bins_is_not_counted(shop):
+    run, books = shop['run'], shop['books']
+    account = books['client'].account.create(company=books['company'], name='Shrinkage', type='expense')['id']
+    _receive(shop, shop['widget'], 10, date='2017-01-03', bin='A1')
+    _receive(shop, shop['widget'], 5, date='2017-01-03', bin='A2')
+    run('item update', dict(item='Widget', cycle_class='A'), reason='Class')
+    _count_bins(run, account, '2017-03-04', ['A1'], [dict(item='Widget', quantity='10', bin='A1')])
+    row = [r for r in run('cycle-count due', dict(site='Warehouse', as_of='2017-03-10'))['rows'] if r['item_name'] == 'Widget']
+    assert row and row[0]['last_counted'] is None
+    _count_bins(run, account, '2017-03-05', ['A1', 'A2'], [dict(item='Widget', quantity='10', bin='A1'),
+                                                           dict(item='Widget', quantity='5', bin='A2')])
+    assert not [r for r in run('cycle-count due', dict(site='Warehouse', as_of='2017-03-10'))['rows'] if r['item_name'] == 'Widget']
+    empty = run('cycle-count classify', dict(date_from='2016-01-01', date_to='2016-12-31'), dry_run=True)
+    assert empty['changes'] == 0 and 'No goods were issued' in empty['message']
+
+
+def test_a_serial_number_split_over_two_bins_says_so(shop):
+    """Late paperwork within one site: WH-1 received into A1, moved to A3 on the 3rd, and a sale backdated to the
+    2nd takes it from A1, where it was then. The transfer now moves a unit A1 no longer holds: A1 shows -1 and A3
+    shows 1. The ties hold, and the sale says the paperwork places the unit in two bins."""
+    run, books = shop['run'], shop['books']
+    heater = _part(books, 'Water Heater', cost='100.00', price='300.00', tracking='serial')
+    _receive(shop, heater, 1, date='2017-03-01', bin='A1', serial_numbers=['WH-1'])
+    run('inventory-transfer post', dict(date='2017-03-03', from_site='Warehouse', to_site='Warehouse', lines=[
+        dict(item='Water Heater', quantity='1', from_bin='A1', to_bin='A3', serial_numbers=['WH-1'])]), reason='Shelve')
+    sold = _sell(shop, 'Water Heater', 1, date='2017-03-02', serial_numbers=['WH-1'])
+    assert any('in two bins' in w for w in sold.get('warnings', [])), sold.get('warnings')
+    _bin_ties(books)
+
+
+def test_thirty_items_in_weekly_rounds_keep_every_class_within_its_interval_plus_a_round(shop):
+    """Ten items per class, rounds of five a week for 60 weeks: after a warm-up of twelve weeks, no class's worst
+    gap between counts passes its interval plus one round (the due list ranks by lateness over the interval)."""
+    from datetime import date, timedelta
+    run, books = shop['run'], shop['books']
+    account = books['client'].account.create(company=books['company'], name='Shrinkage', type='expense')['id']
+    names = [f'{cls}{n}' for cls in 'ABC' for n in range(10)]
+    _stocked(shop, names, quantity=5, date='2016-12-01')
+    for name in names:
+        run('item update', dict(item=name, cycle_class=name[0]), reason='Class')
+    interval = {'A': 30, 'B': 90, 'C': 365}
+    counted = {name: [] for name in names}
+    day = date(2017, 1, 2)
+    for week in range(60):
+        try:
+            made = _count(run, 'Warehouse', day.isoformat(), account, cycle=True, limit=5)
+        except BookflowError as nothing:
+            assert 'no item is due' in str(nothing.details)
+        else:
+            for line in made['lines']:
+                counted[line['item_name']].append(day)
+        day += timedelta(days=7)
+    warm = date(2017, 1, 2) + timedelta(weeks=12)
+    worst = {}
+    for name, days in counted.items():
+        assert days, name
+        stops = days + [day]
+        for a, b in zip(stops, stops[1:]):
+            if a >= warm:
+                worst[name[0]] = max(worst.get(name[0], 0), (b - a).days)
+    assert all(worst[cls] <= interval[cls] + 7 for cls in worst), worst

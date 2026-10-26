@@ -526,6 +526,8 @@ def _entry_bin(s, count, lines, item, entry, lot_id, serial_id, prefix):
     count names, else the one bin the sheet lists this item and number in, else no bin."""
     from bookflow.company import bins
     if entry.bin is not None:
+        if bins.is_no_bin(entry.bin):
+            return None
         return bins.resolve_bin(s, count['site_id'], entry.bin, field=prefix + 'bin')['id']
     selection = json.loads(count['selection'])
     if selection.get('kind') == 'bins' and len(selection.get('bins') or ()) == 1:
@@ -800,7 +802,15 @@ def build_change(s, ctx, count, derived, *, purpose, account_id, class_id):
     # Serial numbers stay one unit, never twice in stock or taken twice, through every derivation (R104 increment 4).
     from bookflow.company import serial_lots
     numbering = serial_lots.Numbering(s)
-    serial_lots.check(numbering, [row for document in documents for row in document.placements] + loose, field='entries')
+    try:
+        serial_lots.check(numbering, [row for document in documents for row in document.placements] + loose,
+                          field='entries')
+    except BookflowError as error:
+        if purpose != 'rederive' or error.code != 'E_VALIDATION':
+            raise
+        # The refusal belongs to the count being derived again, not to the change that reached it: name it.
+        raise BookflowError('E_VALIDATION', message=f'Count {count["number"]}, derived again: {error.message}',
+                            details={**(error.details or {}), 'count': count['number']}) from None
     first_item = items[restated[0]]
     change = inventory._Change(documents, first_item, states.get(first_item['id']), currency,
                                items=items, states=states, warnings=warnings + zero_warnings + numbering.warnings)
@@ -1145,3 +1155,19 @@ def _placed_against(s, mark, reach):
             for position in sorted(positions):
                 out.append(f'Placed {position} count {number} of {site} on {date}.')
     return out
+
+
+def covering_count(s, item_id, site_id, bin_id, date, position='before'):
+    """The number of a recorded count that counted ``item_id`` at this place (site and bin) at or after a line
+    dated ``date`` at ``position``, or None (R104 increment 5 review). Moving that line's stock to another place
+    after the fact would leave the count's shelf as counted and the units at the new place too."""
+    rank = {'before': 0, 'count': 1, 'after': 2}
+    k, l = c.inventory_counts, c.inventory_count_lines
+    rows = s.company.conn.execute(sa.select(k.c.number, k.c.count_date).join(l, l.c.count_id == k.c.id).where(
+        k.c.status == 'recorded', k.c.site_id == site_id, l.c.item_id == item_id,
+        l.c.counted_microunits.is_not(None), k.c.count_date >= date,
+        (l.c.bin_id.is_(None) if bin_id is None else l.c.bin_id == bin_id)).order_by(k.c.count_date, k.c.number)).all()
+    for number, count_date in rows:
+        if count_date > date or rank.get(position or 'before', 0) < rank['count']:
+            return number
+    return None
