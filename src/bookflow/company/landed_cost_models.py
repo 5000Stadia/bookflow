@@ -6,7 +6,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 from bookflow.company.journal_models import _Date as IsoDate
-from bookflow.company.journal_outputs import JournalOutput, JournalWriteOutput
+from bookflow.company.journal_outputs import JournalMoneyOutput, JournalOutput, JournalWriteOutput
 
 Selector = Annotated[str, Field(min_length=1, max_length=1004), BeforeValidator(lambda v: v.strip() if isinstance(v, str) else v)]
 Basis = Literal['quantity', 'value', 'weight', 'volume', 'amounts']
@@ -88,7 +88,7 @@ class LandedCostSetupInput(_Strict):
     pass
 
 
-Money = dict
+
 
 
 class ChargeOutput(BaseModel):
@@ -99,9 +99,9 @@ class ChargeOutput(BaseModel):
     vendor: str | None
     date: str
     description: str | None
-    amount: dict
-    allocated: dict
-    unallocated: dict
+    amount: JournalMoneyOutput
+    allocated: JournalMoneyOutput
+    unallocated: JournalMoneyOutput
 
 
 class ChargesOutput(BaseModel):
@@ -109,8 +109,8 @@ class ChargesOutput(BaseModel):
     clearing_account_id: str | None
     clearing_account: str | None
     rows: list[ChargeOutput]
-    total_unallocated: dict
-    clearing_balance: dict
+    total_unallocated: JournalMoneyOutput
+    clearing_balance: JournalMoneyOutput
     message: str | None = None
 
 
@@ -126,7 +126,7 @@ class AllocationLineOutput(BaseModel):
     account_name: str | None
     basis: str
     measure: str
-    amount: dict
+    amount: JournalMoneyOutput
     landed_movement_id: str | None
     reversed: bool = False
 
@@ -138,9 +138,9 @@ class TargetShareOutput(BaseModel):
     target_movement_id: str | None
     item_name: str | None
     account_name: str | None
-    amount: dict
-    to_stock: dict = Field(description='The part the stock still on hand (or consumed on or after the allocation date) carries.')
-    issued_before: dict = Field(description=(
+    amount: JournalMoneyOutput
+    to_stock: JournalMoneyOutput = Field(description='The part the stock still on hand (or consumed on or after the allocation date) carries.')
+    issued_before: JournalMoneyOutput = Field(description=(
         'The part owed by stock issued before the allocation date: forward true-ups dated at the allocation, to cost '
         'of goods sold for a sale, to its own account for an adjustment, and on into the assembly for a build.'))
 
@@ -151,7 +151,7 @@ class TrueUpOutput(BaseModel):
     effective_date: str
     corrects_movement_id: str
     landed_movement_id: str
-    delta: dict
+    delta: JournalMoneyOutput
     transaction_id: str = ''
     number: str = ''
 
@@ -165,7 +165,7 @@ class AllocationSummary(BaseModel):
     basis: str
     memo: str | None = None
     reason: str | None = None
-    total: dict
+    total: JournalMoneyOutput
     lines: list[AllocationLineOutput]
     targets: list[TargetShareOutput]
     true_ups: list[TrueUpOutput] = Field(default_factory=list)
@@ -187,7 +187,7 @@ class LandedCostListRow(BaseModel):
     status: str
     date: str
     basis: str
-    total: dict
+    total: JournalMoneyOutput
     targets: int
     memo: str | None
 

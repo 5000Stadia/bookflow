@@ -133,6 +133,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `tax_percent` | string \| null | yes | yes | — | — |
 | `tax_agency_vendor_id` | string \| null | yes | yes | — | — |
 | `assembly_build_point` | string \| null | yes | yes | — | — |
+| `unit_weight` | string \| null | no | yes | null | — |
+| `unit_volume` | string \| null | no | yes | null | — |
 | `asset_number` | string \| null | yes | yes | — | — |
 | `purchase_date` | string \| null | yes | yes | — | — |
 | `original_cost` | object \| null | yes | yes | — | — |
@@ -317,6 +319,8 @@ Example JSON output:
   "type": "service",
   "unit_of_measure_set": null,
   "unit_of_measure_set_id": null,
+  "unit_volume": null,
+  "unit_weight": null,
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
   "updated_via": "cli",
@@ -595,6 +599,8 @@ The same example as complete `bookflow_run` arguments:
 | `tax_percent` | `--tax-percent` | string \| null | no | yes | null | — |
 | `tax_agency_vendor_id` | `--tax-agency-vendor-id` | string \| null | no | yes | null | — |
 | `assembly_build_point` | `--assembly-build-point` | string \| null | no | yes | null | — |
+| `unit_weight` | `--unit-weight` | string \| null | no | yes | null | Weight of one base unit, in whatever weight unit the company uses for freight, for landed cost by weight (R104 increment 6); null for none. |
+| `unit_volume` | `--unit-volume` | string \| null | no | yes | null | Volume of one base unit, in whatever volume unit the company uses for freight, for landed cost by volume; null for none. |
 | `asset_number` | `--asset-number` | string \| null | no | yes | null | — |
 | `purchase_date` | `--purchase-date` | string \| null | no | yes | null | — |
 | `original_cost` | `--original-cost` | any \| null | no | yes | null | — |
@@ -726,6 +732,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `tax_percent` | string \| null | yes | yes | — | — |
 | `tax_agency_vendor_id` | string \| null | yes | yes | — | — |
 | `assembly_build_point` | string \| null | yes | yes | — | — |
+| `unit_weight` | string \| null | no | yes | null | — |
+| `unit_volume` | string \| null | no | yes | null | — |
 | `asset_number` | string \| null | yes | yes | — | — |
 | `purchase_date` | string \| null | yes | yes | — | — |
 | `original_cost` | object \| null | yes | yes | — | — |
@@ -906,6 +914,8 @@ Example JSON output:
   "type": "service",
   "unit_of_measure_set": null,
   "unit_of_measure_set_id": null,
+  "unit_volume": null,
+  "unit_weight": null,
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
   "updated_via": "cli",
@@ -1089,6 +1099,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `tax_percent` | string \| null | yes | yes | — | — |
 | `tax_agency_vendor_id` | string \| null | yes | yes | — | — |
 | `assembly_build_point` | string \| null | yes | yes | — | — |
+| `unit_weight` | string \| null | no | yes | null | — |
+| `unit_volume` | string \| null | no | yes | null | — |
 | `asset_number` | string \| null | yes | yes | — | — |
 | `purchase_date` | string \| null | yes | yes | — | — |
 | `original_cost` | object \| null | yes | yes | — | — |
@@ -1273,6 +1285,8 @@ Example JSON output:
   "type": "service",
   "unit_of_measure_set": null,
   "unit_of_measure_set_id": null,
+  "unit_volume": null,
+  "unit_weight": null,
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
   "updated_via": "cli",
@@ -1447,6 +1461,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].tax_percent` | string \| null | yes | yes | — | — |
 | `items[].tax_agency_vendor_id` | string \| null | yes | yes | — | — |
 | `items[].assembly_build_point` | string \| null | yes | yes | — | — |
+| `items[].unit_weight` | string \| null | no | yes | null | — |
+| `items[].unit_volume` | string \| null | no | yes | null | — |
 | `items[].asset_number` | string \| null | yes | yes | — | — |
 | `items[].purchase_date` | string \| null | yes | yes | — | — |
 | `items[].original_cost` | object \| null | yes | yes | — | — |
@@ -2005,6 +2021,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `tax_percent` | string \| null | yes | yes | — | — |
 | `tax_agency_vendor_id` | string \| null | yes | yes | — | — |
 | `assembly_build_point` | string \| null | yes | yes | — | — |
+| `unit_weight` | string \| null | no | yes | null | — |
+| `unit_volume` | string \| null | no | yes | null | — |
 | `asset_number` | string \| null | yes | yes | — | — |
 | `purchase_date` | string \| null | yes | yes | — | — |
 | `original_cost` | object \| null | yes | yes | — | — |
@@ -2182,6 +2200,8 @@ Example JSON output:
   "type": "service",
   "unit_of_measure_set": null,
   "unit_of_measure_set_id": null,
+  "unit_volume": null,
+  "unit_weight": null,
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
   "updated_via": "cli",
@@ -2418,6 +2438,8 @@ The same example as complete `bookflow_run` arguments:
 | `tax_percent` | `--tax-percent` | string \| null | no | yes | null | — |
 | `tax_agency_vendor_id` | `--tax-agency-vendor-id` | string \| null | no | yes | null | — |
 | `assembly_build_point` | `--assembly-build-point` | string \| null | no | yes | null | — |
+| `unit_weight` | `--unit-weight` | string \| null | no | yes | null | Weight of one base unit, for landed cost by weight (R104 increment 6); null clears it. |
+| `unit_volume` | `--unit-volume` | string \| null | no | yes | null | Volume of one base unit, for landed cost by volume; null clears it. |
 | `asset_number` | `--asset-number` | string \| null | no | yes | null | — |
 | `purchase_date` | `--purchase-date` | string \| null | no | yes | null | — |
 | `original_cost` | `--original-cost` | any \| null | no | yes | null | — |
@@ -2552,6 +2574,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `tax_percent` | string \| null | yes | yes | — | — |
 | `tax_agency_vendor_id` | string \| null | yes | yes | — | — |
 | `assembly_build_point` | string \| null | yes | yes | — | — |
+| `unit_weight` | string \| null | no | yes | null | — |
+| `unit_volume` | string \| null | no | yes | null | — |
 | `asset_number` | string \| null | yes | yes | — | — |
 | `purchase_date` | string \| null | yes | yes | — | — |
 | `original_cost` | object \| null | yes | yes | — | — |
@@ -2738,6 +2762,8 @@ Example JSON output:
   "type": "service",
   "unit_of_measure_set": null,
   "unit_of_measure_set_id": null,
+  "unit_volume": null,
+  "unit_weight": null,
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
   "updated_via": "cli",
