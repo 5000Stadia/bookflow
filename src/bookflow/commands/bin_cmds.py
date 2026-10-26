@@ -10,6 +10,7 @@ from bookflow.company import cycle_counts
 from bookflow.core.registry import Plan, command
 
 _LIST_ERRORS = ['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_NAME_TAKEN', 'E_VERSION_CONFLICT']
+_STATE_ERRORS = ['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT']
 
 
 def _write(name, description, inp, out, planner, applier, *, errors, positional=(), version=None):
@@ -71,12 +72,12 @@ bin_update = _write(
     errors=_LIST_ERRORS, positional=['bin'], version=_BIN_VERSION)
 bin_activate = _write(
     'bin activate', 'Make an inactive bin available again for stock lines and transfers.',
-    m.BinSelectInput, m.BinWriteOutput, plan_bin_activate, bins.apply, errors=_LIST_ERRORS, positional=['bin'],
+    m.BinSelectInput, m.BinWriteOutput, plan_bin_activate, bins.apply, errors=_STATE_ERRORS, positional=['bin'],
     version=_BIN_VERSION)
 bin_deactivate = _write(
     'bin deactivate', 'Make a bin inactive so new stock lines cannot name it. Refused (E_RECORD_IN_USE, naming the '
     'items) while it or a bin inside it holds stock, or while active bins sit inside it.',
-    m.BinSelectInput, m.BinWriteOutput, plan_bin_deactivate, bins.apply, errors=[*_LIST_ERRORS, 'E_RECORD_IN_USE'],
+    m.BinSelectInput, m.BinWriteOutput, plan_bin_deactivate, bins.apply, errors=[*_STATE_ERRORS, 'E_RECORD_IN_USE'],
     positional=['bin'], version=_BIN_VERSION)
 bin_show = _read('bin show', 'Show a bin with what it and the bins inside it hold (item, lot or serial number, '
                  'quantity), as of today or as_of. A bin is named by id, full name (A:3:Top) or label code; name the '
@@ -141,12 +142,12 @@ class_update = _write(
     positional=['cycle_class'], version=_CLASS_VERSION)
 class_activate = _write(
     'cycle-class activate', 'Make an inactive cycle class available again.', m.CycleClassSelectInput,
-    m.CycleClassWriteOutput, plan_class_activate, cycle_counts.apply, errors=_LIST_ERRORS, positional=['cycle_class'],
+    m.CycleClassWriteOutput, plan_class_activate, cycle_counts.apply, errors=_STATE_ERRORS, positional=['cycle_class'],
     version=_CLASS_VERSION)
 class_deactivate = _write(
     'cycle-class deactivate', 'Make a cycle class inactive. Refused (E_RECORD_IN_USE) while items are in it.',
     m.CycleClassSelectInput, m.CycleClassWriteOutput, plan_class_deactivate, cycle_counts.apply,
-    errors=[*_LIST_ERRORS, 'E_RECORD_IN_USE'], positional=['cycle_class'], version=_CLASS_VERSION)
+    errors=[*_STATE_ERRORS, 'E_RECORD_IN_USE'], positional=['cycle_class'], version=_CLASS_VERSION)
 class_show = _read('cycle-class show', 'Show a cycle class: its interval and how many items are in it.',
                    m.CycleClassShowInput, m.CycleClassOutput, plan_class_show,
                    errors=['E_VALIDATION', 'E_RECORD_NOT_FOUND'], positional=['cycle_class'])

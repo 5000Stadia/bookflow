@@ -178,6 +178,7 @@ The same example as complete `bookflow_run` arguments:
 | `description` | `--description` | string \| null | no | yes | null | What or where the site is. |
 | `address` | `--address` | string \| null | no | yes | null | Postal address of the site, as free text. |
 | `is_default` | `--is-default` | boolean | no | no | false | Make this the default site: stock lines naming no site are placed here. |
+| `tracks_bins` | `--tracks-bins` | boolean | no | no | false | Locate stock at this site to bins (add them with `bin create`). |
 
 ### Command and context options
 
@@ -692,6 +693,7 @@ The same example as complete `bookflow_run` arguments:
 | `description` | `--description` | string \| null | no | yes | null | — |
 | `address` | `--address` | string \| null | no | yes | null | — |
 | `is_default` | `--is-default` | literal[true] \| null | no | yes | null | true makes this the default site (the previous default stops being it). |
+| `tracks_bins` | `--tracks-bins` | boolean \| null | no | yes | null | true locates stock here to bins; false is refused while any bin holds stock. |
 
 ### Command and context options
 

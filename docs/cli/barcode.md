@@ -188,9 +188,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `code` | string | yes | no | — | — |
 | `as_of` | string | yes | no | — | — |
 | `found` | boolean | yes | no | — | True when the code names exactly one record (preferring active ones). |
-| `kind` | string \| null | yes | yes | — | `item`, `serial_number`, `lot`, `ambiguous` when it names more than one, or null when nothing carries it. |
+| `kind` | string \| null | yes | yes | — | `item`, `bin`, `serial_number`, `lot`, `ambiguous` when it names more than one, or null when nothing carries it. |
 | `match` | object \| null | yes | yes | — | The one record the code names; null when none or ambiguous. |
-| `match.kind` | string | yes | no | — | What the code names: `item`, else `serial_number` or `lot` (a scanned unit label); bins join with bins. |
+| `match.kind` | string | yes | no | — | What the code names: `item`, else `bin` (a bin label), else `serial_number` or `lot` (a scanned unit label). |
 | `match.id` | string | yes | no | — | — |
 | `match.name` | string | yes | no | — | The record's full name. |
 | `match.type` | string | yes | no | — | The item type. |
@@ -199,10 +199,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `match.on_hand` | array[object] | yes | no | — | Quantity on hand by site as of as_of; sites holding none are left out. |
 | `match.on_hand[].site_id` | string | yes | no | — | — |
 | `match.on_hand[].site` | string | yes | no | — | — |
+| `match.on_hand[].item_id` | string \| null | no | yes | null | On a bin label: the item the bin holds. |
+| `match.on_hand[].item` | string \| null | no | yes | null | On a bin label: that item's name. |
 | `match.on_hand[].quantity` | string | yes | no | — | — |
 | `match.line_fields` | object[string, any] | yes | no | — | Fields to put on a document line for this code, e.g. {"item": "Copper Coupling"}, or {"item": "Water Heater", "serial_numbers": ["WH-1"]} for a serial label. |
 | `matches` | array[object] | yes | no | — | Every record carrying the code, active first: two when a duplicate is kept. |
-| `matches[].kind` | string | yes | no | — | What the code names: `item`, else `serial_number` or `lot` (a scanned unit label); bins join with bins. |
+| `matches[].kind` | string | yes | no | — | What the code names: `item`, else `bin` (a bin label), else `serial_number` or `lot` (a scanned unit label). |
 | `matches[].id` | string | yes | no | — | — |
 | `matches[].name` | string | yes | no | — | The record's full name. |
 | `matches[].type` | string | yes | no | — | The item type. |
@@ -211,6 +213,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `matches[].on_hand` | array[object] | yes | no | — | Quantity on hand by site as of as_of; sites holding none are left out. |
 | `matches[].on_hand[].site_id` | string | yes | no | — | — |
 | `matches[].on_hand[].site` | string | yes | no | — | — |
+| `matches[].on_hand[].item_id` | string \| null | no | yes | null | On a bin label: the item the bin holds. |
+| `matches[].on_hand[].item` | string \| null | no | yes | null | On a bin label: that item's name. |
 | `matches[].on_hand[].quantity` | string | yes | no | — | — |
 | `matches[].line_fields` | object[string, any] | yes | no | — | Fields to put on a document line for this code, e.g. {"item": "Copper Coupling"}, or {"item": "Water Heater", "serial_numbers": ["WH-1"]} for a serial label. |
 | `ambiguous` | boolean | yes | no | — | — |
