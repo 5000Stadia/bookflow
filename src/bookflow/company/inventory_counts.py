@@ -593,6 +593,15 @@ def _place_ids(key):
     return dict(bin_id=bin_id, lot_id=lot_id, serial_number_id=serial_id)
 
 
+def _units(key, difference):
+    """A place's difference as placements: a serial number's one unit at a time (a unit owed at -1 and counted
+    present differs by two), anything else whole."""
+    if _place_ids(key)['serial_number_id'] is None:
+        return [difference]
+    from bookflow.company.serial_lots import UNIT
+    return [UNIT if difference > 0 else -UNIT] * (abs(difference) // UNIT)
+
+
 # A journal entry carries at most 200 lines, so a count posts its differences in entries of at most this
 # many items, two lines each (R104 increment 2: a 500-line count posts in several).
 ITEMS_PER_ENTRY = 99
@@ -646,18 +655,19 @@ def build_change(s, ctx, count, derived, *, purpose, account_id, class_id):
             sequence += 1
             planned[item_id] = values
             explicit[item_id] = [dict(id=new_id(), item_id=item_id, site_id=count['site_id'], **_place_ids(key),
-                                      quantity_microunits=difference, effective_date=date, count_position='count',
+                                      quantity_microunits=part, effective_date=date, count_position='count',
                                       sequence=values['sequence'], source='movement', movement_id=values['id'],
                                       transfer_revision_id=None, source_line_id=None, reverses_placement_id=None)
-                                 for key, difference in sorted(entry.desired.items())]
+                                 for key, difference in sorted(entry.desired.items()) for part in _units(key, difference)]
         elif entry.desired and entry.desired != entry.live:
             # The places cancel: stock was misplaced, not lost. Placements alone move it.
             for key, difference in sorted(entry.desired.items()):
-                loose.append(dict(id=new_id(), item_id=item_id, site_id=count['site_id'], **_place_ids(key),
-                                  quantity_microunits=difference, effective_date=date, count_position='count',
-                                  sequence=sequence, source='count', movement_id=None, transfer_revision_id=None,
-                                  source_line_id=entry.line_ids[key], reverses_placement_id=None))
-                sequence += 1
+                for part in _units(key, difference):
+                    loose.append(dict(id=new_id(), item_id=item_id, site_id=count['site_id'], **_place_ids(key),
+                                      quantity_microunits=part, effective_date=date, count_position='count',
+                                      sequence=sequence, source='count', movement_id=None, transfer_revision_id=None,
+                                      source_line_id=entry.line_ids[key], reverses_placement_id=None))
+                    sequence += 1
 
     def refuse(refusal, item):
         return inventory.refuse_stock(refusal, item, quantity_field='entries', value_field='entries')
