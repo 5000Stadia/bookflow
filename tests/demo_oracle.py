@@ -315,6 +315,7 @@ DEMO_ARCS = {
     '8': 'shipping-kit receipt: three units and their allocated shipping',
     '9': "the bank's fee for the returned check of DEMO-BOUNCE-1",
     '10': 'the van count DEMO-VAN-COUNT: a valve short and a shipping kit over (the half kit was misplaced)',
+    '11': "DEMO-LC-1's forward true-up: the five lengths of pipe sold before the freight was spread",
 }
 
 # Arcs that deliberately post nothing. They are declared because they exist and are seeded, and

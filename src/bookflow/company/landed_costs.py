@@ -642,7 +642,7 @@ def _post_change(s, ctx, inp):
                 ('landed_cost_allocation_lines', 'landed_cost_allocation_line', 'id', lines_rows)]
 
     first_item = next(iter(items.values()), None) or {'id': '', 'full_name': ACCOUNT_NAME}
-    document = inventory._Document(JournalPostInput(date=date, memo=memo, lines=lines), 'post', KIND, movements,
+    document = inventory._Document(JournalPostInput(date=date, memo=memo, lines=lines, number=number), 'post', KIND, movements,
                                    trailing=trailing)
     change = inventory._Change([document], first_item, None, currency, items=items)
     change.allocation = dict(header, lines=line_plan, targets=targets, chosen=chosen, documents=documents)
