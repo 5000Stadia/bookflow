@@ -52,6 +52,7 @@ SCENARIOS = (
     Scenario("reconcile candidates, first page", "hard", "reconcile candidates"),
     Scenario("reconcile mark all", "hard", "reconcile mark", warm=False),
     Scenario("reconcile preview", "hard", "reconcile preview"),
+    Scenario("reconcile finish", "hard", "reconcile finish", repeat=1, warm=False),
     Scenario("membership grant, organisation", "admin", "membership grant", repeat=3, warm=False),
     Scenario("membership revoke, organisation", "admin", "membership revoke", repeat=3, warm=False),
 )
@@ -148,17 +149,25 @@ class _Bench:
                 "operation_key": self.key("open"), "account": i["checking"], "opening_date": start,
                 "entered_balance": "0.00", "references": [],
                 "evidence": {"format": 1, "statement_reference": None, "entered_text": "Bench opening"}})["draft"]
+            # The statement's ending balance is the account's balance, so that once every movement
+            # is marked the difference is zero and `reconcile finish` can certify it.
             return {"operation_key": self.key("rec"), "account": i["checking"], "statement_date": day,
-                    "ending_balance": "0.00", "opening_draft_id": opening["id"]}, False
+                    "ending_balance": self._checking_balance(), "opening_draft_id": opening["id"]}, False
         if name == "reconcile candidates, first page":
             return {"draft": self.state["draft"]["id"], "limit": 200}, False
         if name == "reconcile mark all":
             draft = self.state["draft"]
             return {"draft": draft["id"], "operation_key": self.key("mark"), "expected_version": draft["version"],
-                    "all": True, "all_action": "mark" if rep % 2 == 0 else "unmark"}, False
+                    # Alternate, ending on a mark so that the preview and finish see every movement ticked.
+                    "all": True, "all_action": "mark" if (self._reps(s) - 1 - rep) % 2 == 0 else "unmark"}, False
         if name == "reconcile preview":
             draft = self.state["draft"]
             return {"draft": draft["id"], "expected_version": draft["version"]}, False
+        if name == "reconcile finish":
+            draft, page = self.state["draft"], self.state["preview"]
+            return {"draft": draft["id"], "operation_key": self.key("fin"), "expected_version": draft["version"],
+                    "expected_facts_fingerprint": page["expected_facts_fingerprint"],
+                    "dependency_guard": page["dependency_guard"]}, False
         if name == "membership grant, organisation":
             return {"user": self.m["member"], "organization": self.m["group_organization"], "role": "standard"}, True
         if name == "membership revoke, organisation":
@@ -169,6 +178,12 @@ class _Bench:
         return {"customer": self.ids["busy_customer"], "date": day, "amount": "37.25", "number": self.key("chk"),
                 "payment_method": self.ids["payment_method"], "deposit_to": self.ids["undeposited"],
                 "operation_key": self.key("pay"), "applications": {"mode": "inline", "items": []}}
+
+    def _checking_balance(self) -> str:
+        """Checking's balance now: every bench movement on it is dated on or before the statement date."""
+        account = next(a for a in self.run("account list", {})["items"] if a["id"] == self.ids["checking"])
+        balance = account["balance"]
+        return str(balance["amount"] if isinstance(balance, dict) else balance)
 
     def _deposit(self, sources: list, day: str) -> dict:
         return {"operation_key": self.key("dep"), "document": {
@@ -197,6 +212,7 @@ class _Bench:
             self.state["draft"] = out.get("draft") or self.state["draft"]
         elif s.name == "reconcile preview":
             self.state["preview_totals"] = out.get("totals")
+            self.state["preview"] = out
 
     def _reps(self, s: Scenario) -> int:
         return s.repeat if s.repeat is not None else self.repeat
