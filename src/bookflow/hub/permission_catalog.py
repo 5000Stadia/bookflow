@@ -274,7 +274,9 @@ def _declared_fields(annotation):
 
 
 def _field_types(annotation):
-    if annotation.__module__ == __name__:
+    # The permission modules' value types are fixed declarations too (R180: a membership
+    # grant over 200 companies checked tens of thousands of them, re-reading their hints).
+    if annotation.__module__ == __name__ or annotation.__module__.startswith('bookflow.hub.permission_'):
         return _declared_fields(annotation)
     return tuple(get_type_hints(annotation).items())
 
