@@ -41,13 +41,13 @@ def test_the_same_numbers_through_python_cli_http_and_mcp(root, tmp_path):
                 on = {'item': 'Water Heater', 'serial_numbers': ['WH-2002'], 'site': 'Warehouse', 'date': DEMO_AS_OF}
                 first = await call(surface, 'inventory assign', on, idempotency_key='label-a')
                 again = await call(surface, 'inventory assign', on, idempotency_key='label-a')
-                lot = await call(surface, 'lot show', {'number': 'S-2611'})
+                lot = await call(surface, 'lot show', {'number': 'S-2611', 'as_of': DEMO_AS_OF})
                 lot_updated = await call(surface, 'lot update', {'number': 'S-2611', 'expected_version': lot['version'],
                                                                 'memo': 'Recall check: fine'})
-                serial = await call(surface, 'serial-number show', {'number': 'WH-2002'})
+                serial = await call(surface, 'serial-number show', {'number': 'WH-2002', 'as_of': DEMO_AS_OF})
                 serial_updated = await call(surface, 'serial-number update', {'number': 'WH-2002', 'memo': 'Warranty to 2036'})
                 lots = await call(surface, 'lot list', {'expiring_by': '2027-06-30'})
-                serials = await call(surface, 'serial-number list', {'in_stock': True})
+                serials = await call(surface, 'serial-number list', {'in_stock': True, 'as_of': DEMO_AS_OF})
                 stock = await call(surface, 'report serial-lot-stock', {'as_of': DEMO_AS_OF})
                 history = await call(surface, 'report serial-lot-history', {'number': 'WH-1001'})
                 trace = await call(surface, 'report lot-trace', {'number': 'S-2611'})
