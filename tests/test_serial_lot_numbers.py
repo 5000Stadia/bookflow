@@ -535,3 +535,25 @@ def test_a_transfer_of_an_expired_lot_warns(shop):
     moved = run('inventory-transfer post', dict(date='2017-10-02', from_site='Warehouse', to_site='Van 1', lines=[
         dict(item='Sealant', quantity='1', lot='L-100')]), reason='Load')
     assert any('expired on 2017-09-30' in w for w in moved['warnings']), moved['warnings']
+
+
+def test_the_database_refuses_a_loose_reversal_that_is_not_its_own_counts(shop):
+    """With the application bypassed, a count-source row reversing a sale's placement would put a sold WH-1 back
+    beside the one received again -- two in stock and the quantity tie broken. The database refuses it: a
+    reversal with no movement or transfer revision retires only a loose placement of its own count."""
+    _receive(shop, serials=('WH-1',))
+    _sell(shop, '2017-03-02', ['WH-1'])
+    _receive(shop, date='2017-03-03', serials=('WH-1',))
+    with sqlite3.connect(_db(shop['books'])) as conn:
+        conn.row_factory = sqlite3.Row
+        sale = dict(conn.execute(
+            "SELECT p.* FROM inventory_placements p JOIN inventory_movements m ON m.id = p.movement_id "
+            "WHERE p.serial_number_id IS NOT NULL AND p.quantity_microunits < 0 AND m.kind = 'issue'").fetchone())
+        row = dict(sale, id='01ZZZZZZZZZZZZZZZZZZZZZZZA', source='count', movement_id=None, source_line_id='X',
+                   sequence=990001, quantity_microunits=-sale['quantity_microunits'], reverses_placement_id=sale['id'])
+        with pytest.raises(sqlite3.IntegrityError, match='its own count|in stock twice'):
+            conn.execute(f"INSERT INTO inventory_placements ({', '.join(row)}) VALUES ({', '.join('?' * len(row))})",
+                         list(row.values()))
+        conn.rollback()
+    assert _numbers(shop['books'])[('Water Heater', 'Warehouse', 'WH-1')] == 1
+    _number_ties(shop['books'])

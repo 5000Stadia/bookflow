@@ -17,7 +17,8 @@ The guards, all in the database so they hold when the application is bypassed:
 - a serial number's running quantity, in replay order (date, count position, sequence), stays within
   -1 to 1: -1 is a unit sold before its receipt is recorded, and 2 is a second unit of one number in
   stock, which the database refuses (as it refuses -2). Only standing placements count: a placement a
-  reversal retires and the reversal itself are left out together. A movement and a transfer revision are checked when their row is
+  reversal retires and the reversal itself are left out together. A reversal with no movement or transfer
+  revision retires only a loose placement of its own count, and is range-checked as it is written. A movement and a transfer revision are checked when their row is
   written (their placements are all in place by then); an assignment's and a count's placements, one
   per number, as each is written;
 - an assignment's placements net to zero per item and place, and nothing is added to one once written.
@@ -119,20 +120,27 @@ GUARDS = (
     "CREATE TRIGGER inventory_transfer_revisions_serial_range BEFORE INSERT ON inventory_transfer_revisions "
     f"WHEN {_owner_range('transfer_revision_id')} "
     f"BEGIN SELECT RAISE(ABORT, {_MESSAGE}); END",
-    # A standing assignment or count placement is checked as it is written (one per number each); a reversal
-    # retires a placement exactly and is checked with the change it belongs to.
+    # An assignment or count placement is checked as it is written (one per number each), and so is a loose
+    # reversal -- one with no movement or transfer revision to check it with: the standing placements, less the
+    # one it retires, plus itself unless it is that reversal, stay within -1 to 1 at every step.
     "CREATE TRIGGER inventory_placements_serial_range BEFORE INSERT ON inventory_placements "
-    "WHEN NEW.serial_number_id IS NOT NULL AND NEW.source IN ('assignment', 'count') "
-    "AND NEW.reverses_placement_id IS NULL AND EXISTS ("
+    "WHEN NEW.serial_number_id IS NOT NULL AND NEW.source IN ('assignment', 'count') AND EXISTS ("
     f"SELECT 1 FROM (SELECT NEW.effective_date AS d, {_RANK.format(p='NEW')} AS k, NEW.sequence AS q "
     f"UNION SELECT effective_date, {_RANK.format(p='inventory_placements')}, sequence FROM inventory_placements "
     "WHERE serial_number_id = NEW.serial_number_id) g WHERE "
     "coalesce((SELECT sum(r.quantity_microunits) FROM inventory_placements r "
-    f"WHERE r.serial_number_id = NEW.serial_number_id AND {_standing('r')} "
+    f"WHERE r.serial_number_id = NEW.serial_number_id AND {_standing('r')} AND r.id IS NOT NEW.reverses_placement_id "
     f"AND (r.effective_date, {_RANK.format(p='r')}, r.sequence) <= (g.d, g.k, g.q)), 0) "
-    f"+ (CASE WHEN (NEW.effective_date, {_RANK.format(p='NEW')}, NEW.sequence) <= (g.d, g.k, g.q) "
-    f"THEN NEW.quantity_microunits ELSE 0 END) NOT BETWEEN -{UNIT} AND {UNIT}) "
+    f"+ (CASE WHEN NEW.reverses_placement_id IS NULL AND (NEW.effective_date, {_RANK.format(p='NEW')}, NEW.sequence) "
+    f"<= (g.d, g.k, g.q) THEN NEW.quantity_microunits ELSE 0 END) NOT BETWEEN -{UNIT} AND {UNIT}) "
     f"BEGIN SELECT RAISE(ABORT, {_MESSAGE}); END",
+    # A loose reversal (no movement, no transfer revision) retires only a loose placement of its own count.
+    "CREATE TRIGGER inventory_placements_loose_reversal BEFORE INSERT ON inventory_placements "
+    "WHEN NEW.reverses_placement_id IS NOT NULL AND NEW.movement_id IS NULL AND NEW.transfer_revision_id IS NULL "
+    "AND NOT EXISTS (SELECT 1 FROM inventory_placements o JOIN inventory_count_lines lo ON lo.id = o.source_line_id "
+    "JOIN inventory_count_lines ln ON ln.id = NEW.source_line_id WHERE o.id = NEW.reverses_placement_id "
+    "AND o.source = 'count' AND NEW.source = 'count' AND lo.count_id = ln.count_id) "
+    "BEGIN SELECT RAISE(ABORT, 'a loose reversal retires only a placement of its own count'); END",
     # An assignment's placements net to zero per item and place, on its own date; nothing joins it later.
     "CREATE TRIGGER inventory_assignments_balanced BEFORE INSERT ON inventory_assignments "
     "WHEN NOT EXISTS (SELECT 1 FROM inventory_placements p WHERE p.source = 'assignment' AND p.source_line_id = NEW.id) "

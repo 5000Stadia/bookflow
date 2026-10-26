@@ -896,7 +896,9 @@ def _write_postings(s, ctx, change, command_name):
     if change is None:
         return []
     loose = getattr(change, 'loose_placements', [])
-    retiring = [row for row in loose if row.get('reverses_placement_id')]
+    # Retiring a found unit before the missing one it was paired with keeps every step within one unit.
+    retiring = sorted((row for row in loose if row.get('reverses_placement_id')),
+                      key=lambda row: int(row['quantity_microunits']))
     placing = [row for row in loose if not row.get('reverses_placement_id')]
     touched, rows = [], []
     if loose:
