@@ -299,7 +299,7 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
     # the revision being replaced put the same item, else the default site.
     # Keyed by the entered line's stable identity, so two lines of one item at two sites keep their
     # own; a line with no identity (a build's) falls back to where the same item was.
-    prior_sites, prior_item_sites, prior_numbers = {}, {}, {}
+    prior_sites, prior_item_sites, prior_numbers, prior_bins = {}, {}, {}, {}
     if reversing:
         from bookflow.company import serial_lots
         carried = serial_lots.line_numbers(s, [row['id'] for row in reversing if row['kind'] in INPUT_KINDS])
@@ -312,6 +312,7 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
                 identity = identities.get(row['document_line_id'])
                 if identity:
                     prior_sites.setdefault(identity, places[0]['site_id'])
+                    prior_bins.setdefault(identity, (places[0]['site_id'], places[0]['bin_id']))
                     if row['id'] in carried:
                         prior_numbers.setdefault(identity, carried[row['id']])
                 prior_item_sites.setdefault(row['item_id'], places[0]['site_id'])
@@ -394,9 +395,23 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
                 or (prior_item_sites.get(entry.item_id) if entry.line_identity is None else None))
         if site is not None:
             change.sites[identity] = site
+        # The line's bin (R104 increment 5): the one it names, else where its stock stood (a correction) or its
+        # sale's (a return) when at this same site, else the item's default bin there, else none.
+        from bookflow.company import bins
+        placed_at = site or placements.default_site_id(s)
+        fallback = bins.UNSET
+        prior_place = prior_bins.get(entry.line_identity) if entry.line_identity else None
+        if prior_place is not None and prior_place[0] == placed_at:
+            fallback = prior_place[1]
+        elif entry.returns_movement_id:
+            issued = placements.place_of_movement(s, entry.returns_movement_id)
+            if issued is not None and issued[0] == placed_at:
+                fallback = issued[1]
+        bin_id = bins.line_bin(s, entry.item_id, placed_at, entry.numbers.bin if entry.numbers is not None else None,
+                               field=f'{field}.bin', fallback=fallback)
         change.numbers[identity] = dict(
             spec=entry.numbers, item_name=entry.item_name, returns=entry.returns_movement_id, field=field,
-            prior=prior_numbers.get(entry.line_identity) if entry.line_identity else None)
+            prior=prior_numbers.get(entry.line_identity) if entry.line_identity else None, bin_id=bin_id)
         history.append(values)
         change.movements.append(Movement(values, key=entry.key))
         change.costs[entry.key] = values['value_minor_units']

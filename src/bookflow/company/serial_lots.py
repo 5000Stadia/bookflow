@@ -43,6 +43,7 @@ class Numbers:
     lot: str | None = None
     lot_expiry: str | None = None
     serial_numbers: tuple | None = None
+    bin: str | None = None          # the bin the line names (R104 increment 5); resolved at the line's site
 
     @property
     def stated(self):
@@ -52,12 +53,14 @@ class Numbers:
 def from_line(line):
     """The ``Numbers`` an input line (a model or a dict) states, or None when it states none."""
     get = (line.get if isinstance(line, dict) else lambda name, default=None: getattr(line, name, default))
-    lot, expiry, serials = get('lot'), get('lot_expiry'), get('serial_numbers')
-    if lot is None and expiry is None and serials is None:
+    lot, expiry, serials, bin_ = get('lot'), get('lot_expiry'), get('serial_numbers'), get('bin')
+    if lot is None and expiry is None and serials is None and bin_ is None:
         return None
     lot = str(lot).strip() if lot is not None else None
+    bin_ = str(bin_).strip() if bin_ is not None else None
     return Numbers(lot=lot or None, lot_expiry=expiry,
-                   serial_numbers=None if serials is None else tuple(str(n).strip() for n in serials if str(n).strip()))
+                   serial_numbers=None if serials is None else tuple(str(n).strip() for n in serials if str(n).strip()),
+                   bin=bin_ or None)
 
 
 def number_key(text):
@@ -112,6 +115,13 @@ def live(rows):
 def site_name(s, site_id):
     from bookflow.company import placements
     return placements.site_names(s).get(site_id, site_id)
+
+
+def place_name(s, place):
+    """A ``(site, bin)`` place in words: "Warehouse" or "Warehouse bin A:3"."""
+    from bookflow.company import bins
+    site, bin_id = place
+    return site_name(s, site) + (f' bin {bins.bin_names(s, [bin_id]).get(bin_id, bin_id)}' if bin_id else '')
 
 
 def describe(s, row):
@@ -226,8 +236,9 @@ def _issue_numbers(s, issue_id, made=()):
     return ({k: v for k, v in took_serial.items() if v > 0}, {k: v for k, v in took_lot.items() if v > 0}, unassigned)
 
 
-def place(state, row, site_id, spec=None, *, item_name=None, returns_movement_id=None, field='lines', prior=None):
-    """The placements, without provenance, one movement's quantity splits into at ``site_id``.
+def place(state, row, site_id, spec=None, *, item_name=None, returns_movement_id=None, field='lines', prior=None,
+          bin_id=None):
+    """The placements, without provenance, one movement's quantity splits into at ``site_id`` (and ``bin_id``).
 
     ``spec`` is what the line states; ``prior`` what the line it restates carried (kept when it states
     nothing). Each part: site, bin, lot, serial number and signed quantity, with any new number row embedded.
@@ -236,7 +247,7 @@ def place(state, row, site_id, spec=None, *, item_name=None, returns_movement_id
     item_id, quantity = row['item_id'], int(row['quantity_microunits'])
     name = item_name or _item_name(s, item_id)
     kind = state.tracking(item_id)
-    base = dict(site_id=site_id, bin_id=None, lot_id=None, serial_number_id=None)
+    base = dict(site_id=site_id, bin_id=bin_id, lot_id=None, serial_number_id=None)
     if spec is None or not spec.stated:
         spec = prior if prior is not None and kind != 'none' else spec
     if kind == 'none':
@@ -275,23 +286,29 @@ def place(state, row, site_id, spec=None, *, item_name=None, returns_movement_id
                 raise _invalid(field + '.serial_numbers', f'{number} was not taken by the sale this return gives back',
                                message=(f'A return gives back only serial numbers its sale took; {number} of {name} '
                                         'was not among them.'))
-            at = site_id
+            at, at_bin = site_id, bin_id
             if incoming:
                 owed = state.serial_place(serial_id, position, -1) if new is None else None
-                if owed is not None and owed[0] != site_id:
-                    at = owed[0]
-                    state.warn(f'{number} of {name} was sold before its receipt; it comes back to 0 at '
-                               f'{site_name(s, at)}, where it was sold.')
+                if owed is not None and owed != (site_id, bin_id):
+                    at, at_bin = owed
+                    if owed[0] != site_id:
+                        state.warn(f'{number} of {name} was sold before its receipt; it comes back to 0 at '
+                                   f'{site_name(s, at)}, where it was sold.')
             else:
                 held = state.serial_place(serial_id, position, 1) if new is None else None
-                if held is not None and held[0] != site_id:
-                    at = held[0]
-                    state.warn(f'{number} of {name} left from {site_name(s, at)}, where the books hold it, '
-                               f'not {site_name(s, site_id)}.')
+                if held is not None and held != (site_id, bin_id):
+                    at, at_bin = held
+                    if held[0] != site_id:
+                        state.warn(f'{number} of {name} left from {site_name(s, at)}, where the books hold it, '
+                                   f'not {site_name(s, site_id)}.')
+                    else:
+                        state.warn(f'{number} of {name} left from {place_name(s, held)}, where the books hold it, '
+                                   f'not {place_name(s, (site_id, bin_id))}.')
                 elif held is None and (new is not None or not state.serial_rows(serial_id)):
                     state.warn(f'{number} of {name} is not on file; it shows -1 until a receipt or an '
                                '`inventory assign` brings it in.')
-            part = dict(base, site_id=at, serial_number_id=serial_id, quantity_microunits=UNIT if incoming else -UNIT)
+            part = dict(base, site_id=at, bin_id=at_bin, serial_number_id=serial_id,
+                        quantity_microunits=UNIT if incoming else -UNIT)
             if new is not None:
                 part['_serial_row'] = new
             parts.append(part)
@@ -474,42 +491,58 @@ def revision_numbers(s, revision_id):
 
 def numbers_changed(s, revision, lines):
     """Whether resolved ``lines`` (dicts with ``line_id`` and ``numbers``) restate numbers a stored revision's
-    same lines do not carry: a change of serial numbers or lot alone is a change."""
+    same lines do not carry: a change of serial numbers or lot alone is a change, and so is a change of bin
+    (R104 increment 5)."""
     if revision is None:
         return False
-    saved = None
+    saved = places = None
     for line in lines:
         numbers = line.get('numbers')
-        if numbers is None or not numbers.stated or not line.get('line_id'):
+        if numbers is None or not line.get('line_id'):
             continue
-        saved = revision_numbers(s, revision['id']) if saved is None else saved
-        if semantic(numbers) != saved.get(line['line_id']):
-            return True
+        if numbers.stated:
+            saved = revision_numbers(s, revision['id']) if saved is None else saved
+            if semantic(numbers) != saved.get(line['line_id']):
+                return True
+        if numbers.bin:
+            from bookflow.company import bins, placements
+            places = placements.revision_line_places(s, revision['id']) if places is None else places
+            stored = bins.bin_row(s, (places.get(line['line_id']) or (None, None))[1] or '')
+            if stored is None or not bins.names_bin(stored, numbers.bin):
+                return True
     return False
 
 
 def fingerprint_part(lines):
-    """The fingerprint's numbers entry, only when some line states numbers (so nothing else moves)."""
+    """The fingerprint's numbers entry, only when some line states numbers or a bin (so nothing else moves)."""
     found = [semantic(line.get('numbers')) for line in lines]
-    return {'numbers': found} if any(found) else {}
+    out = {'numbers': found} if any(found) else {}
+    named = [number_key(line['numbers'].bin) if line.get('numbers') is not None and line['numbers'].bin else None
+             for line in lines]
+    if any(named):
+        out['bins'] = named
+    return out
 
 
-def transfer_parts(state, item, quantity, numbers, from_site, to_site, date, position, sequence, field):
-    """``(lot_id, [(site_id, lot_id, serial_id, signed quantity, new number row)])`` one transfer line moves:
-    each number out of the from place and into the to place, the rest unassigned."""
+def transfer_parts(state, item, quantity, numbers, from_site, to_site, date, position, sequence, field,
+                   from_bin=None, to_bin=None):
+    """``(lot_id, [(site_id, bin_id, lot_id, serial_id, signed quantity, new number row)])`` one transfer line
+    moves: each number out of the from place and into the to place, the rest unassigned. A serial number leaves
+    the bin of the from site the books hold it in."""
     s, name = state.s, item['full_name']
     kind = state.tracking(item['id'])
+    out_, in_ = (from_site, from_bin), (to_site, to_bin)
     if kind == 'none':
         if numbers is not None and (numbers.lot or numbers.serial_numbers):
             raise _invalid(field, f'{name} is not tracked by lot or serial number')
-        return None, [(from_site, None, None, -quantity, None), (to_site, None, None, quantity, None)]
+        return None, [(*out_, None, None, -quantity, None), (*in_, None, None, quantity, None)]
     key = (date, _RANK.get(position, 0), sequence)
     if kind == 'serial':
         if quantity % UNIT:
             raise _invalid(field + '.quantity', f'{name} is tracked by serial number, so it moves in whole units')
         if numbers is not None and numbers.lot:
             raise _invalid(field + '.lot', f'{name} is tracked by serial number, not by lot')
-        serials = list(numbers.serial_numbers or ()) if numbers is not None else []
+        serials = list(numbers.serial_numbers or ()) if numbers is not None and numbers.serial_numbers else []
         if len({number_key(n) for n in serials}) != len(serials):
             raise _invalid(field + '.serial_numbers', 'name each serial number once')
         if len(serials) * UNIT > quantity:
@@ -523,10 +556,13 @@ def transfer_parts(state, item, quantity, numbers, from_site, to_site, date, pos
                 raise _invalid(field + '.serial_numbers', f'{number} is not at {site_name(s, from_site)} on {date}',
                                message=f'{number} of {name} is not at {site_name(s, from_site)} on {date}{where}.',
                                serial_number=number)
-            parts += [(from_site, None, serial_id, -UNIT, None), (to_site, None, serial_id, UNIT, None)]
+            if held[1] != from_bin:
+                state.warn(f'{number} of {name} left from {place_name(s, held)}, where the books hold it, '
+                           f'not {place_name(s, out_)}.')
+            parts += [(*held, None, serial_id, -UNIT, None), (*in_, None, serial_id, UNIT, None)]
         rest = quantity - UNIT * len(serials)
         if rest:
-            parts += [(from_site, None, None, -rest, None), (to_site, None, None, rest, None)]
+            parts += [(*out_, None, None, -rest, None), (*in_, None, None, rest, None)]
         return None, parts
     if numbers is not None and numbers.serial_numbers:
         raise _invalid(field + '.serial_numbers', f'{name} is tracked by lot, not by serial number')
@@ -535,12 +571,12 @@ def transfer_parts(state, item, quantity, numbers, from_site, to_site, date, pos
         if suggested is not None:
             state.warn(f'{name} moved unassigned; the earliest-expiring lot at {site_name(s, from_site)} is '
                        f'{suggested["number"]}; name it as lot to move it.')
-        return None, [(from_site, None, None, -quantity, None), (to_site, None, None, quantity, None)]
+        return None, [(*out_, None, None, -quantity, None), (*in_, None, None, quantity, None)]
     lot_id, new = state.number('lot', item['id'], numbers.lot, expiry=numbers.lot_expiry, field=field)
     record = new or number_names(s, lot_ids=[lot_id])[lot_id]
     if record.get('expiry_date') and record['expiry_date'] < date:
         state.warn(f'Lot {numbers.lot} of {name} expired on {record["expiry_date"]}.')
-    return lot_id, [(from_site, lot_id, None, -quantity, new), (to_site, lot_id, None, quantity, None)]
+    return lot_id, [(*out_, lot_id, None, -quantity, new), (*in_, lot_id, None, quantity, None)]
 
 
 def line_serials(rows):

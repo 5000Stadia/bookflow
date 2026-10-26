@@ -4,6 +4,10 @@ The page lists each site with what it holds (Quantity on Hand by Site), the site
 a site, a Transfer Inventory form (from site, to site, item and quantity lines), and the latest transfers
 with Void. Every write goes through its command (`inventory-site create`, `inventory-transfer post`,
 `inventory-transfer void`) with a reason for the audit trail; a transfer posts nothing.
+
+Bins (R104 increment 5): a site that tracks bins lists its bins with what each holds (`bin list`, Items by
+Bin), takes new ones (`bin create`), and the transfer form gains From bin and To bin per line, so stock moves
+between two bins of one site the same way it moves between sites.
 """
 from __future__ import annotations
 
@@ -32,6 +36,8 @@ def mount(app, *, render, run, credential, page_error, role_allows):
                            if row.get('type') in ('inventory_part', 'inventory_assembly') and row.get('active', True))
         except BookflowError:
             items = []
+        binned = [site for site in sites if site['active'] and site['tracks_bins']]
+        bins = run(request, 'bin list', {}, company_id)['bins'] if binned else []
         active = [site['name'] for site in sites if site['active']]
         default_from = next((site['name'] for site in sites if site['is_default']), active[0] if active else '')
         default_to = next((name for name in active if name != default_from), default_from)
@@ -39,6 +45,7 @@ def mount(app, *, render, run, credential, page_error, role_allows):
                       default_from=default_from, default_to=default_to,
                       company_id=company['company_id'], sites=sites, stock=stock['rows'], as_of=as_of, chosen=chosen,
                       transfers=transfers, items=items, values=values or {}, result=result, error=error, lines=LINES,
+                      bins=bins, binned=binned,
                       can_write=role_allows('inventory-transfer post', company, credential(request)), today=today_iso())
 
     @app.get('/c/{company_id}/inventory/sites')
@@ -53,7 +60,7 @@ def mount(app, *, render, run, credential, page_error, role_allows):
         headers = {'X-Bookflow-Reason': form['ctx:reason'].strip()} if (form.get('ctx:reason') or '').strip() else None
         try:
             if action == 'site':
-                raw = {'name': (form.get('site_name') or '').strip()}
+                raw = {'name': (form.get('site_name') or '').strip(), 'tracks_bins': form.get('site_bins') == 'on'}
                 if (form.get('site_description') or '').strip():
                     raw['description'] = form['site_description'].strip()
                 out = run(request, 'inventory-site create', raw, company_id, headers=headers)
@@ -63,7 +70,11 @@ def mount(app, *, render, run, credential, page_error, role_allows):
                 for n in range(LINES):
                     item, quantity = (form.get(f'item_{n}') or '').strip(), (form.get(f'quantity_{n}') or '').strip()
                     if item or quantity:
-                        lines.append({'item': item, 'quantity': quantity})
+                        line = {'item': item, 'quantity': quantity}
+                        for key in ('from_bin', 'to_bin'):
+                            if (form.get(f'{key}_{n}') or '').strip():
+                                line[key] = form[f'{key}_{n}'].strip()
+                        lines.append(line)
                 if not lines:
                     raise BookflowError('E_VALIDATION', message='Enter at least one item and quantity to move.',
                                         details={'fields': [{'field': 'lines', 'problem': 'enter at least one line'}]})
@@ -77,6 +88,18 @@ def mount(app, *, render, run, credential, page_error, role_allows):
                 result = f"Transfer {out['number']} moved the stock; nothing was posted. Now: {after}."
                 if out['warnings']:
                     result += ' ' + ' '.join(out['warnings'])
+            elif action == 'bin':
+                raw = {'site': (form.get('bin_site') or '').strip(), 'name': (form.get('bin_name') or '').strip()}
+                for key, field in (('parent', 'bin_parent'), ('barcode', 'bin_barcode')):
+                    if (form.get(field) or '').strip():
+                        raw[key] = form[field].strip()
+                out = run(request, 'bin create', raw, company_id, headers=headers)
+                result = f"Added bin {out['full_name']} at {out['site_name']}."
+            elif action.startswith('bins:'):
+                _, name, version, state = action.split(':', 3)
+                out = run(request, 'inventory-site update', {'site': name, 'expected_version': int(version),
+                                                             'tracks_bins': state == 'on'}, company_id, headers=headers)
+                result = f"{out['name']} " + ('now tracks bins.' if out['tracks_bins'] else 'no longer tracks bins.')
             elif action.startswith('void:'):
                 _, number, version = action.split(':', 2)
                 out = run(request, 'inventory-transfer void', {'transfer': number, 'expected_version': int(version)},

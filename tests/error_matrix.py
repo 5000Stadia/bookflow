@@ -2334,14 +2334,14 @@ MATRIX['barcode generate'] = {'E_RECORD_NOT_FOUND': 'a named item is unknown', '
                               'E_DIRECTIVE_NOT_FOUND': 'unknown --directive', 'E_DIRECTIVE_INACTIVE': 'deactivated --directive'}
 # Physical counts (R104 increment 2).
 MATRIX['inventory-count create'] = {
-    'E_VALIDATION': 'an unknown site (the sites are listed), a non-stock item, bins or cycle (later increments), or nothing to count',
+    'E_VALIDATION': 'an unknown site (the sites are listed), a non-stock item, an unknown bin or a site that does not track bins, a cycle count with nothing due, or nothing to count',
     'E_RECORD_NOT_FOUND': 'item or category absent from selected company',
     'E_INACTIVE_REFERENCE': 'an inactive site',
     'E_PERIOD_CLOSED': 'a count date on or before the closing date',
     'E_DUPLICATE_NUMBER': 'the count number is already used',
     **_SITE_COMMON}
 MATRIX['inventory-count enter'] = {
-    'E_VALIDATION': 'a count that is not open, a non-stock item, an unknown or ambiguous code, a negative quantity, a bin, a lot or serial number of a kind the item does not track, a serial number the books hold at another site, or a serial number counted other than 0 or 1',
+    'E_VALIDATION': 'a count that is not open, a non-stock item, an unknown or ambiguous code, a negative quantity, an unknown bin, a lot or serial number of a kind the item does not track, a serial number the books hold at another site, or a serial number counted other than 0 or 1',
     'E_RECORD_NOT_FOUND': 'count or item absent from selected company',
     **_SITE_COMMON}
 MATRIX['inventory-count post'] = {
@@ -2437,3 +2437,42 @@ for _noun in ('lot', 'serial-number'):
 for _report in ('serial-lot-stock', 'serial-lot-history', 'lot-trace'):
     MATRIX[f'report {_report}'] = {'E_RECORD_NOT_FOUND': 'number, item or site absent from selected company',
                                    'E_VALIDATION': 'a number that is both a serial number and a lot without kind, or an unknown site'}
+# Bins and cycle counts (R104 increment 5).
+MATRIX['bin create'] = {
+    'E_VALIDATION': 'a blank name or one with a colon, a site that does not track bins, a fourth level, or a label another active bin carries',
+    'E_NAME_TAKEN': 'a bin of that full name at the site',
+    'E_RECORD_NOT_FOUND': 'site absent from selected company',
+    'E_INACTIVE_REFERENCE': 'an inactive site or parent bin',
+    **_SITE_COMMON}
+MATRIX['bin update'] = {
+    'E_VALIDATION': 'an unknown or ambiguous bin, a blank name, or a label another active bin carries',
+    'E_NAME_TAKEN': 'a bin of that full name at the site',
+    'E_RECORD_NOT_FOUND': 'site absent from selected company',
+    'E_VERSION_CONFLICT': 'the bin changed since expected_version',
+    **_SITE_COMMON}
+for _verb in ('activate', 'deactivate'):
+    MATRIX[f'bin {_verb}'] = {
+        'E_VALIDATION': 'an unknown or ambiguous bin, a parent that is inactive, or a label another active bin now carries',
+        'E_RECORD_NOT_FOUND': 'site absent from selected company',
+        'E_VERSION_CONFLICT': 'the bin changed since expected_version',
+        **({'E_RECORD_IN_USE': 'the bin or a bin inside it holds stock, or active bins sit inside it'} if _verb == 'deactivate' else {}),
+        **_SITE_COMMON}
+MATRIX['bin show'] = {'E_VALIDATION': 'an unknown or ambiguous bin', 'E_RECORD_NOT_FOUND': 'site absent from selected company'}
+MATRIX['bin list'] = {'E_VALIDATION': 'an unknown site'}
+MATRIX['report items-by-bin'] = {'E_VALIDATION': 'an unknown site or bin', 'E_RECORD_NOT_FOUND': 'item absent from selected company',
+                                 'E_INTERNAL': 'placements disagree with the stock ledger (the quantity tie)'}
+MATRIX['cycle-class create'] = {'E_VALIDATION': 'a blank name or an interval outside 1-3660 days', 'E_NAME_TAKEN': 'another class has the name', **_SITE_COMMON}
+MATRIX['cycle-class update'] = {'E_VALIDATION': 'an unknown class, a blank name or an interval outside 1-3660 days',
+                                'E_NAME_TAKEN': 'another class has the name', 'E_RECORD_NOT_FOUND': 'class absent',
+                                'E_VERSION_CONFLICT': 'the class changed since expected_version', **_SITE_COMMON}
+for _verb in ('activate', 'deactivate'):
+    MATRIX[f'cycle-class {_verb}'] = {
+        'E_VALIDATION': 'an unknown class', 'E_RECORD_NOT_FOUND': 'class absent',
+        'E_VERSION_CONFLICT': 'the class changed since expected_version',
+        **({'E_RECORD_IN_USE': 'items are still in the class'} if _verb == 'deactivate' else {}),
+        **_SITE_COMMON}
+MATRIX['cycle-class show'] = {'E_VALIDATION': 'an unknown class', 'E_RECORD_NOT_FOUND': 'class absent'}
+MATRIX['cycle-count classify'] = {
+    'E_VALIDATION': 'a share outside 0-100, shares passing 100, a period that ends before it starts, or an unknown class',
+    'E_RECORD_NOT_FOUND': 'class absent', 'E_INACTIVE_REFERENCE': 'an inactive class', **_SITE_COMMON}
+MATRIX['cycle-count due'] = {'E_VALIDATION': 'an unknown site or a malformed date', 'E_RECORD_NOT_FOUND': 'site absent from selected company'}

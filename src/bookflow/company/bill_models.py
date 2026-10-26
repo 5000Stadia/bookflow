@@ -116,6 +116,7 @@ class BillItemInput(_Input):
     site: _Selector | None = Field(default=None, description=(
         'Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the '
         "document's site, else the purchase-order line's, else the default site."))
+    bin: _SL.Selector | None = Field(default=None, description=_SL.BIN_HELP)
     lot: _SL.Number | None = Field(default=None, description=_SL.LOT_HELP)
     lot_expiry: _SL.IsoDate | None = Field(default=None, description=_SL.EXPIRY_HELP)
     serial_numbers: list[_SL.Number] | None = Field(default=None, max_length=10000, description=_SL.SERIAL_HELP)

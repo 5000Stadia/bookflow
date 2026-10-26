@@ -3,10 +3,14 @@
 ``/inventory/counts`` lists open and recorded counts and starts a new one (site, date, blind).
 ``/inventory/counts/{number}`` is the count screen: an item-or-code field pinned on top with the
 quantity beside it (the phone's number keypad), each entry appended through `inventory-count enter`,
-the lines grouped by place with counted (and, unless blind, expected and the difference), and Post,
+the lines grouped by bin and place with counted (and, unless blind, expected and the difference), and Post,
 which opens the preview -- every item's difference and value, and the documents entered after
 counting began -- before `inventory-count post` records it with the preview's fingerprint. Every
 write goes through its command with a reason for the audit trail, and every form submits through htmx.
+
+Bins and cycle counts (R104 increment 5): a count may be of named bins, or of the next items due by cycle
+class; the Counts page lists each site's due items with "Count the next N". On the count screen a scanned
+bin label sets the current bin (the Bin field), and entries count in it.
 """
 from __future__ import annotations
 
@@ -15,6 +19,16 @@ from starlette.concurrency import run_in_threadpool
 
 from bookflow.core.clock import today_iso
 from bookflow.core.errors import BookflowError
+
+
+def _groups(lines, by_bin):
+    """``[(heading, lines)]``: by bin (no bin last) at a site that tracks bins, else by place."""
+    out = {}
+    for line in lines:
+        key = (line.get('bin') or '\uffff') if by_bin else line['place']
+        out.setdefault(key, []).append(line)
+    return [(('Bin ' + key if key != '\uffff' else 'No bin') if by_bin else key.capitalize(), rows)
+            for key, rows in sorted(out.items(), key=lambda kv: kv[0].casefold())]
 
 
 def mount(app, *, render, run, credential, page_error, role_allows):
@@ -36,16 +50,30 @@ def mount(app, *, render, run, credential, page_error, role_allows):
         company = _company(request, company_id)
         sites = run(request, 'inventory-site list', {}, company_id)['sites']
         counts = run(request, 'inventory-count query', {'limit': 50}, company_id)['counts']
+        due = []
+        for site in sites:
+            try:
+                answer = run(request, 'cycle-count due', {'site': site['name'], 'limit': 10}, company_id)
+            except BookflowError:
+                continue
+            if answer['due'] or answer['not_due']:
+                due.append(answer)
         return render('inventory_counts.html', request, status_code=status_code, company=company,
                       company_id=company['company_id'], sites=sites, counts=counts, values=values or {}, error=error,
+                      due=due, any_bins=any(site['tracks_bins'] for site in sites),
                       today=today_iso(), can_write=role_allows('inventory-count create', company, credential(request)))
 
     def count_page(request, company_id, number, *, values=None, result=None, error=None, preview=None,
                    status_code=200):
         company = _company(request, company_id)
         count = run(request, 'inventory-count show', {'count': number}, company_id)
+        try:
+            bins = [row['full_name'] for row in run(request, 'bin list', {'site': count['site_id']}, company_id)['bins']]
+        except BookflowError:
+            bins = []
         return render('inventory_count.html', request, status_code=status_code, company=company,
                       company_id=company['company_id'], count=count, values=values or {}, result=result, error=error,
+                      bins=bins, groups=_groups(count['lines'], bool(bins)),
                       preview=preview, accounts=_accounts(request, company_id),
                       can_enter=role_allows('inventory-count enter', company, credential(request)),
                       can_post=role_allows('inventory-count post', company, credential(request)))
@@ -73,7 +101,14 @@ def mount(app, *, render, run, credential, page_error, role_allows):
             if (form.get(key) or '').strip():
                 raw[key] = form[key].strip()
         items = [part.strip() for part in (form.get('items') or '').split(',') if part.strip()]
-        if items:
+        bins = [part.strip() for part in (form.get('bins') or '').split(',') if part.strip()]
+        if form.get('cycle') in ('on', '1', 'true'):
+            raw['cycle'] = True
+            if (form.get('limit') or '').strip():
+                raw['limit'] = int(form['limit']) if form['limit'].strip().isdigit() else 0
+        elif bins:
+            raw['bins'] = bins
+        elif items:
             raw['items'] = items
         try:
             out = run(request, 'inventory-count create', raw, company_id, headers=_headers(form))
@@ -104,10 +139,12 @@ def mount(app, *, render, run, credential, page_error, role_allows):
                     raise BookflowError('E_VALIDATION', message='Scan or type an item first.',
                                         details={'fields': [{'field': 'scan', 'problem': 'scan or type an item'}]})
                 entry = {'item': what, 'quantity': quantity, 'mode': 'add' if form.get('mode') == 'add' else 'set'}
+                if (form.get('bin') or '').strip():
+                    entry['bin'] = form['bin'].strip()
                 out = run(request, 'inventory-count enter', {'count': number, 'entries': [entry]}, company_id,
                           headers=headers or {'X-Bookflow-Reason': 'Counted'})
                 line = out['entered'][0]
-                result = f"{line['item_name']}: counted {line['counted']}" + (
+                result = f"{line['item_name']}" + (f" in bin {line['bin']}" if line.get('bin') else '') + f": counted {line['counted']}" + (
                     f", expected {line['expected']}, difference {line['difference']}." if line['expected'] is not None
                     else '.') + f" {out['uncounted_lines']} lines still to count."
             elif action in ('preview', 'post'):
@@ -135,9 +172,10 @@ def mount(app, *, render, run, credential, page_error, role_allows):
                 return page_error(request, e)
             return count_page(request, company_id, number, values=dict(form), error=e.to_dict(), preview=preview,
                               status_code=400)
+        kept = {'bin': form.get('bin', '')} if action == 'enter' else {}
         return count_page(request, company_id, number, result=result, preview=preview,
                           values={'adjustment_account': form.get('adjustment_account', ''),
-                                  'ctx:reason': form.get('ctx:reason', '')} if preview else None)
+                                  'ctx:reason': form.get('ctx:reason', ''), **kept} if preview else kept)
 
     @app.post('/c/{company_id}/inventory/counts/{number}')
     async def count_submit(request: Request, company_id: str, number: str):

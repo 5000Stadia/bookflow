@@ -10,7 +10,10 @@ Number = Annotated[str, Field(min_length=1, max_length=128), BeforeValidator(lam
 from bookflow.company.journal_models import _Date as IsoDate  # noqa: E402
 Selector = Annotated[str, Field(min_length=1, max_length=1004), BeforeValidator(lambda v: v.strip() if isinstance(v, str) else v)]
 
-NUMBER_FIELDS = ('lot', 'lot_expiry', 'serial_numbers')
+NUMBER_FIELDS = ('lot', 'lot_expiry', 'serial_numbers', 'bin')
+BIN_HELP = ("Bin at the line's site the units go to or leave from (R104 increment 5), by id, full name such as "
+            "A:3 or label code; the site must track bins. Omitted: the bin the line's stock stood in (a correction), "
+            "its sale's bin (a return), else the item's default bin at the site, else no bin.")
 LOT_HELP = ("Lot number of a lot-tracked item: the lot an incoming line receives into (made when new), or the lot an "
             "outgoing line takes from. Omitted on an outgoing line, the units leave unassigned and the result names "
             "the earliest-expiring lot in stock there.")
@@ -51,6 +54,7 @@ class AssignInput(_Strict):
     lot_expiry: IsoDate | None = Field(None, description='Expiry date of a new lot.')
     quantity: str | None = Field(None, description='How many units go into or out of the lot; serial numbers count themselves.')
     site: Selector | None = Field(None, description="Site the units are at; omitted, the document line's site, else the default site.")
+    bin: Selector | None = Field(None, description="Bin the units are in, at a site that tracks bins; omitted, the document line's bin, else no bin.")
     date: IsoDate | None = Field(None, description='Date the units are numbered on; omitted, today (or the document line\'s own date).')
     count_position: Literal['before', 'after'] | None = Field(None, description='Before (the default) or after a count of the site on that date.')
     document: Selector | None = Field(None, description=(

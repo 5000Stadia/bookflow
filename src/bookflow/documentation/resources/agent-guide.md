@@ -1120,6 +1120,34 @@ wrong is voided (`inventory-count void`), never adjusted around. `inventory adju
 value is valued at the running average. `report physical-inventory-worksheet` prints a blank sheet
 and `report inventory-valuation-detail` shows each movement's effect on quantity and value.
 
+## I counted bin A3, and what should we count this week?
+
+A site that tracks bins (`inventory-site update <site> --tracks-bins true`) locates its stock to bins up to
+three levels deep (`bin create --name 3 --parent A` makes A:3). Every stock line, transfer line, count entry,
+`inventory adjust` line and `inventory assign` takes `bin` (a transfer line `from_bin` and `to_bin`); a line
+naming none goes to the item's default bin at the site (`item update --site-settings
+'[{"site":"Warehouse","default_bin":"A2"}]'`), a correction keeps the bin its stock stood in, and a return goes
+back to its sale's bin. Moving stock between two bins of one site is an `inventory-transfer post` with the same
+`from_site` and `to_site`: it posts nothing. A scanned bin label is a `bin` anywhere a bin is named, and
+`barcode lookup` answers `kind` `bin`.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "inventory-count create", "reason": "Count bin A3", "input": {"site": "Warehouse", "bins": ["A3"]}}
+{"command": "inventory-count enter", "reason": "Counted bin A3",
+ "input": {"count": "C-2", "entries": [{"item": "Widget", "quantity": "12"}, {"code": "0012345678905", "quantity": "3"}]}}
+{"command": "cycle-count due", "reason": "What to count this week", "input": {"site": "Warehouse"}}
+{"command": "inventory-count create", "reason": "This week's cycle count", "input": {"site": "Warehouse", "cycle": true, "limit": 25}}
+```
+
+A bins count lists exactly what the bins hold (and the bins inside them); entries naming no bin count in the
+one bin named. Each item's cycle class (A every 30 days, B 90, C 365, stored on first use; `cycle-class`
+changes them) makes it due at a site once that many days have passed since its last recorded count there, or
+when it was never counted there. `cycle-count due` lists the due items, most overdue first; a `cycle` count
+takes the next ones, and recording it moves them on. `cycle-count classify --dry-run` proposes classes from
+the cost of goods each item issued (the items making 80% are A, the next 15% B), and running it sets them.
+`report items-by-bin` shows each bin's items, and the bins adding up to the site.
+
 ## Which customer got water heater WH-1?
 
 An item with `tracking` `serial` carries a serial number per unit; one with `lot` carries lot numbers

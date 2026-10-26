@@ -102,6 +102,14 @@ def _decide(s, ctx, inp):
     if inp.document is not None:
         movement, _, label = _document_movement(s, item, inp.document, inp.line)
         site_id = placements.site_of_movement(s, movement['id'])
+        loose = [r for r in placements.movement_placements(s, [movement['id']]).get(movement['id'], [])
+                 if not r['lot_id'] and not r['serial_number_id']]
+        bin_id = (max(loose, key=lambda r: abs(int(r['quantity_microunits'])))['bin_id'] if loose
+                  else (placements.place_of_movement(s, movement['id']) or (None, None))[1])
+        if inp.bin is not None:
+            from bookflow.company import bins
+            if bins.resolve_bin(s, site_id, inp.bin)['id'] != bin_id:
+                raise _invalid('bin', f'{label} moved its {item["full_name"]} at another bin')
         if inp.site is not None and placements.resolve_site(s, inp.site, active=False)['id'] != site_id:
             raise _invalid('site', f'{label} moved its {item["full_name"]} at {serial_lots.site_name(s, site_id)}')
         date, position = movement['effective_date'], movement.get('count_position') or 'before'
@@ -112,6 +120,8 @@ def _decide(s, ctx, inp):
             position = 'before'
     else:
         site_id = placements.resolve_site(s, inp.site)['id'] if inp.site else placements.default_site_id(s)
+        from bookflow.company import bins
+        bin_id = bins.line_bin(s, item['id'], site_id, inp.bin)
         date = inp.date or _today(s)
         position = inp.count_position or 'before'
     journals.open_dates(s, [date])
@@ -122,7 +132,7 @@ def _decide(s, ctx, inp):
         if quantity <= 0:
             raise _invalid('quantity', 'must be above 0')
     return dict(item=item, kind=kind, movement=movement, label=label, sign=sign, site_id=site_id, date=date,
-                position=position, quantity=quantity)
+                position=position, quantity=quantity, bin_id=bin_id)
 
 
 def _available(s, d, numbering, sequence):
@@ -139,7 +149,7 @@ def _available(s, d, numbering, sequence):
     if inp_direction(d) == 'assign':
         held = placements.held(s, [item['id']], d['site_id'], d['date'],
                                ('before',) if d['position'] == 'before' else ('before', 'count', 'after'))
-        loose = held.get((item['id'], placements.place_key()), 0)
+        loose = held.get((item['id'], placements.place_key(d['bin_id'])), 0)
         if loose < quantity:
             raise _invalid('quantity', (
                 f'{serial_lots.site_name(s, d["site_id"])} holds {_q(max(loose, 0))} unassigned {item["full_name"]} on '
@@ -164,7 +174,7 @@ def _run(s, ctx, inp, *, persist):
     # Assign: numbers take the units from unassigned. Unassign: the other way. On a document line that took units
     # out, the same holds with the signs of the line.
     direction = (1 if inp.direction == 'assign' else -1) * d['sign']
-    base = dict(item_id=item['id'], site_id=d['site_id'], bin_id=None, effective_date=d['date'],
+    base = dict(item_id=item['id'], site_id=d['site_id'], bin_id=d['bin_id'], effective_date=d['date'],
                 count_position=d['position'], sequence=sequence, source='assignment', movement_id=None,
                 transfer_revision_id=None, source_line_id=assignment_id, reverses_placement_id=None, **provenance)
     rows = []
@@ -193,7 +203,7 @@ def _run(s, ctx, inp, *, persist):
     names = serial_lots.number_names(s, [r['lot_id'] for r in rows], [r['serial_number_id'] for r in rows])
     names.update({row['id']: row for row in numbering.new.values()})
     held = placements.held(s, [item['id']], d['site_id'], d['date'], ('before', 'count', 'after'))
-    unassigned = held.get((item['id'], placements.place_key()), 0) + int(rows[-1]['quantity_microunits'])
+    unassigned = held.get((item['id'], placements.place_key(d['bin_id'])), 0) + int(rows[-1]['quantity_microunits'])
     site = serial_lots.site_name(s, d['site_id'])
     numbered = [PlaceQuantity(site_id=r['site_id'], site_name=site, lot=(names.get(r['lot_id']) or {}).get('number'),
                               serial_number=(names.get(r['serial_number_id']) or {}).get('number'),
@@ -205,7 +215,7 @@ def _run(s, ctx, inp, *, persist):
                           status='assigned' if persist else 'will_assign')
     if not persist:
         return output, [], ''
-    header = dict(id=assignment_id, item_id=item['id'], site_id=d['site_id'], bin_id=None, date=d['date'],
+    header = dict(id=assignment_id, item_id=item['id'], site_id=d['site_id'], bin_id=d['bin_id'], date=d['date'],
                   count_position=d['position'], direction=inp.direction,
                   movement_id=d['movement']['id'] if d['movement'] else None,
                   memo=(inp.memo or '').strip() or None, reason=(ctx.reason or '').strip() or None, **provenance)
@@ -224,7 +234,7 @@ def _require_held(s, d, rows):
     held = placements.held(s, [d['item']['id']], d['site_id'], d['date'],
                            ('before',) if d['position'] == 'before' else ('before', 'count', 'after'))
     for row in rows:
-        key = (d['item']['id'], placements.place_key(None, row['lot_id'], row['serial_number_id']))
+        key = (d['item']['id'], placements.place_key(d['bin_id'], row['lot_id'], row['serial_number_id']))
         if held.get(key, 0) < -int(row['quantity_microunits']):
             raise _invalid('serial_numbers' if row['serial_number_id'] else 'lot', (
                 f'{serial_lots.site_name(s, d["site_id"])} does not hold that many under that number on {d["date"]}'))

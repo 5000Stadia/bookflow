@@ -157,6 +157,7 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.SCHEDULING_POLICY_VERSION: '445b102fcbce9835b1edceafe75f8d5dc573d18f03c0db73c83085ad1ceb7568',
     c.PERFORMANCE_POLICY_VERSION: '4e60dbb727be31efe9804b77a51cf36648ec37efde2dae1b6e323739504ea6a4',
     c.SERIAL_LOT_POLICY_VERSION: '4b340c8c2715584586326a1ee9698cc097af5993ab61cf68b25644a859768d03',
+    c.BINS_POLICY_VERSION: '5b61fdbac14da296bfe5c87ba003b4acaf6fbec991d31b1675acb87a66209b91',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -289,6 +290,7 @@ def _full_known():
     from . import permission_scheduling_catalog
     from . import permission_performance_catalog
     from . import permission_serial_lot_catalog
+    from . import permission_bins_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
         c.SETUP_POLICY_VERSION: permission_setup_catalog,
@@ -347,6 +349,7 @@ def _full_known():
         c.SCHEDULING_POLICY_VERSION: permission_scheduling_catalog,
         c.PERFORMANCE_POLICY_VERSION: permission_performance_catalog,
         c.SERIAL_LOT_POLICY_VERSION: permission_serial_lot_catalog,
+        c.BINS_POLICY_VERSION: permission_bins_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is
     # a handful of string comparisons, once per process, and no descriptor is hashed for
@@ -507,7 +510,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.SERIAL_LOT_POLICY_VERSION)
+    return known_catalog(c.BINS_POLICY_VERSION)
 
 
 def catalog_for_root(tx):

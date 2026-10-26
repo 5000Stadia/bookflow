@@ -103,7 +103,7 @@ def plan_site_create(s, ctx, inp) -> Plan:
     display, key = _site_name(s, inp.name)
     row = dict(id=new_id(), **common(s.actor.id, ctx.interface.value, clock.now_iso()), name=display, name_key=key,
                description=(inp.description or '').strip() or None, address=(inp.address or '').strip() or None,
-               is_default=bool(inp.is_default), tracks_bins=False, active=True)
+               is_default=bool(inp.is_default), tracks_bins=bool(inp.tracks_bins), active=True)
     previous = placements.default_site(s) if inp.is_default else None
     return Plan(site_output(s, row, cls=SiteWriteOutput), dict(row=row, before=None, previous_default=previous))
 
@@ -123,7 +123,12 @@ def plan_site_update(s, ctx, inp) -> Plan:
             raise _invalid('is_default', 'an inactive site cannot be the default; activate it first')
         new['is_default'] = True
         previous = placements.default_site(s)
-    changed = any(new[k] != old[k] for k in ('name', 'description', 'address', 'is_default'))
+    if inp.tracks_bins is not None and bool(inp.tracks_bins) != bool(old['tracks_bins']):
+        if not inp.tracks_bins:
+            from bookflow.company import bins
+            bins.check_tracking_off(s, old)
+        new['tracks_bins'] = bool(inp.tracks_bins)
+    changed = any(new[k] != old[k] for k in ('name', 'description', 'address', 'is_default', 'tracks_bins'))
     if changed:
         new = _bumped(new, s, ctx)
     out = site_output(s, new, cls=SiteWriteOutput, changed=changed)
@@ -261,8 +266,8 @@ def _number(s, explicit, own=None):
     return f'{prefix}{number}', dict(name=SEQUENCE, next_number=number + 1, prefix=prefix)
 
 
-def _resolved_lines(s, lines, date):
-    from bookflow.company import item_conversions
+def _resolved_lines(s, lines, date, from_site, to_site):
+    from bookflow.company import bins, item_conversions
     out = []
     for index, line in enumerate(lines):
         field = f'lines.{index}'
@@ -279,7 +284,9 @@ def _resolved_lines(s, lines, date):
         item_conversions.require_stock_date(s, item['id'], item['full_name'], date, field + '.item')
         from bookflow.company import serial_lots
         out.append(dict(item=item, quantity=quantity, description=(line.description or '').strip() or None,
-                        numbers=serial_lots.from_line(line)))
+                        numbers=serial_lots.from_line(line),
+                        from_bin=bins.line_bin(s, item['id'], from_site, line.from_bin, field=field + '.from_bin'),
+                        to_bin=bins.line_bin(s, item['id'], to_site, line.to_bin, field=field + '.to_bin')))
     return out
 
 
@@ -319,17 +326,30 @@ def _decide(s, ctx, inp, operation):
                                         field='from_site')
     to_site = placements.resolve_site(s, inp.to_site if inp.to_site is not None else old_rev['to_site_id'],
                                       field='to_site')
-    if from_site['id'] == to_site['id']:
-        raise _invalid('to_site', 'a transfer moves stock between two different sites (moving between bins of '
-                                  'one site arrives with bins)')
+    same_site = from_site['id'] == to_site['id']
+    if same_site and not from_site['tracks_bins']:
+        raise _invalid('to_site', f'a transfer moves stock between two sites, or between two bins of a site that tracks '
+                                  f'bins; {from_site["name"]} does not track bins')
     journals.open_dates(s, [date] + ([old_rev['date']] if old_rev else []))
     if inp.lines is not None:
-        lines = _resolved_lines(s, inp.lines, date)
+        lines = _resolved_lines(s, inp.lines, date, from_site['id'], to_site['id'])
     else:
+        from bookflow.company import bins
         kept = _old_numbers(s, old_rev['id'])
-        lines = [dict(item=item_service.resolve_item(s.company, line['item_id']), quantity=int(line['quantity_microunits']),
-                      description=line['description'], line_id=line['line_id'], numbers=kept.get(line['line_id']))
-                 for line in _lines(s, old_rev['id'])]
+        lines = []
+        for line in _lines(s, old_rev['id']):
+            item = item_service.resolve_item(s.company, line['item_id'])
+            kept_from = line['from_bin_id'] if old_rev['from_site_id'] == from_site['id'] else bins.UNSET
+            kept_to = line['to_bin_id'] if old_rev['to_site_id'] == to_site['id'] else bins.UNSET
+            lines.append(dict(item=item, quantity=int(line['quantity_microunits']), description=line['description'],
+                              line_id=line['line_id'], numbers=kept.get(line['line_id']),
+                              from_bin=bins.line_bin(s, item['id'], from_site['id'], fallback=kept_from),
+                              to_bin=bins.line_bin(s, item['id'], to_site['id'], fallback=kept_to)))
+    if same_site:
+        for index, line in enumerate(lines):
+            if line['from_bin'] == line['to_bin']:
+                raise _invalid(f'lines.{index}.to_bin', 'moving within one site takes the stock from one bin to another; '
+                                                       'name a from_bin and a to_bin that differ')
     memo = inp.memo if 'memo' in inp.model_fields_set else (old_rev['memo'] if old_rev else None)
     position = inp.count_position or (old_rev['count_position'] if old_rev else 'before')
     number, sequence = (old['number'], None) if old else _number(s, inp.number)
@@ -360,10 +380,12 @@ def _placements(s, decided, revision_id, line_ids, sequence, state=None):
                     reverses_placement_id=None)
         lot_id, parts = serial_lots.transfer_parts(
             state, line['item'], line['quantity'], line.get('numbers'), decided['from_site']['id'],
-            decided['to_site']['id'], decided['date'], decided['position'], sequence, f'lines.{index}')
+            decided['to_site']['id'], decided['date'], decided['position'], sequence, f'lines.{index}',
+            from_bin=line.get('from_bin'), to_bin=line.get('to_bin'))
         line['lot_id'] = lot_id
-        for site, lot, serial, quantity, made in parts:
-            row = dict(base, id=new_id(), site_id=site, lot_id=lot, serial_number_id=serial, quantity_microunits=quantity)
+        for site, bin_id, lot, serial, quantity, made in parts:
+            row = dict(base, id=new_id(), site_id=site, bin_id=bin_id, lot_id=lot, serial_number_id=serial,
+                       quantity_microunits=quantity)
             if made is not None:
                 row['_lot_row'] = made
             out.append(row)
@@ -384,7 +406,7 @@ def _on_hand_after(s, decided, new_placements):
     rows = []
     for item in items:
         name = inventory.item_name(s, item)
-        for site in (decided['from_site'], decided['to_site']):
+        for site in {each['id']: each for each in (decided['from_site'], decided['to_site'])}.values():
             rows.append(TransferSiteStock(site_id=site['id'], site_name=site['name'], item_id=item, item_name=name,
                                           quantity_on_hand=_q(stock.get((item, site['id']), 0))))
     return rows
@@ -397,7 +419,8 @@ def _history(revisions):
 
 
 def _line_outputs(s, lines):
-    from bookflow.company import serial_lots
+    from bookflow.company import bins, serial_lots
+    bin_name = bins.bin_names(s, [b for line in lines for b in (line.get('from_bin_id'), line.get('to_bin_id'))])
     serials = {}
     for revision_id in {line['revision_id'] for line in lines}:
         serials.update(serial_lots.line_serials(_live_placements(s, revision_id)))
@@ -406,6 +429,7 @@ def _line_outputs(s, lines):
     return [TransferLineOutput(line_id=line['line_id'], item_id=line['item_id'],
                                item_name=inventory.item_name(s, line['item_id']),
                                quantity=_q(line['quantity_microunits']), description=line['description'],
+                               from_bin=bin_name.get(line.get('from_bin_id')), to_bin=bin_name.get(line.get('to_bin_id')),
                                lot=(names.get(line['lot_id']) or {}).get('number') if line.get('lot_id') else None,
                                serial_numbers=[(names.get(i) or {}).get('number', i) for i in serials.get(line['line_id'], [])])
             for line in lines]
@@ -443,7 +467,8 @@ def _run(s, ctx, inp, operation, *, persist):
     for position, line in enumerate(decided['lines'], 1):
         lines.append(dict(id=new_id(), revision_id=revision_id, line_id=line.get('line_id') or new_id(),
                           position=position, item_id=line['item']['id'], quantity_microunits=line['quantity'],
-                          unit_id=None, unit_factor_nanounits=1_000_000_000, from_bin_id=None, to_bin_id=None,
+                          unit_id=None, unit_factor_nanounits=1_000_000_000, from_bin_id=line.get('from_bin'),
+                          to_bin_id=line.get('to_bin'),
                           lot_id=None, description=line['description']))
     sequence = inventory.next_sequence(s)
     from bookflow.company import serial_lots
