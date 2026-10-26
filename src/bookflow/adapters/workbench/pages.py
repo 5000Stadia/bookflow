@@ -228,7 +228,7 @@ def _tracks_numbers(request, company_id, run):
         return False
     for kind in ('serial', 'lot'):
         try:
-            if run(request, 'item list', {'filter': [f'tracking={kind}'], 'limit': 1}, company_id).get('items'):
+            if run(request, 'item list', {'filter': [f'tracking={kind}']}, company_id).get('items'):
                 return True
         except BookflowError:
             return False
@@ -1933,6 +1933,12 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             for field in ('customer', 'document', 'receipt', 'draw', 'invoice'):
                 value = request.query_params.get('f:' + field, request.query_params.get(field))
                 if value is not None and field in cmd.input_model.model_fields:
+                    attempted['f:' + field] = value
+        if cmd.name == 'inventory assign' and not attempted:
+            # Opened from a tracked item's page (R104 increment 4): the link names the item, perhaps a document.
+            for field in ('item', 'document', 'site'):
+                value = request.query_params.get('f:' + field, request.query_params.get(field))
+                if value is not None:
                     attempted['f:' + field] = value
         if noun in ('fixed-asset', 'loan') and cmd.is_write and not attempted:
             # Opened from an asset's schedule or a loan (R119): the link names which one.
