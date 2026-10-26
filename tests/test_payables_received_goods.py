@@ -22,7 +22,8 @@ def test_billed_receipts_are_unpaid_bills_and_every_total_is_accounts_payable(cl
     # DEMO-SERIAL-1 (R104 increment 4) bills two water heaters and two lots of sealant, 730.00.
     assert listed == {"DEMO-KIT-BILL": 4400, "1": 2400, "DEMO-SERIAL-1": 73000}
     for number in listed:
-        bill = next(row for row in client.run("bill query", {"number": number, "limit": 5}, company=COMPANY)["items"]
+        # `number` matches a part of the number, so bill 1 shares its page with every bill numbered ...1.
+        bill = next(row for row in client.run("bill query", {"number": number, "limit": 50}, company=COMPANY)["items"]
                     if row["number"] == number)
         assert bill["settlement_current"]["open"]["minor_units"] == listed[number]
     assert unpaid["totals"]["balance"]["minor_units"] == 6800 + 73000
