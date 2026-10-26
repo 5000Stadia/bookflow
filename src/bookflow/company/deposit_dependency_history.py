@@ -543,6 +543,14 @@ class _KindStore:
         self.entries = {}   # identity -> its audit entries in (seq, id) order, maybe empty
         self.complete = False
 
+    def copy(self, memo):
+        """An independent copy of what was read (the session is shared, not copied)."""
+        import copy
+        clone = copy.copy(self)
+        clone.rows = copy.deepcopy(self.rows, memo)
+        clone.entries = copy.deepcopy(self.entries, memo)
+        return clone
+
     def remember(self, row):
         identity = row[self.owner.key]
         if self.rows.get(identity) is None:
@@ -622,6 +630,9 @@ class _RowsView(Mapping):
     def __setitem__(self, identity, value):
         self.store.rows[identity] = value
 
+    def __deepcopy__(self, memo):
+        return type(self)(self.store.copy(memo))
+
 
 class _EntriesView(Mapping):
     """`History.entries[kind]`: each identity's complete audit entries, read on first use."""
@@ -644,6 +655,9 @@ class _EntriesView(Mapping):
 
     def __setitem__(self, identity, value):
         self.store.entries[identity] = value
+
+    def __deepcopy__(self, memo):
+        return type(self)(self.store.copy(memo))
 
 
 class History:
@@ -882,8 +896,15 @@ class History:
         if pure:
             entries = self.entries[kind].get(identity, ())
             read = len(entries) if self.cutoff is None else next((i for i, entry in enumerate(entries) if entry['seq'] > self.cutoff), len(entries))
-            key = kind, identity, read
-            cached = self.chains.get(key)
+            # Keyed by the entries' content, not their position: a caller may replace or
+            # edit the entries it reads (the history tests do), and an edited entry list is
+            # a different input.
+            try:
+                key = kind, identity, tuple((entry['id'], entry['event_id'], entry['seq'], entry['action'], entry['version_before'],
+                                             entry['version_after'], entry['after'], entry['before']) for entry in entries[:read])
+                cached = self.chains.get(key)
+            except (KeyError, TypeError):   # a malformed entry: no cache, the chain meets it
+                return self._chain(kind, identity)
             if cached is not None:
                 for entry in entries[:read]:
                     self.events[entry['event_id']] = entry
