@@ -456,6 +456,8 @@ def _public_values(
     *,
     custom_values: tuple[dict[str, Any], ...] | tuple | None = None,
     collections: dict[str, tuple] | None = None,
+    page: "parties.PartyPage | None" = None,
+    reveal_tax: bool | None = None,
 ) -> dict[str, Any]:
     projected = parties.project_party_record(
         s.company,
@@ -463,7 +465,8 @@ def _public_values(
         row,
         custom_values=custom_values,
         collections=collections,
-        reveal_tax_suffix=_can_reveal_tax(s),
+        reveal_tax_suffix=_can_reveal_tax(s) if reveal_tax is None else reveal_tax,
+        page=page,
     )
     projected["created_at"] = localize(s, projected["created_at"])
     projected["updated_at"] = localize(s, projected["updated_at"])
@@ -1005,7 +1008,10 @@ def _register_party(noun: str) -> None:
             filter_expressions=filters,
             sort_expressions=sorts,
         )
-        projected = [_public_values(s, noun, row) for row in rows]
+        # One set-based read of each fact for the whole list, not one per record (R180).
+        page = parties.PartyPage(s.company, noun, rows)
+        reveal = _can_reveal_tax(s)
+        projected = [_public_values(s, noun, row, page=page, reveal_tax=reveal) for row in rows]
         if manual_profile is not None:
             projected = [item for item in projected if item["profile_complete"] is manual_profile]
         if manual_sort:

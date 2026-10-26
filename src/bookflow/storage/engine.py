@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import errno as _errno
 import sqlite3
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
@@ -65,8 +66,36 @@ def _connect(path: Path, writable: bool, create: bool) -> sqlite3.Connection:
     return conn
 
 
+# R180: one SQLAlchemy engine for the process. The compiled-statement cache belongs to an engine
+# (its keys hold the engine's dialect), so an engine per Database compiled every statement afresh
+# in every command: about a hundred compiles per invoice post however warm the process. The
+# shared engine owns no connections (NullPool): each Database still opens and owns its own
+# sqlite3 connection, handed to the engine's creator only while that Database connects.
+_ENGINE: sa.Engine | None = None
+_ENGINE_LOCK = threading.Lock()
+_OPENING = threading.local()
+STATEMENT_CACHE_SIZE = 1500
+
+
+def _opening_connection():
+    raw = getattr(_OPENING, "raw", None)
+    if raw is None:
+        raise RuntimeError("the shared engine connects only while a Database opens")
+    return raw
+
+
+def _engine() -> sa.Engine:
+    global _ENGINE
+    if _ENGINE is None:
+        with _ENGINE_LOCK:
+            if _ENGINE is None:
+                _ENGINE = sa.create_engine("sqlite://", creator=_opening_connection, poolclass=sa.pool.NullPool,
+                                           query_cache_size=STATEMENT_CACHE_SIZE)
+    return _ENGINE
+
+
 class Database:
-    """One open database: an sqlite3 connection wrapped by a SQLAlchemy engine."""
+    """One open database: an sqlite3 connection wrapped by a SQLAlchemy connection."""
 
     @performance.measured("db.open")
     def __init__(self, path: Path, writable: bool, create: bool = False):
@@ -77,8 +106,12 @@ class Database:
         self.engine = None
         self.conn = None
         try:
-            self.engine = sa.create_engine("sqlite://", creator=lambda: self.raw, poolclass=sa.pool.StaticPool)
-            self.conn = self.engine.connect()
+            self.engine = _engine()
+            _OPENING.raw = self.raw
+            try:
+                self.conn = self.engine.connect()
+            finally:
+                _OPENING.raw = None
             if not writable:
                 # SQLAlchemy's logical autobegin does not BEGIN sqlite3 in
                 # autocommit mode. Begin after its connection initialization.
@@ -118,13 +151,9 @@ class Database:
         finally:
             try:
                 if self.conn is not None:
-                    self.conn.close()
+                    self.conn.close()  # NullPool: resets and closes the raw connection
             finally:
-                try:
-                    if self.engine is not None:
-                        self.engine.dispose()
-                finally:
-                    self.raw.close()
+                self.raw.close()
 
 
 @contextmanager

@@ -302,3 +302,113 @@ Other figures worth acting on:
   statements, so the cost per statement grows with the tables. About 85 SQLAlchemy compiles
   per post miss the compile cache (measured on the empty company).
 - **Storage**: 30 audit entries and about 49 KB per document, and 5.7 MB per empty company.
+
+## Increment 2, lane A (2026-10-25): the straightforward hot spots
+
+Five fixes, each keeping every result byte-for-byte the same. To prove that, the JSON outputs of a fixed
+read set were captured before and after, with volatile fields (generation time, cursors, paths) ignored,
+on the demo company and on a generated one, and diffed. Both diffs were empty. The read set covered
+lists, shows, the register in both directions and over several periods, general ledger, transaction
+detail and deposit sources.
+
+**The company measured.** The `large` profile scaled down to about a tenth (`Profile("medium", 24, 600,
+120, 45, 45, 38, 10, 8, 2, 300, 60)`): 600 customers, 120 items, 45 vendors, 24 months (2021-10 to
+2023-09), about 2,600 documents plus 300 payments in Undeposited Funds, and an organisation of 60
+companies. It took 22 minutes to generate at load 39, and 507 MB.
+
+**The large company could not be opened.** A copy of the parked large template upgraded cleanly:
+`upgrade` took 306 s at load 39 for the hub and 201 companies, co0088 to co0085. But every command
+afterwards was refused, base code and this branch alike, with `catalog_mismatch` on `state`. That
+includes `permission show`, so `permission activate` cannot upgrade the catalog either. The
+template's hub stores the permission catalog of the build that generated it, before
+performance-v1 was re-chained on scheduling-v1. This chain does not hold that catalog version, so
+`load_root` refuses it. Installations only run merged builds and never meet this. A bench template
+is different: it must be regenerated whenever a permission layer it was built with is re-chained.
+The copy was deleted.
+
+**How it was timed.** `perf.bench.run_bench` with 3 timed repetitions after a warm-up (writes: no
+warm-up), p50 of the client wall time. Statements come from the timings store. Both runs were at a
+1-minute load of 37 to 38 on 16 cores.
+
+| scenario | before ms | after ms | before stmts | after stmts | fix |
+|---|---|---|---|---|---|
+| customer list (600) | 8,597 | 263 (load 46; 1,528 at load 38 before the page reads) | 6,048 | 50 | 1 |
+| vendor list (45, capture) | 495 | 59 | 353 | 45 | 1 |
+| membership grant, organisation of 60 | 3,723 | 1,270 | 208 | 208 | 3 |
+| membership revoke, organisation of 60 | 3,820 | 1,062 | 210 | 210 | 3 |
+| invoice post | 433 | 179 | 458 | 447 | 4 |
+| bill post | 260 | 98 | 217 | 216 | 4 |
+| payment receive | 213 | 124 | 260 | 253 | 4 |
+| deposit sources, page of 200 | 4,189 | 2,257 | 11,962 | 11,961 | 2 |
+| general ledger, every account, one year (capture) | 601 | 295 | 47 | 46 | 5 |
+| transaction detail, one year (capture) | 371 | 296 | 48 | 47 | 5 |
+| register, newest 50 of a year (capture) | 294 | 258 | 123 | 122 | 5 |
+| home (`company show`) | 45 | 34 | 45 | 44 | 4 |
+
+The fixes:
+
+1. **Customer and vendor lists**.
+   - `own_balance` and `vendor_balance` used to run the `MATERIALIZED` CTE that groups every A/R (A/P)
+     line, once for each projected party. Now they sum only the lines that read as the party:
+     `members_sql`, the inverse of `survivor_sql`, through the `name_type, name_id` index.
+   - A list now projects through one `parties.PartyPage`. It reads each fact set-based for the whole
+     page, in the order the one-record read uses: custom values, addresses, contacts and their points,
+     vendor links, item profiles, the prepayment account, labels and ancestors.
+   - Balances come from one grouped read of each name's own net plus the live merges. `members_sql`
+     and `family_cte` are then walked in Python.
+   - A record left off the page (an ancestor dropped by a filter) falls back to the one-record read.
+     `test_party_page_reads` compares every party with and without a page, also after a merge.
+   - The statements no longer grow with the number of customers: 50 for 600 customers, against
+     6,048 before.
+   - Item list already projected through a page cache, and employee and other-name lists have no
+     balance.
+2. **`Config.load` once per command** (`core/config.load_scope`, entered by `dispatch.execute`). The
+   first read of each path is kept, and every later load gets its own deep copy. Every command holds
+   the RootLock, so no other process changes the settings while it runs. The first settings write in
+   the process (`save`, `stage_pending`, `flush_pending`) turns the cache off for the rest of that
+   command, and a file that fails to parse is never kept. A deposit sources page went from 1,436
+   config disk reads to 2. Those reads use their own connection, so the statement count does not show
+   them.
+3. **Permission comparison** (`permission_policy`).
+   - Each phase's facts are indexed once per comparison: visibility and memberships by key,
+     requirement and default sets, and admin action keys by domain. Before, every question
+     rescanned them.
+   - `compare` keeps its last validated input and its answer. The apply still reads and validates its
+     own facts in its write transaction. It skips the recomputation only when those facts equal the
+     preview's.
+   - `tests/permission_policy_oracle.py` keeps the scanning code verbatim as a test-only oracle.
+     `test_permission_policy_index` checks every public question against it, answers and refusals
+     both, on 300 random rosters, catalogs and semantics. A deliberately broken index is caught on
+     62 of 100 seeds.
+   - `_check` also reuses the declared field types of the permission modules' own value types.
+     Before, it called `get_type_hints` for every value checked.
+   - What remains of a grant is mostly snapshot decoding and catalog normalisation.
+4. **Compile cache** (`storage/engine`). The cache belongs to an engine, and its keys hold the engine's
+   dialect. With one engine per `Database`, every command compiled every statement afresh: 104
+   compiles per invoice post however warm the process. There is now one engine per process. It owns
+   no connections (`NullPool`): each `Database` still opens and owns its own sqlite3 connection, and
+   hands it to the engine's creator only while it connects. A warm invoice post now compiles 2
+   statements. The repeated "generated" sites were each a different statement, not uncacheable
+   constructs.
+5. **Ledger running balance** (`ledger_reports._ledger`). A posting's balance used to be a window sum
+   over the account's whole history, rerun on every page. Now it is the account's opening balance
+   (from the `balances` aggregate) plus the running sum over the period only. Every effect before the
+   period sorts first, so the figure is unchanged. The two parts come back as `base` and `net` and
+   are added in Python, because aggregate text never meets SQL arithmetic. The gain grows with the
+   history before the period: about 2x on a year of this company, more on five years.
+
+Left for lane B: admitting deposit sources per row (`deposit_draft_validation.admit`, called again for
+each listed row at the end of `deposit_source_queries.query`, after `candidates` has already admitted
+them) and the dependency history reads.
+
+**The first catalog build, once per process (lane B's finding).**
+- `permission_runtime.known_catalog` is built and verified once per process, not once per command:
+  a warm process spends under 1 ms per command in it.
+- The cost lands on every new process, so on every CLI command. The first `current_catalog()`
+  imports all 56 catalog layers, and each layer re-validates the whole accumulated catalog
+  (`_normal_catalog`, `catalog_manifest`).
+- `_check` now caches each annotation's shape, and a union first tries the value's own plain type.
+  Together with the shared field-type cache, the first build fell from 5.1 to 3.8 s CPU.
+- What remains is that per-layer full validation, O(layers × catalog). It could be cut by
+  validating only each layer's delta, or by a verified on-disk cache. That changes the
+  verification itself, so it is left for its own decision.

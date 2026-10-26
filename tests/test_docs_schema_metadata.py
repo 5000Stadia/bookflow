@@ -110,7 +110,7 @@ def test_documented_metadata_matches_fresh_migrated_database(tmp_path: Path, sco
     path = tmp_path / f"{scope}.db"
     with open_database(path, writable=True, create=True) as db:
         migrate_to_head(db, scope, None)
-        database_shape = _database_shape(sa.inspect(db.engine), db.conn)
+        database_shape = _database_shape(sa.inspect(db.conn), db.conn)
     assert _metadata_shape(metadata) == database_shape
 
 

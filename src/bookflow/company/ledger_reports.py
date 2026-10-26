@@ -725,11 +725,17 @@ def trial_balance(inp: TrialBalanceInput, s, *, principal_id=None) -> TrialBalan
 def _ledger(scope):
     """The account-by-account walk both ledger reports page.
 
-    ``running`` is the whole account's balance, computed before anything is sliced, which
-    is what lets a page boundary fall anywhere without breaking the figure a reader
-    follows down the column. ``flat`` puts the opening balance in front of the postings
-    and the period activity and closing balance behind them, so a section reads as one
-    account's story whichever report is printing it.
+    A posting's balance is the whole account's balance after it: the account's opening
+    (every effect before the period, one aggregate in ``balances``) plus the period's running
+    sum up to it, computed before anything is sliced, which is what lets a page boundary
+    fall anywhere without breaking the figure a reader follows down the column. Every
+    effect before the period sorts before every effect in it (the order starts with the
+    date), so this is the same figure as a running sum over the account's whole history,
+    without walking that history on every page (R180). The two parts stay apart as
+    ``base`` and ``net`` because aggregate text is never added in SQL; the reader adds them.
+    ``flat`` puts the opening balance in front of the postings and the period activity and
+    closing balance behind them, so a section reads as one account's story whichever
+    report is printing it.
     """
     return _effects(scope) + """, selected AS (
  SELECT * FROM balances WHERE opening!='0' OR activity>0
@@ -737,16 +743,16 @@ def _ledger(scope):
  SELECT e.*, bookflow_sum_int(debit_minor_units-credit_minor_units) OVER (
    PARTITION BY account_id ORDER BY effective_date, batch_id, line_no, id
    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running_net
- FROM effects e
+ FROM effects e WHERE e.effective_date>=:date_from
 ), flat AS (
  SELECT account_id, 0 AS phase, '' AS effective_date, '' AS batch_id, 0 AS line_no,
-        '' AS posting_line_id, 'opening' AS kind, opening AS net, '0' AS debit, '0' AS credit
+        '' AS posting_line_id, 'opening' AS kind, opening AS net, '0' AS base, '0' AS debit, '0' AS credit
  FROM selected
  UNION ALL
- SELECT account_id, 1, effective_date, batch_id, line_no, id, 'posting', running_net,
-        debit_minor_units, credit_minor_units FROM running WHERE effective_date>=:date_from
+ SELECT r.account_id, 1, r.effective_date, r.batch_id, r.line_no, r.id, 'posting', r.running_net, b.opening,
+        r.debit_minor_units, r.credit_minor_units FROM running r JOIN balances b ON b.account_id=r.account_id
  UNION ALL
- SELECT account_id, 2, '', '', 0, '', 'closing', closing, debits, credits FROM selected
+ SELECT account_id, 2, '', '', 0, '', 'closing', closing, '0', debits, credits FROM selected
 ), ordered AS (
  SELECT f.*, a.number AS account_number, a.full_name_key AS account_full_name_key
  FROM flat f JOIN accounts a ON a.id=f.account_id
@@ -796,7 +802,7 @@ def general_ledger(inp: GeneralLedgerInput, s, *, principal_id=None) -> GeneralL
             ("opening", "period_debits", "period_credits", "closing"), values)})
         # Window calculation is inside running, before this bounded page slice.
         result = raw.execute(_GL + f""", page AS (
-          SELECT account_id, phase, effective_date, batch_id, line_no, posting_line_id, kind, net, debit, credit
+          SELECT account_id, phase, effective_date, batch_id, line_no, posting_line_id, kind, net, base, debit, credit
           FROM ordered
           ORDER BY {account_order("account_")}, phase, effective_date, batch_id, line_no, posting_line_id
           LIMIT :limit OFFSET :offset)
@@ -820,7 +826,7 @@ def general_ledger(inp: GeneralLedgerInput, s, *, principal_id=None) -> GeneralL
             row["display_account_label"] = _account_display(
                 row["current_account_label"], row["current_account_name"],
                 row["current_account_number"], numbers, lowest)
-            row["signed_balance"] = money(int(row.pop("net")), currency)
+            row["signed_balance"] = money(int(row.pop("net")) + int(row.pop("base")), currency)
             row["debit"], row["credit"] = money(int(row["debit"]), currency), money(int(row["credit"]), currency)
             if row["kind"] != "posting":
                 for key in ("effective_date", "batch_id", "line_no", "posting_line_id"):
@@ -874,7 +880,7 @@ def transaction_detail(inp: TransactionDetailInput, s, *, principal_id=None) -> 
             ("opening", "period_debits", "period_credits", "closing"), values)})
         # Window calculation is inside running, before this bounded page slice.
         result = raw.execute(_DETAIL + f""", page AS (
-          SELECT account_id, phase, effective_date, batch_id, line_no, posting_line_id, kind, net, debit, credit
+          SELECT account_id, phase, effective_date, batch_id, line_no, posting_line_id, kind, net, base, debit, credit
           FROM ordered
           ORDER BY {account_order("account_")}, phase, effective_date, batch_id, line_no, posting_line_id
           LIMIT :limit OFFSET :offset)
@@ -901,7 +907,7 @@ def transaction_detail(inp: TransactionDetailInput, s, *, principal_id=None) -> 
             row["display_account_label"] = _account_display(
                 row["current_account_label"], row["current_account_name"],
                 row["current_account_number"], numbers, lowest)
-            row["balance"] = money(int(row.pop("net")), currency)
+            row["balance"] = money(int(row.pop("net")) + int(row.pop("base")), currency)
             row["debit"], row["credit"] = money(int(row["debit"]), currency), money(int(row["credit"]), currency)
             row["date"] = row.pop("effective_date")
             if row["kind"] == "posting":

@@ -3,10 +3,13 @@
 from __future__ import annotations
 from bookflow.core.commit_hooks import CommitHooks
 
+import contextvars
+import copy
 import os
 import sqlite3
 import sys
 import tomllib
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -52,6 +55,37 @@ def dump(data: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+# R180: one command can ask for the settings many times (an OS binding revalidates on every
+# deposit source it admits), and each Config.load reads config.toml and opens hub.db read-only
+# for its pending intent. Inside load_scope (one dispatch.execute) the first read per path is
+# kept and each later load gets its own copy of it. Every command runs under the RootLock, so no
+# other Bookflow process changes either source meanwhile; the moment this process itself writes
+# settings (save, stage_pending, flush_pending) the scope stops caching, and every later load in
+# the command reads disk exactly as it did before. Outside a scope nothing is cached.
+_SCOPE: contextvars.ContextVar[dict | None] = contextvars.ContextVar("bookflow_config_scope", default=None)
+_OFF = object()
+
+
+@contextmanager
+def load_scope():
+    """Read the settings once per path for the duration of one command (nested scopes share)."""
+    if _SCOPE.get() is not None:
+        yield
+        return
+    token = _SCOPE.set({})
+    try:
+        yield
+    finally:
+        _SCOPE.reset(token)
+
+
+def _settings_changed() -> None:
+    cache = _SCOPE.get()
+    if cache is not None:
+        cache.clear()
+        cache[_OFF] = True
+
+
 class Config:
     def __init__(self, path: Path):
         self.path = path
@@ -59,6 +93,19 @@ class Config:
 
     @classmethod
     def load(cls, path: Path) -> "Config":
+        cache = _SCOPE.get()
+        if cache is None or _OFF in cache:
+            return cls._load(path)
+        key = str(path)
+        data = cache.get(key)
+        if data is None:
+            data = cache[key] = cls._load(path).data
+        cfg = cls(path)
+        cfg.data = copy.deepcopy(data)
+        return cfg
+
+    @classmethod
+    def _load(cls, path: Path) -> "Config":
         cfg = cls(path)
         pending = _pending_from_disk(path.parent / "hub.db")
         if pending is not None:
@@ -95,12 +142,14 @@ class Config:
                 table.pop("default_company", None)
 
     def save(self) -> None:
+        _settings_changed()
         write_metadata(self.path, dump(self.data))
 
     def stage_pending(self, hub, *, request_id: str) -> None:
         """Record the desired file contents inside the caller's audited hub transaction."""
         if not hub.writable or not hub.raw.in_transaction:
             raise RuntimeError("config intent requires an active writable hub transaction")
+        _settings_changed()
         from bookflow.core.ids import new_id
         from bookflow.hub.schema import pending_config
 
@@ -123,6 +172,7 @@ class Config:
             pending = _pending_row(hub.raw)
             if pending is None:
                 return False
+            _settings_changed()
             from bookflow.hub.schema import pending_config
             from sqlalchemy.exc import DBAPIError
 
