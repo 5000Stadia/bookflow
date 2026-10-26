@@ -21,9 +21,18 @@ ADDED_ACTIONS = (
     c.CompanyAction('transaction find', (c.Requirement('ledger.read', 'member'),), True,
                     ('bookflow.commands.transaction_find_cmds.transaction_find|src/bookflow/commands/transaction_find_cmds.py',)),
 )
+# _withheld asks, per family, whether the caller could run that family's own `show`, and leaves the
+# family out if not. That probe is a require_resource site of this delta, so it is declared here and
+# never in the frozen ancestor (see tests/test_permission_catalog.py on why). Its pairs are the
+# families' `show` requirements.
+CURRENT_SOURCES = (*previous.CATALOG.conditional_sources,
+    c.ResourceSource('bookflow.company.transaction_find._withheld',
+        (('src/bookflow/company/transaction_find.py', 330),),
+        (c.Requirement('customer-work', 'member'), c.Requirement('ledger.read', 'member'))))
 CATALOG = replace(previous.CATALOG, version=c.TRANSACTION_FIND_POLICY_VERSION,
     commands=tuple(sorted((*previous.CATALOG.commands, *ADDED_COMMANDS), key=lambda x: x.name)),
-    company_actions=tuple(sorted((*previous.CATALOG.company_actions, *ADDED_ACTIONS), key=lambda x: x.key)))
+    company_actions=tuple(sorted((*previous.CATALOG.company_actions, *ADDED_ACTIONS), key=lambda x: x.key)),
+    conditional_sources=tuple(sorted(CURRENT_SOURCES, key=lambda x: x.owner)))
 MANIFEST = c.catalog_manifest(CATALOG, previous.MANIFEST.standalone_names)
 
 

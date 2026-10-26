@@ -413,6 +413,168 @@ them) and the dependency history reads. Both were done in lane C, below.
   validating only each layer's delta, or by a verified on-disk cache. That changes the
   verification itself, so it is left for its own decision.
 
+## Increment 2, lane B (2026-10-26): reconciliation
+
+Every reconciliation command loads the account's stored reconciliation rows and re-proves them
+against the ledger. The checks themselves were right; the time came from how they looked
+things up: a scan of a whole table for each row being checked. Increment 2 keeps every check
+and its order, so the same rule is still the first one raised, and replaces each scan with an
+index built once per load:
+
+- `reconciliation_storage_validation.validate`: one set of key tuples per foreign-key target
+  (proved in Python, not with `PRAGMA foreign_key_check`, which would trust a table rebuilt
+  without its key); `by`, `get` and `matching` built once; certificate members grouped by
+  movement; receipts, attempts, events and claims indexed.
+- `reconciliation_adapters.Graph`: rows are frozen when the graph is built (a read-only
+  mapping of tuples), so its document index and id maps cannot go stale. `authority` reads
+  each evidence table once instead of once per payment or deposit operation.
+- `reconciliation_proof.prove`: sources indexed by posting line, legs by batch.
+- `reconciliation_loading`: the closure follows a value index. The ledger tables that only the
+  foreign-key proof reads are fetched for the ids the stored rows point at, not whole, and
+  `load` hands its own fresh arguments to the snapshot without a defensive deep copy.
+- `reconciliation_preparation`: the enumeration and proofs that `validate` makes are kept on
+  the Snapshot for the command that loaded it, so a later `account_population` reuses them.
+
+**Equivalence.** `tests/reconciliation_oracle.py` keeps the old scans for one increment.
+`tests/test_reconciliation_indexed_equivalence.py` runs:
+
+- every mutation case of the storage-validation tests through both, old and new;
+- a damaged-books corpus of about 9,000 variants (rows missing or duplicated, with and without
+  their dependents; each column nulled, dangled, swapped, bumped, set to an odd type; JSON
+  snapshots with repeated or dropped keys and bent fields; ledger rows damaged under the
+  stored rows; referenced tables emptied or withheld), plus a table rebuilt without its
+  foreign key. Old and new give the same first outcome every time; 91 of the 137 storage
+  rules are raised first by some damage. The rest sit behind earlier consistency rules
+  (fingerprints, hashes, balances) and are covered only by the hand-built mutation cases;
+- a demo company reconciled monthly, and a generated company reconciled for 24 months
+  (`BOOKFLOW_R180_ORACLE_ROOT`), where the closure, authority set, `enumerate_graph`,
+  `prove` at every captured cutoff and `validate` agree exactly.
+
+**Measured.** The large bench company was never reconciled, which hides the certificate
+checks, so the commands were timed on a generated company reconciled for real: 25 months
+(200 customers; per month 26 invoices, 22 payments, 15 bills, 12 bill payments, 4 deposits;
+about 1,950 documents and 396 checking movements). Its checking account was reconciled
+monthly for 24 months through the commands, and month 25 was timed on two copies, old code
+and new, one after the other:
+
+| command (month 25) | old ms | old stmts | new ms | new stmts | load |
+|---|---|---|---|---|---|
+| reconcile start | 53,698 | 2,732 | 21,630 (cold imports included) | 584 | 43 to 51 |
+| reconcile candidates | 53,726 | 921 | 5,477 | 205 | 50 to 52 |
+| reconcile mark (all) | 180,065 | 2,733 | 13,777 | 585 | 51 to 52 |
+| reconcile preview | 28,041 | 921 | 5,864 | 205 | 49 to 52 |
+| reconcile finish | 95,493 | 2,744 | 11,717 | 596 | 43 to 52 |
+| the whole month | 411,200 | | 58,500 | | |
+
+The same on lane A's `medium` template (24 months, 600 customers, 1,080 invoices, 874
+payments, 46 deposits, 192 bill payments), reconciled monthly for 23 months with the new code
+and month 24 timed on copies. "Old" here is main after lane A (db5d39c9), so the difference
+is this lane's alone:
+
+| command (month 24, medium) | old ms | old stmts | new ms | new stmts | load |
+|---|---|---|---|---|---|
+| reconcile start | 78,812 | 4,375 | 5,630 | 595 | 38 to 44 |
+| reconcile candidates | 42,984 | 1,468 | 3,504 | 208 | 38 to 47 |
+| reconcile mark (all) | 78,432 | 4,376 | 4,797 | 596 | 39 to 40 |
+| reconcile preview | 23,546 | 1,468 | 1,437 | 208 | 39 |
+| reconcile finish | 70,356 | 4,387 | 5,272 | 607 | 38 |
+| the whole month | 294,200 | | 22,600 | | |
+
+With the new code, building the 24 months took 12 to 21 s a month at load 39 to 43, growing
+slowly with the certificates. A profile of the new month shows one load at about 6.4 s
+(`validate` 3.3 s, now linear in the stored members and certificates). The largest remaining
+cost is the permission catalog (`known_catalog`, about 33 s over the five commands), which is
+lane A's work.
+
+On the large template (five years, 1,854 effect versions on checking), the company file
+migrates from co0088 to the head in 14 s, and one reconciliation load of checking takes
+**7.2 s and 404 statements** at load 36. The paper's sum for the same load was about 890 s,
+and the baseline commands that make 1 to 3 such loads took 5,751 to 7,825 s. The commands
+themselves could not be timed there: the template's hub carries a permission catalog stored
+before the layers were re-chained, so every command is refused (`catalog_mismatch`), and
+`upgrade` does not change it.
+
+## Increment 2, lane D (2026-10-26): the sealed permission catalog
+
+Chosen 2026-10-26: keep a sealed, already-checked copy of the catalog on disk, re-checked
+whenever the code changes. Code: `hub/permission_catalog_cache.py`, the first-call logic in
+`permission_runtime.known_catalog`, `configure` in `core/dispatch.py`.
+
+**What a full verification proves today.** Three things, in this order.
+1. *The ancestor is unchanged.* Importing `permission_runtime` hashes the frozen ancestor
+   (`permission_catalog.FROZEN_CATALOG`) and refuses to import unless it equals
+   `ACCEPTED_ANCESTOR_SHA256`, which lives in the runtime and not beside the literal.
+2. *Every layer is a well-formed catalog.* Importing each of the 56 layer modules builds
+   `CATALOG = replace(previous.CATALOG, ...)` and `MANIFEST = catalog_manifest(CATALOG, standalone)`.
+   That runs `_normal_catalog` over the whole accumulated catalog: every field has its exact
+   declared type (literals, tuples, no empty strings or `*`); capability, command, company
+   action, admin action, default and conditional source keys are unique; threshold rules hold,
+   including the delete-capability rules; every command and company action names only
+   registered requirements, and company-routed ones only company requirements; defaults are
+   registered and never a delete capability; source call sites are positive lines;
+   standalone names are typed, unique and not commands. Then it hashes the canonical JSON of
+   the normalised catalog: the descriptor sha256.
+3. *Every selectable version is pinned and unmoved.* `_verify_accepted` refuses to serve if any
+   version `known_catalog` can return lacks a pin in `ACCEPTED_DESCRIPTOR_SHA256`, or if any
+   layer's descriptor sha256 differs from its pin. Since a root stores the exact descriptor it
+   activated, this is what keeps every stored root loadable.
+It does not prove call-site parity with `SOURCE_COMMIT` or that each delta adds only its own
+commands; those are tests (`test_permission_catalog_history`), unchanged.
+
+**The sealed copy.** The first process of a code version that runs the full verification
+writes what it verified to `<data root>/cache/permission-catalog-<key>.bin`: for each version,
+its `CATALOG` as JSON, its standalone names, its `SOURCE_COMMIT` and its bundle's source
+commit, exclusions and inventory digest.
+- *The key* is a sha256 over the source bytes of every `hub/permission_*catalog*.py` (all
+  layers, `permission_catalog.py` and the cache module itself, found by glob so a new layer such
+  as serial-lot-v1 is covered without an edit here), `permission_runtime.py`,
+  `permission_snapshot.py`, `permission_policy.py` and `core/deletion_families.py`; the pins and
+  the ancestor pin; the Bookflow version; the Python version and cache tag. Never mtimes. A copy
+  under any other key is never read, and is deleted when the new one is written.
+- *The seal* is a sha256 over the file's index and stored body, re-hashed on every load. Each
+  version's blob is zlib-compressed on its own, so a load inflates only the versions it uses.
+- *One copy per root.* Writing a copy deletes every other `permission-catalog-*.bin` in that
+  folder, best effort, and touches nothing else, so upgrades and checkouts never pile copies up.
+- *On a hit* the runtime still imports `permission_runtime` (so guard 1 still runs), checks the
+  key and the seal, and decodes only the versions actually asked for (usually one, the tip),
+  each with the strict snapshot decoder. Each decoded version is then validated in full by
+  `catalog_manifest` (rule 2 for that one catalog) and must hash to its pin (rule 3 for it).
+  What a hit skips is importing the layer modules and re-validating the versions not used.
+- *Never fail open.* A missing, partial, damaged or wrong-key file, any read, parse or decode
+  error, or a version that no longer reproduces its pin, means the full verification and a
+  rewrite. Writes go to a temporary file in the same folder, then `os.replace`, so concurrent
+  first runs leave one whole file, and a reader sees an old whole file or a new whole one.
+- *What the seal protects against:* truncation, partial writes, disk or copy corruption and
+  stale code, which is the threat model: anyone who can write the data root can already edit
+  the books. It is not a signature. Someone who rewrites the file and recomputes the seal can
+  change what is not re-derived on a hit: element order within a version (the pin is over the
+  normalised form) and the bundle's source commit and inventory digest. They cannot make a
+  catalog that fails rule 2 or a descriptor that misses its pin.
+- *Forcing the full check:* `BOOKFLOW_CATALOG_VERIFY=full` makes a process ignore the copy (and
+  rewrite it). There is no `doctor` or `verify` command; `permission show` and `permission
+  activate`, the commands that inspect and store the executable catalog, always run the full
+  verification first (once per process; a warm server pays it on the first such call only).
+- *Where it applies:* dispatch names the data root before any catalog is built. A process that has
+  not named a data root verifies in full as before, and the copy is never written into a root
+  that does not exist yet (`init` creates it).
+
+**Before and after.** `customer list --json` on the demo company, one new process each, user
+CPU seconds, three runs each, at a 1-minute load of 37 on 16 cores:
+
+| | wall s | user s |
+|---|---|---|
+| main (db5d39c9) | 6.7 | 6.2 to 6.5 |
+| this branch, no copy yet (full check, then writes the copy) | 6.5 | 6.1 to 6.3 |
+| this branch, copy present | 2.8 to 3.0 | 2.6 to 2.8 |
+| this branch, `BOOKFLOW_CATALOG_VERIFY=full` | 6.6 | 6.2 to 6.3 |
+
+In isolation the first build fell from about 3.6 s CPU to 0.15 s (key 3 ms, load and seal
+3 ms, decode, validation and pin of the tip 145 ms). Writing the copy costs the first process
+about 0.4 s: the layers share most descriptor objects, so each is encoded once, then each
+version is compressed. Each version is stored whole; compressed, the file is 0.86 MB (19 MB
+uncompressed). The timing table above was taken before compression; compression only made
+the load faster (60 ms to 3 ms) and the first write about 0.2 s slower.
+
 ## Increment 2, lane C (2026-10-26): deposits read what they prove, once
 
 A deposit command proves its read set (every record and relation its dependency guard covers) in

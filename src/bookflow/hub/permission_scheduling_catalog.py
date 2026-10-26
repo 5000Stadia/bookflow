@@ -35,9 +35,17 @@ ADDED_COMMANDS = tuple(
 ADDED_ACTIONS = tuple(
     c.CompanyAction(name, (c.Requirement(capability, threshold),), True, (_OWNER.format(planner),))
     for name, capability, threshold, planner in _ADDED)
+# reminders asks, per heading, whether the reader's own list command would admit them, and hides
+# the heading if not. That probe is a require_resource site of this delta, so it is declared here and
+# never in the frozen ancestor (see tests/test_permission_catalog.py on why).
+CURRENT_SOURCES = (*previous.CATALOG.conditional_sources,
+    c.ResourceSource('bookflow.company.reminders._may',
+        (('src/bookflow/company/reminders.py', 103),),
+        tuple(c.Requirement(capability, 'member') for capability in ('customer', 'ledger.read', 'note', 'reports'))))
 CATALOG = replace(previous.CATALOG, version=c.SCHEDULING_POLICY_VERSION,
     commands=tuple(sorted((*previous.CATALOG.commands, *ADDED_COMMANDS), key=lambda x: x.name)),
-    company_actions=tuple(sorted((*previous.CATALOG.company_actions, *ADDED_ACTIONS), key=lambda x: x.key)))
+    company_actions=tuple(sorted((*previous.CATALOG.company_actions, *ADDED_ACTIONS), key=lambda x: x.key)),
+    conditional_sources=tuple(sorted(CURRENT_SOURCES, key=lambda x: x.owner)))
 MANIFEST = c.catalog_manifest(CATALOG, previous.MANIFEST.standalone_names)
 
 

@@ -40,6 +40,10 @@ NOT_SETTLEMENT = {
     'payment_discounts': 'discount detail beneath an application the closure already follows (its application_id)',
     'reconciliation_keys': 'our own storage, keyed to the bank effect of the same document',
     'reconciliation_deposit_versions': 'our own storage, keyed to the bank effect of the same document',
+    # R121: an accountant's adjusting or reclassifying journal entry; a reclassification names
+    # the entry whose amount it moved between accounts. It cites, it does not settle: no amount
+    # is applied against the source and neither document's open balance changes.
+    'accountant_adjustments': 'provenance: a reclassifying journal entry citing the entry it moved, not a settlement',
     # Settlement-shaped and deliberately not followed. A credit memo naming the sale it credits
     # is a real edge and adding it would widen the closure across two AR sales, either of which
     # can own a work allocation -- so unlike the money-out edges this one can change what the

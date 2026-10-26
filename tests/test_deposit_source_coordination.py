@@ -79,6 +79,15 @@ from tests.test_work_billing_lifecycle import accepted, bill
 from tests.test_deposit_sources import uf
 
 
+def test_source_columns_cover_every_column_of_their_tables(client):
+    # A column a later migration adds to a source table (co0091's unit_price_fraction was one)
+    # must be classified here, or every coordinated correction of that source fails E_INTERNAL.
+    from bookflow.company.deposit_coordination import SOURCE_COLUMNS
+    with sqlite3.connect(database_path(client)) as db:
+        drift={table:sorted({r[1] for r in db.execute(f'PRAGMA table_xinfo({table})')}^set(columns)) for table,columns in SOURCE_COLUMNS.items()}
+    assert {table:columns for table,columns in drift.items() if columns}=={}
+
+
 def test_n7_keyless_work_tax_redistribution_keeps_full_billing_and_cash_confirmation(client,tax_sale,monkeypatch):
     source=accepted(client,tax_sale,**tax_request(tax_sale))
     receipt=bill(client,source,verb='sales-receipt',deposit_to=uf(client),payment_method='Check',amount_received='0.22')
