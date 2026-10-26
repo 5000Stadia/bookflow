@@ -335,8 +335,14 @@ def _project(kind, value, fields=None):
         # rows without the credit-source column at all, so history holds no key for it while
         # the live row holds NULL. Normalising both to NULL is what keeps an old receipt's
         # signed history equal to the row it describes after co0027 widened the table.
+        # co0091 (R150) widened these owners with sub-cent fractions; history signed before it
+        # holds no key where the live row holds NULL, which is the same fact.
         for kind_name, extension in (('application', 'credit_source_key_id'),
-                                     ('application_allocation', 'credit_source_component_id')):
+                                     ('application_allocation', 'credit_source_component_id'),
+                                     ('sales_line_profile', 'unit_price_fraction'),
+                                     ('source_item', 'price_fraction'), ('source_item', 'cost_fraction'),
+                                     ('work_revision_line', 'unit_price_fraction'),
+                                     ('work_revision_line', 'estimated_unit_cost_fraction')):
             if kind == kind_name and extension not in value:
                 value = {**value, extension: None}
         if kind in schemas:
