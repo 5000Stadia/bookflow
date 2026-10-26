@@ -493,3 +493,84 @@ and the baseline commands that make 1 to 3 such loads took 5,751 to 7,825 s. The
 themselves could not be timed there: the template's hub carries a permission catalog stored
 before the layers were re-chained, so every command is refused (`catalog_mismatch`), and
 `upgrade` does not change it.
+
+## Increment 2, lane D (2026-10-26): the sealed permission catalog
+
+Chosen 2026-10-26: keep a sealed, already-checked copy of the catalog on disk, re-checked
+whenever the code changes. Code: `hub/permission_catalog_cache.py`, the first-call logic in
+`permission_runtime.known_catalog`, `configure` in `core/dispatch.py`.
+
+**What a full verification proves today.** Three things, in this order.
+1. *The ancestor is unchanged.* Importing `permission_runtime` hashes the frozen ancestor
+   (`permission_catalog.FROZEN_CATALOG`) and refuses to import unless it equals
+   `ACCEPTED_ANCESTOR_SHA256`, which lives in the runtime and not beside the literal.
+2. *Every layer is a well-formed catalog.* Importing each of the 56 layer modules builds
+   `CATALOG = replace(previous.CATALOG, ...)` and `MANIFEST = catalog_manifest(CATALOG, standalone)`.
+   That runs `_normal_catalog` over the whole accumulated catalog: every field has its exact
+   declared type (literals, tuples, no empty strings or `*`); capability, command, company
+   action, admin action, default and conditional source keys are unique; threshold rules hold,
+   including the delete-capability rules; every command and company action names only
+   registered requirements, and company-routed ones only company requirements; defaults are
+   registered and never a delete capability; source call sites are positive lines;
+   standalone names are typed, unique and not commands. Then it hashes the canonical JSON of
+   the normalised catalog: the descriptor sha256.
+3. *Every selectable version is pinned and unmoved.* `_verify_accepted` refuses to serve if any
+   version `known_catalog` can return lacks a pin in `ACCEPTED_DESCRIPTOR_SHA256`, or if any
+   layer's descriptor sha256 differs from its pin. Since a root stores the exact descriptor it
+   activated, this is what keeps every stored root loadable.
+It does not prove call-site parity with `SOURCE_COMMIT` or that each delta adds only its own
+commands; those are tests (`test_permission_catalog_history`), unchanged.
+
+**The sealed copy.** The first process of a code version that runs the full verification
+writes what it verified to `<data root>/cache/permission-catalog-<key>.bin`: for each version,
+its `CATALOG` as JSON, its standalone names, its `SOURCE_COMMIT` and its bundle's source
+commit, exclusions and inventory digest.
+- *The key* is a sha256 over the source bytes of every `hub/permission_*catalog*.py` (all
+  layers, `permission_catalog.py` and the cache module itself, found by glob so a new layer such
+  as serial-lot-v1 is covered without an edit here), `permission_runtime.py`,
+  `permission_snapshot.py`, `permission_policy.py` and `core/deletion_families.py`; the pins and
+  the ancestor pin; the Bookflow version; the Python version and cache tag. Never mtimes. A copy
+  under any other key is never read, and is deleted when the new one is written.
+- *The seal* is a sha256 over the file's index and stored body, re-hashed on every load. Each
+  version's blob is zlib-compressed on its own, so a load inflates only the versions it uses.
+- *One copy per root.* Writing a copy deletes every other `permission-catalog-*.bin` in that
+  folder, best effort, and touches nothing else, so upgrades and checkouts never pile copies up.
+- *On a hit* the runtime still imports `permission_runtime` (so guard 1 still runs), checks the
+  key and the seal, and decodes only the versions actually asked for (usually one, the tip),
+  each with the strict snapshot decoder. Each decoded version is then validated in full by
+  `catalog_manifest` (rule 2 for that one catalog) and must hash to its pin (rule 3 for it).
+  What a hit skips is importing the layer modules and re-validating the versions not used.
+- *Never fail open.* A missing, partial, damaged or wrong-key file, any read, parse or decode
+  error, or a version that no longer reproduces its pin, means the full verification and a
+  rewrite. Writes go to a temporary file in the same folder, then `os.replace`, so concurrent
+  first runs leave one whole file, and a reader sees an old whole file or a new whole one.
+- *What the seal protects against:* truncation, partial writes, disk or copy corruption and
+  stale code, which is the threat model: anyone who can write the data root can already edit
+  the books. It is not a signature. Someone who rewrites the file and recomputes the seal can
+  change what is not re-derived on a hit: element order within a version (the pin is over the
+  normalised form) and the bundle's source commit and inventory digest. They cannot make a
+  catalog that fails rule 2 or a descriptor that misses its pin.
+- *Forcing the full check:* `BOOKFLOW_CATALOG_VERIFY=full` makes a process ignore the copy (and
+  rewrite it). There is no `doctor` or `verify` command; `permission show` and `permission
+  activate`, the commands that inspect and store the executable catalog, always run the full
+  verification first (once per process; a warm server pays it on the first such call only).
+- *Where it applies:* dispatch names the data root before any catalog is built. A process that has
+  not named a data root verifies in full as before, and the copy is never written into a root
+  that does not exist yet (`init` creates it).
+
+**Before and after.** `customer list --json` on the demo company, one new process each, user
+CPU seconds, three runs each, at a 1-minute load of 37 on 16 cores:
+
+| | wall s | user s |
+|---|---|---|
+| main (db5d39c9) | 6.7 | 6.2 to 6.5 |
+| this branch, no copy yet (full check, then writes the copy) | 6.5 | 6.1 to 6.3 |
+| this branch, copy present | 2.8 to 3.0 | 2.6 to 2.8 |
+| this branch, `BOOKFLOW_CATALOG_VERIFY=full` | 6.6 | 6.2 to 6.3 |
+
+In isolation the first build fell from about 3.6 s CPU to 0.15 s (key 3 ms, load and seal
+3 ms, decode, validation and pin of the tip 145 ms). Writing the copy costs the first process
+about 0.4 s: the layers share most descriptor objects, so each is encoded once, then each
+version is compressed. Each version is stored whole; compressed, the file is 0.86 MB (19 MB
+uncompressed). The timing table above was taken before compression; compression only made
+the load faster (60 ms to 3 ms) and the first write about 0.2 s slower.

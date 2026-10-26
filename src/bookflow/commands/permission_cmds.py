@@ -41,6 +41,7 @@ show = command('permission show',scope='hub',capability='user',required_role='hu
 
 
 def state(session):
+    runtime.verify_full()  # the self-check: always the full catalog verification, never the sealed copy
     from bookflow.hub import permission_snapshot as snap; build = runtime.current_catalog()
     from bookflow.hub.permission_activation import _administrators
     row = session.hub.raw.execute('SELECT mode,generation FROM permission_state WHERE id=1').fetchone()
@@ -69,6 +70,7 @@ activate = command('permission activate',scope='hub',capability='user',required_
 
 
 def preparation(inp,ctx,s,preview):
+    runtime.verify_full()  # activation stores a descriptor: full verification first
     from bookflow.hub import permission_snapshot as snap; build = runtime.current_catalog()
     current = state(s)
     if inp.expected_generation != current.generation:

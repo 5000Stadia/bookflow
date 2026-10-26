@@ -482,6 +482,8 @@ def _run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: st
     def before_lock():
         root = resolve_data_root(data_root)
         performance.protect_root(root)
+        from bookflow.hub import permission_catalog_cache
+        permission_catalog_cache.configure(root)  # a sealed, verified catalog copy under <root>/cache
         if root.exists() and not root.is_dir():
             raise BookflowError("E_IO", details={"operation": "data_root", "errno": "ENOTDIR", "path": str(root)})
         check_local(root)
