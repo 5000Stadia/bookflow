@@ -809,6 +809,15 @@ jobs at night; the van ends as counted.
   placement is written; an assignment whose placements do not net to zero at its item, site and bin on its
   own date, or a placement added to one already written. A number's placements plus the unassigned bucket
   sum to the place's quantity by construction; the seeded checker asserts it at every place on every date.
+- **Only standing placements count** for the serial range, in the database as in the application: a placement
+  a reversal retires, and the reversal (which keeps its original's date and position under a later sequence),
+  are left out together, so a correction or void dated around another document never reads as two steps. A
+  reversal is checked with the change it belongs to, not on its own row. A count derived again retires its old
+  loose placements before it posts, and places its new ones after, so a unit now posted as found never meets the
+  loose placement it replaces.
+- **Late paperwork can split a serial number over two sites** (a sale backdated before the transfer that moved
+  the unit: one site shows -1, the other +1). The quantity and number ties hold; the write warns, naming both
+  sites, and a transfer or a count of where the unit really is puts it right.
 - **The application check is stricter than the database.** Reversed pairs left out, a serial number may
   stand at -1 only before anything has brought it in; once it has been in stock and left, taking it again is
   refused naming the document that took it (`serial_lots.check`). It runs on every document, transfer,
