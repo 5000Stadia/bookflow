@@ -413,7 +413,7 @@ them) and the dependency history reads.
   validating only each layer's delta, or by a verified on-disk cache. That changes the
   verification itself, so it is left for its own decision.
 
-## Increment 2: reconciliation (2026-10-26)
+## Increment 2, lane B (2026-10-26): reconciliation
 
 Every reconciliation command loads the account's stored reconciliation rows and re-proves them
 against the ledger. The checks themselves were right; the time came from how they looked
