@@ -2604,13 +2604,13 @@ reason = "The slip for the half kit moved back this morning"
 [[commands]]
 command = "item create"
 capture = "heater_item"
-input = { name = "Water Heater", type = "inventory_part", description = "40-gallon water heater", purchase_description = "40-gallon water heater", sales_enabled = true, purchase_enabled = true, price = "899.00", cost = "350.00", income_account_id = "${income_account.id}", cogs_account_id = "${cogs_account.id}", asset_account_id = "${inventory_account.id}", tracking = "serial" }
+input = { name = "Water Heater", barcode = "4006381334013", type = "inventory_part", description = "40-gallon water heater", purchase_description = "40-gallon water heater", sales_enabled = true, purchase_enabled = true, price = "899.00", cost = "350.00", income_account_id = "${income_account.id}", cogs_account_id = "${cogs_account.id}", asset_account_id = "${inventory_account.id}", tracking = "serial" }
 reason = "Water heaters carry serial numbers for their warranties"
 
 [[commands]]
 command = "item create"
 capture = "sealant_item"
-input = { name = "Pipe Sealant", type = "inventory_part", description = "Thread sealant, 50 ml", purchase_description = "Thread sealant", sales_enabled = true, purchase_enabled = true, price = "7.50", cost = "3.00", income_account_id = "${income_account.id}", cogs_account_id = "${cogs_account.id}", asset_account_id = "${inventory_account.id}", tracking = "lot" }
+input = { name = "Pipe Sealant", barcode = "4006381334020", type = "inventory_part", description = "Thread sealant, 50 ml", purchase_description = "Thread sealant", sales_enabled = true, purchase_enabled = true, price = "7.50", cost = "3.00", income_account_id = "${income_account.id}", cogs_account_id = "${cogs_account.id}", asset_account_id = "${inventory_account.id}", tracking = "lot" }
 reason = "Sealant is tracked by lot and expiry"
 
 [[commands]]
