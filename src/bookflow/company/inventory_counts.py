@@ -1018,7 +1018,7 @@ def settle_in_command(s, ctx, mark):
     Called by dispatch after a company write applies, inside its transaction. Cheap when the company
     has no recorded count, and when the command wrote no placement.
     """
-    if mark is None:
+    if mark is None or s.company is None:  # a command that closed or replaced the company (rename, upgrade)
         return []
     conn = s.company.conn
     k = c.inventory_counts
