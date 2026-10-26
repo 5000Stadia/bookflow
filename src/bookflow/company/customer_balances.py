@@ -11,7 +11,7 @@ from bookflow.company import schema
 from bookflow.company.ledger_reports import register_ledger_functions
 from bookflow.core.exact import _require_i64
 from bookflow.core.money import Money
-from bookflow.company.party_merges import family_cte, survivor_sql
+from bookflow.company.party_merges import family_cte, members_sql, survivor_sql
 
 
 class _IntegerText(sa.TypeDecorator):
@@ -56,11 +56,30 @@ def balance_expression(db=None):
 
 
 def own_balance(db, id: str) -> int:
-    """Signed minor units for this exact customer/job; fail on i64 overflow."""
-    value = db.conn.execute(sa.select(balance_expression(db)).where(
-        schema.customers.c.id == id,
-    )).scalar_one_or_none()
-    return _require_i64(int(value or "0"), field="current_balance")
+    """Signed minor units for this exact customer/job; fail on i64 overflow.
+
+    The same figure ``balance_expression`` gives the customer's row, read through the
+    customer's own posting lines only (the index on name_type, name_id), so a list that
+    projects every customer is linear in the ledger rather than quadratic (R180).
+    """
+    return _require_i64(_party_net(db, "customer", id), field="current_balance")
+
+
+def _party_net(db, kind: str, id: str) -> int:
+    """Net over every line that reads as ``id``: its own unless merged away, and each merged
+    into it. ``balance_expression`` groups by ``survivor_sql``; ``members_sql`` is its inverse."""
+    register_functions(db)
+    if kind == "customer":
+        account_type, net = "accounts_receivable", "l.debit_minor_units - l.credit_minor_units"
+    else:
+        account_type, net = "accounts_payable", "l.credit_minor_units - l.debit_minor_units"
+    value = db.raw.execute(f"""
+        SELECT bookflow_sum_int({net})
+        FROM posting_lines l JOIN accounts a ON a.id = l.account_id
+        WHERE l.name_type = :kind AND a.type = :account_type
+          AND l.name_id IN ({members_sql(kind, ":id")})
+    """, {"id": id, "kind": kind, "account_type": account_type}).fetchone()[0]
+    return int(value or "0")
 
 
 def family_balance(db, id: str) -> int:
@@ -141,8 +160,7 @@ def vendor_balance_expression(db=None):
 
 
 def vendor_balance(db, id: str) -> int:
-    """Signed minor units the company owes this vendor; fail on i64 overflow."""
-    value = db.conn.execute(sa.select(vendor_balance_expression(db)).where(
-        schema.vendors.c.id == id,
-    )).scalar_one_or_none()
-    return _require_i64(int(value or "0"), field="open_balance")
+    """Signed minor units the company owes this vendor; fail on i64 overflow.
+
+    ``vendor_balance_expression``'s figure for the vendor's row, read through its own lines."""
+    return _require_i64(_party_net(db, "vendor", id), field="open_balance")
