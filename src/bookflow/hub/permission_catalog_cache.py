@@ -10,7 +10,11 @@ full check proves and what this copy does and does not stand in for.
   catalog layer module, of permission_catalog, permission_runtime, permission_snapshot,
   permission_policy, core/deletion_families and this module; the pinned descriptor hashes;
   the Bookflow version; the Python version. Never mtimes.
-- The file is sealed: a sha256 over its index and body, re-hashed on every load.
+- The file is sealed: a sha256 over its index and stored (compressed) body, re-hashed on
+  every load. Each version's blob is zlib-compressed on its own, so a load inflates only
+  the versions it uses.
+- Writing a copy deletes every other permission-catalog-*.bin in that folder (best effort),
+  so an upgrade or a new checkout leaves one copy, never a pile.
 - Every failure reading, parsing, sealing or decoding falls back to full verification.
   Nothing here can make a catalog acceptable that full verification would refuse.
 - BOOKFLOW_CATALOG_VERIFY=full forces full verification (and rewrites the copy).
@@ -26,9 +30,10 @@ import os
 import re
 import sys
 import tempfile
+import zlib
 from pathlib import Path
 
-FORMAT = 'bookflow-permission-catalog-cache/1'
+FORMAT = 'bookflow-permission-catalog-cache/2'  # /2: each version's blob zlib-compressed
 ENV = 'BOOKFLOW_CATALOG_VERIFY'
 _HERE = Path(__file__).resolve().parent
 _EXTRA_SOURCES = ('permission_runtime.py', 'permission_snapshot.py', 'permission_policy.py',
@@ -103,7 +108,7 @@ def encode(key: str, entries: dict) -> bytes:
     body = bytearray()
     index = {}
     for version in sorted(entries):
-        blob = entries[version]['catalog'].encode('utf-8')
+        blob = zlib.compress(entries[version]['catalog'].encode('utf-8'), 6)
         index[version] = dict(entries[version]['meta'], offset=len(body), length=len(blob))
         body += blob
     head = _canonical(dict(format=FORMAT, key=key, versions=index))
@@ -121,7 +126,7 @@ class Sealed:
         offset, length = entry['offset'], entry['length']
         if type(offset) is not int or type(length) is not int or offset < 0 or offset + length > len(self._body):
             raise ValueError('index out of range')
-        return self._body[offset:offset + length].decode('utf-8')
+        return zlib.decompress(self._body[offset:offset + length]).decode('utf-8')
 
 
 def decode(data: bytes, key: str) -> Sealed:

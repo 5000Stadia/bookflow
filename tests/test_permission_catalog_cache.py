@@ -70,6 +70,25 @@ def test_layer_source_change_forces_full_and_rewrites(root, monkeypatch, tmp_pat
     assert after != before and not before.exists()
 
 
+def test_key_change_leaves_exactly_one_copy_and_nothing_else_touched(root, monkeypatch):
+    runtime._chain()
+    folder = root / 'cache'
+    keep = [folder / 'notes.txt', folder / 'permission-catalog-x.tmp', root / 'permission-catalog-old.bin']
+    for path in keep:
+        path.write_text('not ours')
+    for n in range(3):  # three code versions in a row
+        monkeypatch.setattr(runtime, '_cache_key', lambda n=n: '%064x' % (n + 1))
+        _fresh_process_state(monkeypatch)
+        assert type(runtime._chain()) is dict
+        [only] = _files(root)
+        assert only.name == 'permission-catalog-%s.bin' % ('%064x' % (n + 1))[:40]
+    assert all(path.read_text() == 'not ours' for path in keep)
+    assert only.stat().st_size < 4 * 1024 * 1024  # compressed: about 1 MB, not 19 MB
+    _fresh_process_state(monkeypatch)
+    assert isinstance(runtime._chain(), runtime._CachedChain)
+    assert runtime.current_catalog().MANIFEST == runtime._full_known()[c.PERFORMANCE_POLICY_VERSION].MANIFEST
+
+
 def test_every_key_input_moves_the_key(monkeypatch):
     pins, ancestor = dict(runtime.ACCEPTED_DESCRIPTOR_SHA256), runtime.ACCEPTED_ANCESTOR_SHA256
     key = cache.compute_key(pins, ancestor)

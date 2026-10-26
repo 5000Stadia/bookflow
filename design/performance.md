@@ -450,7 +450,10 @@ commit, exclusions and inventory digest.
   `permission_snapshot.py`, `permission_policy.py` and `core/deletion_families.py`; the pins and
   the ancestor pin; the Bookflow version; the Python version and cache tag. Never mtimes. A copy
   under any other key is never read, and is deleted when the new one is written.
-- *The seal* is a sha256 over the file's index and body, re-hashed on every load.
+- *The seal* is a sha256 over the file's index and stored body, re-hashed on every load. Each
+  version's blob is zlib-compressed on its own, so a load inflates only the versions it uses.
+- *One copy per root.* Writing a copy deletes every other `permission-catalog-*.bin` in that
+  folder, best effort, and touches nothing else, so upgrades and checkouts never pile copies up.
 - *On a hit* the runtime still imports `permission_runtime` (so guard 1 still runs), checks the
   key and the seal, and decodes only the versions actually asked for (usually one, the tip),
   each with the strict snapshot decoder. Each decoded version is then validated in full by
@@ -484,7 +487,9 @@ CPU seconds, three runs each, at a 1-minute load of 37 on 16 cores:
 | this branch, copy present | 2.8 to 3.0 | 2.6 to 2.8 |
 | this branch, `BOOKFLOW_CATALOG_VERIFY=full` | 6.6 | 6.2 to 6.3 |
 
-In isolation the first build fell from about 3.6 s CPU to 0.2 s (key 3 ms, load and seal
-60 ms, decode of the tip 70 ms, its validation and pin 110 ms). Writing the copy costs the
-first process about 0.2 s: the layers share most descriptor objects, so each is encoded once.
-The file is 19 MB, since each version is stored whole.
+In isolation the first build fell from about 3.6 s CPU to 0.15 s (key 3 ms, load and seal
+3 ms, decode, validation and pin of the tip 145 ms). Writing the copy costs the first process
+about 0.4 s: the layers share most descriptor objects, so each is encoded once, then each
+version is compressed. Each version is stored whole; compressed, the file is 0.86 MB (19 MB
+uncompressed). The timing table above was taken before compression; compression only made
+the load faster (60 ms to 3 ms) and the first write about 0.2 s slower.
