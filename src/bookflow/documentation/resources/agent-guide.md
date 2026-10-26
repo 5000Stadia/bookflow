@@ -685,6 +685,13 @@ When the accountant's change file arrives, `accountant-copy preview` (its full p
 new, imported or refused, and why; show that to the owner and let them import. Each imported change is
 posted as the accountant, and `report accountant-changes` lists everything an accountant changed.
 
+## "Why is it slow?"
+
+Every command's time is recorded beside the hub (never in the books, and never what was typed):
+`perf report` (`since` 24h or 7d, optionally one `command` or `surface`) gives p50, p95 and max per
+command and the slowest single calls, each with its SQL statement count. Quote those figures rather
+than guessing; an installation administrator can turn recording off with `perf settings`.
+
 ## How are we doing against budget?
 
 A budget is a named plan for one fiscal year: an amount per account per month, entered positive for
@@ -1049,6 +1056,32 @@ work-order and purchase-order lines) takes `site`; a document may name one `site
 Leave it out and the line uses the default site; a return goes back where its sale took from, and a
 receipt against a purchase-order line arrives where that line said. `report quantity-by-site` and
 `report stock-status --site` read stock by site.
+## What needs doing today?
+
+Start with `reminders`: one heading per kind of work with its count and total -- memorized
+transactions due (reminder slots, and missed automatic ones the company left for a person),
+memorized entries that need a person (blocked: a closed period, an inactive account, an owner who
+lost the right to post), to-dos due, overdue notices ready to send, overdue invoices and bills to
+pay. Then `todo list --mine`: the to-dos assigned to you, soonest first.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "todo list", "input": {"mine": true, "due_by": "2026-11-03"}}
+```
+
+Do each one, then `todo complete TODO`. A to-do whose `source_ref` begins `memorized-occurrence:`
+was assigned by the scheduler because an automatic entry failed: its notes carry the error; fix
+the cause and `memorized retry OCCURRENCE`, or `memorized skip OCCURRENCE` if the owner says it
+should not be entered. Leave work for a person with `todo create --assignee USERNAME` and a
+reason, linked to the customer, vendor, document or memorized transaction it is about.
+
+The host enters automatic memorized transactions and prepares overdue notices by itself while
+`bookflow serve` runs: do not run `memorized process` just because it is a new day. Overdue notices
+are never sent by Bookflow. `notice list` shows the ones ready, each with `print_path` (its PDF)
+and the letter text; sending one is the owner's decision. Once a person (or a delivery step the
+owner set up) has sent it, `notice mark-sent NOTICE --method email`; if the owner says not to,
+`notice dismiss NOTICE --note "why"`. A dismissed notice is not prepared again until the next
+notice period.
 
 ## A scanned barcode
 

@@ -154,7 +154,9 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.CHECK_PRINTING_POLICY_VERSION: 'a4c3dc284228e3321e3b9fe710ec73488a84800195a5bae91896dd9324979522',
     c.BARCODES_POLICY_VERSION: 'f2e8e164a17a2a43960e2af90d3382579423e8ef8b03902bc9d36ee07e23058a',
     c.INVENTORY_COUNTS_POLICY_VERSION: '5af62281b43f9d583b58533c6dc155c4b8eb95fcc8ef9b7ebc7c994e8963e250',
-    c.SERIAL_LOT_POLICY_VERSION: '0b206958f6fca747535b29a9c04c02c88a3d67ab0dd79b487dc283b16b0e2656',
+    c.SCHEDULING_POLICY_VERSION: '16f34e115a6e90fbb5d8377c225ca118c864719d654bb6656991d0c94ef659be',
+    c.PERFORMANCE_POLICY_VERSION: 'f7dff2bccde0245a0a551c224df697de196e5607bacefd605d988ac0ddd56017',
+    c.SERIAL_LOT_POLICY_VERSION: '41cf9e8f2ebd29fd7a453375e047d373e496473365079b35324b590b04802a8e',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -284,6 +286,8 @@ def known_catalog(version):
     from . import permission_check_printing_catalog
     from . import permission_barcodes_catalog
     from . import permission_inventory_counts_catalog
+    from . import permission_scheduling_catalog
+    from . import permission_performance_catalog
     from . import permission_serial_lot_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
@@ -340,6 +344,8 @@ def known_catalog(version):
         c.CHECK_PRINTING_POLICY_VERSION: permission_check_printing_catalog,
         c.BARCODES_POLICY_VERSION: permission_barcodes_catalog,
         c.INVENTORY_COUNTS_POLICY_VERSION: permission_inventory_counts_catalog,
+        c.SCHEDULING_POLICY_VERSION: permission_scheduling_catalog,
+        c.PERFORMANCE_POLICY_VERSION: permission_performance_catalog,
         c.SERIAL_LOT_POLICY_VERSION: permission_serial_lot_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is

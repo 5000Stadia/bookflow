@@ -80,6 +80,9 @@ ACCEPTED = {
     'check-printing-v1': (673, 'a4c3dc284228e3321e3b9fe710ec73488a84800195a5bae91896dd9324979522'),
     'barcodes-v1': (675, 'f2e8e164a17a2a43960e2af90d3382579423e8ef8b03902bc9d36ee07e23058a'),
     'inventory-counts-v1': (685, '5af62281b43f9d583b58533c6dc155c4b8eb95fcc8ef9b7ebc7c994e8963e250'),
+    'scheduling-v1': (696, '16f34e115a6e90fbb5d8377c225ca118c864719d654bb6656991d0c94ef659be'),
+    'performance-v1': (698, 'f7dff2bccde0245a0a551c224df697de196e5607bacefd605d988ac0ddd56017'),
+    'serial-lot-v1': (708, '41cf9e8f2ebd29fd7a453375e047d373e496473365079b35324b590b04802a8e'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -179,6 +182,12 @@ CHAIN_ADDITIONS = {
                             'inventory-count post', 'inventory-count query', 'inventory-count sheet',
                             'inventory-count show', 'inventory-count void', 'report inventory-valuation-detail',
                             'report physical-inventory-worksheet'},
+    'scheduling-v1': {'todo create', 'todo update', 'todo complete', 'todo show', 'todo list', 'notice generate',
+                      'notice list', 'notice show', 'notice mark-sent', 'notice dismiss', 'reminders'},
+    'performance-v1': {'perf report', 'perf settings'},
+    'serial-lot-v1': {'inventory assign', 'lot list', 'lot show', 'lot update', 'report lot-trace',
+                      'report serial-lot-history', 'report serial-lot-stock', 'serial-number list',
+                      'serial-number show', 'serial-number update'},
 }
 
 _ANCESTOR_EDIT = """

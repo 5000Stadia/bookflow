@@ -4,7 +4,7 @@
 
 ## `serve`
 
-Serve every routed command over HTTP and the loopback socket, holding the data-root lock until interrupted.
+Serve every routed command over HTTP and the loopback socket, holding the data-root lock until interrupted. While it runs, the host's scheduler enters due automatic memorized transactions, assigns to-dos and prepares overdue notices; it looks for due work every BOOKFLOW_SCHEDULE_CHECK_SECONDS seconds (environment variable; default 60, at least 1).
 
 | Contract | Value |
 |---|---|

@@ -1,0 +1,46 @@
+{% extends "base.html" %}{% block title %}Performance · Bookflow{% endblock %}{% block body %}
+{% macro label(text) %}<span class="document-cell-label" aria-hidden="true">{{ text }}</span>{% endmacro %}
+<h1>Performance</h1>
+<p class="muted">How long commands take on this installation, measured inside each command. Nothing about the books' content is recorded.</p>
+<form method="get" action="/hub/performance" hx-get="/hub/performance" hx-target="body" hx-push-url="true" class="find-filters" id="perf-filters" role="search" aria-label="Filter timings">
+<label>Since<input name="since" value="{{ form.since }}" placeholder="7d, 24h or 2026-10-01" autocomplete="off"></label>
+<label>Command<input name="command" value="{{ form.command }}" placeholder="e.g. invoice post" autocomplete="off"></label>
+<label>Surface<select name="surface"><option value="">Every surface</option>{% for s in surfaces %}<option value="{{ s }}"{% if form.surface == s %} selected{% endif %}>{{ s }}</option>{% endfor %}</select></label>
+<p class="actions"><button type="submit">Show</button> <a href="/hub/performance">Clear</a></p>
+</form>
+{% if error %}<div class="error" role="alert" id="perf-error"><strong>{{ error.message }}</strong></div>{% endif %}
+{% if report %}<section class="document-detail basic-report" aria-label="Command timings">
+<p id="perf-count" role="status"><strong>{{ report.calls }}</strong> {{ 'call' if report.calls == 1 else 'calls' }} since {{ report.since }}{% if report.scope != 'installation' %}, on the companies you can see{% endif %}.{% if not report.recording %} Recording is off.{% endif %}</p>
+<div class="table-wrap report-lines-wrap"><table class="ledger-table document-lines" id="perf-lines" role="table">
+<thead role="rowgroup"><tr role="row"><th scope="col">Command</th><th scope="col">Surface</th><th scope="col" class="num">Calls</th><th scope="col" class="num">Errors</th><th scope="col" class="num">p50 ms</th><th scope="col" class="num">p95 ms</th><th scope="col" class="num">Max ms</th><th scope="col" class="num">SQL / call</th><th scope="col" class="num">Most rows</th></tr></thead>
+<tbody role="rowgroup">
+{% for row in report['items'] %}<tr role="row">
+<td role="cell">{{ label('Command') }}{{ row.command }}</td>
+<td role="cell">{{ label('Surface') }}{{ row.surface }}</td>
+<td role="cell" class="num">{{ label('Calls') }}{{ row.count }}</td>
+<td role="cell" class="num">{{ label('Errors') }}{{ row.errors }}</td>
+<td role="cell" class="num">{{ label('p50 ms') }}{{ row.p50_ms }}</td>
+<td role="cell" class="num">{{ label('p95 ms') }}{{ row.p95_ms }}</td>
+<td role="cell" class="num">{{ label('Max ms') }}{{ row.max_ms }}</td>
+<td role="cell" class="num">{{ label('SQL / call') }}{{ row.mean_sql }}</td>
+<td role="cell" class="num">{{ label('Most rows') }}{{ row.max_rows }}</td>
+</tr>{% else %}<tr role="row"><td role="cell" colspan="9">No calls in this window.</td></tr>{% endfor %}
+</tbody></table></div>
+{% if report.slowest %}<h2>Slowest calls</h2>
+<div class="table-wrap report-lines-wrap"><table class="ledger-table document-lines" id="perf-slowest" role="table">
+<thead role="rowgroup"><tr role="row"><th scope="col">When (UTC)</th><th scope="col">Command</th><th scope="col">Surface</th><th scope="col">Outcome</th><th scope="col" class="num">ms</th><th scope="col" class="num">SQL</th><th scope="col" class="num">SQL ms</th><th scope="col" class="num">Rows</th><th scope="col">Company size</th></tr></thead>
+<tbody role="rowgroup">
+{% for row in report.slowest %}<tr role="row">
+<td role="cell">{{ label('When') }}{{ row.at }}</td>
+<td role="cell">{{ label('Command') }}{{ row.command }}</td>
+<td role="cell">{{ label('Surface') }}{{ row.surface }}</td>
+<td role="cell">{{ label('Outcome') }}{{ row.outcome }}</td>
+<td role="cell" class="num">{{ label('ms') }}{{ row.wall_ms }}</td>
+<td role="cell" class="num">{{ label('SQL') }}{{ row.sql_count }}</td>
+<td role="cell" class="num">{{ label('SQL ms') }}{{ row.sql_ms }}</td>
+<td role="cell" class="num">{{ label('Rows') }}{{ row.rows_in or row.rows_out or '' }}</td>
+<td role="cell">{{ label('Company size') }}{{ row.size_class or '' }}</td>
+</tr>{% endfor %}
+</tbody></table></div>{% endif %}
+</section>{% endif %}
+{% endblock %}

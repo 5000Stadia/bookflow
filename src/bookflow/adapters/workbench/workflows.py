@@ -15,6 +15,7 @@ CUSTOMER_GROUPS = (
 )
 
 LABELS = {
+    "again": "Enter it again",
     "name": "Name", "parent_id": "Parent customer or job", "company_name": "Company name",
     "terms_id": "Payment terms", "sales_tax_code_id": "Sales tax code",
     "sales_tax_item_id": "Sales tax item", "sales_rep_id": "Sales representative",
@@ -46,19 +47,28 @@ def company_form_groups(leaves):
         finance_charge_annual_rate='Annual interest rate (%)', finance_charge_minimum='Minimum finance charge',
         finance_charge_grace_days='Grace period (days)', finance_charge_account_id='Finance charge account',
         finance_charge_on_overdue_charges='Assess finance charges on overdue finance charges',
-        finance_charge_from='Calculate charges from', finance_charge_mark_to_print='Mark finance charge invoices to be printed')
+        finance_charge_from='Calculate charges from', finance_charge_mark_to_print='Mark finance charge invoices to be printed',
+        scheduler_catch_up_days='Enter missed automatic transactions up to (days back; blank for all)',
+        overdue_notice_days='Prepare a notice when an invoice is this many days overdue (blank: off)',
+        overdue_notice_frequency='Prepare notices', overdue_notice_minimum='Only for an overdue balance of at least',
+        overdue_notice_template='Each notice is')
     payment_preferences = {'automatically_apply_payments', 'automatically_calculate_payments', 'use_undeposited_funds_for_payments'}
     display_preferences = {'negative_number_style'}
     finance_preferences = {'finance_charge_annual_rate', 'finance_charge_minimum', 'finance_charge_grace_days',
         'finance_charge_account_id', 'finance_charge_on_overdue_charges', 'finance_charge_from', 'finance_charge_mark_to_print'}
+    reminder_preferences = {'scheduler_catch_up_days', 'overdue_notice_days', 'overdue_notice_frequency',
+        'overdue_notice_minimum', 'overdue_notice_template'}
     for leaf in leaves:
         if leaf['path'] in labels:
             leaf['label'] = labels[leaf['path']]
     groups = [dict(title=title, open=True, leaves=[leaf for leaf in leaves if leaf['path'] in fields])
         for title, fields in [('Customer work preferences', preferences), ('Customer payment preferences', payment_preferences),
-            ('Finance charges', finance_preferences), ('Reports and lists', display_preferences),
-            ('Company information', {leaf['path'] for leaf in leaves} - preferences - payment_preferences - display_preferences - finance_preferences)]]
-    return [group for group in groups if group['leaves'] or group['title'] not in ('Reports and lists', 'Finance charges')]
+            ('Finance charges', finance_preferences), ('Reminders and overdue notices', reminder_preferences),
+            ('Reports and lists', display_preferences),
+            ('Company information', {leaf['path'] for leaf in leaves} - preferences - payment_preferences - display_preferences
+             - finance_preferences - reminder_preferences)]]
+    return [group for group in groups if group['leaves'] or group['title'] not in ('Reports and lists', 'Finance charges',
+                                                                                   'Reminders and overdue notices')]
 
 
 def customer_form_groups(leaves: list[dict[str, Any]]) -> list[dict[str, Any]]:

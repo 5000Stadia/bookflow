@@ -12,7 +12,7 @@ migration never imports current application metadata.
 from alembic import op
 
 revision = 'co0095'
-down_revision = 'co0093'
+down_revision = 'co0085'
 branch_labels = depends_on = None
 
 COLUMN = "ALTER TABLE items ADD COLUMN tracking VARCHAR(8) DEFAULT 'none' NOT NULL CONSTRAINT ck_items_tracking CHECK (tracking IN ('none', 'serial', 'lot'))"
@@ -32,7 +32,7 @@ GUARDS = (
     "CREATE TRIGGER inventory_assignments_balanced BEFORE INSERT ON inventory_assignments WHEN NOT EXISTS (SELECT 1 FROM inventory_placements p WHERE p.source = 'assignment' AND p.source_line_id = NEW.id) OR EXISTS (SELECT 1 FROM inventory_placements p WHERE p.source = 'assignment' AND p.source_line_id = NEW.id GROUP BY p.item_id, p.site_id, p.bin_id HAVING sum(p.quantity_microunits) != 0) OR EXISTS (SELECT 1 FROM inventory_placements p WHERE p.source = 'assignment' AND p.source_line_id = NEW.id AND (p.item_id != NEW.item_id OR p.site_id != NEW.site_id OR p.bin_id IS NOT NEW.bin_id OR p.effective_date != NEW.date OR p.reverses_placement_id IS NOT NULL)) BEGIN SELECT RAISE(ABORT, 'inventory assignment placements do not net to zero at their place'); END",
     "CREATE TRIGGER inventory_placements_open_assignment BEFORE INSERT ON inventory_placements WHEN NEW.source = 'assignment' AND EXISTS (SELECT 1 FROM inventory_assignments a WHERE a.id = NEW.source_line_id) BEGIN SELECT RAISE(ABORT, 'placement added to an inventory assignment already written'); END",
 )
-# What a test rewinding a head file to co0093 drops: the triggers first, then the indexes and the table.
+# What a test rewinding a head file to co0085 drops: the triggers first, then the indexes and the table.
 TRIGGERS = tuple(statement.split()[2] for statement in GUARDS)
 INDEX_NAMES = ('ix_inventory_placements_serial', 'ix_inventory_placements_lot')
 

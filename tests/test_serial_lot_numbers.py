@@ -389,3 +389,57 @@ def test_seeded_numbered_paperwork_keeps_every_number_tie(shop, seed):
         _number_ties(books)
         valuation = run('report inventory-valuation', dict(as_of='2017-12-31'))
         assert valuation['totals']['asset_value']['minor_units'] == _net(books).get(_asset(books), 0), (seed, step, op)
+
+
+def test_co0095_on_a_populated_company_changes_no_existing_row_and_matches_the_metadata(shop):
+    """co0095 upgrades a company with stock: every existing row of every table reads the same (items gain only
+    tracking = none), the new objects exist, and the frozen DDL is exactly the current metadata."""
+    import importlib
+    from sqlalchemy.dialects.sqlite import dialect
+    from sqlalchemy.schema import CreateIndex, CreateTable
+    from bookflow.company import schema as c
+    from tests.test_negative_stock_migration import _at
+    m = importlib.import_module('bookflow.storage.company_migrations.versions.0095_serial_lot_numbers')
+    table = c.metadata.tables['inventory_assignments']
+    assert m.DDL == str(CreateTable(table).compile(dialect=dialect()))
+    assert m.INDEXES[:2] == tuple(str(CreateIndex(i).compile(dialect=dialect()))
+                                  for i in sorted(table.indexes, key=lambda i: i.name))
+    run = shop['run']
+    plain = shop['books']['client'].item.create(
+        company=shop['books']['company'], name='Boiler', type='inventory_part', description='Boiler', price='9.00',
+        purchase_description='Boiler', cost='4.00', cogs_account_id=shop['books']['cogs'],
+        income_account_id=shop['books']['income'])['id']
+    run('bill post', dict(vendor=shop['books']['vendor'], date='2017-03-01', items=[dict(item=plain, quantity='5', unit_cost='4.00')]),
+        reason='In')
+    run('invoice post', dict(customer=shop['acme'], date='2017-03-02', lines=[dict(item='Boiler', quantity='2')]), reason='Out')
+    path = _db(shop['books'])
+    copy = path.parent / 'rewound95.db'
+    with sqlite3.connect(path) as source, sqlite3.connect(copy) as target:
+        source.backup(target)
+    with sqlite3.connect(copy) as conn:
+        conn.execute('PRAGMA foreign_keys=OFF')
+        for trigger in m.TRIGGERS:
+            conn.execute(f'DROP TRIGGER {trigger}')
+        for index in m.INDEX_NAMES:
+            conn.execute(f'DROP INDEX {index}')
+        conn.execute('DROP TABLE inventory_assignments')
+        conn.execute('UPDATE items SET tracking = \'none\'')
+        conn.execute('ALTER TABLE items DROP COLUMN tracking')
+        conn.execute("UPDATE alembic_version SET version_num='co0085'")
+        conn.commit()
+        names = [r[0] for r in conn.execute("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' "
+                                            "AND name != 'alembic_version'")]
+        before = {name: sorted(conn.execute(f'SELECT * FROM "{name}"').fetchall(), key=repr) for name in names}
+    _at(copy, 'co0095')
+    with sqlite3.connect(copy) as conn:
+        for name in names:
+            rows = conn.execute(f'SELECT * FROM "{name}"').fetchall()
+            if name == 'items':
+                columns = [r[1] for r in conn.execute('PRAGMA table_info(items)')]
+                at = columns.index('tracking')
+                assert {row[at] for row in rows} == {'none'}
+                rows = [row[:at] + row[at + 1:] for row in rows]
+            assert sorted(rows, key=repr) == before[name], name
+        assert conn.execute("SELECT count(*) FROM sqlite_schema WHERE name IN ('inventory_assignments', "
+                            "'inventory_movements_serial_range', 'ix_inventory_placements_serial')").fetchone() == (3,)
+        assert conn.execute('PRAGMA foreign_key_check').fetchall() == []

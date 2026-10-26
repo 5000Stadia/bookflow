@@ -239,6 +239,17 @@ INVENTORY_SITE_COMMANDS = frozenset(('inventory-site activate', 'inventory-site 
     'inventory-transfer post', 'inventory-transfer query', 'inventory-transfer show', 'inventory-transfer update',
     'inventory-transfer void', 'report quantity-by-site'))
 
+# R111: to-dos, overdue notices and the Reminders list. Its witness creates, updates, completes, shows and lists a
+# to-do, generates, lists, shows, marks sent and dismisses overdue notices, and reads reminders through all four
+# surfaces over identical demo copies.
+SCHEDULING_COMMANDS = frozenset(('todo create', 'todo update', 'todo complete', 'todo show', 'todo list',
+                                 'notice generate', 'notice list', 'notice show', 'notice mark-sent', 'notice dismiss',
+                                 'reminders'))
+
+# R180: performance tracking. Its witness reads the timings report and the store's settings through all four
+# surfaces over identical demo copies; the three operator tools are standalone and local.
+PERF_COMMANDS = frozenset(('perf report', 'perf settings', 'perf generate', 'perf bench', 'perf compare'))
+
 BROWSING_COMMANDS = frozenset(('account query options', 'class query options', 'custom-field query children', 'custom-field query options', 'customer query options', 'customer-message query options', 'customer-type query options', 'employee query options', 'item query children', 'item query options', 'item-category query options', 'job-type query options', 'other-name query options', 'payment-method query options', 'price-level query children', 'price-level query options', 'sales-rep query options', 'sales-tax-code query options', 'ship-method query options', 'term query options', 'unit-of-measure query children', 'unit-of-measure query options', 'vendor query children', 'vendor query options', 'vendor-type query options'))
 
 # R106: timekeeping. Its witness sets the preferences, saves, shows and copies a weekly timesheet, clocks a person
@@ -262,7 +273,7 @@ SERIAL_LOT_COMMANDS = frozenset(('inventory assign', 'lot list', 'lot show', 'lo
     'report serial-lot-history', 'report serial-lot-stock', 'serial-number list', 'serial-number show',
     'serial-number update'))
 
-FROZEN_COMMANDS = SERIAL_LOT_COMMANDS | INVENTORY_COUNT_COMMANDS | BARCODE_COMMANDS | CHECK_PRINTING_COMMANDS | ACCOUNTANT_REVIEW_COMMANDS | TIMEKEEPING_COMMANDS | INVENTORY_SITE_COMMANDS | PARTIAL_PO_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
+FROZEN_COMMANDS = SERIAL_LOT_COMMANDS | PERF_COMMANDS | SCHEDULING_COMMANDS | INVENTORY_COUNT_COMMANDS | BARCODE_COMMANDS | CHECK_PRINTING_COMMANDS | ACCOUNTANT_REVIEW_COMMANDS | TIMEKEEPING_COMMANDS | INVENTORY_SITE_COMMANDS | PARTIAL_PO_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
 account create
 account deactivate
 account list
@@ -714,6 +725,9 @@ LOCAL_VALID_WITNESSES = {
     'company use': ['tests/test_row1_flow.py::test_company_selection',
                     'tests/test_row3_host.py::test_a_forwarded_company_use_writes_the_callers_login_table'],
     'docs generate': ['tests/test_docs_command.py::test_docs_generate_cli_needs_no_initialized_data_root'],
+    'perf generate': ['tests/test_perf_tracking.py::test_generate_and_bench_a_tiny_company'],
+    'perf bench': ['tests/test_perf_tracking.py::test_generate_and_bench_a_tiny_company'],
+    'perf compare': ['tests/test_perf_tracking.py::test_compare_flags_a_planted_regression'],
     'mcp': ['tests/test_mcp_hosted.py::test_real_stdio_discovery_help_and_attributed_host_write',
             'tests/test_mcp_installed_guide.py::test_literal_installed_mcp_guide'],
     'serve': ['tests/test_row3_host.py::test_the_host_migrates_and_records_the_descriptor',
@@ -808,6 +822,8 @@ def execution_map():
     from tests.test_barcode_surfaces import COMMANDS as BARCODE_SURFACE_COMMANDS
     from tests.test_serial_lot_surfaces import COMMANDS as SERIAL_LOT_SURFACE_COMMANDS
     from tests.test_inventory_count_surfaces import COMMANDS as INVENTORY_COUNT_SURFACE_COMMANDS
+    from tests.test_scheduling_surfaces import COMMANDS as SCHEDULING_SURFACE_COMMANDS
+    from tests.test_perf_surfaces import COMMANDS as PERF_SURFACE_COMMANDS
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
     assert {c.name for c in commands} == FROZEN_COMMANDS, 'New or removed command needs a deliberate coverage disposition'
@@ -902,6 +918,8 @@ def execution_map():
                    'tests/test_barcode_surfaces.py::test_the_same_barcodes_through_python_cli_http_and_mcp' if cmd.name in BARCODE_SURFACE_COMMANDS else  # all four
                    'tests/test_serial_lot_surfaces.py::test_the_same_numbers_through_python_cli_http_and_mcp' if cmd.name in SERIAL_LOT_SURFACE_COMMANDS else  # all four
                    'tests/test_inventory_count_surfaces.py::test_the_same_count_through_python_cli_http_and_mcp' if cmd.name in INVENTORY_COUNT_SURFACE_COMMANDS else  # all four
+                   'tests/test_scheduling_surfaces.py::test_the_same_to_dos_notices_and_reminders_through_python_cli_http_and_mcp' if cmd.name in SCHEDULING_SURFACE_COMMANDS else  # all four
+                   'tests/test_perf_surfaces.py::test_the_same_timings_report_through_python_cli_http_and_mcp' if cmd.name in PERF_SURFACE_COMMANDS else  # all four
                    'tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute' if cmd.name in LOCAL_COMMANDS else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else
                 'local_lifecycle' if cmd.local_only else 'binary_' + cmd.transfer.direction if cmd.transfer else

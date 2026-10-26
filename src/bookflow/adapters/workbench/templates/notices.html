@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% block title %}Overdue notices{% endblock %}{% block body %}<style>form.inline{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}.notice-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}</style><section id="notices">
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/customers">Customers</a> / Overdue notices</nav>
+<h1>Overdue notices</h1>
+<p class="muted">The scheduler prepares one notice per overdue customer on the company's notice schedule (set under Preferences, Overdue notices). Bookflow does not send them: print or email each one yourself, then mark it sent.</p>
+{% if notice %}<p class="notice" role="status" data-notice>{{ notice }}</p>{% endif %}
+<nav class="actions" aria-label="Notice views">{% for s in ('ready', 'sent', 'dismissed', 'all') %}{% if s != status %}<a href="/c/{{ company_id }}/notice?status={{ s }}">{{ 'Ready to send' if s == 'ready' else s | capitalize }}</a> {% endif %}{% endfor %}<a href="/c/{{ company_id }}/notice/generate">Generate now</a></nav>
+{% if status == 'ready' and ready_total %}<p data-ready-total>{{ notices | length }} ready · {{ ready_total.amount }} overdue</p>{% endif %}
+{% set back = '/c/' ~ company_id ~ '/notice' %}
+{% if notices %}<div class="table-wrap"><table class="list-table" data-notice-table><thead><tr><th>Customer</th><th>Measured</th><th class="num">Overdue</th><th>Oldest due</th><th>Kind</th><th>Status</th><th></th></tr></thead><tbody>
+{% for n in notices %}<tr data-notice="{{ n.id }}"><td data-label="Customer"><a href="/c/{{ company_id }}/customer/{{ n.customer_id }}">{{ n.customer_name }}</a></td><td data-label="Measured">{{ n.as_of }}</td><td class="num" data-label="Overdue">{{ n.overdue.amount }}</td><td data-label="Oldest due">{{ n.oldest_due_date }} ({{ n.days_overdue }} days)</td><td data-label="Kind">{{ n.template | capitalize }}</td><td data-label="Status">{{ n.status }}{% if n.sent_method %} ({{ n.sent_method }}){% endif %}{% if n.dismissed_reason %}: {{ n.dismissed_reason }}{% endif %}</td>
+<td><div class="notice-actions"><a href="{{ n.print_path }}" target="_blank" rel="noopener" data-print>Print</a>{% if n.status == 'ready' %}
+<form method="post" class="inline" action="/c/{{ company_id }}/notice/{{ n.id }}/_sent"><input type="hidden" name="back" value="{{ back }}"><label class="visually-hidden" for="m-{{ n.id }}">Sent by</label><select id="m-{{ n.id }}" name="method"><option value="print">Mailed</option><option value="email">Emailed</option><option value="other">Other</option></select><button type="submit">Mark sent</button></form>
+<form method="post" class="inline" action="/c/{{ company_id }}/notice/{{ n.id }}/_dismiss"><input type="hidden" name="back" value="{{ back }}"><label class="visually-hidden" for="d-{{ n.id }}">Why not</label><input id="d-{{ n.id }}" name="note" placeholder="Why not send it" size="16"><button type="submit">Dismiss</button></form>{% endif %}</div></td></tr>{% endfor %}
+</tbody></table></div>{% else %}<p data-notice-none>No {{ 'notices ready to send' if status == 'ready' else status ~ ' notices' }}.</p>{% endif %}
+</section>{% endblock %}

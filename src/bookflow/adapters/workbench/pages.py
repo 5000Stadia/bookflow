@@ -706,6 +706,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
 
     Purchases.install_deletion(app, run=run, render=render, page_error=page_error)
     FindPage.install(app, host=host, run=run, render=render, page_error=page_error)
+    from bookflow.adapters.workbench import perf_page as PerfPage
+    PerfPage.install(app, host=host, run=run, render=render, page_error=page_error)
 
     def result_names(request: Request, company_id: str | None, company_view: dict[str, Any] | None):
         """Name the records a read result points at, through each record's own `show`."""
@@ -809,6 +811,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     # R153: bill part of a purchase order, or close its lines by hand.
     from bookflow.adapters.workbench import purchase_order_billing_pages as PartialOrderPages
     PartialOrderPages.mount(app, render=render, run=run, credential=credential, page_error=page_error)
+    # R111: Reminders, the to-do list and the overdue notice queue.
+    from bookflow.adapters.workbench import scheduling_pages as SchedulingPages
+    SchedulingPages.mount(app, render=render, run=run, credential=credential, page_error=page_error)
 
     @app.get("/static/{name}")
     @permission_read_package(host)
@@ -2239,8 +2244,13 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             for leaf in described:
                 if leaf['path'] in labels:
                     leaf['label'] = labels[leaf['path']]
-        if sales_form:
+        # A memorized entry posts the template as it is now: its form carries the preview's fingerprint, as sales forms do (R111).
+        fingerprint_form = sales_form or cmd.name in ('memorized process', 'memorized retry', 'memorized enter', 'memorized-group enter')
+        if fingerprint_form:
             described = [leaf for leaf in described if leaf['path'] != 'expected_facts_fingerprint']
+        if cmd.name == 'memorized enter':
+            # A second entry of a posted slot is a deliberate act: its own checkbox, below the warning.
+            described = [leaf for leaf in described if leaf['path'] != 'again']
         if noun == 'sales-receipt' and verb == 'update':
             # The dedicated decimal control uses the shared typed form translator.
             described = [leaf for leaf in described if leaf['path'] != 'amount_received']
@@ -2485,7 +2495,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                           home=(getattr(request.state, 'workbench_company', None) or {}).get('home_currency'),
                           resolve=result_names(request, company_id, authorized_company))
                           if not cmd.is_write and not preview and noun != 'report' and not billing else None,
-                      sales_form=sales_form, sales_scope=cred.token_id,
+                      sales_form=sales_form, fingerprint_form=fingerprint_form, sales_scope=cred.token_id,
                       deposit_receipts=([{**row, "display_amount": Money(row["amount"]["minor_units"], row["amount"]["currency"]).to_dict()["amount"]} for row in result.get("receipts", [])] if noun == "deposit" and result else []),
                       deposit_bank_total=(Money(result["deposit"]["bank_total"]["minor_units"], result["deposit"]["bank_total"]["currency"]).to_dict()["amount"] if noun == "deposit" and result and "deposit" in result else None),
                       sales_fingerprint=(result.get('facts_fingerprint', '') if preview and result else

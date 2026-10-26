@@ -220,6 +220,11 @@ company_info = _table(
     _column("finance_charge_from", sa.String(12), "Whether finance charges count days from the due_date or the invoice_date.", sa.CheckConstraint("finance_charge_from IN ('due_date','invoice_date')", name="ck_company_finance_charge_from"), nullable=False, server_default="due_date"),
     _column("finance_charge_mark_to_print", sa.Boolean, "Whether assessed finance charges are marked to be printed.", nullable=False, server_default="0"),
     _column("negative_number_style", sa.String(12), "How negative amounts are shown to people: minus (-40.00) or parentheses ((40.00)); exports and data keep the minus sign.", sa.CheckConstraint("negative_number_style IN ('minus','parentheses')", name="ck_company_negative_number_style"), nullable=False, server_default="minus"),
+    _column("scheduler_catch_up_days", sa.Integer, "Missed automatic memorized entries older than this many days are left for a person instead of entered by the scheduler; null enters every missed one, as the anchor does.", sa.CheckConstraint("scheduler_catch_up_days IS NULL OR scheduler_catch_up_days BETWEEN 0 AND 3650", name="ck_company_scheduler_catch_up_days"), nullable=True),
+    _column("overdue_notice_days", sa.Integer, "Overdue notices: days past due a customer's oldest open document must be before a notice is generated; null turns notices off.", sa.CheckConstraint("overdue_notice_days IS NULL OR overdue_notice_days BETWEEN 1 AND 3650", name="ck_company_overdue_notice_days"), nullable=True),
+    _column("overdue_notice_frequency", sa.String(12), "Overdue notices: how often the scheduler generates them, weekly or monthly.", sa.CheckConstraint("overdue_notice_frequency IN ('weekly','monthly')", name="ck_company_overdue_notice_frequency"), nullable=False, server_default="monthly"),
+    _column("overdue_notice_minimum", sa.String(24), "Overdue notices: least overdue balance that earns a notice, home-currency decimal text; null for any amount.", nullable=True),
+    _column("overdue_notice_template", sa.String(12), "Overdue notices: what each notice is, a statement or a short letter.", sa.CheckConstraint("overdue_notice_template IN ('statement','letter')", name="ck_company_overdue_notice_template"), nullable=False, server_default="statement"),
     description="Authoritative company identity, contact, calendar, currency, and accounting settings.",
 )
 
@@ -1227,6 +1232,8 @@ sa.Index("ix_items_barcode", items.c.barcode)
 sa.Index("ix_inventory_bins_barcode", inventory_bins.c.barcode)
 from bookflow.company.inventory_count_schema import define_tables as _define_inventory_count_tables
 globals().update(_define_inventory_count_tables(metadata, _column, _table, _common))
+from bookflow.company.scheduling_schema import define_tables as _define_scheduling_tables
+globals().update(_define_scheduling_tables(metadata, _column, _table, _common))
 # Serial and lot numbers (co0095, R104 increment 4): items.tracking and inventory assignments.
 from bookflow.company import serial_lot_schema as _serial_lot_schema
 items.append_column(_serial_lot_schema.tracking_column(_column))
