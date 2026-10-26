@@ -6,7 +6,8 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 Number = Annotated[str, Field(min_length=1, max_length=128), BeforeValidator(lambda v: v.strip() if isinstance(v, str) else v)]
-IsoDate = Annotated[str, Field(pattern=r'^\d{4}-\d{2}-\d{2}$')]
+# A real calendar date, as every date field takes it (2017-02-30 is refused).
+from bookflow.company.journal_models import _Date as IsoDate  # noqa: E402
 Selector = Annotated[str, Field(min_length=1, max_length=1004), BeforeValidator(lambda v: v.strip() if isinstance(v, str) else v)]
 
 NUMBER_FIELDS = ('lot', 'lot_expiry', 'serial_numbers')

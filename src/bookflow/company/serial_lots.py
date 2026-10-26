@@ -385,6 +385,17 @@ def check(state, rows, *, field='lines'):
                                message=f'{number} of {item} has already left stock{took}; it cannot be taken again.',
                                serial_number=number)
             history.extend(groups[key])
+        # Late paperwork can leave one serial number owed at one site and held at another (a sale backdated
+        # before the transfer that moved it, say). The ties hold; the places need a transfer or a count.
+        places = {}
+        for row in standing:
+            places[row['site_id']] = places.get(row['site_id'], 0) + int(row['quantity_microunits'])
+        split = {site: quantity for site, quantity in places.items() if quantity}
+        if len(split) > 1:
+            where = ' and '.join(f'{_q(quantity)} at {site_name(s, site)}'
+                                 for site, quantity in sorted(split.items(), key=lambda kv: kv[1]))
+            state.warn(f'{number} of {item} now shows {where}: its paperwork places it at two sites. An '
+                       '`inventory-transfer` (or a count) of where the unit really is puts it right.')
     lots = {(row['item_id'], row['site_id'], row['lot_id']) for row in rows
             if row.get('lot_id') and int(row['quantity_microunits']) < 0}
     for item_id, site_id, lot_id in sorted(lots):
@@ -526,6 +537,9 @@ def transfer_parts(state, item, quantity, numbers, from_site, to_site, date, pos
                        f'{suggested["number"]}; name it as lot to move it.')
         return None, [(from_site, None, None, -quantity, None), (to_site, None, None, quantity, None)]
     lot_id, new = state.number('lot', item['id'], numbers.lot, expiry=numbers.lot_expiry, field=field)
+    record = new or number_names(s, lot_ids=[lot_id])[lot_id]
+    if record.get('expiry_date') and record['expiry_date'] < date:
+        state.warn(f'Lot {numbers.lot} of {name} expired on {record["expiry_date"]}.')
     return lot_id, [(from_site, lot_id, None, -quantity, new), (to_site, lot_id, None, quantity, None)]
 
 

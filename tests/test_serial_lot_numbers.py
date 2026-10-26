@@ -443,3 +443,92 @@ def test_co0095_on_a_populated_company_changes_no_existing_row_and_matches_the_m
         assert conn.execute("SELECT count(*) FROM sqlite_schema WHERE name IN ('inventory_assignments', "
                             "'inventory_movements_serial_range', 'ix_inventory_placements_serial')").fetchone() == (3,)
         assert conn.execute('PRAGMA foreign_key_check').fetchall() == []
+
+
+# ---------------------------------------------------------------- review findings (R104 increment 4 review)
+
+def _ok(fn):
+    """Valid paperwork: never refused by a trigger (E_IO) or internally."""
+    try:
+        return fn()
+    except BookflowError as error:
+        assert error.code not in ('E_IO', 'E_INTERNAL'), error
+        raise
+
+
+def test_a_reversed_pair_is_not_two_steps_for_the_database(shop):
+    """A reversal keeps its original's date and position under a later sequence; a placement sorting before
+    the pair once read +-2 and was refused with E_IO. Bill date moved earlier; void and re-enter dated earlier;
+    an `after` sale voided and the number sold again that day; a return voided and the sale corrected."""
+    run = shop['run']
+    bill = _receive(shop, date='2017-03-03', serials=('WH-1',))
+    shown = run('bill show', dict(bill=bill['id']))
+    _ok(lambda: run('bill update', dict(bill=bill['id'], expected_version=shown['version'], date='2017-03-02'), reason='Date'))
+    shown = run('bill show', dict(bill=bill['id']))
+    _ok(lambda: run('bill void', dict(bill=bill['id'], expected_version=shown['version']), reason='Wrong'))
+    _ok(lambda: _receive(shop, date='2017-03-01', serials=('WH-1',)))
+    sale = _ok(lambda: _sell(shop, '2017-03-05', ['WH-4'], count_position='after'))
+    _ok(lambda: run('invoice void', dict(invoice=sale['id'], expected_version=run('invoice show', dict(
+        invoice=sale['id']))['version']), reason='Void'))
+    _ok(lambda: _sell(shop, '2017-03-05', ['WH-4'], site='Van 1'))
+    sold = _ok(lambda: _sell(shop, '2017-03-06', ['WH-1']))
+    shown = run('invoice show', dict(invoice=sold['id']))
+    credit = _ok(lambda: run('credit-memo post', dict(customer=shop['acme'], date='2017-03-07', lines=[dict(
+        source_invoice=sold['id'], source_line=shown['revision']['lines'][0]['line_id'], quantity='1')]), reason='Return'))
+    _ok(lambda: run('credit-memo void', dict(credit_memo=credit['id'], expected_version=run('credit-memo show', dict(
+        credit_memo=credit['id']))['version']), reason='Void'))
+    shown = run('invoice show', dict(invoice=sold['id']))
+    _ok(lambda: run('invoice update', dict(invoice=sold['id'], expected_version=shown['version'], lines=[dict(
+        line_id=shown['revision']['lines'][0]['line_id'], item='Water Heater', quantity='1', serial_numbers=[])]),
+        reason='Unknown unit'))
+    _number_ties(shop['books'])
+
+
+def test_a_count_derived_again_retires_its_loose_placements_before_it_posts_found_units(shop):
+    """Two heaters, one moved to the van; a van count finds WH-4 and counts the unassigned unit at 0 (the
+    places cancel: no movement). Voiding the transfer derives the count again, which now posts WH-4 found --
+    after retiring the loose WH-4 it replaces, never beside it."""
+    run, books = shop['run'], shop['books']
+    shrinkage = books['client'].account.create(company=books['company'], name='Inventory Shrinkage', type='expense')['id']
+    _receive(shop, serials=(), quantity=2)
+    moved = run('inventory-transfer post', dict(date='2017-03-03', from_site='Warehouse', to_site='Van 1', lines=[
+        dict(item='Water Heater', quantity='1')]), reason='Load')
+    count = run('inventory-count create', dict(site='Van 1', date='2017-03-04', items=['Water Heater']), reason='Count')
+    run('inventory-count enter', dict(count=count['number'], entries=[
+        dict(item='Water Heater', serial_number='WH-4', quantity='1'), dict(item='Water Heater', quantity='0')]), reason='Counted')
+    preview = run('inventory-count post', dict(count=count['number'], expected_version=count['version'],
+                                               adjustment_account=shrinkage), reason='Count', dry_run=True)
+    run('inventory-count post', dict(count=count['number'], expected_version=count['version'], adjustment_account=shrinkage,
+                                     preview_fingerprint=preview['preview_fingerprint']), reason='Count')
+    shown = run('inventory-transfer show', dict(transfer=moved['number']))
+    _ok(lambda: run('inventory-transfer void', dict(transfer=moved['number'], expected_version=shown['version']), reason='Never moved'))
+    assert _numbers(books)[('Water Heater', 'Van 1', 'WH-4')] == 1
+    _number_ties(books)
+
+
+def test_impossible_dates_are_refused(shop):
+    for bad in ('2017-02-30', '2017-13-45', '9999-99-99'):
+        with pytest.raises(BookflowError) as refused:
+            shop['run']('bill post', dict(vendor=shop['books']['vendor'], date='2017-03-01', items=[dict(
+                item=shop['sealant'], quantity='1', unit_cost='4.00', lot='L-9', lot_expiry=bad)]), reason='In')
+        assert refused.value.code == 'E_VALIDATION'
+        with pytest.raises(BookflowError):
+            shop['run']('serial-number show', dict(number='WH-1', as_of=bad))
+
+
+def test_late_paperwork_that_splits_a_serial_over_two_sites_says_so_and_a_transfer_repairs_it(shop):
+    run = shop['run']
+    _receive(shop, serials=('WH-1',))
+    run('inventory-transfer post', dict(date='2017-03-03', from_site='Warehouse', to_site='Van 1', lines=[
+        dict(item='Water Heater', quantity='1', serial_numbers=['WH-1'])]), reason='Load')
+    late = _sell(shop, '2017-03-02', ['WH-1'])        # backdated before the transfer that moved it
+    assert any('two sites' in w and 'WH-1' in w for w in late['warnings']), late['warnings']
+    _number_ties(shop['books'])
+
+
+def test_a_transfer_of_an_expired_lot_warns(shop):
+    run = shop['run']
+    _receive_sealant(shop)
+    moved = run('inventory-transfer post', dict(date='2017-10-02', from_site='Warehouse', to_site='Van 1', lines=[
+        dict(item='Sealant', quantity='1', lot='L-100')]), reason='Load')
+    assert any('expired on 2017-09-30' in w for w in moved['warnings']), moved['warnings']

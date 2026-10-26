@@ -16,7 +16,8 @@ The guards, all in the database so they hold when the application is bypassed:
   placement's own item, which tracks that kind of number;
 - a serial number's running quantity, in replay order (date, count position, sequence), stays within
   -1 to 1: -1 is a unit sold before its receipt is recorded, and 2 is a second unit of one number in
-  stock, which the database refuses. A movement and a transfer revision are checked when their row is
+  stock, which the database refuses (as it refuses -2). Only standing placements count: a placement a
+  reversal retires and the reversal itself are left out together. A movement and a transfer revision are checked when their row is
   written (their placements are all in place by then); an assignment's and a count's placements, one
   per number, as each is written;
 - an assignment's placements net to zero per item and place, and nothing is added to one once written.
@@ -69,18 +70,29 @@ def tracking_column(C):
 _RANK = "(CASE {p}.count_position WHEN 'before' THEN 0 WHEN 'count' THEN 1 ELSE 2 END)"
 
 
+def _standing(p):
+    """SQL true when placement alias ``p`` stands: it is no reversal, and no reversal retires it. A reversal keeps
+    its original's date and position under a later sequence, so a retired pair is left out as a whole, never
+    read as two steps (as ``serial_lots.check`` reads it)."""
+    return (f"{p}.reverses_placement_id IS NULL AND NOT EXISTS (SELECT 1 FROM inventory_placements x "
+            f"WHERE x.reverses_placement_id = {p}.id)")
+
+
 def _out_of_range(serial, groups):
-    """SQL true when some group of ``serial``'s placements in ``groups`` ends with a running quantity
-    outside -1 to 1 unit. ``groups`` is an alias over inventory_placements of that serial."""
+    """SQL true when the standing placements of ``serial`` run outside -1 to 1 unit at the step of ``groups``
+    (an alias over that serial's standing placements)."""
     return (f"(SELECT sum(r.quantity_microunits) FROM inventory_placements r WHERE r.serial_number_id = {serial} "
-            f"AND (r.effective_date, {_RANK.format(p='r')}, r.sequence) <= "
+            f"AND {_standing('r')} AND (r.effective_date, {_RANK.format(p='r')}, r.sequence) <= "
             f"({groups}.effective_date, {_RANK.format(p=groups)}, {groups}.sequence)) NOT BETWEEN -{UNIT} AND {UNIT}")
 
 
 def _owner_range(owner_column):
     return (f"EXISTS (SELECT 1 FROM inventory_placements n JOIN inventory_placements g "
             f"ON g.serial_number_id = n.serial_number_id WHERE n.{owner_column} = NEW.id "
-            f"AND n.serial_number_id IS NOT NULL AND {_out_of_range('n.serial_number_id', 'g')})")
+            f"AND n.serial_number_id IS NOT NULL AND {_standing('g')} AND {_out_of_range('n.serial_number_id', 'g')})")
+
+
+_MESSAGE = "'a serial number would be in stock twice, or owed twice (below -1)'"
 
 
 GUARDS = (
@@ -103,21 +115,24 @@ GUARDS = (
     # A serial number's running quantity stays within -1 to 1: never two of one number in stock.
     "CREATE TRIGGER inventory_movements_serial_range BEFORE INSERT ON inventory_movements "
     f"WHEN {_owner_range('movement_id')} "
-    "BEGIN SELECT RAISE(ABORT, 'a serial number would be in stock twice, or taken twice'); END",
+    f"BEGIN SELECT RAISE(ABORT, {_MESSAGE}); END",
     "CREATE TRIGGER inventory_transfer_revisions_serial_range BEFORE INSERT ON inventory_transfer_revisions "
     f"WHEN {_owner_range('transfer_revision_id')} "
-    "BEGIN SELECT RAISE(ABORT, 'a serial number would be in stock twice, or taken twice'); END",
+    f"BEGIN SELECT RAISE(ABORT, {_MESSAGE}); END",
+    # A standing assignment or count placement is checked as it is written (one per number each); a reversal
+    # retires a placement exactly and is checked with the change it belongs to.
     "CREATE TRIGGER inventory_placements_serial_range BEFORE INSERT ON inventory_placements "
-    "WHEN NEW.serial_number_id IS NOT NULL AND NEW.source IN ('assignment', 'count') AND EXISTS ("
+    "WHEN NEW.serial_number_id IS NOT NULL AND NEW.source IN ('assignment', 'count') "
+    "AND NEW.reverses_placement_id IS NULL AND EXISTS ("
     f"SELECT 1 FROM (SELECT NEW.effective_date AS d, {_RANK.format(p='NEW')} AS k, NEW.sequence AS q "
     f"UNION SELECT effective_date, {_RANK.format(p='inventory_placements')}, sequence FROM inventory_placements "
     "WHERE serial_number_id = NEW.serial_number_id) g WHERE "
     "coalesce((SELECT sum(r.quantity_microunits) FROM inventory_placements r "
-    f"WHERE r.serial_number_id = NEW.serial_number_id AND (r.effective_date, {_RANK.format(p='r')}, r.sequence) "
-    "<= (g.d, g.k, g.q)), 0) "
+    f"WHERE r.serial_number_id = NEW.serial_number_id AND {_standing('r')} "
+    f"AND (r.effective_date, {_RANK.format(p='r')}, r.sequence) <= (g.d, g.k, g.q)), 0) "
     f"+ (CASE WHEN (NEW.effective_date, {_RANK.format(p='NEW')}, NEW.sequence) <= (g.d, g.k, g.q) "
     f"THEN NEW.quantity_microunits ELSE 0 END) NOT BETWEEN -{UNIT} AND {UNIT}) "
-    "BEGIN SELECT RAISE(ABORT, 'a serial number would be in stock twice, or taken twice'); END",
+    f"BEGIN SELECT RAISE(ABORT, {_MESSAGE}); END",
     # An assignment's placements net to zero per item and place, on its own date; nothing joins it later.
     "CREATE TRIGGER inventory_assignments_balanced BEFORE INSERT ON inventory_assignments "
     "WHEN NOT EXISTS (SELECT 1 FROM inventory_placements p WHERE p.source = 'assignment' AND p.source_line_id = NEW.id) "

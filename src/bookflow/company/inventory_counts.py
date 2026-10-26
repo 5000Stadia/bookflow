@@ -887,13 +887,18 @@ def _refuse_overlap(s, count, lines, counted):
 
 
 def _write_postings(s, ctx, change, command_name):
-    """Persist a count change: its journal entry, and any placements that move between places alone."""
+    """Persist a count change: its journal entries, and any placements that move between places alone.
+
+    The order keeps every serial number one unit at every step (R104 increment 4): the count's old loose
+    placements are retired first, then its entries (which retire and restate its movements), then its new
+    loose placements -- so a unit the count now posts as found never meets the loose placement it replaces.
+    """
     if change is None:
         return []
-    touched = []
-    if change.documents:
-        _, touched = inventory.persist_change(s, ctx, change, command_name=command_name, persist=True)
     loose = getattr(change, 'loose_placements', [])
+    retiring = [row for row in loose if row.get('reverses_placement_id')]
+    placing = [row for row in loose if not row.get('reverses_placement_id')]
+    touched, rows = [], []
     if loose:
         at = clock.now_iso()
         event = new_id()
@@ -903,8 +908,13 @@ def _write_postings(s, ctx, change, command_name):
         audit.write_event_to(s.company, ctx, command_name, 'move counted stock between places', moved,
                              actor_id=s.actor.id, actor_kind=s.actor.kind,
                              directive_code=getattr(s, 'directive_code', None), event_id=event)
-        placements.insert(s, rows)
         touched += moved
+    by_id = {row['id']: row for row in rows}
+    placements.insert(s, [by_id[row['id']] for row in retiring])
+    if change.documents:
+        _, written = inventory.persist_change(s, ctx, change, command_name=command_name, persist=True)
+        touched = written + touched
+    placements.insert(s, [by_id[row['id']] for row in placing])
     return touched
 
 
