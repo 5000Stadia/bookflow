@@ -121,14 +121,15 @@ def test_adapter_errors_are_typed_and_operational_failures_unchanged(certificate
     for failure,reason in ((adapters.Unsupported('hidden unsupported detail'),'E_RECONCILIATION_UNSUPPORTED'),(adapters.Corrupt('hidden corrupt detail'),'E_RECONCILIATION_SOURCE_INVALID'),(ValueError('bad owned format'),'E_RECONCILIATION_SOURCE_INVALID')):
         def fail(*args):raise failure
         monkeypatch.setattr(adapters,'enumerate_graph',fail)
-        for call in (lambda:p.account_population(s,bank,'2026-12-31'),lambda:am.derive(s,(),before_source=s.source,authority_transactions=s.authority_transactions)):
+        # `replace` gives a Snapshot with no proofs yet: one already made is kept for its command.
+        for call in (lambda:p.account_population(replace(s),bank,'2026-12-31'),lambda:am.derive(s,(),before_source=s.source,authority_transactions=s.authority_transactions)):
             with pytest.raises(BookflowError) as error:call()
             assert error.value.code==reason
             assert 'hidden' not in str(error.value.to_dict())
     operational=OSError('owned IO failed')
     def fail(*args):raise operational
     monkeypatch.setattr(adapters,'enumerate_graph',fail)
-    with pytest.raises(OSError) as error:p.account_population(s,bank,'2026-12-31')
+    with pytest.raises(OSError) as error:p.account_population(replace(s),bank,'2026-12-31')
     assert error.value is operational
     monkeypatch.setattr(adapters,'enumerate_graph',original)
 

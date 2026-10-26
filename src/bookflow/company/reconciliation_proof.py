@@ -1,13 +1,22 @@
 """Independent raw-leg coverage, inverse bijection and dated GL witnesses."""
-from collections import Counter
+from collections import Counter, defaultdict
 from bookflow.company.reconciliation_adapters import require
 from bookflow.company.reconciliation_models import STATEMENT_ACCOUNTS
 
 
 def prove(g, history, current, account_id, cutoff):
-    """Amounts alone are insufficient: prove unique ownership before summing."""
+    """Amounts alone are insufficient: prove unique ownership before summing.
+
+    The same checks in the same order as the scans they replaced, with sources indexed by
+    their line and legs by their batch once (each index keeps table order, so every list it
+    yields is the one the scan built).
+    """
     legs = g.by_id('posting_lines'); sources = g.by_id('posting_line_sources'); batches = g.by_id('posting_batches')
     require(len(legs)==len(g.rows['posting_lines']) and len(sources)==len(g.rows['posting_line_sources']), 'duplicate_physical_identity')
+    by_line = defaultdict(list)
+    for r in sources.values(): by_line[r['posting_line_id']].append(r)
+    by_batch = defaultdict(list)
+    for r in legs.values(): by_batch[r['batch_id']].append(r)
     originals = {key:r for key,r in legs.items() if batches[r['batch_id']]['kind'] != 'reversal'}
     bank = {key:r for key,r in originals.items() if g.accounts[r['account_id']]['type'] in STATEMENT_ACCOUNTS}
     represented = Counter(key for v in history if v.active for key in v.posting_line_ids)
@@ -20,11 +29,11 @@ def prove(g, history, current, account_id, cutoff):
         require(all((r['transaction_id'],r['batch_id'],r['account_id'],r['currency']) ==
             (value.ref.transaction_id,value.business_batch_id,value.account_id,value.currency) for r in owned), 'effect_leg_owner')
         require(sum(r['debit_minor_units']-r['credit_minor_units'] for r in owned)==value.signed_debit, 'effect_leg_amount')
-        actual_sources = {r['id'] for r in sources.values() if r['posting_line_id'] in value.posting_line_ids}
+        actual_sources = {r['id'] for key in set(value.posting_line_ids) for r in by_line.get(key, ())}
         require(set(value.source_ids)==actual_sources and len(value.source_ids)==len(actual_sources), 'effect_source_coverage')
     # All legs (including nonbank offsets) have complete positive attribution.
     for leg in legs.values():
-        allocations = [r for r in sources.values() if r['posting_line_id']==leg['id']]
+        allocations = list(by_line.get(leg['id'], ()))
         require(bool(allocations) and sum(r['amount_minor_units'] for r in allocations)==leg['debit_minor_units']+leg['credit_minor_units'], 'source_amount_coverage')
         require(all(r['transaction_id']==leg['transaction_id'] and r['currency']==leg['currency'] for r in allocations), 'source_owner')
     reversal_batches = [b for b in batches.values() if b['kind']=='reversal']
@@ -33,16 +42,16 @@ def prove(g, history, current, account_id, cutoff):
     for batch in reversal_batches:
         original = batches[batch['reverses_batch_id']]
         require(original['kind']!='reversal' and (original['transaction_id'],original['effective_date'])==(batch['transaction_id'],batch['effective_date']), 'inverse_batch_anchor')
-        expected = {r['id'] for r in legs.values() if r['batch_id']==original['id']}
-        actual = [r for r in legs.values() if r['batch_id']==batch['id']]
+        expected = {r['id'] for r in by_batch.get(original['id'], ())}
+        actual = list(by_batch.get(batch['id'], ()))
         require(Counter(r['reversed_line_id'] for r in actual)==Counter({key:1 for key in expected}), 'inverse_leg_bijection')
         for row in actual:
             old = legs[row['reversed_line_id']]
             ignored = {'id','batch_id','created_at','created_by','created_via','reversed_line_id','debit_minor_units','credit_minor_units'}
             require({k:v for k,v in row.items() if k not in ignored}=={k:v for k,v in old.items() if k not in ignored}, 'inverse_leg_facts')
             require((row['debit_minor_units'],row['credit_minor_units'])==(old['credit_minor_units'],old['debit_minor_units']), 'inverse_leg_amount')
-            expected_sources = {r['id'] for r in sources.values() if r['posting_line_id']==old['id']}
-            copied = [r for r in sources.values() if r['posting_line_id']==row['id']]
+            expected_sources = {r['id'] for r in by_line.get(old['id'], ())}
+            copied = list(by_line.get(row['id'], ()))
             require(Counter(r['reversed_source_id'] for r in copied)==Counter({key:1 for key in expected_sources}), 'inverse_source_bijection')
             for src in copied:
                 prior = sources[src['reversed_source_id']]

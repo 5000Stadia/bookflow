@@ -48,16 +48,53 @@ def canonical(row):
     return json.dumps(dict(row), sort_keys=True, separators=(',', ':'), ensure_ascii=False)
 
 
-@dataclass
+@dataclass(frozen=True, eq=False)
 class Graph:
+    """One caller-owned snapshot of source rows, with its lookups indexed once.
+
+    `rows` is frozen at construction -- a read-only mapping of tuples -- so the indexes built
+    from it cannot go stale: a graph that needs pending rows (`prepare_prospective`) has them
+    added before it is built, never after. `owned` returns the rows of one document in table
+    order and `by_id` a read-only id map, the same answers the scans they replace gave
+    (`tests/reconciliation_oracle.py` keeps those scans for the equivalence tests).
+    """
     rows: dict
     accounts: dict
 
+    def __post_init__(self):
+        rows = MappingProxyType({name: tuple(values) for name, values in self.rows.items()})
+        object.__setattr__(self, 'rows', rows)
+        owned = {}
+        for name, values in rows.items():
+            index = owned[name] = {}
+            for r in values:
+                index.setdefault(r.get('transaction_id', r.get('id')), []).append(r)
+        object.__setattr__(self, '_owned', owned)
+        object.__setattr__(self, '_ids', {})
+
+    def __eq__(self, other):
+        if not isinstance(other, Graph):
+            return NotImplemented
+        return dict(self.rows) == dict(other.rows) and self.accounts == other.accounts
+
+    __hash__ = None
+
+    def __deepcopy__(self, memo):
+        from copy import deepcopy
+        copied = Graph({name: deepcopy(list(values), memo) for name, values in self.rows.items()},
+                       deepcopy(self.accounts, memo))
+        memo[id(self)] = copied
+        return copied
+
     def owned(self, table, transaction):
-        return [r for r in self.rows[table] if r.get('transaction_id', r.get('id')) == transaction]
+        self.rows[table]  # an unknown table is a KeyError, as the scan made it
+        return list(self._owned[table].get(transaction, ()))
 
     def by_id(self, table):
-        return {r['id']: r for r in self.rows[table]}
+        found = self._ids.get(table)
+        if found is None:
+            found = self._ids[table] = MappingProxyType({r['id']: r for r in self.rows[table]})
+        return found
 
 
 def graph(s, identifiers, *, pending=None, headers=()):
@@ -114,12 +151,17 @@ def authority(s, identifiers):
     # Selections include every historical attempt and consumed operation through
     # the accepted owner, rather than only present applications.
     edges = []
+    # One read per evidence table, grouped, instead of a query per operation: the batch cache
+    # `record_transactions` already offers, held for this one call and never beyond it. Every
+    # identity asked for here is a non-null primary key, so a grouped lookup answers what the
+    # per-row `WHERE` did.
+    cache = {}
     for row in s.company.conn.execute(sa.select(c.payment_operations.c.id)).mappings():
-        edges.append(payment_authority.record_transactions(s.company, 'payment_operation', row['id']))
+        edges.append(payment_authority.record_transactions(s.company, 'payment_operation', row['id'], cache=cache))
     for row in s.company.conn.execute(sa.select(c.payment_selections.c.id)).mappings():
-        edges.append(payment_authority.record_transactions(s.company, 'payment_selection', row['id']))
+        edges.append(payment_authority.record_transactions(s.company, 'payment_selection', row['id'], cache=cache))
     for row in s.company.conn.execute(sa.select(c.deposit_operations.c.id)).mappings():
-        edges.append(payment_authority.record_transactions(s.company, 'deposit_operation', row['id']))
+        edges.append(payment_authority.record_transactions(s.company, 'deposit_operation', row['id'], cache=cache))
     for name, settling, settled, through in SETTLEMENT_EDGES:
         table = c.metadata.tables[name]
         if through is None:

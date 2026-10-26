@@ -6,11 +6,11 @@ Runtime loading, publication and persistence are deliberately not implemented.
 """
 import copy
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from collections import defaultdict
 from bookflow.company import reconciliation_adapters as adapters
 from bookflow.company.reconciliation_proof import prove
-from bookflow.company.reconciliation_storage_validation import validate, canonical, digest, InvalidStorage
+from bookflow.company.reconciliation_storage_validation import validate, canonical, digest, InvalidStorage, proved
 from bookflow.company import reconciliation_commands_models as m
 
 # Private domain reasons travel the existing typed pipeline without registering
@@ -110,6 +110,13 @@ def read_admission(s,authority_transactions, *, extra_transactions=(),extra_acco
     for account in sorted(accounts):account_population(s,account,'9999-12-31')
 
 
+class _Memo(dict):
+    """Proofs already made over one Snapshot's frozen source graph, for the one command that
+    loaded it. A copy of the Snapshot starts empty, so a copy that is then changed proves again."""
+    def __copy__(self):return _Memo()
+    def __deepcopy__(self,memo):return _Memo()
+
+
 @dataclass(frozen=True)
 class Snapshot:
     rows: dict
@@ -117,6 +124,7 @@ class Snapshot:
     captured_graphs: dict
     referenced_rows: dict
     authority_transactions: tuple[str,...]
+    proofs: _Memo = field(default_factory=_Memo, init=False, compare=False, repr=False)
     def by(self,name):return {r['id']:r for r in self.rows[name]}
     @property
     def versions(self):return self.by('effect_versions')
@@ -133,9 +141,22 @@ def snapshot(rows, *, source: adapters.Graph, captured_graphs, referenced_rows, 
     """
     require(authority_required(rows,source,captured_graphs)<=set(authority_transactions),'E_PERMISSION')
     values=copy.deepcopy((rows,source,captured_graphs,referenced_rows))
+    return _validated(values,authority_transactions)
+
+def owned_snapshot(rows, *, source: adapters.Graph, captured_graphs, referenced_rows, authority_transactions):
+    """`snapshot` for a caller that built every argument for this call and keeps none of them
+    (`reconciliation_loading.load`): the same checks, without the defensive deep copy."""
+    require(authority_required(rows,source,captured_graphs)<=set(authority_transactions),'E_PERMISSION')
+    return _validated((rows,source,captured_graphs,referenced_rows),authority_transactions)
+
+def _validated(values,authority_transactions):
+    proofs=_Memo()
     with adapter_errors():
-        validate(values[0],source=values[1],captured_graphs=values[2],referenced_rows=values[3])
-    return Snapshot(*values,tuple(sorted(set(authority_transactions))))
+        validate(values[0],source=values[1],captured_graphs=values[2],referenced_rows=values[3],memo=proofs)
+    result=Snapshot(*values,tuple(sorted(set(authority_transactions))))
+    # The proofs `validate` just made of this source graph are the ones every read repeats.
+    object.__setattr__(result,'proofs',proofs)
+    return result
 
 def account_population(s,account,cutoff):
     require(authority_required(s.rows,s.source,s.captured_graphs)<=set(s.authority_transactions),'E_PERMISSION')
@@ -143,8 +164,7 @@ def account_population(s,account,cutoff):
         a=s.source.accounts[account]
         home=s.referenced_rows['company_info'][0]['home_currency']
         require(a['type'] in ('bank','credit_card') and a['currency']==home,'E_RECONCILIATION_UNSUPPORTED')
-        history,current=adapters.enumerate_graph(s.source)
-        total,gl=prove(s.source,history,current,account,cutoff)
+        total,gl=proved(s.proofs,s.source,account,cutoff)
         values=tuple(v for v in s.current.values() if v['account_id']==account and v['active'])
         stored=sum(v['signed_debit'] for v in values if v['effective_date']<=cutoff)
         require(stored==total,'E_RECONCILIATION_SOURCE_INVALID',lambda:effects_mismatch(stored,total,cutoff))

@@ -215,8 +215,42 @@ def _decode(value):
         raise InvalidStorage('invalid_json') from exc
 
 
-def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
+def _frozen(value):
+    """A hashable stand-in for a decoded JSON value: equal exactly when the values are `==`."""
+    if type(value) is dict:
+        return ('dict', frozenset((k, _frozen(v)) for k, v in value.items()))
+    if type(value) is list:
+        return ('list', tuple(_frozen(v) for v in value))
+    return value
+
+
+def enumerated(memo, graph):
+    """`enumerate_graph(graph)`, once per graph per memo. A Graph's rows are frozen, so its
+    enumeration cannot change while the memo holds it (and holding it keeps its id unique)."""
+    from bookflow.company.reconciliation_adapters import enumerate_graph
+    found = memo.get(('enumerate', id(graph)))
+    if found is None or found[0] is not graph:
+        found = memo['enumerate', id(graph)] = (graph, enumerate_graph(graph))
+    return found[1]
+
+
+def proved(memo, graph, account_id, cutoff):
+    """`prove` over the graph's own enumeration, once per (graph, account, cutoff) per memo.
+    Only a result is kept: a proof that raises is attempted again, and raises again."""
+    from bookflow.company.reconciliation_proof import prove
+    key = ('prove', id(graph), account_id, cutoff)
+    found = memo.get(key)
+    if found is None or found[0] is not graph:
+        history, current = enumerated(memo, graph)
+        found = memo[key] = (graph, prove(graph, history, current, account_id, cutoff))
+    return found[1]
+
+
+def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None, memo=None):
     """Validate a complete N-table snapshot; return no partial decoded output.
+
+    `memo` lets a caller keep the source enumeration and proofs made here for the snapshot it
+    builds (`reconciliation_preparation`), so a command proves each graph once.
 
     Source is an explicit R0 Graph, not a connection. Whole source coverage is
     required only for nonempty effect storage (future A migration/owner caller).
@@ -261,21 +295,39 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
                             try: MODELS[name,c.name].model_validate(decoded,strict=True)
                             except ValueError as exc: raise InvalidStorage('snapshot_format') from exc
                         value[c.name] = decoded
-    def by(name,field='id'): return {v[field]:v for v in r[name]}
-    def matching(name,field,key): return [v for v in r[name] if v[field]==key]
+    # The rows are final from here on, so every lookup below is an index built once from them
+    # (lazily, on first use) rather than a scan per question. `by` keeps the last row of a
+    # repeated key and `matching` keeps table order, as the scans they replace did.
+    indexes={}
+    def by(name,field='id'):
+        found=indexes.get(('by',name,field))
+        if found is None: found=indexes['by',name,field]={v[field]:v for v in r[name]}
+        return found
+    def grouped_by(name,field):
+        found=indexes.get(('matching',name,field))
+        if found is None:
+            found=indexes['matching',name,field]={}
+            for v in r[name]: found.setdefault(v[field],[]).append(v)
+        return found
+    def matching(name,field,key): return list(grouped_by(name,field).get(key,()))
     def get(name,key,field='id'):
         found=by(name,field).get(key); require(found is not None,'missing_owner'); return found
-    # Prove every new-table FK explicitly even when a migration has FK OFF.
+    # Prove every new-table FK explicitly even when a migration has FK OFF. Each target's key
+    # tuples become one set, built the first time a non-null key asks for it.
     referenced_rows = referenced_rows or {}
+    targets={}
     for name,t in tables.items():
         for constraint in t.foreign_key_constraints:
             remote=constraint.referred_table.name
+            columns=tuple(e.column.name for e in constraint.elements)
             for value in r[name]:
                 key=tuple(value[e.parent.name] for e in constraint.elements)
                 if any(v is None for v in key): continue
                 candidates = r[remote.removeprefix(PREFIX)] if remote.startswith(PREFIX) else referenced_rows.get(remote)
                 require(candidates is not None,'referenced_rows_required')
-                require(any(tuple(v[e.column.name] for e in constraint.elements)==key for v in candidates),'foreign_owner')
+                held=targets.get((remote,columns))
+                if held is None: held=targets[remote,columns]={tuple(v[c] for c in columns) for v in candidates}
+                require(key in held,'foreign_owner')
     choices={
         ('opening_members','classification'):('covered','outstanding'),
         ('drafts','kind'):('opening','statement','amendment'),
@@ -309,9 +361,10 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
         require(v['kind'] in ('member','seed','certificate','proposal'),'attempt_kind')
         for kind in ('member','seed','certificate','proposal'):
             require(v[kind+'_ordinal']==(v['ordinal'] if kind==v['kind'] else None),'attempt_subtype_pointer')
+    attempt_keys={(i['attempt_id'],i['ordinal'],i['kind']) for i in r['attempt_items']}
     for kind in ('member','seed','certificate','proposal'):
         for v in r['attempt_'+kind+'s']:
-            require(any(i['attempt_id']==v['attempt_id'] and i['ordinal']==v['ordinal'] and i['kind']==kind for i in r['attempt_items']),'extra_attempt_subtype')
+            require((v['attempt_id'],v['ordinal'],kind) in attempt_keys,'extra_attempt_subtype')
     for c in r['claims']:
         require((c['opening_id'] is None)!=(c['certificate_id'] is None),'claim_owner_shape')
     for key in r['keys']:
@@ -348,12 +401,11 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
         if key['producer'] in FUNDING_PRODUCERS: return key['transaction_id']
         return key['commercial_line_id']
     transitions = {}
+    memo = {} if memo is None else memo
     if versions:
         require(source is not None,'source_proof_required')
-        from bookflow.company.reconciliation_adapters import enumerate_graph
-        from bookflow.company.reconciliation_proof import prove
-        history,current=enumerate_graph(source)
-        for account in {v.account_id for v in history}: prove(source,history,current,account,'9999-12-31')
+        history,current=enumerated(memo,source)
+        for account in {v.account_id for v in history}: proved(memo,source,account,'9999-12-31')
         expected={(v.ref.producer,v.ref.transaction_id,v.ref.role,v.ref.component_id,v.version_id):v for v in history}
         actual={}
         for v in versions.values():
@@ -389,10 +441,19 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
             previous[key]=stored['id']
 
         heads={v['key_id']:v['version_id'] for v in r['effect_heads']}
-        expected_heads={next(k['id'] for k in keys.values() if (k['producer'],k['transaction_id'],k['role'],component(k))==(v.ref.producer,v.ref.transaction_id,v.ref.role,v.ref.component_id)): actual[v.ref.producer,v.ref.transaction_id,v.ref.role,v.ref.component_id,v.version_id]['id'] for v in current}
+        first_key={}
+        for k in keys.values(): first_key.setdefault((k['producer'],k['transaction_id'],k['role'],component(k)),k['id'])
+        expected_heads={}
+        for v in current:
+            head=first_key.get((v.ref.producer,v.ref.transaction_id,v.ref.role,v.ref.component_id))
+            if head is None: raise StopIteration  # what the scan's `next()` raised
+            expected_heads[head]=actual[v.ref.producer,v.ref.transaction_id,v.ref.role,v.ref.component_id,v.version_id]['id']
         require(heads==expected_heads,'source_heads')
     else:
         require(not keys and not r['effect_heads'],'empty_source_links')
+    whole_movements={}
+    for e in versions.values():
+        if e['active']: whole_movements.setdefault(_frozen(e['movement_snapshot']),set()).add(e['key_id'])
     def members(name,owner_field,owner):
         values=matching(name,owner_field,owner)
         require(sorted(v['ordinal'] for v in values)==list(range(len(values))),'member_ordinals')
@@ -409,7 +470,7 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
         selected={versions[m['version_id']]['key_id'] for m in values}
         for m in values:
             v=versions[m['version_id']]
-            whole={e['key_id'] for e in versions.values() if e['active'] and e['movement_snapshot']==v['movement_snapshot']}
+            whole=whole_movements.get(_frozen(v['movement_snapshot']),set())
             require(whole<=selected,'incomplete_movement')
         return values
     # A capture is proven against the live graph where it is written and validated against the
@@ -431,11 +492,9 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
     def capture(owner,pop,opening=False):
         """The write-time proof. Absent a graph the stored-row ties below stand alone."""
         if owner['id'] not in captured_graphs:return
-        from bookflow.company.reconciliation_adapters import enumerate_graph
-        from bookflow.company.reconciliation_proof import prove
         graph=captured_graphs[owner['id']]
-        history,current=enumerate_graph(graph)
-        total,gl=prove(graph,history,current,owner['account_id'],pop['cutoff'])
+        history,current=enumerated(memo,graph)
+        total,gl=proved(memo,graph,owner['account_id'],pop['cutoff'])
         values=[v for v in current if v.account_id==owner['account_id'] and (not opening or v.active and v.effective_date<=pop['cutoff'])]
         identity={ (keys[v['key_id']]['producer'],keys[v['key_id']]['transaction_id'],keys[v['key_id']]['role'],component(keys[v['key_id']]),v['source_version']):v['id'] for v in versions.values() }
         expected=[identity.get((v.ref.producer,v.ref.transaction_id,v.ref.role,v.ref.component_id,v.version_id)) for v in values]
@@ -453,6 +512,11 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
         require(sum(amount(m) for m in ms if m['classification']=='covered')==o['balance'],'opening_balance')
         require(sum(versions[m['version_id']]['signed_debit'] for m in ms)==pop['signed_gl_total'],'opening_gl')
         require(pop['source_fingerprint']==population_fingerprint(versions[m['version_id']] for m in ms),'capture_fingerprint')
+    selected_keys={}
+    def cleared(certificate):
+        found=selected_keys.get(certificate)
+        if found is None: found=selected_keys[certificate]={m['key_id'] for m in matching('certificate_members','certificate_id',certificate) if m['classification']=='selected'}
+        return found
     for c in r['certificates']:
         ms=members('certificate_members','certificate_id',c['id']); pop=c['captured_source_snapshot']
         capture(c,pop)
@@ -463,7 +527,7 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
         prior=set(); previous=c['previous_certificate_id']; visited=set()
         while previous:
             require(previous not in visited,'chain_cycle');visited.add(previous)
-            prior.update(m['key_id'] for m in matching('certificate_members','certificate_id',previous) if m['classification']=='selected')
+            prior.update(cleared(previous))
             previous=get('certificates',previous)['previous_certificate_id']
         for m in ms:
             expected='opening_covered' if m['key_id'] in covered else 'prior_cleared' if m['key_id'] in prior else None
@@ -505,7 +569,9 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
     claims=by('claims'); released={v['claim_id'] for v in r['releases']}
     for c in claims.values():
         table,field,key,classification=('opening_members','opening_id',c['opening_id'],'covered') if c['opening_id'] else ('certificate_members','certificate_id',c['certificate_id'],'selected')
-        require(any(m['key_id']==c['key_id'] and m['version_id']==c['version_id'] and m['classification']==classification for m in matching(table,field,key)),'claim_member')
+        found=indexes.get(('claimable',table,field,key))
+        if found is None: found=indexes['claimable',table,field,key]={(m['key_id'],m['version_id'],m['classification']) for m in matching(table,field,key)}
+        require((c['key_id'],c['version_id'],classification) in found,'claim_member')
     current=[v for v in claims.values() if v['id'] not in released]
     require(len({v['key_id'] for v in current})==len(current),'overlapping_claims')
     require({(v['key_id'],v['claim_id']) for v in r['current_members']}=={(v['key_id'],v['id']) for v in current},'current_claims')
@@ -521,12 +587,14 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
         event=next((e for e in r['event_accounts'] if e['event_id']==a['last_event_id'] and e['account_id']==a['account_id']),None)
         require(event is not None and (event['after_chain_version'],event['after_opening_id'],event['after_head_id'])==(a['version'],a['opening_id'],a['head_certificate_id']),'chain_event_head')
     require(active=={(v['account_id'],v['statement_date'],v['certificate_id']) for v in r['active_certificates']},'active_chain_projection')
+    owners={(a['opening_id'],a['account_id']) for a in r['accounts']}; chain_heads={v[2] for v in active}
     for c in current:
-        require(any(a['opening_id']==c['opening_id'] and a['account_id']==c['account_id'] for a in r['accounts']) if c['opening_id'] else any(v[2]==c['certificate_id'] for v in active),'claim_active_owner')
+        require((c['opening_id'],c['account_id']) in owners if c['opening_id'] else c['certificate_id'] in chain_heads,'claim_active_owner')
+    afters={(p['account_id'],p['after_chain_version'],p['after_opening_id'],p['after_head_id']) for p in r['event_accounts']}
     for e in r['event_accounts']:
         require(e['after_chain_version']==e['before_chain_version']+1,'event_version')
         if e['before_chain_version']:
-            require(any(p['account_id']==e['account_id'] and p['after_chain_version']==e['before_chain_version'] and p['after_opening_id']==e['before_opening_id'] and p['after_head_id']==e['before_head_id'] for p in r['event_accounts']),'event_history_gap')
+            require((e['account_id'],e['before_chain_version'],e['before_opening_id'],e['before_head_id']) in afters,'event_history_gap')
     for consumption in r['proposal_consumptions']:
         proposal=get('proposals',consumption['proposal_id']); saved=get('proposal_revisions',consumption['proposal_revision_id'])
         account=get('drafts',proposal['draft_id'])['account_id']
@@ -544,13 +612,15 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
             latest=max(choices,key=lambda v:v[number]); require(h['version']==latest[number],'projection_version')
             if 'current_revision_id' in h: require(h['current_revision_id']==latest['id'],'projection_head')
             else: require(h['parameters_snapshot']==latest['parameters_snapshot'],'preset_snapshot')
-    _receipts(r)
+    _receipts(r,grouped_by)
     require(Counter(e['operation_id'] for e in r['events'])==Counter({o['id']:1 for o in r['operations']}),'operation_event_coverage')
+    by_audit=defaultdict(set)
+    for (owner,_),v in transitions.items(): by_audit[owner].add(v)
     for event in r['events']:
         audit=event['audit_event_id']
-        expected={v for (owner,_),v in transitions.items() if owner==audit}
+        expected=by_audit.get(audit,set())
         actual=set()
-        targets={v['transaction_id'] for v in r['operation_transactions'] if v['operation_id']==event['operation_id']}
+        targets={v['transaction_id'] for v in matching('operation_transactions','operation_id',event['operation_id'])}
         for link in matching('event_effects','event_id',event['id']):
             new=versions[link['new_version_id']]
             require(link['source_audit_event_id']==new['source_audit_event_id']==audit,'event_causality')
@@ -561,34 +631,40 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
         require(actual==expected,'event_transition_coverage')
 
 
-def _receipts(r):
+def _receipts(r,grouped_by):
     from bookflow.company.reconciliation_schema import COMMANDS
+    def owned(name,field,key): return grouped_by(name,field).get(key,())
+    first_subtype={}
+    for kind in ('member','seed','certificate','proposal'):
+        for v in r['attempt_'+kind+'s']: first_subtype.setdefault((kind,v['attempt_id'],v['ordinal']),v)
+    first_revision={}
+    for v in r['draft_revisions']: first_revision.setdefault(v['id'],v)
     for op in r['operations']:
         require(op['command'] in COMMANDS and op['request_schema_version']==op['effect_schema_version']==1,'operation_format')
         require(1<=len(op['operation_key'])<=128,'operation_key')
         for field in ('original_request_snapshot','original_effect_snapshot'):
             envelope=op[field]; require(set(envelope['collections'])=={'request','effects','targets','generated'},'receipt_manifest')
             for kind,manifest in envelope['collections'].items():
-                items=sorted((v for v in r['operation_items'] if v['operation_id']==op['id'] and v['kind']==kind),key=lambda v:v['ordinal'])
+                items=sorted((v for v in owned('operation_items','operation_id',op['id']) if v['kind']==kind),key=lambda v:v['ordinal'])
                 require([v['ordinal'] for v in items]==list(range(manifest['count'])),'receipt_tail')
                 require(digest([v['facts_snapshot'] for v in items])==manifest['hash'],'receipt_hash')
         # Intent hash covers the canonical stored original intent document; the
         # future command owner supplies presence/spelling/context captures.
         require(digest(op['original_request_snapshot']['canonical_intent'])==op['canonical_intent_hash'],'intent_hash')
-        target_items=[v['facts_snapshot'] for v in r['operation_items'] if v['operation_id']==op['id'] and v['kind']=='targets']
+        target_items=[v['facts_snapshot'] for v in owned('operation_items','operation_id',op['id']) if v['kind']=='targets']
         require(all(set(v)=={'kind','id'} for v in target_items),'target_shape')
         targets={(v['kind'],v['id']) for v in target_items}
-        actual={(kind,v[field]) for kind,field in [('transactions','transaction_id'),('accounts','account_id'),('drafts','draft_id'),('openings','opening_id'),('certificates','certificate_id')] for v in r['operation_'+kind] if v['operation_id']==op['id']}
+        actual={(kind,v[field]) for kind,field in [('transactions','transaction_id'),('accounts','account_id'),('drafts','draft_id'),('openings','opening_id'),('certificates','certificate_id')] for v in owned('operation_'+kind,'operation_id',op['id'])}
         require(len(targets)==len(target_items) and targets==actual,'operation_target_coverage')
     for a in r['attempts']:
         require(a['state'] in ('uploading','sealed','applied','aborted','superseded'),'attempt_state')
         require(a['state'] not in ('uploading','sealed') or any(d['id']==a['draft_id'] and d['state']=='open' for d in r['drafts']),'attempt_open_draft')
         require(any(e['audit_event_id']==a['audit_event_id'] and e['kind']==('bulk_stage' if a['state'] in ('uploading','sealed') else 'bulk_terminal') and any(d['operation_id']==e['operation_id'] and d['draft_id']==a['draft_id'] for d in r['operation_drafts']) for e in r['events']),'attempt_event')
-        items=sorted((v for v in r['attempt_items'] if v['attempt_id']==a['id']),key=lambda v:v['ordinal'])
+        items=sorted(owned('attempt_items','attempt_id',a['id']),key=lambda v:v['ordinal'])
         require([v['ordinal'] for v in items]==list(range(len(items))) and len(items)<=a['declared_count'],'attempt_ordinals')
         seen=set()
         for item in items:
-            subtype=next((v for v in r['attempt_'+item['kind']+'s'] if v['attempt_id']==a['id'] and v['ordinal']==item['ordinal']),None)
+            subtype=first_subtype.get((item['kind'],a['id'],item['ordinal'])) if item['kind'] in ('member','seed','certificate','proposal') else next((v for v in r['attempt_'+item['kind']+'s'] if v['attempt_id']==a['id'] and v['ordinal']==item['ordinal']),None)
             require(subtype is not None,'attempt_subtype')
             payload={k:v for k,v in subtype.items() if k not in ('attempt_id','ordinal')}
             require(item['payload']==payload,'attempt_payload')
@@ -598,7 +674,7 @@ def _receipts(r):
                 if subtype['certificate_id'] is not None:
                     key=('certificate',subtype['certificate_id'])
                 else:
-                    revision=next((v for v in r['draft_revisions'] if v['id']==subtype['replacement_draft_revision_id']),None)
+                    revision=first_revision.get(subtype['replacement_draft_revision_id'])
                     require(revision is not None and revision['account_id']==subtype['account_id'],'attempt_revision_owner')
                     header=Header.model_validate(revision['header_snapshot'])
                     require(header.statement_date is not None,'attempt_statement_date')
@@ -615,7 +691,7 @@ def _receipts(r):
         if a['state'] in ('sealed','applied'):
             require(len(items)==a['declared_count'],'attempt_tail')
             require(digest([{'kind':v['kind'],'payload':v['payload']} for v in items])==a['intent_hash'],'attempt_hash')
-        chunks=sorted((v for v in r['attempt_chunks'] if v['attempt_id']==a['id']),key=lambda v:v['chunk_index'])
+        chunks=sorted(owned('attempt_chunks','attempt_id',a['id']),key=lambda v:v['chunk_index'])
         require([v['chunk_index'] for v in chunks]==list(range(len(chunks))),'chunk_sequence')
         received=[]
         for chunk in chunks:
