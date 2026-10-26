@@ -1,0 +1,9 @@
+<section class="workspace-card" aria-label="{{ 'Serial numbers' if item_numbers.tracking == 'serial' else 'Lots' }}" id="item-numbers">
+<h2>{{ 'Serial numbers' if item_numbers.tracking == 'serial' else 'Lots' }} in stock</h2>
+{% set loose = item_numbers.unassigned %}
+{% if loose %}<p class="attention"><strong>Unassigned:</strong> {% for row in loose %}{{ row.quantity }} at {{ row.site_name }}{% if not loop.last %}, {% endif %}{% endfor %}. These units carry no {{ 'serial number' if item_numbers.tracking == 'serial' else 'lot' }} yet.</p>{% endif %}
+{% if item_numbers.rows %}<div class="table-wrap"><table><thead><tr><th>{{ 'Serial number' if item_numbers.tracking == 'serial' else 'Lot' }}</th><th>Site</th><th class="num">On hand</th>{% if item_numbers.tracking == 'lot' %}<th>Expires</th>{% endif %}</tr></thead><tbody>
+{% for row in item_numbers.rows %}<tr{% if row.number is none %} class="unassigned"{% endif %}><td>{% if row.number %}<a href="/c/{{ company_id }}/report/serial-lot-history?number={{ row.number|urlencode }}">{{ row.number }}</a>{% else %}Unassigned{% endif %}</td><td>{{ row.site_name }}</td><td class="num">{{ row.quantity }}</td>{% if item_numbers.tracking == 'lot' %}<td>{{ row.expiry_date or '' }}{% if row.expired %} · expired{% endif %}</td>{% endif %}</tr>{% endfor %}
+</tbody></table></div>{% else %}<p>Nothing in stock as of {{ item_numbers.as_of }}.</p>{% endif %}
+{% if item_numbers.can_assign %}<nav class="actions" aria-label="Number actions"><a href="/c/{{ company_id }}/inventory/assign?item={{ record.id|urlencode }}">Assign numbers</a></nav>{% endif %}
+</section>

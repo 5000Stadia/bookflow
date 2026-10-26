@@ -147,6 +147,10 @@ class ItemInput(StrictModel):
     sales_tax_code_id: str | None = Field(default=None, min_length=26, max_length=26)
     manufacturer_part_number: str | None = Field(default=None, max_length=128)
     barcode: str | None = Field(default=None, max_length=128)
+    tracking: Literal["none", "serial", "lot"] | None = Field(default=None, description=(
+        "Number tracking of an inventory part or assembly: none (the default), serial (each unit carries its own "
+        "serial number) or lot (units carry a lot number and its expiry). Turning it on leaves the stock on hand "
+        "unassigned; number it with `inventory assign`."))
     unit_of_measure_set_id: str | None = Field(default=None, min_length=26, max_length=26)
     reorder_point_min: str | None = None
     reorder_point_max: str | None = None
@@ -308,6 +312,7 @@ class ItemOutput(StrictModel):
     sales_tax_code: str | None
     manufacturer_part_number: str | None
     barcode: str | None
+    tracking: str = "none"
     unit_of_measure_set_id: str | None
     unit_of_measure_set: str | None
     reorder_point_min: str | None
@@ -369,7 +374,7 @@ _IDENTITY = frozenset({"name", "type", "parent_id", "category_id", "default_clas
 _SALES = frozenset({"description", "sales_enabled", "price", "income_account_id", "sales_tax_code_id"})
 _PURCHASE = frozenset({"purchase_description", "purchase_enabled", "cost", "expense_account_id", "preferred_vendor_id", "vendor_profiles"})
 _INVENTORY_PURCHASE = frozenset({"purchase_description", "purchase_enabled", "cost", "preferred_vendor_id", "vendor_profiles"})
-_STOCK = frozenset({"cogs_account_id", "asset_account_id", "manufacturer_part_number", "barcode", "unit_of_measure_set_id", "reorder_point_min", "reorder_point_max"})
+_STOCK = frozenset({"cogs_account_id", "asset_account_id", "manufacturer_part_number", "barcode", "tracking", "unit_of_measure_set_id", "reorder_point_min", "reorder_point_max"})
 _FIXED = frozenset({
     "asset_number", "purchase_date", "original_cost", "vendor_id", "location", "serial_number",
     "warranty_expiration", "disposal_status", "disposal_date", "disposal_proceeds",
@@ -808,6 +813,7 @@ def _owner_values(db: Database, parsed: ItemInput, *, supplied: set[str], refere
     for field in _DIRECT_FIELDS:
         values[field] = getattr(parsed, field)
     values["preferred_vendor_id"] = parsed.preferred_vendor_id
+    values["tracking"] = parsed.tracking or "none"   # R104 increment 4
     for field in _MONEY_FIELDS:
         values.update(_money(getattr(parsed, field), db, field))
     for field, column in _PERCENT_FIELDS.items():
@@ -1111,6 +1117,8 @@ def _payload_from_state(owner: Mapping[str, Any], members: Sequence[Mapping[str,
         "purchase_enabled": bool(owner["purchase_enabled"]), "preferred_vendor_id": owner["preferred_vendor_id"],
     }
     payload.update({field: owner[field] for field in _DIRECT_FIELDS if field not in {"category_id", "description", "purchase_description"}})
+    if (owner.get("tracking") or "none") != "none":
+        payload["tracking"] = owner["tracking"]
     for field in _MONEY_FIELDS:
         payload[field] = _money_input(owner, field)
     for field, column in _PERCENT_FIELDS.items():
@@ -1145,6 +1153,21 @@ def _validate_type_change(db: Database, current: Mapping[str, Any], target_type:
     ).mappings().all()
     if any(row["type"] != target_type for row in related):
         raise BookflowError("E_TYPE_CHANGE", details={"record_id": current["id"], "from": old_type, "to": target_type, "hierarchy": True})
+
+
+def _assert_tracking_change(db: Database, current: Mapping[str, Any], tracking: str) -> None:
+    """Tracking turns on freely (stock on hand stays unassigned); it turns off, or changes kind, only while no
+    unit on hand or owed carries a number of the old kind (R104 increment 4)."""
+    old = current.get("tracking") or "none"
+    if old == "none":
+        return
+    column = schema.inventory_placements.c.serial_number_id if old == "serial" else schema.inventory_placements.c.lot_id
+    held = db.conn.execute(sa.select(column, sa.func.sum(schema.inventory_placements.c.quantity_microunits)).where(
+        schema.inventory_placements.c.item_id == current["id"], column.is_not(None)).group_by(column)).all()
+    if any(int(quantity) for _, quantity in held):
+        kind = "serial numbers" if old == "serial" else "lots"
+        raise _validation("tracking", f"{current['full_name']} still holds units under {kind}; unassign them with "
+                                      "`inventory assign --direction unassign` first")
 
 
 def assert_barcode_available(db: Database, barcode: str | None, *, exclude_id: str | None = None,
@@ -1347,6 +1370,7 @@ def plan_item_update(
     changed_fields: set[str] = set()
     storage_groups = {
         **{field: (field,) for field in _DIRECT_FIELDS},
+        "tracking": ("tracking",),
         "name": ("name", "full_name"), "parent_id": ("parent_id", "full_name"),
         "type": ("type",), "sales_enabled": ("sales_enabled",),
         "purchase_enabled": ("purchase_enabled",), "preferred_vendor_id": ("preferred_vendor_id",),
@@ -1374,6 +1398,8 @@ def plan_item_update(
         return ItemUpdatePlan(None, (), ())
     if "barcode" in changed_fields:
         assert_barcode_available(db, after_candidate.get("barcode"), exclude_id=record_id)
+    if "tracking" in changed_fields:
+        _assert_tracking_change(db, current, after_candidate.get("tracking") or "none")
     after = {
         **after_candidate,
         **list_service.update_metadata(current, actor_id, via, at=at or now_iso()),
@@ -1938,7 +1964,7 @@ def project_item(
             "purchase_description", "sales_enabled", "purchase_enabled", "income_account_id",
             "expense_account_id", "cogs_account_id", "asset_account_id", "deposit_account_id",
             "liability_account_id", "default_class_id", "sales_tax_code_id",
-            "manufacturer_part_number", "barcode", "unit_of_measure_set_id", "preferred_vendor_id",
+            "manufacturer_part_number", "barcode", "tracking", "unit_of_measure_set_id", "preferred_vendor_id",
             "notes", "print_members", "payment_method_id", "use_undeposited_funds",
             "tax_agency_vendor_id", "asset_number", "purchase_date", "vendor_id", "location",
             "serial_number", "warranty_expiration", "disposal_status", "disposal_date",

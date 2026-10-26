@@ -21,6 +21,7 @@ from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 
+from bookflow.company import serial_lot_models as _SL
 from bookflow.company.custom_fields import CustomFieldKindExpectations, CustomFieldValuePatch
 from bookflow.company.journal_models import MoneyInput
 from bookflow.company.journal_outputs import (
@@ -76,6 +77,10 @@ class InventoryAdjustLineInput(_Input):
                                   'is worked out when written. Forbidden with a decrease.')
     negative_value: bool = Field(default=False, description='With value_change: write the value down rather than up.')
     site: _Selector | None = Field(default=None, description="Inventory site of this line; omitted, the adjustment's site, else the default site.")
+    lot: _SL.Number | None = Field(default=None, description='Lot the units go into (an increase) or leave from (a decrease), of a lot-tracked item.')
+    lot_expiry: _SL.IsoDate | None = Field(default=None, description=_SL.EXPIRY_HELP)
+    serial_numbers: list[_SL.Number] | None = Field(default=None, max_length=10000, description=(
+        'Serial numbers of the units found (an increase) or gone (a decrease), of a serial-tracked item; the rest are unassigned.'))
     class_id: _Selector | None = Field(default=None, description="Class of this line; omitted, the adjustment's class.")
     description: str | None = Field(default=None, max_length=2000, description='Line description on both posting lines.')
 
@@ -133,6 +138,10 @@ class InventoryAdjustInput(_Input):
                     'and optionally value_change or new_value. Leave item, quantity_change and value_change out.')
     class_id: _Selector | None = Field(default=None, description='Class captured on both posting lines.')
     site: _Selector | None = Field(default=None, description='Inventory site the quantity change is at, by id or name; omitted, the default site.')
+    lot: _SL.Number | None = Field(default=None, description='One-item form: lot the units go into or leave from, of a lot-tracked item.')
+    lot_expiry: _SL.IsoDate | None = Field(default=None, description=_SL.EXPIRY_HELP)
+    serial_numbers: list[_SL.Number] | None = Field(default=None, max_length=10000, description=(
+        'One-item form: serial numbers of the units found or gone, of a serial-tracked item.'))
     count_position: _Position = Field(
         default='before', description='before (the default) or after a physical count of its site on the same date.')
     memo: str | None = Field(default=None, max_length=2000, description='Why the stock was adjusted.')

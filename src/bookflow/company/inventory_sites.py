@@ -277,7 +277,24 @@ def _resolved_lines(s, lines, date):
         if quantity <= 0:
             raise _invalid(field + '.quantity', 'must be above 0')
         item_conversions.require_stock_date(s, item['id'], item['full_name'], date, field + '.item')
-        out.append(dict(item=item, quantity=quantity, description=(line.description or '').strip() or None))
+        from bookflow.company import serial_lots
+        out.append(dict(item=item, quantity=quantity, description=(line.description or '').strip() or None,
+                        numbers=serial_lots.from_line(line)))
+    return out
+
+
+def _old_numbers(s, revision_id):
+    """``{line identity: Numbers}`` a stored revision's lines moved, so an update restating no lines keeps them."""
+    from bookflow.company import serial_lots
+    serials = serial_lots.line_serials(_live_placements(s, revision_id))
+    lines = _lines(s, revision_id)
+    names = serial_lots.number_names(s, [line['lot_id'] for line in lines], [i for ids in serials.values() for i in ids])
+    out = {}
+    for line in lines:
+        numbers = serials.get(line['line_id'], [])
+        out[line['line_id']] = serial_lots.Numbers(
+            lot=names[line['lot_id']]['number'] if line['lot_id'] else None,
+            serial_numbers=tuple(names[i]['number'] for i in numbers) if numbers else None)
     return out
 
 
@@ -309,8 +326,10 @@ def _decide(s, ctx, inp, operation):
     if inp.lines is not None:
         lines = _resolved_lines(s, inp.lines, date)
     else:
+        kept = _old_numbers(s, old_rev['id'])
         lines = [dict(item=item_service.resolve_item(s.company, line['item_id']), quantity=int(line['quantity_microunits']),
-                      description=line['description'], line_id=line['line_id']) for line in _lines(s, old_rev['id'])]
+                      description=line['description'], line_id=line['line_id'], numbers=kept.get(line['line_id']))
+                 for line in _lines(s, old_rev['id'])]
     memo = inp.memo if 'memo' in inp.model_fields_set else (old_rev['memo'] if old_rev else None)
     position = inp.count_position or (old_rev['count_position'] if old_rev else 'before')
     number, sequence = (old['number'], None) if old else _number(s, inp.number)
@@ -318,23 +337,38 @@ def _decide(s, ctx, inp, operation):
                 memo=(memo or '').strip() or None, lines=lines, number=number, sequence=sequence)
 
 
-def _placements(s, decided, revision_id, line_ids, sequence):
-    """The new revision's placements: the old ones reversed, then -q out and +q in per line."""
+def _placements(s, decided, revision_id, line_ids, sequence, state=None):
+    """The new revision's placements: the old ones reversed, then -q out and +q in per line, each lot and
+    serial number moved with its units (R104 increment 4) and the rest unassigned."""
+    from bookflow.company import serial_lots
+    state = state if state is not None else serial_lots.Numbering(s)
     out = []
     if decided['old_rev'] is not None:
-        for original in _live_placements(s, decided['old_rev']['id']):
-            if original['reverses_placement_id'] is not None:
+        live = _live_placements(s, decided['old_rev']['id'])
+        retired = {row['reverses_placement_id'] for row in live if row['reverses_placement_id']}
+        for original in live:
+            if original['reverses_placement_id'] is not None or original['id'] in retired:
                 continue   # the revision before it, already retired
             out.append(dict(original, id=new_id(), quantity_microunits=-int(original['quantity_microunits']),
                             sequence=sequence, transfer_revision_id=revision_id,
                             reverses_placement_id=original['id']))
-    for line, line_id in zip(decided['lines'], line_ids):
+    state.made.extend(out)
+    for index, (line, line_id) in enumerate(zip(decided['lines'], line_ids)):
         base = dict(item_id=line['item']['id'], bin_id=None, lot_id=None, serial_number_id=None,
                     effective_date=decided['date'], count_position=decided['position'], sequence=sequence,
                     source='transfer', movement_id=None, transfer_revision_id=revision_id, source_line_id=line_id,
                     reverses_placement_id=None)
-        out.append(dict(base, id=new_id(), site_id=decided['from_site']['id'], quantity_microunits=-line['quantity']))
-        out.append(dict(base, id=new_id(), site_id=decided['to_site']['id'], quantity_microunits=line['quantity']))
+        lot_id, parts = serial_lots.transfer_parts(
+            state, line['item'], line['quantity'], line.get('numbers'), decided['from_site']['id'],
+            decided['to_site']['id'], decided['date'], decided['position'], sequence, f'lines.{index}')
+        line['lot_id'] = lot_id
+        for site, lot, serial, quantity, made in parts:
+            row = dict(base, id=new_id(), site_id=site, lot_id=lot, serial_number_id=serial, quantity_microunits=quantity)
+            if made is not None:
+                row['_lot_row'] = made
+            out.append(row)
+            state.made.append(row)
+    serial_lots.check(state, out)
     return out
 
 
@@ -362,6 +396,21 @@ def _history(revisions):
                  created_via=r['created_via']) for r in revisions]
 
 
+def _line_outputs(s, lines):
+    from bookflow.company import serial_lots
+    serials = {}
+    for revision_id in {line['revision_id'] for line in lines}:
+        serials.update(serial_lots.line_serials(_live_placements(s, revision_id)))
+    names = serial_lots.number_names(s, [line.get('lot_id') for line in lines],
+                                     [i for ids in serials.values() for i in ids])
+    return [TransferLineOutput(line_id=line['line_id'], item_id=line['item_id'],
+                               item_name=inventory.item_name(s, line['item_id']),
+                               quantity=_q(line['quantity_microunits']), description=line['description'],
+                               lot=(names.get(line['lot_id']) or {}).get('number') if line.get('lot_id') else None,
+                               serial_numbers=[(names.get(i) or {}).get('number', i) for i in serials.get(line['line_id'], [])])
+            for line in lines]
+
+
 def transfer_output(s, header, rev, lines, *, cls=TransferOutput, status=None, warnings=(), on_hand_after=(),
                     history=None, **extra):
     names = placements.site_names(s)
@@ -371,10 +420,7 @@ def transfer_output(s, header, rev, lines, *, cls=TransferOutput, status=None, w
                date=rev['date'], count_position=rev['count_position'], from_site_id=rev['from_site_id'],
                from_site_name=names.get(rev['from_site_id'], ''), to_site_id=rev['to_site_id'],
                to_site_name=names.get(rev['to_site_id'], ''), memo=rev['memo'], reason=rev.get('reason'),
-               lines=[TransferLineOutput(line_id=line['line_id'], item_id=line['item_id'],
-                                         item_name=inventory.item_name(s, line['item_id']),
-                                         quantity=_q(line['quantity_microunits']), description=line['description'])
-                      for line in lines],
+               lines=_line_outputs(s, lines),
                on_hand_after=list(on_hand_after), warnings=list(dict.fromkeys(warnings)),
                history=history if history is not None else [], **extra)
 
@@ -400,9 +446,14 @@ def _run(s, ctx, inp, operation, *, persist):
                           unit_id=None, unit_factor_nanounits=1_000_000_000, from_bin_id=None, to_bin_id=None,
                           lot_id=None, description=line['description']))
     sequence = inventory.next_sequence(s)
+    from bookflow.company import serial_lots
+    numbering = serial_lots.Numbering(s)
     new_placements = [dict(p, **provenance, audit_event_id=event)
-                      for p in _placements(s, decided, revision_id, [line['line_id'] for line in lines], sequence)]
-    warnings = placements.warnings(s, new_placements)
+                      for p in _placements(s, decided, revision_id, [line['line_id'] for line in lines], sequence,
+                                           numbering)]
+    for line, decided_line in zip(lines, decided['lines']):
+        line['lot_id'] = decided_line.get('lot_id')
+    warnings = placements.warnings(s, new_placements) + numbering.warnings
     on_hand_after = _on_hand_after(s, decided, new_placements)
     if operation == 'void':
         header.update(status='voided')
@@ -416,7 +467,8 @@ def _run(s, ctx, inp, operation, *, persist):
                                status='will_post' if not old else header['status'], warnings=warnings,
                                on_hand_after=on_hand_after, number=decided['number'],
                                history=_history(_revisions(s, old['id'])) if old else []), [], 'preview'
-    touched = [Touched('inventory_placement', p['id'], 'create', None, 1, p, db='company') for p in new_placements]
+    touched, clean = placements.number_touched(new_placements)
+    touched += [Touched('inventory_placement', p['id'], 'create', None, 1, p, db='company') for p in clean]
     touched.append(Touched('inventory_transfer_revision', rev['id'], 'create', None, 1, rev, db='company'))
     touched += [Touched('inventory_transfer_line', line['id'], 'create', None, 1, line, db='company') for line in lines]
     touched.append(Touched('inventory_transfer', header['id'], 'update' if old else 'create',

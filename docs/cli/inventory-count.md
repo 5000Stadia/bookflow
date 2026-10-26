@@ -376,8 +376,8 @@ The same example as complete `bookflow_run` arguments:
 | `entries[].item` | inside `--entries` JSON array | string \| null | no | yes | null | Item counted, by id, name or barcode. |
 | `entries[].code` | inside `--entries` JSON array | string \| null | no | yes | null | A scanned barcode naming the item. |
 | `entries[].bin` | inside `--entries` JSON array | string \| null | no | yes | null | Bin counted (bins arrive with a later increment). |
-| `entries[].lot` | inside `--entries` JSON array | string \| null | no | yes | null | Lot counted (lots arrive with a later increment). |
-| `entries[].serial_number` | inside `--entries` JSON array | string \| null | no | yes | null | Serial number counted (a later increment). |
+| `entries[].lot` | inside `--entries` JSON array | string \| null | no | yes | null | Lot counted, of a lot-tracked item; omitted, the units are counted unassigned. |
+| `entries[].serial_number` | inside `--entries` JSON array | string \| null | no | yes | null | Serial number counted, of a serial-tracked item (quantity 1 when there, 0 when not); units whose number cannot be read are counted without one, unassigned. |
 | `entries[].quantity` | inside `--entries` JSON array | string | yes | no | — | Quantity counted at the place, in the item's base unit; 0 counts it empty.; minimum length 1; maximum length 40 |
 | `entries[].mode` | inside `--entries` JSON array | literal["set", "add"] | no | no | "set" | set (the default): the place holds this many. add: this many more (a scan adds 1). |
 

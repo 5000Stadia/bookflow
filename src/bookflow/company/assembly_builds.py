@@ -372,7 +372,24 @@ def _on_hand(history, date):
     return sum(int(row['quantity_microunits']) for row in history if row['effective_date'] <= date)
 
 
-def _plan(s, item, components, quantity, date, *, reversing=(), exclude=None, site_id=None):
+def build_numbers(s, inp):
+    """``{'assembly': Numbers, component item id: Numbers}`` a build input names (R104 increment 4)."""
+    from bookflow.company import serial_lots
+    out = {}
+    numbers = serial_lots.from_line(inp)
+    if numbers is not None:
+        out['assembly'] = numbers
+    for index, entry in enumerate(getattr(inp, 'components', None) or ()):
+        component = item_service.resolve_item(s.company, entry.item)
+        stated = serial_lots.from_line(entry)
+        if stated is not None:
+            out[component['id']] = stated
+    return out
+
+
+def _plan(s, item, components, quantity, date, *, reversing=(), exclude=None, site_id=None, numbers=None):
+    from bookflow.company import serial_lots
+    numbers = numbers or {}
     currency = _home(s)
     build = _Build(item, components, quantity, date, currency)
     build.site_id = site_id
@@ -409,7 +426,7 @@ def _plan(s, item, components, quantity, date, *, reversing=(), exclude=None, si
     issues = [inventory_effects.Entry(
         key=f'c{index}', item_id=entry['item']['id'], item_name=entry['item']['full_name'], kind='issue',
         quantity_microunits=entry['need'], asset_account_id=entry['component']['account_id'],
-        offset_account_id=item['asset_account_id'], site_id=site_id)
+        offset_account_id=item['asset_account_id'], site_id=site_id, numbers=numbers.get(entry['item']['id']))
         for index, entry in enumerate(build.rows) if entry['component']['kind'] == 'stock' and entry['need'] > 0]
     # The first pass prices the components. It carries the assembly's receipt too, at a provisional value
     # (what the build being restated received, else nothing): without it, a later build that consumed this
@@ -449,7 +466,8 @@ def _plan(s, item, components, quantity, date, *, reversing=(), exclude=None, si
         entry['component']['account_id'] for entry in build.rows if entry['cost'])
     receipt = inventory_effects.Entry(key='assembly', item_id=item['id'], item_name=item['full_name'], kind='receipt',
                                       quantity_microunits=quantity, asset_account_id=item['asset_account_id'],
-                                      offset_account_id=offset, value_minor_units=total, site_id=site_id)
+                                      offset_account_id=offset, value_minor_units=total, site_id=site_id,
+                                      numbers=numbers.get('assembly'))
     build.change = inventory_effects.plan(s, entries=issues + [receipt], reversing=reversing, date=date,
                                           currency=currency, field='quantity')
     for index, entry in enumerate(build.rows):
@@ -612,7 +630,7 @@ def _post(s, ctx, build, journal, operation, *, command_name, revision_row, pers
     extra = [('assembly_builds', 'assembly_build', 'id', [row])]
     if movements:
         # Placed before the movements, which the database refuses unless their placements sum to them (R104).
-        extra.append(placements.extra(placements.placements_for_rows(
+        extra.extend(placements.extras(placements.placements_for_rows(
             s, movements, build.change.sites, build.change.placements)))
         extra.append(('inventory_movements', 'inventory_movement', 'id', movements))
     applied = journals.persist_prepared(fresh, ctx, s, command_name=command_name, extra=tuple(extra),
@@ -671,7 +689,7 @@ def _run(s, ctx, inp, operation, *, persist):
         components = capture(s, item, currency)
         _require_open(s, inp.date)
         site_id = placements.site_id_for(s, getattr(inp, 'site', None))
-        build = _plan(s, item, components, quantity, inp.date, site_id=site_id)
+        build = _plan(s, item, components, quantity, inp.date, site_id=site_id, numbers=build_numbers(s, inp))
         if build.shortfall and not inp.pending:
             raise _short(build)
         build_id = new_id()

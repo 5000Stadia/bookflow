@@ -40,6 +40,12 @@ The same example as complete `bookflow_run` arguments:
 | `memo` | `--memo` | string \| null | no | yes | null | Memo on the build. |
 | `pending` | `--pending` | boolean | no | no | false | Mark the build pending when the components on hand are short of it: nothing is posted, the components are reserved, and `assembly finalize` builds it later. A build that can be built is built; pending applies only to a shortfall. |
 | `site` | `--site` | string \| null | no | yes | null | Inventory site the components are taken from and the assembly put at, by id or name; omitted, the default site. |
+| `lot` | `--lot` | string \| null | no | yes | null | Lot the built assemblies receive into, when the assembly is lot-tracked. |
+| `lot_expiry` | `--lot-expiry` | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
+| `serial_numbers` | `--serial-numbers` | array[string] \| null | no | yes | null | Serial numbers of the built units, when the assembly is serial-tracked; the rest are unassigned. |
+| `components[].item` | inside `--components` JSON array | string | yes | no | — | Component item, by id or full name.; minimum length 1; maximum length 1000 |
+| `components[].lot` | inside `--components` JSON array | string \| null | no | yes | null | Lot the component is taken from. |
+| `components[].serial_numbers` | inside `--components` JSON array | array[string] \| null | no | yes | null | Serial numbers of the component units taken. |
 
 ### Command and context options
 

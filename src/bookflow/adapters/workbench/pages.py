@@ -215,6 +215,26 @@ def _presence_types() -> set[str]:
     return set(get_args(ann)) if get_origin(ann) is Literal else set()
 
 
+def _with_tracking(company, tracked):
+    """The company, its info marked when any item tracks serial or lot numbers (R104 increment 4)."""
+    if not isinstance(company, dict) or not isinstance(company.get('info'), dict):
+        return company
+    return dict(company, info=dict(company['info'], tracks_numbers=tracked))
+
+
+def _tracks_numbers(request, company_id, run):
+    """Whether any item of the company tracks serial or lot numbers; unknown reads as no."""
+    if not company_id:
+        return False
+    for kind in ('serial', 'lot'):
+        try:
+            if run(request, 'item list', {'filter': [f'tracking={kind}']}, company_id).get('items'):
+                return True
+        except BookflowError:
+            return False
+    return False
+
+
 def _role_allows(cmd: registry.Command, record: dict[str, Any], *, hub_admin: bool = False) -> bool:
     if hub_admin or record.get("access") == "hub_admin":
         return True
@@ -1745,7 +1765,18 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 if err.code == 'E_QUERY_STALE':
                     return render('error.html', request, error=err.to_dict(), restart_url=request.url.path)
                 return page_error(request, err)
+        item_numbers = None
+        if company_id and command_noun == 'item' and (out.get('tracking') or 'none') != 'none':
+            # A tracked item's lots or serial numbers, and its unassigned units, by site (R104 increment 4).
+            try:
+                stock = run(request, 'report serial-lot-stock', {'item': out['id'], 'limit': 500}, company_id)
+                item_numbers = {'tracking': out['tracking'], 'rows': stock['rows'], 'as_of': stock['as_of'],
+                                'unassigned': [row for row in stock['rows'] if row['number'] is None],
+                                'can_assign': _role_allows(registry.get('inventory assign'), role_view, hub_admin=cred.hub_admin)}
+            except BookflowError:
+                item_numbers = None
         return render("record.html", request, company_id=company_id, noun=noun, record_id=record_id, record=visible_record, record_title=record_title, audit=audit, meta=meta, verbs=verbs,
+                      item_numbers=item_numbers,
                       details_url=_details_url(request, company_id, noun, record_id),
                       source_report_watermark=_source_watermark(request),
                       master_detail=master_detail,
@@ -1902,6 +1933,12 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             for field in ('customer', 'document', 'receipt', 'draw', 'invoice'):
                 value = request.query_params.get('f:' + field, request.query_params.get(field))
                 if value is not None and field in cmd.input_model.model_fields:
+                    attempted['f:' + field] = value
+        if cmd.name == 'inventory assign' and not attempted:
+            # Opened from a tracked item's page (R104 increment 4): the link names the item, perhaps a document.
+            for field in ('item', 'document', 'site'):
+                value = request.query_params.get('f:' + field, request.query_params.get(field))
+                if value is not None:
                     attempted['f:' + field] = value
         if noun in ('fixed-asset', 'loan') and cmd.is_write and not attempted:
             # Opened from an asset's schedule or a loan (R119): the link names which one.
@@ -2509,7 +2546,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                           result=result if result and 'revision' in result else None, preview=preview,
                           record_id=record_id, error=error,
                           base=_document_base(company_id, noun),
-                          hidden=Document.hidden_columns(authorized_company)) if document_form else None,
+                          hidden=Document.hidden_columns(_with_tracking(authorized_company, _tracks_numbers(request, company_id, run)))) if document_form else None,
                       form_groups=None if document_form else Work.form_groups(described) if noun in Work.NOUNS and cmd.is_write else W.customer_form_groups(described) if noun == "customer" and verb in ("create", "update") else W.company_form_groups(described) if noun == 'company' and verb in ('new', 'update') else None)
 
     def contact_copy_page(

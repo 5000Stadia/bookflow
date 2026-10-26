@@ -112,6 +112,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `sales_tax_code` | string \| null | yes | yes | — | — |
 | `manufacturer_part_number` | string \| null | yes | yes | — | — |
 | `barcode` | string \| null | yes | yes | — | — |
+| `tracking` | string | no | no | "none" | — |
 | `unit_of_measure_set_id` | string \| null | yes | yes | — | — |
 | `unit_of_measure_set` | string \| null | yes | yes | — | — |
 | `reorder_point_min` | string \| null | yes | yes | — | — |
@@ -310,6 +311,7 @@ Example JSON output:
   "tax_agency_vendor_id": null,
   "tax_basis": null,
   "tax_percent": null,
+  "tracking": "none",
   "type": "service",
   "unit_of_measure_set": null,
   "unit_of_measure_set_id": null,
@@ -575,6 +577,7 @@ The same example as complete `bookflow_run` arguments:
 | `sales_tax_code_id` | `--sales-tax-code-id` | string \| null | no | yes | null | — |
 | `manufacturer_part_number` | `--manufacturer-part-number` | string \| null | no | yes | null | — |
 | `barcode` | `--barcode` | string \| null | no | yes | null | — |
+| `tracking` | `--tracking` | literal["none", "serial", "lot"] \| null | no | yes | null | Number tracking of an inventory part or assembly: none (the default), serial (each unit carries its own serial number) or lot (units carry a lot number and its expiry). Turning it on leaves the stock on hand unassigned; number it with `inventory assign`. |
 | `unit_of_measure_set_id` | `--unit-of-measure-set-id` | string \| null | no | yes | null | — |
 | `reorder_point_min` | `--reorder-point-min` | string \| null | no | yes | null | — |
 | `reorder_point_max` | `--reorder-point-max` | string \| null | no | yes | null | — |
@@ -699,6 +702,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `sales_tax_code` | string \| null | yes | yes | — | — |
 | `manufacturer_part_number` | string \| null | yes | yes | — | — |
 | `barcode` | string \| null | yes | yes | — | — |
+| `tracking` | string | no | no | "none" | — |
 | `unit_of_measure_set_id` | string \| null | yes | yes | — | — |
 | `unit_of_measure_set` | string \| null | yes | yes | — | — |
 | `reorder_point_min` | string \| null | yes | yes | — | — |
@@ -893,6 +897,7 @@ Example JSON output:
   "tax_agency_vendor_id": null,
   "tax_basis": null,
   "tax_percent": null,
+  "tracking": "none",
   "type": "service",
   "unit_of_measure_set": null,
   "unit_of_measure_set_id": null,
@@ -1058,6 +1063,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `sales_tax_code` | string \| null | yes | yes | — | — |
 | `manufacturer_part_number` | string \| null | yes | yes | — | — |
 | `barcode` | string \| null | yes | yes | — | — |
+| `tracking` | string | no | no | "none" | — |
 | `unit_of_measure_set_id` | string \| null | yes | yes | — | — |
 | `unit_of_measure_set` | string \| null | yes | yes | — | — |
 | `reorder_point_min` | string \| null | yes | yes | — | — |
@@ -1256,6 +1262,7 @@ Example JSON output:
   "tax_agency_vendor_id": null,
   "tax_basis": null,
   "tax_percent": null,
+  "tracking": "none",
   "type": "service",
   "unit_of_measure_set": null,
   "unit_of_measure_set_id": null,
@@ -1412,6 +1419,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].sales_tax_code` | string \| null | yes | yes | — | — |
 | `items[].manufacturer_part_number` | string \| null | yes | yes | — | — |
 | `items[].barcode` | string \| null | yes | yes | — | — |
+| `items[].tracking` | string | no | no | "none" | — |
 | `items[].unit_of_measure_set_id` | string \| null | yes | yes | — | — |
 | `items[].unit_of_measure_set` | string \| null | yes | yes | — | — |
 | `items[].reorder_point_min` | string \| null | yes | yes | — | — |
@@ -1968,6 +1976,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `sales_tax_code` | string \| null | yes | yes | — | — |
 | `manufacturer_part_number` | string \| null | yes | yes | — | — |
 | `barcode` | string \| null | yes | yes | — | — |
+| `tracking` | string | no | no | "none" | — |
 | `unit_of_measure_set_id` | string \| null | yes | yes | — | — |
 | `unit_of_measure_set` | string \| null | yes | yes | — | — |
 | `reorder_point_min` | string \| null | yes | yes | — | — |
@@ -2159,6 +2168,7 @@ Example JSON output:
   "tax_agency_vendor_id": null,
   "tax_basis": null,
   "tax_percent": null,
+  "tracking": "none",
   "type": "service",
   "unit_of_measure_set": null,
   "unit_of_measure_set_id": null,
@@ -2382,6 +2392,7 @@ The same example as complete `bookflow_run` arguments:
 | `sales_tax_code_id` | `--sales-tax-code-id` | string \| null | no | yes | null | — |
 | `manufacturer_part_number` | `--manufacturer-part-number` | string \| null | no | yes | null | — |
 | `barcode` | `--barcode` | string \| null | no | yes | null | — |
+| `tracking` | `--tracking` | literal["none", "serial", "lot"] \| null | no | yes | null | Number tracking: none, serial or lot. Turning it on leaves stock on hand unassigned (`inventory assign` numbers it); turning it off is refused while units carry numbers. |
 | `unit_of_measure_set_id` | `--unit-of-measure-set-id` | string \| null | no | yes | null | — |
 | `reorder_point_min` | `--reorder-point-min` | string \| null | no | yes | null | — |
 | `reorder_point_max` | `--reorder-point-max` | string \| null | no | yes | null | — |
@@ -2508,6 +2519,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `sales_tax_code` | string \| null | yes | yes | — | — |
 | `manufacturer_part_number` | string \| null | yes | yes | — | — |
 | `barcode` | string \| null | yes | yes | — | — |
+| `tracking` | string | no | no | "none" | — |
 | `unit_of_measure_set_id` | string \| null | yes | yes | — | — |
 | `unit_of_measure_set` | string \| null | yes | yes | — | — |
 | `reorder_point_min` | string \| null | yes | yes | — | — |
@@ -2708,6 +2720,7 @@ Example JSON output:
   "tax_agency_vendor_id": null,
   "tax_basis": null,
   "tax_percent": null,
+  "tracking": "none",
   "type": "service",
   "unit_of_measure_set": null,
   "unit_of_measure_set_id": null,

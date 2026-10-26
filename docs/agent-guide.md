@@ -1120,6 +1120,31 @@ wrong is voided (`inventory-count void`), never adjusted around. `inventory adju
 value is valued at the running average. `report physical-inventory-worksheet` prints a blank sheet
 and `report inventory-valuation-detail` shows each movement's effect on quantity and value.
 
+## Which customer got water heater WH-1?
+
+An item with `tracking` `serial` carries a serial number per unit; one with `lot` carries lot numbers
+and their expiry. Every stock line (and a transfer line, a count entry, `inventory adjust` and
+`assembly build`) takes `serial_numbers` (one per unit, up to the quantity) or `lot` (with `lot_expiry`
+when the lot is new). Name only numbers you were given: a unit whose number you do not know is left
+out and stays unassigned, and a person or you number it later with `inventory assign`, either units on
+hand or the units one document line moved:
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "report serial-lot-history", "reason": "Warranty call", "input": {"number": "WH-1"}}
+{"command": "inventory assign", "reason": "Serial read off the job sheet",
+ "input": {"item": "Water Heater", "document": "invoice 1001", "serial_numbers": ["WH-7"]}}
+```
+
+The history lists every move of the number in order with its document and customer or vendor; its last
+sale row answers the question, and `serial-number show` says where it is now. A number already in stock
+is refused, and one that has left is refused naming the document that took it; a number never on file
+is accepted with a warning and shows -1 until its receipt. A return names no numbers when its sale took
+them all: they come back. An outgoing sealant line that names no lot leaves unassigned, and the result
+names the earliest-expiring lot there; name it as `lot` to take it. `report serial-lot-stock` lists
+numbers in stock (with `expiring_by`), and `report lot-trace` answers a recall: every vendor and
+customer of a lot, and the builds it went into. A scanned serial or lot label works in `barcode lookup`.
+
 ## Stock sent back to a vendor
 
 Enter it as one `vendor-credit post` with `items`: one row per thing sent back, each with

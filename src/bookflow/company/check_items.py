@@ -87,6 +87,7 @@ def attach(s, fresh, items, *, count_position=None):
             class_id=line['class_id'])
         if entry is not None:
             entry.site_id = item.get('site_id')   # R104
+            entry.numbers = item.get('numbers')   # R104 increment 4
             entry.line_identity = line.get('line_id')
             entries.append(entry)
         outputs.append(output(item, line['line_id'], line['currency']))

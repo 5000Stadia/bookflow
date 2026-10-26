@@ -1,6 +1,7 @@
 """Typed credit memo input and results shared by every command adapter."""
 from __future__ import annotations
 
+from bookflow.company import serial_lot_models as _SL
 from typing import Annotated, Literal
 
 from pydantic import Field, model_serializer, model_validator
@@ -53,13 +54,16 @@ class CreditLineInput(StrictModel):
     use_defaults: list[LineDefault] = Field(default_factory=list, max_length=6)
     site: Selector | None = Field(default=None, description=(
         "Inventory site a returned stocked line goes back to, by id or name; omitted, where its sale took it from."))
+    lot: _SL.Number | None = Field(default=None, description=_SL.LOT_HELP)
+    lot_expiry: _SL.IsoDate | None = Field(default=None, description=_SL.EXPIRY_HELP)
+    serial_numbers: list[_SL.Number] | None = Field(default=None, max_length=10000, description=_SL.SERIAL_HELP)
 
     @model_serializer(mode="wrap")
     def unset_site(self, handler):
         values = handler(self)
         if "site" not in self.model_fields_set:
             values.pop("site", None)
-        return values
+        return _SL.drop_unset(self, values)
 
     @model_validator(mode="after")
     def one_kind_of_line(self):
@@ -233,6 +237,10 @@ class CreditLineOutput(CreatedOutput):
     net_minor_units: int
     tax_minor_units: int
     gross_minor_units: int
+    # R104 increment 4: the lot and serial numbers the line's stock carries; absent when none.
+    lot: str | None = Field(default=None, exclude_if=lambda v: v is None)
+    lot_expiry: str | None = Field(default=None, exclude_if=lambda v: v is None)
+    serial_numbers: list[str] | None = Field(default=None, exclude_if=lambda v: v is None)
     class_id: str | None
     class_name: str | None
     source_transaction_id: str | None

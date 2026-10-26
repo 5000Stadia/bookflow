@@ -525,8 +525,10 @@ def _item_line(s, line, header_class, currency, index, noun='bill'):
     memo = line.description if line.description is not None else row['purchase_description']
     from bookflow.company import placements
     site_id = placements.site_id_for(s, getattr(line, 'site', None), field=field + '.site')
+    from bookflow.company import serial_lots
+    numbers = serial_lots.from_line(line)
     return dict(line_id=None, family='item', amount_minor_units=amount, memo=memo, profile=profile,
-                **({'site_id': site_id} if site_id else {}))
+                **({'site_id': site_id} if site_id else {}), **({'numbers': numbers} if numbers else {}))
 
 
 # ---------------------------------------------------------------- supplier reference
@@ -878,7 +880,8 @@ def _custom_semantic(snapshot):
 def _line_semantic(line):
     return {'line_id': line['line_id'], 'family': line['family'], 'memo': line['memo'],
             'amount_minor_units': line['amount_minor_units'], 'profile': line['profile'].model_dump(),
-            **({'site_id': line['site_semantic']} if line.get('site_semantic') else {})}
+            **({'site_id': line['site_semantic']} if line.get('site_semantic') else {}),
+            **({'numbers': line['numbers_semantic']} if line.get('numbers_semantic') else {})}
 
 
 def place_item_lines(s, lines, header_site, old_revision):
@@ -893,7 +896,28 @@ def place_item_lines(s, lines, header_site, old_revision):
         if site:
             line['site_id'] = site
             line['site_semantic'] = placements.semantic_site(s, site)
+    number_lines(s, lines, old_revision)
     return lines
+
+
+def number_lines(s, lines, old_revision):
+    """Each stocked line's lot and serial numbers for the "has anything changed" comparison (R104 increment 4):
+    what it states, else what the same line identity carried."""
+    from bookflow.company import serial_lots
+    prior = None
+    for line in lines:
+        numbers = line.get('numbers')
+        if numbers is not None and numbers.stated:
+            line['numbers_semantic'] = serial_lots.semantic(numbers)
+        elif old_revision is not None and line.get('line_id'):
+            prior = serial_lots.revision_numbers(s, old_revision['id']) if prior is None else prior
+            line['numbers_semantic'] = prior.get(line['line_id'])
+    return lines
+
+
+def saved_line_numbers(s, revision):
+    from bookflow.company import serial_lots
+    return serial_lots.revision_numbers(s, revision['id'])
 
 
 def saved_line_sites(s, revision):
@@ -904,8 +928,10 @@ def saved_line_sites(s, revision):
 def _saved_semantic(s, revision):
     profile = profile_row(s, revision)
     sites = saved_line_sites(s, revision)
+    numbers = saved_line_numbers(s, revision)
     lines = [_line_semantic(dict(line, profile=LINE_FACTS[line['family']].model_validate_json(
-        line['line_snapshot']), site_semantic=sites.get(line['line_id']))) for line in saved_lines(s, revision)]
+        line['line_snapshot']), site_semantic=sites.get(line['line_id']), numbers_semantic=numbers.get(line['line_id'])))
+        for line in saved_lines(s, revision)]
     return dict(date=revision['date'], number=revision['number'], memo=revision['memo'],
                 issuer=json.loads(revision['issuer_snapshot']),
                 profile=BillProfile.model_validate_json(profile['profile_snapshot']).model_dump(),
@@ -1167,6 +1193,7 @@ def _stock_entries(pending, profile, lines=None, header_site=None):
     """
     items = {row['document_line_id']: row for row in pending['purchase_item_lines']}
     sites = {position: line.get('site_id') for position, line in enumerate(lines or (), 1)}
+    numbers = {position: line.get('numbers') for position, line in enumerate(lines or (), 1)}
     entries = []
     for envelope in pending['document_lines']:
         line = items.get(envelope['id'])
@@ -1179,6 +1206,7 @@ def _stock_entries(pending, profile, lines=None, header_site=None):
         if entry is not None:
             entry.site_id = sites.get(envelope['position']) or header_site   # R104
             entry.line_identity = envelope['line_id']
+            entry.numbers = numbers.get(envelope['position'])
             entries.append(entry)
     return entries
 

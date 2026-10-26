@@ -82,6 +82,7 @@ ACCEPTED = {
     'inventory-counts-v1': (685, 'cbf2b5f35092aa7691fde5b0abb64a0f7c72ea55cf02820051a2649d44d639f5'),
     'scheduling-v1': (696, '445b102fcbce9835b1edceafe75f8d5dc573d18f03c0db73c83085ad1ceb7568'),
     'performance-v1': (698, '4e60dbb727be31efe9804b77a51cf36648ec37efde2dae1b6e323739504ea6a4'),
+    'serial-lot-v1': (708, '4b340c8c2715584586326a1ee9698cc097af5993ab61cf68b25644a859768d03'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -184,6 +185,9 @@ CHAIN_ADDITIONS = {
     'scheduling-v1': {'todo create', 'todo update', 'todo complete', 'todo show', 'todo list', 'notice generate',
                       'notice list', 'notice show', 'notice mark-sent', 'notice dismiss', 'reminders'},
     'performance-v1': {'perf report', 'perf settings'},
+    'serial-lot-v1': {'inventory assign', 'lot list', 'lot show', 'lot update', 'report lot-trace',
+                      'report serial-lot-history', 'report serial-lot-stock', 'serial-number list',
+                      'serial-number show', 'serial-number update'},
 }
 
 _ANCESTOR_EDIT = """

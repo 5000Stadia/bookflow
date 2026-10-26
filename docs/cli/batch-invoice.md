@@ -52,6 +52,9 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].refresh_defaults` | inside `--lines` JSON array | boolean | no | no | false | — |
 | `lines[].use_defaults` | inside `--lines` JSON array | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "percent"]] | no | no | [] | — |
 | `lines[].site` | inside `--lines` JSON array | string \| null | no | yes | null | Inventory site a stocked line takes from (a sale), gives back to (a return) or commits at (an order), by id or name. Omitted: the document's site, else the source line's, else the default site. |
+| `lines[].lot` | inside `--lines` JSON array | string \| null | no | yes | null | Lot number of a lot-tracked item: the lot an incoming line receives into (made when new), or the lot an outgoing line takes from. Omitted on an outgoing line, the units leave unassigned and the result names the earliest-expiring lot in stock there. |
+| `lines[].lot_expiry` | inside `--lines` JSON array | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
+| `lines[].serial_numbers` | inside `--lines` JSON array | array[string] \| null | no | yes | null | Serial numbers of a serial-tracked item, one per unit, up to the line's quantity; units left unnumbered are unassigned (number them later with `inventory assign`). Never make one up. An outgoing number leaves from where the books hold it; a number never on file is accepted with a warning and shows -1 until its receipt. Omitted on a correction, the line keeps the numbers it had. |
 | `memo` | `--memo` | string \| null | no | yes | null | Memo written on every invoice in this batch. |
 | `customer_message` | `--customer-message` | string \| null | no | yes | null | Message written on every invoice in this batch; omit to take each customer's own default message. |
 

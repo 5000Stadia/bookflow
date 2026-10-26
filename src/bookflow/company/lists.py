@@ -365,7 +365,7 @@ _add(_define(
 _add(_define(
     "item", "items", ("Item", "Items"), "full_name", selector=("id", "full_name"), hierarchical=True,
     search=("name", "full_name", "description", "purchase_description", "manufacturer_part_number", "barcode", "category", "vendor_item_identifiers", "notes", "$custom-searchable"),
-    filters=("active", "type", "parent_id", "category_id", "sales_enabled", "purchase_enabled", "sales_tax_code_id", "preferred_vendor_id", "unit_of_measure_set_id", "default_class_id"),
+    filters=("active", "type", "parent_id", "category_id", "sales_enabled", "purchase_enabled", "sales_tax_code_id", "preferred_vendor_id", "unit_of_measure_set_id", "default_class_id", "tracking"),
     sorts=("type", "full_name", "price", "cost", "quantity_on_hand", "preferred_vendor", "category", "updated_at"), default_sort=("type", "full_name", "id"),
     default_columns=("type", "full_name", "price", "cost", "quantity_on_hand", "preferred_vendor", "active"),
     additional_columns=("category", "tax_code", "all-account-references", "reorder_points", "unit_set", "manufacturer_part_number", "barcode", "default_class", "average_cost", "inventory_value", "inventory_values_available", "$custom", "$common", "$stored"),

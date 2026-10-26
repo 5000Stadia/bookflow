@@ -5,6 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
+from bookflow.company import serial_lot_models as _SL
 from bookflow.company.journal_models import _Date, _Number, _Version
 from bookflow.company.sales_models import Selector
 
@@ -91,6 +92,10 @@ class TransferLineInput(_Strict):
     item: Selector = Field(description='Inventory part or assembly to move, by id or name.')
     quantity: str = Field(min_length=1, max_length=40, description='Quantity to move in the item base unit, a positive decimal.')
     description: str | None = Field(None, max_length=2000)
+    lot: _SL.Number | None = Field(None, description='Lot moved, of a lot-tracked item; omitted, the units move unassigned.')
+    serial_numbers: list[_SL.Number] | None = Field(None, max_length=10000, description=(
+        'Serial numbers moved, one per unit, of a serial-tracked item; each must be at the from site on the date. '
+        'Units left unnumbered move unassigned.'))
 
 
 class TransferPostInput(_Strict):
@@ -138,6 +143,8 @@ class TransferLineOutput(_Strict):
     item_name: str
     quantity: str
     description: str | None
+    lot: str | None = None
+    serial_numbers: list[str] = Field(default_factory=list)
 
 
 class TransferSiteStock(_Strict):

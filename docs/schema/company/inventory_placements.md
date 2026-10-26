@@ -12,8 +12,8 @@ Database: `company`.
 | `item_id` | VARCHAR(26) | no | — | — | ix_inventory_placements_item, ix_inventory_placements_site | items.id | Item whose units this places. |
 | `site_id` | VARCHAR(26) | no | — | — | ix_inventory_placements_site | inventory_sites.id | Site the units are at. |
 | `bin_id` | VARCHAR(26) | yes | — | — | — | inventory_bins.id | Bin the units are in; null for no bin. |
-| `lot_id` | VARCHAR(26) | yes | — | — | — | lots.id | Lot the units carry; null when unassigned. |
-| `serial_number_id` | VARCHAR(26) | yes | — | — | — | serial_numbers.id | Serial number of the unit; null when unassigned. |
+| `lot_id` | VARCHAR(26) | yes | — | — | ix_inventory_placements_lot | lots.id | Lot the units carry; null when unassigned. |
+| `serial_number_id` | VARCHAR(26) | yes | — | — | ix_inventory_placements_serial | serial_numbers.id | Serial number of the unit; null when unassigned. |
 | `quantity_microunits` | BIGINT | no | — | — | — | — | Signed quantity placed, micro-units; never zero. |
 | `effective_date` | VARCHAR(10) | no | — | — | ix_inventory_placements_item, ix_inventory_placements_site | — | Date the units are there from, YYYY-MM-DD. |
 | `count_position` | VARCHAR(8) | no | — | — | — | — | before or after the counts of its site on its date, or count for a count's own difference. |

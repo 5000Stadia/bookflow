@@ -951,6 +951,14 @@ def overview(company_id: str, today: str, ask: Ask) -> dict[str, Any]:
         attention["bills_more"] = len(soon) > ATTENTION_ROWS
         attention["bills_href"] = report("unpaid-bills", as_of=today)
 
+    # Tracked items with units that carry no serial number or lot yet (R104 increment 4).
+    numbers = ask("report serial-lot-stock", {"as_of": today, "limit": 500})
+    if numbers is not None:
+        loose = [dict(row, href=f"{base}/item/{row['item_id']}#item-numbers") for row in numbers["rows"]
+                 if row["number"] is None and not row["quantity"].startswith("-")]
+        attention["unassigned"] = loose[:ATTENTION_ROWS]
+        attention["unassigned_more"] = len(loose) > ATTENTION_ROWS
+
     month = ask("report profit-and-loss", {"date_from": month_start, "date_to": today, "limit": 1})
     if month is not None:
         figures.append(dict(key="income", label="Income this month", value=month["totals"]["income"],
