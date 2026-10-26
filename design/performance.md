@@ -400,3 +400,15 @@ The fixes:
 Left for lane B: admitting deposit sources per row (`deposit_draft_validation.admit`, called again for
 each listed row at the end of `deposit_source_queries.query`, after `candidates` has already admitted
 them) and the dependency history reads.
+
+**The first catalog build, once per process (lane B's finding).**
+- `permission_runtime.known_catalog` is built and verified once per process, not once per command:
+  a warm process spends under 1 ms per command in it.
+- The cost lands on every new process, so on every CLI command. The first `current_catalog()`
+  imports all 56 catalog layers, and each layer re-validates the whole accumulated catalog
+  (`_normal_catalog`, `catalog_manifest`).
+- `_check` now caches each annotation's shape, and a union first tries the value's own plain type.
+  Together with the shared field-type cache, the first build fell from 5.1 to 3.8 s CPU.
+- What remains is that per-layer full validation, O(layers × catalog). It could be cut by
+  validating only each layer's delta, or by a verified on-disk cache. That changes the
+  verification itself, so it is left for its own decision.
