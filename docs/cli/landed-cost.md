@@ -32,7 +32,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `as_of` | `--as-of` | string \| null | no | yes | null | Charges and allocations dated on or before this date; default today. |
+| `as_of` | `--as-of` | string \| null | no | yes | null | Charges and allocations dated on or before this date; default every date. |
 | `vendor` | `--vendor` | string \| null | no | yes | null | Only this vendor's charges. |
 | `include_allocated` | `--include-allocated` | boolean | no | no | false | Also list charges with nothing left to allocate. |
 
@@ -404,6 +404,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `allocation.lines[].charge_document` | string \| null | yes | yes | — | — |
 | `allocation.lines[].target_document` | string \| null | yes | yes | — | — |
 | `allocation.lines[].target_movement_id` | string \| null | yes | yes | — | — |
+| `allocation.lines[].target_transaction_id` | string \| null | no | yes | null | — |
+| `allocation.lines[].target_quantity` | string \| null | no | yes | null | The target receipt line's base quantity. |
 | `allocation.lines[].item_id` | string \| null | yes | yes | — | — |
 | `allocation.lines[].item_name` | string \| null | yes | yes | — | — |
 | `allocation.lines[].account_id` | string \| null | yes | yes | — | — |
@@ -1052,6 +1054,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `allocation.lines[].charge_document` | string \| null | yes | yes | — | — |
 | `allocation.lines[].target_document` | string \| null | yes | yes | — | — |
 | `allocation.lines[].target_movement_id` | string \| null | yes | yes | — | — |
+| `allocation.lines[].target_transaction_id` | string \| null | no | yes | null | — |
+| `allocation.lines[].target_quantity` | string \| null | no | yes | null | The target receipt line's base quantity. |
 | `allocation.lines[].item_id` | string \| null | yes | yes | — | — |
 | `allocation.lines[].item_name` | string \| null | yes | yes | — | — |
 | `allocation.lines[].account_id` | string \| null | yes | yes | — | — |
@@ -1471,6 +1475,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `allocation.lines[].charge_document` | string \| null | yes | yes | — | — |
 | `allocation.lines[].target_document` | string \| null | yes | yes | — | — |
 | `allocation.lines[].target_movement_id` | string \| null | yes | yes | — | — |
+| `allocation.lines[].target_transaction_id` | string \| null | no | yes | null | — |
+| `allocation.lines[].target_quantity` | string \| null | no | yes | null | The target receipt line's base quantity. |
 | `allocation.lines[].item_id` | string \| null | yes | yes | — | — |
 | `allocation.lines[].item_name` | string \| null | yes | yes | — | — |
 | `allocation.lines[].account_id` | string \| null | yes | yes | — | — |
