@@ -35,6 +35,38 @@ def io_error(operation: str, exc: BaseException, path: Path | str | None = None)
     return BookflowError("E_IO", details={"operation": operation, "errno": code or "EIO", "path": str(path) if path else None})
 
 
+_CONSTRAINT_TRIGGER = getattr(sqlite3, "SQLITE_CONSTRAINT_TRIGGER", 1811)
+
+
+def guard_refusal_text(exc: BaseException) -> str | None:
+    """The message of one of Bookflow's own guard triggers, when that is what refused a write.
+
+    Every trigger in the company and hub schemas is ours, and SQLite reports a trigger's
+    RAISE(ABORT, '...') with the extended code SQLITE_CONSTRAINT_TRIGGER and the trigger's
+    literal message, never SQL or values. A UNIQUE, CHECK, NOT NULL or foreign-key violation
+    carries a different extended code and is not a guard refusal.
+    """
+    inner = getattr(exc, "orig", None) if isinstance(exc, sa.exc.DBAPIError) else exc
+    if isinstance(inner, sqlite3.IntegrityError) and getattr(inner, "sqlite_errorcode", None) == _CONSTRAINT_TRIGGER:
+        return str(inner)
+    return None
+
+
+def guard_tables(conn: sqlite3.Connection, message: str) -> list[str]:
+    """The tables whose triggers raise this exact guard message (a message may be shared)."""
+    literal = "'" + message.replace("'", "''") + "'"
+    rows = conn.execute("SELECT DISTINCT tbl_name FROM sqlite_master WHERE type = 'trigger' AND instr(sql, ?) > 0 "
+                        "ORDER BY tbl_name", (literal,)).fetchall()
+    return [row[0] for row in rows]
+
+
+def guard_refused(message: str, details: dict | None = None) -> BookflowError:
+    """E_GUARD_REFUSED: a schema guard refused a write the application's own checks let through."""
+    return BookflowError("E_GUARD_REFUSED",
+                         message=f"{BookflowError('E_GUARD_REFUSED').message} The check said: {message}.",
+                         details={"guard": message, **(details or {})})
+
+
 def _connect(path: Path, writable: bool, create: bool) -> sqlite3.Connection:
     if not create and not path.exists():
         raise BookflowError("E_IO", details={"operation": "open", "errno": "ENOENT", "path": str(path)})

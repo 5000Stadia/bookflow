@@ -126,19 +126,48 @@ def site_of_movement(s, movement_id):
     return max(rows, key=lambda row: abs(int(row['quantity_microunits'])))['site_id']
 
 
-def for_movements(s, rows, sites=None):
+def retirable(s, movement_ids):
+    """``{movement_id: [placement, ...]}`` a reversal of each movement retires: its own placements and the
+    live placements of assignments that numbered its units (R104 increment 4)."""
+    out = movement_placements(s, movement_ids)
+    ids = [movement_id for movement_id in movement_ids if movement_id]
+    if not ids:
+        return out
+    a, t = c.inventory_assignments, c.inventory_placements
+    for start in range(0, len(ids), 500):
+        rows = [dict(row) for row in s.company.conn.execute(
+            sa.select(t, a.c.movement_id.label('_assigned_to')).join(a, a.c.id == t.c.source_line_id).where(
+                t.c.source == 'assignment', a.c.movement_id.in_(ids[start:start + 500]))
+            .order_by(t.c.sequence, t.c.id)).mappings()]
+        reversed_ids = set(s.company.conn.execute(sa.select(t.c.reverses_placement_id).where(
+            t.c.reverses_placement_id.in_([row['id'] for row in rows]))).scalars()) if rows else set()
+        for row in rows:
+            if row['id'] not in reversed_ids:
+                owner = row.pop('_assigned_to')
+                out.setdefault(owner, []).append(row)
+    return out
+
+
+def for_movements(s, rows, sites=None, numbers=None, state=None):
     """The placement rows, without provenance, for movement rows about to be written.
 
     ``sites`` maps a movement id to the site it is placed at; a movement it does not name is placed
     at the default site. A reversal places nothing of its own: it retires exactly the placements of
-    the movement it reverses, each one negated and linked by ``reverses_placement_id``. A movement
-    that moves no quantity (a value change, a recost) has no placements.
+    the movement it reverses (and of assignments that numbered its units), each one negated and linked by
+    ``reverses_placement_id``. A movement that moves no quantity (a value change, a recost) has no
+    placements. ``numbers`` maps a movement id to what its line says about lot and serial numbers
+    (``dict(spec=, prior=, returns=, item_name=, field=)``); a tracked item's quantity splits into
+    numbered and unassigned placements (``serial_lots.place``), and the change's serial numbers are
+    checked as a whole. ``state`` (a ``serial_lots.Numbering``) collects the warnings.
     """
+    from bookflow.company import serial_lots
     sites = sites or {}
+    numbers = numbers or {}
+    state = state if state is not None else serial_lots.Numbering(s)
     default = None
     reversed_ids = [row['reverses_movement_id'] for row in rows
                     if row['kind'] == 'reversal' and int(row['quantity_microunits'])]
-    stored = movement_placements(s, reversed_ids)
+    stored = retirable(s, reversed_ids)
     made = {}
     out = []
     for row in rows:
@@ -164,11 +193,20 @@ def for_movements(s, rows, sites=None):
             if site is None:
                 default = default or default_site_id(s)
                 site = default
-            own = [dict(base, id=new_id(), site_id=site, quantity_microunits=quantity, reverses_placement_id=None)]
+            info = numbers.get(row['id']) or {}
+            parts = serial_lots.place(state, row, site, info.get('spec'), item_name=info.get('item_name'),
+                                      returns_movement_id=info.get('returns') or row.get('returns_movement_id'),
+                                      field=info.get('field') or 'lines', prior=info.get('prior'))
+            own = [dict(base, id=new_id(), reverses_placement_id=None, **part) for part in parts]
+            if info.get('returns') or row.get('returns_movement_id'):
+                for placement in own:
+                    placement['_returns'] = info.get('returns') or row.get('returns_movement_id')
         if sum(int(p['quantity_microunits']) for p in own) != quantity:
             raise BookflowError('E_INTERNAL', message='A movement\'s placements do not sum to its quantity.')
         made[row['id']] = own
+        state.made.extend(own)
         out.extend(own)
+    serial_lots.check(state, out)
     return out
 
 
@@ -199,13 +237,51 @@ def placements_for_rows(s, movement_rows, sites=None, placements=None):
 
 
 def extra(rows):
-    """The ``persist_prepared`` extra entry for placement rows; it must come before the movements'."""
-    return ('inventory_placements', 'inventory_placement', 'id', rows)
+    """The ``persist_prepared`` extra entry for placement rows; it must come before the movements'.
+
+    Placements that name a lot or serial number made by this change carry it; ``extras`` writes those
+    first, so use it wherever a change may name new numbers."""
+    from bookflow.company import serial_lots
+    return ('inventory_placements', 'inventory_placement', 'id', serial_lots.split(rows)[2])
+
+
+def extras(rows):
+    """The ``persist_prepared`` extra entries for placement rows: new lots, new serial numbers, then the
+    placements themselves; they must come before the movements'."""
+    from bookflow.company import serial_lots
+    lots, serials, clean = serial_lots.split(rows)
+    out = []
+    if lots:
+        out.append(('lots', 'lot', 'id', lots))
+    if serials:
+        out.append(('serial_numbers', 'serial_number', 'id', serials))
+    out.append(('inventory_placements', 'inventory_placement', 'id', clean))
+    return out
+
+
+def number_touched(rows):
+    """``Touched`` records for the new lots and serial numbers placement rows carry, and the clean rows."""
+    from bookflow.company import serial_lots
+    from bookflow.core.registry import Touched
+    lots, serials, clean = serial_lots.split(rows)
+    return ([Touched('lot', row['id'], 'create', None, 1, row, db='company') for row in lots]
+            + [Touched('serial_number', row['id'], 'create', None, 1, row, db='company') for row in serials]), clean
 
 
 def insert(s, rows):
-    if rows:
-        s.company.conn.execute(c.inventory_placements.insert(), rows)
+    """Write placement rows, and first any new lot or serial number they carry. Returns the new numbers'
+    ``Touched`` records (the placements' own are the caller's)."""
+    from bookflow.company import serial_lots
+    from bookflow.core.registry import Touched
+    lots, serials, clean = serial_lots.split(rows)
+    touched = []
+    for table, kind, made in ((c.lots, 'lot', lots), (c.serial_numbers, 'serial_number', serials)):
+        if made:
+            s.company.conn.execute(table.insert(), made)
+            touched += [Touched(kind, row['id'], 'create', None, 1, row, db='company') for row in made]
+    if clean:
+        s.company.conn.execute(c.inventory_placements.insert(), clean)
+    return touched
 
 
 # ---------------------------------------------------------------- readings

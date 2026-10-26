@@ -102,4 +102,7 @@ def attachments(root):
 
 
 def books(root):
-    return dict(databases={str(path.relative_to(root)):database(path) for path in sorted(Path(root).rglob('*.db'))},attachments=attachments(root))
+    # R180's timings store (<root>/telemetry/timings.db) is telemetry kept apart from the
+    # books: every call appends to it, read-only ones included, so it is not book state.
+    return dict(databases={str(path.relative_to(root)):database(path) for path in sorted(Path(root).rglob('*.db'))
+                           if path.relative_to(root).parts[0]!='telemetry'},attachments=attachments(root))

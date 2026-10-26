@@ -106,6 +106,7 @@ Example JSON output:
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |
@@ -187,9 +188,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `code` | string | yes | no | — | — |
 | `as_of` | string | yes | no | — | — |
 | `found` | boolean | yes | no | — | True when the code names exactly one record (preferring active ones). |
-| `kind` | string \| null | yes | yes | — | `item`, `ambiguous` when it names more than one, or null when nothing carries it. |
+| `kind` | string \| null | yes | yes | — | `item`, `serial_number`, `lot`, `ambiguous` when it names more than one, or null when nothing carries it. |
 | `match` | object \| null | yes | yes | — | The one record the code names; null when none or ambiguous. |
-| `match.kind` | string | yes | no | — | What the code names: `item` (bins, serial numbers and lots join as they gain codes). |
+| `match.kind` | string | yes | no | — | What the code names: `item`, else `serial_number` or `lot` (a scanned unit label); bins join with bins. |
 | `match.id` | string | yes | no | — | — |
 | `match.name` | string | yes | no | — | The record's full name. |
 | `match.type` | string | yes | no | — | The item type. |
@@ -199,9 +200,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `match.on_hand[].site_id` | string | yes | no | — | — |
 | `match.on_hand[].site` | string | yes | no | — | — |
 | `match.on_hand[].quantity` | string | yes | no | — | — |
-| `match.line_fields` | object[string, string] | yes | no | — | Fields to put on a document line for this code, e.g. {"item": "Copper Coupling"}. |
+| `match.line_fields` | object[string, any] | yes | no | — | Fields to put on a document line for this code, e.g. {"item": "Copper Coupling"}, or {"item": "Water Heater", "serial_numbers": ["WH-1"]} for a serial label. |
 | `matches` | array[object] | yes | no | — | Every record carrying the code, active first: two when a duplicate is kept. |
-| `matches[].kind` | string | yes | no | — | What the code names: `item` (bins, serial numbers and lots join as they gain codes). |
+| `matches[].kind` | string | yes | no | — | What the code names: `item`, else `serial_number` or `lot` (a scanned unit label); bins join with bins. |
 | `matches[].id` | string | yes | no | — | — |
 | `matches[].name` | string | yes | no | — | The record's full name. |
 | `matches[].type` | string | yes | no | — | The item type. |
@@ -211,7 +212,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `matches[].on_hand[].site_id` | string | yes | no | — | — |
 | `matches[].on_hand[].site` | string | yes | no | — | — |
 | `matches[].on_hand[].quantity` | string | yes | no | — | — |
-| `matches[].line_fields` | object[string, string] | yes | no | — | Fields to put on a document line for this code, e.g. {"item": "Copper Coupling"}. |
+| `matches[].line_fields` | object[string, any] | yes | no | — | Fields to put on a document line for this code, e.g. {"item": "Copper Coupling"}, or {"item": "Water Heater", "serial_numbers": ["WH-1"]} for a serial label. |
 | `ambiguous` | boolean | yes | no | — | — |
 | `valid_ean13` | boolean | yes | no | — | Whether the code is a 13-digit EAN with a correct check digit (other symbologies are still looked up). |
 | `message` | string | yes | no | — | The answer in words; for an unknown code, how to assign it to an item. |
@@ -243,6 +244,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
 | `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |

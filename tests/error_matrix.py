@@ -222,7 +222,7 @@ RECONCILIATION_MATRIX = {
 
 INFRASTRUCTURE = ["E_USAGE", "E_VALIDATION", "E_CONTEXT_IN_INPUT", "E_NOT_INITIALIZED", "E_NO_ACTOR", "E_PERMISSION", "E_COMPANY_NOT_FOUND",
                   "E_COMPANY_AMBIGUOUS", "E_ORGANIZATION_NOT_FOUND", "E_DB_BUSY", "E_NETWORK_SHARE", "E_FS_UNKNOWN", "E_SCHEMA_UNKNOWN",
-                  "E_SCHEMA_BEHIND", "E_MIGRATION_FAILED", "E_CONFIG_INVALID", "E_IO", "E_PARTIAL_WRITE", "E_REASON_REQUIRED", "E_FEATURE_DISABLED", "E_UNAUTHENTICATED", "E_INTERNAL"]
+                  "E_SCHEMA_BEHIND", "E_MIGRATION_FAILED", "E_CONFIG_INVALID", "E_IO", "E_PARTIAL_WRITE", "E_REASON_REQUIRED", "E_FEATURE_DISABLED", "E_UNAUTHENTICATED", "E_GUARD_REFUSED", "E_INTERNAL"]
 
 _LEDGER_WRITE_ERRORS = {
     'E_RECORD_NOT_FOUND': 'journal, account, party or class absent from selected company',
@@ -2341,7 +2341,7 @@ MATRIX['inventory-count create'] = {
     'E_DUPLICATE_NUMBER': 'the count number is already used',
     **_SITE_COMMON}
 MATRIX['inventory-count enter'] = {
-    'E_VALIDATION': 'a count that is not open, a non-stock item, an unknown or ambiguous code, a negative quantity, or a bin, lot or serial number',
+    'E_VALIDATION': 'a count that is not open, a non-stock item, an unknown or ambiguous code, a negative quantity, a bin, a lot or serial number of a kind the item does not track, a serial number the books hold at another site, or a serial number counted other than 0 or 1',
     'E_RECORD_NOT_FOUND': 'count or item absent from selected company',
     **_SITE_COMMON}
 MATRIX['inventory-count post'] = {
@@ -2418,3 +2418,22 @@ MATRIX['reminders'] = {'E_VALIDATION': 'a malformed as_of date'}
 # R111 review X6: a person's entry names the revision it will post; a template changed since the preview is refused.
 for _name in ('memorized enter', 'memorized process', 'memorized retry', 'memorized-group enter'):
     MATRIX[_name]['E_PREVIEW_STALE'] = 'a template was changed after the preview that named the revision to post'
+# Serial and lot numbers (R104 increment 4).
+MATRIX['inventory assign'] = {
+    'E_VALIDATION': 'an untracked item, numbers of the wrong kind, a serial number named twice, already in stock or already gone, more units than the place (or the document line) holds unassigned, an unknown or ambiguous document, or a number not held there to unassign',
+    'E_RECORD_NOT_FOUND': 'item or site absent from selected company',
+    'E_INACTIVE_REFERENCE': 'an inactive site',
+    'E_PERIOD_CLOSED': 'a date on or before the closing date',
+    **_SITE_COMMON}
+for _noun in ('lot', 'serial-number'):
+    MATRIX[f'{_noun} update'] = {
+        'E_VALIDATION': 'a number two items share without the item named',
+        'E_RECORD_NOT_FOUND': 'no such number',
+        'E_VERSION_CONFLICT': 'the number changed since expected_version',
+        **_SITE_COMMON}
+    for _verb in ('show', 'list'):
+        MATRIX[f'{_noun} {_verb}'] = {'E_RECORD_NOT_FOUND': 'number, item or site absent from selected company',
+                                      'E_VALIDATION': 'a number two items share without the item named, or an unknown site'}
+for _report in ('serial-lot-stock', 'serial-lot-history', 'lot-trace'):
+    MATRIX[f'report {_report}'] = {'E_RECORD_NOT_FOUND': 'number, item or site absent from selected company',
+                                   'E_VALIDATION': 'a number that is both a serial number and a lot without kind, or an unknown site'}

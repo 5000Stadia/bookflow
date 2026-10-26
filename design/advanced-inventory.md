@@ -797,6 +797,64 @@ jobs at night; the van ends as counted.
   code is 2000000000022), Service Call Kit 0036000291452, Received Shipping Kit 4006381333931; the Brass
   Shutoff Valve keeps its 100000000050. No oracle moves: codes change no quantity or amount.
 
+## As built: increment 4
+
+- **Migration co0095** adds `items.tracking` (`none`, `serial`, `lot`; every existing item `none`), the
+  `inventory_assignments` table and two placement indexes (serial number, lot). No existing row changes.
+- **The number tie in the database.** Triggers refuse: a serial-number placement of anything but one whole
+  unit; a placement naming a lot or serial number of another item, or of a kind its item does not track
+  (reversals excepted); a serial number whose running quantity in replay order (date, count position,
+  sequence, a sequence group taken as one step) leaves -1 to 1 -- checked when a movement or a transfer
+  revision row is written (its placements are all in by then) and, for assignments and counts, as each
+  placement is written; an assignment whose placements do not net to zero at its item, site and bin on its
+  own date, or a placement added to one already written. A number's placements plus the unassigned bucket
+  sum to the place's quantity by construction; the seeded checker asserts it at every place on every date.
+- **Only standing placements count** for the serial range, in the database as in the application: a placement
+  a reversal retires, and the reversal (which keeps its original's date and position under a later sequence),
+  are left out together, so a correction or void dated around another document never reads as two steps. A
+  reversal is checked with the change it belongs to, not on its own row. A count derived again retires its old
+  loose placements before it posts, and places its new ones after, so a unit now posted as found never meets the
+  loose placement it replaces.
+- **Late paperwork can split a serial number over two sites** (a sale backdated before the transfer that moved
+  the unit: one site shows -1, the other +1). The quantity and number ties hold; the write warns, naming both
+  sites, and a transfer or a count of where the unit really is puts it right.
+- **The application check is stricter than the database.** Reversed pairs left out, a serial number may
+  stand at -1 only before anything has brought it in; once it has been in stock and left, taking it again is
+  refused naming the document that took it (`serial_lots.check`). It runs on every document, transfer,
+  assignment, count post and count re-derivation.
+- **Where a numbered unit goes.** Out: from the site the books hold it at (the result says so when that is
+  not the line's site). In: where it stands at -1 when sold before its receipt, so it comes back to 0 there;
+  else the line's site. A transfer refuses a serial number that is not at the from site on its date.
+- **Assignments** are one item at one site: serial numbers, or a lot and a quantity, `assign` or `unassign`.
+  With `document` (and `line` when it has two lines of the item) they number the units that line moved, at its
+  date, position and site; a correction or void of that document retires them with the line's movement (the
+  reversal's placements include the assignment's), so a voided sale takes its numbering back. On hand, they are
+  refused beyond the unassigned units the site holds.
+- **Corrections keep numbers.** A line that restates nothing about numbers keeps the ones its stock carried
+  (and an assignment made against it); `serial_numbers: []` takes them off. A change of numbers alone is a change.
+- **Return defaults.** A return naming no numbers takes back its sale's serial numbers when they are exactly
+  the units returned, or the sale's one lot; otherwise the units come back unassigned. Naming a number the sale
+  did not take is refused.
+- **Whole units.** Every stock line of a serial-tracked item moves whole base units.
+- **Tracking** turns on freely (stock on hand stays unassigned and shows on the item page and the Overview); it
+  turns off or changes kind only while no unit carries a number of the old kind.
+- **Counts** create lines per lot and serial number the books hold, take `lot` or `serial_number` on entries
+  (a number not on file is made; a serial number the books hold at another site is refused, pointing to the
+  transfer), and refuse a serial line counted other than 0 or 1.
+- **Builds** take `lot`, `lot_expiry` and `serial_numbers` for the assembly and `components` (item, lot, serial
+  numbers) for tracked components; `report lot-trace` links them through the build's own transaction. A build
+  update restates no numbers yet (it keeps none); later.
+- **Barcode lookup** answers a serial or lot label after items (`kind` `serial_number` or `lot`, `line_fields`
+  naming the item and the number); the Scan route gives the item.
+- **Shown and printed.** Invoice, sales receipt and credit memo lines show `lot`, `lot_expiry` and
+  `serial_numbers` (absent when none), and the printed line adds "SN ..." or "Lot ..., expires ...". Sales
+  orders carry no numbers (they move no stock), so their printed lines do not either.
+- **Permissions** (layer `serial-lot-v1`): `inventory assign`, `lot update` and `serial-number update` are
+  `item` standard; shows and lists `item` member; the three reports `reports` member.
+- **Browser.** Sale and bill item grids gain Serial numbers and Lot columns for a company with a tracked item
+  (the controls are in each row's panel otherwise); the item page lists its numbers and unassigned units with
+  Assign numbers; the Overview lists unassigned units of tracked items.
+
 ## 10. Open questions
 
 Each default stands if nobody decides.

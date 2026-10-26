@@ -68,6 +68,16 @@ CUTOVER_SEED_EDITS = (
 )
 
 
+# R104's barcodes gave two of the demo's earliest items a barcode in place, so a scan in the
+# demo finds them; nothing else on those lines moved.
+BARCODE_SEED_EDITS = (
+    (b'input = { name = "Copper Coupling", type = "non_inventory_part"',
+     b'input = { name = "Copper Coupling", barcode = "0012345678905", type = "non_inventory_part"'),
+    (b'input = { name = "Two-Valve Kit", type = "inventory_assembly"',
+     b'input = { name = "Two-Valve Kit", barcode = "2000000000015", type = "inventory_assembly"'),
+)
+
+
 # The one in-place edit the reference year took when the seeds stopped reading the wall clock: the
 # reference is written as of its year end (its `[calendar] as_of`), when alternative B's estimate has
 # expired, so its acceptance acknowledges that, exactly as the demo seed's has since R83.
@@ -80,7 +90,7 @@ REFERENCE_CLOCK_EDITS = (
 def as_edited_by_r83(old, resource):
     """Frozen bytes of a demo resource as they read after the deliberate in-place edits.
 
-    seed.toml took R83's and the move-in's edits; reference.toml took only the one its fixed
+    seed.toml took R83's, the move-in's and R104 barcodes' edits; reference.toml took only the one its fixed
     working day needed (REFERENCE_CLOCK_EDITS).
     """
     if resource == 'reference.toml':
@@ -89,7 +99,7 @@ def as_edited_by_r83(old, resource):
         return old
     if resource != 'seed.toml':
         return old
-    for before, after in (*R83_SEED_EDITS, *CUTOVER_SEED_EDITS):
+    for before, after in (*R83_SEED_EDITS, *CUTOVER_SEED_EDITS, *BARCODE_SEED_EDITS):
         old = old.replace(before, after)
     return old
 
@@ -214,8 +224,8 @@ DEMO_POSITION = {
     'balances': {
         'Checking': 651945,                # 657295 - 3850 DEMO-ASK-1 - 1500 DEMO-BOUNCE-1 (the bank's 15.00 fee; the 200.00 came and went)
         'Accounts Receivable': 84121,      # 61621 + 20000 (DEMO-BOUNCE-INV-1 reopened) + 2500 (DEMO-BOUNCE-FEE-1)
-        'Inventory Asset': 36289,          # 36184 + 105 DEMO-VAN-COUNT: a valve short (-10.95), a shipping kit over (+12.00)
-        'Accounts Payable': -7810,
+        'Inventory Asset': 109289,         # 36184 + 105 DEMO-VAN-COUNT: a valve short (-10.95), a shipping kit over (+12.00); + 73000 DEMO-SERIAL-1
+        'Accounts Payable': -80810,        # -7810 - 73000 DEMO-SERIAL-1 (two heaters, two lots of sealant)
         'Sales Tax Payable': -7856,         # -7646 - 210 DEMO-STADJ-1
         'Opening Balance Equity': -500000,
         # Early-payment discounts: +500.00 invoiced, 490.00 received plus a 10.00 discount;
@@ -239,7 +249,7 @@ DEMO_POSITION = {
         # DEMO-WO-PAY-1 (R177): a 150.00 invoice written off with a receipt of 0.00.
         'Bad Debt': 15000,
     },
-    'trial_balance': 1164156,              # 1047664 + 30000 + 1000 + 47782 + 210 (DEMO-STADJ-1) + 37500 (DEMO-BOUNCE-, DEMO-WO-: receivable +22500, Bank Fees +1500, Bad Debt +15000, Checking -1500)
+    'trial_balance': 1237156,              # + 73000 DEMO-SERIAL-1; 1047664 + 30000 + 1000 + 47782 + 210 (DEMO-STADJ-1) + 37500 (DEMO-BOUNCE-, DEMO-WO-: receivable +22500, Bank Fees +1500, Bad Debt +15000, Checking -1500)
     'journal_entries': 22,                # + the DEMO-VAN-COUNT differences (journal 10)
                    # + DEMO-ASK-1, + the bank's fee entry of DEMO-BOUNCE-1
     'net_income': -25931,                  # + 105 DEMO-VAN-COUNT
@@ -269,6 +279,7 @@ DEMO_ARCS = {
     'DEMO-FEE': 'a bank fee',
     'DEMO-JPY': 'a foreign-tagged entry posting in home currency',
     'DEMO-COUNT': 'the inventory count adjustment',
+    'DEMO-SERIAL-': 'serial and lot numbers: two serial-numbered water heaters and two lots of sealant received',
     'DEMO-KIT-': 'service-kit restock: free sample, and the bill that confirms a cost',
     'REG-': 'register-entry examples: split, payment, card, card payment and deposit',
     'DEMO-1099-': 'a 1099 subcontractor: a bill paid by check and a bill paid on the card',

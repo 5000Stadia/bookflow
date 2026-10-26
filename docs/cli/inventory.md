@@ -47,10 +47,16 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].new_value` | inside `--lines` JSON array | string \| object \| null | no | yes | null | The item's whole asset value on the date (the anchor's New Value); the change is worked out when written. Forbidden with a decrease. |
 | `lines[].negative_value` | inside `--lines` JSON array | boolean | no | no | false | With value_change: write the value down rather than up. |
 | `lines[].site` | inside `--lines` JSON array | string \| null | no | yes | null | Inventory site of this line; omitted, the adjustment's site, else the default site. |
+| `lines[].lot` | inside `--lines` JSON array | string \| null | no | yes | null | Lot the units go into (an increase) or leave from (a decrease), of a lot-tracked item. |
+| `lines[].lot_expiry` | inside `--lines` JSON array | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
+| `lines[].serial_numbers` | inside `--lines` JSON array | array[string] \| null | no | yes | null | Serial numbers of the units found (an increase) or gone (a decrease), of a serial-tracked item; the rest are unassigned. |
 | `lines[].class_id` | inside `--lines` JSON array | string \| null | no | yes | null | Class of this line; omitted, the adjustment's class. |
 | `lines[].description` | inside `--lines` JSON array | string \| null | no | yes | null | Line description on both posting lines. |
 | `class_id` | `--class-id` | string \| null | no | yes | null | Class captured on both posting lines. |
 | `site` | `--site` | string \| null | no | yes | null | Inventory site the quantity change is at, by id or name; omitted, the default site. |
+| `lot` | `--lot` | string \| null | no | yes | null | One-item form: lot the units go into or leave from, of a lot-tracked item. |
+| `lot_expiry` | `--lot-expiry` | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
+| `serial_numbers` | `--serial-numbers` | array[string] \| null | no | yes | null | One-item form: serial numbers of the units found or gone, of a serial-tracked item. |
 | `count_position` | `--count-position` | literal["before", "after"] | no | no | "before" | before (the default) or after a physical count of its site on the same date. |
 | `memo` | `--memo` | string \| null | no | yes | null | Why the stock was adjusted. |
 | `number` | `--number` | string \| null | no | yes | null | Document number; omit to take the next journal number. |
@@ -435,6 +441,7 @@ Example JSON output:
 | `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |
@@ -456,6 +463,163 @@ Example JSON output:
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
+## `inventory assign`
+
+Number tracked units after the fact; posts nothing. Moves units at one place between unassigned and serial numbers or a lot: units on hand on a date, or -- with document -- the units one document line moved, dated with that line ("which water heater did that sale take"). An agent that does not know a number leaves it out of the document and assigns it here later; never make one up. direction unassign takes numbers off units. Refused on or before the closing date. Example: `bookflow inventory assign --item "Water Heater" --document "invoice 1001" --serial-numbers '["WH-7"]' --reason "Serial from the job sheet"`.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | item |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/inventory.assign` |
+| External binary body | none |
+
+### CLI
+
+`bookflow inventory assign --item "Water Heater" --document "invoice 1001" --serial-numbers '["WH-1003"]' --company "Demo Plumbing Co" --reason "Serial read off the job sheet" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "inventory assign", "input": {"item": "Water Heater", "document": "invoice 1001", "serial_numbers": ["WH-1003"]}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `item` | `--item` | string | yes | no | — | Tracked item whose units are numbered: ID, full name or barcode.; minimum length 1; maximum length 1004 |
+| `serial_numbers` | `--serial-numbers` | array[string] \| null | no | yes | null | Serial numbers to give units (assign) or to take off them (unassign), one unit each. |
+| `lot` | `--lot` | string \| null | no | yes | null | Lot to put units in (assign) or take them out of (unassign). |
+| `lot_expiry` | `--lot-expiry` | string \| null | no | yes | null | Expiry date of a new lot. |
+| `quantity` | `--quantity` | string \| null | no | yes | null | How many units go into or out of the lot; serial numbers count themselves. |
+| `site` | `--site` | string \| null | no | yes | null | Site the units are at; omitted, the document line's site, else the default site. |
+| `date` | `--date` | string \| null | no | yes | null | Date the units are numbered on; omitted, today (or the document line's own date). |
+| `count_position` | `--count-position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a count of the site on that date. |
+| `document` | `--document` | string \| null | no | yes | null | A document whose stock line moved the units: number those units (which water heater a sale took). Its type and number, e.g. "invoice 1001", or its transaction ID. |
+| `line` | `--line` | string \| null | no | yes | null | Line identity of that document's stock line; omitted when it has one line of the item. |
+| `direction` | `--direction` | literal["assign", "unassign"] | no | no | "assign" | assign: unassigned units take the numbers. unassign: numbered units become unassigned. |
+| `memo` | `--memo` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/inventory.assign`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `id` | string \| null | yes | yes | — | — |
+| `item_id` | string | yes | no | — | — |
+| `item_name` | string | yes | no | — | — |
+| `site_id` | string | yes | no | — | — |
+| `site_name` | string | yes | no | — | — |
+| `date` | string | yes | no | — | — |
+| `count_position` | string | yes | no | — | — |
+| `direction` | string | yes | no | — | — |
+| `document` | string \| null | no | yes | null | The document line whose units were numbered, in words; null for stock on hand. |
+| `numbered` | array[object] | yes | no | — | What moved: each number and the unassigned bucket, signed. |
+| `numbered[].site_id` | string | yes | no | — | — |
+| `numbered[].site_name` | string | yes | no | — | — |
+| `numbered[].bin_id` | string \| null | no | yes | null | — |
+| `numbered[].lot` | string \| null | no | yes | null | — |
+| `numbered[].serial_number` | string \| null | no | yes | null | — |
+| `numbered[].quantity` | string | yes | no | — | — |
+| `unassigned_after` | string | yes | no | — | Unassigned units of the item at the site on the date, after this. |
+| `posted` | boolean | no | no | false | Always false: an assignment posts nothing. |
+| `warnings` | array[string] | no | no | [] | — |
+| `status` | string | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "count_position": "value",
+  "date": "2026-01-01",
+  "direction": "value",
+  "document": null,
+  "id": null,
+  "item_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "item_name": "value",
+  "numbered": [],
+  "posted": false,
+  "site_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "site_name": "value",
+  "status": "value",
+  "unassigned_after": "value",
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
 
 ## `inventory show`
 
@@ -842,6 +1006,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
 | `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
@@ -1270,6 +1435,7 @@ Example JSON output:
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |

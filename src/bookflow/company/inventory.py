@@ -215,6 +215,7 @@ class _Change:
     states: dict = field(default_factory=dict)  # item id -> its replay with this change
     lines: list = field(default_factory=list)   # _Line per adjusted line
     placements: list = field(default_factory=list)  # planned placements for its own movements
+    numbers: dict = field(default_factory=dict)  # movement id -> what its line says of lot and serial numbers
 
 
 def _warnings(item, history, state, own):
@@ -462,7 +463,8 @@ def _adjustment_change(s, ctx, inp, currency, sequence):
         raise invalid('quantity_change' if not many else 'lines',
                       'this adjustment is worth nothing at the current average cost, and '
                       'Bookflow posts no zero-amount entry')
-    journal_lines, movements_out, change_lines, sites = [], [], [], {}
+    from bookflow.company import serial_lots
+    journal_lines, movements_out, change_lines, sites, numbers = [], [], [], {}, {}
     for values, item, site_id, line, basis in written:
         description = line.description or inp.memo or f'Inventory adjustment for {item["full_name"]}'
         index = None
@@ -473,6 +475,9 @@ def _adjustment_change(s, ctx, inp, currency, sequence):
         movements_out.append(_Movement(values, index))
         if site_id:
             sites[values['id']] = site_id
+        stated_numbers = serial_lots.from_line(line)
+        if stated_numbers is not None:
+            numbers[values['id']] = dict(spec=stated_numbers, item_name=item['full_name'], field='lines' if many else 'item')
         change_lines.append(_Line(item, values['id'], site_id or placements.default_site_id(s),
                                   basis or found_basis.get(values['id'], 'average')))
     warnings = []
@@ -488,9 +493,11 @@ def _adjustment_change(s, ctx, inp, currency, sequence):
     document = _Document(journal, 'post', 'adjustment', movements_out)
     first = planned[0]
     first_item = items[first['item_id']]
-    return _Change([document], first_item, states[first['item_id']], currency, int(first['quantity_microunits']),
-                   int(first['value_minor_units']), first['kind'], first['asset_account_id'], offset['id'],
-                   warnings, sites, items, states, change_lines)
+    change = _Change([document], first_item, states[first['item_id']], currency, int(first['quantity_microunits']),
+                     int(first['value_minor_units']), first['kind'], first['asset_account_id'], offset['id'],
+                     warnings, sites, items, states, change_lines)
+    change.numbers = numbers
+    return change
 
 
 def _void_change(s, inp, currency, sequence):
@@ -605,7 +612,10 @@ def complete(s, change):
                    for movement in document.movements) + 1
     correction_documents(s, change, sequence)
     own = [movement.values for movement in change.documents[0].movements]
-    change.placements = change.placements or placements.for_movements(s, own, change.sites)
+    from bookflow.company import serial_lots
+    numbering = serial_lots.Numbering(s)
+    change.placements = change.placements or placements.for_movements(s, own, change.sites, change.numbers, numbering)
+    change.warnings.extend(w for w in numbering.warnings if w not in change.warnings)
     change.warnings.extend(placements.warnings(s, change.placements + list(change.documents[0].extra_placements),
                                                {item_id: item['full_name'] for item_id, item in change.items.items()}
                                                or {change.item['id']: change.item['full_name']}))
@@ -811,7 +821,7 @@ def persist_change(s, ctx, change, *, command_name, persist, nouns=None):
                 change.placements if position == 0 else None)
             placed = placements.placements_for_rows(s, rows, change.sites, planned)
             placed += placements.with_provenance(document.extra_placements, **provenance)
-            extra.append(placements.extra(placed))
+            extra.extend(placements.extras(placed))
             extra.append(('inventory_movements', 'inventory_movement', 'id', rows))
             applied = journals.persist_prepared(
                 fresh, call, s, command_name=command_name, extra=tuple(extra),

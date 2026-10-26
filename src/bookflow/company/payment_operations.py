@@ -46,11 +46,24 @@ def original_request(inp, ctx, s, command):
 
 
 def request_hash(inp, ctx, s, command):
-    from bookflow.company.sales_models import money, SalesMoneyInput
+    from bookflow.company.sales_models import money, SalesMoneyInput, SalesPriceInput
+    from bookflow.core import unit_price
     value = request(inp, ctx, s, command)
     currency = s.company_info_row['home_currency']
+    def owns(annotation, model):
+        return annotation is model or any(owns(arg, model) for arg in get_args(annotation))
     def owns_money(annotation):
-        return annotation is SalesMoneyInput or any(owns_money(arg) for arg in get_args(annotation))
+        return owns(annotation, SalesMoneyInput)
+    def price(raw, key):
+        # R150 prices may carry places beyond the minor unit. A whole price hashes exactly as
+        # it did before, so an operation key saved earlier still matches its replay.
+        units = unit_price.parse(raw.model_dump(exclude_unset=True) if isinstance(raw, BaseModel) else raw,
+                                 currency, key)
+        minor, fraction = unit_price.split(units)
+        result = dict(minor_units=minor, currency=currency)
+        if fraction is not None:
+            result['fraction'] = fraction
+        return result
     def normalize(item):
         if isinstance(item, BaseModel):
             result = item.model_dump(mode='json', exclude_unset=True)
@@ -64,6 +77,8 @@ def request_hash(inp, ctx, s, command):
                     if raw is not None and owns_money(field.annotation):
                         parsed = money(raw, currency, key)
                         result[key] = dict(minor_units=parsed.minor_units, currency=parsed.currency)
+                    elif raw is not None and owns(field.annotation, SalesPriceInput):
+                        result[key] = price(raw, key)
                     elif isinstance(raw, (BaseModel, list)):
                         result[key] = normalize(raw)
             return result

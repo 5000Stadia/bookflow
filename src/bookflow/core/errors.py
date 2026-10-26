@@ -26,6 +26,9 @@ INFRASTRUCTURE_CODES: dict[str, str] = {
     "E_CONFIG_INVALID": "The configuration file could not be read.",
     "E_MIGRATION_FAILED": "A schema migration failed; the database was backed up first and is unchanged.",
     "E_IO": "A filesystem operation failed.",
+    "E_GUARD_REFUSED": ("Bookflow's own safety check in the database refused this write, so nothing was saved. "
+                        "This is a Bookflow bug, not a problem with your input or your disk: please report it "
+                        "with this error's details and request id."),
     "E_PARTIAL_WRITE": "The authoritative write committed, but a secondary update remains incomplete.",
     "E_REASON_REQUIRED": "This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP).",
     "E_FEATURE_DISABLED": "This feature is not enabled for the company.",

@@ -78,6 +78,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].item_name` | string | yes | no | — | — |
 | `lines[].quantity` | string | yes | no | — | — |
 | `lines[].description` | string \| null | yes | yes | — | — |
+| `lines[].lot` | string \| null | no | yes | null | — |
+| `lines[].serial_numbers` | array[string] | no | no | [] | — |
 | `on_hand_after` | array[object] | no | no | [] | Each line item's quantity at both sites on the transfer date, after it. |
 | `on_hand_after[].site_id` | string | yes | no | — | — |
 | `on_hand_after[].site_name` | string | yes | no | — | — |
@@ -123,6 +125,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
 | `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
@@ -179,6 +182,8 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].item` | inside `--lines` JSON array | string | yes | no | — | Inventory part or assembly to move, by id or name.; minimum length 1; maximum length 1004 |
 | `lines[].quantity` | inside `--lines` JSON array | string | yes | no | — | Quantity to move in the item base unit, a positive decimal.; minimum length 1; maximum length 40 |
 | `lines[].description` | inside `--lines` JSON array | string \| null | no | yes | null | — |
+| `lines[].lot` | inside `--lines` JSON array | string \| null | no | yes | null | Lot moved, of a lot-tracked item; omitted, the units move unassigned. |
+| `lines[].serial_numbers` | inside `--lines` JSON array | array[string] \| null | no | yes | null | Serial numbers moved, one per unit, of a serial-tracked item; each must be at the from site on the date. Units left unnumbered move unassigned. |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `count_position` | `--count-position` | literal["before", "after"] | no | no | "before" | Before (default) or after a count of either site on the same date. |
 
@@ -236,6 +241,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].item_name` | string | yes | no | — | — |
 | `lines[].quantity` | string | yes | no | — | — |
 | `lines[].description` | string \| null | yes | yes | — | — |
+| `lines[].lot` | string \| null | no | yes | null | — |
+| `lines[].serial_numbers` | array[string] | no | no | [] | — |
 | `on_hand_after` | array[object] | no | no | [] | Each line item's quantity at both sites on the transfer date, after it. |
 | `on_hand_after[].site_id` | string | yes | no | — | — |
 | `on_hand_after[].site_name` | string | yes | no | — | — |
@@ -286,6 +293,7 @@ Example JSON output:
 | `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |
@@ -389,6 +397,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `transfers[].lines[].item_name` | string | yes | no | — | — |
 | `transfers[].lines[].quantity` | string | yes | no | — | — |
 | `transfers[].lines[].description` | string \| null | yes | yes | — | — |
+| `transfers[].lines[].lot` | string \| null | no | yes | null | — |
+| `transfers[].lines[].serial_numbers` | array[string] | no | no | [] | — |
 | `transfers[].on_hand_after` | array[object] | no | no | [] | Each line item's quantity at both sites on the transfer date, after it. |
 | `transfers[].on_hand_after[].site_id` | string | yes | no | — | — |
 | `transfers[].on_hand_after[].site_name` | string | yes | no | — | — |
@@ -420,6 +430,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
 | `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
@@ -513,6 +524,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].item_name` | string | yes | no | — | — |
 | `lines[].quantity` | string | yes | no | — | — |
 | `lines[].description` | string \| null | yes | yes | — | — |
+| `lines[].lot` | string \| null | no | yes | null | — |
+| `lines[].serial_numbers` | array[string] | no | no | [] | — |
 | `on_hand_after` | array[object] | no | no | [] | Each line item's quantity at both sites on the transfer date, after it. |
 | `on_hand_after[].site_id` | string | yes | no | — | — |
 | `on_hand_after[].site_name` | string | yes | no | — | — |
@@ -558,6 +571,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
 | `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
@@ -615,6 +629,8 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].item` | inside `--lines` JSON array | string | yes | no | — | Inventory part or assembly to move, by id or name.; minimum length 1; maximum length 1004 |
 | `lines[].quantity` | inside `--lines` JSON array | string | yes | no | — | Quantity to move in the item base unit, a positive decimal.; minimum length 1; maximum length 40 |
 | `lines[].description` | inside `--lines` JSON array | string \| null | no | yes | null | — |
+| `lines[].lot` | inside `--lines` JSON array | string \| null | no | yes | null | Lot moved, of a lot-tracked item; omitted, the units move unassigned. |
+| `lines[].serial_numbers` | inside `--lines` JSON array | array[string] \| null | no | yes | null | Serial numbers moved, one per unit, of a serial-tracked item; each must be at the from site on the date. Units left unnumbered move unassigned. |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `count_position` | `--count-position` | literal["before", "after"] \| null | no | yes | null | — |
 
@@ -672,6 +688,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].item_name` | string | yes | no | — | — |
 | `lines[].quantity` | string | yes | no | — | — |
 | `lines[].description` | string \| null | yes | yes | — | — |
+| `lines[].lot` | string \| null | no | yes | null | — |
+| `lines[].serial_numbers` | array[string] | no | no | [] | — |
 | `on_hand_after` | array[object] | no | no | [] | Each line item's quantity at both sites on the transfer date, after it. |
 | `on_hand_after[].site_id` | string | yes | no | — | — |
 | `on_hand_after[].site_name` | string | yes | no | — | — |
@@ -722,6 +740,7 @@ Example JSON output:
 | `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |
@@ -833,6 +852,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].item_name` | string | yes | no | — | — |
 | `lines[].quantity` | string | yes | no | — | — |
 | `lines[].description` | string \| null | yes | yes | — | — |
+| `lines[].lot` | string \| null | no | yes | null | — |
+| `lines[].serial_numbers` | array[string] | no | no | [] | — |
 | `on_hand_after` | array[object] | no | no | [] | Each line item's quantity at both sites on the transfer date, after it. |
 | `on_hand_after[].site_id` | string | yes | no | — | — |
 | `on_hand_after[].site_name` | string | yes | no | — | — |
@@ -883,6 +904,7 @@ Example JSON output:
 | `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |

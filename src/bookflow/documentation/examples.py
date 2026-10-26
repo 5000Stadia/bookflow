@@ -1637,3 +1637,25 @@ EXAMPLES.update({
                               {"notice": "01JNOTICE00000000000000000", "note": "Called; paying Friday"}),
     "reminders": Example('bookflow reminders --mine' + _C, {"mine": True}),
 })
+# Serial and lot numbers (R104 increment 4).
+_C = ' --company "Demo Plumbing Co"'
+EXAMPLES.update({
+    'inventory assign': Example(
+        'bookflow inventory assign --item "Water Heater" --document "invoice 1001" --serial-numbers \'["WH-1003"]\''
+        + _C + ' --reason "Serial read off the job sheet" --json',
+        {'item': 'Water Heater', 'document': 'invoice 1001', 'serial_numbers': ['WH-1003']}),
+    'lot show': Example('bookflow lot show S-2611 --item "Pipe Sealant"' + _C + ' --json',
+                        {'number': 'S-2611', 'item': 'Pipe Sealant'}),
+    'lot list': Example('bookflow lot list --expiring-by 2027-06-30' + _C + ' --json', {'expiring_by': '2027-06-30'}),
+    'lot update': Example('bookflow lot update S-2611 --expiry-date 2027-04-30' + _C
+                          + ' --reason "Supplier corrected the expiry" --json', {'number': 'S-2611', 'expiry_date': '2027-04-30'}),
+    'serial-number show': Example('bookflow serial-number show WH-1001' + _C + ' --json', {'number': 'WH-1001'}),
+    'serial-number list': Example('bookflow serial-number list --item "Water Heater" --in-stock' + _C + ' --json',
+                                  {'item': 'Water Heater', 'in_stock': True}),
+    'serial-number update': Example('bookflow serial-number update WH-1001 --memo "Warranty registered"' + _C
+                                    + ' --reason "Warranty card sent" --json', {'number': 'WH-1001', 'memo': 'Warranty registered'}),
+    'report serial-lot-stock': Example('bookflow report serial-lot-stock --site "Van 1"' + _C + ' --json', {'site': 'Van 1'}),
+    'report serial-lot-history': Example('bookflow report serial-lot-history --number WH-1001' + _C + ' --json',
+                                         {'number': 'WH-1001'}),
+    'report lot-trace': Example('bookflow report lot-trace --number S-2611' + _C + ' --json', {'number': 'S-2611'}),
+})

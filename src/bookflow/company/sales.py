@@ -220,6 +220,8 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
     tax_ordinals = {r['document_line_id']: r['tax_ordinal'] for r in tax_mapping}
     rendered = []
     restored = _restored(lines)
+    from bookflow.company import serial_lots
+    numbered = serial_lots.revision_display(s, revision['id']) if not pending else {}
     for line in lines:
         taxes = []
         for component in sorted((row for row in components if row['document_line_id'] == line['id']),
@@ -232,7 +234,8 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
             **shown_amount(line, currency, restored.get(line['position'], 0)),
             unit_price=unit_price.to_dict(unit_price.row_units(line, 'unit_price'), currency) if line['unit_price_minor_units'] is not None else None,
             pricing_basis=line.get('pricing_basis', 'unit'), net=Money(line['net_minor_units'], currency).to_dict(),
-            tax=Money(line['tax_minor_units'], currency).to_dict(), gross=Money(line['gross_minor_units'], currency).to_dict(), tax_components=taxes))
+            tax=Money(line['tax_minor_units'], currency).to_dict(), gross=Money(line['gross_minor_units'], currency).to_dict(), tax_components=taxes,
+            **{k: v for k, v in (numbered.get(line['line_id']) or {}).items() if v is not None}))
     snapshot = json.loads(revision['custom_fields_snapshot'])
     return SalesRevisionOutput(**values, profile=json.loads(profile['profile_snapshot']), lines=rendered,
         issuer_snapshot=json.loads(revision['issuer_snapshot']), custom_fields_snapshot=snapshot, custom_fields=custom.project(snapshot))
@@ -554,6 +557,13 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
         if site and resolved['profile'].item_type in inventory.TRACKED_TYPES:
             resolved['site_id'] = site
             resolved['site_semantic'] = placements.semantic_site(s, site)
+        # Lot and serial numbers a stocked line names (R104 increment 4).
+        from bookflow.company import serial_lots
+        numbers = serial_lots.from_line(line)
+        if numbers is not None:
+            if resolved['profile'].item_type not in inventory.TRACKED_TYPES:
+                raise _invalid('lines.serial_numbers', 'only stocked lines carry lot or serial numbers')
+            resolved['numbers'] = numbers
         lines.append(resolved)
         warnings.extend(w for w in line_warnings if w not in warnings)
     if len(lines) > 200:
@@ -575,7 +585,8 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
     fingerprint = hashlib.sha256(json_text(dict(company_id=info['id'], type=document_type,
         version=old_header['version'] if old_header else 0, content=semantic, tax_attribution=attribution.model_dump(mode='json'),
         # Where stocked lines take from, only when some line is away from the default site (R104).
-        **({'sites': [line.get('site_semantic') for line in lines]} if any(line.get('site_semantic') for line in lines) else {}))).encode()).hexdigest()
+        **({'sites': [line.get('site_semantic') for line in lines]} if any(line.get('site_semantic') for line in lines) else {}),
+        **_numbers_part(lines))).encode()).hexdigest()
     if (inp.expected_facts_fingerprint is not None and inp.expected_facts_fingerprint != fingerprint
             and not (document_type == 'invoice' and getattr(inp, 'operation_key', None))):
         raise BookflowError('E_PREVIEW_STALE', details={'facts_fingerprint': fingerprint})
@@ -794,6 +805,9 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
         changed_fields = _changes(_saved_semantic(s, old_revision), resolved['semantic']) if old_revision else []
         if old_revision and saved_sites(s, old_revision) != resolved_sites(resolved['lines']):
             changed_fields.append('lines.site')   # a line moved to another inventory site (R104)
+        from bookflow.company import serial_lots
+        if serial_lots.numbers_changed(s, old_revision, resolved['lines']):
+            changed_fields.append('lines.serial_numbers')   # other lot or serial numbers (R104 increment 4)
         if old_revision and inventory_effects.position_moves(s, old_header['id'], getattr(inp, 'count_position', None)):
             changed_fields.append('count_position')   # moved against its date's counts (R104 increment 2)
         if old_revision and not changed_fields and not resolved['custom_plan'].changed:
@@ -910,6 +924,11 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
     return plan
 
 
+def _numbers_part(lines):
+    from bookflow.company import serial_lots
+    return serial_lots.fingerprint_part(lines)
+
+
 def _stock_entries(pending, lines=None):
     """The entered lines that move stock, in the shape the inventory ledger takes them.
 
@@ -920,6 +939,7 @@ def _stock_entries(pending, lines=None):
     """
     profiles = {line['document_line_id']: line for line in pending['sales_line_profiles']}
     sites = {position: line.get('site_id') for position, line in enumerate(lines or (), 1)}
+    numbers = {position: line.get('numbers') for position, line in enumerate(lines or (), 1)}
     entries = []
     for envelope in pending['document_lines']:
         line = profiles[envelope['id']]
@@ -930,7 +950,8 @@ def _stock_entries(pending, lines=None):
             key=envelope['id'], item_id=facts.item.id, item_name=facts.item.label,
             kind='issue', quantity_microunits=line['base_quantity_microunits'],
             asset_account_id=facts.asset_account.id, offset_account_id=facts.cogs_account.id,
-            class_id=envelope['class_id'], site_id=sites.get(envelope['position']), line_identity=envelope['line_id']))
+            class_id=envelope['class_id'], site_id=sites.get(envelope['position']), line_identity=envelope['line_id'],
+            numbers=numbers.get(envelope['position'])))
     return entries
 
 

@@ -88,6 +88,10 @@ class SalesLineOutput(CreatedOutput):
     # R150: the unit price's thousandths of a minor unit beyond unit_price_minor_units (its
     # nearest minor unit); absent when the price is whole. ``unit_price.amount`` is exact.
     unit_price_fraction: int | None = Field(default=None, exclude_if=lambda v: v is None)
+    # R104 increment 4: the lot and serial numbers the line's stock carries; absent when none.
+    lot: str | None = Field(default=None, exclude_if=lambda v: v is None)
+    lot_expiry: str | None = Field(default=None, exclude_if=lambda v: v is None)
+    serial_numbers: list[str] | None = Field(default=None, exclude_if=lambda v: v is None)
     net_minor_units: int
     tax_minor_units: int
     gross_minor_units: int

@@ -71,7 +71,9 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +2 barcodes (R104 increment 3): barcode lookup and barcode generate.
     # +5 performance tracking (R180): perf report and perf settings (routed), perf generate, bench and compare
     # (standalone local tools, three more local lifecycle rows).
-    assert len(rows) == 703
+    # +10 serial and lot numbers (R104 increment 4): inventory assign; lot show/list/update; serial-number
+    # show/list/update; report serial-lot-stock, serial-lot-history and lot-trace.
+    assert len(rows) == 713
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
@@ -328,7 +330,11 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # skip, enter and memorized-group enter, their null branches (memorized enter's again adds none). No new variant kind.
     # 3657 -> 3660 (R180), measured per command: perf report 2 (command, surface), perf settings 1 (recording)
     # -- their null branches. No existing command moved. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==3660
+    # 3660 -> 3793 (R104 increment 4, serial and lot numbers), measured: the ten new commands' optional inputs, and
+    # lot, lot_expiry and serial_numbers on every stock line (sales, credit-memo and bill item lines, checks, card
+    # charges, item receipts, vendor credits, inventory adjust, transfers, assembly build and its components), lot
+    # and serial_number on count entries and tracking on item update -- their null branches. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==3793
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.
