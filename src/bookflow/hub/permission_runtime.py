@@ -4,7 +4,7 @@ Visibility is governed by memberships, not installation administration. Record
 and conditional source owners still perform their complete target graph checks.
 """
 from collections import OrderedDict
-from dataclasses import asdict, replace
+from dataclasses import asdict, fields, replace
 import hashlib
 import json
 import sqlite3
@@ -238,8 +238,8 @@ class _MembershipVisibility:
 VISIBILITY = _MembershipVisibility()
 
 
-def known_catalog(version):
-    """Accepted explicit policy versions; never substitute the current build."""
+def _full_known():
+    """Import and verify every accepted version: the full check (see known_catalog)."""
     from . import permission_activation_catalog, permission_setup_catalog
     from . import permission_deletion_catalog, permission_sales_deletion_catalog
     from . import permission_payment_deletion_catalog, permission_bill_deletion_catalog
@@ -349,7 +349,157 @@ def known_catalog(version):
     # a handful of string comparisons, once per process, and no descriptor is hashed for
     # it. See ACCEPTED_DESCRIPTOR_SHA256 for why it is not done at module scope.
     _verify_accepted(known)
-    return known.get(version)
+    return known
+
+
+class _CachedLayer:
+    """One accepted version read back from the sealed cache: what known_catalog's callers use
+    of a layer module (CATALOG, MANIFEST, SOURCE_COMMIT, catalog_bundle()), nothing more."""
+    __slots__ = ('CATALOG', 'MANIFEST', 'SOURCE_COMMIT', '_bundle')
+
+    def __init__(self, catalog, manifest, source_commit, bundle):
+        self.CATALOG, self.MANIFEST, self.SOURCE_COMMIT, self._bundle = catalog, manifest, source_commit, bundle
+
+    def catalog_bundle(self):
+        return self._bundle
+
+
+class _CachedChain:
+    """The verified chain as a sealed file recorded it. Each version is decoded on first use
+    and must still validate and hash to its pin; any failure is a fallback, never a pass."""
+    def __init__(self, sealed):
+        self._sealed, self._layers = sealed, {}
+
+    def get(self, version):
+        if version in self._layers:
+            return self._layers[version]
+        if version not in self._sealed.index:
+            return None
+        with _known_lock:
+            if version not in self._layers:
+                self._layers[version] = self._decode(version)
+            return self._layers[version]
+
+    def _decode(self, version):
+        entry = self._sealed.index[version]
+        catalog = s._decode(s._parse(self._sealed.blob(version), 'catalog'), c.Catalog, 'catalog')
+        standalone = s._decode(entry['standalone'], tuple[str, ...], 'standalone')
+        manifest = c.catalog_manifest(catalog, standalone)
+        exclusions = s._decode(entry['bundle_exclusions'], tuple[str, ...], 'exclusions')
+        if (catalog.version != version or manifest.descriptor_sha256 != ACCEPTED_DESCRIPTOR_SHA256.get(version)
+                or manifest.standalone_names != standalone or type(entry['source_commit']) is not str
+                or type(entry['bundle_source_commit']) is not str or type(entry['bundle_digest']) is not str):
+            raise ValueError('cached version %r does not reproduce its pin' % version)
+        bundle = s.CatalogBundle(entry['bundle_source_commit'], catalog, exclusions, entry['bundle_digest'])
+        return _CachedLayer(catalog, manifest, entry['source_commit'], bundle)
+
+
+_known = None  # dict of verified modules, or a _CachedChain; decided once per process
+_known_lock = Lock()
+
+
+def _cache_key():
+    from . import permission_catalog_cache as cache
+    return cache.compute_key(ACCEPTED_DESCRIPTOR_SHA256, ACCEPTED_ANCESTOR_SHA256)
+
+
+def _json_fragment(value, memo):
+    """JSON for a descriptor value, as asdict() would give it. The layers share most of their
+    descriptor objects, so each one is encoded once (keyed by identity while all are alive)."""
+    kind = type(value)
+    if kind is tuple or kind in _DESCRIPTOR_FIELDS:
+        found = memo.get(id(value))
+        if found is not None and found[0] is value:
+            return found[1]
+        if kind is tuple:
+            text = '[' + ','.join(_json_fragment(x, memo) for x in value) + ']'
+        else:
+            text = '{' + ','.join(json.dumps(name) + ':' + _json_fragment(getattr(value, name), memo)
+                                  for name in _DESCRIPTOR_FIELDS[kind]) + '}'
+        memo[id(value)] = (value, text)
+        return text
+    if kind in (str, int, bool, type(None)):
+        return json.dumps(value, ensure_ascii=False, allow_nan=False)
+    raise TypeError('not a descriptor value')
+
+
+_DESCRIPTOR_FIELDS = {kind: tuple(sorted(f.name for f in fields(kind))) for kind in (
+    c.Catalog, c.CommandDescriptor, c.CapabilitySpec, c.DefaultEntry, c.CompanyAction,
+    c.AdminAction, c.ResourceSource, c.Requirement)}
+
+
+def _cache_entries(known):
+    entries, memo = {}, {}
+    for version, module in known.items():
+        bundle = module.catalog_bundle()
+        if bundle.descriptor != module.CATALOG:
+            return None  # a layer whose bundle is not its CATALOG: never cached
+        entries[version] = dict(
+            catalog=_json_fragment(module.CATALOG, memo),
+            meta=dict(standalone=list(module.MANIFEST.standalone_names), source_commit=module.SOURCE_COMMIT,
+                      bundle_source_commit=bundle.source_commit, bundle_exclusions=list(bundle.exclusions),
+                      bundle_digest=bundle.source_inventory_digest))
+    return entries
+
+
+def verify_full():
+    """Run the full check in this process, whatever the cache holds, and refresh the cache.
+
+    `permission show` and `permission activate` call this: they are the self-check."""
+    global _known
+    with _known_lock:
+        known = _full_known()
+        fresh, _known = type(_known) is not dict, known
+    if fresh:
+        _write_cache(known)  # once per process: a warm server's self-checks never rewrite it
+    return known
+
+
+def _write_cache(known):
+    from . import permission_catalog_cache as cache
+    if cache.cache_dir() is None:
+        return
+    try:
+        entries = _cache_entries(known)
+        if entries is not None:
+            cache.store(_cache_key(), entries)
+    except Exception:
+        pass  # the cache is an optimisation; a failed write costs the next process time only
+
+
+def _chain():
+    global _known
+    known = _known
+    if known is not None:
+        return known
+    from . import permission_catalog_cache as cache
+    with _known_lock:
+        if _known is None and cache.cache_dir() is not None and not cache.forced_full():
+            try:
+                sealed = cache.load(_cache_key())
+            except Exception:
+                sealed = None
+            if sealed is not None and set(sealed.index) == set(ACCEPTED_DESCRIPTOR_SHA256):
+                _known = _CachedChain(sealed)
+        if _known is not None:
+            return _known
+    return verify_full()
+
+
+def known_catalog(version):
+    """Accepted explicit policy versions; never substitute the current build.
+
+    The first call in a process either verifies the whole chain (_full_known) or, when this
+    exact code version already did so and sealed the result under the data root, reads that
+    back (permission_catalog_cache). Any doubt about the sealed copy means the full check.
+    """
+    known = _chain()
+    if type(known) is dict:
+        return _full_known().get(version)
+    try:
+        return known.get(version)
+    except Exception:
+        return verify_full().get(version)
 
 
 def current_catalog():

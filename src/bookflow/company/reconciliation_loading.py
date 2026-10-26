@@ -82,6 +82,14 @@ def _rows_for(db, accounts, identifiers):
                 continue
             edges.append((name, tuple(k.parent.name for k in constraint.elements),
                           target.removeprefix(PREFIX), tuple(k.column.name for k in constraint.elements)))
+    # Each edge's target rows grouped by the columns it points at, built once: the closure asks
+    # "which rows hold this value" instead of scanning the target table per kept row.
+    pointed = {}
+    for _, _, target, remote in edges:
+        if (target, remote) not in pointed:
+            groups = pointed[target, remote] = {}
+            for key, row in indexed[target].items():
+                groups.setdefault(tuple(row[col] for col in remote), []).append(key)
     while True:
         grew = False
         for name, columns, target, remote in edges:
@@ -90,11 +98,11 @@ def _rows_for(db, accounts, identifiers):
                 row = indexed[name][key]
                 value = tuple(row[col] for col in columns)
                 if None not in value:
-                    wanted.add((target, remote, value))
-            for other, remote_columns, value in wanted:
-                for key, row in indexed[other].items():
-                    if tuple(row[col] for col in remote_columns) == value and key not in keep[other]:
-                        keep[other].add(key)
+                    wanted.add(value)
+            for value in wanted:
+                for key in pointed[target, remote].get(value, ()):
+                    if key not in keep[target]:
+                        keep[target].add(key)
                         grew = True
             # The other direction: a kept row's own children belong with it, because what
             # `validate` checks about an operation or an attempt is the completeness of its items.
@@ -111,17 +119,61 @@ def _rows_for(db, accounts, identifiers):
     return {name: [row for key, row in indexed[name].items() if key in keep[name]] for name in tables}
 
 
-def referenced_rows(db):
+# Ledger tables only `validate`'s foreign-key proof reads. Every reconciliation key into them
+# names the target's `id`, so the rows that can answer it are the rows with those ids; the
+# other referenced tables (company_info, accounts, transactions, attachments, attachment links,
+# classes) are read by value elsewhere and stay whole.
+KEYED_ONLY = ('audit_events', 'bank_effect_keys', 'bank_effect_versions', 'document_line_identities',
+              'posting_batches', 'posting_line_sources', 'posting_lines', 'transaction_revisions')
+
+
+def _pointed_ids(rows):
+    """The `id` values the stored rows point at in each KEYED_ONLY table, or None for a table
+    some key points at with a value that is not text (it is then read whole, as before)."""
+    wanted = {name: set() for name in KEYED_ONLY}
+    for name, table in _tables().items():
+        for constraint in table.foreign_key_constraints:
+            target = constraint.referred_table.name
+            if target not in wanted:
+                continue
+            columns = [e.parent.name for e in constraint.elements]
+            position = [e.column.name for e in constraint.elements].index('id')
+            for row in rows[name]:
+                value = tuple(row[col] for col in columns)
+                if None in value or wanted[target] is None:
+                    continue
+                if type(value[position]) is not str:
+                    wanted[target] = None
+                    continue
+                wanted[target].add(value[position])
+    return wanted
+
+
+def referenced_rows(db, rows=None):
     """Every non-reconciliation table a reconciliation foreign key points at, plus company_info.
 
     `validate` proves those keys itself rather than trusting that the database had them switched
-    on, so it needs the rows to prove them against.
+    on, so it needs the rows to prove them against. Given the stored rows, a KEYED_ONLY table is
+    read only for the ids they point at: a key is found among those rows exactly when it is found
+    in the whole table, because the row that matches it has one of those ids.
     """
     names = {fk.column.table.name for n, t in c.metadata.tables.items() if n.startswith(PREFIX)
              for fk in t.foreign_keys if not fk.column.table.name.startswith(PREFIX)}
     names.add('company_info')
-    return {n: [dict(v) for v in db.conn.execute(sa.select(c.metadata.tables[n])).mappings()]
-            for n in sorted(names)}
+    wanted = _pointed_ids(rows) if rows is not None else {}
+    result = {}
+    for n in sorted(names):
+        table = c.metadata.tables[n]
+        ids = wanted.get(n)
+        if ids is None:
+            result[n] = [dict(v) for v in db.conn.execute(sa.select(table)).mappings()]
+            continue
+        ordered = sorted(ids)
+        result[n] = []
+        for offset in range(0, len(ordered), 500):
+            result[n].extend(dict(v) for v in db.conn.execute(
+                sa.select(table).where(table.c.id.in_(ordered[offset:offset + 500]))).mappings())
+    return result
 
 
 def load(s, account_id, *, prove_captures=()):
@@ -145,10 +197,13 @@ def load(s, account_id, *, prove_captures=()):
         accounts = found
     authorized = adapters.authority(s, identifiers)
     source = adapters.graph(SimpleNamespace(company=db), identifiers)
-    return preparation.snapshot(rows, source=source,
-                                captured_graphs={identity: source for identity in prove_captures},
-                                referenced_rows=referenced_rows(db),
-                                authority_transactions=authorized)
+    # Every argument below was built by this call and is referenced nowhere else, so the
+    # snapshot can own it without the defensive copy `preparation.snapshot` makes for a caller
+    # that keeps its arguments.
+    return preparation.owned_snapshot(rows, source=source,
+                                      captured_graphs={identity: source for identity in prove_captures},
+                                      referenced_rows=referenced_rows(db, rows),
+                                      authority_transactions=authorized)
 
 
 def prove_written(s, account_id, operation_id):
