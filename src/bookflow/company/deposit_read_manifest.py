@@ -1680,7 +1680,8 @@ DEPOSIT_TABLES = ('transaction_revisions', 'deposit_profiles', 'document_line_id
 # R101 increments 4-5 merged over R110: CoordinateOutput recomputed on the merged models.
 # CoordinateOutput moved with R104: the sales request it carries gained an optional inventory `site` (header and line).
 # R150 rehashed Effect, LifecycleOutput, CoordinateOutput and Manifest on the merged models: sub-cent fractions on SalesLineProfile and SalesPriceInput. R104 increment 2 rehashed CoordinateOutput: count_position on the sales request.
-CODECS = {'CoordinateOutput': 'b1faeb9ef241229fe5bb70ae18e47612f61e411b7aa68c374488b1a5f07afd09', 'Effect': '8ffca29d972ff6c16c908f308f2de9fe90cba21ca8fc1b76556c138f44e3a9fc', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': '0978349e0bf8b78e4412ad989130dfbb26b877ea41b3fb1e596daeeb034c1014', 'Manifest': 'd59bfa3ea08d7ea878ba0fff911102085ec8dfdd6d154c9f81e850ba730dfbb8', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
+# Merged R104 increment 4 (serial/lot fields) with the co0091 fraction on CoordinateSalesLineProfilesRow: CoordinateOutput rehashed.
+CODECS = {'CoordinateOutput': '28c570cff92c8a5b684edd492472de573bc439b7eeb95948dd29023df6255564', 'Effect': '8ffca29d972ff6c16c908f308f2de9fe90cba21ca8fc1b76556c138f44e3a9fc', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': '0978349e0bf8b78e4412ad989130dfbb26b877ea41b3fb1e596daeeb034c1014', 'Manifest': 'd59bfa3ea08d7ea878ba0fff911102085ec8dfdd6d154c9f81e850ba730dfbb8', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
 
 # Explicit dependency inspection registry closure, separate from disclosure.
 DEPENDENCY_OWNERS = {'account': ('accounts',

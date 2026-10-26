@@ -379,6 +379,9 @@ class CoordinateSalesLineProfilesRow(Frozen):
     unit_factor_nanounits: int
     base_quantity_microunits: int | None
     unit_price_minor_units: int | None
+    # co0091 (R150): the sub-cent part of an exact rate, a business fact like the price itself.
+    # Defaulted so a source stored before the column existed still reads back.
+    unit_price_fraction: int | None = None
     pricing_basis: str
     net_minor_units: int
     tax_minor_units: int
