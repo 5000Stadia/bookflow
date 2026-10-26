@@ -1,7 +1,8 @@
 """Print Checks: the queue of cheques saved to be printed, print runs, "Did checks print OK?", reprints.
 
 **The queue is derived, never stored.** A cheque saved "to be printed" -- a check from Write
-Checks, or a payment by check from Pay Bills -- is written with no number and one immutable
+Checks, a payment by check from Pay Bills, a sales tax payment by check from Pay Sales Tax, or a
+customer refund by check (co0096) -- is written with no number and one immutable
 ``check_print_marks`` row. It is in the queue for its bank account while it was marked, carries no
 number in ``check_instruments``, stands posted, and no print run is holding it. Nothing else says
 it is queued, so nothing else has to be kept in step: typing a number on a correction, printing
@@ -40,6 +41,14 @@ on or before the closing date is not printed or renumbered: ``check print`` and 
 the printer did with numbers already given while the period was open, and is never refused for
 the period. Reprinting with the same number changes nothing and is always allowed.
 
+**Sales tax payments and refunds** print like any other cheque: the stub of a remittance names
+the agency and the period it paid through, and the stub of a refund names each credit memo or
+overpayment it paid out. Their own profiles keep the number they were written with (none, for one
+saved to be printed); the number they print with lives in ``check_instruments`` like every other
+cheque's, and their outputs, the register and statement import read it from there. A refund is
+corrected with a new revision, so a correction carries its printed number forward onto the new
+revision (``carry_forward``), as a check's correction does.
+
 **After printing.** A cheque that printed is paper with a payee and an amount on it, so ``check
 update`` refuses to change its amount, its payee or its bank account (void it and write a new
 one); the memo, date and lines that do not change the total stay correctable. A cheque in a run
@@ -63,7 +72,8 @@ from bookflow.core.errors import BookflowError
 from bookflow.core.ids import is_ulid, new_id
 from bookflow.core.registry import Applied, Plan, Touched
 
-DOCUMENT_TYPES = {'journal_entry': 'check', 'bill_payment': 'bill_payment'}
+DOCUMENT_TYPES = {'journal_entry': 'check', 'bill_payment': 'bill_payment', 'sales_tax_payment': 'sales_tax_payment',
+                  'customer_refund': 'customer_refund'}
 DEFAULT_STYLE = 'voucher'
 
 
@@ -110,6 +120,7 @@ def on_paper(s, account_id, keys, *, excluding=None):
     found = {row[0] for row in _conn(s).execute(query)}
     found.update(row[0] for row in _conn(s).execute(sa.select(z.c.check_number_key).where(
         z.c.account_id == account_id, z.c.check_number_key.in_(sorted(keys)))))
+    found.update(typed_elsewhere(s, account_id, keys, excluding=excluding))
     return found
 
 
@@ -183,6 +194,29 @@ def facts(s, header):
         base.update(account_id=funding['account_id'], amount_minor_units=funding['amount_minor_units'],
                     currency=funding['currency'], name_type=funding.get('name_type'), name_id=funding.get('name_id'),
                     party_name=funding.get('party_name'), stub=stub)
+    elif header['type'] == 'sales_tax_payment':
+        from bookflow.company import sales_tax_payments
+        from bookflow.company.sales_tax_payment_facts import SalesTaxPaymentProfile
+        profile = sales_tax_payments.profile_row(s, revision)
+        captured = SalesTaxPaymentProfile.model_validate_json(profile['profile_snapshot'])
+        # One line: the agency and the period the remittance answered, with the agency's own
+        # account number when it has one, which is what an agency files the paper under.
+        stub = [('tax', captured.agency.label, captured.agency.account_number or '', profile['through_date'],
+                 profile['amount_minor_units'])]
+        base.update(account_id=profile['funding_account_id'], amount_minor_units=profile['amount_minor_units'],
+                    currency=revision['currency'], name_type='vendor', name_id=profile['agency_id'],
+                    party_name=captured.agency.label, stub=stub)
+    elif header['type'] == 'customer_refund':
+        from bookflow.company import refunds
+        from bookflow.company.refund_facts import CustomerRefundProfile
+        profile = refunds.profile_row(s, revision)
+        captured = CustomerRefundProfile.model_validate_json(profile['profile_snapshot'])
+        stub = [('refund', ('Credit memo ' if row.credit_memo_id else 'Overpayment, payment ') + row.document_number,
+                 row.credit_memo_date or row.payment_date or '', row.amount_minor_units)
+                for row in captured.sources]
+        base.update(account_id=profile['funding_account_id'], amount_minor_units=profile['amount_minor_units'],
+                    currency=revision['currency'], name_type='customer', name_id=profile['party_id'],
+                    party_name=captured.customer.label, stub=stub)
     else:
         from bookflow.company import bill_payments
         profile = bill_payments.profile_row(s, revision)
@@ -272,6 +306,76 @@ def _deleted(s, transaction_id):
             if _conn(s).execute(sa.select(t.c.transaction_id).where(t.c.transaction_id == transaction_id)).first():
                 return True
     return False
+
+
+def printed_number(s, transaction_id):
+    """The number a cheque carries in its chequebook now, or None: what a reader shows as its check number."""
+    held = check_numbers.current(s, transaction_id)
+    return held['check_number'] if held else None
+
+
+def shown_number(s, transaction_id, typed):
+    """The check number a sales tax payment or refund shows: the printed one, else the one typed on it."""
+    if not sa.inspect(_conn(s)).has_table('check_print_marks'):
+        return typed
+    return printed_number(s, transaction_id) or typed
+
+
+def may_print(to_be_printed, *, method_kind, bank, typed_number):
+    """The one rule for saving a sales tax payment or a refund to be printed."""
+    if not to_be_printed:
+        return
+    if method_kind != 'check' or not bank:
+        raise _invalid('to_be_printed', 'only a payment by check from a bank account is printed')
+    if typed_number is not None:
+        raise _invalid('check_number', 'a cheque saved to be printed takes its number when it prints; '
+                                       'leave check_number empty')
+
+
+def guard_typed_number(s, header, number):
+    """A refund correction may not type a number over one the print layer owns."""
+    if number is None:
+        return
+    status = print_status(s, header['id'])
+    if status == 'queued':
+        raise _invalid('check_number', 'this refund is waiting in the print queue and takes its number when it '
+                                       'prints; print it with `check print`')
+    if status in ('in_run', 'printed'):
+        raise _invalid('check_number', 'this refund was printed with a number from a print run; reprint it with '
+                                       '`check reprint --new-number` to change the number on the paper')
+
+
+def carry_forward(s, ctx, header, revision, *, at, event):
+    """A correction's new revision keeps the number its cheque was printed with (refunds)."""
+    held = check_numbers.current(s, header['id'])
+    if held is None:
+        return None
+    settled = {key: held[key] for key in check_numbers.IDENTITY} | {'pointer': None}
+    return check_numbers.rows(s, ctx, header, revision, settled, held, at=at, event=event)
+
+
+def typed_elsewhere(s, account_id, keys, *, excluding=None):
+    """Numbers typed by hand on a sales tax payment or refund drawn on this account.
+
+    Those two keep a hand-written number on their own profile rather than in the chequebook, so
+    the allocator and the print run ask here too: a number already on paper is never handed out again.
+    """
+    if not keys:
+        return set()
+    found = set()
+    for table in (c.sales_tax_payment_profiles, c.customer_refund_profiles):
+        query = sa.select(table.c.check_number).where(table.c.funding_account_id == account_id,
+                                                      table.c.check_number.is_not(None))
+        if excluding is not None:
+            query = query.where(table.c.transaction_id != excluding)
+        for (number,) in _conn(s).execute(query):
+            try:
+                key = check_numbers.canonical(number)[1]
+            except BookflowError:
+                continue
+            if key in keys:
+                found.add(key)
+    return found
 
 
 def mark_row(header_id, type_, *, at, actor_id, interface, event):
@@ -430,7 +534,14 @@ def _printed_check(fact, number, sample=False):
             return ''
         return ('-' if units < 0 else '') + amount_in_figures(abs(units), fact['currency']).lstrip('*')
 
-    if fact['type'] == 'bill_payment':
+    if fact['type'] == 'sales_tax_payment':
+        heading = ('Sales tax agency', 'Agency account', 'Tax through', '', 'Amount')
+        lines = tuple(StubLine((agency, account, through, '', shown(amount)))
+                      for _, agency, account, through, amount in fact['stub'])
+    elif fact['type'] == 'customer_refund':
+        heading = ('Refund of', 'Dated', '', '', 'Refunded')
+        lines = tuple(StubLine((ref, date, '', '', shown(amount))) for _, ref, date, amount in fact['stub'])
+    elif fact['type'] == 'bill_payment':
         heading = ('Bill', 'Date', 'Original', 'Discount', 'Paid')
         lines = tuple(StubLine((ref, date, shown(original), shown(discount) if discount else '', shown(paid)))
                       for _, ref, date, original, discount, paid in fact['stub'])

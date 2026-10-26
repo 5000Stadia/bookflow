@@ -60,11 +60,12 @@ KINDS = ('check', 'card_charge', 'card_credit', 'transfer')
 DOCUMENT_TYPE = 'journal_entry'
 
 # Every document that can carry a cheque, in the transaction type it posts as: the journal
-# entry ``check post`` writes, and the bill payment ``bill pay`` writes. Declared once and
+# entry ``check post`` writes, the bill payment ``bill pay`` writes, and (co0096) a sales tax payment or
+# customer refund saved to be printed and numbered by a print run. Declared once and
 # read by ``ck_check_instrument_type`` below, by ``company/check_numbers.py`` -- which refuses
 # to hand a number to anything else -- and by ``company/check_reports.py``, so whatever prints
 # a cheque next joins the chequebook by adding itself here and nowhere else.
-CHEQUE_DOCUMENT_TYPES = ('journal_entry', 'bill_payment')
+CHEQUE_DOCUMENT_TYPES = ('journal_entry', 'bill_payment', 'sales_tax_payment', 'customer_refund')
 
 
 def _one_of(column, values):
@@ -151,7 +152,7 @@ def define_tables(metadata, column, table):
     check_instruments = T('check_instruments',
         C('transaction_id', sa.String(26), 'The check this cheque identity currently belongs to.',
           primary_key=True),
-        C('type', sa.String(32), 'Transaction type of the document this cheque was written on: the journal entry a check posts as, or the bill payment Pay Bills writes.', nullable=False),
+        C('type', sa.String(32), 'Transaction type of the document this cheque was written on: the journal entry a check posts as, the bill payment Pay Bills writes, or a sales tax payment or customer refund printed from the queue (co0096).', nullable=False),
         C('revision_id', sa.String(26), 'Revision whose cheque identity this projects.', nullable=False),
         *identity(immutable=False),
         *shape('check_instrument'),

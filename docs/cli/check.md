@@ -948,7 +948,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].item_id` | string | yes | no | — | — |
 | `items[].position` | integer | yes | no | — | — |
 | `items[].transaction_id` | string | yes | no | — | — |
-| `items[].document_type` | literal["check", "bill_payment"] | yes | no | — | — |
+| `items[].document_type` | literal["check", "bill_payment", "sales_tax_payment", "customer_refund"] | yes | no | — | — |
 | `items[].check_number` | string | yes | no | — | — |
 | `items[].date` | string | yes | no | — | — |
 | `items[].payee_name` | string \| null | yes | yes | — | — |
@@ -966,7 +966,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `pdf` | string | yes | no | — | The command that returns this run as a PDF. |
 | `skipped` | array[object] | no | no | [] | Queued cheques a run over the whole queue left waiting, with why: dated on or before the closing date. |
 | `skipped[].transaction_id` | string | yes | no | — | — |
-| `skipped[].document_type` | literal["check", "bill_payment"] | yes | no | — | — |
+| `skipped[].document_type` | literal["check", "bill_payment", "sales_tax_payment", "customer_refund"] | yes | no | — | — |
 | `skipped[].reference` | string | yes | no | — | — |
 | `skipped[].date` | string | yes | no | — | — |
 | `skipped[].payee_name` | string \| null | yes | yes | — | — |
@@ -1232,7 +1232,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].item_id` | string | yes | no | — | — |
 | `items[].position` | integer | yes | no | — | — |
 | `items[].transaction_id` | string | yes | no | — | — |
-| `items[].document_type` | literal["check", "bill_payment"] | yes | no | — | — |
+| `items[].document_type` | literal["check", "bill_payment", "sales_tax_payment", "customer_refund"] | yes | no | — | — |
 | `items[].check_number` | string | yes | no | — | — |
 | `items[].date` | string | yes | no | — | — |
 | `items[].payee_name` | string \| null | yes | yes | — | — |
@@ -1250,7 +1250,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `pdf` | string | yes | no | — | The command that returns this run as a PDF. |
 | `skipped` | array[object] | no | no | [] | Queued cheques a run over the whole queue left waiting, with why: dated on or before the closing date. |
 | `skipped[].transaction_id` | string | yes | no | — | — |
-| `skipped[].document_type` | literal["check", "bill_payment"] | yes | no | — | — |
+| `skipped[].document_type` | literal["check", "bill_payment", "sales_tax_payment", "customer_refund"] | yes | no | — | — |
 | `skipped[].reference` | string | yes | no | — | — |
 | `skipped[].date` | string | yes | no | — | — |
 | `skipped[].payee_name` | string \| null | yes | yes | — | — |
@@ -1407,7 +1407,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].item_id` | string | yes | no | — | — |
 | `items[].position` | integer | yes | no | — | — |
 | `items[].transaction_id` | string | yes | no | — | — |
-| `items[].document_type` | literal["check", "bill_payment"] | yes | no | — | — |
+| `items[].document_type` | literal["check", "bill_payment", "sales_tax_payment", "customer_refund"] | yes | no | — | — |
 | `items[].check_number` | string | yes | no | — | — |
 | `items[].date` | string | yes | no | — | — |
 | `items[].payee_name` | string \| null | yes | yes | — | — |
@@ -1425,7 +1425,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `pdf` | string | yes | no | — | The command that returns this run as a PDF. |
 | `skipped` | array[object] | no | no | [] | Queued cheques a run over the whole queue left waiting, with why: dated on or before the closing date. |
 | `skipped[].transaction_id` | string | yes | no | — | — |
-| `skipped[].document_type` | literal["check", "bill_payment"] | yes | no | — | — |
+| `skipped[].document_type` | literal["check", "bill_payment", "sales_tax_payment", "customer_refund"] | yes | no | — | — |
 | `skipped[].reference` | string | yes | no | — | — |
 | `skipped[].date` | string | yes | no | — | — |
 | `skipped[].payee_name` | string \| null | yes | yes | — | — |
@@ -1666,7 +1666,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `accounts[].settings.version` | integer \| null | yes | yes | — | Settings version; null when the account still has the defaults. |
 | `accounts[].checks` | array[object] | yes | no | — | — |
 | `accounts[].checks[].transaction_id` | string | yes | no | — | — |
-| `accounts[].checks[].document_type` | literal["check", "bill_payment"] | yes | no | — | check (Write Checks) or bill_payment (Pay Bills). |
+| `accounts[].checks[].document_type` | literal["check", "bill_payment", "sales_tax_payment", "customer_refund"] | yes | no | — | check (Write Checks), bill_payment (Pay Bills), sales_tax_payment (Pay Sales Tax) or customer_refund (a refund by check). |
 | `accounts[].checks[].reference` | string | yes | no | — | The document's own reference from its series; not a check number. |
 | `accounts[].checks[].account_id` | string | yes | no | — | — |
 | `accounts[].checks[].date` | string | yes | no | — | — |
@@ -1795,7 +1795,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].item_id` | string | yes | no | — | — |
 | `items[].position` | integer | yes | no | — | — |
 | `items[].transaction_id` | string | yes | no | — | — |
-| `items[].document_type` | literal["check", "bill_payment"] | yes | no | — | — |
+| `items[].document_type` | literal["check", "bill_payment", "sales_tax_payment", "customer_refund"] | yes | no | — | — |
 | `items[].check_number` | string | yes | no | — | — |
 | `items[].date` | string | yes | no | — | — |
 | `items[].payee_name` | string \| null | yes | yes | — | — |
@@ -1813,7 +1813,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `pdf` | string | yes | no | — | The command that returns this run as a PDF. |
 | `skipped` | array[object] | no | no | [] | Queued cheques a run over the whole queue left waiting, with why: dated on or before the closing date. |
 | `skipped[].transaction_id` | string | yes | no | — | — |
-| `skipped[].document_type` | literal["check", "bill_payment"] | yes | no | — | — |
+| `skipped[].document_type` | literal["check", "bill_payment", "sales_tax_payment", "customer_refund"] | yes | no | — | — |
 | `skipped[].reference` | string | yes | no | — | — |
 | `skipped[].date` | string | yes | no | — | — |
 | `skipped[].payee_name` | string \| null | yes | yes | — | — |
@@ -2320,7 +2320,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].item_id` | string | yes | no | — | — |
 | `items[].position` | integer | yes | no | — | — |
 | `items[].transaction_id` | string | yes | no | — | — |
-| `items[].document_type` | literal["check", "bill_payment"] | yes | no | — | — |
+| `items[].document_type` | literal["check", "bill_payment", "sales_tax_payment", "customer_refund"] | yes | no | — | — |
 | `items[].check_number` | string | yes | no | — | — |
 | `items[].date` | string | yes | no | — | — |
 | `items[].payee_name` | string \| null | yes | yes | — | — |
@@ -2338,7 +2338,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `pdf` | string | yes | no | — | The command that returns this run as a PDF. |
 | `skipped` | array[object] | no | no | [] | Queued cheques a run over the whole queue left waiting, with why: dated on or before the closing date. |
 | `skipped[].transaction_id` | string | yes | no | — | — |
-| `skipped[].document_type` | literal["check", "bill_payment"] | yes | no | — | — |
+| `skipped[].document_type` | literal["check", "bill_payment", "sales_tax_payment", "customer_refund"] | yes | no | — | — |
 | `skipped[].reference` | string | yes | no | — | — |
 | `skipped[].date` | string | yes | no | — | — |
 | `skipped[].payee_name` | string \| null | yes | yes | — | — |

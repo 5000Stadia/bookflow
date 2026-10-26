@@ -160,7 +160,7 @@ REFUND_PRIMARY = ('customer', 'date', 'number', 'class_id')
 
 # How the money leaves: the account it is drawn on, how it was paid, and the numbers that
 # identify it afterwards.
-REFUND_TERMS = ('funding_account', 'method', 'check_number', 'reference')
+REFUND_TERMS = ('funding_account', 'method', 'check_number', 'to_be_printed', 'reference')
 REFUND_FOOTER = ('memo',)
 
 # The refund's grid is not a sale and not an expense: it is the money the customer already has
@@ -403,7 +403,7 @@ NOUN_LABELS = {
                     'customer_purchase_order': 'P.O. Number'},
     'customer-refund': {'customer': 'Customer:Job', 'funding_account': 'Pay from',
                         'method': 'Payment method', 'check_number': 'Check No.',
-                        'reference': 'Reference'},
+                        'to_be_printed': 'Print later', 'reference': 'Reference'},
     'vendor-credit': {'vendor': 'Vendor', 'supplier_reference': 'Ref. No.',
                       'ap_account': 'A/P Account'},
 }
@@ -457,6 +457,9 @@ NOUN_DESCRIPTIONS = {
                         'method': 'How the customer was paid back.',
                         'check_number': 'The number on the paper check. Accepted only when the '
                                         'method is a check.',
+                        'to_be_printed': 'Save the refund check with no number and print it later from '
+                                         'Print Checks, which numbers it from the first check in the '
+                                         'printer. Leave Check No. empty.',
                         'reference': 'Your own reference for this payment, kept as typed.',
                         'number': "Bookflow's own number for this refund. Leave it empty to take "
                                   'the next one.'},

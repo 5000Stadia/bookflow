@@ -619,8 +619,8 @@ schedule entries and the work orders he is assigned that day; `customer` instead
 
 ## Printing checks: "print this week's checks"
 
-Write the checks with `to_be_printed: true` (on `check post`, or on `bill pay` by check from a bank
-account) and leave `number` out: they wait in the bank account's print queue with no number
+Write the checks with `to_be_printed: true` (on `check post`, or by check from a bank account on
+`bill pay`, `sales-tax pay` or `customer-refund post`) and leave `number` / `check_number` out: they wait in the bank account's print queue with no number
 (`check print-queue`). `check print` gives them numbers in order from `first_number`, the number on
 the first check loaded in the printer, and `check print-pdf --run` returns the PDF to print. A number
 already used on the account is refused, never skipped.

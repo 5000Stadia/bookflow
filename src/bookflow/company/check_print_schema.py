@@ -28,6 +28,8 @@ Every table here is append-only except the settings, which carry a version like 
 """
 import sqlalchemy as sa
 
+from bookflow.company.money_out_schema import CHEQUE_DOCUMENT_TYPES
+
 STYLES = ('voucher', 'standard', 'wallet')
 OUTCOMES = ('printed', 'failed', 'cancelled')
 RUN_KINDS = ('batch', 'reprint')
@@ -59,9 +61,10 @@ def define_tables(metadata, C, T, common):
 
     marks = T('check_print_marks',
         ident('transaction_id', primary_key=True, doc='Cheque saved to be printed.'),
-        C('type', sa.String(32), 'Transaction type of the cheque: journal_entry (a check) or bill_payment.', nullable=False),
+        C('type', sa.String(32), 'Transaction type of the cheque: journal_entry (a check), bill_payment, '
+                                 'sales_tax_payment or customer_refund (co0096).', nullable=False),
         *history(),
-        sa.CheckConstraint("type IN ('journal_entry', 'bill_payment')", name='ck_check_print_mark_type'),
+        sa.CheckConstraint(_one_of('type', CHEQUE_DOCUMENT_TYPES), name='ck_check_print_mark_type'),
         sa.ForeignKeyConstraint(['transaction_id', 'type'], ['transactions.id', 'transactions.type'],
                                 name='fk_check_print_mark_document'),
         description='Cheques saved to be printed (Print Later); queue membership is derived from these.')

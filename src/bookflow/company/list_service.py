@@ -432,8 +432,12 @@ def apply_hierarchy_plan(db_or_connection: Any, table: sa.Table, plan: Hierarchy
         connection.execute(table.update().where(table.c.id == update.id).values(**values))
 
 
-def hierarchy_ancestors(db_or_connection: Any, table: sa.Table, row: Mapping[str, Any]) -> tuple[dict[str, Any], ...]:
-    """Return nearest-to-farthest ancestors and reject corrupt cycles."""
+def hierarchy_ancestors(db_or_connection: Any, table: sa.Table, row: Mapping[str, Any], *,
+                        fetch=None) -> tuple[dict[str, Any], ...]:
+    """Return nearest-to-farthest ancestors and reject corrupt cycles.
+
+    ``fetch`` (connection, table, id) replaces the one-row read, for a caller that
+    projects a page and reads each ancestor once."""
     connection = _connection(db_or_connection)
     ancestors: list[dict[str, Any]] = []
     seen = {str(row["id"])}
@@ -442,7 +446,7 @@ def hierarchy_ancestors(db_or_connection: Any, table: sa.Table, row: Mapping[str
         if parent_id in seen:
             raise BookflowError("E_HIERARCHY_CYCLE", details={"record_id": row["id"], "parent_id": parent_id})
         seen.add(parent_id)
-        parent = _row_by_id(connection, table, parent_id)
+        parent = (fetch or _row_by_id)(connection, table, parent_id)
         ancestors.append(parent)
         parent_id = parent.get("parent_id")
         if len(ancestors) >= MAX_HIERARCHY_DEPTH:

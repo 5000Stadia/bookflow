@@ -2154,19 +2154,25 @@ def _customer_vendor_links(
 
 
 def _vendor_item_profiles(db: Database, vendor_id: str) -> list[dict[str, Any]]:
-    rows = db.conn.execute(
+    return [_vendor_item_profile(row) for row in _vendor_item_profile_rows(db, (vendor_id,))]
+
+
+def _vendor_item_profile_rows(db: Database, vendor_ids) -> list[Mapping[str, Any]]:
+    return db.conn.execute(
         sa.select(schema.item_vendor_profiles, schema.items.c.full_name.label("item_name"))
         .join(schema.items, schema.items.c.id == schema.item_vendor_profiles.c.item_id)
         .where(
-            schema.item_vendor_profiles.c.vendor_id == vendor_id,
+            schema.item_vendor_profiles.c.vendor_id.in_(tuple(vendor_ids)),
             schema.item_vendor_profiles.c.active.is_(True),
             schema.items.c.active.is_(True),
         )
         .order_by(schema.items.c.full_name_key, schema.item_vendor_profiles.c.position,
                   schema.item_vendor_profiles.c.id)
     ).mappings().all()
-    return [
-        {
+
+
+def _vendor_item_profile(row: Mapping[str, Any]) -> dict[str, Any]:
+    return {
             "id": row["id"],
             "position": int(row["position"]),
             "active": True,
@@ -2185,8 +2191,6 @@ def _vendor_item_profiles(db: Database, vendor_id: str) -> list[dict[str, Any]]:
             "manufacturer_part_number": row["manufacturer_part_number"],
             "availability_notes": row["availability_notes"],
         }
-        for row in rows
-    ]
 
 
 def _money_output(row: Mapping[str, Any], field: str) -> dict[str, Any] | None:
@@ -2272,13 +2276,14 @@ def _effective_collection(
     mode_field: str,
     collection: str,
     root_collections: Mapping[str, tuple[Mapping[str, Any], ...]] | None = None,
+    reads: "_DirectReads | None" = None,
 ) -> tuple[tuple[Mapping[str, Any], ...], str | None]:
     for candidate in (row, *ancestors):
         if candidate.get(mode_field) == "own":
             collections = (
                 root_collections
                 if candidate["id"] == row["id"] and root_collections is not None
-                else read_party_collections(db, "customer", str(candidate["id"]))
+                else (reads or _DirectReads(db)).collections("customer", str(candidate["id"]))
             )
             return collections.get(collection, ()), str(candidate["id"])
     return (), None
@@ -2332,6 +2337,289 @@ def _prepayment_held(db, customer_id):
     return held_on_customer(db, customer_id)
 
 
+class _DirectReads:
+    """The facts a party projection reads beyond its row, one record at a time."""
+
+    def __init__(self, db: Database):
+        self.db = db
+
+    def custom_values(self, record_type: str, record_id: str) -> tuple:
+        return tuple(custom_fields.read_owner_values(self.db, record_type=record_type, record_id=record_id))
+
+    def home(self) -> str:
+        return _home_currency(self.db)
+
+    def own(self, customer_id: str) -> int:
+        from bookflow.company.customer_balances import own_balance
+        return own_balance(self.db, customer_id)
+
+    def family(self, customer_id: str) -> int:
+        from bookflow.company.customer_balances import family_balance
+        return family_balance(self.db, customer_id)
+
+    def held(self, customer_id: str) -> int:
+        return _prepayment_held(self.db, customer_id)
+
+    def owed(self, vendor_id: str) -> int:
+        from bookflow.company.customer_balances import vendor_balance
+        return vendor_balance(self.db, vendor_id)
+
+    def links(self, noun: str, record_id: str) -> list[dict[str, Any]]:
+        return _customer_vendor_links(self.db, noun, record_id)
+
+    def ancestors(self, table: sa.Table, row: Mapping[str, Any]) -> tuple[dict[str, Any], ...]:
+        return list_service.hierarchy_ancestors(self.db, table, row)
+
+    def collections(self, noun: str, record_id: str) -> dict[str, tuple[dict[str, Any], ...]]:
+        return read_party_collections(self.db, noun, record_id)
+
+    def label(self, table: sa.Table, record_id: str | None) -> str | None:
+        return _reference_label(self.db, table, record_id)
+
+    def item_profiles(self, vendor_id: str) -> list[dict[str, Any]]:
+        return _vendor_item_profiles(self.db, vendor_id)
+
+
+def _chunks(values: list[str], size: int = 500):
+    for start in range(0, len(values), size):
+        yield values[start:start + size]
+
+
+class PartyPage(_DirectReads):
+    """The same facts for a whole page of party records, read set-based (R180).
+
+    A list projected each record through _DirectReads: about eight statements a customer, so
+    a list's statements grew with the number of customers. A page reads each kind of fact
+    once for every record on it, in the order the one-record read uses, and answers exactly
+    what that read would. A record that is not on the page (an ancestor left off by a
+    filter) falls back to the one-record read.
+    """
+
+    def __init__(self, db: Database, noun: str, rows):
+        super().__init__(db)
+        self.noun = noun
+        self.ids = [str(row["id"]) for row in rows]
+        self._home = _home_currency(db)
+        self._labels: dict[tuple[str, str], str | None] = {}
+        self._rows: dict[str, dict[str, Any]] = {}
+        self._custom = self._read_custom()
+        self._links = self._read_links()
+        self._collections = self._read_collections()
+        if noun == "customer":
+            self._read_customer_balances()
+            from bookflow.company.prepayments import find_account
+            self._holding = find_account(db) is not None
+        elif noun == "vendor":
+            self._read_vendor_balances()
+            self._profiles: dict[str, list[dict[str, Any]]] = {i: [] for i in self.ids}
+            for chunk in _chunks(self.ids):
+                for row in _vendor_item_profile_rows(db, chunk):
+                    self._profiles[str(row["vendor_id"])].append(_vendor_item_profile(row))
+
+    # -- reads
+
+    def _read_custom(self):
+        from bookflow.company.custom_fields import _stable_id, typed_value_from_canonical
+        c = schema
+        record_type = self.noun.replace("-", "_")
+        found: dict[str, list[dict[str, Any]]] = {_stable_id(i, field="record_id"): [] for i in self.ids}
+        for chunk in _chunks(list(found)):
+            for row in self.db.conn.execute(
+                sa.select(
+                    c.custom_field_values.c.record_id,
+                    c.custom_field_values.c.id,
+                    c.custom_field_values.c.def_id,
+                    c.custom_field_values.c.canonical_text,
+                    c.custom_field_defs.c.name,
+                    c.custom_field_defs.c.kind,
+                    c.custom_field_defs.c.active.label("definition_active"),
+                    c.custom_field_defs.c.position,
+                )
+                .select_from(c.custom_field_values.join(c.custom_field_defs, c.custom_field_defs.c.id == c.custom_field_values.c.def_id))
+                .where(
+                    c.custom_field_values.c.record_type == record_type,
+                    c.custom_field_values.c.record_id.in_(chunk),
+                    c.custom_field_values.c.active.is_(True),
+                )
+                .order_by(c.custom_field_values.c.record_id, c.custom_field_defs.c.position,
+                          c.custom_field_defs.c.name_key, c.custom_field_defs.c.id)
+            ).mappings():
+                found[row["record_id"]].append({
+                    "id": row["id"],
+                    "definition_id": row["def_id"],
+                    "name": row["name"],
+                    "kind": row["kind"],
+                    "definition_active": bool(row["definition_active"]),
+                    "value": typed_value_from_canonical(row["kind"], row["canonical_text"]),
+                })
+        return {key: tuple(value) for key, value in found.items()}
+
+    def _read_links(self):
+        if self.noun not in ("customer", "vendor"):
+            return {}
+        t = schema.customer_vendor_links
+        endpoint = t.c.customer_id if self.noun == "customer" else t.c.vendor_id
+        found: dict[str, list[dict[str, Any]]] = {i: [] for i in self.ids}
+        for chunk in _chunks(self.ids):
+            for row in self.db.conn.execute(
+                sa.select(t.c.id, t.c.version, t.c.customer_id, t.c.vendor_id, t.c.active)
+                .where(endpoint.in_(chunk))
+                .order_by(endpoint, t.c.active.desc(), t.c.id)
+            ).mappings():
+                found[str(row["customer_id"] if self.noun == "customer" else row["vendor_id"])].append({
+                    "id": str(row["id"]),
+                    "version": int(row["version"]),
+                    "customer_id": str(row["customer_id"]),
+                    "vendor_id": str(row["vendor_id"]),
+                    "active": bool(row["active"]),
+                })
+        return found
+
+    def _owned(self, table: sa.Table, owner_column: str, owners: list[str]) -> dict[str, list[dict[str, Any]]]:
+        found: dict[str, list[dict[str, Any]]] = {i: [] for i in owners}
+        for chunk in _chunks(owners):
+            for row in self.db.conn.execute(
+                sa.select(table).where(table.c[owner_column].in_(chunk))
+                .order_by(table.c[owner_column], table.c.position, table.c.id)
+            ).mappings():
+                found[str(row[owner_column])].append(dict(row))
+        return found
+
+    def _contacts(self, owner_column: str, contact_table: sa.Table, point_table: sa.Table):
+        contacts = self._owned(contact_table, owner_column, self.ids)
+        points = self._owned(point_table, "contact_id", [str(x["id"]) for rows in contacts.values() for x in rows])
+        result = {}
+        for owner, rows in contacts.items():
+            for contact in rows:
+                contact["points"] = tuple(points[str(contact["id"])])
+            result[owner] = tuple(rows)
+        return result
+
+    def _read_collections(self):
+        if self.noun == "customer":
+            addresses = self._owned(schema.customer_addresses, "customer_id", self.ids)
+            contacts = self._contacts("customer_id", schema.customer_contacts, schema.customer_contact_points)
+            return {i: {"shipping_addresses": tuple(addresses[i]), "contacts": contacts[i]} for i in self.ids}
+        if self.noun == "vendor":
+            contacts = self._contacts("vendor_id", schema.vendor_contacts, schema.vendor_contact_points)
+            expenses = self._owned(schema.vendor_expense_accounts, "vendor_id", self.ids)
+            return {i: {"contacts": contacts[i], "expense_accounts": tuple(expenses[i])} for i in self.ids}
+        return {i: {} for i in self.ids}
+
+    def _nets(self, kind: str):
+        """Each name's own net (no merges), and the live merges: merged id to its survivor."""
+        from bookflow.company.customer_balances import register_functions
+        register_functions(self.db)
+        if kind == "customer":
+            account_type, net = "accounts_receivable", "l.debit_minor_units - l.credit_minor_units"
+        else:
+            account_type, net = "accounts_payable", "l.credit_minor_units - l.debit_minor_units"
+        raw = {str(name): int(value or "0") for name, value in self.db.raw.execute(f"""
+            SELECT l.name_id, bookflow_sum_int({net})
+            FROM posting_lines l JOIN accounts a ON a.id = l.account_id
+            WHERE l.name_type = :kind AND a.type = :account_type GROUP BY l.name_id
+        """, {"kind": kind, "account_type": account_type})}
+        merged = {str(m): str(sv) for m, sv in self.db.raw.execute(
+            "SELECT merged_id, survivor_id FROM party_merges WHERE party_kind = :kind AND undone_at IS NULL",
+            {"kind": kind})}
+        into: dict[str, set[str]] = {}
+        for m, sv in merged.items():
+            into.setdefault(sv, set()).add(m)
+        return raw, merged, into
+
+    def _members(self, merged, into, party_id):
+        # customer_balances.members_sql: the party itself unless merged away, and each merged into it.
+        return ({party_id} if party_id not in merged else set()) | into.get(party_id, set())
+
+    def _read_customer_balances(self):
+        from bookflow.core.exact import _require_i64
+        raw, merged, into = self._nets("customer")
+        self._own = {i: _require_i64(sum(raw.get(x, 0) for x in self._members(merged, into, i)), field="current_balance")
+                     for i in self.ids}
+        # customer_balances._family_net: party_merges.family_cte, walked here over one read of
+        # the customer tree.
+        children: dict[str, list[str]] = {}
+        exists = set()
+        for identity, parent in self.db.raw.execute("SELECT id, parent_id FROM customers"):
+            exists.add(str(identity))
+            if parent is not None:
+                children.setdefault(str(parent), []).append(str(identity))
+        self._family = {}
+        for i in self.ids:
+            family = {i} if i in exists else set()
+            frontier = list(family)
+            while frontier:
+                current = frontier.pop()
+                for nxt in (*(child for child in children.get(current, ()) if child not in merged),
+                            *into.get(current, ())):
+                    if nxt not in family:
+                        family.add(nxt)
+                        frontier.append(nxt)
+            self._family[i] = _require_i64(sum(raw.get(x, 0) for x in family), field="family_balance")
+
+    def _read_vendor_balances(self):
+        from bookflow.core.exact import _require_i64
+        raw, merged, into = self._nets("vendor")
+        self._owed = {i: _require_i64(sum(raw.get(x, 0) for x in self._members(merged, into, i)), field="open_balance")
+                      for i in self.ids}
+
+    # -- answers
+
+    def custom_values(self, record_type, record_id):
+        from bookflow.company.custom_fields import _stable_id
+        key = _stable_id(record_id, field="record_id")
+        if record_type == self.noun.replace("-", "_") and key in self._custom:
+            return self._custom[key]
+        return super().custom_values(record_type, record_id)
+
+    def home(self):
+        return self._home
+
+    def own(self, customer_id):
+        return self._own[customer_id] if customer_id in self._own else super().own(customer_id)
+
+    def family(self, customer_id):
+        return self._family[customer_id] if customer_id in self._family else super().family(customer_id)
+
+    def held(self, customer_id):
+        return super().held(customer_id) if self._holding else 0
+
+    def owed(self, vendor_id):
+        return self._owed[vendor_id] if vendor_id in self._owed else super().owed(vendor_id)
+
+    def links(self, noun, record_id):
+        if noun == self.noun and record_id in self._links:
+            return [dict(x) for x in self._links[record_id]]
+        return super().links(noun, record_id)
+
+    def ancestors(self, table, row):
+        connection = self.db.conn
+        rows = self._rows
+        def fetch(_connection, _table, record_id):
+            if record_id not in rows:
+                rows[record_id] = list_service._row_by_id(connection, table, record_id)
+            return dict(rows[record_id])
+        return list_service.hierarchy_ancestors(self.db, table, row, fetch=fetch)
+
+    def collections(self, noun, record_id):
+        if noun == self.noun and record_id in self._collections:
+            return self._collections[record_id]
+        return super().collections(noun, record_id)
+
+    def label(self, table, record_id):
+        if record_id is None:
+            return None
+        key = (table.name, record_id)
+        if key not in self._labels:
+            self._labels[key] = super().label(table, record_id)
+        return self._labels[key]
+
+    def item_profiles(self, vendor_id):
+        if self.noun == "vendor" and vendor_id in self._profiles:
+            return [dict(x) for x in self._profiles[vendor_id]]
+        return super().item_profiles(vendor_id)
+
+
 def project_party_record(
     db: Database,
     noun: str,
@@ -2340,17 +2628,16 @@ def project_party_record(
     custom_values: tuple[Mapping[str, Any], ...] | None = None,
     collections: Mapping[str, tuple[Mapping[str, Any], ...]] | None = None,
     reveal_tax_suffix: bool = False,
+    page: PartyPage | None = None,
 ) -> dict[str, Any]:
-    """Return the complete scalar public projection for one party record."""
+    """Return the complete scalar public projection for one party record.
+
+    ``page`` reads the facts beyond the row for a whole list at once (PartyPage); the
+    projection is the same with or without it."""
     values = dict(row)
+    reads = page if page is not None else _DirectReads(db)
     custom = (
-        tuple(
-            custom_fields.read_owner_values(
-                db,
-                record_type=noun.replace("-", "_"),
-                record_id=str(row["id"]),
-            )
-        )
+        reads.custom_values(noun.replace("-", "_"), str(row["id"]))
         if custom_values is None
         else custom_values
     )
@@ -2362,11 +2649,11 @@ def project_party_record(
         )
     }
     if noun == "customer":
-        from bookflow.company.customer_balances import own_balance, family_balance
-        net = Money(own_balance(db, str(values["id"])), _home_currency(db)).to_dict()
-        vendor_links = _customer_vendor_links(db, "customer", str(values["id"]))
-        ancestors = list_service.hierarchy_ancestors(db, schema.customers, row)
-        stored_collections = collections or read_party_collections(db, "customer", str(values["id"]))
+        home = reads.home()
+        net = Money(reads.own(str(values["id"])), home).to_dict()
+        vendor_links = reads.links("customer", str(values["id"]))
+        ancestors = reads.ancestors(schema.customers, row)
+        stored_collections = collections or reads.collections("customer", str(values["id"]))
         effective_addresses, effective_address_source = _effective_collection(
             db,
             values,
@@ -2374,6 +2661,7 @@ def project_party_record(
             mode_field="address_mode",
             collection="shipping_addresses",
             root_collections=stored_collections,
+            reads=reads,
         )
         effective_contacts, effective_contact_source = _effective_collection(
             db,
@@ -2382,6 +2670,7 @@ def project_party_record(
             mode_field="contact_mode",
             collection="contacts",
             root_collections=stored_collections,
+            reads=reads,
         )
         public_contacts = _public_contacts(effective_contacts)
         result = {
@@ -2428,8 +2717,8 @@ def project_party_record(
             "balances_available": True,
             "current_balance": net,
             "open_balance": net,
-            "family_balance": Money(family_balance(db, str(values["id"])), _home_currency(db)).to_dict(),
-            "prepayment_held": Money(_prepayment_held(db, str(values["id"])), _home_currency(db)).to_dict(),
+            "family_balance": Money(reads.family(str(values["id"])), home).to_dict(),
+            "prepayment_held": Money(reads.held(str(values["id"])), home).to_dict(),
             "customer_or_job": "job" if values["parent_id"] is not None else "customer",
         }
         address, address_source = _effective_customer_address(values, ancestors)
@@ -2452,11 +2741,11 @@ def project_party_record(
         result["job_sales_rep_id"] = values["job_sales_rep_id"]
         result["effective_sales_rep_id"] = sales_rep
         result["sales_rep_source_id"] = sales_rep_source
-        result["customer_type"] = _reference_label(db, schema.customer_types, result["effective_customer_type_id"])
-        result["job_type"] = _reference_label(db, schema.job_types, values["job_type_id"])
-        result["sales_rep"] = _reference_label(db, schema.sales_reps, sales_rep)
-        result["terms"] = _reference_label(db, schema.terms, result["effective_terms_id"])
-        result["payment_method"] = _reference_label(db, schema.payment_methods, result["effective_preferred_payment_method_id"])
+        result["customer_type"] = reads.label(schema.customer_types, result["effective_customer_type_id"])
+        result["job_type"] = reads.label(schema.job_types, values["job_type_id"])
+        result["sales_rep"] = reads.label(schema.sales_reps, sales_rep)
+        result["terms"] = reads.label(schema.terms, result["effective_terms_id"])
+        result["payment_method"] = reads.label(schema.payment_methods, result["effective_preferred_payment_method_id"])
         return result
 
     address = _address_output(values, "address")
@@ -2466,23 +2755,22 @@ def project_party_record(
         **{field: values.get(field) for field in _PERSON_FIELDS},
         "address": address,
         "default_class_id": values.get("default_class_id"),
-        "default_class": _reference_label(db, schema.classes, values.get("default_class_id")),
+        "default_class": reads.label(schema.classes, values.get("default_class_id")),
         "notes": values.get("notes"),
         "custom_fields": list(custom),
     }
     if noun == "vendor":
-        from bookflow.company.customer_balances import vendor_balance
-        owed = Money(vendor_balance(db, str(values["id"])), _home_currency(db)).to_dict()
-        customer_links = _customer_vendor_links(db, "vendor", str(values["id"]))
-        party_collections = collections or read_party_collections(db, "vendor", str(values["id"]))
+        owed = Money(reads.owed(str(values["id"])), reads.home()).to_dict()
+        customer_links = reads.links("vendor", str(values["id"]))
+        party_collections = collections or reads.collections("vendor", str(values["id"]))
         public_contacts = _public_contacts(party_collections.get("contacts", ()))
         return {
             **base,
             "company_name": values["company_name"],
             "terms_id": values["terms_id"],
-            "terms": _reference_label(db, schema.terms, values["terms_id"]),
+            "terms": reads.label(schema.terms, values["terms_id"]),
             "vendor_type_id": values["vendor_type_id"],
-            "vendor_type": _reference_label(db, schema.vendor_types, values["vendor_type_id"]),
+            "vendor_type": reads.label(schema.vendor_types, values["vendor_type_id"]),
             "billing_rate_level_id": None,
             "account_number": values["account_number"],
             "print_name_on_check_as": values["print_name_on_check_as"],
@@ -2497,7 +2785,7 @@ def project_party_record(
                 None,
             ),
             "customer_links": customer_links,
-            "item_vendor_profiles": _vendor_item_profiles(db, str(values["id"])),
+            "item_vendor_profiles": reads.item_profiles(str(values["id"])),
             "last_purchase_date": None,
             "last_purchase_cost": None,
             "contacts": public_contacts,

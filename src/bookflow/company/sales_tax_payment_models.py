@@ -50,6 +50,9 @@ class SalesTaxPayInput(_Input):
     funding_account: _Selector
     method: _Selector
     check_number: CheckNumber | None = None
+    to_be_printed: bool = Field(default=False, title='Print later', description=(
+        'Print later: save the check with no number and put it in the funding bank account\'s print queue; '
+        '`check print` numbers it when it prints. Needs a check method on a bank account, and no check_number.'))
     reference: Reference | None = None
     memo: Text | None = None
     number: _Number | None = None
@@ -155,6 +158,9 @@ class SalesTaxPaymentSummaryOutput(CommonOut):
     total: MoneyOutput
     total_minor_units: int
     currency: str
+    print_status: Literal['queued', 'in_run', 'printed'] | None = Field(default=None, exclude_if=lambda value: value is None, description=(
+        'For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting '
+        '"Did checks print OK?") or printed.'))
     # What the agency was owed through `through_date` when the remittance was written, and
     # what that figure became once this document posted. Both are captured rather than
     # recomputed on read, so the document says what the books said at the moment it was made.
