@@ -1,7 +1,7 @@
 {% extends "base.html" %}{% block title %}Sites and transfers{% endblock %}{% block body %}<section id="inventory-sites">
 <nav class="crumbs"><a href="/c/{{ company_id }}/_group/items">Items</a> / Sites and transfers</nav>
 <h1>Sites and transfers</h1>
-<p class="actions"><a href="/c/{{ company_id }}/report/quantity-by-site">Quantity on hand by site</a> <a href="/c/{{ company_id }}/report/stock-status">Stock status</a></p>
+<p class="actions"><a href="/c/{{ company_id }}/report/quantity-by-site">Quantity on hand by site</a>{% if binned %} <a href="/c/{{ company_id }}/report/items-by-bin">Items by bin</a>{% endif %} <a href="/c/{{ company_id }}/report/stock-status">Stock status</a></p>
 {% if result %}<div role="status" class="notice" data-site-result><strong>{{ result }}</strong></div>{% endif %}
 {% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
 <section class="workspace-card" aria-label="Stock by site">
@@ -24,9 +24,10 @@
 <label>To site <select name="to_site" required>{% for s in sites if s.active %}<option value="{{ s.name }}" {% if values.get('to_site', default_to) == s.name %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></label>
 <label>Date <input type="date" name="date" value="{{ values.get('date', today) }}"></label>
 {% from "scan_field.html" import scan_field %}{{ scan_field(company_id, 'rows') }}<script src="{{ static_urls['scan.js'] }}" defer></script>
-<div class="table-wrap"><table class="list-table" data-transfer-lines><thead><tr><th>Item</th><th>Quantity</th></tr></thead><tbody>
-{% for n in range(lines) %}<tr><td data-label="Item"><input name="item_{{ n }}" list="site-items" value="{{ values.get('item_' ~ n, '') }}" aria-label="Item {{ n + 1 }}"></td><td data-label="Quantity"><input name="quantity_{{ n }}" inputmode="decimal" size="8" value="{{ values.get('quantity_' ~ n, '') }}" aria-label="Quantity {{ n + 1 }}"></td></tr>{% endfor %}
+<div class="table-wrap"><table class="list-table" data-transfer-lines><thead><tr><th>Item</th><th>Quantity</th>{% if binned %}<th>From bin</th><th>To bin</th>{% endif %}</tr></thead><tbody>
+{% for n in range(lines) %}<tr><td data-label="Item"><input name="item_{{ n }}" list="site-items" value="{{ values.get('item_' ~ n, '') }}" aria-label="Item {{ n + 1 }}"></td><td data-label="Quantity"><input name="quantity_{{ n }}" inputmode="decimal" size="8" value="{{ values.get('quantity_' ~ n, '') }}" aria-label="Quantity {{ n + 1 }}"></td>{% if binned %}<td data-label="From bin"><input name="from_bin_{{ n }}" list="site-bins" size="8" value="{{ values.get('from_bin_' ~ n, '') }}" aria-label="From bin {{ n + 1 }}"></td><td data-label="To bin"><input name="to_bin_{{ n }}" list="site-bins" size="8" value="{{ values.get('to_bin_' ~ n, '') }}" aria-label="To bin {{ n + 1 }}"></td>{% endif %}</tr>{% endfor %}
 </tbody></table></div>
+{% if binned %}<datalist id="site-bins">{% for b in bins %}<option value="{{ b.full_name }}">{{ b.site_name }}</option>{% endfor %}</datalist><p><small>Between two bins of one site, choose that site as both From and To.</small></p>{% endif %}
 <datalist id="site-items">{% for name in items %}<option value="{{ name }}">{% endfor %}</datalist>
 <label>Memo <input name="memo" value="{{ values.get('memo', '') }}"></label>
 <label>Reason (shown in the audit trail) <input name="ctx:reason" value="{{ values.get('ctx:reason', '') }}" placeholder="Load the van"></label>
@@ -37,21 +38,40 @@
 <section class="workspace-card" aria-label="Transfers">
 <h2>Transfers</h2>
 {% if transfers %}<form method="post" action="/c/{{ company_id }}/inventory/sites" hx-post="/c/{{ company_id }}/inventory/sites" hx-target="body" hx-swap="outerHTML"><div class="table-wrap"><table class="list-table" data-transfer-list><thead><tr><th>Number</th><th>Date</th><th>From</th><th>To</th><th>Lines</th><th>Status</th>{% if can_write %}<th></th>{% endif %}</tr></thead><tbody>
-{% for t in transfers %}<tr><td data-label="Number">{{ t.number }}</td><td data-label="Date">{{ t.date }}</td><td data-label="From">{{ t.from_site_name }}</td><td data-label="To">{{ t.to_site_name }}</td><td data-label="Lines">{% for l in t.lines %}{{ l.quantity }} {{ l.item_name }}{% if not loop.last %}, {% endif %}{% endfor %}</td><td data-label="Status">{{ t.status }}</td>{% if can_write %}<td>{% if t.status == 'posted' %}<button type="submit" name="action" value="void:{{ t.number }}:{{ t.version }}" aria-label="Void transfer {{ t.number }}">Void</button>{% endif %}</td>{% endif %}</tr>{% endfor %}
+{% for t in transfers %}<tr><td data-label="Number">{{ t.number }}</td><td data-label="Date">{{ t.date }}</td><td data-label="From">{{ t.from_site_name }}</td><td data-label="To">{{ t.to_site_name }}</td><td data-label="Lines">{% for l in t.lines %}{{ l.quantity }} {{ l.item_name }}{% if l.from_bin or l.to_bin %} ({{ l.from_bin or 'no bin' }} to {{ l.to_bin or 'no bin' }}){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</td><td data-label="Status">{{ t.status }}</td>{% if can_write %}<td>{% if t.status == 'posted' %}<button type="submit" name="action" value="void:{{ t.number }}:{{ t.version }}" aria-label="Void transfer {{ t.number }}">Void</button>{% endif %}</td>{% endif %}</tr>{% endfor %}
 </tbody></table></div>
 {% if can_write %}<label>Reason for a void <input name="ctx:reason" placeholder="Entered in error"></label>{% endif %}
 </form>{% else %}<p>No transfers yet.</p>{% endif %}
 </section>
 <section class="workspace-card" aria-label="Sites">
 <h2>Sites</h2>
-<div class="table-wrap"><table class="list-table" data-site-list><thead><tr><th>Site</th><th>Description</th><th>Items held</th><th>Default</th><th>Active</th></tr></thead><tbody>
-{% for s in sites %}<tr><td data-label="Site"><a href="/c/{{ company_id }}/inventory/sites?site={{ s.name|urlencode }}">{{ s.name }}</a></td><td data-label="Description">{{ s.description or '' }}</td><td data-label="Items held">{{ s.item_count }}</td><td data-label="Default">{{ 'yes' if s.is_default else '' }}</td><td data-label="Active">{{ 'yes' if s.active else 'no' }}</td></tr>{% endfor %}
+<form method="post" action="/c/{{ company_id }}/inventory/sites" hx-post="/c/{{ company_id }}/inventory/sites" hx-target="body" hx-swap="outerHTML">
+<div class="table-wrap"><table class="list-table" data-site-list><thead><tr><th>Site</th><th>Description</th><th>Items held</th><th>Default</th><th>Bins</th><th>Active</th></tr></thead><tbody>
+{% for s in sites %}<tr><td data-label="Site"><a href="/c/{{ company_id }}/inventory/sites?site={{ s.name|urlencode }}">{{ s.name }}</a></td><td data-label="Description">{{ s.description or '' }}</td><td data-label="Items held">{{ s.item_count }}</td><td data-label="Default">{{ 'yes' if s.is_default else '' }}</td><td data-label="Bins">{{ 'tracked' if s.tracks_bins else 'no' }}{% if can_write and s.active %} <button type="submit" name="action" value="bins:{{ s.name }}:{{ s.version }}:{{ 'off' if s.tracks_bins else 'on' }}" class="secondary" data-site-bins-toggle>{{ 'Stop tracking' if s.tracks_bins else 'Track bins' }}</button>{% endif %}</td><td data-label="Active">{{ 'yes' if s.active else 'no' }}</td></tr>{% endfor %}
 </tbody></table></div>
+{% if can_write %}<label>Reason for a bins change <input name="ctx:reason" placeholder="Shelving installed"></label>{% endif %}
+</form>
 {% if can_write %}<form method="post" action="/c/{{ company_id }}/inventory/sites" hx-post="/c/{{ company_id }}/inventory/sites" hx-target="body" hx-swap="outerHTML" data-site-form>
 <label>New site <input name="site_name" placeholder="Van 2"></label>
 <label>Description <input name="site_description"></label>
+<div><label class="check"><input type="checkbox" name="site_bins"> Track bins</label></div>
 <label>Reason <input name="ctx:reason" placeholder="A new van"></label>
 <div class="actions"><button type="submit" name="action" value="site">Add site</button></div>
 </form>{% endif %}
 </section>
+{% if binned %}<section class="workspace-card" aria-label="Bins" data-bin-card>
+<h2>Bins</h2>
+{% if bins %}<div class="table-wrap"><table class="list-table" data-bin-list><thead><tr><th>Site</th><th>Bin</th><th>Label</th><th class="num">Items held</th></tr></thead><tbody>
+{% for b in bins %}<tr><td data-label="Site">{{ b.site_name }}</td><td data-label="Bin"><a href="/c/{{ company_id }}/report/items-by-bin?bin={{ b.id }}">{{ b.full_name }}</a></td><td data-label="Label">{{ b.barcode or '' }}</td><td class="num" data-label="Items held">{{ b.item_count }}</td></tr>{% endfor %}
+</tbody></table></div>{% else %}<p>No bins yet.</p>{% endif %}
+{% if can_write %}<form method="post" action="/c/{{ company_id }}/inventory/sites" hx-post="/c/{{ company_id }}/inventory/sites" hx-target="body" hx-swap="outerHTML" data-bin-form>
+<label>Site <select name="bin_site">{% for s in binned %}<option value="{{ s.name }}" {% if values.get('bin_site') == s.name %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></label>
+<label>New bin <input name="bin_name" value="{{ values.get('bin_name', '') }}" placeholder="A4"></label>
+<label>Inside bin (optional) <input name="bin_parent" list="site-bins-all" value="{{ values.get('bin_parent', '') }}" placeholder="A"></label>
+<label>Label code (optional) <input name="bin_barcode" value="{{ values.get('bin_barcode', '') }}"></label>
+<datalist id="site-bins-all">{% for b in bins %}<option value="{{ b.full_name }}">{% endfor %}</datalist>
+<label>Reason <input name="ctx:reason" placeholder="New shelving"></label>
+<div class="actions"><button type="submit" name="action" value="bin" data-bin-save>Add bin</button></div>
+</form>{% endif %}
+</section>{% endif %}
 </section>{% endblock %}

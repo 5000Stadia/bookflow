@@ -113,6 +113,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `manufacturer_part_number` | string \| null | yes | yes | — | — |
 | `barcode` | string \| null | yes | yes | — | — |
 | `tracking` | string | no | no | "none" | — |
+| `cycle_class_id` | string \| null | no | yes | null | — |
 | `unit_of_measure_set_id` | string \| null | yes | yes | — | — |
 | `unit_of_measure_set` | string \| null | yes | yes | — | — |
 | `reorder_point_min` | string \| null | yes | yes | — | — |
@@ -254,6 +255,7 @@ Example JSON output:
   "created_by": "value",
   "created_via": "cli",
   "custom_fields": [],
+  "cycle_class_id": null,
   "default_class": null,
   "default_class_id": null,
   "deposit_account_id": null,
@@ -578,6 +580,7 @@ The same example as complete `bookflow_run` arguments:
 | `manufacturer_part_number` | `--manufacturer-part-number` | string \| null | no | yes | null | — |
 | `barcode` | `--barcode` | string \| null | no | yes | null | — |
 | `tracking` | `--tracking` | literal["none", "serial", "lot"] \| null | no | yes | null | Number tracking of an inventory part or assembly: none (the default), serial (each unit carries its own serial number) or lot (units carry a lot number and its expiry). Turning it on leaves the stock on hand unassigned; number it with `inventory assign`. |
+| `cycle_class_id` | `--cycle-class-id` | string \| null | no | yes | null | Cycle-count class of an inventory part or assembly (R104 increment 5): how often it is due to be counted at each site. Null: never due. |
 | `unit_of_measure_set_id` | `--unit-of-measure-set-id` | string \| null | no | yes | null | — |
 | `reorder_point_min` | `--reorder-point-min` | string \| null | no | yes | null | — |
 | `reorder_point_max` | `--reorder-point-max` | string \| null | no | yes | null | — |
@@ -703,6 +706,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `manufacturer_part_number` | string \| null | yes | yes | — | — |
 | `barcode` | string \| null | yes | yes | — | — |
 | `tracking` | string | no | no | "none" | — |
+| `cycle_class_id` | string \| null | no | yes | null | — |
 | `unit_of_measure_set_id` | string \| null | yes | yes | — | — |
 | `unit_of_measure_set` | string \| null | yes | yes | — | — |
 | `reorder_point_min` | string \| null | yes | yes | — | — |
@@ -840,6 +844,7 @@ Example JSON output:
   "created_by": "value",
   "created_via": "cli",
   "custom_fields": [],
+  "cycle_class_id": null,
   "default_class": null,
   "default_class_id": null,
   "deposit_account_id": null,
@@ -1064,6 +1069,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `manufacturer_part_number` | string \| null | yes | yes | — | — |
 | `barcode` | string \| null | yes | yes | — | — |
 | `tracking` | string | no | no | "none" | — |
+| `cycle_class_id` | string \| null | no | yes | null | — |
 | `unit_of_measure_set_id` | string \| null | yes | yes | — | — |
 | `unit_of_measure_set` | string \| null | yes | yes | — | — |
 | `reorder_point_min` | string \| null | yes | yes | — | — |
@@ -1205,6 +1211,7 @@ Example JSON output:
   "created_by": "value",
   "created_via": "cli",
   "custom_fields": [],
+  "cycle_class_id": null,
   "default_class": null,
   "default_class_id": null,
   "deposit_account_id": null,
@@ -1420,6 +1427,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].manufacturer_part_number` | string \| null | yes | yes | — | — |
 | `items[].barcode` | string \| null | yes | yes | — | — |
 | `items[].tracking` | string | no | no | "none" | — |
+| `items[].cycle_class_id` | string \| null | no | yes | null | — |
 | `items[].unit_of_measure_set_id` | string \| null | yes | yes | — | — |
 | `items[].unit_of_measure_set` | string \| null | yes | yes | — | — |
 | `items[].reorder_point_min` | string \| null | yes | yes | — | — |
@@ -1977,6 +1985,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `manufacturer_part_number` | string \| null | yes | yes | — | — |
 | `barcode` | string \| null | yes | yes | — | — |
 | `tracking` | string | no | no | "none" | — |
+| `cycle_class_id` | string \| null | no | yes | null | — |
 | `unit_of_measure_set_id` | string \| null | yes | yes | — | — |
 | `unit_of_measure_set` | string \| null | yes | yes | — | — |
 | `reorder_point_min` | string \| null | yes | yes | — | — |
@@ -2112,6 +2121,7 @@ Example JSON output:
   "created_by": "value",
   "created_via": "cli",
   "custom_fields": [],
+  "cycle_class_id": null,
   "default_class": null,
   "default_class_id": null,
   "deposit_account_id": null,
@@ -2393,6 +2403,7 @@ The same example as complete `bookflow_run` arguments:
 | `manufacturer_part_number` | `--manufacturer-part-number` | string \| null | no | yes | null | — |
 | `barcode` | `--barcode` | string \| null | no | yes | null | — |
 | `tracking` | `--tracking` | literal["none", "serial", "lot"] \| null | no | yes | null | Number tracking: none, serial or lot. Turning it on leaves stock on hand unassigned (`inventory assign` numbers it); turning it off is refused while units carry numbers. |
+| `cycle_class` | `--cycle-class` | string \| null | no | yes | null | Cycle-count class by name or id (A, B, C, ...): how often the item is due to be counted at each site; an empty string clears it (never due). `cycle-count classify` proposes classes from issued cost. |
 | `unit_of_measure_set_id` | `--unit-of-measure-set-id` | string \| null | no | yes | null | — |
 | `reorder_point_min` | `--reorder-point-min` | string \| null | no | yes | null | — |
 | `reorder_point_max` | `--reorder-point-max` | string \| null | no | yes | null | — |
@@ -2442,6 +2453,7 @@ The same example as complete `bookflow_run` arguments:
 | `site_settings[].site` | inside `--site-settings` JSON array | string | yes | no | — | Inventory site id or name.; minimum length 1; maximum length 200 |
 | `site_settings[].reorder_point_min` | inside `--site-settings` JSON array | string \| null | no | yes | null | Reorder minimum at this site in the base unit; null for none. |
 | `site_settings[].reorder_point_max` | inside `--site-settings` JSON array | string \| null | no | yes | null | Reorder maximum at this site in the base unit; null for none. |
+| `site_settings[].default_bin` | inside `--site-settings` JSON array | string \| null | no | yes | null | Bin stock of this item goes to and leaves from at this site when a line names none (id, full name or label); an empty string clears it. The site must track bins. |
 
 ### Command and context options
 
@@ -2520,6 +2532,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `manufacturer_part_number` | string \| null | yes | yes | — | — |
 | `barcode` | string \| null | yes | yes | — | — |
 | `tracking` | string | no | no | "none" | — |
+| `cycle_class_id` | string \| null | no | yes | null | — |
 | `unit_of_measure_set_id` | string \| null | yes | yes | — | — |
 | `unit_of_measure_set` | string \| null | yes | yes | — | — |
 | `reorder_point_min` | string \| null | yes | yes | — | — |
@@ -2662,6 +2675,7 @@ Example JSON output:
   "created_by": "value",
   "created_via": "cli",
   "custom_fields": [],
+  "cycle_class_id": null,
   "default_class": null,
   "default_class_id": null,
   "deposit_account_id": null,

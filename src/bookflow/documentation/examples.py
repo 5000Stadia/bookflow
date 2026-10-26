@@ -1659,3 +1659,29 @@ EXAMPLES.update({
                                          {'number': 'WH-1001'}),
     'report lot-trace': Example('bookflow report lot-trace --number S-2611' + _C + ' --json', {'number': 'S-2611'}),
 })
+# Bins and cycle counts (R104 increment 5).
+_C = ' --company "Demo Plumbing Co"'
+EXAMPLES.update({
+    'bin create': Example('bookflow bin create --site Warehouse --name Top --parent A3 --barcode 2000000001036' + _C
+                          + ' --reason "Top shelf of bay A3" --json',
+                          {'site': 'Warehouse', 'name': 'Top', 'parent': 'A3', 'barcode': '2000000001036'}),
+    'bin update': Example('bookflow bin update A3 --site Warehouse --description "Kits and fittings"' + _C
+                          + ' --reason "Bay contents changed" --json',
+                          {'bin': 'A3', 'site': 'Warehouse', 'description': 'Kits and fittings'}),
+    'bin activate': Example('bookflow bin activate A3:Top' + _C + ' --reason "Shelf back in use" --json', {'bin': 'A3:Top'}),
+    'bin deactivate': Example('bookflow bin deactivate A3:Top' + _C + ' --reason "Shelf removed" --json', {'bin': 'A3:Top'}),
+    'bin show': Example('bookflow bin show A2 --site Warehouse' + _C + ' --json', {'bin': 'A2', 'site': 'Warehouse'}),
+    'bin list': Example('bookflow bin list --site Warehouse' + _C + ' --json', {'site': 'Warehouse'}),
+    'report items-by-bin': Example('bookflow report items-by-bin --site Warehouse' + _C + ' --json', {'site': 'Warehouse'}),
+    'cycle-class create': Example('bookflow cycle-class create --name D --interval-days 730' + _C
+                                  + ' --reason "Obsolete stock every two years" --json', {'name': 'D', 'interval_days': 730}),
+    'cycle-class update': Example('bookflow cycle-class update A --interval-days 28' + _C
+                                  + ' --reason "Count fast movers every four weeks" --json', {'cycle_class': 'A', 'interval_days': 28}),
+    'cycle-class activate': Example('bookflow cycle-class activate D' + _C + ' --reason "Back in use" --json', {'cycle_class': 'D'}),
+    'cycle-class deactivate': Example('bookflow cycle-class deactivate D' + _C + ' --reason "Not used" --json', {'cycle_class': 'D'}),
+    'cycle-class show': Example('bookflow cycle-class show A' + _C + ' --json', {'cycle_class': 'A'}),
+    'cycle-class list': Example('bookflow cycle-class list' + _C + ' --json', {}),
+    'cycle-count classify': Example('bookflow cycle-count classify --date-to 2026-12-31 --dry-run' + _C + ' --json',
+                                    {'date_to': '2026-12-31'}),
+    'cycle-count due': Example('bookflow cycle-count due --site Warehouse' + _C + ' --json', {'site': 'Warehouse'}),
+})

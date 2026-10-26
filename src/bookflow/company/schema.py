@@ -1240,8 +1240,15 @@ items.append_column(_serial_lot_schema.tracking_column(_column))
 globals().update(_serial_lot_schema.define_tables(metadata, _column, _table))
 sa.Index("ix_inventory_placements_serial", inventory_placements.c.serial_number_id)
 sa.Index("ix_inventory_placements_lot", inventory_placements.c.lot_id)
+<<<<<<< HEAD
 # Landed cost (co0098, R104 increment 6): allocations, their lines, and items' unit weight and volume.
 from bookflow.company import landed_cost_schema as _landed_cost_schema
 for _weight_column in _landed_cost_schema.weight_columns(_column):
     items.append_column(_weight_column)
 globals().update(_landed_cost_schema.define_tables(metadata, _column, _table))
+=======
+# Bins and cycle counts (co0097, R104 increment 5): cycle classes and items.cycle_class_id.
+from bookflow.company import bin_cycle_schema as _bin_cycle_schema
+globals().update(_bin_cycle_schema.define_tables(metadata, _column, _table, _common))
+items.append_column(_bin_cycle_schema.cycle_class_column(_column))
+>>>>>>> main

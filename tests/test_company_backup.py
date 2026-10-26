@@ -185,8 +185,10 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0095 = importlib.import_module("bookflow.storage.company_migrations.versions.0095_serial_lot_numbers")
     co0098 = importlib.import_module("bookflow.storage.company_migrations.versions.0098_landed_cost")
 
+    co0097 = importlib.import_module("bookflow.storage.company_migrations.versions.0097_bins_cycle_counts")
+
     def older(conn):
-        # Newest first: co0098 (on co0095): its guards, co0093's true-up guard put back, its tables and item columns.
+        # Newest first: co0098 (on co0097): its guards, co0093's true-up guard put back, its tables and item columns.
         for trigger in co0098.TRIGGERS:
             conn.execute(f"DROP TRIGGER {trigger}")
         conn.execute("DROP TRIGGER inventory_movements_true_up_link")
@@ -195,6 +197,11 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
             conn.execute(f"DROP TABLE {table}")
         for column in co0098.ITEM_COLUMNS:
             conn.execute(f"ALTER TABLE items DROP COLUMN {column}")
+        # Then co0097 (on co0095): its guards, items.cycle_class_id and cycle_classes.
+        for trigger in co0097.TRIGGERS:
+            conn.execute(f"DROP TRIGGER {trigger}")
+        conn.execute("ALTER TABLE items DROP COLUMN cycle_class_id")
+        conn.execute("DROP TABLE cycle_classes")
         # Then co0095 (on co0096), then co0096 (on co0085), co0085 (on co0093), co0093, co0094, co0092 and co0091.
         for trigger in co0095.TRIGGERS:
             conn.execute(f"DROP TRIGGER {trigger}")  # co0095's guards

@@ -440,7 +440,7 @@ def test_co0098_on_a_populated_company_changes_no_existing_row_and_records_recei
         conn.execute("DELETE FROM accounts WHERE system_role = 'landed_cost_clearing'")
         for column in m.ITEM_COLUMNS:
             conn.execute(f'ALTER TABLE items DROP COLUMN {column}')
-        conn.execute("UPDATE alembic_version SET version_num='co0095'")
+        conn.execute("UPDATE alembic_version SET version_num='co0097'")
         conn.commit()
         names = [r[0] for r in conn.execute("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' "
                                             "AND name != 'alembic_version'")]

@@ -91,7 +91,7 @@ NUMBER_LABELS = {'invoice': 'Invoice #', 'sales-receipt': 'Sale #', 'estimate': 
 # between Quantity and Rate it read as though it were one. It lives in the row's own
 # panel with the other per-line machinery instead, where it is still one click away.
 SALE_GRID = (('item', 'Item'), ('description', 'Description'), ('quantity', 'Quantity'),
-             ('unit', 'Unit of measure'), ('serial_numbers', 'Serial numbers'), ('lot', 'Lot'),
+             ('unit', 'Unit of measure'), ('bin', 'Bin'), ('serial_numbers', 'Serial numbers'), ('lot', 'Lot'),
              ('unit_price', 'Rate'), ('class_id', 'Class'), ('@amount', 'Amount'), ('tax_code', 'Tax'))
 
 WORK_GRID = (('item', 'Item'), ('description', 'Description'), ('quantity', 'Quantity'),
@@ -187,7 +187,7 @@ VENDOR_CREDIT_GRID = (('account', 'Account'), ('amount', 'Amount'), ('memo', 'Me
 # a computed figure -- the server derives quantity x cost when the cost is what was given --
 # so it is a typed column here too and there is no ``@amount`` asking the server for one.
 BILL_ITEM_GRID = (('item', 'Item'), ('description', 'Description'), ('quantity', 'Qty'),
-                  ('serial_numbers', 'Serial numbers'), ('lot', 'Lot'), ('unit_cost', 'Cost'), ('amount', 'Amount'),
+                  ('bin', 'Bin'), ('serial_numbers', 'Serial numbers'), ('lot', 'Lot'), ('unit_cost', 'Cost'), ('amount', 'Amount'),
                   ('customer', 'Customer:Job'), ('billable', 'Billable'), ('class_id', 'Class'))
 
 # What a head means on the Items grid rather than on a sale. The same word does not mean the
@@ -259,7 +259,7 @@ WIDTHS = {'item': ('minmax(9rem, 1.2fr)', 9), 'description': ('minmax(9rem, 1.5f
           'source_line': ('minmax(8rem, 1.1fr)', 8),
           'credit_memo': ('minmax(11rem, 2fr)', 11),
           'payment': ('minmax(11rem, 2fr)', 11),
-          'serial_numbers': ('minmax(8rem, 1fr)', 8), 'lot': ('6.5rem', 6.5)}
+          'serial_numbers': ('minmax(8rem, 1fr)', 8), 'lot': ('6.5rem', 6.5), 'bin': ('6rem', 6)}
 ACTIONS_WIDTH = ('4.5rem', 4.5)
 
 # Per-line controls that belong to pricing machinery rather than the document grid.
@@ -576,6 +576,9 @@ def hidden_columns(company):
     # in each row's own panel otherwise.
     if not info.get('tracks_numbers'):
         hidden.extend(('serial_numbers', 'lot'))
+    # A Bin column only once a site tracks bins (R104 increment 5).
+    if not info.get('tracks_bins'):
+        hidden.append('bin')
     return tuple(hidden)
 
 

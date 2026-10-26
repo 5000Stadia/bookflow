@@ -24,7 +24,16 @@ def _drop_blanks(value):
 LineLot = Annotated[Number | None, BeforeValidator(_blank_is_none)]
 LineSerials = Annotated[list[Number] | None, BeforeValidator(_drop_blanks)]
 
-NUMBER_FIELDS = ('lot', 'lot_expiry', 'serial_numbers')
+# A blank bin cell is no bin named (R104 increment 5).
+LineBin = Annotated[Selector | None, BeforeValidator(_blank_is_none)]
+
+NUMBER_FIELDS = ('lot', 'lot_expiry', 'serial_numbers', 'bin')
+BIN_HELP = ("Bin at the line's site the units go to or leave from (R104 increment 5), by id, full name such as "
+            "A:3 or label code; the site must track bins. \"(no bin)\" names the units outside every bin. Omitted: the "
+            "bin the line's stock stood in (a correction), its sale's bin (a return), else the item's default bin at "
+            "the site, else no bin -- and an outgoing line takes its units from the default bin when it holds them, "
+            "else from no bin, else from the bins holding them, never driving a bin below zero while the units are "
+            "elsewhere at the site.")
 LOT_HELP = ("Lot number of a lot-tracked item: the lot an incoming line receives into (made when new), or the lot an "
             "outgoing line takes from. Omitted on an outgoing line, the units leave unassigned and the result names "
             "the earliest-expiring lot in stock there.")
@@ -65,6 +74,7 @@ class AssignInput(_Strict):
     lot_expiry: IsoDate | None = Field(None, description='Expiry date of a new lot.')
     quantity: str | None = Field(None, description='How many units go into or out of the lot; serial numbers count themselves.')
     site: Selector | None = Field(None, description="Site the units are at; omitted, the document line's site, else the default site.")
+    bin: Selector | None = Field(None, description="Bin the units are in, at a site that tracks bins; omitted, the document line's bin, else no bin.")
     date: IsoDate | None = Field(None, description='Date the units are numbered on; omitted, today (or the document line\'s own date).')
     count_position: Literal['before', 'after'] | None = Field(None, description='Before (the default) or after a count of the site on that date.')
     document: Selector | None = Field(None, description=(

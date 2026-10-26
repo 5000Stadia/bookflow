@@ -151,6 +151,9 @@ class ItemInput(StrictModel):
         "Number tracking of an inventory part or assembly: none (the default), serial (each unit carries its own "
         "serial number) or lot (units carry a lot number and its expiry). Turning it on leaves the stock on hand "
         "unassigned; number it with `inventory assign`."))
+    cycle_class_id: str | None = Field(default=None, min_length=26, max_length=26, description=(
+        "Cycle-count class of an inventory part or assembly (R104 increment 5): how often it is due to be counted at "
+        "each site. Null: never due."))
     unit_of_measure_set_id: str | None = Field(default=None, min_length=26, max_length=26)
     reorder_point_min: str | None = None
     reorder_point_max: str | None = None
@@ -319,6 +322,7 @@ class ItemOutput(StrictModel):
     manufacturer_part_number: str | None
     barcode: str | None
     tracking: str = "none"
+    cycle_class_id: str | None = None
     unit_of_measure_set_id: str | None
     unit_of_measure_set: str | None
     reorder_point_min: str | None
@@ -382,7 +386,11 @@ _IDENTITY = frozenset({"name", "type", "parent_id", "category_id", "default_clas
 _SALES = frozenset({"description", "sales_enabled", "price", "income_account_id", "sales_tax_code_id"})
 _PURCHASE = frozenset({"purchase_description", "purchase_enabled", "cost", "expense_account_id", "preferred_vendor_id", "vendor_profiles"})
 _INVENTORY_PURCHASE = frozenset({"purchase_description", "purchase_enabled", "cost", "preferred_vendor_id", "vendor_profiles"})
+<<<<<<< HEAD
 _STOCK = frozenset({"cogs_account_id", "asset_account_id", "manufacturer_part_number", "barcode", "tracking", "unit_of_measure_set_id", "reorder_point_min", "reorder_point_max", "unit_weight", "unit_volume"})
+=======
+_STOCK = frozenset({"cogs_account_id", "asset_account_id", "manufacturer_part_number", "barcode", "tracking", "cycle_class_id", "unit_of_measure_set_id", "reorder_point_min", "reorder_point_max"})
+>>>>>>> main
 _FIXED = frozenset({
     "asset_number", "purchase_date", "original_cost", "vendor_id", "location", "serial_number",
     "warranty_expiration", "disposal_status", "disposal_date", "disposal_proceeds",
@@ -824,6 +832,7 @@ def _owner_values(db: Database, parsed: ItemInput, *, supplied: set[str], refere
         values[field] = getattr(parsed, field)
     values["preferred_vendor_id"] = parsed.preferred_vendor_id
     values["tracking"] = parsed.tracking or "none"   # R104 increment 4
+    values["cycle_class_id"] = parsed.cycle_class_id   # R104 increment 5
     for field in _MONEY_FIELDS:
         values.update(_money(getattr(parsed, field), db, field))
     for field, column in _PERCENT_FIELDS.items():
@@ -1132,6 +1141,8 @@ def _payload_from_state(owner: Mapping[str, Any], members: Sequence[Mapping[str,
     payload.update({field: owner[field] for field in _DIRECT_FIELDS if field not in {"category_id", "description", "purchase_description"}})
     if (owner.get("tracking") or "none") != "none":
         payload["tracking"] = owner["tracking"]
+    if owner.get("cycle_class_id"):
+        payload["cycle_class_id"] = owner["cycle_class_id"]
     for field in _MONEY_FIELDS:
         payload[field] = _money_input(owner, field)
     for field, column in _PERCENT_FIELDS.items():
@@ -1977,7 +1988,7 @@ def project_item(
             "purchase_description", "sales_enabled", "purchase_enabled", "income_account_id",
             "expense_account_id", "cogs_account_id", "asset_account_id", "deposit_account_id",
             "liability_account_id", "default_class_id", "sales_tax_code_id",
-            "manufacturer_part_number", "barcode", "tracking", "unit_of_measure_set_id", "preferred_vendor_id",
+            "manufacturer_part_number", "barcode", "tracking", "cycle_class_id", "unit_of_measure_set_id", "preferred_vendor_id",
             "notes", "print_members", "payment_method_id", "use_undeposited_funds",
             "tax_agency_vendor_id", "asset_number", "purchase_date", "vendor_id", "location",
             "serial_number", "warranty_expiration", "disposal_status", "disposal_date",

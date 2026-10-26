@@ -19,7 +19,7 @@ import time
 from alembic import op
 
 revision = 'co0098'
-down_revision = 'co0095'
+down_revision = 'co0097'
 branch_labels = depends_on = None
 
 COLUMNS = ('ALTER TABLE items ADD COLUMN unit_weight_microunits BIGINT CONSTRAINT ck_items_unit_weight CHECK (unit_weight_microunits IS NULL OR unit_weight_microunits > 0)', 'ALTER TABLE items ADD COLUMN unit_volume_microunits BIGINT CONSTRAINT ck_items_unit_volume CHECK (unit_volume_microunits IS NULL OR unit_volume_microunits > 0)')
