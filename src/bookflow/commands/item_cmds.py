@@ -58,6 +58,9 @@ class ItemUpdateInput(StrictInput):
     sales_tax_code_id: str | None = Field(default=None, min_length=26, max_length=26)
     manufacturer_part_number: str | None = Field(default=None, max_length=128)
     barcode: str | None = Field(default=None, max_length=128)
+    tracking: Literal["none", "serial", "lot"] | None = Field(default=None, description=(
+        "Number tracking: none, serial or lot. Turning it on leaves stock on hand unassigned (`inventory assign` "
+        "numbers it); turning it off is refused while units carry numbers."))
     unit_of_measure_set_id: str | None = Field(default=None, min_length=26, max_length=26)
     reorder_point_min: str | None = None
     reorder_point_max: str | None = None

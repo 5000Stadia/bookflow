@@ -31,21 +31,21 @@ class SiteQuantity(_Strict):
 
 
 class BarcodeMatch(_Strict):
-    kind: str = Field(description="What the code names: `item` (bins, serial numbers and lots join as they gain codes).")
+    kind: str = Field(description="What the code names: `item`, else `serial_number` or `lot` (a scanned unit label); bins join with bins.")
     id: str
     name: str = Field(description="The record's full name.")
     type: str = Field(description="The item type.")
     active: bool
     barcode: str | None
     on_hand: list[SiteQuantity] = Field(description="Quantity on hand by site as of as_of; sites holding none are left out.")
-    line_fields: dict[str, str] = Field(description="Fields to put on a document line for this code, e.g. {\"item\": \"Copper Coupling\"}.")
+    line_fields: dict[str, Any] = Field(description="Fields to put on a document line for this code, e.g. {\"item\": \"Copper Coupling\"}, or {\"item\": \"Water Heater\", \"serial_numbers\": [\"WH-1\"]} for a serial label.")
 
 
 class BarcodeLookupOutput(_Strict):
     code: str
     as_of: str
     found: bool = Field(description="True when the code names exactly one record (preferring active ones).")
-    kind: str | None = Field(description="`item`, `ambiguous` when it names more than one, or null when nothing carries it.")
+    kind: str | None = Field(description="`item`, `serial_number`, `lot`, `ambiguous` when it names more than one, or null when nothing carries it.")
     match: BarcodeMatch | None = Field(description="The one record the code names; null when none or ambiguous.")
     matches: list[BarcodeMatch] = Field(description="Every record carrying the code, active first: two when a duplicate is kept.")
     ambiguous: bool

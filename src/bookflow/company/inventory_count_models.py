@@ -68,8 +68,10 @@ class CountEntryInput(_Input):
     item: Selector | None = Field(None, description='Item counted, by id, name or barcode.')
     code: str | None = Field(None, min_length=1, max_length=128, description="A scanned barcode naming the item.")
     bin: Selector | None = Field(None, description='Bin counted (bins arrive with a later increment).')
-    lot: Selector | None = Field(None, description='Lot counted (lots arrive with a later increment).')
-    serial_number: Selector | None = Field(None, description='Serial number counted (a later increment).')
+    lot: Selector | None = Field(None, description='Lot counted, of a lot-tracked item; omitted, the units are counted unassigned.')
+    serial_number: Selector | None = Field(None, description=(
+        'Serial number counted, of a serial-tracked item (quantity 1 when there, 0 when not); units whose number '
+        'cannot be read are counted without one, unassigned.'))
     quantity: Quantity = Field(description='Quantity counted at the place, in the item\'s base unit; 0 counts it empty.')
     mode: Literal['set', 'add'] = Field('set', description='set (the default): the place holds this many. add: this many more '
                                                           '(a scan adds 1).')

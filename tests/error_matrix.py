@@ -2341,7 +2341,7 @@ MATRIX['inventory-count create'] = {
     'E_DUPLICATE_NUMBER': 'the count number is already used',
     **_SITE_COMMON}
 MATRIX['inventory-count enter'] = {
-    'E_VALIDATION': 'a count that is not open, a non-stock item, an unknown or ambiguous code, a negative quantity, or a bin, lot or serial number',
+    'E_VALIDATION': 'a count that is not open, a non-stock item, an unknown or ambiguous code, a negative quantity, a bin, a lot or serial number of a kind the item does not track, a serial number the books hold at another site, or a serial number counted other than 0 or 1',
     'E_RECORD_NOT_FOUND': 'count or item absent from selected company',
     **_SITE_COMMON}
 MATRIX['inventory-count post'] = {
@@ -2377,3 +2377,22 @@ MATRIX['report inventory-valuation-detail'] = {
     'E_VALIDATION': 'a malformed date',
     'E_RECORD_NOT_FOUND': 'item absent from selected company',
 }
+# Serial and lot numbers (R104 increment 4).
+MATRIX['inventory assign'] = {
+    'E_VALIDATION': 'an untracked item, numbers of the wrong kind, a serial number named twice, already in stock or already gone, more units than the place (or the document line) holds unassigned, an unknown or ambiguous document, or a number not held there to unassign',
+    'E_RECORD_NOT_FOUND': 'item or site absent from selected company',
+    'E_INACTIVE_REFERENCE': 'an inactive site',
+    'E_PERIOD_CLOSED': 'a date on or before the closing date',
+    **_SITE_COMMON}
+for _noun in ('lot', 'serial-number'):
+    MATRIX[f'{_noun} update'] = {
+        'E_VALIDATION': 'a number two items share without the item named',
+        'E_RECORD_NOT_FOUND': 'no such number',
+        'E_VERSION_CONFLICT': 'the number changed since expected_version',
+        **_SITE_COMMON}
+    for _verb in ('show', 'list'):
+        MATRIX[f'{_noun} {_verb}'] = {'E_RECORD_NOT_FOUND': 'number, item or site absent from selected company',
+                                      'E_VALIDATION': 'a number two items share without the item named, or an unknown site'}
+for _report in ('serial-lot-stock', 'serial-lot-history', 'lot-trace'):
+    MATRIX[f'report {_report}'] = {'E_RECORD_NOT_FOUND': 'number, item or site absent from selected company',
+                                   'E_VALIDATION': 'a number that is both a serial number and a lot without kind, or an unknown site'}

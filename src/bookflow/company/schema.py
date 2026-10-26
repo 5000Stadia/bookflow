@@ -1227,3 +1227,9 @@ sa.Index("ix_items_barcode", items.c.barcode)
 sa.Index("ix_inventory_bins_barcode", inventory_bins.c.barcode)
 from bookflow.company.inventory_count_schema import define_tables as _define_inventory_count_tables
 globals().update(_define_inventory_count_tables(metadata, _column, _table, _common))
+# Serial and lot numbers (co0095, R104 increment 4): items.tracking and inventory assignments.
+from bookflow.company import serial_lot_schema as _serial_lot_schema
+items.append_column(_serial_lot_schema.tracking_column(_column))
+globals().update(_serial_lot_schema.define_tables(metadata, _column, _table))
+sa.Index("ix_inventory_placements_serial", inventory_placements.c.serial_number_id)
+sa.Index("ix_inventory_placements_lot", inventory_placements.c.lot_id)

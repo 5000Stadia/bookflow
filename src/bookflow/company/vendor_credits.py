@@ -353,18 +353,21 @@ def _line_semantic(line):
     return {'line_id': line['line_id'], 'family': line['family'], 'memo': line['memo'],
             'amount_minor_units': line['amount_minor_units'],
             'profile': line['profile'].model_dump(mode='json'),
-            **({'site_id': line['site_semantic']} if line.get('site_semantic') else {})}
+            **({'site_id': line['site_semantic']} if line.get('site_semantic') else {}),
+            **({'numbers': line['numbers_semantic']} if line.get('numbers_semantic') else {})}
 
 
 def saved_semantic(s, revision):
     """What the stored revision says about itself, in the shape a fresh resolution says it."""
     stored = profile_row(s, revision)
     sites = bills.saved_line_sites(s, revision)
+    numbers = bills.saved_line_numbers(s, revision)
     return dict(
         date=revision['date'], number=revision['number'], memo=revision['memo'],
         profile=VendorCreditProfile.model_validate_json(stored['profile_snapshot']).model_dump(mode='json'),
         lines=[_line_semantic(dict(line, profile=LINE_FACTS[line['family']].model_validate_json(
-            line['line_snapshot']), site_semantic=sites.get(line['line_id']))) for line in saved_lines(s, revision)])
+            line['line_snapshot']), site_semantic=sites.get(line['line_id']), numbers_semantic=numbers.get(line['line_id'])))
+            for line in saved_lines(s, revision)])
 
 
 def resolved_semantic(resolved):
@@ -727,6 +730,7 @@ def _stock_entries(pending, profile, lines=None):
     """
     items = {row['document_line_id']: row for row in pending['vendor_credit_item_lines']}
     sites = {position: line.get('site_id') for position, line in enumerate(lines or (), 1)}
+    numbers = {position: line.get('numbers') for position, line in enumerate(lines or (), 1)}
     entries = []
     for envelope in pending['document_lines']:
         line = items.get(envelope['id'])
@@ -739,6 +743,7 @@ def _stock_entries(pending, profile, lines=None):
         if entry is not None:
             entry.site_id = sites.get(envelope['position'])   # R104
             entry.line_identity = envelope['line_id']
+            entry.numbers = numbers.get(envelope['position'])
             entries.append(entry)
     return entries
 

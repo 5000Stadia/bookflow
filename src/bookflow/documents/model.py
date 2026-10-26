@@ -244,7 +244,12 @@ def _sales_rows(revision: Mapping[str, Any], columns) -> tuple[tuple[str, ...], 
                     else "Quoted" if line.get("pricing_basis") == "allocated" else "")
             unit = _label(snapshot.get("unit"))
             quantity = str(line["quantity"]) + (f" {unit}" if unit else "")
-        row = [_label(snapshot["item"]) or "", line.get("description") or ""]
+        description = line.get("description") or ""
+        if line.get("serial_numbers") or line.get("lot"):
+            # Serial numbers, lot and expiry print on the line (R104 increment 4).
+            from bookflow.company.serial_lots import printed
+            description = " \u2014 ".join(part for part in (description, printed(line)) if part)
+        row = [_label(snapshot["item"]) or "", description]
         if ordered:
             figures = line.get("order") or {}
             row += [figures.get("ordered", ""), figures.get("previously_invoiced", ""), figures.get("backordered", "")]

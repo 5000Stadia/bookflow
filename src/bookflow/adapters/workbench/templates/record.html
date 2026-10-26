@@ -20,6 +20,7 @@
 {% if work %}{% include "work_detail.html" %}{% endif %}
 {% if billing %}{% include "billing.html" %}{% endif %}
 {% if prepayments %}{% include "prepayments.html" %}{% endif %}
+{% if item_numbers %}{% include "item_numbers.html" %}{% endif %}
 {% if sale %}{% include "sales_detail.html" %}{% endif %}
 {% if purchase_history %}{% set history_label = 'Sale history' if sale else 'Purchase history' if purchase_noun else 'Journal history' %}{% set history_base = noun_base(company_id, purchase_noun) if purchase_noun else base %}<section aria-label="{{ history_label }}"><h2>{{ history_label }}</h2><ul>{% for revision in purchase_history['items'] %}<li><a href="{{ history_base }}/{{ record_id }}?include_deleted=1&revision_number={{ revision.revision_number }}">Revision {{ revision.revision_number }}</a> · {{ revision.date|longday }} · <time datetime="{{ revision.created_at }}" title="{{ revision.created_at|when }}">{{ revision.created_at|ago }}</time></li>{% endfor %}</ul>
 <nav aria-label="{{ history_label }} pages">{% if purchase_history_paging.previous_url %}<a rel="prev" href="{{ purchase_history_paging.previous_url }}">Previous revisions</a>{% endif %} {% if purchase_history_paging.next_url %}<a rel="next" href="{{ purchase_history_paging.next_url }}">Next revisions</a>{% endif %} {% if purchase_history_paging.first_url %}<a href="{{ purchase_history_paging.first_url }}">First revisions</a>{% endif %}</nav></section>{% endif %}
