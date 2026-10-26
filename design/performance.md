@@ -180,13 +180,15 @@ it gets faster as increment 2 lands.
 
 ### Scenario timings
 
-Measured through the Python client, which is the full offline path a CLI call takes. ms is
-client wall time; "stmts" is SQL statements per call; "rows" is the longest list in or out.
+Measured through the Python client, which is the full offline path a CLI call takes. p50 is the
+client wall time over the timed repetitions. Max is the largest time inside `execute` that the
+timings store recorded, warm-up included (the bench's own run file was not written because the
+run was stopped); "stmts" is SQL statements per call; "rows" is the longest list in or out.
 Five timed repetitions after a warm-up, except where the reps column says otherwise.
 
-| scenario | command | reps | p50 ms | max ms | stmts | SQL ms (p50) | rows | load |
+| scenario | command | reps | p50 ms | max ms in execute | stmts | SQL ms (p50) | rows | load |
 |---|---|---|---|---|---|---|---|---|
-| home | company show | 5 | 43 | 44 | 45 | 16 | 7 | 34.6 |
+| home | company show | 5 | 43 | 35 | 45 | 16 | 7 | 34.6 |
 | register, newest 50 | register query | 5 | 3,552 | 4,109 | 224 | 3,390 | 50 | 34.6 |
 | customer list | customer list | 5 | 170,055 | 237,991 | 20,048 | 157,216 | 2,001 | 37.9 |
 | item list | item list | 5 | 153 | 405 | 49 | 21 | 400 | 37.9 |
