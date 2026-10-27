@@ -165,7 +165,7 @@ def test_install_setup_connect_and_post_an_invoice_as_the_agent_for_the_owner(in
         assert "Bookflow is ready at " + url in (root / "host.log").read_text()
         assert {s["step"]: s["status"] for s in first["steps"]} == {
             "owner": "created", "organization": "created", "company": "created", "agent": "created",
-            "works for": "created", "access": "updated", "authorized": "created", "token": "created",
+            "works for": "created", "access": "created", "authorized": "created", "token": "created",
             "mcp config": "created", "owner password": "created", "host": "created"}
         token_file = Path(first["token_file"])
         assert oct(token_file.stat().st_mode & 0o777) == "0o600"
@@ -257,3 +257,129 @@ def test_install_setup_connect_and_post_an_invoice_as_the_agent_for_the_owner(in
                 except ProcessLookupError:
                     break
                 time.sleep(0.1)
+
+
+# ---------------------------------------------------------------- a person's decisions survive a rerun (review F1-F4)
+
+def _setup(client, root, project, **extra):
+    data = {"company": COMPANY, "owner_name": "Dana Ruiz", "serve": False,
+            "mcp_config": str(project / ".mcp.json"), **extra}
+    return client.run("setup", data)
+
+
+def _steps(out):
+    return {s["step"]: s["status"] for s in out["steps"]}
+
+
+def _role(client, out):
+    rows = client.run("membership list", {"user": out["agent"]["username"], "company": out["company"]["company_id"]})["items"]
+    return [m["role"] for m in rows if m["active"]]
+
+
+@pytest.fixture
+def books(tmp_path, monkeypatch):
+    import bookflow
+    root = tmp_path / "books"
+    project = tmp_path / "project"
+    project.mkdir()
+    monkeypatch.setenv("BOOKFLOW_DATA_ROOT", str(root))
+    monkeypatch.delenv("BOOKFLOW_COMPANY", raising=False)
+    return bookflow.connect(data_root=str(root)), root, project
+
+
+@pytest.mark.timeout(600)
+def test_a_rerun_keeps_a_narrowed_role_and_never_reassigns_or_reauthorizes(books):
+    client, root, project = books
+    first = _setup(client, root, project)
+    assert first["agent"]["role"] == "standard" and _role(client, first) == ["standard"]
+    owner = first["owner"]["username"]
+
+    # The owner narrows the agent to read-only; a plain rerun keeps it so and does not reauthorize it.
+    client.run("membership grant", {"user": "assistant", "company": first["company"]["company_id"], "role": "readonly"},
+               reason="owner narrows")
+    narrowed = client.run("agent show", {"agent": "assistant"})["authority"]
+    again = _setup(client, root, project)
+    assert _role(client, again) == ["readonly"] and again["agent"]["role"] == "readonly"
+    after = client.run("agent show", {"agent": "assistant"})["authority"]
+    assert after["suspended"] == narrowed["suspended"] and after["fresh_context_ack_at"] == narrowed["fresh_context_ack_at"]
+    if narrowed["suspended"]:
+        assert _steps(again)["authorized"] == "stopped" and "--acknowledge-fresh-context" in json.dumps(again["next_steps"]) \
+            or _steps(again)["authorized"] == "stopped"
+
+    # The owner unassigns it; a rerun asking for admin changes nothing and says how a person restores it.
+    shown = client.run("agent show", {"agent": "assistant"})
+    client.run("agent unassign", {"agent": "assistant", "principal": owner,
+                                  "expected_version": shown["authority"]["version"]}, reason="owner stops the agent")
+    stopped = _setup(client, root, project, role="admin")
+    assert _steps(stopped)["works for"] == "stopped" and stopped["agent"]["stopped"]
+    assert any(f"bookflow agent assign assistant --principal {owner}" in n for n in stopped["next_steps"])
+    assert client.run("agent show", {"agent": "assistant"})["principals"] == []
+    assert _role(client, stopped) == ["readonly"]
+
+
+@pytest.mark.timeout(600)
+def test_a_revoked_token_stays_revoked_until_a_person_asks_and_the_config_keeps_its_mode(books):
+    client, root, project = books
+    first = _setup(client, root, project)
+    config = project / ".mcp.json"
+    os.chmod(config, 0o600)
+    meta = json.loads((root / "agents" / "assistant.json").read_text())
+    client.run("token revoke", {"token": meta["token_id"]}, reason="owner revokes the agent's token")
+    again = _setup(client, root, project, bind="127.0.0.1:18799")  # the server entry changes, the file is rewritten
+    assert _steps(again)["token"] == "stopped" and _steps(again)["mcp config"] == "updated"
+    assert oct(config.stat().st_mode & 0o777) == "0o600"
+    live = client.run("token list", {"user": first["agent"]["user_id"]})["items"]
+    assert live == []
+    renewed = _setup(client, root, project, bind="127.0.0.1:18799", new_token=True)
+    assert _steps(renewed)["token"] == "updated"
+    assert len(client.run("token list", {"user": first["agent"]["user_id"]})["items"]) == 1
+    assert not list(project.glob(".*.tmp")) and not list((root / "agents").glob(".*.tmp"))
+
+
+def test_a_token_path_that_is_a_directory_is_a_clean_error(books, tmp_path):
+    from bookflow import BookflowError
+    from bookflow.adapters.mcp.launcher import read_token_file
+    client, root, project = books
+    (root / "agents" / "assistant.token").mkdir(parents=True)
+    with pytest.raises(BookflowError) as setup_error:
+        _setup(client, root, project)
+    assert setup_error.value.code == "E_VALIDATION"
+    with pytest.raises(BookflowError) as launcher_error:
+        read_token_file(str(root / "agents" / "assistant.token"))
+    assert launcher_error.value.code == "E_UNAUTHENTICATED"
+
+
+def test_the_token_file_beats_an_exported_token_with_one_warning(tmp_path, monkeypatch, capsys):
+    from bookflow.adapters.mcp.launcher import launcher_secret
+    from bookflow.commands.mcp_cmds import McpInput
+    token = tmp_path / "agent.token"
+    token.write_text("from-the-file\n")
+    os.chmod(token, 0o600)
+    monkeypatch.setenv("BOOKFLOW_TOKEN", "from-the-shell")
+    assert launcher_secret(McpInput(token_file=str(token))) == "from-the-file"
+    assert capsys.readouterr().err.count("ignoring BOOKFLOW_TOKEN") == 1
+    assert launcher_secret(McpInput()) == "from-the-shell"
+
+
+def test_setup_will_not_take_another_program_for_its_host(books):
+    import http.server
+    import threading
+    from bookflow import BookflowError
+    client, root, project = books
+
+    class Health(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    stranger = http.server.HTTPServer(("127.0.0.1", 0), Health)
+    threading.Thread(target=stranger.serve_forever, daemon=True).start()
+    try:
+        with pytest.raises(BookflowError) as error:
+            _setup(client, root, project, serve=True, bind=f"127.0.0.1:{stranger.server_address[1]}")
+        assert error.value.code == "E_IO" and "not this data root's host" in error.value.message
+    finally:
+        stranger.shutdown()

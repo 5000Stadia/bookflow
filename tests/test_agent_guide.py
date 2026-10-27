@@ -66,10 +66,9 @@ def test_every_hand_authored_fence_is_classified():
             ("illustrative", "bash"),
             ("executable", "python"),
             ("illustrative", "bash"),
-            ("illustrative", "json"),  # a returned customer check in one step, `payment bounce` (R176)
-            ("illustrative", "json"),  # a bad debt written off without cash, `payment receive` at 0.00 (R177)
-            ("illustrative", "json"),  # a statement kept as an attachment, read by `reconcile import` (311b8f2)
-        ],
+            # Then one JSON example per everyday request: `payment bounce` (R176), a bad debt at 0.00 (R177),
+            # a statement read by `reconcile import` (311b8f2), and the requests added since.
+        ] + [("illustrative", "json")] * 23,
         "agent-install.md": [("illustrative", "sh"), ("illustrative", "sh"), ("illustrative", "json")],
         # Seed/serve, documentation generation, and financial statement examples.
         "reference-year.md": [("illustrative", "sh")] * 3,

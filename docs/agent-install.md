@@ -24,12 +24,12 @@ In one step it:
 
 - creates the books (in `~/.bookflow`, or `--data-root`) with the owner as their administrator; this computer's login is the owner's;
 - creates the company with that home currency and a chart of accounts (`--chart general`, or `service`, `product`, `contractor`, `retail`, `nonprofit`);
-- creates your own identity, `assistant` (`--agent`, `--agent-name`), working for the owner with the `standard` role (`--role`), so the audit trail records "Assistant for Dana Ruiz", never the owner alone;
+- creates your own identity, `assistant` (`--agent`, `--agent-name`), working for the owner with the `standard` role (`--role` chooses another), so the audit trail records "Assistant for Dana Ruiz", never the owner alone;
 - issues your token into an owner-only file beside the books and writes the `bookflow` server into `.mcp.json` (`--mcp-config PATH`); the file names the token file and never holds the secret;
 - makes a one-time link for the owner to set their password in the browser (`owner_link.url`; it works once and expires after two hours, `--link-minutes`);
 - starts the host in the background and returns once it answers (`url`; `GET <url>health` returns 200). `--no-serve` skips this.
 
-Rerunning `setup` with the same company is safe: it reports what exists, repairs what is missing and never makes anything twice. If the owner has not used their link yet, a rerun replaces it with a new one.
+Rerunning `setup` with the same company is safe: it reports what exists, adds what was never made and never makes anything twice. It keeps the agent's current role unless you pass `--role`. It never undoes a person's decision: if the owner unassigned or suspended the agent, revoked its access or revoked its token, setup reports that step as `stopped` with the command the owner runs to restore it, and changes nothing. If the owner has not used their link yet, a rerun replaces it with a new one.
 
 The JSON result holds everything: `company.company_id`, `agent`, `mcp_config`, `mcp_server` (the stdio command for any other MCP client), `token_file`, `url`, `owner_link`, `steps` and `next_steps`.
 
@@ -46,6 +46,7 @@ as the arguments to `bookflow_run`. The company is already selected. Every write
 
 ## What to tell the owner
 
+- You see the owner's link because you ran setup: hand it straight to the owner, and do not open it, keep it or use it yourself.
 - Open the link from `owner_link.url` on this computer and choose a password. It works once. After that, they log in at the `url` (for example http://127.0.0.1:8765/) with their username.
 - What you enter shows in the books as yours, made for them.
 - Some things stay theirs: the closing date, who can do what (people, roles, tokens), merging duplicates and backup schedules. You will ask them when one comes up.
@@ -54,4 +55,4 @@ as the arguments to `bookflow_run`. The company is already selected. Every write
 
 - After a restart of the computer, start the host again with `bookflow serve --background`. It prints the address once it answers.
 - When the chart is numbered (it is by default), give a new account the next free number in its type's range with `account create --number`, as the rest of the chart has, and check the numbers with `account list`.
-- To stop using your token, revoke it with `token revoke`. Rerunning `setup` issues a new one.
+- A revoked token stays revoked. Only the owner decides to issue a new one, with `bookflow setup --company "..." --new-token`.

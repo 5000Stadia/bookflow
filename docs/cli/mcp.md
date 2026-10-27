@@ -26,7 +26,7 @@ Expose Bookflow commands through three MCP tools over stdio.
 |---|---|---|---|---|---|---|
 | `url` | `--url` | string \| null | no | yes | null | Existing Bookflow host origin; otherwise BOOKFLOW_URL |
 | `token_env` | `--token-env` | string | no | no | "BOOKFLOW_TOKEN" | Environment variable containing the bearer; never the bearer itself; minimum length 1 |
-| `token_file` | `--token-file` | string \| null | no | yes | null | Owner-only file (mode 0600) holding the bearer, as `bookflow setup` writes it; read only when the token_env variable is unset |
+| `token_file` | `--token-file` | string \| null | no | yes | null | Owner-only file (mode 0600) holding the bearer, as `bookflow setup` writes it; used instead of the token_env variable when both are present |
 | `label` | `--client-name` | string | no | no | "bookflow-agent" | Informational client label recorded with MCP activity; minimum length 1; maximum length 120 |
 | `selection_root` | `--selection-root` | string \| null | no | yes | null | Read-only calling-machine configuration root for company fallback |
 | `input_dir` | `--input-dir` | array[string] | no | no | [] | Allowed calling-machine business input directory; repeatable |

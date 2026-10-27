@@ -40,16 +40,17 @@ class SetupInput(BaseModel):
     owner_name: str | None = Field(None, max_length=200, description="The owner's name as people see it")
     agent: str = Field("assistant", min_length=1, max_length=64, description="Username for the AI agent's own identity")
     agent_name: str | None = Field(None, max_length=200, description="The agent's name in lists and the audit trail; defaults to Assistant")
-    role: Literal["readonly", "standard", "admin"] = Field("standard", description="The agent's role in the company")
+    role: Literal["readonly", "standard", "admin"] | None = Field(None, description="The agent's role in the company: standard for a new agent; given for an existing one, it changes the role")
     mcp_config: str = Field(".mcp.json", min_length=1, description="MCP client configuration file to write or update (the `bookflow` server entry only)")
     bind: str = Field("127.0.0.1:8765", max_length=128, description="Address the host listens on, host:port (loopback)")
     serve: bool = Field(True, description="Start the host in the background if it is not answering, and wait until it does")
     link_minutes: int = Field(120, ge=1, le=1440, description="Minutes the owner's one-time password link stays valid")
+    new_token: bool = Field(False, description="Issue the agent a new token even though its last one was revoked; a person's decision")
 
 
 class SetupStep(BaseModel):
     step: str
-    status: Literal["created", "exists", "updated", "skipped"]
+    status: Literal["created", "exists", "updated", "skipped", "stopped"]
     detail: str
 
 
@@ -105,40 +106,36 @@ def launcher_command() -> list[str]:
     return [sys.executable, "-c", "from bookflow.bootstrap import main; main()"]
 
 
-def _write_json_atomic(path: Path, data: dict[str, Any], mode: int) -> None:
-    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
+def _write_atomic(path: Path, text: str, mode: int) -> None:
+    """Write beside the target under a fresh random name (never following or reusing a file), then rename."""
+    import secrets
+    tmp = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, mode)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as out:
-            json.dump(data, out, indent=2)
-            out.write("\n")
+            os.fchmod(out.fileno(), mode)
+            out.write(text)
             out.flush()
             os.fsync(out.fileno())
         os.replace(tmp, path)
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
+
+
+def _write_json_atomic(path: Path, data: dict[str, Any], mode: int) -> None:
+    _write_atomic(path, json.dumps(data, indent=2) + "\n", mode)
 
 
 def _write_secret(path: Path, secret: str) -> None:
-    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as out:
-            out.write(secret + "\n")
-            out.flush()
-            os.fsync(out.fileno())
-        os.replace(tmp, path)
-    except BaseException:
-        tmp.unlink(missing_ok=True)
-        raise
+    _write_atomic(path, secret + "\n", 0o600)
 
 
 def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
     """The bootstrap path for `setup` (dispatch._run_bootstrap): existing commands, in order, each only if needed."""
     import sqlalchemy as sa
     from bookflow.client import Client
-    from bookflow.commands.host_cmds import host_url, parse_bind, is_loopback, start_in_background, answers
+    from bookflow.commands.host_cmds import host_url, parse_bind, is_loopback, start_in_background, answers, serving_pid
     from bookflow.core.config import Config
     from bookflow.hub import setup_links
     from bookflow.hub import schema as h
@@ -209,7 +206,8 @@ def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
     except BookflowError as e:
         if e.code not in ("E_USER_NOT_FOUND", "E_NOT_FOUND"):
             raise
-    if agent is None:
+    created = agent is None
+    if created:
         run("agent create", {"username": inp.agent, "display_name": inp.agent_name or "Assistant"}, write=True)
         agent = run("agent show", {"agent": inp.agent})
         step("agent", "created", f"{inp.agent}, its own identity in the audit trail")
@@ -217,21 +215,57 @@ def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
         step("agent", "exists", inp.agent)
     if not agent.get("active", True):
         raise BookflowError("E_VALIDATION", message=f"The agent {inp.agent} is deactivated; a person brings it back with `agent activate`.")
-    if owner_id not in {p["user_id"] for p in agent["principals"]}:
+    # A person's stop (unassigning, narrowing, suspending, revoking) is never undone here: setup reports it
+    # with the command a person runs to restore it. Only an agent this run created is assigned and authorized.
+    stopped: list[str] = []
+
+    def stop(name: str, detail: str, restore: str) -> None:
+        step(name, "stopped", f"{detail}; to restore it a person runs: {restore}")
+        stopped.append(restore)
+
+    owner_name = owner_row["username"]
+    if owner_id in {p["user_id"] for p in agent["principals"]}:
+        step("works for", "exists", f"{inp.agent} acts for {owner_name}")
+    elif created:
         run("agent assign", {"agent": inp.agent, "principal": owner_id, "confirm_permitted_use": True}, write=True)
-        step("works for", "created", f"{inp.agent} acts for {owner_row['username']}")
+        step("works for", "created", f"{inp.agent} acts for {owner_name}")
     else:
-        step("works for", "exists", f"{inp.agent} acts for {owner_row['username']}")
-    granted = run("membership grant", {"user": inp.agent, "company": company_id, "role": inp.role}, write=True)
-    step("access", "updated" if granted.get("changed", True) else "exists", f"{inp.role} in {inp.company}")
+        stop("works for", f"{inp.agent} does not act for {owner_name}",
+             f"bookflow agent assign {inp.agent} --principal {owner_name} --confirm-permitted-use")
+    try:
+        listed = run("membership list", {"user": agent["username"], "company": company_id, "include_inactive": True})["items"]
+    except BookflowError as e:
+        if e.code != "E_USER_NOT_FOUND":  # an agent with no access anywhere yet is not listed at all
+            raise
+        listed = []
+    access = [m for m in listed if m["scope_type"] == "company" and m["scope_id"] == company_id]
+    live_access = [m for m in access if m["active"]]
+    role = inp.role or "standard"
+    if stopped:
+        step("access", "skipped", "left as it is while the agent is stopped")
+        role = live_access[0]["role"] if live_access else None
+    elif live_access and (inp.role is None or live_access[0]["role"] == inp.role):
+        role = live_access[0]["role"]
+        step("access", "exists", f"{role} in {inp.company}")
+    elif access and not live_access and not created:
+        role = None
+        stop("access", f"{inp.agent}'s access to {inp.company} was revoked",
+             f"bookflow membership grant {inp.agent} --company \"{inp.company}\" --role {inp.role or access[0]['role']}")
+    else:
+        run("membership grant", {"user": inp.agent, "company": company_id, "role": role}, write=True)
+        step("access", "updated" if live_access else "created", f"{role} in {inp.company}")
     agent = run("agent show", {"agent": inp.agent})
-    if agent["authority"]["suspended"]:
-        run("agent authorize", {"agent": inp.agent, "confirm_permitted_use": True,
-                                "acknowledge_fresh_context": agent["authority"]["fresh_context_required"]}, write=True)
+    authority = agent["authority"]
+    if not authority["suspended"]:
+        step("authorized", "exists", f"{inp.agent} may act")
+    elif authority["authorized_at"] is None and not authority["fresh_context_required"] and not stopped:
+        run("agent authorize", {"agent": inp.agent, "confirm_permitted_use": True}, write=True)
         agent = run("agent show", {"agent": inp.agent})
         step("authorized", "created", f"{inp.agent} may act")
     else:
-        step("authorized", "exists", f"{inp.agent} may act")
+        fresh = " --acknowledge-fresh-context" if authority["fresh_context_required"] else ""
+        stop("authorized", f"{inp.agent} is suspended ({authority['suspension_reason']})",
+             f"bookflow agent authorize {inp.agent} --confirm-permitted-use{fresh}")
 
     # 4. The agent's token, kept in an owner-only file beside the books.
     folder = root / "agents"
@@ -239,6 +273,8 @@ def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
     os.chmod(folder, 0o700)
     token_file = folder / f"{agent['username']}.token"
     meta_file = folder / f"{agent['username']}.json"
+    if token_file.exists() and not token_file.is_file():
+        raise BookflowError("E_VALIDATION", details={"fields": [{"field": "token_file", "problem": f"{token_file} is not a regular file; move it aside"}]})
     live = {t["token_id"] for t in run("token list", {"user": agent["agent_id"]})["items"]}
     try:
         kept = json.loads(meta_file.read_text(encoding="utf-8")).get("token_id")
@@ -246,6 +282,11 @@ def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
         kept = None
     if kept in live and token_file.is_file():
         step("token", "exists", f"kept {token_file}")
+    elif stopped:
+        step("token", "skipped", "no token is issued while the agent is stopped")
+    elif kept is not None and kept not in live and not inp.new_token:
+        stop("token", f"{inp.agent}'s token was revoked",
+             f"bookflow setup --company \"{inp.company}\" --new-token")
     else:
         if kept in live:
             run("token revoke", {"token": kept}, write=True)
@@ -278,7 +319,9 @@ def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
     else:
         existing.setdefault("mcpServers", {})[SERVER_NAME] = server
         config_path.parent.mkdir(parents=True, exist_ok=True)
-        _write_json_atomic(config_path, existing, 0o644)
+        # An existing file keeps its own permissions; a new one is readable, as it holds no secret.
+        mode = config_path.stat().st_mode & 0o777 if config_path.exists() else 0o644
+        _write_json_atomic(config_path, existing, mode)
         step("mcp config", "created" if before is None else "updated", f"{config_path} (server `{SERVER_NAME}`)")
 
     # 6. The owner's one-time password link, only while they have no password.
@@ -293,9 +336,13 @@ def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
         step("owner password", "created", f"one-time link, valid until {_readable(expires)}")
 
     # 7. The host.
-    if answers(url):
-        host = {"status": "running", "pid": None, "log": None}
-        step("host", "exists", f"answering at {url}")
+    running = serving_pid(root, inp.bind)
+    if running:
+        host = {"status": "running", "pid": running, "log": None}
+        step("host", "exists", f"answering at {url} (pid {running})")
+    elif answers(url):
+        raise BookflowError("E_IO", message=f"Something else answers at {url}, not this data root's host; choose another --bind.",
+                            details={"operation": "serve", "address": inp.bind})
     elif inp.serve:
         started = start_in_background(root, inp.bind)
         host = {"status": "started" if started["started"] else "running", "pid": started["pid"] or None, "log": started["log"]}
@@ -306,7 +353,8 @@ def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
 
     company_out = {"company_id": company_id, "display_name": shown.get("display_name", inp.company),
                    "home_currency": shown.get("home_currency", inp.currency), "organization_id": shown.get("organization_id")}
-    next_steps = []
+    next_steps = [f"The agent is stopped by a person's decision; only a person restores it: {r}" for r in stopped]
+    warnings.extend(f"stopped: {r}" for r in stopped)
     if host["status"] == "not_started":
         next_steps.append(f"Start the host: bookflow serve --background --bind {inp.bind}")
     next_steps.append(f"Load the MCP server `{SERVER_NAME}` from {config_path} (restart or reload your MCP client).")
@@ -322,7 +370,7 @@ def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
         warnings=warnings, data_root=str(root),
         owner={"user_id": owner_id, "username": owner_row["username"], "display_name": owner_row["display_name"]},
         company=company_out,
-        agent={"user_id": agent["agent_id"], "username": agent["username"], "role": inp.role,
+        agent={"user_id": agent["agent_id"], "username": agent["username"], "role": role, "stopped": bool(stopped),
                "acts_for": owner_row["username"], "acts_for_user_id": owner_id},
         mcp_config=str(config_path), mcp_server=server, token_file=str(token_file), url=url, host=host,
         owner_link=owner_link, steps=steps, next_steps=next_steps, content="\n".join(lines) + "\n",

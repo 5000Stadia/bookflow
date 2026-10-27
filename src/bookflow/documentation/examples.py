@@ -1554,7 +1554,7 @@ EXAMPLES.update({
 })
 # Accountant review (R121): the external accountant, the accountant's copy and what comes back, the checklist.
 _ACCT_CO = ' --company "Demo Plumbing Co" --json'
-_CHANGES = '/home/owner/Downloads/Demo Plumbing Co accountant changes 2026-10-14-091500.json'
+_CHANGES = '/srv/owner/Downloads/Demo Plumbing Co accountant changes 2026-10-14-091500.json'
 EXAMPLES.update({
     'accountant add': Example('bookflow accountant add jlee --through 2026-09-30 --note "Q3 review" --reason "Q3 review"' + _ACCT_CO,
                               {'user': 'jlee', 'through': '2026-09-30', 'note': 'Q3 review'}),

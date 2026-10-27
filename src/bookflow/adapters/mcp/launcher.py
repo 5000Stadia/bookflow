@@ -3,6 +3,7 @@
 import ipaddress
 import json
 import os
+import sys
 import socket
 from contextlib import ExitStack
 from urllib.parse import urlsplit, quote
@@ -205,18 +206,31 @@ def read_token_file(path: str) -> str | None:
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
     except OSError:
         raise BookflowError("E_UNAUTHENTICATED", message="The launcher's token file could not be opened.") from None
+    st = os.fstat(fd)
+    if stat.S_ISDIR(st.st_mode):
+        os.close(fd)
+        raise BookflowError("E_UNAUTHENTICATED", message="The launcher's token file is a directory; name the token file itself.")
     with os.fdopen(fd, "rb") as handle:
-        st = os.fstat(handle.fileno())
         if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o077:
             raise BookflowError("E_UNAUTHENTICATED", message="The launcher's token file must be a regular file you own with mode 0600.")
         return handle.read(4096).decode("utf-8", "replace").strip()
 
 
+def launcher_secret(inp) -> str | None:
+    """The bearer: the configured --token-file when given, else the token_env variable."""
+    secret = os.environ.get(inp.token_env)
+    if inp.token_file:
+        # The configured file is this launcher's own credential; an exported variable from the
+        # surrounding shell must not quietly replace it (R182 review).
+        if secret:
+            print(f"bookflow mcp: using --token-file; ignoring {inp.token_env} from the environment", file=sys.stderr, flush=True)
+        secret = read_token_file(inp.token_file)
+    return secret
+
+
 def launch(inp):
     origin = host_origin(inp.url or os.environ.get("BOOKFLOW_URL"))
-    secret = os.environ.get(inp.token_env)
-    if not secret and inp.token_file:
-        secret = read_token_file(inp.token_file)
+    secret = launcher_secret(inp)
     if not secret or not secret.strip() or any(ch in secret for ch in "\r\n"):
         raise BookflowError("E_UNAUTHENTICATED", message="Configure the launcher's bearer environment variable or its --token-file.")
     try:

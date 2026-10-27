@@ -449,14 +449,14 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 ### CLI
 
-`bookflow accountant-copy import "/home/owner/Downloads/Demo Plumbing Co accountant changes 2026-10-14-091500.json" --reason "Q3 adjustments" --company "Demo Plumbing Co" --json`
+`bookflow accountant-copy import "/srv/owner/Downloads/Demo Plumbing Co accountant changes 2026-10-14-091500.json" --reason "Q3 adjustments" --company "Demo Plumbing Co" --json`
 
 ### MCP
 
 The same example as complete `bookflow_run` arguments:
 
 ```json
-{"command": "accountant-copy import", "input": {"file": "/home/owner/Downloads/Demo Plumbing Co accountant changes 2026-10-14-091500.json"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+{"command": "accountant-copy import", "input": {"file": "/srv/owner/Downloads/Demo Plumbing Co accountant changes 2026-10-14-091500.json"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
 ```
 
 ### Input
@@ -604,14 +604,14 @@ Verify an accountant's change file against these books and list each change: new
 
 ### CLI
 
-`bookflow accountant-copy preview "/home/owner/Downloads/Demo Plumbing Co accountant changes 2026-10-14-091500.json" --company "Demo Plumbing Co" --json`
+`bookflow accountant-copy preview "/srv/owner/Downloads/Demo Plumbing Co accountant changes 2026-10-14-091500.json" --company "Demo Plumbing Co" --json`
 
 ### MCP
 
 The same example as complete `bookflow_run` arguments:
 
 ```json
-{"command": "accountant-copy preview", "input": {"file": "/home/owner/Downloads/Demo Plumbing Co accountant changes 2026-10-14-091500.json"}, "company": "Company ID or name"}
+{"command": "accountant-copy preview", "input": {"file": "/srv/owner/Downloads/Demo Plumbing Co accountant changes 2026-10-14-091500.json"}, "company": "Company ID or name"}
 ```
 
 ### Input

@@ -286,6 +286,19 @@ def answers(url: str, timeout: float = 1.0) -> bool:
         return False
 
 
+def serving_pid(root: Path, bind: str) -> int | None:
+    """The pid of this data root's own host at this address, from its descriptor, if that host is alive and answers."""
+    try:
+        descriptor = json.loads((Path(root) / "host.json").read_text(encoding="utf-8"))
+        pid = int(descriptor["pid"])
+        if parse_bind(descriptor["bind"]) != parse_bind(bind):
+            return None
+        os.kill(pid, 0)
+    except (OSError, ValueError, KeyError, TypeError, BookflowError):
+        return None
+    return pid if answers(host_url(bind)) else None
+
+
 def start_in_background(root: Path, bind: str, *, allow_network: bool = False, secure_cookies: bool | None = None,
                         wait_seconds: float = 180.0) -> dict[str, Any]:
     """Start `serve` detached and wait, inside this call, until it answers; or report the one already answering."""
@@ -293,8 +306,12 @@ def start_in_background(root: Path, bind: str, *, allow_network: bool = False, s
     import sys
     import time
     url = host_url(bind)
+    running = serving_pid(root, bind)
+    if running:
+        return {"url": url, "pid": running, "log": None, "started": False}
     if answers(url):
-        return {"url": url, "pid": 0, "log": None, "started": False}
+        raise BookflowError("E_IO", message=f"Something else answers at {url}, not this data root's host; choose another --bind.",
+                            details={"operation": "serve", "address": bind})
     log_path = Path(root) / "host.log"
     args = [sys.executable, "-c", "from bookflow.bootstrap import main; main()", "serve", "--bind", bind,
             "--data-root", str(root)]
@@ -317,7 +334,7 @@ def start_in_background(root: Path, bind: str, *, allow_network: bool = False, s
                 tail = []
             raise BookflowError("E_IO", message="The background host stopped while starting: " + " | ".join(tail),
                                 details={"operation": "serve", "log": str(log_path)})
-        if answers(url, timeout=0.5):
+        if serving_pid(root, bind) == child.pid:
             return {"url": url, "pid": child.pid, "log": str(log_path), "started": True}
         time.sleep(0.1)
     raise BookflowError("E_IO", message=f"The background host did not answer within {int(wait_seconds)} seconds; see {log_path}.",
