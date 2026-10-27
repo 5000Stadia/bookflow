@@ -50,6 +50,8 @@ def print_site(tmp_path_factory):
         post('2026-09-15', ['1.00'] * 115, 'PRINT-ROW')
         post('2026-09-16', ['1.00'] * 114 + ['123456789.01'], 'PRINT-ROW', offset=115)
         post('2026-10-01', ['999.00'], 'EXCLUDED-DATE')
+        # R109's budget reports are about one budget, so the fixture keeps one to name.
+        client.run('budget create', {'name': 'Print plan', 'fiscal_year': 2026}, company=company)
         client.run('user set-password', {'username': os_login(), 'password': PASSWORD})
         client.run('user add', {'username': 'print-outsider', 'password': PASSWORD})
         token = client.token.issue(label='report-print-test')['secret']
@@ -125,7 +127,7 @@ def test_all_registered_report_presenters_have_complete_views(print_site, browse
     # Every required filter gets a real value of its own kind: the period's dates, and the
     # fixture's bank for a report that is about one account (reconciliation discrepancy).
     # Filling `account` with a date asked for an account that does not exist.
-    real = {'date_from': '2026-09-01', 'account': print_site.bank}
+    real = {'date_from': '2026-09-01', 'account': print_site.bank, 'budget': 'Print plan'}
     raw = {name: real.get(name, '2026-09-30')
            for name, field in cmd.input_model.model_fields.items() if field.is_required()}
     response = browser.get(Print.print_url(print_site.company, verb, raw))

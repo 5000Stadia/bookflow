@@ -873,6 +873,11 @@ def test_every_routed_read_returns_the_same_document_over_http_as_in_the_library
         except bookflow.BookflowError as refused:
             assert name in documented, (name, refused.to_dict())
             local = refused.to_dict()
+        if name == "perf report":
+            # R180's call timings are live: every call, these reads included, adds to them, and
+            # the host records while the library may not. The same document shape is what holds.
+            assert set(local) == set(over_http[name]), name
+            continue
         assert normalize(local) == normalize(over_http[name]), name
         if name.startswith("payment recovery "):
             assert local == over_http[name], name

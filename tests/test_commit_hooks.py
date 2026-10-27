@@ -52,13 +52,33 @@ EXPECTED = {
     ('company/cutover.py', 'apply'): ('cutover.apply', 2),
     # A scheduled backup records its checkpoint in the company it copied (R156).
     ('core/host.py', 'Host._take_scheduled_backup'): ('host.backup', 1),
+    # R111: one scheduler tick per company is one operation; its steps commit inside it.
+    ('company/scheduler.py', 'run_company'): ('scheduler.run', 0),
+}
+
+# Commits made inside an operation their caller opened (the scheduler tick's steps), each with
+# the operation that encloses it. Listed so a new one fails this inventory as any commit does.
+COMMITS_IN_CALLER = {
+    ('company/scheduler.py', '_reconsider_window_holds'): ('scheduler.write', 1, 'scheduler.run'),
+    ('company/scheduler.py', 'assign_blocked'): ('scheduler.write', 1, 'scheduler.run'),
+    ('company/scheduler.py', '_ensure_principal'): ('scheduler.write', 1, 'scheduler.run'),
+    ('company/notices.py', 'scheduled'): ('scheduler.write', 1, 'scheduler.run'),
 }
 
 
 def test_manual_actual_owner_inventory():
     import bookflow
     root = Path(bookflow.__file__).parent
-    assert set(OWNERS) == {owner for owner, count in EXPECTED.values()}
+    assert set(OWNERS) == {owner for owner, count in EXPECTED.values()} | {
+        owner for owner, _, _ in COMMITS_IN_CALLER.values()}
+    for (file, qual), (owner, count, enclosing) in COMMITS_IN_CALLER.items():
+        assert enclosing in {name for name, _ in EXPECTED.values()}, (file, qual)
+        node = ast.parse((root / file).read_text())
+        for part in qual.split('.'):
+            node = next(n for n in node.body if isinstance(n, (ast.FunctionDef, ast.ClassDef)) and n.name == part)
+        commits = [n for n in ast.walk(node) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                   and n.func.attr == 'commit']
+        assert [ast.literal_eval(n.args[1]) for n in commits] == [owner] * count, (file, qual)
     assert OWNERS['http.refresh_token'] is Impact.LIVENESS
     assert OWNERS['host.sweep'] is Impact.EXPIRED
     assert OWNERS['config.flush'] is Impact.PROJECTION
@@ -85,7 +105,9 @@ def test_manual_actual_owner_inventory():
                 actual.append(str(file.relative_to(root)))
             if n.func.attr == 'commit' and not n.args:
                 assert str(file.relative_to(root)) == 'storage/traced_sqlite.py'
-    assert actual == ['core/commit_hooks.py']
+    # R180's timings store is its own telemetry database, kept apart from the books and the hub
+    # (perf/store.py); its two commits are outside what the hook executor owns.
+    assert sorted(actual) == ['core/commit_hooks.py', 'perf/store.py', 'perf/store.py']
     for file in root.rglob('*.py'):
         if file.name == 'commit_hooks.py':
             continue

@@ -39,13 +39,14 @@ def test_over_long_reason_on_payment_writes_is_a_plain_field_error(client, sale)
     assert voided['current']['status'] == 'voided'
 
 
-def test_deposit_over_200_rows_names_the_limit_and_what_to_do(client, sale):
+def test_deposit_over_the_row_limit_names_the_limit_and_what_to_do(client, sale):
+    # R153 raised the limit from 200 to 2,000 rows.
     bank = client.account.create(name='R142 bank', type='bank', company=COMPANY)['id']
     row = dict(received_from=dict(kind='customer', id=sale['customer']), from_account=sale['income'], amount='1.00')
-    document = dict(mode='inline', deposit_to=bank, date='2026-06-03', additional=[row] * 201)
+    document = dict(mode='inline', deposit_to=bank, date='2026-06-03', additional=[row] * 2001)
     error = _refused(lambda: client.run('deposit post', dict(operation_key='r142-big', document=document),
                                         company=COMPANY))
     assert error.code == 'E_VALIDATION'
     problem = ' '.join(field['problem'] for field in error.details['fields'])
-    assert 'at most 200 rows' in problem and 'has 201' in problem and 'second deposit' in problem
-    assert 'exceed200' not in problem
+    assert 'at most 2000 rows' in problem and 'has 2001' in problem and 'second deposit' in problem
+    assert 'exceed2000' not in problem

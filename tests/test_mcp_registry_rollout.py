@@ -14,6 +14,8 @@ COMMANDS = frozenset({'organization new', 'organization rename', 'company new', 
 def state(root):
     result = {}
     for path in root.rglob('*.db'):
+        if path.relative_to(root).parts[0] == 'telemetry':
+            continue  # R180's call timings: telemetry kept apart from the books, written on every call
         with sqlite3.connect(path.as_uri()+'?mode=ro', uri=True) as db:
             result[str(path.relative_to(root))] = tuple(db.iterdump())
     return result

@@ -38,14 +38,20 @@ def test_same_customer_and_reference_warns_before_and_after_saving(client):
     assert receive(client, 'Payment Example Customer', 'r85-second', ' 5120 ')['warnings'] == []
 
 
+def repeated(result):
+    # Only the repeated-check warning; R124 adds an unrelated one (unapplied cash while the
+    # customer has an open estimate) for the demo's commercial customer.
+    return [w for w in result['warnings'] if w.startswith('reference: ')]
+
+
 def test_no_warning_for_other_customer_other_reference_or_a_voided_receipt(client):
     first = receive(client, 'Payment Example Customer', 'r85-a', '7781')
-    assert receive(client, 'Commercial Example Customer', 'r85-b', '7781', dry_run=True)['warnings'] == []
-    assert receive(client, 'Payment Example Customer', 'r85-c', '7782', dry_run=True)['warnings'] == []
-    assert receive(client, 'Payment Example Customer', 'r85-d', None, dry_run=True)['warnings'] == []
+    assert repeated(receive(client, 'Commercial Example Customer', 'r85-b', '7781', dry_run=True)) == []
+    assert repeated(receive(client, 'Payment Example Customer', 'r85-c', '7782', dry_run=True)) == []
+    assert repeated(receive(client, 'Payment Example Customer', 'r85-d', None, dry_run=True)) == []
     client.run('payment void', {'payment': first['id'], 'expected_version': first['version'],
                                 'operation_key': 'r85-void'}, company=COMPANY, reason='Recorded in error')
-    assert receive(client, 'Payment Example Customer', 'r85-e', '7781', dry_run=True)['warnings'] == []
+    assert repeated(receive(client, 'Payment Example Customer', 'r85-e', '7781', dry_run=True)) == []
 
 
 @pytest.mark.skipif(not CHROME.exists(), reason='Chrome unavailable')

@@ -213,6 +213,15 @@ def test_every_printable_kind_is_reachable_and_none_is_declared_twice(books, hos
     reader = browser(hosted)
     records = {"invoice": books["invoice"], "sales-receipt": books["receipt"],
                "estimate": books["estimate"], "credit-memo": books["credit"], "sales-order": books["order"]}
+    # R111: an overdue notice prints too. DOC-100 fell due 2026-07-03 with 800.00 still owing.
+    def keyed(command, body):
+        response = hosted.api.post(f"/companies/{hosted.company_id}/commands/{command.replace(' ', '.')}",
+                                   json=body, headers={**hosted.bearer, "X-Bookflow-Reason": "Overdue notices"})
+        assert response.status_code == 200, response.text
+        return response.json()
+    keyed("company update", {"overdue_notice_days": 1, "overdue_notice_template": "letter"})
+    keyed("notice generate", {"as_of": "2026-08-10"})
+    records["notice"] = books["run"]("notice list", {})["items"][0]
     expected = set(KINDS) - IDENTIFIED_OTHERWISE
     assert set(records) == expected, (
         "a printable kind has no record here, so this witness would skip it: "

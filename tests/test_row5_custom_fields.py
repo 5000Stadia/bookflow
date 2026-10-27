@@ -392,11 +392,12 @@ def test_unknown_definition_and_unsupported_transaction_values_are_rejected(conn
             conn, record_type="customer", record_id=new_id(), patch={new_id(): "x"}, creating=True
         ),
     )
-    definition = _definition(conn, name="Sales order note", scopes=("sales_order",))
+    # Sales orders take values since R101; a purchase order still does not.
+    definition = _definition(conn, name="Purchase order note", scopes=("purchase_order",))
     _assert_code(
         "E_VALIDATION",
         lambda: plan_owner_value_patch(
-            conn, record_type="sales_order", record_id=new_id(), patch={definition["id"]: "x"}, creating=True
+            conn, record_type="purchase_order", record_id=new_id(), patch={definition["id"]: "x"}, creating=True
         ),
     )
 
