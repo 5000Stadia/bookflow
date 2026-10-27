@@ -13,7 +13,9 @@ from tests.mcp_matrix_support import Matrix
 
 SURFACES = ('python', 'cli', 'http', 'mcp')
 COMMANDS = frozenset(('shipment post', 'shipment update', 'shipment void', 'shipment show', 'shipment query',
-                      'shipment history', 'shipment invoice', 'report shipped-not-invoiced'))
+                      'shipment history', 'shipment invoice', 'report shipped-not-invoiced',
+                      # R181 increment 2: one of the four comes back (retried), is read back, and the return voided.
+                      'shipment return', 'shipment-return show', 'shipment-return query', 'shipment-return void'))
 
 
 @pytest.mark.timeout(900)
@@ -49,12 +51,21 @@ def test_the_same_shipment_through_python_cli_http_and_mcp(root, tmp_path):
                 listed = await call(surface, 'shipment query', {'not_invoiced': True})
                 history = await call(surface, 'shipment history', {'shipment': first['number']})
                 waiting = await call(surface, 'report shipped-not-invoiced', {'as_of': DEMO_AS_OF})
+                back_input = {'shipment': first['number'], 'date': DEMO_AS_OF,
+                              'lines': [{'shipment_line': '1', 'quantity': '1'}]}
+                back = await call(surface, 'shipment return', back_input, idempotency_key='back-a')
+                back_again = await call(surface, 'shipment return', back_input, idempotency_key='back-a')
+                back_shown = await call(surface, 'shipment-return show', {'shipment_return': back['number']})
+                back_listed = await call(surface, 'shipment-return query', {'shipment': first['number']})
+                back_void = await call(surface, 'shipment-return void', {'shipment_return': back['number'],
+                                                                         'expected_version': 1})
                 invoice = await call(surface, 'shipment invoice', {'shipment': first['number'], 'date': DEMO_AS_OF})
                 refused = await call(surface, 'shipment void', {'shipment': first['number']}, rejected=True)
                 after = await call(surface, 'report shipped-not-invoiced', {'as_of': DEMO_AS_OF})
                 results[surface] = dict(preview=preview, first=first, again=again, tracked=tracked, shown=shown,
                                         listed=listed, history=history, waiting=waiting, invoice=invoice,
-                                        refused=refused, after=after)
+                                        refused=refused, after=after, back=back, back_again=back_again,
+                                        back_shown=back_shown, back_listed=back_listed, back_void=back_void)
             return results
         finally:
             await matrix.close()
@@ -71,6 +82,9 @@ def test_the_same_shipment_through_python_cli_http_and_mcp(root, tmp_path):
         assert [line['quantity'] for line in r['invoice']['revision']['lines']] == ['4'], surface
         assert 'E_WORK_DEPENDENCY' in str(r['refused']), surface
         assert r['after']['total']['minor_units'] == r['after']['account_balance']['minor_units'], surface
+        assert r['back']['number'] == r['back_again']['number'] and r['back']['value']['amount'] == '3.00', surface
+        assert r['back_shown']['status'] == 'returned' and [x['number'] for x in r['back_listed']['rows']] == [r['back']['number']]
+        assert r['back_void']['status'] == 'voided' and r['back_void']['version'] == 2, surface
         shapes.add((r['first']['number'], r['first']['cost']['minor_units'], r['waiting']['total']['minor_units'],
                     r['after']['total']['minor_units'], r['invoice']['total']['minor_units']))
     assert len(shapes) == 1

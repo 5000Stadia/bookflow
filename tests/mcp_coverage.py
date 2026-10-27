@@ -288,7 +288,9 @@ AGENT_SETUP_COMMANDS = frozenset(('setup',))
 # R181 increment 1: shipments. Its witness stocks a part, orders six, ships four (previewed, retried), records
 # tracking, reads show, query, history and the Shipped Not Invoiced report, invoices it and is refused a void.
 SHIPMENT_COMMANDS = frozenset(('shipment post', 'shipment update', 'shipment void', 'shipment show', 'shipment query',
-    'shipment history', 'shipment invoice', 'report shipped-not-invoiced'))
+    'shipment history', 'shipment invoice', 'report shipped-not-invoiced',
+    # R181 increment 2: a return of one (retried), read back through show and query, and voided.
+    'shipment return', 'shipment-return show', 'shipment-return query', 'shipment-return void'))
 
 LANDED_COST_COMMANDS = frozenset(('landed-cost setup', 'landed-cost charges', 'landed-cost post', 'landed-cost void',
     'landed-cost show', 'landed-cost query'))

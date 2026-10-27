@@ -1300,6 +1300,7 @@ The same example as complete `bookflow_run` arguments:
 | `overdue_notice_frequency` | `--overdue-notice-frequency` | literal["weekly", "monthly"] \| null | no | yes | null | Overdue notices: generate them once a month (the first scheduler run of each month) or once a week (from each Monday). |
 | `overdue_notice_minimum` | `--overdue-notice-minimum` | string \| null | no | yes | null | Overdue notices: the least overdue balance that earns a notice, in the home currency (e.g. 25.00); null for any amount. |
 | `overdue_notice_template` | `--overdue-notice-template` | literal["statement", "letter"] \| null | no | yes | null | Overdue notices: what each notice is, the customer statement or a short collection letter listing the overdue invoices. |
+| `invoice_when_shipping` | `--invoice-when-shipping` | literal["ask", "always", "never"] \| null | no | yes | null | Shipments: after a shipment posts, ask (the default) whether to invoice it now, always offer to, or never; it drives the browser's prompt and the agent's next-command hint. `shipment post` itself does only what it is told. |
 
 ### Command and context options
 

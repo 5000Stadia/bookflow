@@ -378,8 +378,10 @@ def test_the_invoice_later_equals_the_invoice_at_once(tmp_path, monkeypatch, see
             ('sell', rnd.choice([d for d in outside if d > bill_day]), 1)]))
     returned = rnd.random() < .5
     if returned:
-        # Increment 2: some shipped units come back before the bill and are cancelled on the order; the twin cancels
-        # them on its order instead of ever shipping them.
+        # Increment 2: some shipped units come back before the bill on a shipment return. The twin that never ships
+        # bills them all at B and takes them back on a credit memo dated B: a return is worth its endpoint share of
+        # the issue it names in both, so profit and loss is the same to the cent (billing only the rest would cost a
+        # fresh issue of fewer units, which rounds differently).
         plan.append(('return', rnd.choice([d for d in days if ship_day <= d <= bill_day])))
     plan.append(('bill', bill_day))
     if not returned and rnd.random() < .5:
@@ -441,12 +443,6 @@ def test_the_invoice_later_equals_the_invoice_at_once(tmp_path, monkeypatch, see
                     if twin is late:
                         run('shipment return', dict(shipment=mine['shipment'], date=step[1], reopen=False, lines=[dict(
                             shipment_line='1', quantity=str(back))]), reason='Came back')
-                    else:
-                        order = run('sales-order show', dict(sales_order=mine['order']['number']))
-                        line = order['revision']['lines'][0]
-                        run('sales-order update', dict(sales_order=order['number'], expected_version=order['version'],
-                                                       lines=[dict(line_id=line['line_id'], item=twin['widget'],
-                                                                   cancelled_quantity=str(back))]), reason='Not wanted')
                 elif op == 'credit':
                     invoice = mine['invoice']
                     run('credit-memo post', dict(customer=twin['customer'], date=step[1], lines=[dict(
@@ -461,6 +457,11 @@ def test_the_invoice_later_equals_the_invoice_at_once(tmp_path, monkeypatch, see
                         mine['invoice'] = run('sales-order invoice', dict(
                             sales_order=order['number'], expected_version=order['version'], conversion_key='at-once',
                             date=step[1], all_open=True), reason='Shipped and billed')
+                        if mine.get('returned'):
+                            invoice = mine['invoice']
+                            run('credit-memo post', dict(customer=twin['customer'], date=step[1], lines=[dict(
+                                quantity=str(mine['returned']), source_invoice=invoice['id'],
+                                source_line=invoice['revision']['lines'][0]['line_id'])]), reason='Came back')
             except BookflowError as error:
                 assert error.code not in NEVER, (seed, step, error)
                 raise AssertionError(f'{twin["name"]} refused {step}: {error.code} {error.message}') from None

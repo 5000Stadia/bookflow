@@ -1233,6 +1233,19 @@ date, lines, places or tracking (carrier and tracking numbers are text only); `s
 and both are refused below what an invoice billed (void or correct that invoice first; its cost goes back to
 Shipped Not Invoiced). `report shipped-not-invoiced` lists what waits and always equals the account.
 
+**Goods sent back.** Units a shipment took that no invoice has billed come back with `shipment return <shipment>`:
+name the `lines` (`shipment_line`, its position as `shipment show` lists it, and a `quantity` in the base unit; serial
+numbers or a lot the shipment took), the `date`, and `reopen` (default true: they are to ship again; false cancels
+them on the order). They go back to the bin they left, worth their share of the shipment line's cost, out of Shipped
+Not Invoiced. Units an invoice billed come back on a credit memo naming the invoice line (`credit-memo post` with
+`source_invoice` and `source_line`), as any return: the order stays invoiced. `shipment-return void` undoes a return.
+While a return stands the shipment's stock is not restated or voided; to take units off a shipment, record a return.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "shipment return", "reason": "Acme sent one back before we billed it", "input": {"shipment": "1004", "lines": [{"shipment_line": "1", "quantity": "1"}]}}
+```
+
 ## Stock sent back to a vendor
 
 Enter it as one `vendor-credit post` with `items`: one row per thing sent back, each with
