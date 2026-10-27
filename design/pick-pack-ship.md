@@ -599,6 +599,51 @@ For the builder, defaults standing unless review finds otherwise:
 5. **Tracking links.** *Default:* the tracking number prints as text; a per-ship-method link template
    waits on K1.
 
+## As built: increment 1
+
+- **Migration co0102** (on co0100; main's R180 co0101 re-chains at merge) adds `shipments` (immutable header: number
+  from the `shipment` sequence starting 1001, order, customer, journal entry), `shipment_revisions` (append-only; the
+  newest is current, its number the version, its status the shipment's), `shipment_lines` (per revision, stable
+  `line_identity`, the order line's billing root, item, base quantity, accounts, class, the issue movement),
+  `shipment_billings` and `shipment_recognitions`; `inventory_documents` admits `shipment` and `shipment_cost` (a
+  rebuild as co0096 does); `company_info.invoice_when_shipping` (`ask`). Every new row is immutable (guards on update
+  and delete); no guard counts rows.
+- **The shipment posts as a journal entry the inventory ledger owns** (kind `shipment`): per line, Cr the item's
+  Inventory Asset (the issue movement's leg), Dr Shipped Not Invoiced, both naming the customer. The issue's offset
+  account is Shipped Not Invoiced, so every later correction of it (backdated purchase, provisional true-up, landed
+  true-up, FIFO) posts against that account by the existing machinery, split nowhere.
+- **The derived balance is settled after every company write** (dispatch, beside the count re-derivation;
+  `shipments.settle_in_command`, cheap when the company has no Shipped Not Invoiced account): for each shipment line
+  the write reached, cost(d) is everything posted to Shipped Not Invoiced for it dated by d, and cost of goods sold
+  should hold `endpoint_share(cost(d), quantity, 0, billed(d))`; the difference from what `shipment_recognitions`
+  already moved is posted at each date in a journal entry of its own (kind `shipment_cost`, Dr COGS Cr Shipped Not
+  Invoiced, naming the customer), not as a line of the invoice's entry. So an invoice, its void or re-date, and a
+  recost before or after it all land by one rule; a delta dated on or before the closing date refuses the write.
+- **Invoices.** An invoice line billing shipped units (from `sales-order invoice`, shipped-first by default, or
+  `shipments`, or `shipment invoice`) moves no stock and posts no cost of its own; `shipment_billings` record it, live
+  while the invoice is posted and its current revision carries the line. An invoice correction keeps such a line's
+  quantity or removes it (its units go back to shipped and not invoiced). An explicit order selection of a line
+  holding shipped units must bill exactly those units (one invoice line bills shipments or issues stock, never both;
+  the mixed two-line form waits). Shipments dated after the invoice are not billed by it.
+- **Order figures.** `shipped`, `shipped_not_invoiced` and `to_ship` appear on stocked order lines once the order
+  has a shipment; committed (and shortfall coverage) read to ship. Closing an order holding shipped units not
+  invoiced, cancelling below what was delivered, removing or re-itemising a shipped line, and voiding an order with
+  live shipments are refused.
+- **Corrections in this increment.** `shipment update` restates date, lines, places, count position or the text
+  facts (carrier, tracking, ship method, memo); a text-only change writes a revision and the entry restates with the
+  same amounts. Refused below what invoices billed or later than an invoice billing it; `shipment void` refused while
+  billed. A credit memo returning goods a shipment-billed invoice line billed is refused with E_VALIDATION naming the
+  shipment until increment 2's returns.
+- **Twin property, as tested.** Generated sequences keep stock paperwork dated before S or after B (a purchase or
+  sale between them rightly costs the twin's later issue differently under average); late purchases dated before S,
+  short shipments filled after B, landed costs between S and B, counts after B and FIFO switches before S all hold
+  P&L, receivables and stock equal on every date.
+- **Not in this increment:** the demo order shipped in part (oracle moves across the demo; a follow-up), cash-basis
+  reading of the `shipment_cost` entries as the invoice's cost line, `invoice_when_shipping` in `company update`.
+- **Browser.** Inventory > Ship an order (`/shipments/new`, lines with to ship, Preview, Ship), the shipment page
+  (`/shipments/<number>`: cost waiting, invoices, Create invoice, Void, history), Shipments list; the order page gains
+  Shipped and To ship columns and Ship and Shipments links.
+
 ## Decided (2026-10-26)
 
 - K1 carrier integration: none. Carrier and tracking are recorded and printed as text only (Kabe, gate gba01e0).
