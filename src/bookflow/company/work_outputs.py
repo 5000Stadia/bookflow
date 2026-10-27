@@ -21,6 +21,13 @@ class OrderLineQuantities(StrictModel):
     open_amount: MoneyOutput = Field(description="The exact net of the open quantity.")
     state: Literal['open', 'partly_invoiced', 'invoiced', 'closed'] = Field(description=(
         "open; partly_invoiced; invoiced (nothing open, nothing cancelled); closed (nothing open, some cancelled)."))
+    # Present once a shipment has shipped any of the order (R181); absent, every figure reads as before.
+    shipped: str | None = Field(default=None, exclude_if=lambda v: v is None, description=(
+        "What shipments shipped of it, in the line's unit."))
+    shipped_not_invoiced: str | None = Field(default=None, exclude_if=lambda v: v is None, description=(
+        "Shipped and not yet billed by an invoice: bill it with `shipment invoice` or `sales-order invoice`."))
+    to_ship: str | None = Field(default=None, exclude_if=lambda v: v is None, description=(
+        "Ordered less invoiced, shipped not invoiced and cancelled: what is still to ship (the anchor's Backordered)."))
 
 
 class LineStock(StrictModel):

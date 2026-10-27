@@ -870,8 +870,21 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
     # says now, and every earlier sale this displaces is owed its own dated correction. A
     # refusal here -- more going out than is on hand on some earlier date, a closed period any
     # delta would land in -- leaves nothing behind, because nothing has been written.
+    # Lines billing shipped units move no stock (R181): their units left on the shipment.
+    from bookflow.company import shipments as _shipments
+    shipped = _shipments.billed_line_ids(s, old_header['id']) if old_header else {}
+    if shipped and operation != 'void':
+        _shipments.guard_invoice_lines(s, shipped, pending)
+    shipment_billings = []
+    if operation != 'void' and resolved is not None:
+        for envelope, line in zip(pending['document_lines'], resolved['lines']):
+            for part in line.get('shipment_lines') or ():
+                shipment_billings.append(dict(id=new_id(), transaction_id=header['id'], line_id=envelope['line_id'],
+                    shipment_id=part.shipment_id, shipment_line_identity=part.identity,
+                    quantity_microunits=part.waiting, **row_provenance, audit_event_id=event))
     stock = inventory_effects.plan(
-        s, entries=[] if operation == 'void' else _stock_entries(pending, resolved['lines'] if resolved else None),
+        s, entries=[] if operation == 'void' else _stock_entries(pending, resolved['lines'] if resolved else None,
+                                                                 skip=shipped),
         reversing=inventory_effects.own_movements(s, old_header['id']) if old_header else (),
         date=revision['date'], currency=revision['currency'],
         count_position=getattr(inp, 'count_position', None))
@@ -909,7 +922,8 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
         stock=stock, semantic=resolved['semantic'] if resolved else None,
         # Only a sale billed from quoted work says which of its lines were billed; the deposit
         # coordinator reads every other sale plan against a closed set of keys.
-        **({'billed_sources': resolved['billed_sources']} if resolved and 'billed_sources' in resolved else {})))
+        **({'billed_sources': resolved['billed_sources']} if resolved and 'billed_sources' in resolved else {}),
+        **({'shipment_billings': shipment_billings} if shipment_billings else {})))
     from bookflow.company.billing_edits import carry_allocations
     carry_allocations(plan, s)
     if 'billing_allocations' in plan.data and operation != 'void':
@@ -927,7 +941,7 @@ def _numbers_part(lines):
     return serial_lots.fingerprint_part(lines)
 
 
-def _stock_entries(pending, lines=None):
+def _stock_entries(pending, lines=None, skip=()):
     """The entered lines that move stock, in the shape the inventory ledger takes them.
 
     The quantity issued is the line's *base* quantity, not the quantity typed: stock is held
@@ -944,6 +958,8 @@ def _stock_entries(pending, lines=None):
         facts = SalesLineProfile.model_validate_json(line['item_snapshot'])
         if facts.item_type not in inventory.TRACKED_TYPES:
             continue
+        if envelope['line_id'] in skip or (lines and (lines[envelope['position'] - 1] or {}).get('shipment_lines')):
+            continue   # billed from a shipment: the units left on it (R181)
         entries.append(inventory_effects.Entry(
             key=envelope['id'], item_id=facts.item.id, item_name=facts.item.label,
             kind='issue', quantity_microunits=line['base_quantity_microunits'],

@@ -3,7 +3,7 @@
 Sales-orders design §3. **Committing documents** are sales orders whose stored status is open and
 work orders that are not cancelled -- either active -- dated on or before the report date; a
 complete work order still commits until it is invoiced. **Committed** per item is the open
-quantity of their stocked lines (ordered less invoiced less cancelled) in the item's base unit.
+quantity of their stocked lines (ordered less invoiced less cancelled), less what shipments took and no invoice billed yet (R181), in the item's base unit.
 Nothing is stored: every reader calls `open_lines` or `committed`, as `receiving.order_remaining`
 owns on-order. As with on-order, a past report date selects the documents dated by then and
 measures what remains open now. A line for an assembly commits the assembly item itself.
@@ -43,7 +43,7 @@ class OpenLine:
     invoiced: Fraction      # selected-unit microunits, exact
     cancelled: int
     open: Fraction          # ordered - invoiced - cancelled
-    open_base: int          # the same in the item's base unit
+    open_base: int          # what is still to ship, in the item's base unit (open less shipped not invoiced, R181)
     open_net: int           # exact net of the open quantity, minor units
     unit_factor_nanounits: int
     site_id: str | None = None   # the inventory site the line commits at; None is unassigned (R104)
@@ -93,6 +93,9 @@ def open_lines(s, as_of=None, *, items=None, document_ids=None, keep_closed=Fals
     rows = _rows(s, as_of, items, document_ids, stocked_only, kinds)
     roots = list({(row["root_document_id"], row["root_line_id"]) for row in rows})
     occupied = alloc.occupied_roots(s, roots) if roots else set()
+    # Units a shipment took and no invoice billed yet have left the shelf: they commit nothing (R181).
+    from bookflow.company import shipments
+    shipped = shipments.waiting_base_by_root(s, roots) if roots and shipments.has_shipments(s) else {}
     policies = {}
     out = []
     for row in rows:
@@ -117,6 +120,8 @@ def open_lines(s, as_of=None, *, items=None, document_ids=None, keep_closed=Fals
             continue
         open_micro = int(round(remaining)) if remaining > 0 else 0
         open_base = base_quantity(open_micro, row["unit_factor_nanounits"]) if open_micro > 0 else 0
+        if shipped.get(root):
+            open_base = max(0, open_base - shipped[root])   # to ship, not to bill
         out.append(OpenLine(row["document_id"], row["kind"], row["number"], row["date"], row["customer_id"],
                             row["revision_id"], row["line_id"], row["position"], row["item_id"], quantity,
                             invoiced, cancelled, remaining, open_base, open_net, row["unit_factor_nanounits"],

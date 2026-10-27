@@ -57,7 +57,7 @@ class ConversionInput(StrictModel):
         values = handler(self)
         # Both generic cache identity and permanent conversion hashes predate
         # these optional members. Omission must retain their original bytes.
-        for name in ('selections', 'percent', 'apply_prepayment'):
+        for name in ('selections', 'percent', 'apply_prepayment', 'shipments'):
             if name not in self.model_fields_set:
                 values.pop(name, None)
         # true is the default, so naming it is the same request as leaving it out.
@@ -140,7 +140,9 @@ class SalesOrderInvoiceInput(ConversionInput, InvoiceFields, PrepaymentChoice):
     selections: list[OrderSelection] | None = Field(default=None, min_length=1, max_length=200)
     all_open: bool = Field(default=False, description=(
         'Bill every open quantity whatever the stock. Without it (and without line_ids or selections) the invoice '
-        'bills what can ship.'))
+        'bills the units shipments shipped and no invoice billed yet, and when there are none, what can ship.'))
+    shipments: list[Selector] | None = Field(default=None, min_length=1, max_length=50, description=(
+        'Bill exactly these shipments\' units not yet invoiced (numbers or ids); the invoice moves no stock.'))
 
     @field_validator('selections', 'line_ids')
     @classmethod
@@ -159,6 +161,8 @@ class SalesOrderInvoiceInput(ConversionInput, InvoiceFields, PrepaymentChoice):
             raise ValueError('an order is invoiced by quantity; percent is not offered')
         if self.all_open and self.model_fields_set & {'line_ids', 'selections'}:
             raise ValueError('choose all_open, line_ids or selections, not more than one')
+        if self.shipments is not None and (self.all_open or self.model_fields_set & {'line_ids', 'selections'}):
+            raise ValueError('shipments bills those shipments; leave out all_open, line_ids and selections')
         return self
 
 

@@ -86,6 +86,7 @@ ACCEPTED = {
     'bins-v1': (723, '5b61fdbac14da296bfe5c87ba003b4acaf6fbec991d31b1675acb87a66209b91'),
     'landed-cost-v1': (729, '1031c961c6bd10b761157ec1c255240324aaa2237f06f96f168bf26b7c4f5350'),
     'fifo-v1': (733, '724f7e0e052f9255d45480af689cf2861870cac19a18c71783918af73b04bc88'),
+    'shipments-v1': (741, 'a1eb285852a4e00fdfcdb270c4349da7884dc71e33f1a64cf8507c5f6507eb23'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -198,6 +199,8 @@ CHAIN_ADDITIONS = {
     'landed-cost-v1': {'landed-cost charges', 'landed-cost post', 'landed-cost query', 'landed-cost setup',
                        'landed-cost show', 'landed-cost void'},
     'fifo-v1': {'costing-method set', 'costing-method show', 'costing-method withdraw', 'report inventory-layers'},
+    'shipments-v1': {'report shipped-not-invoiced', 'shipment history', 'shipment invoice', 'shipment post',
+                     'shipment query', 'shipment show', 'shipment update', 'shipment void'},
 }
 
 _ANCESTOR_EDIT = """

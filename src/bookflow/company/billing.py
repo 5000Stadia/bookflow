@@ -54,7 +54,12 @@ def source_selection(s, inp, kind):
     if kind == 'sales_order':
         # An order bills by quantity, by its own default; the progress preference is not consulted.
         from bookflow.company.sales_orders import billing_choice
-        return header, rev, select(s, billing_choice(s, inp, header, rev, lines, identities), header, rev, lines, identities)
+        choice = billing_choice(s, inp, header, rev, lines, identities)
+        selected = select(s, choice, header, rev, lines, identities)
+        for item in selected:
+            # The shipped units a line bills (R181): the sale line moves no stock for them.
+            item.shipments = choice.from_shipments.get(item.line['line_id'])
+        return header, rev, selected
     policy.check_selection(s, inp, header, rev, lines, identities)
     return header, rev, select(s, inp, header, rev, lines, identities)
 
@@ -237,6 +242,8 @@ def billed_lines(s, rev, selected, profile, retax=None):
         elif line['id'] in chosen:
             item = chosen[line['id']]
             entry = resolved_line(item.facts, item.proof) if item.proof else resolved_line(item.facts)
+            if getattr(item, 'shipments', None):
+                entry['shipment_lines'] = item.shipments   # billed from shipments: no stock moves (R181)
         else:
             continue
         if retax is not None:
@@ -424,6 +431,8 @@ def persist(plan, ctx, s, *, command_name):
         old['version'] if old else None, header['version'], header, old, db='company')]
     inserts = [(getattr(c, table), data['pending'][table], kind, key) for table, kind, key in sales.TABLE_KINDS]
     inserts.append((c.work_billing_allocations, data.get('billing_allocations', []), 'work_billing_allocation', 'id'))
+    if data.get('shipment_billings'):
+        inserts.append((c.shipment_billings, data['shipment_billings'], 'shipment_billing', 'id'))
     if data.get('billing_conversion'):
         wh, wb = data['work_header'], data['work_before']
         touched.append(Touched('work_document', wh['id'], 'update', wb['version'], wh['version'], wh, wb, db='company'))

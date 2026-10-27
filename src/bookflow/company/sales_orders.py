@@ -68,6 +68,9 @@ def line_quantities(s, header, rev, lines, identities, currency):
     policy = tax_policy.effective(work.facts(rev).profile)
     running = live(header)
     out = {}
+    from bookflow.company import shipments
+    shipped = shipments.order_line_figures(s, [_root(s, identities, line) for line in lines]) \
+        if shipments.has_shipments(s) else {}
     for line in lines:
         f = work.line_facts(line)
         if derived(f):
@@ -83,6 +86,14 @@ def line_quantities(s, header, rev, lines, identities, currency):
         out[line['line_id']] = OrderLineQuantities(ordered=_quantity(f.quantity_microunits),
             invoiced=_quantity(invoiced), cancelled=_quantity(cancelled), open=_quantity(open_quantity),
             open_amount=Money(open_net, currency).to_dict(), state=state)
+        if shipped:
+            done, waiting = shipped.get(root, (0, 0))
+            factor = f.unit_factor_nanounits
+            waiting_selected = Fraction(waiting * 1_000_000_000, factor)
+            to_ship = max(remaining - waiting_selected, 0) if running else 0
+            out[line['line_id']] = out[line['line_id']].model_copy(update=dict(
+                shipped=_quantity(Fraction(done * 1_000_000_000, factor)),
+                shipped_not_invoiced=_quantity(waiting_selected), to_ship=_quantity(to_ship)))
     return out
 
 
@@ -178,6 +189,7 @@ def protect(s, header, before, after):
     """
     from bookflow.company import work_tax
     from bookflow.company.billing import dependency
+    shipment_guard(s, header, before, after)
     taken = consumed(s, header)
     if not taken:
         return
@@ -211,8 +223,63 @@ def held_prepayment(s, header, sources=()):
     return sum(row['held'] for row in prepayments.receipt_rows(s, document_ids=ids))
 
 
+def shipment_guard(s, header, before, after):
+    """Shipped units are billed or come back, never cancelled or dropped (R181, design/pick-pack-ship.md §2).
+
+    A line holding shipped units keeps its item and unit and stays; its quantity less cancelled may not fall below
+    what was delivered (invoiced plus shipped not invoiced); closing the order is refused while it holds shipped
+    units no invoice billed, naming the shipments.
+    """
+    from bookflow.company import shipments, work
+    from bookflow.company.billing import dependency
+    if header is None or not shipments.has_shipments(s):
+        return
+    parts = shipments.waiting_parts(s, order_ids=[header['id']])
+    if not parts:
+        return
+    if (after.get('status') == 'closed' and before.get('status') != 'closed'
+            and any(p.waiting > 0 for rows in parts.values() for p in rows)):
+        numbers = sorted({p.number for rows in parts.values() for p in rows if p.waiting > 0})
+        raise BookflowError('E_WORK_DEPENDENCY', message=(
+            f'Shipment {", ".join(numbers)} holds units of this order not yet invoiced; bill them '
+            f'(`shipment invoice {numbers[0]}`) or void the shipment (`shipment void {numbers[0]}`) before closing it.'),
+            details=dict(source_id=header['id'], problem='shipped units not yet invoiced', shipments=numbers))
+    identities = {row['id']: (row['root_document_id'], row['root_line_id'])
+                  for row in s.company.conn.execute(sa.select(c.work_line_identities).where(
+                      c.work_line_identities.c.document_id == header['id'])).mappings()}
+    old = {entry['line_id']: entry['facts'] for entry in before.get('lines', ())}
+    new = {entry['line_id']: entry['facts'] for entry in after.get('lines', ())}
+    for key, facts in old.items():
+        root = identities.get(key, (header['id'], key))
+        shipped = sum(p.shipped for p in parts.get(root, ()))
+        if not shipped:
+            continue
+        if key not in new or new[key].get('item_id') != facts.get('item_id') or \
+                new[key].get('unit_factor_nanounits') != facts.get('unit_factor_nanounits'):
+            dependency('a shipped order line keeps its item and unit and cannot be removed', source_line_id=key)
+        waiting = sum(p.waiting for p in parts.get(root, ()))
+        factor = int(new[key].get('unit_factor_nanounits') or 1_000_000_000)
+        line = work.line_facts(dict(facts_snapshot=new[key])) if not hasattr(new[key], 'quantity_microunits') else new[key]
+        policy_root_invoiced = invoiced_microunits(s, root, line, _policy(s, header))
+        delivered = policy_root_invoiced + Fraction(waiting * 1_000_000_000, factor)
+        if line.quantity_microunits - line.cancelled_quantity_microunits < delivered:
+            dependency('shipped units are billed or returned, never cancelled: ordered less cancelled cannot fall '
+                       'below what was delivered', source_line_id=key)
+
+
+def _policy(s, header):
+    from bookflow.company import tax_policy, work
+    return tax_policy.effective(work.facts(work.revision(s, header)).profile)
+
+
 def void_guard(s, header):
     """`sales-order void` is refused while an active invoice consumes any root or a prepayment is held."""
+    from bookflow.company import shipments
+    if shipments.has_shipments(s):
+        live = sorted({row['number'] for row in shipments.shipped_lines(s, order_ids=[header['id']])})
+        if live:
+            raise BookflowError('E_WORK_DEPENDENCY', details=dict(source_id=header['id'], shipments=live,
+                problem=f'shipment {", ".join(live)} shipped this order; void the shipment first'))
     taken = consumed(s, header)
     if taken:
         raise BookflowError('E_WORK_DEPENDENCY', details=dict(source_id=header['id'],
@@ -239,9 +306,11 @@ class _WholeLine:
 class _Choice:
     """An order invoice request in the billing selection's own terms."""
 
-    def __init__(self, line_ids=None, selections=None, shipped=None):
+    def __init__(self, line_ids=None, selections=None, shipped=None, from_shipments=None):
         self.line_ids, self.selections, self.percent = line_ids, selections, None
         self.shipped = shipped or {}
+        # Order line id -> the shipment lines (shipments.Part) whose waiting units it bills (R181).
+        self.from_shipments = from_shipments or {}
 
 
 def _micro(fraction):
@@ -249,6 +318,115 @@ def _micro(fraction):
 
 
 def billing_choice(s, inp, header, rev, lines, identities):
+    """What an order invoice bills, shipped units first (R181, design/pick-pack-ship.md §3).
+
+    `shipments` bills exactly those shipments' units not yet invoiced. With no selection the invoice bills every
+    unit shipments shipped and no invoice billed yet, oldest shipment first, and moves no stock; only when the order
+    has none does it fall back to what can ship. An explicit selection of a line holding shipped units bills exactly
+    those units (the invoice line bills shipments or issues stock, never both). A shipment dated after the invoice
+    is not billed by it.
+    """
+    from bookflow.company import shipments
+    if not shipments.has_shipments(s):
+        return _order_choice(s, inp, header, rev, lines, identities)
+    from bookflow.company import work
+    from bookflow.company.billing_models import BillingSelection
+    from bookflow.company.billing_selection import derived
+    figures = line_quantities(s, header, rev, lines, identities, rev['currency'])
+    rows = []
+    for line in lines:
+        facts = work.line_facts(line)
+        if derived(facts) or line['line_id'] not in figures:
+            continue
+        rows.append((line, facts, Fraction(figures[line['line_id']].open), _root(s, identities, line)))
+    parts = shipments.waiting_parts(s, [row[3] for row in rows])
+    requested = getattr(inp, 'shipments', None)
+    wanted = None
+    if requested:
+        wanted = set()
+        for index, selector in enumerate(requested):
+            found = shipments.resolve(s, selector)
+            if found['sales_order_id'] != header['id']:
+                raise _invalid(f'shipments.{index}', f'shipment {found["number"]} is not on this order')
+            if found['revision']['status'] != 'shipped':
+                raise _invalid(f'shipments.{index}', f'shipment {found["number"]} is voided')
+            if found['revision']['ship_date'] > inp.date:
+                raise BookflowError('E_VALIDATION', message=(
+                    f'Shipment {found["number"]} shipped on {found["revision"]["ship_date"]}, after this invoice\'s '
+                    f'date {inp.date}; date the invoice on or after the ship date.'),
+                    details={'fields': [{'field': 'date', 'problem': 'before the ship date of a shipment it bills'}],
+                             'ship_date': found['revision']['ship_date']})
+            wanted.add(found['id'])
+    ready, later = {}, []
+    for line, facts, remaining, root in rows:
+        scope = [p for p in parts.get(root, ()) if p.waiting > 0 and (wanted is None or p.shipment_id in wanted)]
+        later += [p for p in scope if p.ship_date > inp.date]
+        scope = [p for p in scope if p.ship_date <= inp.date]
+        if scope:
+            ready[line['line_id']] = (line, facts, remaining, scope)
+
+    def waiting_of(entry):
+        _, facts, _, scope = entry
+        return Fraction(sum(p.waiting for p in scope) * 1_000, facts.unit_factor_nanounits)   # whole units
+
+    if wanted is not None or not (inp.all_open or inp.line_ids or inp.selections):
+        if not ready:
+            if later:
+                first = min(later, key=lambda p: p.ship_date)
+                raise BookflowError('E_VALIDATION', message=(
+                    f'Shipment {first.number} shipped on {first.ship_date}, after this invoice\'s date {inp.date}; '
+                    'date the invoice on or after the ship date.'),
+                    details={'fields': [{'field': 'date', 'problem': 'before the ship date of shipped units'}],
+                             'ship_date': first.ship_date})
+            if wanted is not None:
+                raise _invalid('shipments', 'these shipments have nothing left to invoice')
+            return _order_choice(s, inp, header, rev, lines, identities)
+        selections, from_shipments = [], {}
+        for line_id, entry in ready.items():
+            quantity = waiting_of(entry)
+            micro = _micro(quantity)
+            if not micro:
+                raise _invalid('shipments', 'shipped units do not convert exactly to the order line\'s unit')
+            selections.append(_WholeLine(line_id) if quantity == entry[2]
+                              else BillingSelection(line_id=line_id, quantity=_plain(micro)))
+            from_shipments[line_id] = entry[3]
+        return _Choice(selections=selections, from_shipments=from_shipments)
+    choice = _order_choice(s, inp, header, rev, lines, identities)
+    # An explicit choice: a line holding shipped units bills exactly those units, from its shipments.
+    chosen = {}
+    if choice.selections is not None:
+        for entry in choice.selections:
+            chosen[entry.line_id] = None if entry.quantity is None else Fraction(parse_quantity(entry.quantity), 1_000_000)
+    else:
+        keep = set(choice.line_ids) if choice.line_ids is not None else None
+        for line, facts, remaining, root in rows:
+            if (keep is None and remaining > 0) or (keep is not None and line['line_id'] in keep):
+                chosen[line['line_id']] = None
+    for line, facts, remaining, root in rows:
+        if line['line_id'] not in chosen:
+            continue
+        waiting = [p for p in parts.get(root, ()) if p.waiting > 0]
+        if not waiting:
+            continue
+        quantity = chosen[line['line_id']] if chosen[line['line_id']] is not None else remaining
+        entry = ready.get(line['line_id'])
+        if entry is None or quantity != waiting_of(entry) or len(entry[3]) != len(waiting):
+            raise BookflowError('E_VALIDATION', message=(
+                f'{facts.profile.item.label} has {_plain(_micro(waiting_of((line, facts, remaining, waiting))) or 0)} '
+                'shipped and not yet invoiced; bill those first (`shipment invoice`, or `sales-order invoice` with no '
+                'selection), then the rest. An invoice line bills shipped units or issues stock, never both.'),
+                details={'fields': [{'field': 'selections', 'problem': 'a line holding shipped units bills exactly those'}],
+                         'line_id': line['line_id'], 'reason': 'shipped_units_first'})
+        choice.from_shipments[line['line_id']] = entry[3]
+    return choice
+
+
+def parse_quantity(text):
+    from bookflow.core.exact import parse_quantity_micro_units
+    return parse_quantity_micro_units(text)
+
+
+def _order_choice(s, inp, header, rev, lines, identities):
     """What an order invoice bills: the explicit choice, every open quantity, or what can ship.
 
     With no selection each stocked line bills min(open, available to this order) -- on hand less
