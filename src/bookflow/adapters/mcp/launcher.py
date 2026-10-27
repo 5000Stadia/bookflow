@@ -33,7 +33,12 @@ def host_origin(value):
     return value.rstrip("/")
 
 
-async def serve(inp, origin, secret, inputs, outputs):
+async def serve(inp, origin, secret, inputs, outputs, once=None):
+    """Serve the three tools over stdio; with ``once`` (tool name, arguments), make that one call and return its result.
+
+    The one-call path is `bookflow agent run`: the very same headers, bridge and intent protocol as a
+    connected MCP client, so the write is attributed exactly as it would be over MCP (R183).
+    """
     import httpx2
     from mcp.server import Server
     from mcp.server.stdio import stdio_server
@@ -176,7 +181,7 @@ async def serve(inp, origin, secret, inputs, outputs):
                 document, is_error = error_document(BookflowError("E_IO", details={"operation": "mcp_result", "reason": "connection", "outcome": "unknown" if submitted else "not_submitted"}), adapter_failure=True), True
             except Exception:
                 document, is_error = error_document(BookflowError("E_IO", details={"operation": "mcp_result", "reason": "invalid_response", "outcome": "unknown" if submitted else "not_submitted"}), adapter_failure=True), True
-            if params.name == "bookflow_run":
+            if params.name == "bookflow_run" and once is None:
                 document = await within_budget(document, arguments if submitted else None)
             elif params.name == "bookflow_help" and not is_error:
                 from .budget import fit_help
@@ -192,6 +197,9 @@ async def serve(inp, origin, secret, inputs, outputs):
                 document = error_document(BookflowError("E_IO", details={"operation": "mcp_result", "reason": "serialization", "outcome": "unknown" if submitted else "not_submitted"}), adapter_failure=True)
                 return types.CallToolResult(content=[types.TextContent(text=json.dumps(document))], structured_content=document, is_error=True)
 
+        if once is not None:
+            name, arguments = once
+            return await call_tool(None, types.CallToolRequestParams(name=name, arguments=arguments))
         server = Server("bookflow", version=client_version(), on_list_tools=list_tools, on_call_tool=call_tool)
         from .stdio import eof_fenced_streams
         async with stdio_server() as (read, write):

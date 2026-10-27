@@ -68,7 +68,7 @@ class ImportInput(m.Dated):
                                     description='CSV columns; ignored for OFX and QFX.')
     draft: m.ID | None = Field(None, description='An open statement reconciliation on this account to tick the matched movements on.')
     start: bool = Field(False, description='Start a statement reconciliation from the file (or reuse the open one for the same statement date) and tick the matched movements on it.')
-    statement_date: str | None = Field(None, description="Statement date; defaults to the file's balance date (OFX) or its last line's date (CSV).")
+    statement_date: str | None = Field(None, description="Statement date, the closing date printed on the statement; an OFX file's balance date when left out. A CSV states none, so starting a draft from one needs it.")
     ending_balance: str | None = Field(None, max_length=40, description="Ending balance, as money (\"6236.95\"); defaults to the file's ledger balance (OFX) or latest running balance (CSV).")
     match_days: int = Field(files.MATCH_DAYS, strict=True, ge=0, le=60,
                             description='Days apart a line and an entry of the same amount may be dated and still match.')
@@ -312,7 +312,9 @@ def _prepare(inp, ctx, s, ids):
     draft = None
     started = None
     opening_draft = None
-    statement_date = inp.statement_date or parsed.statement_date
+    # A CSV's last line is not its statement date (R183): a statement closes on its own date, often
+    # days after the last transaction. Only an OFX file states one (its balance date).
+    statement_date = inp.statement_date or (parsed.statement_date if parsed.format != 'csv' else None)
     if inp.ending_balance is not None:
         ending = m.statement_balance(inp.ending_balance, currency, 'ending_balance')
     else:
@@ -326,6 +328,9 @@ def _prepare(inp, ctx, s, ids):
     elif inp.start:
         if statement_date is None or ending is None:
             raise files.invalid('ending_balance' if statement_date else 'statement_date',
+                                ('a CSV statement does not say its statement date; pass statement_date, the closing date printed '
+                                 'on the statement' + ('' if ending is not None else ', and ending_balance'))
+                                if parsed.format == 'csv' and statement_date is None else
                                 'the file gives no statement date and ending balance; pass statement_date and ending_balance'
                                 ' (a statement summary attached as a text file reads with `attachment text`)')
         draft = _statement_draft(snapshot, account_id, statement_date)

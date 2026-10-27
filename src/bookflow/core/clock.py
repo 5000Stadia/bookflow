@@ -48,3 +48,13 @@ def today_iso() -> str:
     """Today as an ISO date: the working day when one is set, else the UTC date of ``now``."""
     day = _working_day.get()
     return day.isoformat() if day is not None else now().date().isoformat()
+
+
+#: Marks a date field that defaults to today, the company's own date (R183): reports' date_to and
+#: as_of. Validation fills the calling machine's date; the command run replaces it with the company's
+#: before planning, when the field was not supplied (core.dispatch._dated_today).
+TODAY_DEFAULT = {"x-bookflow-default": "today"}
+
+
+def today_default() -> str:
+    return today_iso()

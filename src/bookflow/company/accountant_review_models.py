@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from bookflow.company.ledger_reports import MoneyOutput, ReportMetadata, iso_date
 from bookflow.core.models import WriteOutput
+from bookflow.core.clock import TODAY_DEFAULT, today_default
 
 _DATE = dict(min_length=10, max_length=10)
 
@@ -192,7 +193,7 @@ class CopyImportOutput(WriteOutput, ChangesFileOutput):
 # ------------------------------------------------------------------ review support
 
 class ReviewChecklistInput(_In):
-    as_of: str = Field(**_DATE, description='End of the period under review, YYYY-MM-DD.')
+    as_of: str = Field(default_factory=today_default, json_schema_extra=TODAY_DEFAULT, **_DATE, description='End of the period under review, YYYY-MM-DD.')
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=4096)
     _as_of = field_validator('as_of')(iso_date)

@@ -38,6 +38,9 @@ class CompanyShowOutput(CompanySummary):
     info_created_by_name: str | None
     info_updated_by_name: str | None
     editing_by: list[dict[str, Any]] = []
+    owner_steps: list[dict[str, Any]] = Field(default_factory=list, description=(
+        "What only the owner still has to do: choose a password (`bookflow owner-link`) or turn on daily backups "
+        "(`bookflow backup schedule`); each with step, detail and the exact command. Empty once both are done."))
 
 
 company_show = command("company show", scope="company", description="Show the selected company: registration, company information, and who created it.",
@@ -59,7 +62,22 @@ def plan_company_show(inp: Empty, ctx: Context, s: Session) -> Plan:
     names = cinfo.principal_names(s.company, {info["created_by"], info["updated_by"]})
     return Plan(preview=CompanyShowOutput(**summary.model_dump(), info=info, info_version=info["version"], info_created_by_name=names.get(info["created_by"]), info_updated_by_name=names.get(info["updated_by"]),
                                           preference_changes=work_preferences.changes(s, work_preferences.FIELDS),
-                                          editing_by=_editing_by(s, "company_info", row["id"])))
+                                          editing_by=_editing_by(s, "company_info", row["id"]),
+                                          owner_steps=_owner_steps(s, row)))
+
+
+def _owner_steps(s: Session, row: dict[str, Any]) -> list[dict[str, Any]]:
+    """The owner's pending steps (R183): a password for an installation administrator who has none, and backups."""
+    import sqlalchemy as sa
+    from bookflow.commands.setup_cmds import owner_steps
+    from bookflow.company import backup_schedule as sched
+    from bookflow.hub import schema as h
+    admins = s.hub.conn.execute(sa.select(h.users.c.password_hash).where(
+        h.users.c.hub_admin.is_(True), h.users.c.kind == "human", h.users.c.active.is_(True))).scalars().all()
+    steps = owner_steps(Path(s.data_root), company_id=row["id"], company_name=row["display_name"],
+                        has_password=not admins or all(bool(p) for p in admins),
+                        backups_on=sched.entry(s.config.data, row["id"]) is not None)
+    return [x.model_dump(mode="json") for x in steps if not x.done]
 
 
 class RenameInput(BaseModel):

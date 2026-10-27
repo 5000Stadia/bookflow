@@ -1129,6 +1129,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `info_created_by_name` | string \| null | yes | yes | — | — |
 | `info_updated_by_name` | string \| null | yes | yes | — | — |
 | `editing_by` | array[object[string, any]] | no | no | [] | — |
+| `owner_steps` | array[object[string, any]] | no | no | [] | What only the owner still has to do: choose a password (`bookflow owner-link`) or turn on daily backups (`bookflow backup schedule`); each with step, detail and the exact command. Empty once both are done. |
 
 Example JSON output:
 
@@ -1151,6 +1152,7 @@ Example JSON output:
   "legal_name": "value",
   "organization_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "organization_name": "value",
+  "owner_steps": [],
   "path": null,
   "preference_changes": [],
   "registered_by_name": null,

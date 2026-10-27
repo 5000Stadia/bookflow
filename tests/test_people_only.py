@@ -51,7 +51,9 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # fifo-v1 adds setting and withdrawing the costing method: how stock is costed is the company's policy.
     # verify-v1 adds none: `company verify` only reads.
     # agent-setup-v1 adds none: `setup` is a local bootstrap command no agent can reach.
-    # shipments-v1 and shipments-returns-v1 add none: shipments and their returns are ledger writes.
+    # shipments-v1 adds none: shipments are ledger writes.
+    # setup-trial-v1 adds none: `owner-link` is a local bootstrap command and `reconcile discard` is bookkeeping.
+    # shipments-returns-v1 adds none: shipment returns are ledger writes.
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {
         'journal restore', 'invoice restore', 'customer merge', 'customer unmerge', 'vendor merge', 'vendor unmerge',

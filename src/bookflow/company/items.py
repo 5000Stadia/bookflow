@@ -819,8 +819,41 @@ def _determined_accounts(db: Database, parsed: ItemInput, supplied: set[str]) ->
     return parsed.model_copy(update=filled) if filled else parsed
 
 
+def _service_defaults(db: Database, parsed: ItemInput, supplied: set[str]) -> ItemInput:
+    """A new service item sold without a price or description gets the anchor's blanks (R183).
+
+    A service is often priced per job, so a missing price is 0.00 and the rate is typed on each
+    invoice line, as the anchor's item list leaves it. A missing sales description is the item's
+    name, which is what the invoice line would otherwise be left without. On a company that has not
+    turned sales tax on, a missing sales-tax code is the non-taxable one: there is no tax to choose.
+    Anything supplied is kept as it is.
+    """
+    if parsed.type != "service":
+        return parsed
+    sales, _purchase = _logical_defaults(parsed.type, parsed)
+    if not sales:
+        return parsed
+    filled: dict[str, Any] = {}
+    if parsed.price is None and "price" not in supplied:
+        filled["price"] = "0"
+    if not _required(parsed.description) and "description" not in supplied:
+        filled["description"] = parsed.name
+    if parsed.sales_tax_code_id is None and "sales_tax_code_id" not in supplied:
+        enabled = db.conn.execute(sa.select(schema.company_info.c.sales_tax_enabled)).scalar_one_or_none()
+        if not enabled:
+            codes = schema.sales_tax_codes
+            rows = db.conn.execute(sa.select(codes.c.id, codes.c.code).where(
+                codes.c.taxable.is_(False), codes.c.active.is_(True)).order_by(codes.c.code)).all()
+            chosen = next((r for r in rows if r.code.casefold() == "non"), rows[0] if rows else None)
+            if chosen is not None:
+                filled["sales_tax_code_id"] = str(chosen.id)
+    return parsed.model_copy(update=filled) if filled else parsed
+
+
 def _owner_values(db: Database, parsed: ItemInput, *, supplied: set[str], reference_changes: set[str], creating: bool) -> dict[str, Any]:
     parsed = _determined_accounts(db, parsed, supplied)
+    if creating:
+        parsed = _service_defaults(db, parsed, supplied)
     _validate_profile(parsed, supplied)
     sales_enabled, purchase_enabled = _logical_defaults(parsed.type, parsed)
     values: dict[str, Any] = {"type": parsed.type, "sales_enabled": sales_enabled, "purchase_enabled": purchase_enabled}

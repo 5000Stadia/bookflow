@@ -650,7 +650,7 @@ For the builder, defaults standing unless review finds otherwise:
   sequence starting 1001, shipment, order, customer, return date, `reopen`, journal entry), `shipment_return_revisions`
   (append-only: `returned`, then `voided`) and `shipment_return_lines` (shipment line identity, base quantity, the
   receipt movement); `inventory_documents` admits `shipment_return` (a rebuild as co0102 does). Every row immutable; no
-  guard counts rows. Permission layer `shipments-returns-v1` on `shipments-v1` (the brief's spelling).
+  guard counts rows. Permission layer `shipments-returns-v1` on `setup-trial-v1` (the brief's spelling).
 - **`shipment return`** writes one receipt movement per line naming the shipment line's issue, so the replay values it
   as any return (the endpoint share of the issue, recosted with it); its offset account is Shipped Not Invoiced, so
   its entry is Dr Inventory Asset, Cr Shipped Not Invoiced and its later corrections post there too. Lines name a

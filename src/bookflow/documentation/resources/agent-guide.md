@@ -619,6 +619,26 @@ schedule entries and the work orders he is assigned that day; `customer` instead
 {"command": "schedule calendar", "input": {"employee": "Dave Brazer", "view": "day", "date": "2026-10-25"}}
 ```
 
+## A service item
+
+`item create` with `type: service`, `sales_enabled: true`, a `name` and an `income_account_id` is enough
+for a service sold per job: a missing `price` is 0.00 (type the rate on each invoice line), a missing
+`description` is the item's name, and on books that have not turned sales tax on a missing
+`sales_tax_code_id` is the non-taxable code. Anything you give is kept.
+
+## A debit-card purchase or an online payment from the bank
+
+A payment that leaves the bank account with no cheque behind it (a debit-card purchase, an online bill
+payment, an automatic withdrawal) is `check post` with `no_number: true`: the accounting is a check's,
+it takes no number from the chequebook, never enters the print queue, and stays unnumbered when
+corrected. Do not type a word such as `DEBIT` as the check number: a number is unique on its account,
+so the second one is refused with `E_DUPLICATE_NUMBER`.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "check post", "input": {"account": "Checking", "no_number": true, "date": "2026-10-20", "amount": "62.40", "expenses": [{"account": "Vehicle Expense", "amount": "62.40"}]}, "reason": "Fuel, debit card"}
+```
+
 ## Printing checks: "print this week's checks"
 
 Write the checks with `to_be_printed: true` (on `check post`, or by check from a bank account on
@@ -1000,6 +1020,26 @@ A statement's summary box (its closing date and new balance) often comes as a se
 not a statement file and `reconcile import` refuses it. Attach it the same way and read it with
 `attachment text <attachment id>`, which returns a small text file's content (at most 64 KiB); take
 `statement_date` and `ending_balance` from what it says, never from the books.
+
+## Books that start in the middle of a statement
+
+When the books begin part-way through a bank statement (the opening balance entered as a journal on the
+start date), reconcile from zero: `reconcile opening start` dated the day before the account's first
+movement with `entered_balance` 0.00, then `reconcile start` for the statement and `reconcile mark` with
+`all`, which ticks the opening-balance entry with the rest; the statement's beginning balance is then
+not compared with anything the bank printed. That is the recommended route. The other route, an
+opening dated on the start date with the opening balance as `entered_balance`, works only once the
+opening-balance entry is marked `covered` on the opening draft (`reconcile mark` on the opening with
+`entries`, action `covered`); until then the opening is not proven (`E_RECONCILIATION_OPENING_UNPROVEN`).
+`reconcile mark --all` on the statement then leaves that entry out, as the opening's.
+
+## A draft whose ticked entry changed
+
+If an entry ticked on an open draft is corrected afterwards, `reconcile preview` refuses with
+`E_RECONCILIATION_SELECTION_STALE` and lists what changed (`details.stale`). Take the ticks back with
+`reconcile mark` and `all: true, all_action: "unmark"` (or untick just that entry), then tick again and
+preview. A draft nobody will finish is dropped with `reconcile discard <draft id>` and a reason: it is
+canceled, kept with its history, and leaves the Overview and the owner's entries-to-review.
 
 ## A reconciliation that will not tie
 

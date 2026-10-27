@@ -9,10 +9,10 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_shipments_catalog as previous, permission_catalog as c
+from . import permission_setup_trial_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = '476d6c5704d5a40ff4fa06486ceed132f4d203dc'
+SOURCE_COMMIT = '0ed5e625ea653e6c1e7e3197ec47b85ed40c26dd'
 _OWNER = 'bookflow.commands.shipment_cmds.{}|src/bookflow/commands/shipment_cmds.py'
 _WORK = (c.Requirement(capability='customer-work', threshold='standard'),)
 # (name, capability, threshold, planner, resources, authorization text)

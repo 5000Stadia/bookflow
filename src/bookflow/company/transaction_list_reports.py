@@ -34,11 +34,12 @@ from bookflow.company.ledger_reports import (
     MANY_SPLITS, MoneyOutKind, MoneyOutput, StrictModel, TransactionType, iso_date, money,
 )
 from bookflow.core.errors import BookflowError
+from bookflow.core.clock import TODAY_DEFAULT, today_default
 
 
 class _Period(StrictModel):
     date_from: str = Field(min_length=10, max_length=10, description="Inclusive first accounting date, YYYY-MM-DD.")
-    date_to: str = Field(min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD.")
+    date_to: str = Field(default_factory=today_default, json_schema_extra=TODAY_DEFAULT, min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD.")
     basis: Literal["accrual"] = "accrual"
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=4096)

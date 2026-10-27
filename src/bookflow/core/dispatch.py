@@ -752,10 +752,20 @@ TODAY_DATED = frozenset(("invoice post", "sales-receipt post", "credit-memo post
 
 
 def _dated_today(cmd: Command, inp: BaseModel, s: Session) -> BaseModel:
-    if cmd.name not in TODAY_DATED or getattr(inp, "date", "") is not None:
-        return inp
     from bookflow.company.memorized_schedule import today
-    return inp.model_copy(update={"date": today(s.company_tz)})
+    from bookflow.core.clock import TODAY_DEFAULT
+    if cmd.name in TODAY_DATED and getattr(inp, "date", "") is None:
+        return inp.model_copy(update={"date": today(s.company_tz)})
+    # A field marked TODAY_DEFAULT (reports' date_to and as_of, R183) that the caller left out was
+    # filled with the calling machine's date by validation; the company's own date replaces it.
+    left_out = [name for name, field in type(inp).model_fields.items()
+                if isinstance(field.json_schema_extra, dict)
+                and field.json_schema_extra.get("x-bookflow-default") == TODAY_DEFAULT["x-bookflow-default"]
+                and name not in inp.model_fields_set]
+    if left_out and s.company is not None:
+        day = today(s.company_tz)
+        return inp.model_copy(update={name: day for name in left_out})
+    return inp
 
 
 def _with_stock_warnings(out: dict[str, Any], plan: Any) -> dict[str, Any]:
@@ -1050,5 +1060,8 @@ def _run_bootstrap(cmd: Command, inp: BaseModel, ctx: Context, s: Session) -> di
     if cmd.name == "setup":
         from bookflow.commands.setup_cmds import run_setup
         return run_setup(cmd, inp, ctx, s)
+    if cmd.name == "owner-link":
+        from bookflow.commands.setup_cmds import run_owner_link
+        return run_owner_link(cmd, inp, ctx, s)
     from bookflow.commands.hub_cmds import run_init
     return run_init(cmd, inp, ctx, s)

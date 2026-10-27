@@ -54,6 +54,13 @@ class SetupStep(BaseModel):
     detail: str
 
 
+class OwnerStep(BaseModel):
+    step: Literal["password", "backups"]
+    done: bool
+    detail: str
+    command: str | None = Field(None, description="The exact command the owner runs; null when nothing is left to run")
+
+
 class SetupOutput(BaseModel):
     dry_run: bool = False
     warnings: list[str] = Field(default_factory=list)
@@ -67,6 +74,7 @@ class SetupOutput(BaseModel):
     url: str = Field(description="Where the host answers; GET <url>health returns 200 once it is ready")
     host: dict[str, Any] = Field(description="status (running, started, not_started), pid and log")
     owner_link: dict[str, Any] | None = Field(description="url and expires_at of the owner's one-time password link; null when they have a password")
+    owner_checklist: list[OwnerStep] = Field(description="What only the owner does, still to do: set their password, turn on daily backups; each with the exact command")
     steps: list[SetupStep]
     next_steps: list[str]
     content: str = Field(description="The same result as plain text, for a person")
@@ -133,6 +141,119 @@ def _write_secret(path: Path, secret: str) -> None:
     _write_atomic(path, secret + "\n", 0o600)
 
 
+# ---------------------------------------------------------------- the owner's own steps (R183)
+
+def default_backup_folder() -> Path:
+    return Path.home() / "bookflow-backups"
+
+
+def _root_flag(root: Path) -> str:
+    """` --data-root ROOT` when the books are not in the default place, so a pasted command finds them."""
+    from bookflow.storage.paths import default_data_root
+    try:
+        same = Path(root).resolve() == default_data_root().resolve()
+    except OSError:
+        same = False
+    return "" if same else f" --data-root {_quoted(str(root))}"
+
+
+def _quoted(value: str) -> str:
+    import shlex
+    return shlex.quote(value)
+
+
+def owner_steps(root: Path, *, company_id: str, company_name: str, has_password: bool,
+                backups_on: bool, link: dict[str, Any] | None = None) -> list[OwnerStep]:
+    """The owner's checklist: the two things only they do, each with the command that does it."""
+    flag = _root_flag(root)
+    if has_password:
+        password = OwnerStep(step="password", done=True, detail="The owner has a password and logs in in the browser.")
+    elif link:
+        password = OwnerStep(step="password", done=False, command=f"bookflow owner-link{flag}",
+                             detail=f"Open the one-time link to choose a password (it works once, until "
+                                    f"{_readable(link['expires_at'])}): {link['url']} . If it expires, this makes a fresh one:")
+    else:
+        password = OwnerStep(step="password", done=False, command=f"bookflow owner-link{flag}",
+                             detail="Choose a password through a one-time link; `bookflow owner-link` makes one.")
+    if backups_on:
+        backups = OwnerStep(step="backups", done=True, detail="Daily backups are on (`bookflow backup list` shows them).")
+    else:
+        folder = _quoted(str(default_backup_folder()))
+        backups = OwnerStep(step="backups", done=False,
+                            command=(f"mkdir -p {folder} && bookflow backup schedule {_quoted(company_name)} "
+                                     f"--daily-at 02:00 --destination {folder} --keep 14{flag}"),
+                            detail="Turn on daily backups (a person's decision; an agent cannot). Another disk or "
+                                   "machine is safer than this one: change --destination to it.")
+    return [password, backups]
+
+
+class OwnerLinkInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    bind: str = Field("127.0.0.1:8765", max_length=128, description="Address the host listens on, host:port (loopback); the link opens there")
+    link_minutes: int = Field(120, ge=1, le=1440, description="Minutes the link stays valid")
+
+
+class OwnerLinkOutput(BaseModel):
+    username: str
+    url: str = Field(description="The one-time link; it works once and only for a person with no password yet")
+    expires_at: str
+    host_running: bool = Field(description="Whether the host answers at the link's address now; start it with `bookflow serve --background`")
+    content: str
+    media_type: str = "text/plain"
+
+
+owner_link_cmd = command(
+    "owner-link", scope="hub",
+    description=("Make a fresh one-time link for the owner (this computer's login) to choose their password in the "
+                 "browser, as `setup` does: it works once, expires (two hours by default) and replaces any earlier "
+                 "link. It never resets a password: once the owner has one, it is refused. Use it instead of "
+                 "rerunning setup when a link expired or was lost."),
+    input_model=OwnerLinkInput, output_model=OwnerLinkOutput, writes={"config"},
+    error_codes=["E_VALIDATION", "E_NOT_INITIALIZED", "E_NETWORK_NOT_ALLOWED"], bootstrap=True, local_only=True,
+    capability="init",
+    authorization="the local operating-system login, which must be the installation's owner",
+)(_plan_setup)
+
+
+def run_owner_link(cmd, inp: OwnerLinkInput, ctx: Context, s: Session) -> dict[str, Any]:
+    """The bootstrap path for `owner-link`: the same link store and rules as setup's step 6."""
+    import sqlalchemy as sa
+    from bookflow.commands.host_cmds import host_url, parse_bind, is_loopback, answers
+    from bookflow.core.config import Config
+    from bookflow.hub import setup_links
+    from bookflow.hub import schema as h
+    from bookflow.storage.engine import open_database
+
+    if s.dry_run:
+        raise BookflowError("E_USAGE", message="`owner-link` has no dry run.")
+    host_name, _port = parse_bind(inp.bind)
+    if not is_loopback(host_name):
+        raise BookflowError("E_NETWORK_NOT_ALLOWED", details={"bind": inp.bind},
+                            message="The link opens on this computer only; use a loopback address such as 127.0.0.1:8765.")
+    root = Path(os.path.abspath(Path(s.data_root).expanduser()))
+    if not (root / "hub.db").exists():
+        raise BookflowError("E_NOT_INITIALIZED", details={"data_root": str(root)})
+    mapped = Config.load(root / "config.toml").user_table(s.os_login) or {}
+    owner_id = mapped.get("user_id")
+    if not isinstance(owner_id, str):
+        raise BookflowError("E_NO_ACTOR", message=f"This computer's login is not the owner of {root}; run it as the person who owns it.")
+    with open_database(root / "hub.db", writable=False) as db:
+        row = db.conn.execute(sa.select(h.users).where(h.users.c.id == owner_id)).mappings().first()
+    if row is None or row["kind"] != "human" or not row["active"]:
+        raise BookflowError("E_NO_ACTOR", message="This computer's login is not mapped to an active person.")
+    if row["password_hash"]:
+        raise BookflowError("E_VALIDATION", message=f"{row['username']} already has a password; a one-time link only sets a first one.",
+                            details={"fields": [{"field": "owner", "problem": "already has a password"}]})
+    url = host_url(inp.bind)
+    secret, expires = setup_links.create(root, owner_id, minutes=inp.link_minutes)
+    link = f"{url}setup/{secret}"
+    running = answers(url)
+    text = (f"One-time link for {row['username']} to choose a password (works once, until {_readable(expires)}):\n  {link}\n"
+            + ("" if running else "The host is not answering yet; start it with `bookflow serve --background`.\n"))
+    return OwnerLinkOutput(username=row["username"], url=link, expires_at=expires, host_running=running,
+                           content=text).model_dump(mode="json")
+
+
 def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
     """The bootstrap path for `setup` (dispatch._run_bootstrap): existing commands, in order, each only if needed."""
     import sqlalchemy as sa
@@ -149,7 +270,9 @@ def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
     if not is_loopback(host_name):
         raise BookflowError("E_NETWORK_NOT_ALLOWED", details={"bind": inp.bind},
                             message="`setup` serves on this computer only; use a loopback address such as 127.0.0.1:8765.")
-    root = Path(s.data_root)
+    # Always absolute: the token file's path goes into .mcp.json, which an MCP client reads from
+    # its own working directory, and a relative --data-root would point it somewhere else.
+    root = Path(os.path.abspath(Path(s.data_root).expanduser()))
     url = host_url(inp.bind)
     steps: list[SetupStep] = []
     warnings: list[str] = []
@@ -299,9 +422,7 @@ def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
         step("token", "created" if kept is None else "updated", f"written to {token_file} (mode 0600)")
 
     # 5. The MCP client configuration: no secret in it, only the token file's path.
-    config_path = Path(inp.mcp_config).expanduser()
-    if not config_path.is_absolute():
-        config_path = Path.cwd() / config_path
+    config_path = Path(os.path.abspath(Path(inp.mcp_config).expanduser()))
     command_line = launcher_command()
     server = {"command": command_line[0],
               "args": [*command_line[1:], "mcp", "--url", url, "--client-name", agent["username"],
@@ -362,12 +483,25 @@ def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
     next_steps.append(f"Load the MCP server `{SERVER_NAME}` from {config_path} (restart or reload your MCP client).")
     next_steps.append('Check the connection: call bookflow_run with {"command": "company show", "input": {}}.')
     if owner_link:
-        next_steps.append(f"Give the owner this link to set their password (it works once, until {_readable(owner_link['expires_at'])}): {owner_link['url']}")
+        next_steps.append(f"Give the owner this link to set their password (it works once, until {_readable(owner_link['expires_at'])}): "
+                          f"{owner_link['url']} . If it expires or is lost, `bookflow owner-link` makes a fresh one; there is no need to rerun setup.")
     else:
         next_steps.append(f"The owner logs in at {url} as {owner_row['username']}.")
+    from bookflow.company import backup_schedule as sched
+    checklist = owner_steps(root, company_id=company_id, company_name=company_out["display_name"], has_password=has_password,
+                            backups_on=sched.entry(Config.load(root / "config.toml").data, company_id) is not None, link=owner_link)
+    pending = [x for x in checklist if not x.done]
+    if pending:
+        next_steps.append("Hand the owner their checklist (owner_checklist): only they do these.")
     lines = [f"Bookflow is set up for {company_out['display_name']} ({company_out['home_currency']}).", ""]
     lines += [f"  {x.step:<15} {x.status:<8} {x.detail}" for x in steps]
     lines += ["", "Next:"] + [f"  {n}. {t}" for n, t in enumerate(next_steps, 1)]
+    if pending:
+        lines += ["", "Owner checklist (only the owner does these):"]
+        for x in pending:
+            lines.append(f"  [ ] {x.detail}")
+            if x.command:
+                lines.append(f"      {x.command}")
     return SetupOutput(
         warnings=warnings, data_root=str(root),
         owner={"user_id": owner_id, "username": owner_row["username"], "display_name": owner_row["display_name"]},
@@ -375,5 +509,5 @@ def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
         agent={"user_id": agent["agent_id"], "username": agent["username"], "role": role, "stopped": bool(stopped),
                "acts_for": owner_row["username"], "acts_for_user_id": owner_id},
         mcp_config=str(config_path), mcp_server=server, token_file=str(token_file), url=url, host=host,
-        owner_link=owner_link, steps=steps, next_steps=next_steps, content="\n".join(lines) + "\n",
+        owner_link=owner_link, owner_checklist=checklist, steps=steps, next_steps=next_steps, content="\n".join(lines) + "\n",
     ).model_dump(mode="json")

@@ -102,7 +102,7 @@ def _draft(snapshot, identity):
 
 
 def _commit(s, ctx, name, *, account_id, operation_id, event_id, kind, summary, document, targets,
-            rows, updates=(), touched=()):
+            rows, updates=(), touched=(), operation_command=None):
     """Write one operation and prove the account that now holds it."""
     at = clock.now_iso()
     actor = s.actor
@@ -111,7 +111,7 @@ def _commit(s, ctx, name, *, account_id, operation_id, event_id, kind, summary, 
                                     actor_kind=actor.kind if actor else None)
     made = persistence.created(ctx, actor.id if actor else None, audit_event_id, at)
     everything = persistence.merge(
-        persistence.receipt(operation_id, command=name, operation_key=document['operation_key'],
+        persistence.receipt(operation_id, command=operation_command or name, operation_key=document['operation_key'],
                             request=document['request'], effect=document['effect'],
                             targets=targets, made=made),
         {'events': [persistence.event(event_id, operation_id=operation_id,
@@ -580,6 +580,12 @@ reconcile_candidates = command(
     error_codes=['E_RECORD_NOT_FOUND', 'E_QUERY_STALE', *ERRORS[2:]])(_candidates)
 
 
+def _amounts(totals, currency):
+    """The preview's totals as money to read (R183), in the codebase's money shape."""
+    from bookflow.core.money import Money
+    return {k: Money(int(v), currency).to_dict() for k, v in totals.decimal_units.items()}
+
+
 def _preview(inp, ctx, s):
     account_id = _account_of(s, inp.draft)
     snapshot = _loaded(s, account_id)
@@ -595,7 +601,8 @@ def _preview(inp, ctx, s):
         kind=value.kind, version=value.version,
         next_step=(preparation.FIRST_RECONCILIATION if value.kind == 'opening'
                    else None if totals.difference == 0 else preparation.STOP_RULE),
-        totals=totals, expected_facts_fingerprint=preparation.fingerprint(snapshot, value),
+        totals=totals, amounts=_amounts(totals, snapshot.source.accounts[account_id]['currency']),
+        expected_facts_fingerprint=preparation.fingerprint(snapshot, value),
         dependency_guard=dependency_guard(value), balanced=totals.difference == 0,
         cleared_without_statement_line=None if value.kind == 'opening' else _gaps(s, snapshot, value)))
 
@@ -611,3 +618,59 @@ reconcile_preview = command(
                 'records the same list, and refuses nothing for it.',
     input_model=m.Preview, output_model=m.PreviewOutput, required_role='member',
     capability='ledger.read', positional=['draft'], error_codes=list(ERRORS))(_preview)
+
+
+# ---------------------------------------------------------------- discard (R183)
+
+def _discard_prepare(inp, ctx, s, ids):
+    _reuse(s, inp.operation_key)
+    account_id = _account_of(s, inp.draft)
+    snapshot = _loaded(s, account_id)
+    value = _draft(snapshot, inp.draft)
+    preparation.require(inp.draft == value.id, 'E_RECONCILIATION_MANIFEST')
+    return snapshot, drafts.lifecycle(snapshot, value, 'cancel', expected_version=inp.expected_version,
+                                      revision_id=ids['revision'], operation_id=ids['operation'])
+
+
+def _discard_planner(inp, ctx, s):
+    ids = dict(revision=new_id(), operation=new_id(), event=new_id())
+    snapshot, value = _discard_prepare(inp, ctx, s, ids)
+    return Plan(m.DraftOutput(draft=value), dict(ids=ids, input=inp, prepared=_kept(s, (snapshot, value))))
+
+
+reconcile_discard = command(
+    'reconcile discard', scope='company',
+    description='Discard an open reconciliation draft (statement, opening or amendment) that will not be '
+                'finished: it becomes canceled, leaves the Overview and entries-to-review, and keeps its '
+                'history and notes. Nothing it ticked was cleared, so nothing changes in the books; start '
+                'the statement again with `reconcile start`. A person or an agent may discard, with a reason; '
+                'it is audited. Preview it with --dry-run.',
+    input_model=m.Discard, output_model=m.DraftOutput, writes={'company'}, required_role='standard',
+    capability='ledger.post', accepts_idempotency_key=True, positional=['draft'],
+    error_codes=list(ERRORS))(_discard_planner)
+reconcile_discard.ledger = True
+reconcile_discard.plan_in_write = True
+
+
+@reconcile_discard.applier
+def _discard_apply(plan, ctx, s):
+    inp, ids = plan.data['input'], plan.data['ids']
+    snapshot, value = plan.data.get('prepared') or _discard_prepare(inp, ctx, s, ids)
+    previous = snapshot.by('drafts')[value.id]['current_revision_id']
+    table = c.reconciliation_drafts
+    summary = f'discarded reconciliation draft {value.id}'
+    # The aggregate's own receipt names the lifecycle action the storage was built with ('reconcile
+    # cancel'); the audit trail names the command that was run.
+    _commit(s, ctx, 'reconcile discard', account_id=value.account_id, operation_id=ids['operation'],
+            event_id=ids['event'], kind='draft_change', summary=summary, operation_command='reconcile cancel',
+            document=dict(operation_key=inp.operation_key, request=inp.model_dump(mode='json'),
+                          effect=dict(draft=value.id, version=value.version, state=value.state)),
+            targets=_targets(value.account_id, drafts=[value.id]),
+            rows=lambda made: {k: v for k, v in persistence.draft(
+                value, made=made, previous_revision_id=previous).items() if k != 'drafts'},
+            updates=[table.update().where(table.c.id == value.id).values(
+                version=value.version, current_revision_id=value.current_revision_id,
+                state=value.state, terminal_operation_id=value.terminal_operation_id)],
+            touched=[Touched('reconciliation_draft', value.id, 'update', value.version - 1,
+                             value.version, dict(state=value.state), db='company')])
+    return Applied(m.DraftOutput(draft=value), [], summary, audited=True)

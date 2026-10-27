@@ -169,9 +169,217 @@ Example JSON output:
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
 
+## `reconcile discard`
+
+Discard an open reconciliation draft (statement, opening or amendment) that will not be finished: it becomes canceled, leaves the Overview and entries-to-review, and keeps its history and notes. Nothing it ticked was cleared, so nothing changes in the books; start the statement again with `reconcile start`. A person or an agent may discard, with a reason; it is audited. Preview it with --dry-run.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | ledger.post |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/reconcile.discard` |
+| External binary body | none |
+
+### CLI
+
+`bookflow reconcile discard 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 3 --operation-key example-discard-1 --company "Demo Plumbing Co" --reason "Statement restarted after a corrected entry" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "reconcile discard", "input": {"draft": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 3, "operation_key": "example-discard-1"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `draft` | `DRAFT` | string | yes | no | — | pattern "^[0-9A-HJKMNP-TV-Z]{26}$" |
+| `operation_key` | `--operation-key` | string | yes | no | — | pattern "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" |
+| `expected_version` | `--expected-version` | integer | yes | no | — | minimum 1 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/reconcile.discard`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `contract` | literal["reconciliation.private.v1"] | no | no | "reconciliation.private.v1" | — |
+| `draft` | object | yes | no | — | — |
+| `draft.id` | string | yes | no | — | — |
+| `draft.account_id` | string | yes | no | — | — |
+| `draft.kind` | literal["opening", "statement", "amendment"] | yes | no | — | — |
+| `draft.version` | integer | yes | no | — | — |
+| `draft.current_revision_id` | string | yes | no | — | — |
+| `draft.state` | literal["open", "consumed", "canceled"] | yes | no | — | — |
+| `draft.terminal_operation_id` | string \| null | no | yes | null | — |
+| `draft.header` | object | yes | no | — | — |
+| `draft.header.format` | literal[1] | yes | no | — | — |
+| `draft.header.opening_date` | string \| null | yes | yes | — | — |
+| `draft.header.statement_date` | string \| null | yes | yes | — | — |
+| `draft.header.entered_balance` | integer \| null | yes | yes | — | — |
+| `draft.header.evidence` | object | yes | no | — | — |
+| `draft.header.evidence.format` | literal[1] | no | no | 1 | — |
+| `draft.header.evidence.statement_reference` | string \| null | no | yes | null | — |
+| `draft.header.evidence.entered_text` | string \| null | no | yes | null | — |
+| `draft.header.preferences` | object | yes | no | — | — |
+| `draft.header.preferences.format` | literal[1] | yes | no | — | — |
+| `draft.header.preferences.columns` | array[literal["date", "number", "payee", "memo", "amount", "type", "status"]] | yes | no | — | — |
+| `draft.header.preferences.sort` | literal["date", "number", "payee", "amount", "type"] | yes | no | — | — |
+| `draft.header.preferences.descending` | boolean | yes | no | — | — |
+| `draft.header.preferences.hide_after_date` | boolean | yes | no | — | — |
+| `draft.header.preferences.view` | literal["as_certified", "current_discrepancy"] | yes | no | — | — |
+| `draft.base_chain_version` | integer | yes | no | — | — |
+| `draft.base_opening_id` | string \| null | no | yes | null | — |
+| `draft.base_head_id` | string \| null | no | yes | null | — |
+| `draft.repair_of_opening_id` | string \| null | no | yes | null | — |
+| `draft.repair_of_certificate_id` | string \| null | no | yes | null | — |
+| `draft.selections` | array[object] | no | no | [] | — |
+| `draft.selections[].key_id` | string | yes | no | — | — |
+| `draft.selections[].version_id` | string | yes | no | — | — |
+| `draft.selections[].action` | literal["mark", "covered", "outstanding"] | yes | no | — | — |
+| `draft.proposal_revision_ids` | array[string] | no | no | [] | — |
+| `draft.evidence_references` | array[object \| object] | no | no | [] | — |
+| `draft.evidence_references[].kind` | literal["transaction"] \| literal["transaction_attachment"] | yes | no | — | — |
+| `draft.evidence_references[].transaction_id` | string | yes | no | — | — |
+| `draft.evidence_references[].attachment_id` | string | no | no | — | Present in AttachmentEvidence. |
+| `draft.evidence_references[].attachment_link_id` | string | no | no | — | Present in AttachmentEvidence. |
+
+Example JSON output:
+
+```json
+{
+  "contract": "reconciliation.private.v1",
+  "draft": {
+    "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "base_chain_version": 1,
+    "base_head_id": null,
+    "base_opening_id": null,
+    "current_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "evidence_references": [],
+    "header": {
+      "entered_balance": 125000,
+      "evidence": {
+        "entered_text": null,
+        "format": 1,
+        "statement_reference": "Jan 2026 checking statement"
+      },
+      "format": 1,
+      "opening_date": "2026-01-31",
+      "preferences": {
+        "columns": [
+          "date",
+          "number",
+          "payee",
+          "amount"
+        ],
+        "descending": false,
+        "format": 1,
+        "hide_after_date": true,
+        "sort": "date",
+        "view": "as_certified"
+      },
+      "statement_date": null
+    },
+    "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "kind": "opening",
+    "proposal_revision_ids": [],
+    "repair_of_certificate_id": null,
+    "repair_of_opening_id": null,
+    "selections": [],
+    "state": "open",
+    "terminal_operation_id": null,
+    "version": 1
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECONCILIATION_ATTEMPT_STATE` | That bulk reconciliation attempt is not in a state this step accepts. |
+| `E_RECONCILIATION_CHAIN_STALE` | The account's reconciliation chain moved since this draft read it. |
+| `E_RECONCILIATION_DATE` | A date is outside what this statement period admits. |
+| `E_RECONCILIATION_DEPENDENCY` | Another reconciliation record depends on the one this change would move. |
+| `E_RECONCILIATION_DIFFERENCE` | The statement does not balance: the cleared balance and the entered ending balance differ. If it will not tie, leave the draft open with a note for the owner; never post an entry just to make it tie. Only a person may finish it with a labelled adjustment to Reconciliation Discrepancies. |
+| `E_RECONCILIATION_DRAFT_STATE` | That reconciliation draft is not open, or is not the kind this step accepts. |
+| `E_RECONCILIATION_MANIFEST` | The supplied selection is not the complete, consistent set this operation requires. |
+| `E_RECONCILIATION_MEMBERSHIP_CONFLICT` | A chosen movement is already claimed by the opening or by another statement. |
+| `E_RECONCILIATION_OPENING_UNPROVEN` | The opening does not account for every movement on or before its date. |
+| `E_RECONCILIATION_OPERATION_KEY_REUSED` | That permanent reconciliation operation key belongs to a different original request. |
+| `E_RECONCILIATION_SELECTION_STALE` | A selected movement changed since it was selected; read the candidates again. |
+| `E_RECONCILIATION_SOURCE_INVALID` | The stored statement effects do not reconcile to the general ledger. |
+| `E_RECONCILIATION_UNSUPPORTED` | Statement reconciliation cannot represent this account or one of its documents. |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
 ## `reconcile finish`
 
-Certify a statement reconciliation whose difference is zero, storing the statement it reconciles to and the account exactly as it stood when it was certified. Takes a statement draft from `reconcile start`, never an opening draft: on an account's first reconciliation the opening that statement follows is certified with it. If it will not tie, stop: leave this draft open, add a note to it saying what you checked (`note add reconciliation_draft <draft id> "..."`), and tell the company owner. Never post, change or tick an entry just to make the difference zero; the owner's entries-to-review list shows entries that do. The open draft and its difference stay on the Overview until someone finishes it. Only a person, never an agent, may instead finish it with a labelled adjustment: `reconcile finish` with `adjustment` and a reason posts the exact difference to Reconciliation Discrepancies. That adjustment (QuickBooks' "Enter Adjustment") posts one journal for the exact remaining difference, dated the statement date, to the Reconciliation Discrepancies expense account (made on first use), and certifies the statement with it. Preview it with --dry-run. An agent passing `adjustment` is refused.
+Certify a statement reconciliation whose difference is zero, storing the statement it reconciles to and the account exactly as it stood when it was certified. Takes a statement draft from `reconcile start`, never an opening draft: on an account's first reconciliation the opening that statement follows is certified with it. If it will not tie, stop: leave this draft open, add a note to it saying what you checked (`note add reconciliation_draft <draft id> --body "..."`), and tell the company owner. Never post, change or tick an entry just to make the difference zero; the owner's entries-to-review list shows entries that do. The open draft and its difference stay on the Overview until someone finishes it. Only a person, never an agent, may instead finish it with a labelled adjustment: `reconcile finish` with `adjustment` and a reason posts the exact difference to Reconciliation Discrepancies. That adjustment (QuickBooks' "Enter Adjustment") posts one journal for the exact remaining difference, dated the statement date, to the Reconciliation Discrepancies expense account (made on first use), and certifies the statement with it. Preview it with --dry-run. An agent passing `adjustment` is refused.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -297,7 +505,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `totals.ending_balance` | integer | yes | no | — | — |
 | `totals.cleared_balance` | integer | yes | no | — | — |
 | `totals.difference` | integer | yes | no | — | — |
-| `totals.decimal_units` | object[string, string] | yes | no | — | — |
+| `totals.decimal_units` | object[string, string] | yes | no | — | The same figures as whole minor units (cents for USD), as strings: 627500 is 6,275.00. For amounts to read, use `amounts` beside the totals. |
 | `cleared_without_statement_line` | array[object] \| null | no | yes | null | Only when a statement was imported into this draft (`reconcile import`): each ticked movement no statement line accounts for -- cleared without a statement line. Flagged, never refused; null when nothing was imported, as for any reconciliation built by hand. |
 | `cleared_without_statement_line[].movement` | object | yes | no | — | — |
 | `cleared_without_statement_line[].movement.producer` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge", "sales_tax_adjustment"] | yes | no | — | — |
@@ -489,7 +697,7 @@ The same example as complete `bookflow_run` arguments:
 | `csv_mapping.invert` | `--csv-mapping-invert` | boolean | no | no | false | Flip every amount, for a bank that shows money in as negative. |
 | `draft` | `--draft` | string \| null | no | yes | null | An open statement reconciliation on this account to tick the matched movements on. |
 | `start` | `--start` | boolean | no | no | false | Start a statement reconciliation from the file (or reuse the open one for the same statement date) and tick the matched movements on it. |
-| `statement_date` | `--statement-date` | string \| null | no | yes | null | Statement date; defaults to the file's balance date (OFX) or its last line's date (CSV). |
+| `statement_date` | `--statement-date` | string \| null | no | yes | null | Statement date, the closing date printed on the statement; an OFX file's balance date when left out. A CSV states none, so starting a draft from one needs it. |
 | `ending_balance` | `--ending-balance` | string \| null | no | yes | null | Ending balance, as money ("6236.95"); defaults to the file's ledger balance (OFX) or latest running balance (CSV). |
 | `match_days` | `--match-days` | integer | no | no | 4 | Days apart a line and an entry of the same amount may be dated and still match.; minimum 0; maximum 60 |
 | `suggest_days` | `--suggest-days` | integer | no | no | 14 | Days apart for a same-amount entry to be offered as a suggestion.; minimum 0; maximum 120 |
@@ -1024,7 +1232,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `totals.ending_balance` | integer | yes | no | — | — |
 | `totals.cleared_balance` | integer | yes | no | — | — |
 | `totals.difference` | integer | yes | no | — | — |
-| `totals.decimal_units` | object[string, string] | yes | no | — | — |
+| `totals.decimal_units` | object[string, string] | yes | no | — | The same figures as whole minor units (cents for USD), as strings: 627500 is 6,275.00. For amounts to read, use `amounts` beside the totals. |
+| `amounts` | object[string, JsonValue] | no | no | {} | The totals as amounts in the account currency: amount (e.g. "6275.00"), currency and minor_units, keyed as in totals. |
 | `expected_facts_fingerprint` | string | yes | no | — | — |
 | `dependency_guard` | string | yes | no | — | — |
 | `balanced` | boolean | yes | no | — | — |
@@ -1049,6 +1258,7 @@ Example JSON output:
 ```json
 {
   "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "amounts": {},
   "balanced": false,
   "cleared_without_statement_line": null,
   "contract": "reconciliation.private.v1",
@@ -1119,7 +1329,7 @@ Example JSON output:
 
 ## `reconcile start`
 
-Open a draft for one bank or credit card statement. It follows the account's adopted opening unless you name opening_id, or opening_draft_id for an opening not finished yet; naming neither, an account with no adopted opening follows its one open opening draft, such as the last reconciliation `cutover apply` brings in from the old books. An account with no opening at all needs `reconcile opening start` first. Then `reconcile candidates`, `reconcile mark`, `reconcile preview` and `reconcile finish`. If it will not tie, stop: leave this draft open, add a note to it saying what you checked (`note add reconciliation_draft <draft id> "..."`), and tell the company owner. Never post, change or tick an entry just to make the difference zero; the owner's entries-to-review list shows entries that do. The open draft and its difference stay on the Overview until someone finishes it. Only a person, never an agent, may instead finish it with a labelled adjustment: `reconcile finish` with `adjustment` and a reason posts the exact difference to Reconciliation Discrepancies.
+Open a draft for one bank or credit card statement. It follows the account's adopted opening unless you name opening_id, or opening_draft_id for an opening not finished yet; naming neither, an account with no adopted opening follows its one open opening draft, such as the last reconciliation `cutover apply` brings in from the old books. An account with no opening at all needs `reconcile opening start` first. Then `reconcile candidates`, `reconcile mark`, `reconcile preview` and `reconcile finish`. If it will not tie, stop: leave this draft open, add a note to it saying what you checked (`note add reconciliation_draft <draft id> --body "..."`), and tell the company owner. Never post, change or tick an entry just to make the difference zero; the owner's entries-to-review list shows entries that do. The open draft and its difference stay on the Overview until someone finishes it. Only a person, never an agent, may instead finish it with a labelled adjustment: `reconcile finish` with `adjustment` and a reason posts the exact difference to Reconciliation Discrepancies.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

@@ -10,6 +10,7 @@ from bookflow.company.journal_models import _Version
 from bookflow.company.report_basis import Basis, basis_field
 from bookflow.company.sales_models import Selector
 from bookflow.core.models import WriteOutput
+from bookflow.core.clock import TODAY_DEFAULT, today_default
 
 Name = Annotated[str, Field(min_length=1, max_length=200)]
 Month = Annotated[str, Field(pattern=r"^[0-9]{4}-(0[1-9]|1[0-2])$", description="A month, YYYY-MM.")]
@@ -234,7 +235,7 @@ class BudgetVsActualOutput(_ReportPage):
 
 class ProfitAndLossComparisonInput(ledger.StrictModel):
     date_from: str = Field(min_length=10, max_length=10, description='Inclusive first accounting date, YYYY-MM-DD.')
-    date_to: str = Field(min_length=10, max_length=10, description='Inclusive last accounting date, YYYY-MM-DD.')
+    date_to: str = Field(default_factory=today_default, json_schema_extra=TODAY_DEFAULT, min_length=10, max_length=10, description='Inclusive last accounting date, YYYY-MM-DD.')
     compare: Literal['previous_year', 'previous_period'] = Field('previous_year', description='previous_year: the same dates a year earlier. previous_period: the period of the same length just before (whole months by whole months, otherwise day for day).')
     dollar_change: bool = Field(True, description='Show the $ Change column.')
     percent_change: bool = Field(True, description='Show the % Change column.')
@@ -254,7 +255,7 @@ class ProfitAndLossComparisonInput(ledger.StrictModel):
 
 
 class BalanceSheetComparisonInput(ledger.StrictModel):
-    date_to: str = Field(min_length=10, max_length=10, description='As-of date, YYYY-MM-DD; compared with the same date a year earlier.')
+    date_to: str = Field(default_factory=today_default, json_schema_extra=TODAY_DEFAULT, min_length=10, max_length=10, description='As-of date, YYYY-MM-DD; compared with the same date a year earlier.')
     dollar_change: bool = Field(True, description='Show the $ Change column.')
     percent_change: bool = Field(True, description='Show the % Change column.')
     basis: Basis | None = basis_field()

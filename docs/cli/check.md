@@ -460,6 +460,7 @@ The same example as complete `bookflow_run` arguments:
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
 | `number` | `--number` | string \| null | no | yes | null | The number written on the face of the cheque, which belongs to this bank account and not to the shared document series. Leave it out to take the next number from the account's own next check number, skipping any it has already issued. A number below that pointer is accepted and does not move it backwards; a number already on another cheque drawn on the same account is refused. Leading zeros are kept as typed, and 01001 and 1001 are one number. A number that is not a plain run of digits is a real cheque number with no place in the sequence. |
 | `to_be_printed` | `--to-be-printed` | boolean | no | no | false | Print Later: save the check with no number yet and put it in its bank account's print queue; `check print` gives it a number when it is printed. Leave `number` out. |
+| `no_number` | `--no-number` | boolean | no | no | false | A payment from the bank account with no cheque behind it: a debit-card purchase, an online bill payment, an automatic withdrawal. It takes no number from the chequebook, never enters the print queue and stays unnumbered when corrected unless a number is typed. The accounting is a check's. Leave `number` and `to_be_printed` out. Do not type a word such as DEBIT as the number: a number is unique on its account, so the second one is refused. |
 
 ### Command and context options
 

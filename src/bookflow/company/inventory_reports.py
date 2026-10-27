@@ -29,12 +29,13 @@ from bookflow.company import inventory, ledger_reports as ledger
 from bookflow.company.ledger_reports import MoneyOutput, StrictModel, iso_date, money
 from bookflow.core.errors import BookflowError
 from bookflow.core.exact import format_quantity_micro_units, round_ratio_half_even
+from bookflow.core.clock import TODAY_DEFAULT, today_default
 
 MICRO = 10 ** 6
 
 
 class StockInput(StrictModel):
-    as_of: str = Field(min_length=10, max_length=10,
+    as_of: str = Field(default_factory=today_default, json_schema_extra=TODAY_DEFAULT, min_length=10, max_length=10,
                        description="Inclusive accounting as-of date, YYYY-MM-DD; stock is valued at it.")
     basis: Literal["accrual"] = "accrual"
     limit: int = Field(default=50, ge=1, le=200)

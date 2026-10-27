@@ -1255,11 +1255,11 @@ The same example as complete `bookflow_run` arguments:
 |---|---|---|---|---|---|---|
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
-| `mode` | `--mode` | literal["new_receipt", "existing_credit"] | yes | no | — | — |
+| `mode` | `--mode` | literal["new_receipt", "existing_credit"] | no | no | "new_receipt" | new_receipt (the default) lists a customer's open invoices for a new receipt; existing_credit, the default when payment is given, lists them for a receipt already holding unapplied money. |
 | `customer` | `--customer` | string \| null | no | yes | null | — |
 | `ar_account` | `--ar-account` | string \| null | no | yes | null | — |
 | `payment` | `--payment` | string \| null | no | yes | null | — |
-| `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
+| `date` | `--date` | string | no | no | today (the company's date) | The receipt date, YYYY-MM-DD; defaults to today.; minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
 | `q` | `--q` | string \| null | no | yes | null | — |
 
 ### Command and context options

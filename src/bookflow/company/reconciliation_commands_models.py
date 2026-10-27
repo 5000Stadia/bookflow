@@ -196,6 +196,10 @@ class Mark(DraftChange):
         if not self.all and (self.all_action!='mark' or self.filters!=CandidateFilter()):raise ValueError('filters and all_action need all=true')
         return self
 
+class Discard(DraftChange):
+    """Drop an open draft (R183): it is kept, canceled, with its history; nothing it ticked is cleared."""
+
+
 class MarkAll(DraftChange):
     filters: CandidateFilter
     query_fingerprint: Fingerprint
@@ -402,7 +406,7 @@ class Totals(Model):
     ending_balance: Units
     cleared_balance: Units
     difference: Units
-    decimal_units: dict[str,str]
+    decimal_units: dict[str,str]=Field(description='The same figures as whole minor units (cents for USD), as strings: 627500 is 6,275.00. For amounts to read, use `amounts` beside the totals.')
 
 class CandidatePage(Model):
     contract: Literal['reconciliation.private.v1']='reconciliation.private.v1'
@@ -734,6 +738,8 @@ class PreviewOutput(Model):
     kind: Literal['opening','statement','amendment']
     version: Version
     totals: Totals
+    # R183: the totals as money to read (6275.00), beside the minor units `totals` keeps.
+    amounts: dict[str,JsonValue]=Field(default_factory=dict,description='The totals as amounts in the account currency: amount (e.g. "6275.00"), currency and minor_units, keyed as in totals.')
     # Everything `reconcile finish` demands, so a caller never has to compute either of them.
     expected_facts_fingerprint: Fingerprint=FINGERPRINT_SAMPLE
     dependency_guard: str

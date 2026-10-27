@@ -124,11 +124,20 @@ class CheckPostInput(_MoneyOutPost):
     to_be_printed: bool = Field(default=False, description=(
         'Print Later: save the check with no number yet and put it in its bank account\'s print '
         'queue; `check print` gives it a number when it is printed. Leave `number` out.'))
+    no_number: bool = Field(default=False, description=(
+        'A payment from the bank account with no cheque behind it: a debit-card purchase, an '
+        'online bill payment, an automatic withdrawal. It takes no number from the chequebook, '
+        'never enters the print queue and stays unnumbered when corrected unless a number is '
+        'typed. The accounting is a check\'s. Leave `number` and `to_be_printed` out. Do not '
+        'type a word such as DEBIT as the number: a number is unique on its account, so the '
+        'second one is refused.'))
 
     @model_validator(mode='after')
     def _print_later(self) -> Self:
         if self.to_be_printed and self.number is not None:
             raise ValueError('a check saved to be printed takes its number when it prints; leave number out')
+        if self.no_number and (self.number is not None or self.to_be_printed):
+            raise ValueError('a payment with no cheque number takes neither number nor to_be_printed')
         return self
 
 

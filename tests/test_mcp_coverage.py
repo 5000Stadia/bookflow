@@ -80,11 +80,12 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +1 company verify (R180 stage 2).
     # +1 setup (R182), a local lifecycle row.
     # +8 shipments (R181 increment 1): shipment post/update/void/show/query/history/invoice, report shipped-not-invoiced.
-    assert len(rows) == 748
+    # +3 owner-link, agent run and reconcile discard (R183).
+    assert len(rows) == 751
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
-    assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 9
+    assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 11  # +2 owner-link and agent run (R183)
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
     # and unexplained, which is exactly what `payment delete` was on 2026-09-15 -- registered,

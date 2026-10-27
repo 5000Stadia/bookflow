@@ -39,13 +39,14 @@ from bookflow.company.ledger_reports import (
     MoneyOutKind, MoneyOutput, StrictModel, TransactionType, iso_date, money,
 )
 from bookflow.core.errors import BookflowError
+from bookflow.core.clock import TODAY_DEFAULT, today_default
 
 REPORT = "reconciliation-discrepancy"
 
 
 class ReconciliationDiscrepancyInput(StrictModel):
     account: str = Field(min_length=1, max_length=1000, description="Bank or credit card account ID or canonical full name; includes inactive accounts.")
-    as_of: str = Field(min_length=10, max_length=10, description="Inclusive statement date, YYYY-MM-DD; reconciliations of statements dated after it are left out.")
+    as_of: str = Field(default_factory=today_default, json_schema_extra=TODAY_DEFAULT, min_length=10, max_length=10, description="Inclusive statement date, YYYY-MM-DD; reconciliations of statements dated after it are left out.")
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=4096)
 

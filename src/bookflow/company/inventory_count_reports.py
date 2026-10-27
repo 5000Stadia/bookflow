@@ -19,6 +19,7 @@ from bookflow.company import ledger_reports as ledger, placements
 from bookflow.company.inventory_costing import order_key
 from bookflow.company.inventory_reports import _average, _check_tie, _quantity, _rows, _SELECTED, StockInput
 from bookflow.company.ledger_reports import MoneyOutput, StrictModel, iso_date, money
+from bookflow.core.clock import TODAY_DEFAULT, today_default
 
 
 class WorksheetInput(StockInput):
@@ -61,7 +62,7 @@ def physical_inventory_worksheet(inp: WorksheetInput, s, *, principal_id=None) -
 
 class ValuationDetailInput(StrictModel):
     date_from: str = Field(min_length=10, max_length=10, description='First date of the period, YYYY-MM-DD.')
-    date_to: str = Field(min_length=10, max_length=10, description='Last date of the period, YYYY-MM-DD.')
+    date_to: str = Field(default_factory=today_default, json_schema_extra=TODAY_DEFAULT, min_length=10, max_length=10, description='Last date of the period, YYYY-MM-DD.')
     item: str | None = Field(None, max_length=1000, description='Only this item, by id or name.')
     basis: Literal['accrual'] = 'accrual'
     limit: int = Field(default=50, ge=1, le=200)

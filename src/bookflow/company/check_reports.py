@@ -69,6 +69,7 @@ from bookflow.company.ledger_reports import (
 from bookflow.company.ledger_schema import TRANSACTION_STATUSES
 from bookflow.company.money_out_schema import KINDS as MONEY_OUT_KINDS
 from bookflow.core.errors import BookflowError
+from bookflow.core.clock import TODAY_DEFAULT, today_default
 
 # What a carried-over number is marked as: one an upgrade copied in rather than one this
 # chequebook handed out. A gap among these cannot be told apart from a number the shared
@@ -92,7 +93,7 @@ def _bank_type():
 
 
 class MissingChecksInput(StrictModel):
-    as_of: str = Field(min_length=10, max_length=10, description="Inclusive accounting as-of date, YYYY-MM-DD; a check dated after it is not examined, which can show a hole where a later-dated check sits.")
+    as_of: str = Field(default_factory=today_default, json_schema_extra=TODAY_DEFAULT, min_length=10, max_length=10, description="Inclusive accounting as-of date, YYYY-MM-DD; a check dated after it is not examined, which can show a hole where a later-dated check sits.")
     account: str | None = Field(default=None, min_length=1, max_length=1000, description="Optional bank account ID or canonical full name; includes inactive accounts. Omit for every bank account.")
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=4096)

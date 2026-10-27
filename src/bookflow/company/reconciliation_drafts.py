@@ -118,7 +118,8 @@ def mark(s,draft,inp, *, revision_id):
             require(all(v['effective_date']<=(draft.header.statement_date or draft.header.opening_date) for v in group),'E_RECONCILIATION_DATE')
             require(not {v['key_id'] for v in group}&set(claimed(s)),'E_RECONCILIATION_MEMBERSHIP_CONFLICT')
         for v in group:
-            require(v['key_id'] not in selections or selections[v['key_id']].version_id==v['id'],'E_RECONCILIATION_SELECTION_STALE')
+            # Unticking needs no fresh look (R183): it is how a tick on an entry edited since is taken back.
+            require(entry.action=='unmark' or v['key_id'] not in selections or selections[v['key_id']].version_id==v['id'],'E_RECONCILIATION_SELECTION_STALE')
             if entry.action=='unmark':selections.pop(v['key_id'],None)
             else:selections[v['key_id']]=m.Selection(key_id=v['key_id'],version_id=v['id'],action=entry.action)
     return revised(draft,revision_id,selections=tuple(selections[k] for k in sorted(selections)))

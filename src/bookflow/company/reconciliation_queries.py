@@ -19,6 +19,18 @@ def matches(row,f):
         and (f.memo is None or f.memo.casefold() in (row.memo or '').casefold())
         and (f.amount is None or row.amount==f.amount) and (not f.hide_after_date or row.eligible))
 
+def _opening_covers(s,draft):
+    """What the open opening draft a first statement follows already covers (R183).
+
+    Until that opening is certified (with the statement) its covered movements are claimed by no
+    certificate, but they belong to the opening, not to this statement: ticking them here too is the
+    membership conflict finish would refuse. So they count as claimed, and `mark --all` leaves them out."""
+    if draft.kind=='opening' or draft.base_opening_id is not None:return set()
+    found=[d for d in s.rows['drafts'] if d['account_id']==draft.account_id and d['kind']=='opening' and d['state']=='open']
+    if len(found)!=1:return set()
+    revision=found[0]['current_revision_id']
+    return {v['key_id'] for v in s.rows['draft_members'] if v['revision_id']==revision and v['action']=='covered'}
+
 def candidates(s,draft,filters, *, authority_transactions, limit=50,offset=0,expected_fingerprint=None):
     read_admission(s,authority_transactions)
     require(type(limit) is int and 1<=limit<=200 and type(offset) is int and offset>=0,'E_VALIDATION')
@@ -26,7 +38,7 @@ def candidates(s,draft,filters, *, authority_transactions, limit=50,offset=0,exp
     values,_=account_population(s,draft.account_id,cutoff)
     values={v['id']:v for v in values}
     values.update((v.version_id,s.versions[v.version_id]) for v in draft.selections)
-    selected={v.version_id for v in draft.selections};claims=claimed(s);result=[]
+    selected={v.version_id for v in draft.selections};claims=set(claimed(s))|_opening_covers(s,draft);result=[]
     for group in groups(values.values()).values():
         v=group[0];display=json.loads(v['display_snapshot']);amount=bounded(sum(statement_amount(v) for v in group))
         row=m.Movement(movement=m.MovementKey.model_validate_json(v['movement_snapshot']),group_fingerprint=group_fingerprint(group),component_count=len(group),amount=amount,amount_decimal=str(amount),
@@ -53,6 +65,10 @@ def component_items(s,movement,group_hash, *, authority_transactions, limit=50,o
 
 def _mark_all(s,draft,filters,fingerprint,action,revision_id,*,skip_claimed):
     from bookflow.company.reconciliation_drafts import editable,revised
+    if action=='unmark' and skip_claimed and filters==m.CandidateFilter():
+        # "Unmark all" takes back every tick, including one on an entry edited or voided since it was
+        # ticked (R183): nothing is cleared by unticking, so nothing needs a fresh look first.
+        return revised(draft,revision_id,selections=())
     first=candidates(s,draft,filters,authority_transactions=s.authority_transactions,limit=200,expected_fingerprint=fingerprint)
     result=list(first.items);offset=first.next_offset
     while offset is not None:
@@ -62,10 +78,10 @@ def _mark_all(s,draft,filters,fingerprint,action,revision_id,*,skip_claimed):
     allgroups={group_fingerprint(v):v for v in groups(s.current.values()).values()}
     for row in result:
         if skip_claimed and (not row.eligible or (action=='mark' and row.claimed)):continue
-        require(not row.stale and row.eligible,'E_RECONCILIATION_SELECTION_STALE')
+        require(action=='unmark' or (not row.stale and row.eligible),'E_RECONCILIATION_SELECTION_STALE')
         if action=='mark':require(not row.claimed,'E_RECONCILIATION_MEMBERSHIP_CONFLICT')
         for v in allgroups[row.group_fingerprint]:
-            require(v['key_id'] not in choices or choices[v['key_id']].version_id==v['id'],'E_RECONCILIATION_SELECTION_STALE')
+            require(action=='unmark' or v['key_id'] not in choices or choices[v['key_id']].version_id==v['id'],'E_RECONCILIATION_SELECTION_STALE')
             if action=='unmark':choices.pop(v['key_id'],None)
             else:choices[v['key_id']]=m.Selection(key_id=v['key_id'],version_id=v['id'],action='mark')
     return revised(draft,revision_id,selections=tuple(choices[k] for k in sorted(choices)))

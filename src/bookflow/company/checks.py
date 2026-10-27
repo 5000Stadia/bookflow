@@ -142,6 +142,7 @@ def _facts(s, inp, noun, header):
         return dict(account=inp.account, pay_to=inp.pay_to, date=inp.date, amount=inp.amount,
                     memo=inp.memo, number=getattr(inp, 'number', None), class_id=inp.class_id,
                     to_be_printed=getattr(inp, 'to_be_printed', False),
+                    no_number=getattr(inp, 'no_number', False),
                     expenses=list(inp.expenses), selected_line_id=None,
                     items=check_items.resolve(s, getattr(inp, 'items', None) or [], [], inp.class_id,
                                               registers._home(s)))
@@ -228,7 +229,7 @@ def _register(facts, s, noun, inp, header):
     # no request at all and the journal it posts keeps its own document reference alone.
     instrument = (check_numbers.request(account['id'], facts['number'])
                   if noun == 'check' and not _stays_unnumbered(s, facts, header) else None)
-    if noun == 'check' and instrument is None:
+    if noun == 'check' and instrument is None and _queued(s, facts, header):
         summary = summary.model_copy(update={'print_status': 'queued'})
     return register, summary, instrument, facts["items"]
 
@@ -242,7 +243,7 @@ def _stays_unnumbered(s, facts, header):
     reprinting it is ``check reprint``.
     """
     if header is None:
-        return bool(facts.get('to_be_printed'))
+        return bool(facts.get('to_be_printed') or facts.get('no_number'))
     held = check_numbers.current(s, header['id'])
     if held is not None:
         if facts.get('to_be_printed'):
@@ -251,6 +252,15 @@ def _stays_unnumbered(s, facts, header):
         return False
     if facts.get('number') is not None or facts.get('to_be_printed') is False:
         return False
+    # Still unnumbered: waiting in the print queue, or a payment with no cheque behind it
+    # (`no_number`, R183), which a correction that types no number leaves as it is.
+    return True
+
+
+def _queued(s, facts, header):
+    """Whether an unnumbered check is waiting to be printed, rather than a payment with no cheque."""
+    if header is None:
+        return bool(facts.get('to_be_printed'))
     from bookflow.company import check_printing
     return check_printing.marked(s, header['id'])
 

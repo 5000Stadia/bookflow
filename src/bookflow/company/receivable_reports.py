@@ -57,10 +57,11 @@ from bookflow.company.ledger_reports import (
 from bookflow.company.ledger_schema import SETTLEABLE_RECEIVABLE_SQL, SETTLEABLE_RECEIVABLE_TYPES
 from bookflow.core.errors import BookflowError
 from bookflow.company.party_merges import survivor_sql as _survivor
+from bookflow.core.clock import TODAY_DEFAULT, today_default
 
 
 class AsOfInput(StrictModel):
-    as_of: str = Field(min_length=10, max_length=10, description="Inclusive accounting as-of date, YYYY-MM-DD; receivables are aged against it.")
+    as_of: str = Field(default_factory=today_default, json_schema_extra=TODAY_DEFAULT, min_length=10, max_length=10, description="Inclusive accounting as-of date, YYYY-MM-DD; receivables are aged against it.")
     basis: Literal["accrual"] = "accrual"
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=4096)
@@ -84,7 +85,7 @@ class OpenInvoicesInput(AsOfInput):
 
 class StatementInput(StrictModel):
     date_from: str = Field(min_length=10, max_length=10, description="Inclusive first accounting date of the statement period, YYYY-MM-DD; everything before it is the opening balance.")
-    date_to: str = Field(min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD; the closing balance and the aging columns are as of this date.")
+    date_to: str = Field(default_factory=today_default, json_schema_extra=TODAY_DEFAULT, min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD; the closing balance and the aging columns are as of this date.")
     basis: Literal["accrual"] = "accrual"
     customer: str | None = Field(default=None, min_length=1, max_length=1000, description="Optional customer or job ID or canonical full name; a job is its own customer and is not included with its parent. Omit for every customer with a balance or with activity in the period.")
     limit: int = Field(default=50, ge=1, le=200)

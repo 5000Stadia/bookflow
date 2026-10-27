@@ -32,6 +32,7 @@ from bookflow.company.billing_outputs import BillingLineState
 from bookflow.company.ledger_reports import MoneyOutput, StrictModel, iso_date, money
 from bookflow.core.errors import BookflowError
 from bookflow.core.exact import format_quantity_micro_units
+from bookflow.core.clock import TODAY_DEFAULT, today_default
 
 # A row is listed unless the work behind it is finished or was never chargeable.
 # Derived from the declared billing states so a new state is listed rather than
@@ -43,7 +44,7 @@ NO_CUSTOMER = "No name"
 
 
 class UnbilledCostsInput(StrictModel):
-    as_of: str = Field(min_length=10, max_length=10, description="Inclusive accounting as-of date, YYYY-MM-DD; work dated after it is not yet recorded.")
+    as_of: str = Field(default_factory=today_default, json_schema_extra=TODAY_DEFAULT, min_length=10, max_length=10, description="Inclusive accounting as-of date, YYYY-MM-DD; work dated after it is not yet recorded.")
     customer: str | None = Field(default=None, min_length=1, max_length=1000, description="Optional customer or job ID or canonical full name; a job is its own customer and is not included with its parent.")
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=4096)

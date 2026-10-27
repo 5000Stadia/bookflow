@@ -75,6 +75,7 @@ def test_every_hand_authored_fence_is_classified():
             ("illustrative", "json"),  # mileage on a job (R118)
             ("illustrative", "json"),  # hours on a job (R106)
             ("illustrative", "json"),  # who is where tomorrow (R106)
+            ("illustrative", "json"),  # a debit-card purchase, `check post` with no_number (R183)
             ("illustrative", "json"),  # printing a week's checks (check printing)
             ("illustrative", "json"),  # a customer's special prices (R110)
             ("illustrative", "json"),  # the accountant's copy (R121)
@@ -89,8 +90,9 @@ def test_every_hand_authored_fence_is_classified():
             ("illustrative", "json"),  # a bin count and the week's cycle counts (R104 bins)
             ("illustrative", "json"),  # who got a serial number (R104 serial/lot)
             ("illustrative", "json"),  # landed cost spread over a receipt (landed cost)
+            ("illustrative", "json"),  # ship an order now, bill it later (R181)
         ],
-        "agent-install.md": [("illustrative", "sh"), ("illustrative", "sh"), ("illustrative", "json")],
+        "agent-install.md": [("illustrative", "sh"), ("illustrative", "sh"), ("illustrative", "json"), ("illustrative", "sh")],
         # Seed/serve, documentation generation, and financial statement examples.
         "reference-year.md": [("illustrative", "sh")] * 3,
     }

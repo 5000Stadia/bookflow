@@ -87,6 +87,8 @@ def _default(field: Any) -> str:
     extra = field.json_schema_extra if isinstance(field.json_schema_extra, dict) else {}
     if extra.get("generated"):
         return "generated"
+    if extra.get("x-bookflow-default") == "today":
+        return "today (the company's date)"
     if field.default is not PydanticUndefined:
         value = field.default
     elif field.default_factory is not None:

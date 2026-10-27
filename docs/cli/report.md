@@ -179,7 +179,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `as_of` | `--as-of` | string | yes | no | — | End of the period under review, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `as_of` | `--as-of` | string | no | no | today (the company's date) | End of the period under review, YYYY-MM-DD.; minimum length 10; maximum length 10 |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
 
@@ -359,7 +359,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `as_of` | `--as-of` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD; payables are aged against it.; minimum length 10; maximum length 10 |
+| `as_of` | `--as-of` | string | no | no | today (the company's date) | Inclusive accounting as-of date, YYYY-MM-DD; payables are aged against it.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -574,7 +574,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `as_of` | `--as-of` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD; receivables are aged against it.; minimum length 10; maximum length 10 |
+| `as_of` | `--as-of` | string | no | no | today (the company's date) | Inclusive accounting as-of date, YYYY-MM-DD; receivables are aged against it.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -791,7 +791,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `date_to` | `--date-to` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | no | no | today (the company's date) | Inclusive accounting as-of date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual", "cash"] \| null | no | yes | null | Cash or accrual for this report only. Omit to use the company report basis. Cash reports use current matching evidence and can restate earlier periods after matching changes. |
 | `include_zero` | `--include-zero` | boolean | no | no | false | Include zero ending balances, including inactive and never-posted accounts. |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
@@ -1013,7 +1013,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `date_to` | `--date-to` | string | yes | no | — | As-of date, YYYY-MM-DD; compared with the same date a year earlier.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | no | no | today (the company's date) | As-of date, YYYY-MM-DD; compared with the same date a year earlier.; minimum length 10; maximum length 10 |
 | `dollar_change` | `--dollar-change` | boolean | no | no | true | Show the $ Change column. |
 | `percent_change` | `--percent-change` | boolean | no | no | true | Show the % Change column. |
 | `basis` | `--basis` | literal["accrual", "cash"] \| null | no | yes | null | Cash or accrual for this report only. Omit to use the company report basis. Cash reports use current matching evidence and can restate earlier periods after matching changes. |
@@ -1586,7 +1586,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | no | no | today (the company's date) | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual", "cash"] \| null | no | yes | null | Cash or accrual for this report only. Omit to use the company report basis. Cash reports use current matching evidence and can restate earlier periods after matching changes. |
 | `include_zero` | `--include-zero` | boolean | no | no | false | Include accounts whose balance did not change over the period, including inactive and never-posted balance-sheet accounts. |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
@@ -1824,7 +1824,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `as_of` | `--as-of` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD; receivables are aged against it.; minimum length 10; maximum length 10 |
+| `as_of` | `--as-of` | string | no | no | today (the company's date) | Inclusive accounting as-of date, YYYY-MM-DD; receivables are aged against it.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `minimum_bucket` | `--minimum-bucket` | literal["days_1_30", "days_31_60", "days_61_90", "over_90"] | no | no | "days_1_30" | The oldest-first aging column a customer must reach before it is chased; anything in that column or past it counts. |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
@@ -2094,7 +2094,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `as_of` | `--as-of` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD; balances are what is owed at the end of this day.; minimum length 10; maximum length 10 |
+| `as_of` | `--as-of` | string | no | no | today (the company's date) | Inclusive accounting as-of date, YYYY-MM-DD; balances are what is owed at the end of this day.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -2260,7 +2260,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `as_of` | `--as-of` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD; balances are what is owed at the end of this day.; minimum length 10; maximum length 10 |
+| `as_of` | `--as-of` | string | no | no | today (the company's date) | Inclusive accounting as-of date, YYYY-MM-DD; balances are what is owed at the end of this day.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -2596,7 +2596,7 @@ The same example as complete `bookflow_run` arguments:
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
-| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | no | no | today (the company's date) | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -2757,7 +2757,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `as_of` | `--as-of` | string | yes | no | — | Inclusive date, YYYY-MM-DD; entries dated after it are left out.; minimum length 10; maximum length 10 |
+| `as_of` | `--as-of` | string | no | no | today (the company's date) | Inclusive date, YYYY-MM-DD; entries dated after it are left out.; minimum length 10; maximum length 10 |
 | `include_reviewed` | `--include-reviewed` | boolean | no | no | false | Also list entries an owner already marked reviewed. |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -2940,7 +2940,7 @@ The same example as complete `bookflow_run` arguments:
 |---|---|---|---|---|---|---|
 | `basis` | `--basis` | literal["accrual", "cash"] \| null | no | yes | null | Cash or accrual for this report only. Omit to use the company report basis. Cash reports use current matching evidence and can restate earlier periods after matching changes. |
 | `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
-| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | no | no | today (the company's date) | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
 | `class_id` | `--class-id` | string \| null | no | yes | null | Optional class ID or canonical full name, inactive classes included; a subclass is its own class and is not included with its parent. Omit for every class together with the lines entered under none. |
@@ -3234,7 +3234,7 @@ The same example as complete `bookflow_run` arguments:
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
-| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | no | no | today (the company's date) | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `account` | `--account` | string \| null | no | yes | null | Optional account ID or canonical full name; includes inactive accounts. |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
@@ -3440,7 +3440,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | no | no | today (the company's date) | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual", "cash"] \| null | no | yes | null | Cash or accrual for this report only. Omit to use the company report basis. Cash reports use current matching evidence and can restate earlier periods after matching changes. |
 | `include_zero` | `--include-zero` | boolean | no | no | false | Include income and expense accounts with no period activity, including inactive and never-posted ones. |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
@@ -3619,7 +3619,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `as_of` | `--as-of` | string | yes | no | — | Report date, YYYY-MM-DD: the layers on hand at its end.; minimum length 10; maximum length 10 |
+| `as_of` | `--as-of` | string | no | no | today (the company's date) | Report date, YYYY-MM-DD: the layers on hand at its end.; minimum length 10; maximum length 10 |
 | `item` | `--item` | string \| null | no | yes | null | Only this item, by name, id or barcode. |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
@@ -3774,7 +3774,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `as_of` | `--as-of` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD; stock is valued at it.; minimum length 10; maximum length 10 |
+| `as_of` | `--as-of` | string | no | no | today (the company's date) | Inclusive accounting as-of date, YYYY-MM-DD; stock is valued at it.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -3935,7 +3935,7 @@ The same example as complete `bookflow_run` arguments:
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `date_from` | `--date-from` | string | yes | no | — | First date of the period, YYYY-MM-DD.; minimum length 10; maximum length 10 |
-| `date_to` | `--date-to` | string | yes | no | — | Last date of the period, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | no | no | today (the company's date) | Last date of the period, YYYY-MM-DD.; minimum length 10; maximum length 10 |
 | `item` | `--item` | string \| null | no | yes | null | Only this item, by id or name. |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
@@ -4762,7 +4762,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `as_of` | `--as-of` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD; a check dated after it is not examined, which can show a hole where a later-dated check sits.; minimum length 10; maximum length 10 |
+| `as_of` | `--as-of` | string | no | no | today (the company's date) | Inclusive accounting as-of date, YYYY-MM-DD; a check dated after it is not examined, which can show a hole where a later-dated check sits.; minimum length 10; maximum length 10 |
 | `account` | `--account` | string \| null | no | yes | null | Optional bank account ID or canonical full name; includes inactive accounts. Omit for every bank account. |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -4982,7 +4982,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `as_of` | `--as-of` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD; receivables are aged against it.; minimum length 10; maximum length 10 |
+| `as_of` | `--as-of` | string | no | no | today (the company's date) | Inclusive accounting as-of date, YYYY-MM-DD; receivables are aged against it.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -5170,7 +5170,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `date_to` | `--date-to` | string | yes | no | — | Inclusive last order date, YYYY-MM-DD; orders dated after it are left out. What is still open is what has not been received today.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | no | no | today (the company's date) | Inclusive last order date, YYYY-MM-DD; orders dated after it are left out. What is still open is what has not been received today.; minimum length 10; maximum length 10 |
 | `vendor` | `--vendor` | string \| null | no | yes | null | Optional vendor ID or name; omit for every vendor with an open order. |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -5358,7 +5358,7 @@ The same example as complete `bookflow_run` arguments:
 | `customer` | `--customer` | string \| null | no | yes | null | Only this customer or job: ID or full name. |
 | `item` | `--item` | string \| null | no | yes | null | Only this item: ID or full name. |
 | `date_from` | `--date-from` | string \| null | no | yes | null | Earliest order date, YYYY-MM-DD. |
-| `date_to` | `--date-to` | string | yes | no | — | Inclusive last order date, YYYY-MM-DD; orders dated after it are left out. What is still open is what has not been invoiced today.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | no | no | today (the company's date) | Inclusive last order date, YYYY-MM-DD; orders dated after it are left out. What is still open is what has not been invoiced today.; minimum length 10; maximum length 10 |
 | `short_only` | `--short-only` | boolean | no | no | false | Only lines for stocked items with more committed than on hand (available below zero). |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -5526,7 +5526,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `as_of` | `--as-of` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD; stock is valued at it.; minimum length 10; maximum length 10 |
+| `as_of` | `--as-of` | string | no | no | today (the company's date) | Inclusive accounting as-of date, YYYY-MM-DD; stock is valued at it.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -5664,7 +5664,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `as_of` | `--as-of` | string | yes | no | — | Inclusive date, YYYY-MM-DD; reviews of dates after it are left out.; minimum length 10; maximum length 10 |
+| `as_of` | `--as-of` | string | no | no | today (the company's date) | Inclusive date, YYYY-MM-DD; reviews of dates after it are left out.; minimum length 10; maximum length 10 |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
 
@@ -5828,7 +5828,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | no | no | today (the company's date) | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual", "cash"] \| null | no | yes | null | Cash or accrual for this report only. Omit to use the company report basis. Cash reports use current matching evidence and can restate earlier periods after matching changes. |
 | `include_zero` | `--include-zero` | boolean | no | no | false | Include zero period nets, including inactive and never-posted income and expense accounts. |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
@@ -6049,7 +6049,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | no | no | today (the company's date) | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual", "cash"] \| null | no | yes | null | Cash or accrual for this report only. Omit to use the company report basis. Cash reports use current matching evidence and can restate earlier periods after matching changes. |
 | `include_zero` | `--include-zero` | boolean | no | no | false | Include zero period nets, including inactive and never-posted income and expense accounts. |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
@@ -6319,7 +6319,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | no | no | today (the company's date) | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual", "cash"] \| null | no | yes | null | Cash or accrual for this report only. Omit to use the company report basis. Cash reports use current matching evidence and can restate earlier periods after matching changes. |
 | `include_zero` | `--include-zero` | boolean | no | no | false | Include zero period nets, including inactive and never-posted income and expense accounts. |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
@@ -6590,7 +6590,7 @@ The same example as complete `bookflow_run` arguments:
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
-| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | no | no | today (the company's date) | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
 | `compare` | `--compare` | literal["previous_year", "previous_period"] | no | no | "previous_year" | previous_year: the same dates a year earlier. previous_period: the period of the same length just before (whole months by whole months, otherwise day for day). |
 | `dollar_change` | `--dollar-change` | boolean | no | no | true | Show the $ Change column. |
 | `percent_change` | `--percent-change` | boolean | no | no | true | Show the % Change column. |
@@ -6760,7 +6760,7 @@ The same example as complete `bookflow_run` arguments:
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
-| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | no | no | today (the company's date) | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -6921,7 +6921,7 @@ The same example as complete `bookflow_run` arguments:
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
-| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | no | no | today (the company's date) | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -7073,7 +7073,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `as_of` | `--as-of` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD; stock is valued at it.; minimum length 10; maximum length 10 |
+| `as_of` | `--as-of` | string | no | no | today (the company's date) | Inclusive accounting as-of date, YYYY-MM-DD; stock is valued at it.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -7230,7 +7230,7 @@ The same example as complete `bookflow_run` arguments:
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `account` | `--account` | string | yes | no | — | Bank or credit card account ID or canonical full name; includes inactive accounts.; minimum length 1; maximum length 1000 |
-| `as_of` | `--as-of` | string | yes | no | — | Inclusive statement date, YYYY-MM-DD; reconciliations of statements dated after it are left out.; minimum length 10; maximum length 10 |
+| `as_of` | `--as-of` | string | no | no | today (the company's date) | Inclusive statement date, YYYY-MM-DD; reconciliations of statements dated after it are left out.; minimum length 10; maximum length 10 |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
 
@@ -7398,7 +7398,7 @@ The same example as complete `bookflow_run` arguments:
 |---|---|---|---|---|---|---|
 | `basis` | `--basis` | literal["accrual", "cash"] \| null | no | yes | null | Cash or accrual for this report only. Omit to use the company report basis. Cash reports use current matching evidence and can restate earlier periods after matching changes. |
 | `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
-| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | no | no | today (the company's date) | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
 | `class_id` | `--class-id` | string \| null | no | yes | null | Optional class ID or canonical full name, inactive classes included; a subclass is its own class and is not included with its parent. Omit for every class together with the lines entered under none. |
@@ -7588,7 +7588,7 @@ The same example as complete `bookflow_run` arguments:
 |---|---|---|---|---|---|---|
 | `basis` | `--basis` | literal["accrual", "cash"] \| null | no | yes | null | Cash or accrual for this report only. Omit to use the company report basis. Cash reports use current matching evidence and can restate earlier periods after matching changes. |
 | `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
-| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | no | no | today (the company's date) | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
 | `class_id` | `--class-id` | string \| null | no | yes | null | Optional class ID or canonical full name, inactive classes included; a subclass is its own class and is not included with its parent. Omit for every class together with the lines entered under none. |
@@ -7804,7 +7804,7 @@ The same example as complete `bookflow_run` arguments:
 |---|---|---|---|---|---|---|
 | `basis` | `--basis` | literal["accrual", "cash"] \| null | no | yes | null | Cash or accrual for this report only. Omit to use the company report basis. Cash reports use current matching evidence and can restate earlier periods after matching changes. |
 | `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
-| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | no | no | today (the company's date) | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
 | `class_id` | `--class-id` | string \| null | no | yes | null | Optional class ID or canonical full name, inactive classes included; a subclass is its own class and is not included with its parent. Omit for every class together with the lines entered under none. |
@@ -8420,7 +8420,7 @@ The same example as complete `bookflow_run` arguments:
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date of the statement period, YYYY-MM-DD; everything before it is the opening balance.; minimum length 10; maximum length 10 |
-| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD; the closing balance and the aging columns are as of this date.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | no | no | today (the company's date) | Inclusive last accounting date, YYYY-MM-DD; the closing balance and the aging columns are as of this date.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `customer` | `--customer` | string \| null | no | yes | null | Optional customer or job ID or canonical full name; a job is its own customer and is not included with its parent. Omit for every customer with a balance or with activity in the period. |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
@@ -8672,7 +8672,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `as_of` | `--as-of` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD; stock is valued at it.; minimum length 10; maximum length 10 |
+| `as_of` | `--as-of` | string | no | no | today (the company's date) | Inclusive accounting as-of date, YYYY-MM-DD; stock is valued at it.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -8843,7 +8843,7 @@ The same example as complete `bookflow_run` arguments:
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
-| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | no | no | today (the company's date) | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `accounts` | `--accounts` | array[string] \| null | no | yes | null | Optional account IDs or canonical full names; includes inactive accounts. Omit, or send an empty list, for every account with an opening balance or with activity in the period. |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
@@ -9051,7 +9051,7 @@ The same example as complete `bookflow_run` arguments:
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
-| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | no | no | today (the company's date) | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -9204,7 +9204,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `date_to` | `--date-to` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | no | no | today (the company's date) | Inclusive accounting as-of date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `include_zero` | `--include-zero` | boolean | no | no | false | Include zero ending balances, including inactive and never-posted accounts. |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
@@ -9383,7 +9383,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `as_of` | `--as-of` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD; work dated after it is not yet recorded.; minimum length 10; maximum length 10 |
+| `as_of` | `--as-of` | string | no | no | today (the company's date) | Inclusive accounting as-of date, YYYY-MM-DD; work dated after it is not yet recorded.; minimum length 10; maximum length 10 |
 | `customer` | `--customer` | string \| null | no | yes | null | Optional customer or job ID or canonical full name; a job is its own customer and is not included with its parent. |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -9566,7 +9566,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `as_of` | `--as-of` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD; payables are aged against it.; minimum length 10; maximum length 10 |
+| `as_of` | `--as-of` | string | no | no | today (the company's date) | Inclusive accounting as-of date, YYYY-MM-DD; payables are aged against it.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -9951,7 +9951,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `as_of` | `--as-of` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD; balances are what is owed at the end of this day.; minimum length 10; maximum length 10 |
+| `as_of` | `--as-of` | string | no | no | today (the company's date) | Inclusive accounting as-of date, YYYY-MM-DD; balances are what is owed at the end of this day.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
@@ -10115,7 +10115,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `as_of` | `--as-of` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD; balances are what is owed at the end of this day.; minimum length 10; maximum length 10 |
+| `as_of` | `--as-of` | string | no | no | today (the company's date) | Inclusive accounting as-of date, YYYY-MM-DD; balances are what is owed at the end of this day.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |

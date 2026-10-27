@@ -66,7 +66,7 @@ FIRST_RECONCILIATION=('An opening is certified together with the first statement
 # or by ticking one that does not belong -- unless stopping is a designed, named way out. This is
 # that way out, said in the refusal, in the preview and in the help.
 STOP_RULE=('If it will not tie, stop: leave this draft open, add a note to it saying what you '
-    'checked (`note add reconciliation_draft <draft id> "..."`), and tell the company owner. Never '
+    'checked (`note add reconciliation_draft <draft id> --body "..."`), and tell the company owner. Never '
     'post, change or tick an entry just to make the difference zero; the owner\'s entries-to-review '
     'list shows entries that do. The open draft and its difference stay on the Overview until '
     'someone finishes it. Only a person, never an agent, may instead finish it with a labelled '
@@ -198,7 +198,8 @@ def whole_selection(s,draft, *, current=True):
     versions=s.versions;chosen={v.key_id:v for v in draft.selections}
     require(all(v.version_id in versions and versions[v.version_id]['key_id']==v.key_id and versions[v.version_id]['account_id']==draft.account_id for v in chosen.values()),'E_RECONCILIATION_MANIFEST')
     if current:
-        require(all(s.current.get(k,{}).get('id')==v.version_id and s.current[k]['active'] for k,v in chosen.items()),'E_RECONCILIATION_SELECTION_STALE')
+        require(all(s.current.get(k,{}).get('id')==v.version_id and s.current[k]['active'] for k,v in chosen.items()),'E_RECONCILIATION_SELECTION_STALE',
+                lambda:stale_details(s,draft,chosen))
     selected=[versions[v.version_id] for v in chosen.values()]
     history_groups=groups(v for v in versions.values() if v['active'])
     for group in groups(selected).values():
@@ -206,6 +207,21 @@ def whole_selection(s,draft, *, current=True):
         require({v['key_id'] for v in group}=={v['key_id'] for v in complete},'E_RECONCILIATION_MANIFEST')
         require(len({chosen[v['key_id']].action for v in group})==1,'E_RECONCILIATION_MANIFEST')
     return tuple(selected)
+
+def stale_details(s,draft,chosen):
+    """Which ticked entries changed since they were ticked, and how the draft is made usable again (R183)."""
+    stale=[]
+    for k,v in chosen.items():
+        now=s.current.get(k)
+        if now is not None and now.get('id')==v.version_id and now['active']:continue
+        was=s.versions.get(v.version_id) or {}
+        stale.append(dict(transaction_id=was.get('transaction_id'),date=was.get('effective_date'),
+                          ticked_amount_minor_units=statement_amount(was) if was else None,
+                          now=None if now is None or not now['active'] else dict(date=now['effective_date'],amount_minor_units=statement_amount(now))))
+    return dict(draft=draft.id,stale=stale,
+                next_steps=[f'reconcile mark {draft.id} --all --all-action unmark (takes back every tick; then tick again)',
+                            'or untick only the changed entries with reconcile mark entries action unmark',
+                            f'or reconcile discard {draft.id} to drop this draft and start the statement again'])
 
 def totals(beginning,ending,values):
     grouped=groups(values)
