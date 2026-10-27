@@ -6,12 +6,12 @@
 {% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
 <section class="workspace-card" aria-label="In force">
 <h2>In force today</h2>
-<p data-costing-today><strong>{{ 'FIFO' if shown.method_today == 'fifo' else 'Average cost' }}</strong>. {{ shown.message }}</p>
+<p data-costing-today><strong>{{ shown.message }}</strong></p>
 {% if shown.switches %}<form method="post" action="/c/{{ company_id }}/inventory/costing-method" hx-post="/c/{{ company_id }}/inventory/costing-method" hx-target="body" hx-swap="outerHTML"><div class="table-wrap"><table class="list-table" data-costing-switches><thead><tr><th>From</th><th>Method</th><th>Status</th><th>Reason</th>{% if can_write %}<th></th>{% endif %}</tr></thead><tbody>
 {% for row in shown.switches %}<tr><td data-label="From">{{ row.effective_from }}</td><td data-label="Method">{{ 'FIFO' if row.method == 'fifo' else 'Average' }}</td><td data-label="Status">{{ 'withdrawn' if row.status == 'withdrawn' else ('scheduled' if row.effective_from > today else 'in force') }}</td><td data-label="Reason">{{ row.reason or '' }}</td>{% if can_write %}<td>{% if row.status == 'standing' and row.effective_from > today %}<button type="submit" name="action" value="withdraw:{{ row.effective_from }}" aria-label="Withdraw the switch from {{ row.effective_from }}">Withdraw</button>{% endif %}</td>{% endif %}</tr>{% endfor %}
 </tbody></table></div>
 {% if can_write %}<label>Reason for a withdrawal <input name="ctx:reason" placeholder="Staying on average for now"></label>{% endif %}
-</form>{% else %}<p>No switches: average cost from the beginning.</p>{% endif %}
+</form>{% endif %}
 </section>
 {% if can_write %}
 <section class="workspace-card" aria-label="Switch">

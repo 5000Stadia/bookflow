@@ -82,7 +82,9 @@ def show(s, ctx, inp) -> Plan:
     stored = rows(s)
     today = method_today(s)
     scheduled = [row for row in stored if row['status'] == 'standing' and row['effective_from'] > _today(s)]
-    message = f'{"FIFO" if today == "fifo" else "Average cost"} today.'
+    since = [row for row in stored if row['status'] == 'standing' and row['effective_from'] <= _today(s)]
+    name = 'FIFO' if today == 'fifo' else 'Average cost'
+    message = f'{name} since {since[-1]["effective_from"]}.' if since else f'{name} from the beginning.'
     if scheduled:
         message += ' Scheduled: ' + '; '.join(
             f'{"FIFO" if row["method"] == "fifo" else "average"} from {row["effective_from"]}' for row in scheduled) + '.'
@@ -185,7 +187,8 @@ def _summary_message(inp, change):
     name = 'FIFO' if inp.method == 'fifo' else 'average cost'
     count = len(change.documents)
     corrections = (f' It posts {count} correction {"entry" if count == 1 else "entries"} to movements already dated '
-                   'on or after it.' if count else ' Nothing already posted is dated on or after it, so it posts nothing.')
+                   'on or after it.' if count else ' Nothing already dated on or after it costs differently, so it '
+                   'posts nothing.')
     return f'Costs stock by {name} from {inp.effective_from}.{corrections}'
 
 

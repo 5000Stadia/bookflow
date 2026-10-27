@@ -17,7 +17,7 @@ COMMANDS = {
     "report open-purchase-orders", "report purchases-by-vendor", "report purchases-by-item",
     "report deposit-detail", "report transaction-list-by-date", "report vendor-1099-summary",
     "report reconciliation-discrepancy", "report entries-to-review", "report prior-balances",
-    "report open-sales-orders",
+    "report open-sales-orders", "report inventory-layers",
 }
 
 # One column: (heading, row field, how the cell is written). `label` is the row's first
@@ -76,8 +76,11 @@ LAYOUTS = {
                        ("When reviewed", "reviewed_balance", M), ("Now", "current_balance", M),
                        ("Change", "change", M)),
 }
+LAYOUTS["inventory-layers"] = (("Item", "item_name", "label"), ("Came in on", "source", T), ("Date", "date", D),
+                               ("Quantity", "quantity", "num"), ("Value", "value", M), ("Unit cost", "unit_cost", "num"))
 # The whole-report figures above the table, in reading order, with their headings.
 TOTALS = {
+    "inventory-layers": (("asset_value", "Inventory value"),),
     "customer-balance-summary": (("balance", "Total balance"),),
     "vendor-balance-summary": (("balance", "Total balance"),),
     "customer-balance-detail": (("balance", "Total balance"),),
@@ -103,6 +106,8 @@ TOTALS = {
 }
 # What each report says under its table, in a bookkeeper's words.
 NOTES = {
+    "inventory-layers": ("Each item's cost layers, oldest first. Under FIFO a sale takes the oldest layer first; "
+                         "under average cost each item is one row."),
     "customer-balance-summary": "Each customer's or job's balance is its Total on the A/R aging summary for the same date, so the total is Accounts Receivable on the balance sheet. Select a customer to see every transaction behind its balance.",
     "vendor-balance-summary": "Each vendor's balance is its Total on the A/P aging summary for the same date, so the total is Accounts Payable on the balance sheet. Select a vendor to see every transaction behind its balance.",
     "customer-balance-detail": "Every transaction that makes up each customer's balance, oldest first, with the balance after each. A total row closes each customer; it is the customer's line on the customer balance summary. Select a transaction to open it.",
@@ -142,7 +147,7 @@ def _link(company_id, verb, row, result):
         return f"/c/{company_id}/sales-order/{row['sales_order_id']}"
     if verb in ("purchases-by-vendor", "vendor-1099-summary"):
         return f"/c/{company_id}/vendor/{row['vendor_id']}" if row.get("vendor_id") else None
-    if verb == "purchases-by-item":
+    if verb in ("purchases-by-item", "inventory-layers"):
         return f"/c/{company_id}/item/{row['item_id']}" if row.get("item_id") else None
     if verb == "deposit-detail" and row["kind"] == "deposit":
         return f"/c/{company_id}/deposit/{row['deposit_transaction_id']}"
