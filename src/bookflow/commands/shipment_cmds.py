@@ -6,11 +6,12 @@ nothing and moves the cost to cost of goods sold. The bookkeeping lives in ``com
 """
 from pydantic import BaseModel, ConfigDict, Field
 
-from bookflow.company import shipments
+from bookflow.company import shipment_returns, shipments
 from bookflow.company.shipment_models import (
     ShipmentHistoryOutput, ShipmentInvoiceInput, ShipmentListOutput, ShipmentOutput, ShipmentPostInput,
-    ShipmentQueryInput, ShipmentShowInput, ShipmentUpdateInput, ShipmentVoidInput, ShippedNotInvoicedInput,
-    ShippedNotInvoicedOutput,
+    ShipmentQueryInput, ShipmentReturnInput, ShipmentReturnListOutput, ShipmentReturnOutput, ShipmentReturnQueryInput,
+    ShipmentReturnSelector, ShipmentReturnVoidInput, ShipmentShowInput, ShipmentUpdateInput, ShipmentVoidInput,
+    ShippedNotInvoicedInput, ShippedNotInvoicedOutput,
 )
 from bookflow.company.sales_outputs import SalesWriteOutput
 from bookflow.core.registry import Plan, command
@@ -28,11 +29,14 @@ _POST = (
 )
 _UPDATE = (
     'Correct a shipment: its date, count position, lines (replacing them), ship method, carrier, tracking numbers or '
-    'memo. A change of quantity, place or date reposts the stock at the ship date; a change of carrier, tracking or '
-    'memo alone posts nothing new. Refused below what invoices billed, or later than an invoice billing it.'
+    'memo. A change of quantity, place or date reposts the stock at the ship date; a change of ship method, carrier, '
+    'tracking or memo alone writes a new revision and reposts nothing. Refused below what invoices billed, later than '
+    'an invoice billing it, or (for a repost) while a return gives back its units -- to take units off a shipment, '
+    'record a return with `shipment return`.'
 )
 _VOID = ('Void a shipment with a reason: its units go back where they left from at the ship date and the order has them '
-         'to ship again. Refused while an invoice bills it, naming the invoice; void or correct the invoice first.')
+         'to ship again. Refused while an invoice bills it or a return gives back its units, naming them; void or '
+         'correct those first.')
 _SHOW = ('Show one shipment: the order and customer, ship date, site, each line with its places, numbers, cost, '
          'what invoices billed and what still waits in Shipped Not Invoiced, the invoices, and every revision.')
 _QUERY = 'List shipments, newest first, by order, customer, status or date; `not_invoiced` keeps those not fully billed.'
@@ -155,3 +159,60 @@ for _write in (plan_shipment_post, plan_shipment_update, plan_shipment_void):
     _write.ledger = True
     _write.resource_requirements = (('customer-work', 'standard'),)
     _write.applier(shipments.apply)
+
+
+# ---------------------------------------------------------------- returns (R181 increment 2)
+
+_RETURN = (
+    'Record units a customer sent back from a shipment before they were invoiced: they go back into stock on the '
+    'return date (default today, never before the ship date), to the bin the shipment took them from unless a line '
+    'names one, worth their share of the shipment line\'s cost, which leaves Shipped Not Invoiced. `reopen` (default '
+    'true) leaves them to ship again on the order; false cancels them on it. `lines` name a shipment line (its '
+    'position or line_identity) or an item, a quantity in the item\'s base unit, and serial numbers or a lot the '
+    'shipment took; omitted, every unit still out and not invoiced comes back. Units an invoice billed come back on '
+    'a credit memo naming the invoice line instead. Example: {"shipment": "1001", "lines": [{"shipment_line": "1", '
+    '"quantity": "1"}]}.'
+)
+_RETURN_VOID = ('Void a shipment return with a reason: its units leave stock again at the return date and wait in '
+                'Shipped Not Invoiced; a return that cancelled them on the order un-cancels them. Refused when the '
+                'order no longer has them to ship (shipped again or billed since).')
+_RETURN_SHOW = ('Show one shipment return: the shipment, order and customer, its date, whether the units are to ship '
+                'again, each line with its place, numbers and value, and its history.')
+_RETURN_QUERY = 'List shipment returns, newest first, by shipment, customer, status or date.'
+
+
+def _return_planner(operation):
+    def planner(inp, ctx, s):
+        return shipment_returns.prepare(s, ctx, inp, operation)
+    planner.__name__ = planner.__qualname__ = f'plan_shipment_{"return" if operation == "return" else "return_void"}'
+    return planner
+
+
+plan_shipment_return = command(
+    'shipment return', scope='company', description=_RETURN, input_model=ShipmentReturnInput,
+    output_model=ShipmentReturnOutput, writes={'company'}, required_role='standard', capability='ledger.post',
+    accepts_idempotency_key=True, positional=['shipment'], error_codes=_WRITE_ERRORS)(_return_planner('return'))
+plan_shipment_return_void = command(
+    'shipment-return void', scope='company', description=_RETURN_VOID, input_model=ShipmentReturnVoidInput,
+    output_model=ShipmentReturnOutput, writes={'company'}, required_role='standard', capability='ledger.post',
+    accepts_idempotency_key=True, positional=['shipment_return'], error_codes=_WRITE_ERRORS)(_return_planner('void'))
+
+
+@command('shipment-return show', scope='company', description=_RETURN_SHOW, input_model=ShipmentReturnSelector,
+         output_model=ShipmentReturnOutput, required_role='member', capability='item', positional=['shipment_return'],
+         error_codes=['E_RECORD_NOT_FOUND'])
+def plan_shipment_return_show(inp, ctx, s):
+    return Plan(shipment_returns.show(s, inp))
+
+
+@command('shipment-return query', scope='company', description=_RETURN_QUERY, input_model=ShipmentReturnQueryInput,
+         output_model=ShipmentReturnListOutput, required_role='member', capability='item',
+         error_codes=['E_RECORD_NOT_FOUND', 'E_VALIDATION'])
+def plan_shipment_return_query(inp, ctx, s):
+    return Plan(shipment_returns.query(s, inp))
+
+
+for _write in (plan_shipment_return, plan_shipment_return_void):
+    _write.ledger = True
+    _write.resource_requirements = (('customer-work', 'standard'),)
+    _write.applier(shipment_returns.apply)

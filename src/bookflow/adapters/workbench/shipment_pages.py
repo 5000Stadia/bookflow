@@ -3,7 +3,8 @@
 *Ship* opens from the order page: each stocked line with what it still has to ship, a quantity to ship now, the
 ship date, carrier and tracking numbers; *Preview* shows the dry run of `shipment post` (each line's cost, what stays
 to ship) and *Ship* posts it. The shipment page shows its lines with cost, invoiced and waiting, the invoices that
-bill it and every revision, with *Create invoice* and *Void*. The list is `shipment query`.
+bill it, its returns and every revision, with *Create invoice*, *Return* (units back before they are invoiced),
+*Void return* and *Void*. The list is `shipment query`.
 """
 from __future__ import annotations
 
@@ -117,11 +118,13 @@ def mount(app, *, render, run, credential, page_error, role_allows):
 
     # ---------------------------------------------------------------- one shipment
 
-    def shipment_view(request, company_id, number, *, result=None, invoice=None, error=None, status_code=200):
+    def shipment_view(request, company_id, number, *, result=None, invoice=None, returned=None, error=None,
+                      status_code=200):
         company = run(request, 'company show', {}, company_id)
         shipment = run(request, 'shipment show', {'shipment': number}, company_id)
         return render('shipment.html', request, status_code=status_code, company=company,
                       company_id=company['company_id'], shipment=shipment, result=result, invoice=invoice,
+                      returned=returned,
                       error=error, can_write=can(POST, company, request), quote=quote)
 
     @app.get('/c/{company_id}/shipments/{number}')
@@ -144,6 +147,20 @@ def mount(app, *, render, run, credential, page_error, role_allows):
             if action == 'void':
                 out = run(request, 'shipment void', {'shipment': number}, company_id, headers=headers(reason))
                 return shipment_view(request, company_id, number, result=out)
+            if action == 'return':
+                raw = {'shipment': number, 'reopen': form.get('reopen') == '1'}
+                line = {'shipment_line': (form.get('line') or '1').strip()}
+                if (form.get('quantity') or '').strip():
+                    line['quantity'] = form['quantity'].strip()
+                raw['lines'] = [line]
+                if (form.get('date') or '').strip():
+                    raw['date'] = form['date'].strip()
+                out = run(request, 'shipment return', raw, company_id, headers=headers(reason))
+                return shipment_view(request, company_id, number, returned=out)
+            if action == 'void_return':
+                out = run(request, 'shipment-return void', {'shipment_return': (form.get('return') or '').strip()},
+                          company_id, headers=headers(reason))
+                return shipment_view(request, company_id, number, returned=out)
             raise BookflowError('E_VALIDATION', details={'fields': [{'field': 'action', 'problem': 'unknown action'}]})
         except BookflowError as e:
             if e.code in _PASS:

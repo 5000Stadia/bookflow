@@ -107,7 +107,8 @@ class ShipmentLineOutput(BaseModel):
     serial_numbers: list[str] | None = None
     cost: JournalMoneyOutput = Field(description='What the units cost: the replay\'s value of the issue, every later correction included.')
     invoiced: str = Field(description='What live invoices have billed of it.')
-    not_invoiced: str
+    returned: str = Field(default='0', description='What shipment returns not voided brought back of it.')
+    not_invoiced: str = Field(description='Still out and not billed: shipped less invoiced less returned.')
     waiting: JournalMoneyOutput = Field(description='Its cost still in Shipped Not Invoiced.')
 
 
@@ -117,6 +118,15 @@ class ShipmentBillingOutput(BaseModel):
     date: str
     quantity: str
     line_identity: str
+
+
+class ShipmentReturnRef(BaseModel):
+    return_id: str
+    number: str
+    date: str
+    status: str
+    reopen: bool
+    quantity: str = Field(description='Base quantity it brought back, all lines.')
 
 
 class ShipmentHistoryOutput(BaseModel):
@@ -151,6 +161,7 @@ class ShipmentOutput(BaseModel):
     cost: JournalMoneyOutput = Field(description='What the shipment\'s units cost in all.')
     shipped_not_invoiced: JournalMoneyOutput = Field(description='Cost still waiting in Shipped Not Invoiced.')
     invoices: list[ShipmentBillingOutput] = Field(default_factory=list)
+    returns: list[ShipmentReturnRef] = Field(default_factory=list, description='Shipment returns of its units, voided ones too.')
     order_to_ship: dict[str, str] = Field(default_factory=dict, description='Each order line\'s quantity still to ship after this.')
     history: list[ShipmentHistoryOutput] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
@@ -198,3 +209,118 @@ class ShippedNotInvoicedOutput(BaseModel):
     rows: list[ShippedNotInvoicedRow]
     total: JournalMoneyOutput
     account_balance: JournalMoneyOutput
+
+
+# ---------------------------------------------------------------- shipment returns (R181 increment 2)
+
+
+class ShipmentReturnLineInput(_Strict):
+    shipment_line: Selector | None = Field(default=None, description=(
+        "The shipment line given back: its position (1, 2, ...) or line_identity, as `shipment show` lists them. "
+        'Give this or item.'))
+    item: Selector | None = Field(default=None, description='An item exactly one line of the shipment carries.')
+    quantity: Quantity | None = Field(default=None, description=(
+        "How many came back, in the item's base unit (as the shipment shows it); omitted, all of the line still out "
+        'and not invoiced.'))
+    bin: _SL.LineBin = Field(default=None, description=(
+        'Bin the units go back to; default the bin the shipment took them from.'))
+    lot: _SL.LineLot = Field(default=None, description=_SL.LOT_HELP)
+    serial_numbers: _SL.LineSerials = Field(default=None, max_length=10000, description=(
+        'Serial numbers that came back; each must be one the shipment took.'))
+
+
+class ShipmentReturnInput(_Strict):
+    shipment: Selector = Field(description='Shipment number or id whose units came back.')
+    expected_version: int | None = Field(default=None, ge=1, description="The shipment's version, if you want it checked.")
+    date: IsoDate | None = Field(default=None, description='Date the units came back into stock; default today, never before the ship date.')
+    lines: list[ShipmentReturnLineInput] | None = Field(default=None, min_length=1, max_length=200, description=(
+        'What came back. Omitted: every unit of the shipment still out and not invoiced.'))
+    reopen: bool = Field(default=True, description=(
+        'True (the default): the units are to ship again on the order. False: they are cancelled on the order.'))
+    count_position: Literal['before', 'after'] | None = Field(default=None, description=(
+        'Before (the default) or after a physical count of the site on the return date.'))
+    memo: str | None = Field(default=None, max_length=4000)
+
+
+class ShipmentReturnSelector(_Strict):
+    shipment_return: Selector = Field(description='Shipment return number or id.')
+
+
+class ShipmentReturnVoidInput(_Strict):
+    shipment_return: Selector = Field(description='Shipment return number or id.')
+    expected_version: int | None = Field(default=None, ge=1)
+
+
+class ShipmentReturnQueryInput(_Strict):
+    shipment: Selector | None = Field(default=None, description="Only this shipment's returns.")
+    customer: Selector | None = Field(default=None, description="Only this customer's returns.")
+    status: Literal['returned', 'voided'] | None = None
+    date_from: IsoDate | None = None
+    date_to: IsoDate | None = None
+    limit: int = Field(default=50, ge=1, le=500)
+
+
+class ShipmentReturnLineOutput(BaseModel):
+    position: int
+    shipment_line_identity: str
+    shipment_line_position: int | None
+    item_id: str
+    item_name: str
+    quantity: str = Field(description="Returned, in the item's base unit.")
+    bin: str | None = None
+    lot: str | None = None
+    serial_numbers: list[str] | None = None
+    value: JournalMoneyOutput = Field(description=(
+        "What the units are worth back in stock: the replay's share of the shipment line's cost."))
+
+
+class ShipmentReturnHistoryOutput(BaseModel):
+    version: int
+    status: str
+    reason: str | None
+    created_at: str
+    created_by: str
+    created_via: str
+
+
+class ShipmentReturnOutput(BaseModel):
+    id: str | None
+    number: str | None
+    version: int | None
+    status: str
+    shipment_id: str
+    shipment_number: str
+    sales_order_id: str
+    sales_order_number: str | None
+    customer_id: str
+    customer_name: str | None
+    date: str
+    reopen: bool
+    memo: str | None = None
+    transaction_id: str | None = None
+    lines: list[ShipmentReturnLineOutput]
+    value: JournalMoneyOutput = Field(description='Taken out of Shipped Not Invoiced and put back into Inventory Asset.')
+    order_to_ship: dict[str, str] = Field(default_factory=dict, description="Each order line's quantity still to ship after this.")
+    history: list[ShipmentReturnHistoryOutput] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    next_commands: list[str] = Field(default_factory=list)
+    changed: bool = True
+
+
+class ShipmentReturnListRow(BaseModel):
+    id: str
+    number: str
+    version: int
+    status: str
+    date: str
+    shipment_number: str
+    sales_order_number: str | None
+    customer_name: str | None
+    reopen: bool
+    quantity: str
+    value: JournalMoneyOutput
+
+
+class ShipmentReturnListOutput(BaseModel):
+    rows: list[ShipmentReturnListRow]
+    total: int

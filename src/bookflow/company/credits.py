@@ -309,10 +309,15 @@ def _stock_entries(s, lines, *, date):
         if source is None:      # refused by `_refuse_stocked` before any of this is reached
             raise BookflowError('E_INTERNAL', message='A standalone credit line carries stock.')
         issue = inventory_effects.live_issue(s, source['transaction_id'], source['document_line_id'])
+        shipped = False
         if issue is None:
+            # An invoice line billing shipped units issued nothing itself: the units came off the shelf on the
+            # shipment, so the return names that shipment line's issue and takes its place, numbers and cost (R181).
             from bookflow.company import shipments
-            shipments.refuse_shipped_return(s, source['transaction_id'], source['document_line_id'])
-        if issue is None or -int(issue['quantity_microunits']) != int(source['base_quantity_microunits']):
+            issue = shipments.billed_issue(s, source['transaction_id'], source['document_line_id'],
+                                           line.get('intervals') or ())
+            shipped = issue is not None
+        if issue is None or (not shipped and -int(issue['quantity_microunits']) != int(source['base_quantity_microunits'])):
             raise BookflowError('E_INTERNAL', message=(
                 'The invoice line being returned issued no stock, or issued a quantity its '
                 'own capture does not name.'))

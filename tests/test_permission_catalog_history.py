@@ -89,6 +89,7 @@ ACCEPTED = {
     'verify-v1': (734, '1a850789e63fe9d8b8d995b67098d1eebe026405bea56e31a79d06ce7a487c96'),
     'agent-setup-v1': (735, '5102370f0ee860388d7452f9d004c51789a95c0ed5a93cefa19a38650e475162'),
     'shipments-v1': (743, '9fa6ebf4efaf4a043bf04870d0b7f5dbf30e97f655bf889b631247c43be9c284'),
+    'shipments-returns-v1': (747, 'e3d8e521f51312b55d5910f7c975befd44ed17f12ef59dde94c4ec8707b1b69f'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -205,6 +206,7 @@ CHAIN_ADDITIONS = {
     'agent-setup-v1': {'setup'},
     'shipments-v1': {'report shipped-not-invoiced', 'shipment history', 'shipment invoice', 'shipment post',
                      'shipment query', 'shipment show', 'shipment update', 'shipment void'},
+    'shipments-returns-v1': {'shipment return', 'shipment-return query', 'shipment-return show', 'shipment-return void'},
 }
 
 _ANCESTOR_EDIT = """

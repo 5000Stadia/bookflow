@@ -69,8 +69,9 @@ from bookflow.company.unit_price_schema import fraction_column
 
 # The documents that write movements, in their stored spelling. ``count`` is a physical count's
 # posted difference (R104 increment 2); ``landed_cost`` is reserved for increment 6. ``shipment`` is a shipment's
-# own entry and ``shipment_cost`` the cost it moves to cost of goods sold when billed (R181, co0102).
-DOCUMENT_KINDS = ('adjustment', 'recost', 'count', 'landed_cost', 'shipment', 'shipment_cost')
+# own entry and ``shipment_cost`` the cost it moves to cost of goods sold when billed (R181, co0102);
+# ``shipment_return`` brings unbilled shipped units back (R181 increment 2, co0103).
+DOCUMENT_KINDS = ('adjustment', 'recost', 'count', 'landed_cost', 'shipment', 'shipment_cost', 'shipment_return')
 
 # The movement kinds. ``INPUT_KINDS`` is what a replay walks; the derived two are produced by
 # replay or by a void and are never re-read as new stock activity. Anything that needs "every

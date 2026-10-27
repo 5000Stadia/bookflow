@@ -228,18 +228,6 @@ def test_a_recost_reaching_an_invoice_in_a_closed_period_is_refused(shop):
     assert _balances(books, '2017-03-31') == dict(asset=1600, sni=0, cogs=2400, income=-5400)
 
 
-def test_a_credit_memo_returning_billed_shipped_goods_is_refused_cleanly_until_returns_arrive(shop):
-    run = shop['run']
-    run('shipment post', dict(sales_order=shop['order']['number'], date='2017-03-05', lines=[dict(
-        item='Widget', quantity='2')]), reason='Two')
-    invoice = run('shipment invoice', dict(shipment='1001', date='2017-03-06'), reason='Bill')
-    line = invoice['revision']['lines'][0]['line_id']
-    refused = _error(lambda: run('credit-memo post', dict(customer=shop['books']['customer'], date='2017-03-07', lines=[
-        dict(quantity='1', source_invoice=invoice['id'], source_line=line)]), reason='One came back'))
-    assert refused.code == 'E_VALIDATION' and refused.details['shipments'] == ['1001']
-    _tie(shop['books'])
-
-
 def test_a_zero_price_invoice_billing_a_shipment_still_moves_its_cost(books):
     """Review finding: an invoice of total zero posts no line, and its billing must still reach the derived balance."""
     run = books['run']
