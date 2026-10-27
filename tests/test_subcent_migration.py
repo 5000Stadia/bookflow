@@ -25,7 +25,7 @@ M = importlib.import_module('bookflow.storage.company_migrations.versions.0091_s
 
 
 def test_the_frozen_columns_are_what_the_metadata_declares():
-    assert M.revision == 'co0091' and M.revision in _chain() and HEADS['company'] == 'co0091'
+    assert M.revision == 'co0091' and M.revision in _chain()
     declared = {(table.name, column.name) for table in c.metadata.tables.values()
                 for column in table.columns if column.name.endswith('_fraction')}
     assert declared == set(M.FRACTIONS)
@@ -63,7 +63,7 @@ def _rows(path):
         return found
 
 
-def test_whole_cent_books_read_byte_identical_after_the_upgrade(books):  # noqa: F811
+def test_whole_cent_books_read_byte_identical_after_the_upgrade(books, monkeypatch):  # noqa: F811
     run, client, co = books['run'], books['client'], books['company']
     code = next(row['id'] for row in run('sales-tax-code query', {'limit': 50})['items'] if not row['taxable'])
     item = run('item create', dict(name='Valve', type='non_inventory_part', sales_enabled=True, description='Valve',
@@ -90,7 +90,15 @@ def test_whole_cent_books_read_byte_identical_after_the_upgrade(books):  # noqa:
         for table, name in M.FRACTIONS:  # what the base revision's database is
             raw.execute(f'ALTER TABLE {table} DROP COLUMN {name}')
         raw.execute('UPDATE alembic_version SET version_num = ?', (M.down_revision,))
-    assert client.run('upgrade', {})['companies_migrated'] == [co]
+    # Later revisions' objects are already in this file, so the upgrade stops at co0091 (the one
+    # step under test) and the stamp then returns to the real head those objects belong to.
+    head = HEADS['company']
+    with monkeypatch.context() as patch:
+        patch.setitem(HEADS, 'company', M.revision)
+        assert client.run('upgrade', {})['companies_migrated'] == [co]
+    with sqlite3.connect(path) as raw:
+        assert raw.execute('SELECT version_num FROM alembic_version').fetchone() == (M.revision,)
+        raw.execute('UPDATE alembic_version SET version_num = ?', (head,))
     assert _shown(run, docs) == shown
     assert _rows(path) == rows
     invoice = run('invoice show', {'invoice': docs['invoice'][1]})

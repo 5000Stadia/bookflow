@@ -14,6 +14,7 @@ from alembic import command
 from bookflow.company import schema
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import _config
+from tests.later_columns import added_after
 
 
 COMMON = {
@@ -161,9 +162,10 @@ def _normalized_shape(conn: sqlite3.Connection) -> tuple:
 # EXPECTED_COLUMNS is what co0003 froze, and one test below reads it back out of a
 # co0003 database. Every Row 5 column a later revision added is named here instead,
 # so the live metadata can grow without loosening the frozen-shape assertion.
-ADDED_AFTER_CO0003 = {
-    "accounts": {"cash_flow_section"},  # co0039
-}
+# Columns later revisions added by ALTER TABLE (co0039's cash_flow_section, co0091's fractions,
+# ...), read from those migrations rather than listed.
+ADDED_AFTER_CO0003 = {table: columns for table, columns in added_after("co0003").items()
+                      if table in EXPECTED_COLUMNS}
 
 
 def test_row5_metadata_has_exact_primary_and_child_column_inventory():

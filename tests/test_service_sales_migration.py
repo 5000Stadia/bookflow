@@ -9,6 +9,7 @@ import sqlite3
 import pytest
 import sqlalchemy as sa
 
+from tests.later_columns import added_after
 from bookflow import BookflowError
 from bookflow.company import schema
 from bookflow.storage.engine import open_database
@@ -199,6 +200,17 @@ def test_frozen_ddl_matches_declared_columns_keys_checks(old, tmp_path, monkeypa
                     expected.constraints.remove(current_check)
                     expected.append_constraint(sa.CheckConstraint(
                         f"typeof({quantity}) = 'integer' AND {quantity} > 0", name=current_check.name))
+            later = added_after('co0009').get(name, set())
+            if later:
+                # Columns later revisions added by ALTER TABLE (co0091's fractions, ...), read from
+                # those migrations: co0009 never had them, nor their column CHECKs.
+                if expected is schema.metadata.tables[name]:
+                    expected = expected.to_metadata(sa.MetaData())
+                for column in later:
+                    for constraint in [c for c in expected.constraints if isinstance(c, sa.CheckConstraint)
+                                       and re.search(rf'\b{column}\b', str(c.sqltext))]:
+                        expected.constraints.remove(constraint)
+                    expected._columns.remove(expected.c[column])
             assert [(c.name, str(c.type), c.nullable, c.primary_key) for c in actual.c] == [
                 (c.name, str(c.type), c.nullable, c.primary_key) for c in expected.c]
             assert {(tuple(c.column_keys), tuple(e.target_fullname for e in c.elements), c.deferrable, c.initially)
