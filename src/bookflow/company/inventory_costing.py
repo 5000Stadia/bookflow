@@ -192,6 +192,21 @@ class Found:
 
 
 @dataclass(frozen=True)
+class Layer:
+    """Units on hand and what they are worth, by where they came from (R104 increment 7).
+
+    ``source`` is the movement that brought them in (a bought receipt, a customer return or a found
+    quantity), or None for the opening layer a switch to FIFO makes of the stock on hand, and for the
+    single pool the average keeps.
+    """
+
+    source: str | None
+    effective_date: str | None
+    quantity_microunits: int
+    value_minor_units: int
+
+
+@dataclass(frozen=True)
 class Replay:
     quantity_microunits: int
     value_minor_units: int
@@ -200,6 +215,8 @@ class Replay:
     shortfalls: tuple[Shortfall, ...] = ()
     true_ups: dict = field(default_factory=dict)   # (issue id, receipt id) -> target delta
     found: tuple[Found, ...] = ()
+    layers: tuple[Layer, ...] = ()                 # what is on hand, oldest first (one layer under average)
+    method: str = 'average'                        # the method in force where the walk ended
 
     @property
     def average_cost_minor_units(self) -> int:
@@ -280,13 +297,77 @@ class _Walk:
     shortfalls: list
     found: list
     stale: set
+    layers: list = field(default_factory=list)
+    method: str = 'average'
 
 
-def _walk(rows, retired, posted, landed, strict) -> _Walk:
+def take_layers(layers: list[dict], units: int, first: str | None = None) -> int:
+    """Take ``units`` out of FIFO ``layers``, oldest first (the layer of ``first`` before any other), and
+    return what they were worth: each layer gives round(W*u/U), or all of W when it empties, so no layer is
+    ever left holding value behind no units. Emptied layers are dropped."""
+    taken = 0
+    order = sorted(range(len(layers)), key=lambda i: (layers[i]['source'] != first or first is None, i))
+    for i in order:
+        if not units:
+            break
+        layer = layers[i]
+        used = min(layer['units'], units)
+        give = layer['value'] if used == layer['units'] else round_ratio_half_even(layer['value'] * used, layer['units'])
+        layer['units'] -= used
+        layer['value'] -= give
+        taken += give
+        units -= used
+    layers[:] = [layer for layer in layers if layer['units']]
+    return taken
+
+
+def spread_layers(layers: list[dict], delta: int) -> None:
+    """Add ``delta`` to FIFO ``layers`` by remaining units, cumulative endpoint shares in layer order, so the
+    parts sum exactly to ``delta``."""
+    whole = sum(layer['units'] for layer in layers)
+    done = 0
+    for layer in layers:
+        layer['value'] += endpoint_share(delta, whole, done, done + layer['units'])
+        done += layer['units']
+
+
+def method_on(methods: Sequence[tuple[str, str]], date: str) -> str:
+    """The costing method in force on ``date``: the switch with the latest date on or before it, else average."""
+    method = 'average'
+    for effective_from, chosen in methods:
+        if effective_from <= date:
+            method = chosen
+    return method
+
+
+def _walk(rows, retired, posted, landed, strict, methods=(), until=None) -> _Walk:
     """One pass over the inputs, with ``landed`` (receipt id -> value) added to each receipt where it is
     walked. Only the strict pass refuses; a pass that leaves some landed costs out is a decomposition step and
-    stands only as a difference from its neighbour (``replay``)."""
+    stands only as a difference from its neighbour (``replay``).
+
+    ``methods`` is the company's costing-method timeline, ``(effective_from, method)`` oldest first (R104
+    increment 7, design §3). Where the walk reaches a switch date, before any movement dated on or after it, the
+    stock on hand becomes one opening FIFO layer, or the layers merge back into the average; nothing is revalued.
+    Under FIFO the state is a queue of layers, oldest first, instead of one pool. ``until`` applies the switches
+    dated on or before it after the last row, for a report on that date."""
     quantity = value = 0
+    method = 'average'
+    layers: list[dict] = []                # FIFO: source, date, units, value; oldest first
+    switches = list(methods)
+    reached = 0
+
+    def reach(date):
+        nonlocal method, layers, reached
+        while reached < len(switches) and switches[reached][0] <= date:
+            effective_from, chosen = switches[reached]
+            reached += 1
+            if chosen == method:
+                continue
+            # Switching to FIFO, what is on hand becomes one opening layer; switching back, the layers merge
+            # and the totals carry on as the average. Open shortfalls carry over either way.
+            layers = [dict(source=None, date=effective_from, units=quantity, value=value)] if (
+                chosen == 'fifo' and quantity > 0) else []
+            method = chosen
     rate: tuple[int, int] | None = None   # (value, quantity) of the last known average
     targets: dict[str, int] = {}
     true_ups: dict[tuple[str, str], int] = {}
@@ -303,6 +384,8 @@ def _walk(rows, retired, posted, landed, strict) -> _Walk:
     for row in rows:
         if row['kind'] not in INPUT_KINDS or row['id'] in retired:
             continue
+        reach(row['effective_date'])
+        fifo = method == 'fifo'
         change = int(row['quantity_microunits'])
         if row['kind'] in ('receipt', 'found'):
             issue_id = row.get('returns_movement_id') if row['kind'] == 'receipt' else None
@@ -376,11 +459,11 @@ def _walk(rows, retired, posted, landed, strict) -> _Walk:
             value += worth
             # Cancelled units settle their own sale; only the rest can fill anyone else's.
             incoming, incoming_worth = change - cancelled, worth - cancelled_value
+            span = 0
             if open_shortfalls and incoming:
                 # Incoming units fill the shortfall first, oldest sale first. Each filled
                 # span is valued twice -- what the sale provisionally took, and what this
                 # receipt actually paid -- and the difference is that sale's true-up.
-                span = 0
                 wanting = min(incoming, sum(entry['units'] - entry['filled'] - entry['cancelled']
                                             for entry in open_shortfalls))
                 while wanting:
@@ -399,6 +482,10 @@ def _walk(rows, retired, posted, landed, strict) -> _Walk:
                         open_shortfalls.pop(0)
                 if quantity <= 0:
                     rate = (incoming_worth, incoming)
+            if fifo and incoming > span:
+                # What fills no shortfall is a new layer, worth the rest of the incoming value.
+                layers.append(dict(source=row['id'], date=row['effective_date'], units=incoming - span,
+                                   value=incoming_worth - endpoint_share(incoming_worth, incoming, 0, span)))
         elif row['kind'] == 'value':
             if quantity <= 0 and strict:
                 raise StockRefusal('unvalued_stock', row, quantity_microunits=quantity,
@@ -409,6 +496,8 @@ def _walk(rows, retired, posted, landed, strict) -> _Walk:
                                    value_minor_units=proposed,
                                    problem='stock on hand must be worth more than nothing; '
                                            'issue the quantity to write it off in full')
+            if fifo and layers:
+                spread_layers(layers, int(row['value_minor_units']))
             value = proposed
         elif row['kind'] == 'vendor_return':
             # Sent back to the supplier for a credit. The credit is what the vendor allowed,
@@ -429,12 +518,18 @@ def _walk(rows, retired, posted, landed, strict) -> _Walk:
                     problem=(f'sending back all {format_quantity_micro_units(quantity)} on hand must '
                              f'credit exactly what that stock is worth, {worth}; credit the rest '
                              'on an expense line, or leave some quantity behind'))
+            if fifo:
+                # The layer of the receipt it names, else the oldest layers; the credit leaves, and any difference
+                # from what those units were worth stays in stock, spread over what is left (design §3, question 1).
+                worth = take_layers(layers, max(min(issue, quantity), 0), row.get('returns_movement_id'))
+                if layers and worth + int(row['value_minor_units']):
+                    spread_layers(layers, worth + int(row['value_minor_units']))
             quantity -= issue
             value += int(row['value_minor_units'])
         else:
             issue = -change
             if issue <= quantity:
-                taken = consumed_value(value, quantity, issue)
+                taken = take_layers(layers, issue) if fifo else consumed_value(value, quantity, issue)
                 targets[row['id']] = -taken
                 quantity -= issue
                 value -= taken
@@ -443,7 +538,9 @@ def _walk(rows, retired, posted, landed, strict) -> _Walk:
                 taken = value if on_hand else 0
                 short = issue - on_hand
                 if quantity > 0:
-                    basis, basis_rate = 'average', (value, quantity)
+                    # Under FIFO, the newest layer's unit cost.
+                    basis, basis_rate = 'average', ((layers[-1]['value'], layers[-1]['units']) if fifo
+                                                    else (value, quantity))
                 elif rate is not None:
                     basis, basis_rate = 'average', rate
                 elif row.get('fallback_unit_cost_minor_units') is not None:
@@ -457,6 +554,7 @@ def _walk(rows, retired, posted, landed, strict) -> _Walk:
                     basis, basis_rate = 'none', None
                 provisional = 0 if basis_rate is None else round_ratio_half_even(
                     basis_rate[0] * short, basis_rate[1])
+                layers = []
                 targets[row['id']] = -(taken + provisional)
                 quantity -= issue
                 value -= taken + provisional
@@ -465,7 +563,7 @@ def _walk(rows, retired, posted, landed, strict) -> _Walk:
                 shortfall_of[row['id']] = entry
                 shortfalls.append(Shortfall(row, quantity, short, provisional, basis))
         if quantity > 0:
-            rate = (value, quantity)
+            rate = (layers[-1]['value'], layers[-1]['units']) if fifo and layers else (value, quantity)
         if not strict:
             continue
         if quantity >= 0 and value < 0:
@@ -494,7 +592,9 @@ def _walk(rows, retired, posted, landed, strict) -> _Walk:
             raise StockRefusal('landed_orphan', orphan, problem=(
                 'a landed cost is allocated to a receipt that no longer stands; void the landed-cost '
                 'allocation first'))
-    return _Walk(quantity, value, targets, true_ups, shortfalls, found, stale)
+    if until is not None:
+        reach(until)
+    return _Walk(quantity, value, targets, true_ups, shortfalls, found, stale, layers, method)
 
 
 def _landed_values(rows):
@@ -505,7 +605,7 @@ def _landed_values(rows):
     return added
 
 
-def replay(rows: Iterable[Mapping]) -> Replay:
+def replay(rows: Iterable[Mapping], methods: Sequence[tuple[str, str]] = (), until: str | None = None) -> Replay:
     """Canonical on-hand quantity and value, plus the corrections the posted rows still owe.
 
     A ``landed`` movement (R104 increment 6, design §5) is walked at its receipt's position, as if the
@@ -516,7 +616,11 @@ def replay(rows: Iterable[Mapping]) -> Replay:
     dated on or before its own date says, and each later landed cost owes it the difference between the
     pass that adds it and the one before, a **forward true-up** keyed ``(movement, landed)`` and dated at
     the landed cost. The passes telescope, so the parts sum exactly to the full walk's figures.
+
+    ``methods`` is the company's costing-method timeline (``costing_methods.timeline``); empty is average from
+    the beginning. Every caller with a session passes it, so FIFO decides every value it decides.
     """
+    methods = tuple(methods)
     rows = ordered(rows)
     retired = _retired(rows)
     posted, posted_true_ups = _posted(rows, retired)
@@ -524,12 +628,12 @@ def replay(rows: Iterable[Mapping]) -> Replay:
     # Landed costs on a retired receipt add to nothing (they net to nothing there, or the strict pass refuses).
     landed_rows = [row for row in rows if row['kind'] == 'landed' and row['id'] not in retired
                    and row.get('landed_on_movement_id') not in retired]
-    final = _walk(rows, retired, posted, _landed_values(landed_rows), True)
+    final = _walk(rows, retired, posted, _landed_values(landed_rows), True, methods, until)
     quantity, value, shortfalls, found, stale = final.quantity, final.value, final.shortfalls, final.found, final.stale
     if not landed_rows:
         targets, true_ups = final.targets, final.true_ups
     else:
-        walks = [_walk(rows, retired, posted, _landed_values(landed_rows[:k]), False)
+        walks = [_walk(rows, retired, posted, _landed_values(landed_rows[:k]), False, methods)
                  for k in range(len(landed_rows))] + [final]
         dates = [row['effective_date'] for row in landed_rows]
         targets, true_ups = {}, {}
@@ -575,8 +679,12 @@ def replay(rows: Iterable[Mapping]) -> Replay:
             receipt = by_id[key[1]]
             corrections.append(Correction(by_id[key[0]], delta, receipt['effective_date'], receipt))
     corrections.sort(key=lambda correction: (correction.effective_date, int(correction.target_movement['sequence'])))
+    if final.method == 'fifo':
+        layers = tuple(Layer(layer['source'], layer['date'], layer['units'], layer['value']) for layer in final.layers)
+    else:
+        layers = (Layer(None, None, quantity, value),) if quantity > 0 else ()
     return Replay(quantity, value, targets, tuple(corrections), tuple(shortfalls),
-                  {key: delta for key, delta in true_ups.items()}, tuple(found))
+                  {key: delta for key, delta in true_ups.items()}, tuple(found), layers, final.method)
 
 
 def totals(rows: Iterable[Mapping]) -> tuple[int, int]:

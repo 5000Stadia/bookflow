@@ -42,6 +42,7 @@ def _stock(s, data, indexed, require):
     """
     from bookflow.company import inventory
     from bookflow.company.inventory_costing import replay
+    from bookflow.company import costing_methods
 
     header, pending = data['header'], data['pending']
     movements = [movement.values for movement in data['stock'].movements]
@@ -101,7 +102,7 @@ def _stock(s, data, indexed, require):
     own = {row['id'] for row in movements}
     for item_id in {row['item_id'] for row in movements}:
         stored = inventory.movements(s, item_id=item_id)
-        state = replay(stored + [row for row in movements if row['item_id'] == item_id])
+        state = replay(stored + [row for row in movements if row['item_id'] == item_id], costing_methods.timeline(s))
         # A true-up is owed at a later receipt's date, not at the sale's, and the change writes
         # it as its own correction; only the sale's own-date cost must already agree.
         require(not any(correction.target_movement['id'] in own and correction.filled_by is None

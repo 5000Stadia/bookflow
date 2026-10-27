@@ -92,6 +92,7 @@ import sqlalchemy as sa
 
 from bookflow.company import assembly_builds, inventory, item_conversions, journals, placements, schema as c
 from bookflow.company.document_effects import allocate
+from bookflow.company import costing_methods
 from bookflow.company.inventory_costing import StockRefusal, replay, shortfall_warning
 from bookflow.company.inventory_schema import INPUT_KINDS
 from bookflow.company.journal_models import JournalPostInput
@@ -124,6 +125,7 @@ class Entry:
     class_id: str | None = None
     value_minor_units: int | None = None   # a bought receipt and a vendor return state it; the rest ask costing
     returns_movement_id: str | None = None # the issue this receipt gives back, on a return
+    sends_back_movement_id: str | None = None  # a vendor return's named receipt (R104 increment 7)
     site_id: str | None = None             # the inventory site the line names (else its document's); None defaults
     line_identity: str | None = None       # the entered line's stable identity, to keep its site across revisions
     numbers: object = None                 # serial_lots.Numbers the line states (R104 increment 4); None states none
@@ -376,7 +378,8 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
             effective_date=date, sequence=sequence, currency=currency,
             asset_account_id=entry.asset_account_id, offset_account_id=entry.offset_account_id,
             class_id=entry.class_id, corrects_movement_id=None, reverses_movement_id=None,
-            returns_movement_id=entry.returns_movement_id, filled_by_movement_id=None,
+            returns_movement_id=(entry.sends_back_movement_id if entry.kind == 'vendor_return'
+                                 else entry.returns_movement_id), filled_by_movement_id=None,
             **inventory.fallback_columns(s, entry.item_id, currency, entry.kind),
             count_position=position)
         if entry.kind == 'issue' or entry.returns_movement_id is not None:
@@ -385,7 +388,7 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
             # asks what the running average consumes; a return asks for its share of the issue
             # it gives back. Neither is a number this module is entitled to invent.
             try:
-                computed = replay(history + [values]).targets.get(identity)
+                computed = replay(history + [values], costing_methods.timeline(s)).targets.get(identity)
             except StockRefusal as refusal:
                 raise refuse(refusal, entry.item_id, entry.item_name) from None
             if computed is None:
@@ -493,7 +496,7 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
         owed.extend((item_id, correction) for correction in state.corrections)
         if state.shortfalls:
             try:
-                before = {shortfall.movement['id'] for shortfall in replay(stored[item_id]).shortfalls}
+                before = {shortfall.movement['id'] for shortfall in replay(stored[item_id], costing_methods.timeline(s)).shortfalls}
             except StockRefusal:
                 before = set()
             for shortfall in state.shortfalls:

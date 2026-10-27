@@ -1249,3 +1249,6 @@ from bookflow.company import landed_cost_schema as _landed_cost_schema
 for _weight_column in _landed_cost_schema.weight_columns(_column):
     items.append_column(_weight_column)
 globals().update(_landed_cost_schema.define_tables(metadata, _column, _table))
+# Costing method timeline (co0100, R104 increment 7): dated switches between average and FIFO.
+from bookflow.company import costing_method_schema as _costing_method_schema
+globals().update(_costing_method_schema.define_tables(metadata, _column, _table))

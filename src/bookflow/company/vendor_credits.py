@@ -293,6 +293,8 @@ def _credited_grid(s, inp, header, previous):
                         if family == 'item' else
                         resolver(s, line, header['class_id'], currency, index))
             resolved['line_id'] = key
+            if family == 'item':
+                _link_receipt(s, line, resolved, kept, index)
             resolved_lines.append(resolved)
         grids[family] = resolved_lines
     return grids
@@ -313,6 +315,9 @@ def commercial(s, inp, previous=None):
     date = (inp.date or old_revision['date']) if old_revision else inp.date
     memo = inp.memo if previous is None or _supplied(inp, 'memo') else old_revision['memo']
     grids = _credited_grid(s, inp, header, previous)
+    for index, line in enumerate(grids['item']):
+        if getattr(line['profile'], 'receipt_line_id', None):
+            line['receipt_movement_id'] = receipt_movement(s, line['profile'], date, f'items.{index}.receipt_line')
     # Expenses first, then items: the order of the two tabs on the document itself.
     lines = grids['expense'] + grids['item']
     if not lines:
@@ -722,6 +727,39 @@ def _business_postings(s, header, revision, batch, resolved, pending, created, e
     return credits
 
 
+def _link_receipt(s, line, resolved, kept, index):
+    """The receipt line a stocked row sends back against (R104 increment 7): what it names, else -- when it leaves
+    receipt_line out -- what the same row identity named; null takes it off."""
+    if 'receipt_line' in line.model_fields_set:
+        chosen = line.receipt_line
+    else:
+        old = next((row for row in kept if row['line_id'] == resolved['line_id']), None) if resolved['line_id'] else None
+        chosen = (LINE_FACTS['item'].model_validate_json(old['line_snapshot']).receipt_line_id
+                  if old is not None else None)
+    if chosen is None:
+        return
+    key = chosen.upper() if is_ulid(chosen) else chosen
+    resolved['profile'] = resolved['profile'].model_copy(update={'receipt_line_id': key})
+
+
+def receipt_movement(s, profile, date, field):
+    """The standing bought-receipt movement of ``profile``'s item on the receipt line it names, dated on or
+    before ``date``; refused otherwise."""
+    import sqlalchemy as sa
+    found = s.company.conn.execute(sa.text(
+        "SELECT m.id, m.effective_date FROM inventory_movements m JOIN document_lines d ON d.id = m.document_line_id "
+        "WHERE d.line_id = :line AND m.kind = 'receipt' AND m.returns_movement_id IS NULL AND m.item_id = :item "
+        "AND NOT EXISTS (SELECT 1 FROM inventory_movements x WHERE x.reverses_movement_id = m.id) "
+        "ORDER BY m.sequence DESC LIMIT 1"), dict(line=profile.receipt_line_id, item=profile.item.id)).first()
+    if found is None:
+        raise _invalid(field, f'names no standing receipt line of "{profile.item.label}"; give the line_id of the '
+                              'bill, check, card charge or item receipt line that brought these units in')
+    if found.effective_date > date:
+        raise _invalid(field, f'that receipt is dated {found.effective_date}, after this credit; stock cannot go back '
+                              'before it came in')
+    return found.id
+
+
 def _stock_entries(pending, profile, lines=None):
     """The item rows that send stock back, in the shape the inventory ledger takes them.
 
@@ -731,6 +769,7 @@ def _stock_entries(pending, profile, lines=None):
     items = {row['document_line_id']: row for row in pending['vendor_credit_item_lines']}
     sites = {position: line.get('site_id') for position, line in enumerate(lines or (), 1)}
     numbers = {position: line.get('numbers') for position, line in enumerate(lines or (), 1)}
+    sent_back = {position: line.get('receipt_movement_id') for position, line in enumerate(lines or (), 1)}
     entries = []
     for envelope in pending['document_lines']:
         line = items.get(envelope['id'])
@@ -744,6 +783,7 @@ def _stock_entries(pending, profile, lines=None):
             entry.site_id = sites.get(envelope['position'])   # R104
             entry.line_identity = envelope['line_id']
             entry.numbers = numbers.get(envelope['position'])
+            entry.sends_back_movement_id = sent_back.get(envelope['position'])   # R104 increment 7
             entries.append(entry)
     return entries
 

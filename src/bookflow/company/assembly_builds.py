@@ -49,6 +49,7 @@ from bookflow.company.assembly_build_models import (
     AssemblyBuildListOutput, AssemblyBuildListRow, AssemblyBuildOutput, AssemblyComponentOutput,
     AssemblyCorrectionOutput,
 )
+from bookflow.company import costing_methods
 from bookflow.company.inventory_costing import MICRO, StockRefusal, replay
 from bookflow.company.journal_models import JournalPostInput, JournalUpdateInput, JournalVoidInput
 from bookflow.company.ledger_reports import money
@@ -151,11 +152,12 @@ def replay_items(s, working, load, refuse, planned=None):
     """
     builds = build_transactions(s)
     planned = planned or {}
+    methods = costing_methods.timeline(s)
     order, partners = [], {}
     if not builds and not planned:
         for item_id in list(working):
             try:
-                order.append((item_id, replay(working[item_id])))
+                order.append((item_id, replay(working[item_id], methods)))
             except StockRefusal as refusal:
                 raise refuse(refusal, item_id) from None
         return order, partners
@@ -167,7 +169,7 @@ def replay_items(s, working, load, refuse, planned=None):
         waiting.discard(item_id)
         history = load(item_id)
         try:
-            state = replay(history)
+            state = replay(history, methods)
         except StockRefusal as refusal:
             raise refuse(refusal, item_id) from None
         issues = {row['id']: row for row in history
