@@ -6,6 +6,14 @@
 #payment-workspace section { margin:1.2rem 0; padding:1rem; border:1px solid #d4dce4; border-radius:6px; }
 #payment-workspace [hidden] { display:none !important; }
 #payment-error { border-color:#b14535 !important; background:#fff4f0; }
+/* A phone shows the refusal as one short block beside the action that fixes it (390x844). */
+@media (max-width: 700px) {
+ #payment-error { padding:.5rem .75rem !important; }
+ #payment-error h2 { font-size:1rem; margin:0 0 .25rem; }
+ #payment-error p { margin:.25rem 0; }
+ #payment-error details { margin:.25rem 0; }
+ #payment-error button { margin-top:.25rem; padding:.4rem .75rem; }
+}
 #payment-message { min-height:1.5em; }
 .payment-table-wrap { max-width:100%; overflow:auto; }
 .payment-invoices { width:100%; border-collapse:collapse; }
