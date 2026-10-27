@@ -539,7 +539,7 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
                 partner['sequence'] = sequence
                 movements.append(Movement(partner, line_index=len(lines)))
                 sequence += 1
-        change.corrections.append(Correction(affected, CORRECTION_MEMOS[kind], lines, movements))
+        change.corrections.append(Correction(affected, correction_memo(kind, [c for _, c in by_date[(affected, kind)]]), lines, movements))
     from bookflow.company import serial_lots
     numbering = serial_lots.Numbering(s)
     change.placements = placements.for_movements(s, [movement.values for movement in change.movements], change.sites,
@@ -560,6 +560,13 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
 CORRECTION_MEMOS = ('Weighted-average cost correction', 'Provisional cost true-up', 'Landed cost true-up')
 
 
+def correction_memo(kind, corrections):
+    """A correction entry's memo: a cost correction under FIFO says so (R104 increment 7)."""
+    if kind == 0 and any(getattr(c, 'method', 'average') == 'fifo' for c in corrections):
+        return 'FIFO cost correction'
+    return CORRECTION_MEMOS[kind]
+
+
 def correction_kind(correction):
     if correction.filled_by is None:
         return 0
@@ -576,7 +583,8 @@ def correction_description(correction):
     if kind == 1:
         return (f'Provisional cost true-up for movement {target["id"]} dated {target["effective_date"]}, '
                 f'filled by receipt movement {correction.filled_by["id"]}')
-    return f'Weighted-average cost correction for movement {target["id"]} dated {target["effective_date"]}'
+    what = 'FIFO cost correction' if getattr(correction, 'method', 'average') == 'fifo' else 'Weighted-average cost correction'
+    return f'{what} for movement {target["id"]} dated {target["effective_date"]}'
 
 
 def open_dates(s, change, dates=()):

@@ -255,3 +255,42 @@ def test_the_demo_stays_on_average(root):
                 assert conn.execute('SELECT count(*) FROM costing_methods').fetchone()[0] == 0
                 found += 1
     assert found
+
+
+def test_a_build_on_a_day_whose_count_finds_its_components_only_at_the_count_is_refused_cleanly(shop):
+    """R103: the build sits before that day's count, so the units the count finds come after it; the build would
+    be short, and says so (it once raised KeyError 'transaction_id' on its own planned issue)."""
+    run, books = shop['run'], shop['books']
+    run('invoice post', dict(customer=shop['acme'], date='2017-03-02', lines=[dict(
+        item='Widget', quantity='5', unit_price='50.00')]), reason='Sold out')
+    count = run('inventory-count create', dict(site='Main', date='2017-03-05'), reason='Count')
+    run('inventory-count enter', dict(count=count['number'], entries=[dict(item='Widget', quantity='10')]), reason='Counted')
+    fresh = run('inventory-count show', dict(count=count['number']))
+    post = dict(count=count['number'], expected_version=fresh['version'], adjustment_account=books['cogs'])
+    preview = run('inventory-count post', post, reason='Count', dry_run=True)
+    run('inventory-count post', dict(post, preview_fingerprint=preview['preview_fingerprint']), reason='Count')
+    with pytest.raises(BookflowError) as refused:
+        run('assembly build', dict(item=shop['kit'], quantity='1', date='2017-03-05'), reason='Kit')
+    assert refused.value.code == 'E_VALIDATION' and refused.value.details['reason'] == 'build_left_short'
+
+
+def test_fifo_corrections_say_fifo_in_the_journal(shop):
+    run, books = shop['run'], shop['books']
+    run('invoice post', dict(customer=shop['acme'], date='2017-03-03', lines=[dict(
+        item='Widget', quantity='2', unit_price='50.00')]), reason='Job')
+    done = run('costing-method set', dict(method='fifo', effective_from='2017-03-01'), reason='FIFO')
+    assert done['entries'] == []                         # one opening layer at 6.00: nothing moves
+    early = run('bill post', dict(vendor=books['vendor'], date='2017-03-01', items=[dict(
+        item=shop['widget'], quantity='3', unit_cost='1.00')]), reason='Backdated, after the opening layer')
+    run('invoice post', dict(customer=shop['acme'], date='2017-03-04', lines=[dict(
+        item='Widget', quantity='4', unit_price='50.00')]), reason='Job')
+    run('bill post', dict(vendor=books['vendor'], date='2017-03-02', items=[dict(
+        item=shop['widget'], quantity='1', unit_cost='2.00')]), reason='Another backdated bill')
+    # Voiding the 1.00 bill: the 4 March sale's fourth widget now comes from the 2.00 layer, corrected at its date.
+    bill = run('bill show', dict(bill=early['id']))
+    run('bill void', dict(bill=early['id'], expected_version=bill['version']), reason='Entered in error')
+    with sqlite3.connect(_db(books)) as conn:
+        memos = {row[0] for row in conn.execute(
+            "SELECT r.memo FROM transaction_revisions r JOIN transactions t ON t.current_revision_id = r.id "
+            "WHERE r.memo LIKE '%cost correction%'")}
+    assert memos and all(memo.startswith('FIFO cost correction') for memo in memos), memos

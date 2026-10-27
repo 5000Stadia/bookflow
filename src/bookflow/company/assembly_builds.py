@@ -182,7 +182,7 @@ def replay_items(s, working, load, refuse, planned=None):
                     f'"{inventory.item_name(s, item_id)}": a build consumes stock on hand, so it cannot be '
                     'left below zero. Void or edit that build first, or date this change after it.'),
                     details={'fields': [{'field': 'date', 'problem': 'would leave an earlier build short of a component'}],
-                             'item_id': item_id, 'build_transaction_id': row['transaction_id'],
+                             'item_id': item_id, 'build_transaction_id': row.get('transaction_id'),
                              'effective_date': row['effective_date'], 'reason': 'build_left_short'})
         for correction in state.corrections:
             target = correction.target_movement

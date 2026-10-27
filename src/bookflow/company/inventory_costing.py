@@ -184,6 +184,7 @@ class Correction:
     delta_minor_units: int
     effective_date: str
     filled_by: Mapping | None = None
+    method: str = 'average'         # the costing method in force on effective_date (R104 increment 7)
 
 
 @dataclass(frozen=True)
@@ -194,8 +195,7 @@ class Shortfall:
     quantity_after_microunits: int
     shortfall_microunits: int
     provisional_minor_units: int
-    basis: str                      # 'average', 'purchase_cost' or 'none'
-    fifo: bool = False              # under FIFO 'average' is the newest layer's unit cost, or the last seen
+    basis: str                      # 'average', 'newest_layer' (FIFO), 'purchase_cost' or 'none'
 
 
 @dataclass(frozen=True)
@@ -577,7 +577,8 @@ def _walk(rows, retired, posted, landed, strict, methods=(), until=None) -> _Wal
                 entry = dict(issue=row, units=short, provisional=provisional, filled=0, cancelled=0)
                 open_shortfalls.append(entry)
                 shortfall_of[row['id']] = entry
-                shortfalls.append(Shortfall(row, quantity, short, provisional, basis, fifo))
+                shortfalls.append(Shortfall(row, quantity, short, provisional,
+                                            'newest_layer' if fifo and basis == 'average' else basis))
         if quantity > 0:
             rate = (layers[-1]['value'], layers[-1]['units']) if fifo and layers else (value, quantity)
         if not strict:
@@ -686,14 +687,15 @@ def replay(rows: Iterable[Mapping], methods: Sequence[tuple[str, str]] = (), unt
         target = targets.get(row['id'], 0)
         delta = target - (int(row['value_minor_units']) + posted.get(row['id'], 0))
         if delta:
-            corrections.append(Correction(row, delta, row['effective_date']))
+            corrections.append(Correction(row, delta, row['effective_date'], None, method_on(methods, row['effective_date'])))
     for key in sorted({*true_ups, *posted_true_ups}, key=lambda key: (
             by_id[key[1]]['effective_date'], int(by_id[key[1]]['sequence']),
             int(by_id[key[0]]['sequence']))):
         delta = true_ups.get(key, 0) - posted_true_ups.get(key, 0)
         if delta:
             receipt = by_id[key[1]]
-            corrections.append(Correction(by_id[key[0]], delta, receipt['effective_date'], receipt))
+            corrections.append(Correction(by_id[key[0]], delta, receipt['effective_date'], receipt,
+                                          method_on(methods, receipt['effective_date'])))
     corrections.sort(key=lambda correction: (correction.effective_date, int(correction.target_movement['sequence'])))
     if final.method == 'fifo':
         layers = tuple(Layer(layer['source'], layer['date'], layer['units'], layer['value']) for layer in final.layers)
@@ -720,7 +722,7 @@ def shortfall_warning(item_name: str, shortfall: Shortfall) -> str:
     """The line a person or an agent reads when a sale takes an item below zero."""
     from bookflow.core.exact import format_quantity_micro_units
     quantity = format_quantity_micro_units(shortfall.quantity_after_microunits)
-    how = {'average': "at the newest layer's unit cost" if shortfall.fifo else 'at the average cost',
+    how = {'average': 'at the average cost', 'newest_layer': "at the newest layer's unit cost",
            'purchase_cost': 'at the purchase cost on the item record, because it has never had stock',
            'none': 'at zero, because the item has no average cost and no purchase cost'}[shortfall.basis]
     return (f'Takes {item_name} to {quantity} on {shortfall.movement["effective_date"]}; its cost '

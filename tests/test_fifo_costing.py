@@ -243,3 +243,12 @@ def test_layers_always_sum_to_the_replay_value_and_quantity():
             assert sum(l.value_minor_units for l in state.layers) == state.value_minor_units, seed
         else:
             assert state.layers == ()
+
+
+def test_a_shortfall_under_fifo_names_its_basis_newest_layer():
+    from bookflow.company.inventory_costing import shortfall_warning
+    rows = [row('A', 'receipt', 1, 1000, '2027-01-02', 1), row('S', 'issue', -2, -2000, '2027-01-04', 2)]
+    fifo, average = replay(rows, FIFO).shortfalls[0], replay(rows).shortfalls[0]
+    assert (fifo.basis, average.basis) == ('newest_layer', 'average')
+    assert "newest layer's unit cost" in shortfall_warning('Widget', fifo)
+    assert replay(POSTED + [row('B0', 'receipt', 5, 4000, '2027-01-03', 13)], FIFO).corrections[0].method == 'fifo'

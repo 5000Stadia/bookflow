@@ -639,7 +639,7 @@ def correction_documents(s, change, sequence, also=()):
                 partner['sequence'] = sequence
                 pending.append(_Movement(partner, line_index=len(lines)))
                 sequence += 1
-        memo = inventory_effects.CORRECTION_MEMOS[kind]
+        memo = inventory_effects.correction_memo(kind, [c for _, c in by_date[(date, kind)]])
         change.documents.append(_Document(JournalPostInput(
             date=date, memo=f'{memo} for {label}',
             lines=lines), 'post', 'recost', pending))

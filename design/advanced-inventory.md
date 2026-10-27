@@ -1016,8 +1016,8 @@ jobs at night; the van ends as counted.
   left worth less than nothing while the item's total stays positive; issuing it then credits cost of goods sold.
   The total is what replay refuses on, as under average.
 - **Shortfalls under FIFO** are costed at the newest layer's unit cost (else the last seen, then the average's
-  fallbacks); `Shortfall.basis` still says `average` for that, and the warning says "at the newest layer's unit
-  cost".
+  fallbacks); `Shortfall.basis` is `newest_layer`, and the warning says "at the newest layer's unit cost".
+  Correction entries dated where FIFO is in force are memoed "FIFO cost correction".
 - **`report inventory-layers`** (as_of, item; paged like the stock reports) replays each item's movements dated by
   as_of with the switches dated by then: under FIFO each layer's source document and date ("Opening (FIFO from
   ...)" for a switch's opening layer), quantity, value and unit cost to four places; under average one "Average"
