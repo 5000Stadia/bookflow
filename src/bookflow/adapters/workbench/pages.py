@@ -717,6 +717,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
 
     Purchases.install_deletion(app, run=run, render=render, page_error=page_error)
     FindPage.install(app, host=host, run=run, render=render, page_error=page_error)
+    from bookflow.adapters.workbench import setup_link_pages as SetupLinkPage
+    SetupLinkPage.install(app, host=host, render=render, secure_cookies=secure_cookies)
     from bookflow.adapters.workbench import perf_page as PerfPage
     PerfPage.install(app, host=host, run=run, render=render, page_error=page_error)
 

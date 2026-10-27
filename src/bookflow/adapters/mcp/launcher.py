@@ -198,11 +198,27 @@ async def serve(inp, origin, secret, inputs, outputs):
             await server.run(read, write, server.create_initialization_options())
 
 
+def read_token_file(path: str) -> str | None:
+    """The bearer from an owner-only regular file; an unsafe or unreadable file is refused."""
+    import stat
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError:
+        raise BookflowError("E_UNAUTHENTICATED", message="The launcher's token file could not be opened.") from None
+    with os.fdopen(fd, "rb") as handle:
+        st = os.fstat(handle.fileno())
+        if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o077:
+            raise BookflowError("E_UNAUTHENTICATED", message="The launcher's token file must be a regular file you own with mode 0600.")
+        return handle.read(4096).decode("utf-8", "replace").strip()
+
+
 def launch(inp):
     origin = host_origin(inp.url or os.environ.get("BOOKFLOW_URL"))
     secret = os.environ.get(inp.token_env)
+    if not secret and inp.token_file:
+        secret = read_token_file(inp.token_file)
     if not secret or not secret.strip() or any(ch in secret for ch in "\r\n"):
-        raise BookflowError("E_UNAUTHENTICATED", message="Configure the launcher's bearer environment variable.")
+        raise BookflowError("E_UNAUTHENTICATED", message="Configure the launcher's bearer environment variable or its --token-file.")
     try:
         import anyio
         import mcp  # noqa: F401

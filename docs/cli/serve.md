@@ -27,6 +27,7 @@ Serve every routed command over HTTP and the loopback socket, holding the data-r
 | `bind` | `--bind` | string | no | no | "127.0.0.1:8765" | Address to listen on, host:port; maximum length 128 |
 | `allow_network` | `--allow-network` | boolean | no | no | false | Allow a bind address outside loopback |
 | `secure_cookies` | `--secure-cookies` | boolean \| null | no | yes | null | Set Secure on the session cookie; defaults on for non-loopback binds |
+| `background` | `--background` | boolean | no | no | false | Start the host as a background process, wait until it answers, print its address and return; its log is host.log in the data root |
 
 ### Command and context options
 
@@ -44,6 +45,8 @@ This command has no HTTP route.
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
 | `bind` | string | yes | no | — | — |
+| `url` | string \| null | no | yes | null | Where the host answers; GET <url>health returns 200 once it is ready |
+| `log` | string \| null | no | yes | null | The background host's log file |
 | `socket` | string \| null | yes | yes | — | — |
 | `pid` | integer | yes | no | — | — |
 | `secure_cookies` | boolean | yes | no | — | — |
@@ -58,9 +61,11 @@ Example JSON output:
   "bind": "value",
   "companies_failed": [],
   "companies_migrated": [],
+  "log": null,
   "pid": 1,
   "secure_cookies": false,
   "socket": null,
+  "url": null,
   "warnings": []
 }
 ```

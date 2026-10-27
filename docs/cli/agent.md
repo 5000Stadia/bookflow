@@ -86,7 +86,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `agent.active` | boolean | yes | no | — | — |
 | `agent.authority` | object | yes | no | — | — |
 | `agent.authority.epoch` | integer | yes | no | — | Authority epoch; every suspension raises it, and tokens bind to it |
-| `agent.authority.version` | integer | yes | no | — | Observed version; pass it as expected_version to assign, unassign or authorize |
+| `agent.authority.version` | integer | yes | no | — | Observed authority version; pass it as expected_version to assign, unassign or authorize (the record's own `version` is a different number) |
 | `agent.authority.suspended` | boolean | yes | no | — | True while the agent may not act; new agents start suspended until authorized |
 | `agent.authority.suspension_reason` | string \| null | yes | yes | — | Why it is suspended: not_yet_authorized, binding_loss, principal_authority_loss, own_authority_loss, principal_set_unequal or a migration reason |
 | `agent.authority.fresh_context_required` | boolean | yes | no | — | Authorizing needs acknowledge_fresh_context, because its principals or authority were narrowed |
@@ -209,7 +209,7 @@ The same example as complete `bookflow_run` arguments:
 | `agent` | `AGENT` | string | yes | no | — | Agent username or id; maximum length 64 |
 | `principal` | `--principal` | string | yes | no | — | Human the agent will act on behalf of; username or id; maximum length 64 |
 | `confirm_permitted_use` | `--confirm-permitted-use` | boolean | no | no | false | Confirm this person permits the agent to act for them with their full permissions. Required |
-| `expected_version` | `--expected-version` | integer \| null | no | yes | null | Observed authority version from `agent show`; stale requests refuse |
+| `expected_version` | `--expected-version` | integer \| null | no | yes | null | Observed authority version: `authority.version` from `agent show`, or `agent.authority.version` from a previous agent command; not the agent record's own `version`. Stale requests refuse |
 
 ### Command and context options
 
@@ -260,7 +260,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `agent.active` | boolean | yes | no | — | — |
 | `agent.authority` | object | yes | no | — | — |
 | `agent.authority.epoch` | integer | yes | no | — | Authority epoch; every suspension raises it, and tokens bind to it |
-| `agent.authority.version` | integer | yes | no | — | Observed version; pass it as expected_version to assign, unassign or authorize |
+| `agent.authority.version` | integer | yes | no | — | Observed authority version; pass it as expected_version to assign, unassign or authorize (the record's own `version` is a different number) |
 | `agent.authority.suspended` | boolean | yes | no | — | True while the agent may not act; new agents start suspended until authorized |
 | `agent.authority.suspension_reason` | string \| null | yes | yes | — | Why it is suspended: not_yet_authorized, binding_loss, principal_authority_loss, own_authority_loss, principal_set_unequal or a migration reason |
 | `agent.authority.fresh_context_required` | boolean | yes | no | — | Authorizing needs acknowledge_fresh_context, because its principals or authority were narrowed |
@@ -384,7 +384,7 @@ The same example as complete `bookflow_run` arguments:
 | `agent` | `AGENT` | string | yes | no | — | Agent username or id; maximum length 64 |
 | `confirm_permitted_use` | `--confirm-permitted-use` | boolean | no | no | false | Confirm every assigned person permits this agent to act for them with their full permissions. Required |
 | `acknowledge_fresh_context` | `--acknowledge-fresh-context` | boolean | no | no | false | Acknowledge that the agent will resume in a fresh, isolated execution context: its principals or authority were narrowed, and its old context may hold data the new set may not share. Bookflow cannot erase what an external agent already saw. Required when the agent's fresh_context_required is true |
-| `expected_version` | `--expected-version` | integer \| null | no | yes | null | Observed authority version from `agent show`; stale requests refuse |
+| `expected_version` | `--expected-version` | integer \| null | no | yes | null | Observed authority version: `authority.version` from `agent show`, or `agent.authority.version` from a previous agent command; not the agent record's own `version`. Stale requests refuse |
 
 ### Command and context options
 
@@ -435,7 +435,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `agent.active` | boolean | yes | no | — | — |
 | `agent.authority` | object | yes | no | — | — |
 | `agent.authority.epoch` | integer | yes | no | — | Authority epoch; every suspension raises it, and tokens bind to it |
-| `agent.authority.version` | integer | yes | no | — | Observed version; pass it as expected_version to assign, unassign or authorize |
+| `agent.authority.version` | integer | yes | no | — | Observed authority version; pass it as expected_version to assign, unassign or authorize (the record's own `version` is a different number) |
 | `agent.authority.suspended` | boolean | yes | no | — | True while the agent may not act; new agents start suspended until authorized |
 | `agent.authority.suspension_reason` | string \| null | yes | yes | — | Why it is suspended: not_yet_authorized, binding_loss, principal_authority_loss, own_authority_loss, principal_set_unequal or a migration reason |
 | `agent.authority.fresh_context_required` | boolean | yes | no | — | Authorizing needs acknowledge_fresh_context, because its principals or authority were narrowed |
@@ -609,7 +609,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `agent.active` | boolean | yes | no | — | — |
 | `agent.authority` | object | yes | no | — | — |
 | `agent.authority.epoch` | integer | yes | no | — | Authority epoch; every suspension raises it, and tokens bind to it |
-| `agent.authority.version` | integer | yes | no | — | Observed version; pass it as expected_version to assign, unassign or authorize |
+| `agent.authority.version` | integer | yes | no | — | Observed authority version; pass it as expected_version to assign, unassign or authorize (the record's own `version` is a different number) |
 | `agent.authority.suspended` | boolean | yes | no | — | True while the agent may not act; new agents start suspended until authorized |
 | `agent.authority.suspension_reason` | string \| null | yes | yes | — | Why it is suspended: not_yet_authorized, binding_loss, principal_authority_loss, own_authority_loss, principal_set_unequal or a migration reason |
 | `agent.authority.fresh_context_required` | boolean | yes | no | — | Authorizing needs acknowledge_fresh_context, because its principals or authority were narrowed |
@@ -776,7 +776,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `agent.active` | boolean | yes | no | — | — |
 | `agent.authority` | object | yes | no | — | — |
 | `agent.authority.epoch` | integer | yes | no | — | Authority epoch; every suspension raises it, and tokens bind to it |
-| `agent.authority.version` | integer | yes | no | — | Observed version; pass it as expected_version to assign, unassign or authorize |
+| `agent.authority.version` | integer | yes | no | — | Observed authority version; pass it as expected_version to assign, unassign or authorize (the record's own `version` is a different number) |
 | `agent.authority.suspended` | boolean | yes | no | — | True while the agent may not act; new agents start suspended until authorized |
 | `agent.authority.suspension_reason` | string \| null | yes | yes | — | Why it is suspended: not_yet_authorized, binding_loss, principal_authority_loss, own_authority_loss, principal_set_unequal or a migration reason |
 | `agent.authority.fresh_context_required` | boolean | yes | no | — | Authorizing needs acknowledge_fresh_context, because its principals or authority were narrowed |
@@ -938,7 +938,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].active` | boolean | yes | no | — | — |
 | `items[].authority` | object | yes | no | — | — |
 | `items[].authority.epoch` | integer | yes | no | — | Authority epoch; every suspension raises it, and tokens bind to it |
-| `items[].authority.version` | integer | yes | no | — | Observed version; pass it as expected_version to assign, unassign or authorize |
+| `items[].authority.version` | integer | yes | no | — | Observed authority version; pass it as expected_version to assign, unassign or authorize (the record's own `version` is a different number) |
 | `items[].authority.suspended` | boolean | yes | no | — | True while the agent may not act; new agents start suspended until authorized |
 | `items[].authority.suspension_reason` | string \| null | yes | yes | — | Why it is suspended: not_yet_authorized, binding_loss, principal_authority_loss, own_authority_loss, principal_set_unequal or a migration reason |
 | `items[].authority.fresh_context_required` | boolean | yes | no | — | Authorizing needs acknowledge_fresh_context, because its principals or authority were narrowed |
@@ -1064,7 +1064,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `active` | boolean | yes | no | — | — |
 | `authority` | object | yes | no | — | — |
 | `authority.epoch` | integer | yes | no | — | Authority epoch; every suspension raises it, and tokens bind to it |
-| `authority.version` | integer | yes | no | — | Observed version; pass it as expected_version to assign, unassign or authorize |
+| `authority.version` | integer | yes | no | — | Observed authority version; pass it as expected_version to assign, unassign or authorize (the record's own `version` is a different number) |
 | `authority.suspended` | boolean | yes | no | — | True while the agent may not act; new agents start suspended until authorized |
 | `authority.suspension_reason` | string \| null | yes | yes | — | Why it is suspended: not_yet_authorized, binding_loss, principal_authority_loss, own_authority_loss, principal_set_unequal or a migration reason |
 | `authority.fresh_context_required` | boolean | yes | no | — | Authorizing needs acknowledge_fresh_context, because its principals or authority were narrowed |
@@ -1175,7 +1175,7 @@ The same example as complete `bookflow_run` arguments:
 |---|---|---|---|---|---|---|
 | `agent` | `AGENT` | string | yes | no | — | Agent username or id; maximum length 64 |
 | `principal` | `--principal` | string | yes | no | — | Human the agent will no longer act for; username or id; maximum length 64 |
-| `expected_version` | `--expected-version` | integer \| null | no | yes | null | Observed authority version from `agent show`; stale requests refuse |
+| `expected_version` | `--expected-version` | integer \| null | no | yes | null | Observed authority version: `authority.version` from `agent show`, or `agent.authority.version` from a previous agent command; not the agent record's own `version`. Stale requests refuse |
 
 ### Command and context options
 
@@ -1226,7 +1226,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `agent.active` | boolean | yes | no | — | — |
 | `agent.authority` | object | yes | no | — | — |
 | `agent.authority.epoch` | integer | yes | no | — | Authority epoch; every suspension raises it, and tokens bind to it |
-| `agent.authority.version` | integer | yes | no | — | Observed version; pass it as expected_version to assign, unassign or authorize |
+| `agent.authority.version` | integer | yes | no | — | Observed authority version; pass it as expected_version to assign, unassign or authorize (the record's own `version` is a different number) |
 | `agent.authority.suspended` | boolean | yes | no | — | True while the agent may not act; new agents start suspended until authorized |
 | `agent.authority.suspension_reason` | string \| null | yes | yes | — | Why it is suspended: not_yet_authorized, binding_loss, principal_authority_loss, own_authority_loss, principal_set_unequal or a migration reason |
 | `agent.authority.fresh_context_required` | boolean | yes | no | — | Authorizing needs acknowledge_fresh_context, because its principals or authority were narrowed |

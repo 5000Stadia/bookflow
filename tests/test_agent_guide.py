@@ -70,6 +70,7 @@ def test_every_hand_authored_fence_is_classified():
             ("illustrative", "json"),  # a bad debt written off without cash, `payment receive` at 0.00 (R177)
             ("illustrative", "json"),  # a statement kept as an attachment, read by `reconcile import` (311b8f2)
         ],
+        "agent-install.md": [("illustrative", "sh"), ("illustrative", "sh"), ("illustrative", "json")],
         # Seed/serve, documentation generation, and financial statement examples.
         "reference-year.md": [("illustrative", "sh")] * 3,
     }

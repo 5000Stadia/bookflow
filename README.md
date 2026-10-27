@@ -19,6 +19,15 @@ Invoices, sales receipts, estimates and statements produce a PDF from their own 
 
 The Python distribution is `bookflow-core`; the import package and command are both `bookflow`.
 
+## For AI agents
+
+Installing Bookflow for someone? Read [docs/agent-install.md](docs/agent-install.md) first: one install command, one `bookflow setup`, then connect over MCP.
+
+```
+uv tool install git+https://github.com/5000Stadia/bookflow
+bookflow setup --company "Their Company" --currency USD --owner them --owner-name "Their Name" --json
+```
+
 ## Quick start
 
 You need Python 3.12 or newer and [uv](https://docs.astral.sh/uv/). This takes you from a clean checkout to the demo company in a browser:
@@ -38,7 +47,7 @@ Where to go next:
 - **Automating it or connecting an AI agent** — the [agent guide](docs/agent-guide.md) and the [MCP guide](docs/mcp-guide.md).
 - **Working on it** — `design/blueprint.md` explains every part, and `design/intention.md` the order it was built in.
 
-Data lives in `~/.bookflow` unless `BOOKFLOW_DATA_ROOT` or `--data-root` says otherwise. Add `--extra mcp` to the `uv sync` to use the MCP adapter. Every command takes `--json`; `uv run bookflow --help` lists the rest. Activate the environment (`source .venv/bin/activate`) to drop the `uv run` prefix.
+Data lives in `~/.bookflow` unless `BOOKFLOW_DATA_ROOT` or `--data-root` says otherwise. The MCP adapter is part of the default install. Every command takes `--json`; `uv run bookflow --help` lists the rest. Activate the environment (`source .venv/bin/activate`) to drop the `uv run` prefix.
 
 Numeric fields in the browser accept calculations such as `12.5 * 3`, `1 / 3`,
 and `(20 + 5) / 2`. The result appears as you type; Enter, Tab, or leaving the

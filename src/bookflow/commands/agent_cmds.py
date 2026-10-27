@@ -139,7 +139,7 @@ def _edit(s: Session, ctx: Context, intent, *, preview: bool):
 
 class AgentAuthority(BaseModel):
     epoch: int = Field(description="Authority epoch; every suspension raises it, and tokens bind to it")
-    version: int = Field(description="Observed version; pass it as expected_version to assign, unassign or authorize")
+    version: int = Field(description="Observed authority version; pass it as expected_version to assign, unassign or authorize (the record's own `version` is a different number)")
     suspended: bool = Field(description="True while the agent may not act; new agents start suspended until authorized")
     suspension_reason: str | None = Field(description="Why it is suspended: not_yet_authorized, binding_loss, principal_authority_loss, own_authority_loss, principal_set_unequal or a migration reason")
     fresh_context_required: bool = Field(description="Authorizing needs acknowledge_fresh_context, because its principals or authority were narrowed")
@@ -337,14 +337,14 @@ class AgentAssignInput(BaseModel):
     agent: str = Field(description="Agent username or id", max_length=64)
     principal: str = Field(description="Human the agent will act on behalf of; username or id", max_length=64)
     confirm_permitted_use: bool = Field(False, description="Confirm this person permits the agent to act for them with their full permissions. Required")
-    expected_version: int | None = Field(None, ge=1, description="Observed authority version from `agent show`; stale requests refuse")
+    expected_version: int | None = Field(None, ge=1, description="Observed authority version: `authority.version` from `agent show`, or `agent.authority.version` from a previous agent command; not the agent record's own `version`. Stale requests refuse")
 
 
 class AgentUnassignInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     agent: str = Field(description="Agent username or id", max_length=64)
     principal: str = Field(description="Human the agent will no longer act for; username or id", max_length=64)
-    expected_version: int | None = Field(None, ge=1, description="Observed authority version from `agent show`; stale requests refuse")
+    expected_version: int | None = Field(None, ge=1, description="Observed authority version: `authority.version` from `agent show`, or `agent.authority.version` from a previous agent command; not the agent record's own `version`. Stale requests refuse")
 
 
 def _principals(s: Session, agent_id: str) -> tuple[str, ...]:
@@ -434,7 +434,7 @@ class AgentAuthorizeInput(BaseModel):
     agent: str = Field(description="Agent username or id", max_length=64)
     confirm_permitted_use: bool = Field(False, description="Confirm every assigned person permits this agent to act for them with their full permissions. Required")
     acknowledge_fresh_context: bool = Field(False, description=FRESH_CONTEXT + " Required when the agent's fresh_context_required is true")
-    expected_version: int | None = Field(None, ge=1, description="Observed authority version from `agent show`; stale requests refuse")
+    expected_version: int | None = Field(None, ge=1, description="Observed authority version: `authority.version` from `agent show`, or `agent.authority.version` from a previous agent command; not the agent record's own `version`. Stale requests refuse")
 
 
 agent_authorize = command("agent authorize", scope="hub", capability="user", required_role="hub_admin",

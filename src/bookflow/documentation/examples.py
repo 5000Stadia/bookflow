@@ -52,6 +52,8 @@ EXAMPLES: dict[str, Example] = {
     "hub audit show": Example(f"bookflow hub audit show {ID} --json", {"event": ID}),
     "hub audit tail": Example("bookflow hub audit tail --after 42 --json", {"after": 42}),
     "init": Example("bookflow init --json", {}),
+    "setup": Example('bookflow setup --company "Green Valley Landscaping" --currency USD --owner dana --owner-name "Dana Ruiz" --json',
+                     {"company": "Green Valley Landscaping", "currency": "USD", "owner": "dana", "owner_name": "Dana Ruiz"}),
     "note add": Example(f'bookflow note add customer {ID} --body "Call before arrival" --json', {"record_type": "customer", "record_id": ID, "body": "Call before arrival"}),
     "note show": Example(f'bookflow note show {ID} --json', {"note": ID}),
     "note edit": Example(f'bookflow note edit {ID} --body "Call thirty minutes before arrival" --expected-version 1 --json', {"note": ID, "body": "Call thirty minutes before arrival", "expected_version": 1}),

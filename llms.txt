@@ -1,0 +1,17 @@
+# Bookflow
+
+> Multi-company double-entry accounting for small businesses, one command set reached as a Python library, a CLI, an HTTP host with a browser workbench, and MCP. People and AI agents work in the same books under the same rules.
+
+An AI agent installing Bookflow for someone needs two shell commands and one MCP call:
+
+1. `uv tool install git+https://github.com/5000Stadia/bookflow` (or `pipx install git+https://github.com/5000Stadia/bookflow`); Python 3.12 or newer.
+2. `bookflow setup --company "Their Company" --currency USD --owner them --owner-name "Their Name" --json`, run in the folder whose `.mcp.json` the MCP client reads. It creates the books, the company, the agent's own identity working for the owner, the MCP configuration, a one-time password link for the owner, and starts the host.
+3. Reload the MCP client and call `bookflow_run` with `{"command": "company show", "input": {}}`.
+
+## Docs
+
+- [Agent install](docs/agent-install.md): the steps above in full, and what to tell the owner
+- [MCP guide](docs/mcp-guide.md): the three MCP tools, files, receipts and recovery
+- [Agent guide](docs/agent-guide.md): everyday bookkeeping requests and how to do them
+- [Concepts](docs/concepts.md): selection, context, concurrency, audit, identity, money and errors
+- [Command reference](docs/index.md): every command's inputs, outputs and errors

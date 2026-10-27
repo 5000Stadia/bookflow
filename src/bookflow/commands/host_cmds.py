@@ -75,10 +75,13 @@ class ServeInput(BaseModel):
     bind: str = Field(DEFAULT_BIND, description="Address to listen on, host:port", max_length=128)
     allow_network: bool = Field(False, description="Allow a bind address outside loopback")
     secure_cookies: bool | None = Field(None, description="Set Secure on the session cookie; defaults on for non-loopback binds")
+    background: bool = Field(False, description="Start the host as a background process, wait until it answers, print its address and return; its log is host.log in the data root")
 
 
 class ServeOutput(BaseModel):
     bind: str
+    url: str | None = Field(None, description="Where the host answers; GET <url>health returns 200 once it is ready")
+    log: str | None = Field(None, description="The background host's log file")
     socket: str | None
     pid: int
     secure_cookies: bool
@@ -172,6 +175,12 @@ def run_serve(cmd, inp: ServeInput, ctx: Context, s: Session) -> dict[str, Any]:
         raise BookflowError("E_NETWORK_NOT_ALLOWED", details={"bind": inp.bind})
     _serve_actor(s)
     secure = cookie_security(host_name, inp.secure_cookies)
+    if inp.background:
+        started = start_in_background(s.data_root, inp.bind, allow_network=inp.allow_network,
+                                      secure_cookies=inp.secure_cookies)
+        return ServeOutput(bind=inp.bind, url=started["url"], log=started["log"], socket=None, pid=started["pid"],
+                           secure_cookies=secure, companies_migrated=[], companies_failed=[],
+                           warnings=[] if started["started"] else ["a host was already answering at this address"]).model_dump(mode="json")
     import socket as _socket
     import uvicorn
     handle = None
@@ -221,6 +230,7 @@ def run_serve(cmd, inp: ServeInput, ctx: Context, s: Session) -> dict[str, Any]:
             for signum in (signal.SIGINT, signal.SIGTERM):
                 previous[signum] = signal.getsignal(signum)
                 signal.signal(signum, request_shutdown)
+        announce_when_ready(server, inp.bind)
         try:
             server.run(sockets=[tcp])
         finally:
@@ -234,9 +244,84 @@ def run_serve(cmd, inp: ServeInput, ctx: Context, s: Session) -> dict[str, Any]:
                 tcp.close()
             except OSError:  # pragma: no cover
                 pass
-    out = ServeOutput(bind=inp.bind, socket=str(handle.socket), pid=os.getpid(), secure_cookies=secure,
+    out = ServeOutput(bind=inp.bind, url=host_url(inp.bind), socket=str(handle.socket), pid=os.getpid(), secure_cookies=secure,
                       companies_migrated=list(handle.companies_migrated), companies_failed=list(handle.companies_failed))
     return out.model_dump(mode="json")
+
+
+def host_url(bind: str) -> str:
+    host_name, port = parse_bind(bind)
+    if host_name in ("0.0.0.0", "::", ""):
+        host_name = "127.0.0.1"
+    return f"http://[{host_name}]:{port}/" if ":" in host_name else f"http://{host_name}:{port}/"
+
+
+READY_PREFIX = "Bookflow is ready at "
+
+
+def announce_when_ready(server, bind: str) -> None:
+    """Print one line on stderr once uvicorn accepts requests, so nobody has to poll for it (R182)."""
+    import sys
+    import threading
+    import time
+
+    def watch() -> None:
+        while not server.started:
+            if server.should_exit:
+                return
+            time.sleep(0.02)
+        print(f"{READY_PREFIX}{host_url(bind)} (health check: GET {host_url(bind)}health)", file=sys.stderr, flush=True)
+
+    threading.Thread(target=watch, name="bookflow-ready", daemon=True).start()
+
+
+def answers(url: str, timeout: float = 1.0) -> bool:
+    """Whether a Bookflow host answers GET /health at this address."""
+    from urllib.error import URLError
+    from urllib.request import urlopen
+    try:
+        with urlopen(url + "health", timeout=timeout) as response:
+            return response.status == 200
+    except (URLError, OSError, ValueError):
+        return False
+
+
+def start_in_background(root: Path, bind: str, *, allow_network: bool = False, secure_cookies: bool | None = None,
+                        wait_seconds: float = 180.0) -> dict[str, Any]:
+    """Start `serve` detached and wait, inside this call, until it answers; or report the one already answering."""
+    import subprocess
+    import sys
+    import time
+    url = host_url(bind)
+    if answers(url):
+        return {"url": url, "pid": 0, "log": None, "started": False}
+    log_path = Path(root) / "host.log"
+    args = [sys.executable, "-c", "from bookflow.bootstrap import main; main()", "serve", "--bind", bind,
+            "--data-root", str(root)]
+    if allow_network:
+        args.append("--allow-network")
+    if secure_cookies is not None:
+        args.append("--secure-cookies" if secure_cookies else "--no-secure-cookies")
+    fd = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    try:
+        child = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=fd, stderr=fd, start_new_session=True,
+                                 close_fds=True)
+    finally:
+        os.close(fd)
+    deadline = time.monotonic() + wait_seconds
+    while time.monotonic() < deadline:
+        if child.poll() is not None:
+            try:
+                tail = log_path.read_text(encoding="utf-8", errors="replace").strip().splitlines()[-5:]
+            except OSError:
+                tail = []
+            raise BookflowError("E_IO", message="The background host stopped while starting: " + " | ".join(tail),
+                                details={"operation": "serve", "log": str(log_path)})
+        if answers(url, timeout=0.5):
+            return {"url": url, "pid": child.pid, "log": str(log_path), "started": True}
+        time.sleep(0.1)
+    raise BookflowError("E_IO", message=f"The background host did not answer within {int(wait_seconds)} seconds; see {log_path}.",
+                        details={"operation": "serve", "log": str(log_path)})
 
 
 # ---------------------------------------------------------------- the running host
