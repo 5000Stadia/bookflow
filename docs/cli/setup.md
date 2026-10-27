@@ -4,7 +4,7 @@
 
 ## `setup`
 
-Set up Bookflow for an AI agent in one step: the data root and its owner, a company with a chart of accounts, the agent's own identity working for the owner, its MCP client configuration and token file, a one-time link for the owner to set a password in the browser, and the host running in the background. Rerunning it repairs what is missing and reports the rest; it never makes anything twice.
+Set up Bookflow for an AI agent in one step. Pass --opening-balance ACCOUNT=AMOUNT (e.g. Checking=5000.00) when the owner states a bank balance, and setup posts the opening entry. It makes the data root and its owner, a company with a chart of accounts, the agent's own identity working for the owner, its MCP client configuration and token file, a one-time link for the owner to set a password in the browser, and the host running in the background. Rerunning it repairs what is missing and reports the rest; it never makes anything twice.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -29,6 +29,9 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `company` | `--company` | string | yes | no | — | The company's legal name; also its organization's name; minimum length 1; maximum length 200 |
 | `currency` | `--currency` | string | no | no | "USD" | Home currency, ISO 4217 upper case; minimum length 3; maximum length 3; pattern "^[A-Z]{3}$" |
 | `chart` | `--chart` | literal["general", "service", "product", "contractor", "retail", "nonprofit"] | no | no | "general" | Packaged chart of accounts to start from |
+| `opening_balance` | `--opening-balance` | string \| null | no | yes | null | A bank account's opening balance, ACCOUNT=AMOUNT (e.g. "Checking=5000.00"): posted once as a journal entry, the bank account against Opening Balance Equity, on --opening-date. A rerun never posts it again; it reports the opening balance the account already has |
+| `opening_date` | `--opening-date` | string \| null | no | yes | null | Date of the opening balance, YYYY-MM-DD; defaults to the first day of the current fiscal year, where the books start |
+| `entity_type` | `--entity-type` | literal["sole_proprietor", "partnership", "llc", "s_corp", "c_corp", "nonprofit", "other"] \| null | no | yes | null | The business's legal form, as `company update --entity-type` takes it; set while the company has none (or other), kept as it is otherwise |
 | `owner` | `--owner` | string \| null | no | yes | null | The owner's username; defaults to this computer's login |
 | `owner_name` | `--owner-name` | string \| null | no | yes | null | The owner's name as people see it |
 | `agent` | `--agent` | string | no | no | "assistant" | Username for the AI agent's own identity; minimum length 1; maximum length 64 |
@@ -39,9 +42,6 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `serve` | `--serve` | boolean | no | no | true | Start the host in the background if it is not answering, and wait until it does |
 | `link_minutes` | `--link-minutes` | integer | no | no | 120 | Minutes the owner's one-time password link stays valid; minimum 1; maximum 1440 |
 | `new_token` | `--new-token` | boolean | no | no | false | Issue the agent a new token even though its last one was revoked; a person's decision |
-| `entity_type` | `--entity-type` | literal["sole_proprietor", "partnership", "llc", "s_corp", "c_corp", "nonprofit", "other"] \| null | no | yes | null | The business's legal form, as `company update --entity-type` takes it; set while the company has none (or other), kept as it is otherwise |
-| `opening_balance` | `--opening-balance` | string \| null | no | yes | null | A bank account's opening balance, ACCOUNT=AMOUNT (e.g. "Checking=5000.00"): posted once as a journal entry, the bank account against Opening Balance Equity, on --opening-date. A rerun never posts it again; it reports the opening balance the account already has |
-| `opening_date` | `--opening-date` | string \| null | no | yes | null | Date of the opening balance, YYYY-MM-DD; defaults to the first day of the current fiscal year, where the books start |
 
 ### Command and context options
 

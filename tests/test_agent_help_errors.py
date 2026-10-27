@@ -342,3 +342,22 @@ def test_deposit_replay_refusals_name_the_requirement_and_nothing_else(monkeypat
     with pytest.raises(BookflowError) as caught:
         pages.authorized_original(None, saved, binding)
     assert caught.value.details == public
+
+
+def test_journal_lines_take_account_numbers_and_a_side_word_used_as_a_key_is_named(client):
+    """R183 run 4: an agent sent {"account": "1000", "debit": "5000.00"} for an opening balance."""
+    wrong = _refusal(client, "journal post", {"date": "2026-09-01", "lines": [
+        {"account": "1000", "debit": "5.00"}, {"account": "3000", "credit": "5.00"}]}, reason="opening")
+    problems = {f["field"]: f for f in wrong.details["fields"]}
+    assert problems["lines.0.debit"]["accepted_fields"][:4] == ["line_id", "account", "side", "amount"]
+    assert problems["lines.0.debit"]["problem"].endswith("('debit' is a value of side: give side: 'debit')")
+    assert "is a value of side" in problems["lines.1.credit"]["problem"]
+    # An unknown key that is no field's value keeps the plain refusal.
+    stray = _refusal(client, "journal post", {"date": "2026-09-01", "lines": [
+        {"account": "1000", "side": "debit", "amount": "5.00", "dr": "x"},
+        {"account": "3000", "side": "credit", "amount": "5.00"}]}, reason="opening")
+    assert "is a value of" not in stray.details["fields"][0]["problem"]
+    posted = client.run("journal post", {"date": "2026-09-01", "lines": [
+        {"account": "1000", "side": "debit", "amount": "5.00"}, {"account": "3000", "side": "credit", "amount": "5.00"}]},
+        company=CO, reason="opening")
+    assert posted["id"] and posted["debit_total"]["amount"] == "5.00", "account numbers resolve on journal lines"

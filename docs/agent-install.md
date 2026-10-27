@@ -39,7 +39,7 @@ The JSON result holds everything: `company.company_id`, `agent`, `mcp_config`, `
 
 ## 3. Connect and check
 
-Reload your MCP client so it starts the `bookflow` server from `.mcp.json`. It has three tools: `bookflow_list_commands`, `bookflow_help` and `bookflow_run`. Check the connection:
+The `.mcp.json` setup writes takes effect from your next session: your MCP client starts the `bookflow` server from it when it next starts (or reloads). Until then, `bookflow agent run` (below) is the path. It has three tools: `bookflow_list_commands`, `bookflow_help` and `bookflow_run`. Check the connection:
 
 <!-- bookflow-example: illustrative -->
 ```json
@@ -48,9 +48,9 @@ Reload your MCP client so it starts the `bookflow` server from `.mcp.json`. It h
 
 as the arguments to `bookflow_run`. The company is already selected. Every write needs a short `reason` beside `command` and `input`. The [MCP guide](mcp-guide.md) and the [agent guide](agent-guide.md) cover the rest.
 
-### Until your MCP client reloads
+### Until your next session: `bookflow agent run`
 
-A running agent often cannot reload `.mcp.json` until it restarts. Do not hand-write MCP messages: run the same call from the shell, in the folder setup wrote `.mcp.json` into, with `bookflow agent run`:
+The MCP tools are not there in the session that ran setup; they arrive in your next one. Until then, do not hand-write MCP messages: run the same call from the shell, in the folder setup wrote `.mcp.json` into, with `bookflow agent run`:
 
 <!-- bookflow-example: illustrative -->
 ```sh

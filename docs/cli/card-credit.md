@@ -350,7 +350,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
 | `type` | literal["check", "card_charge", "card_credit"] | yes | no | — | — |
-| `number` | string | yes | no | — | — |
+| `number` | string \| null | yes | yes | — | The document reference; null for a bank payment, which has no number |
 | `current_revision_id` | string | yes | no | — | — |
 | `status` | literal["posted", "voided", "deleted"] | yes | no | — | — |
 | `deletion` | object \| null | no | yes | null | — |
@@ -609,7 +609,7 @@ Example JSON output:
   "idempotent_replay": false,
   "memo": null,
   "merged_over_versions": [],
-  "number": "value",
+  "number": null,
   "revision": {
     "audit_event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "batches": [],
@@ -786,7 +786,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].updated_by` | string | yes | no | — | — |
 | `items[].updated_via` | string | yes | no | — | — |
 | `items[].type` | literal["check", "card_charge", "card_credit"] | yes | no | — | — |
-| `items[].number` | string | yes | no | — | — |
+| `items[].number` | string \| null | yes | yes | — | The document reference; null for a bank payment, which has no number |
 | `items[].current_revision_id` | string | yes | no | — | — |
 | `items[].status` | literal["posted", "voided", "deleted"] | yes | no | — | — |
 | `items[].deletion` | object \| null | no | yes | null | — |
@@ -1001,7 +1001,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
 | `type` | literal["check", "card_charge", "card_credit"] | yes | no | — | — |
-| `number` | string | yes | no | — | — |
+| `number` | string \| null | yes | yes | — | The document reference; null for a bank payment, which has no number |
 | `current_revision_id` | string | yes | no | — | — |
 | `status` | literal["posted", "voided", "deleted"] | yes | no | — | — |
 | `deletion` | object \| null | no | yes | null | — |
@@ -1251,7 +1251,7 @@ Example JSON output:
   },
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "memo": null,
-  "number": "value",
+  "number": null,
   "revision": {
     "audit_event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "batches": [],
@@ -1440,7 +1440,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
 | `type` | literal["check", "card_charge", "card_credit"] | yes | no | — | — |
-| `number` | string | yes | no | — | — |
+| `number` | string \| null | yes | yes | — | The document reference; null for a bank payment, which has no number |
 | `current_revision_id` | string | yes | no | — | — |
 | `status` | literal["posted", "voided", "deleted"] | yes | no | — | — |
 | `deletion` | object \| null | no | yes | null | — |
@@ -1699,7 +1699,7 @@ Example JSON output:
   "idempotent_replay": false,
   "memo": null,
   "merged_over_versions": [],
-  "number": "value",
+  "number": null,
   "revision": {
     "audit_event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "batches": [],
@@ -1881,7 +1881,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
 | `type` | literal["check", "card_charge", "card_credit"] | yes | no | — | — |
-| `number` | string | yes | no | — | — |
+| `number` | string \| null | yes | yes | — | The document reference; null for a bank payment, which has no number |
 | `current_revision_id` | string | yes | no | — | — |
 | `status` | literal["posted", "voided", "deleted"] | yes | no | — | — |
 | `deletion` | object \| null | no | yes | null | — |
@@ -2140,7 +2140,7 @@ Example JSON output:
   "idempotent_replay": false,
   "memo": null,
   "merged_over_versions": [],
-  "number": "value",
+  "number": null,
   "revision": {
     "audit_event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "batches": [],

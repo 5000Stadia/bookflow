@@ -418,11 +418,17 @@ class _DocumentType:
             kind = document.get('kind') if isinstance(document, dict) else getattr(document, 'kind', None)
             if kind:
                 data = {**data, 'type': kind}
+            # A bank payment has no cheque, so it has no number: the journal's document
+            # reference behind it is not one, and showing it here read as a check number (R183).
+            paid = document.get('bank_payment') if isinstance(document, dict) else getattr(document, 'bank_payment', False)
+            if paid:
+                data = {**data, 'number': None}
         return data
 
 
 class MoneyOutOutput(_DocumentType, JournalOutput):
     type: Literal['check', 'card_charge', 'card_credit']
+    number: str | None = Field(description="The document reference; null for a bank payment, which has no number")
     status: Literal['posted', 'voided', 'deleted']
     deletion: PurchaseDeletionInfo | None = Field(default=None, exclude_if=lambda v: v is None)
     document: MoneyOutSummary
@@ -430,11 +436,13 @@ class MoneyOutOutput(_DocumentType, JournalOutput):
 
 class MoneyOutWriteOutput(_DocumentType, JournalWriteOutput):
     type: Literal['check', 'card_charge', 'card_credit']
+    number: str | None = Field(description="The document reference; null for a bank payment, which has no number")
     document: MoneyOutSummary
 
 
 class MoneyOutSummaryOutput(_DocumentType, JournalSummaryOutput):
     type: Literal['check', 'card_charge', 'card_credit']
+    number: str | None = Field(description="The document reference; null for a bank payment, which has no number")
     status: Literal['posted', 'voided', 'deleted']
     deletion: PurchaseDeletionInfo | None = Field(default=None, exclude_if=lambda v: v is None)
     """One row of a money-out list: the journal header with the document's own footer."""

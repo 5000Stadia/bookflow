@@ -89,8 +89,11 @@ def test_a_bank_payment_never_shows_its_document_reference_as_a_check_number(boo
     found = {row['id']: row for row in run('transaction find', {'types': ['check']})['items']}
     assert found[paid['id']]['number'] is None and found[paid['id']]['type_label'] == 'Bank payment'
     assert found[cheque['id']]['number'] == number and found[cheque['id']]['type_label'] == 'Check'
-    reference = run('check show', {'check': paid['id']})['number']
-    assert paid['id'] not in {row['id'] for row in run('transaction find', {'number': reference})['items']}
+    # R183 run 4: nor does the check's own result carry it as a top-level number.
+    assert paid['number'] is None and run('check show', {'check': paid['id']})['number'] is None
+    assert cheque['number'] is not None
+    listed_numbers = {row['id']: row['number'] for row in run('check query', {})['items']}
+    assert listed_numbers[paid['id']] is None
 
     # Show and the list carry the flag; the register calls it a bank payment, with no check number.
     assert run('check show', {'check': paid['id']})['document']['bank_payment'] is True
@@ -99,6 +102,8 @@ def test_a_bank_payment_never_shows_its_document_reference_as_a_check_number(boo
     rows = {row['transaction_id']: row for row in run('register query', {'account': bank, 'date_from': '2026-10-01',
                                                                           'date_to': '2026-10-31'})['rows']}
     assert rows[paid['id']]['bank_payment'] is True and rows[paid['id']]['check_number'] is None
+    reference = rows[paid['id']]['transaction_number']
+    assert paid['id'] not in {row['id'] for row in run('transaction find', {'number': reference})['items']}
     assert rows[cheque['id']]['bank_payment'] is False and rows[cheque['id']]['check_number'] == number
 
     # A cheque saved to be printed has no number yet, but it is a cheque, not a bank payment.

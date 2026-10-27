@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import signal
 import socket
@@ -466,12 +467,26 @@ def test_setup_will_not_take_another_program_for_its_host(books):
 @pytest.mark.timeout(600)
 def test_setup_posts_the_opening_balance_once_and_sets_the_entity_type(books):
     client, root, project = books
+    # R183 run 4: without --opening-balance, the next steps give the exact `agent run` that records one.
+    bare = _setup(client, root, project)
+    [hint] = [n for n in bare["next_steps"] if "opening balance" in n]
+    command = hint.split(": ", 1)[1]
+    assert command.startswith('bookflow agent run "journal post" --mcp-config ') and command.endswith("--json")
+    entry = json.loads(shlex.split(command)[shlex.split(command).index("--input") + 1])
+    assert [(line["account"], line["side"]) for line in entry["lines"]] == [("Checking", "debit"), ("Opening Balance Equity", "credit")]
+    assert entry["date"].endswith("-01-01")
+    # And `setup --help` shows it near the top: in the description and as the fourth option.
+    from bookflow.commands.setup_cmds import SetupInput, setup_cmd
+    assert "--opening-balance ACCOUNT=AMOUNT" in setup_cmd.description
+    assert list(SetupInput.model_fields)[:5] == ["company", "currency", "chart", "opening_balance", "opening_date"]
     first = _setup(client, root, project, entity_type="sole_proprietor", opening_balance="Checking=5,000.00")
+    assert not [n for n in first["next_steps"] if "agent run \"journal post\"" in n]
     company = first["company"]["company_id"]
     opening = first["opening_balance"]
     assert opening["status"] == "created" and opening["amount"] == "5000.00" and opening["account"] == "Checking"
     assert opening["date"].endswith("-01-01"), "the books start on the first day of the fiscal year"
-    assert _steps(first)["entity type"] == "created" and _steps(first)["opening balance"] == "created"
+    # The bare run above made the company, so this one sets its type on an existing company.
+    assert _steps(first)["entity type"] == "updated" and _steps(first)["opening balance"] == "created"
     assert "opening balance" in first["content"] and "5000.00 USD" in first["content"]
     assert client.run("company show", {}, company=company)["info"]["entity_type"] == "sole_proprietor"
     balances = {a["full_name"]: a["balance"] for a in client.run("account list", {}, company=company)["items"]}
@@ -492,7 +507,9 @@ def test_setup_posts_the_opening_balance_once_and_sets_the_entity_type(books):
 
     # A company left at `other` takes the type a rerun gives; an account that is not a bank is refused.
     client.run("company update", {"entity_type": "other"}, company=company, reason="owner resets it")
-    assert _steps(_setup(client, root, project, entity_type="llc"))["entity type"] == "updated"
+    later = _setup(client, root, project, entity_type="llc")
+    assert _steps(later)["entity type"] == "updated"
+    assert not [n for n in later["next_steps"] if "opening balance" in n], "the books already have one"
     from bookflow import BookflowError
     with pytest.raises(BookflowError) as refused:
         _setup(client, root, project, opening_balance="Savings Jar=10")
