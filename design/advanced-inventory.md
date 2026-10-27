@@ -997,3 +997,4 @@ Each default stands if nobody decides.
    per-user default site (each technician's van) is not in these increments.
 7. **Pick, pack and ship.** Neither item includes it, though [sales orders](sales-orders.md) left it
    here. *Default:* not built in these increments; it needs its own place on the roadmap.
+   Placed as R181; its design is [pick, pack and ship](pick-pack-ship.md).
