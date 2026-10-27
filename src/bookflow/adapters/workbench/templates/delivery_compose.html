@@ -8,12 +8,12 @@
 <p class="delivery-note" data-no-connection>{{ note }}</p>
 {% if result %}<p class="notice" role="status">{{ result }}</p>{% endif %}
 {% if error %}<div role="alert" class="error" data-delivery-error><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}{% if (error.details or {}).get('next') %}<br>{{ error.details.next }}{% endif %}</div>{% endif %}
-{% if existing %}<p class="warn" data-existing>Message <a href="/c/{{ company_id }}/delivery/{{ existing.number }}">{{ existing.number }}</a> for this document is {{ existing.status_label|lower }}. {% if existing.status in ('draft', 'held') %}Saving here edits it.{% elif existing.status == 'sent' %}Saving here sends it again as a new message.{% endif %}</p>{% endif %}
+{% if existing %}<p class="warn" data-existing>Message <a href="/c/{{ company_id }}/delivery/{{ existing.number }}">{{ existing.number }}</a> for this document is {{ existing.status_label|lower }}. {% if existing.stale %}The document changed after it was drafted: refresh it to attach the document as it is now, or cancel it from its page.{% elif existing.status in ('draft', 'held') %}Saving here edits it.{% elif existing.status == 'sent' %}Saving here sends it again as a new message.{% endif %}</p>{% endif %}
 {% for w in preview.warnings %}<p class="warn" data-empty-field>{{ w }}</p>{% endfor %}
 {% if can_write %}
 <form method="post" action="/c/{{ company_id }}/delivery/compose" data-email-panel>
 {% for k, v in identity.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
-{% if existing and existing.status == 'sent' %}<input type="hidden" name="again" value="on">{% endif %}
+{% if existing and existing.status == 'sent' %}<input type="hidden" name="again" value="on">{% endif %}{% if existing and existing.stale %}<input type="hidden" name="existing" value="{{ existing.number }}">{% endif %}
 <label>Template <select name="template" hx-get="/c/{{ company_id }}/delivery/compose" hx-include="[name=kind],[name=document],[name=customer],[name=date_from],[name=date_to]" hx-target="body" hx-swap="outerHTML" data-template-picker>{% for t in templates %}<option value="{{ t.id }}" {% if t.id == preview.template_id %}selected{% endif %}>{{ t.name }}{% if t.is_default %} (default){% endif %}</option>{% endfor %}</select></label>
 <label>To <input type="text" name="to" value="{{ values.get('to', recipients.to) }}" placeholder="name@example.com" data-to></label>
 <label>Cc <input type="text" name="cc" value="{{ values.get('cc', recipients.cc) }}"></label>
@@ -22,7 +22,7 @@
 <p class="delivery-file">Attached: <a href="{{ print_url }}" target="_blank" rel="noopener" data-preview-pdf>{{ preview.source_label }} (PDF)</a></p>
 <label>Reason (shown in the audit trail) <input type="text" name="ctx:reason" value="{{ values.get('ctx:reason', '') }}" placeholder="Email to customer"></label>
 {% set post = '/c/' ~ company_id ~ '/delivery/compose' %}
-<div class="delivery-buttons"><button type="submit" name="action" value="save" hx-post="{{ post }}" hx-target="body" hx-swap="outerHTML" data-save>Save draft</button><button type="submit" name="action" value="send" class="primary-action" hx-post="{{ post }}" hx-target="body" hx-swap="outerHTML" data-send>Send</button><button type="submit" name="action" value="export" data-export title="Downloads a .eml file to open in your mail program">Export .eml</button></div>
+<div class="delivery-buttons"><button type="submit" name="action" value="save" hx-post="{{ post }}" hx-target="body" hx-swap="outerHTML" data-save>Save draft</button><button type="submit" name="action" value="send" class="primary-action" hx-post="{{ post }}" hx-target="body" hx-swap="outerHTML" data-send>Send</button><button type="submit" name="action" value="export" hx-post="{{ post }}" hx-target="body" hx-swap="outerHTML" data-export title="Downloads a .eml file to open in your mail program">Export .eml</button>{% if existing and existing.stale and existing.status in ('draft', 'held') %}<button type="submit" name="action" value="refresh" hx-post="{{ post }}" hx-target="body" hx-swap="outerHTML" data-refresh>Refresh PDF</button>{% endif %}</div>
 </form>
 {% else %}<p>Your role cannot draft email. Ask someone with the standard role.</p>{% endif %}
 </section>{% endblock %}

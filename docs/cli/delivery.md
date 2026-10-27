@@ -446,7 +446,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 |---|---|
 | Scope | company |
 | Kind | write |
-| Required role | member |
+| Required role | standard |
 | Capability | customer |
 | Additional resources | ledger.read: member, customer-work: member |
 | Feature | — |
@@ -1391,7 +1391,7 @@ Example JSON output:
 
 ## `delivery update`
 
-Edit a draft or held message: To, Cc, Bcc, subject or body. The attachments stay as drafted.
+Edit a draft or held message: To, Cc, Bcc, subject or body. The attachments stay as drafted unless `refresh`, which attaches the document as it is now and releases a changed-document hold.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -1428,6 +1428,7 @@ The same example as complete `bookflow_run` arguments:
 | `bcc` | `--bcc` | array[string] \| null | no | yes | null | — |
 | `subject` | `--subject` | string \| null | no | yes | null | — |
 | `body` | `--body` | string \| null | no | yes | null | — |
+| `refresh` | `--refresh` | boolean | no | no | false | Attach the document as it is now (same message and number); refills subject and body not hand-written. |
 | `expected_version` | `--expected-version` | integer \| null | no | yes | null | — |
 
 ### Command and context options

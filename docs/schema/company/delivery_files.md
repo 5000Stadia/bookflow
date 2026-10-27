@@ -2,7 +2,7 @@
 
 # `company.delivery_files`
 
-Frozen attachment bytes, content-addressed: identical files share one row. Immutable.
+Frozen attachment bytes, content-addressed: identical files share one row. Immutable; pruned once no standing message carries them.
 
 Database: `company`.
 

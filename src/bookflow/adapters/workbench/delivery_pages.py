@@ -6,7 +6,9 @@ notice: To, Cc, Subject and body filled from the kind's template (a picker reloa
 Save draft, Send and Export .eml. A person's Send is release and go in one tap. ``/delivery`` is the Outbox with its
 tabs and checkboxes; ``/delivery/{message}`` shows one message, its frozen files and its history.
 ``/delivery/settings`` holds the reply-to and copy-to addresses, the templates, and the connections (none: nothing
-leaves this machine). Every form posts through htmx except Export, whose answer is the file itself.
+leaves this machine). Every form posts through htmx, Export too: the answering page carries the file as a link that
+the page downloads at once (cookie-authenticated writes need the header only htmx sends), or says why a message was
+held instead.
 """
 from __future__ import annotations
 
@@ -43,10 +45,14 @@ def _identity(source):
     return {k: source.get(k) for k in ('kind', 'document', 'customer', 'date_from', 'date_to') if source.get(k)}
 
 
-def _download(out):
-    return Response(content=base64.b64decode(out['content_base64']), media_type=out['media_type'], headers={
-        'Content-Disposition': f'attachment; filename="{out["filename"]}"', 'Cache-Control': 'no-store',
-        'X-Content-Type-Options': 'nosniff'})
+def _exported(out):
+    """What an export answers in the page: the warnings (held messages say why) and the file as a data link, or no
+    file when every message was held."""
+    file = None
+    if out.get('content_base64'):
+        file = {'filename': out['filename'], 'media_type': out['media_type'],
+                'href': f"data:{out['media_type']};base64,{out['content_base64']}"}
+    return {'result': ' '.join(out.get('warnings') or []) or 'Exported.', 'export': file}
 
 
 def mount(app, *, render, run, credential, page_error, role_allows):
@@ -110,10 +116,17 @@ def mount(app, *, render, run, credential, page_error, role_allows):
         action = form.get('action') or 'save'
         identity = _identity(form)
         raw = dict(identity, to=_addresses(form.get('to')), cc=_addresses(form.get('cc')))
+        if form.get('again') == 'on':
+            raw['again'] = True
         for key in ('subject', 'body', 'template'):
             if (form.get(key) or '').strip():
                 raw[key] = form[key].replace('\r\n', '\n') if key == 'body' else form[key].strip()
         try:
+            if action == 'refresh' and form.get('existing'):
+                number = form['existing']
+                run(request, 'delivery update', {'message': number, 'refresh': True}, company_id,
+                    headers=headers(form, 'Attached the document as it is now'))
+                return message_page(request, company_id, number, result='Attached the document as it is now.')
             draft = run(request, 'delivery draft', raw, company_id, headers=headers(form, 'Email to customer'))
             number = draft['number']
             if draft.get('existing'):
@@ -124,8 +137,9 @@ def mount(app, *, render, run, credential, page_error, role_allows):
                     run(request, 'delivery update', {'message': number, **changes}, company_id,
                         headers=headers(form, 'Edited the email'))
             if action == 'export':
-                return _download(run(request, 'delivery export', {'messages': [number]}, company_id,
+                done = _exported(run(request, 'delivery export', {'messages': [number]}, company_id,
                                      headers=headers(form, 'Exported to send by hand')))
+                return message_page(request, company_id, number, **done)
             result = f'Message {number} saved as a draft.'
             if action == 'send':
                 sent = run(request, 'delivery send', {'messages': [number]}, company_id,
@@ -147,7 +161,7 @@ def mount(app, *, render, run, credential, page_error, role_allows):
 
     # ------------------------------------------------------------ the Outbox
 
-    def outbox_page(request, company_id, *, error=None, status_code=200, result=None):
+    def outbox_page(request, company_id, *, error=None, status_code=200, result=None, export=None):
         shown = company(request, company_id)
         tab = request.query_params.get('status') or 'live'
         query = {'status': tab if tab in dict(TABS) or tab == 'live' else 'live', 'limit': 100}
@@ -166,6 +180,7 @@ def mount(app, *, render, run, credential, page_error, role_allows):
         return render('delivery_outbox.html', request, status_code=status_code, company=shown,
                       company_id=shown['company_id'], listing=listing, tabs=TABS, tab=query['status'],
                       filters=query, kinds=KINDS, kind_label=KIND_LABEL, states=states, error=error, result=result,
+                      export=export,
                       connection=CONNECTION, can_write=allowed(request, shown, 'delivery send'),
                       can_mark=credential(request) is not None)
 
@@ -182,7 +197,7 @@ def mount(app, *, render, run, credential, page_error, role_allows):
             raise BookflowError('E_VALIDATION', message='Tick the messages first.',
                                 details={'fields': [{'field': 'messages', 'problem': 'tick at least one message'}]})
         if action == 'export':
-            return _download(run(request, 'delivery export', {'messages': numbers}, company_id,
+            return _exported(run(request, 'delivery export', {'messages': numbers}, company_id,
                                  headers=headers(form, 'Exported to send by hand')))
         if action == 'send':
             out = run(request, 'delivery send', {'messages': numbers}, company_id, headers=headers(form, 'Send'))
@@ -208,8 +223,8 @@ def mount(app, *, render, run, credential, page_error, role_allows):
             result = act(request, company_id, form, numbers)
         except BookflowError as e:
             return failed(request, e, outbox_page, company_id)
-        if isinstance(result, Response):
-            return result
+        if isinstance(result, dict):
+            return outbox_page(request, company_id, **result)
         return outbox_page(request, company_id, result=result)
 
     @app.post('/c/{company_id}/delivery')
@@ -223,12 +238,14 @@ def mount(app, *, render, run, credential, page_error, role_allows):
 
     # ------------------------------------------------------------ one message
 
-    def message_page(request, company_id, number, *, error=None, status_code=200, result=None, values=None):
+    def message_page(request, company_id, number, *, error=None, status_code=200, result=None, values=None,
+                     export=None):
         shown = company(request, company_id)
         message = run(request, 'delivery show', {'message': number}, company_id)
         history = run(request, 'delivery history', {'message': number}, company_id)
         return render('delivery_message.html', request, status_code=status_code, company=shown,
                       company_id=shown['company_id'], message=message, history=history, error=error, result=result,
+                      export=export,
                       values=values or {}, connection=CONNECTION, kind_label=KIND_LABEL,
                       can_write=allowed(request, shown, 'delivery update'))
 
@@ -244,7 +261,7 @@ def mount(app, *, render, run, credential, page_error, role_allows):
         try:
             shown = run(request, 'delivery show', {'message': number, 'include_files': True}, company_id)
             doc = next((d for d in shown['documents'] if d['position'] == position), None)
-            if doc is None:
+            if doc is None or not doc.get('content_base64'):
                 raise BookflowError('E_RECORD_NOT_FOUND', details={'record_type': 'delivery_file',
                                                                    'selector': str(position)})
             return Response(content=base64.b64decode(doc['content_base64']), media_type=doc['media_type'], headers={
@@ -262,10 +279,14 @@ def mount(app, *, render, run, credential, page_error, role_allows):
                        'body': (form.get('body') or '').replace('\r\n', '\n')}
                 run(request, 'delivery update', raw, company_id, headers=headers(form, 'Edited the email'))
                 result = 'Saved.'
+            elif action == 'refresh':
+                run(request, 'delivery update', {'message': number, 'refresh': True}, company_id,
+                    headers=headers(form, 'Attached the document as it is now'))
+                result = 'Attached the document as it is now.'
             else:
                 result = act(request, company_id, form, [number])
-                if isinstance(result, Response):
-                    return result
+                if isinstance(result, dict):
+                    return message_page(request, company_id, number, **result)
         except BookflowError as e:
             return failed(request, e, message_page, company_id, number, values=dict(form))
         return message_page(request, company_id, number, result=result)

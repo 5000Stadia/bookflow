@@ -236,9 +236,9 @@ def test_the_email_panel_outbox_and_history_in_the_browser(mail, hosted):  # noq
     assert bad.status_code == 200 and 'not an email address' in bad.text
     outbox = web.get(f'/c/{cid}/delivery?status=draft', headers=WB)
     assert outbox.status_code == 200 and row['number'] in outbox.text and 'Nothing leaves this machine' in outbox.text
-    eml = web.post(f'/c/{cid}/delivery', data={'message': row['number'], 'action': 'export'}, headers=WB)
-    assert eml.status_code == 200 and eml.headers['content-type'].startswith('message/rfc822')
-    assert email.message_from_bytes(eml.content)['X-Unsent'] == '1'
+    eml = web.post(f'/c/{cid}/delivery', data={'message': row['number'], 'action': 'export'},
+                   headers={**WB, 'HX-Request': 'true'})
+    assert eml.status_code == 200 and email.message_from_bytes(_page_file(eml.text))['X-Unsent'] == '1'
     pdf = web.get(f"/c/{cid}/delivery/{row['number']}/file/1", headers=WB)
     shown = mail['run']('delivery show', {'message': row['number']})
     assert hashlib.sha256(pdf.content).hexdigest() == shown['documents'][0]['sha256']
@@ -252,3 +252,166 @@ def test_the_email_panel_outbox_and_history_in_the_browser(mail, hosted):  # noq
     assert 'data-template="Invoice"' in settings.text
     for path in ('/report/statement', '/notice'):
         assert web.get(f'/c/{cid}{path}', headers=WB).status_code == 200
+
+
+def _page_file(text):
+    """The file an export's page carries: its data link, decoded."""
+    import re
+    found = re.search(r'href="data:[^;"]+;base64,([^"]+)"[^>]*data-export-file', text)
+    assert found, text[-2000:]
+    return base64.b64decode(found.group(1))
+
+
+def _pay_in_full(run, invoice, key):
+    method = run('payment-method list', {})['items'][0]['id']
+    run('payment receive', {'customer': invoice['customer_id'], 'date': '2026-06-25', 'amount': '120.00',
+                            'number': 'RCT-' + key, 'operation_key': key, 'payment_method': method,
+                            'applications': {'mode': 'inline', 'items': [
+                                {'invoice': invoice['id'], 'expected_version': invoice['version'],
+                                 'amount': '120.00'}]}})
+
+
+def test_a_payment_that_changes_the_pdf_holds_the_message_and_refresh_reattaches_it(mail, hosted):  # noqa: F811
+    run = mail['run']
+    invoice = run('invoice post', {'number': 'DOC-102', 'date': '2026-06-04', 'due_date': '2026-07-04',
+                                   'customer': mail['customer'], 'lines': [{'item': mail['labour'], 'quantity': '1'}]})
+    drafted = run('delivery draft', {'kind': 'invoice', 'document': 'DOC-102', 'subject': 'Your invoice'})
+    old_sha = drafted['documents'][0]['sha256']
+    _pay_in_full(run, run('invoice show', {'invoice': 'DOC-102'}), 'pay-102')
+    # The revision did not move, but the PDF drawn now (balance due 0) is not the one frozen.
+    assert run('invoice show', {'invoice': 'DOC-102'})['current_revision_id'] == \
+        drafted['documents'][0]['source_revision']
+    shown = run('delivery show', {'message': drafted['number']})
+    assert shown['stale'] and shown['stale_reason'] == 'document_changed'
+    released = run('delivery send', {'messages': [drafted['number']]})
+    [held] = released['messages']
+    assert held['status'] == 'held' and held['hold_reason'] == 'document_changed'
+    assert any('--refresh' in w for w in released['warnings'])
+    refreshed = run('delivery update', {'message': drafted['number'], 'refresh': True})
+    assert refreshed['number'] == drafted['number'] and refreshed['status'] == 'draft' and not refreshed['stale']
+    new_sha = refreshed['documents'][0]['sha256']
+    assert new_sha != old_sha and new_sha == hashlib.sha256(
+        render(_reader(run), hosted.company_id, 'invoice', {'document': invoice['id']}).content).hexdigest()
+    assert refreshed['subject'] == 'Your invoice'  # written by the person: kept
+    events = run('delivery history', {'message': drafted['number']})['events']
+    assert [e['event'] for e in events] == ['drafted', 'held', 'edited']
+    detail = events[-1]['details']
+    assert detail['refreshed'][0]['sha256'] == [old_sha, new_sha] and detail['kept'] == ['subject']
+    assert 'body' in detail['refilled'] or detail['refilled'] == []
+    assert run('delivery send', {'messages': [drafted['number']]})['messages'][0]['status'] == 'ready'
+    # Nothing left to refresh is refused.
+    again = run('delivery draft', {'kind': 'estimate', 'document': mail['estimate']['number']})
+    assert _refused(hosted, 'delivery update', {'message': again['number'], 'refresh': True})['code'] == \
+        'E_VALIDATION'
+
+
+def test_a_new_revision_points_the_draft_refusal_at_refresh(mail, hosted):  # noqa: F811
+    run = mail['run']
+    run('invoice post', {'number': 'DOC-103', 'date': '2026-06-04', 'due_date': '2026-07-04',
+                         'customer': mail['customer'], 'lines': [{'item': mail['labour'], 'quantity': '1'}]})
+    first = run('delivery draft', {'kind': 'invoice', 'document': 'DOC-103'})
+    invoice = run('invoice show', {'invoice': 'DOC-103'})
+    hosted.ok('invoice.update', {'invoice': 'DOC-103', 'expected_version': invoice['version'], 'memo': 'Revised'},
+              company=hosted.company_id, headers={'X-Bookflow-Reason': 'memo fix'})
+    refused = _refused(hosted, 'delivery draft', {'kind': 'invoice', 'document': 'DOC-103'})
+    assert refused['code'] == 'E_WORK_DEPENDENCY' and f"delivery update {first['number']} --refresh" in \
+        refused['details']['next']
+    out = run('delivery update', {'message': first['number'], 'refresh': True})
+    assert out['documents'][0]['source_revision'] == run('invoice show', {'invoice': 'DOC-103'})[
+        'current_revision_id'] and not out['stale']
+    assert run('delivery draft', {'kind': 'invoice', 'document': 'DOC-103'})['number'] == first['number']
+
+
+def test_exporting_a_held_message_again_holds_nothing_more(mail, hosted):  # noqa: F811
+    run = mail['run']
+    voided = run('delivery draft', {'kind': 'sales-receipt', 'document': 'DOC-200'})
+    receipt = run('sales-receipt show', {'sales_receipt': 'DOC-200'})
+    hosted.ok('sales-receipt.void', {'sales_receipt': 'DOC-200', 'expected_version': receipt['version']},
+              company=hosted.company_id, headers={'X-Bookflow-Reason': 'rung up twice'})
+    for _ in range(3):
+        assert run('delivery export', {'messages': [voided['number']]})['held'] == [voided['number']]
+    assert [e['event'] for e in run('delivery history', {'message': voided['number']})['events']] == [
+        'drafted', 'held']
+    assert run('delivery show', {'message': voided['number']})['version'] == 2
+
+
+def test_blank_template_names_are_refused_in_validation(mail, hosted):  # noqa: F811
+    run = mail['run']
+    blank = _refused(hosted, 'delivery-template create', {'kind': 'invoice', 'name': '  ', 'subject': 's',
+                                                          'body': 'b'})
+    assert blank['code'] == 'E_VALIDATION' and blank['details']['fields'][0]['field'] == 'name'
+    made = run('delivery-template create', {'kind': 'invoice', 'name': 'Short', 'subject': 's', 'body': 'b'})
+    assert _refused(hosted, 'delivery-template update', {'template': made['id'], 'name': ' '})['code'] == \
+        'E_VALIDATION'
+
+
+def test_export_needs_the_access_drafting_needs(mail, hosted):  # noqa: F811
+    from tests.test_people_only import _agent
+    drafted = mail['run']('delivery draft', {'kind': 'invoice', 'document': 'DOC-100'})
+    _, readonly = _agent(hosted, role='readonly')
+    r = hosted.call('delivery.export', {'messages': [drafted['number']]}, company=hosted.company_id,
+                    headers=readonly)
+    assert r.status_code == 403, r.text
+    assert [e['event'] for e in mail['run']('delivery history', {'message': drafted['number']})['events']] == [
+        'drafted']
+
+
+def test_cancelling_prunes_files_no_standing_message_carries(mail, hosted):  # noqa: F811
+    run = mail['run']
+    reason = {**hosted.bearer, 'X-Bookflow-Reason': 'not needed'}
+    def cancel(number):
+        return hosted.ok('delivery.cancel', {'message': number}, company=hosted.company_id, headers=reason)
+
+    lone = run('delivery draft', {'kind': 'estimate', 'document': mail['estimate']['number']})
+    exported = run('delivery draft', {'kind': 'invoice', 'document': 'DOC-100'})
+    run('delivery export', {'messages': [exported['number']]})
+    cancel(lone['number'])
+    cancel(exported['number'])
+    gone = run('delivery show', {'message': lone['number']})
+    assert gone['documents'][0]['pdf_path'] is None and gone['documents'][0]['sha256'] == lone['documents'][0][
+        'sha256']
+    assert run('delivery show', {'message': lone['number'], 'include_files': True})['documents'][0][
+        'content_base64'] is None
+    kept = run('delivery show', {'message': exported['number'], 'include_files': True})['documents'][0]
+    assert kept['pdf_path'] and kept['content_base64']
+    # Drafting the same document again freezes the same bytes again, under the same hash.
+    redrafted = run('delivery draft', {'kind': 'estimate', 'document': mail['estimate']['number']})
+    assert redrafted['documents'][0]['sha256'] == lone['documents'][0]['sha256']
+    assert run('delivery show', {'message': redrafted['number'], 'include_files': True})['documents'][0][
+        'content_base64']
+    # A file another standing message carries stays when one of them is cancelled.
+    twin = run('delivery draft', {'kind': 'estimate', 'document': mail['estimate']['number'], 'again': True})
+    cancel(redrafted['number'])
+    assert run('delivery show', {'message': twin['number'], 'include_files': True})['documents'][0]['content_base64']
+    assert [e['event'] for e in run('delivery history', {'message': lone['number']})['events']] == [
+        'drafted', 'cancelled']
+
+
+def test_the_panel_sends_again_exports_through_htmx_and_explains_a_hold(mail, hosted):  # noqa: F811
+    from tests.test_document_print import browser
+    from tests.test_row3_host import WB
+    run = mail['run']
+    web, cid, hx = browser(hosted), hosted.company_id, {**WB, 'HX-Request': 'true'}
+    first = run('delivery draft', {'kind': 'invoice', 'document': 'DOC-100'})
+    run('delivery mark-sent', {'message': first['number']})
+    panel = web.get(f"/c/{cid}/delivery/compose?kind=invoice&document={mail['invoice']['id']}", headers=WB)
+    assert 'name="again" value="on"' in panel.text
+    form = {'kind': 'invoice', 'document': mail['invoice']['id'], 'to': 'accounts@harbourmills.example',
+            'subject': 'Invoice again', 'body': 'Again.', 'again': 'on', 'action': 'save'}
+    saved = web.post(f'/c/{cid}/delivery/compose', data=form, headers=hx)
+    assert saved.status_code == 200 and 'saved as a draft' in saved.text, saved.text[-2000:]
+    second = next(r for r in run('delivery query', {})['rows'] if r['number'] != first['number'])
+    assert run('delivery show', {'message': second['number']})['resend_of'] == first['number']
+    # Export from the panel answers with the page carrying the file.
+    exported = web.post(f'/c/{cid}/delivery/compose', data=dict(form, action='export'), headers=hx)
+    assert exported.status_code == 200 and email.message_from_bytes(_page_file(exported.text))['Subject'] == \
+        'Invoice again'
+    # A held message: the page says why, with no file and no crash, from the outbox and from the panel.
+    voided = run('delivery draft', {'kind': 'sales-receipt', 'document': 'DOC-200'})
+    receipt = run('sales-receipt show', {'sales_receipt': 'DOC-200'})
+    hosted.ok('sales-receipt.void', {'sales_receipt': 'DOC-200', 'expected_version': receipt['version']},
+              company=cid, headers={'X-Bookflow-Reason': 'rung up twice'})
+    held = web.post(f'/c/{cid}/delivery', data={'message': voided['number'], 'action': 'export'}, headers=hx)
+    assert held.status_code == 200 and 'held, not exported' in held.text and 'data-export-file' not in held.text
+    message = web.post(f"/c/{cid}/delivery/{voided['number']}", data={'action': 'export'}, headers=hx)
+    assert message.status_code == 200 and 'voided' in message.text and 'data-export-file' not in message.text

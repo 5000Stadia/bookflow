@@ -94,3 +94,49 @@ def test_email_an_invoice_from_its_page_and_find_it_waiting_in_the_outbox(regist
     _shot(b, width, 'settings')
     if width == 390:
         _fits(b)
+
+
+def _downloaded(b, folder, name):
+    import time
+    for _ in range(200):
+        path = folder / name
+        if path.exists() and not (folder / (name + '.crdownload')).exists() and path.stat().st_size:
+            return path.read_bytes()
+        time.sleep(0.05)
+    raise AssertionError(f'{name} not downloaded: {sorted(p.name for p in folder.iterdir())}; ' + _text(b)[-800:])
+
+
+def test_export_downloads_the_eml_from_the_outbox_and_the_email_panel(register_browser, tmp_path):
+    """A real click on Export .eml: the post carries the workbench header through htmx and the file arrives."""
+    import email
+    env, b = register_browser, register_browser.browser
+    base = f'{env.site.base_url}/c/{env.site.company_id}'
+    b.viewport(1440, 900)
+    run = lambda name, payload: _command(b, env.site, name, payload)
+    write = lambda name, payload: _command(b, env.site, name, payload, **{'X-Bookflow-Reason': 'Browser test'})
+    invoice = run('invoice.show', {'invoice': 'DEMO-SALE-INV-ACTIVE'})
+    write('customer.update', {'customer': invoice['customer_id'], 'email': 'ap@example-customer.test'})
+    message = write('delivery.draft', {'kind': 'invoice', 'document': invoice['id']})
+    name = f"message-{message['number']}.eml"
+
+    outbox_dir, panel_dir = tmp_path / 'outbox', tmp_path / 'panel'
+    outbox_dir.mkdir(), panel_dir.mkdir()
+    b.call('Browser.setDownloadBehavior', {'behavior': 'allow', 'downloadPath': str(outbox_dir)})
+    b.navigate(f'{base}/delivery?status=draft')
+    b.wait_for(f'!!document.querySelector("[data-message=\\"{message["number"]}\\"]")', timeout=30)
+    b.evaluate(f'''(() => {{ document.querySelector("[data-message=\\"{message['number']}\\"] input").click();
+        document.querySelector("[data-outbox-export]").click(); }})()''')
+    b.wait_for('!!document.querySelector("[data-export-file]") || !!document.querySelector("[role=alert]")',
+               timeout=30)
+    parsed = email.message_from_bytes(_downloaded(b, outbox_dir, name))
+    assert parsed['X-Unsent'] == '1' and parsed['To'] == 'ap@example-customer.test'
+
+    b.call('Browser.setDownloadBehavior', {'behavior': 'allow', 'downloadPath': str(panel_dir)})
+    b.navigate(f"{base}/delivery/compose?kind=invoice&document={invoice['id']}")
+    b.wait_for('!!document.querySelector("[data-email-panel]")', timeout=30)
+    b.evaluate('document.querySelector("[data-export]").click()')
+    b.wait_for('!!document.querySelector("[data-export-file]") || !!document.querySelector("[role=alert]")',
+               timeout=30)
+    assert email.message_from_bytes(_downloaded(b, panel_dir, name))['Subject'] == message['subject']
+    assert [e['event'] for e in run('delivery.history', {'message': message['number']})['events']] == [
+        'drafted', 'exported', 'exported']

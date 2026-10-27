@@ -41,6 +41,8 @@ class UpdateInput(_Strict):
     bcc: list[Address] | None = Field(default=None, **_ADDRESSES)
     subject: str | None = Field(default=None, min_length=1, max_length=500)
     body: str | None = Field(default=None, max_length=20000)
+    refresh: bool = Field(default=False, description=(
+        'Attach the document as it is now (same message and number); refills subject and body not hand-written.'))
     expected_version: int | None = Field(default=None, ge=1)
 
 

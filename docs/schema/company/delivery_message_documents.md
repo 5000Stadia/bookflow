@@ -20,7 +20,7 @@ Database: `company`.
 | `file_name` | VARCHAR(255) | no | — | — | — | — | File name as attached. |
 | `media_type` | VARCHAR(127) | no | — | — | — | — | Media type as attached. |
 | `size_bytes` | BIGINT | no | — | — | — | — | Size of the frozen bytes. |
-| `sha256` | VARCHAR(64) | no | — | — | — | delivery_files.sha256 | SHA-256 of the frozen bytes. |
+| `sha256` | VARCHAR(64) | no | — | — | — | — | SHA-256 of the frozen bytes (delivery_files; pruned once no standing message carries them, the hash kept here). |
 | `attachment_id` | VARCHAR(26) | yes | — | — | — | — | Attachment-store file, for an attached file. |
 | `created_at` | VARCHAR(32) | no | — | — | — | — | UTC time this attached file was recorded. |
 | `created_by` | VARCHAR(26) | no | — | — | — | — | Company principal that recorded this attached file. |

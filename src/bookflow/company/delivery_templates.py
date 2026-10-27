@@ -66,7 +66,13 @@ def _stamp(s, ctx, row, at):
     return dict(row, version=row['version'] + 1, updated_at=at, updated_by=s.actor.id, updated_via=ctx.interface.value)
 
 
+def _name(name):
+    if not name.strip():
+        raise _invalid('name', 'is blank')
+
+
 def prepare_create(s, ctx, inp) -> Plan:
+    _name(inp.name)
     merge.check(inp.kind, inp.subject, inp.body)
     _name_taken(s, inp.kind, inp.name)
     at = clock.now_iso()
@@ -119,6 +125,7 @@ def prepare_update(s, ctx, inp) -> Plan:
     at = clock.now_iso()
     after = _stamp(s, ctx, before, at)
     if inp.name is not None:
+        _name(inp.name)
         _name_taken(s, before['kind'], inp.name, before['id'])
         after.update(name=inp.name.strip(), name_key=inp.name.strip().casefold())
     for name in ('subject', 'body'):

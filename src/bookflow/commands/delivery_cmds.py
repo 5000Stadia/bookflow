@@ -19,7 +19,8 @@ _DRAFT = (
     "and body from the kind's default template unless given. A second draft of the same document returns the first "
     'while it is in the outbox; one already sent needs `again`. Nothing is sent. '
     'Example: {"kind": "invoice", "document": "1007"}.')
-_UPDATE = 'Edit a draft or held message: To, Cc, Bcc, subject or body. The attachments stay as drafted.'
+_UPDATE = ('Edit a draft or held message: To, Cc, Bcc, subject or body. The attachments stay as drafted unless '
+           '`refresh`, which attaches the document as it is now and releases a changed-document hold.')
 _SEND = (
     "Release drafts to the outbox (ready). A person's release is also their go; an agent's waits for one. No sending "
     'connection exists yet, so a ready message waits there; export it to send it yourself. A message whose document '
@@ -61,7 +62,7 @@ def plan_delivery_export(inp, ctx, s) -> Plan:
 
 
 def plan_delivery_show(inp, ctx, s) -> Plan:
-    return Plan(d.show(s, inp))
+    return Plan(d.show(s, inp, ctx))
 
 
 def plan_delivery_query(inp, ctx, s) -> Plan:
@@ -105,7 +106,7 @@ delivery_mark_sent = _write('delivery mark-sent', _MARK, m.MarkSentInput, m.Mess
                             errors=['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_WORK_DEPENDENCY', 'E_VERSION_CONFLICT',
                                     'E_PERMISSION'])
 delivery_export = _write('delivery export', _EXPORT, m.ExportInput, m.ExportOutput, plan_delivery_export,
-                         d.apply_export, role='member',
+                         d.apply_export,
                          errors=['E_RECORD_NOT_FOUND', 'E_WORK_DEPENDENCY', 'E_VERSION_CONFLICT'])
 delivery_show = _read('delivery show', _SHOW, m.MessageShowInput, m.MessageOutput, plan_delivery_show,
                       errors=['E_RECORD_NOT_FOUND'], positional=('message',))

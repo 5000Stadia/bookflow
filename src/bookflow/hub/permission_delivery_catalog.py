@@ -1,7 +1,7 @@
 """Add document delivery's messages and outbox (R112 increment 1) without rewriting any accepted descriptor.
 
-Emails to customers are customer correspondence, admitted as overdue notices are: `customer` `member` to read and
-export, `customer` `standard` to draft, edit, release or cancel. A message carries a customer's documents, so every
+Emails to customers are customer correspondence, admitted as overdue notices are: `customer` `member` to read,
+`customer` `standard` to draft, edit, release, export (it holds a stale message and writes events) or cancel. A message carries a customer's documents, so every
 `delivery` command also needs `ledger.read` and `customer-work` at `member` (a principal who may not read an invoice
 or an estimate may not see it in the outbox); drafting and previewing read the document as the principal, so the
 document's own read is checked too. Templates are `customer` `member` and `standard`. Marking a message sent says
@@ -25,7 +25,7 @@ _MESSAGES = (c.Requirement(capability='customer-work', threshold='member'),
 _ADDED = (
     ('delivery cancel', 'standard', 'plan_delivery_cancel', _MESSAGES),
     ('delivery draft', 'standard', 'plan_delivery_draft', _MESSAGES),
-    ('delivery export', 'member', 'plan_delivery_export', _MESSAGES),
+    ('delivery export', 'standard', 'plan_delivery_export', _MESSAGES),
     ('delivery history', 'member', 'plan_delivery_history', _MESSAGES),
     ('delivery mark-sent', 'standard', 'plan_delivery_mark_sent', _MESSAGES),
     ('delivery query', 'member', 'plan_delivery_query', _MESSAGES),

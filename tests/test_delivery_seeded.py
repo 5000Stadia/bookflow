@@ -48,7 +48,12 @@ def _check(run, model, seed, step):
     plain, again = {}, {}
     for number, message in messages.items():
         [doc] = message['documents']
-        assert hashlib.sha256(base64.b64decode(doc['content_base64'])).hexdigest() == doc['sha256']
+        if doc['content_base64'] is None:
+            # Pruned: only a cancelled message never exported gives up its file, and only when no standing
+            # message carries the same bytes.
+            assert message['status'] == 'cancelled' and 'exported' not in model[number], (seed, step, number)
+        else:
+            assert hashlib.sha256(base64.b64decode(doc['content_base64'])).hexdigest() == doc['sha256']
         if message['status'] in LIVE:
             key = (doc['source_id'], message['resend_of'])
             bucket = again if message['resend_of'] else plain
@@ -107,7 +112,11 @@ def test_seeded_outbox_keeps_one_live_message_true_stale_flags_and_whole_histori
                 elif choice == 'export':
                     out = run('delivery export', {'messages': [number]}, reason='By hand')
                     if before['status'] in LIVE and out['held']:
-                        model[number].append('held')
+                        # A message already held for the same reason holds nothing more.
+                        if not (before['status'] == 'held' and before['hold_reason'] == (
+                                'document_voided' if before['stale_reason'] == 'document_voided' else
+                                'document_changed')):
+                            model[number].append('held')
                     else:
                         model[number].append('exported')
                 elif choice == 'cancel':

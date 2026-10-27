@@ -92,7 +92,7 @@ ACCEPTED = {
     'setup-trial-v1': (745, '4e16e82de135a51dd6da3e05b717f128851ddb97e9001b35b3946db7379830de'),
     'shipments-returns-v1': (749, 'f2c9af3e35a8f1708cf051173e262624f264d266576a028990579e07d4323883'),
     'picking-v1': (755, '34c39c80a09a3d5ef8b10808cb187830a236f340946a45cbc9e2b9ca817e71af'),
-    'delivery-v1': (771, '43d302c2f013513734a29a8a582312656e28727d3c4d2724a5b1b63c9d269d97'),
+    'delivery-v1': (771, '085b7a93194e439557234ed8d88a7d7bdfd39ed06f8b2cbdddb732daca07561b'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores

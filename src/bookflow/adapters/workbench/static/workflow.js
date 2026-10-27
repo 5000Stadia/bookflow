@@ -337,3 +337,11 @@ document.addEventListener('click', event => {
   cursor.value = button.dataset.queryNext;
   form.requestSubmit();
 });
+
+// An export answers with its file as a link in the page (the write went through htmx, which carries the
+// workbench header); the page downloads it once, and the link stays to fetch it again.
+const downloadExports = () => document.querySelectorAll('a[data-export-file]:not([data-export-done])').forEach(link => {
+  link.setAttribute('data-export-done', '');
+  link.click();
+});
+document.addEventListener('htmx:afterSettle', downloadExports);

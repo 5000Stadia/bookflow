@@ -9,9 +9,12 @@ description. The bytes are frozen in ``delivery_files`` with their source, revis
 while it is live; a different draft for a document already in the outbox, or one already sent, is refused naming
 it, unless ``again`` makes a new message that names the earlier one (``resend_of``).
 
-**Staleness** is derived, never stored as a flag: a message is stale while any source document's current revision
-differs from the one drafted, or the source was voided. Releasing or exporting a stale message holds it instead
-(``document_changed`` or ``document_voided``). Statements and notices are dated readings and are never stale.
+**Staleness** is derived, never stored as a flag: a message is stale while any source document was voided, its
+current revision differs from the one drafted, or -- checked at release, export and ``delivery show`` -- the document
+drawn now differs from the frozen PDF (a payment changes the balance an invoice prints without a new revision).
+Releasing or exporting a stale message holds it instead (``document_changed`` or ``document_voided``); ``delivery
+update --refresh`` freezes the document as it is now into the same message. Statements and notices are dated readings
+and are never stale.
 
 **Nothing leaves the machine.** No transport is registered in this build: ``send`` releases a draft to ``ready``,
 where it waits. ``export`` gives the owner a ``.eml`` to send from their own mail program, and ``mark-sent`` (a
@@ -25,6 +28,7 @@ import io
 import json
 import re
 import zipfile
+from types import SimpleNamespace
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -180,6 +184,59 @@ def staleness(s, docs) -> str | None:
         if revision != doc['source_revision']:
             reason = 'document_changed'
     return reason
+
+
+def _identity(doc) -> dict:
+    if doc['source_kind'] == 'statement':
+        return {'customer': doc['source_id'], 'date_from': doc['statement_from'], 'date_to': doc['statement_to']}
+    return {'document': doc['source_id']}
+
+
+def drawn_now(read, company_id, doc):
+    """The document's PDF as it would be drawn now, by the same path as drafting (and ``render``)."""
+    from bookflow.documents import model
+    from bookflow.documents.render import drawn
+    return drawn(doc['source_kind'], model.build(read, company_id, doc['source_kind'], _identity(doc)))
+
+
+def content_staleness(s, ctx, docs, read=None) -> str | None:
+    """``staleness``, and then whether a document drawn now differs from its frozen PDF: what the customer would
+    receive no longer matches the books even though the revision did not move (a payment, a credit applied)."""
+    reason = staleness(s, docs)
+    if reason:
+        return reason
+    read = read or reader(s, ctx)
+    for doc in docs:
+        if doc['role'] != 'document' or doc['source_kind'] in ('statement', 'notice'):
+            continue
+        content = drawn_now(read, s.company_row['id'], doc).content
+        if hashlib.sha256(content).hexdigest() != doc['sha256']:
+            return 'document_changed'
+    return None
+
+
+# A frozen file is kept while a standing message carries it: any message not cancelled, or one that was exported
+# (the bytes left the machine in a file). Otherwise it is pruned; history keeps its SHA-256.
+_KEPT = ("EXISTS (SELECT 1 FROM delivery_message_documents d JOIN delivery_messages m ON m.id = d.message_id "
+         "WHERE d.sha256 = {sha} AND (m.status <> 'cancelled' OR EXISTS (SELECT 1 FROM delivery_events e "
+         "WHERE e.message_id = m.id AND e.event = 'exported')))")
+
+
+def prune_files(s, shas) -> list[str]:
+    """Delete the frozen files among ``shas`` that no standing message carries; the ones deleted."""
+    gone = []
+    for sha in sorted(set(shas)):
+        done = s.company.conn.exec_driver_sql(
+            'DELETE FROM delivery_files WHERE sha256 = ? AND NOT ' + _KEPT.format(sha='delivery_files.sha256'), (sha,))
+        if done.rowcount:
+            gone.append(sha)
+    return gone
+
+
+def _exported(s, message_id) -> bool:
+    e = c.delivery_events
+    return s.company.conn.execute(sa.select(e.c.id).where(e.c.message_id == message_id,
+                                                          e.c.event == 'exported').limit(1)).first() is not None
 
 
 # ---------------------------------------------------------------- addresses and merge values
@@ -342,13 +399,17 @@ def project(s, row, docs=None, *, names=None, numbers=None, stale=None, warnings
     if row['resend_of']:
         resend = s.company.conn.execute(sa.select(c.delivery_messages.c.number).where(
             c.delivery_messages.c.id == row['resend_of'])).scalar()
+    present = None
+    if row['status'] == 'cancelled' and docs:
+        present = {r[0] for r in s.company.conn.execute(sa.select(c.delivery_files.c.sha256).where(
+            c.delivery_files.c.sha256.in_([d['sha256'] for d in docs])))}
     attached = [m.AttachedOutput(
         position=d['position'], role=d['role'], source_kind=d['source_kind'], source_id=d['source_id'],
         source_number=numbers.get(d['source_id']), source_revision=d['source_revision'],
         statement_from=d['statement_from'], statement_to=d['statement_to'], file_name=d['file_name'],
         media_type=d['media_type'], size_bytes=d['size_bytes'], sha256=d['sha256'],
         pdf_path=(f"/c/{quote(str(company_id), safe='')}/delivery/{quote(row['id'], safe='')}/file/{d['position']}"
-                  if row['id'] else None)) for d in docs]
+                  if row['id'] and (present is None or d['sha256'] in present) else None)) for d in docs]
     if next_commands is None:
         next_commands = _next(row)
     return m.MessageOutput(
@@ -371,8 +432,8 @@ def project(s, row, docs=None, *, names=None, numbers=None, stale=None, warnings
 def _next(row) -> list[str]:
     n = row['number']
     if row['status'] in ('draft', 'held'):
-        return [f'delivery update {n}', f'delivery send {n}' if row['status'] == 'draft' else f'delivery export {n}',
-                f'delivery cancel {n}']
+        return [f'delivery update {n}', f'delivery send {n}' if row['status'] == 'draft' else
+                f'delivery update {n} --refresh', f'delivery cancel {n}']
     if row['status'] in ('ready', 'failed'):
         return [f'delivery export {n}', f'delivery mark-sent {n}', f'delivery cancel {n}']
     return [f'delivery history {n}']
@@ -497,9 +558,14 @@ def prepare_draft(s, ctx, inp) -> Plan:
     if not inp.again:
         live = next((r for r in earlier if r['status'] in LIVE), None)
         if live is not None:
+            n = live['number']
+            if staleness(s, _docs(s, [live['id']]).get(live['id'], [])):
+                raise _conflict(live, problem=f'{src.label} changed after this message was drafted', next_step=(
+                    f'Attach it as it is now with `delivery update {n} --refresh` (the message keeps its number '
+                    'and history), or cancel it.'))
             raise _conflict(live, problem=f'{src.label} is already in the outbox in this message', next_step=(
-                f"Change it with `delivery update {live['number']}`, cancel it, or draft with --again for a second "
-                'message.'))
+                f'Change it with `delivery update {n}` (`--refresh` attaches the document as it is now), cancel '
+                'it, or draft with --again for a second message.'))
         sent = next((r for r in earlier if r['status'] == 'sent'), None)
         if sent is not None:
             raise _conflict(sent, problem=f'{src.label} was already sent in this message', next_step=(
@@ -547,7 +613,8 @@ def prepare_draft(s, ctx, inp) -> Plan:
                               details=dict(template=template['id'], template_name=template['name'],
                                            sources=[dict(kind=src.kind, id=src.id, revision=src.revision,
                                                          date_from=src.date_from, date_to=src.date_to)],
-                                           warnings=warnings, again_of=again_of)))
+                                           warnings=warnings, again_of=again_of,
+                                           custom=[k for k in ('subject', 'body') if getattr(inp, k) is not None])))
 
 
 def apply_draft(plan, ctx, s) -> Applied:
@@ -606,6 +673,10 @@ def apply_single(plan, ctx, s) -> Applied:
                        db='company'),
                Touched('delivery_event', event['id'], 'create', None, None, event, db='company')]
     extra = plan.data['extra']
+    if extra.get('refresh'):
+        touched += _apply_refresh(s, after, extra['refresh'])
+    if after['status'] == 'cancelled' and not _exported(s, after['id']):
+        prune_files(s, [d['sha256'] for d in _docs(s, [after['id']]).get(after['id'], [])])
     if extra.get('notice_id'):
         from bookflow.company import notices
         touched += notices.mark_sent(s, ctx, extra['notice_id'], 'email').touched
@@ -632,13 +703,103 @@ def prepare_update(s, ctx, inp) -> Plan:
             value = ' '.join(value.split()) if name == 'subject' else value
             if value != before[name]:
                 after[name], changed[name] = value, True
+    details, extra = {}, {}
+    if inp.refresh:
+        extra['refresh'], refreshed, refilled, kept = _plan_refresh(s, ctx, before, after, changed)
+        if refreshed:
+            changed['attachment'] = True
+            details['refreshed'] = refreshed
+        for name in refilled:
+            changed[name] = True
+        details.update(refilled=refilled, kept=kept)
+        if not changed:
+            raise _invalid('refresh', 'the document is drawn the same as when this message was drafted; there is '
+                                      'nothing to refresh')
+        if before['status'] == 'held' and before['hold_reason'] in ('document_changed', 'document_voided'):
+            after.update(status='draft', hold_reason=None)
     if not changed:
-        raise _invalid('message', 'nothing to change: give to, cc, bcc, subject or body')
+        raise _invalid('message', 'nothing to change: give to, cc, bcc, subject or body, or refresh')
     if before['status'] == 'held' and before['hold_reason'] == 'no_recipient' and json.loads(after['to_addresses']):
         after.update(status='draft', hold_reason=None)
-    return _plan_single(s, ctx, before, after, 'edited', {'changed': sorted(changed),
+    return _plan_single(s, ctx, before, after, 'edited', {'changed': sorted(changed), **details,
                         **{k: v for k, v in changed.items() if k in ('to', 'cc', 'bcc')}},
-                        f"edited message {before['number']} ({', '.join(sorted(changed))})")
+                        f"edited message {before['number']} ({', '.join(sorted(changed))})", extra=extra)
+
+
+def _edited_fields(s, message_id) -> set[str]:
+    """Subject and body the person wrote: given at draft, or changed by an edit (not by a refresh)."""
+    e = c.delivery_events
+    out: set[str] = set()
+    for event, details in s.company.conn.execute(sa.select(e.c.event, e.c.details).where(
+            e.c.message_id == message_id, e.c.event.in_(('drafted', 'edited')))):
+        details = json.loads(details)
+        if event == 'drafted':
+            out.update(details.get('custom') or ())
+        else:
+            out.update(set(details.get('changed') or ()) - set(details.get('refilled') or ()))
+    return out & {'subject', 'body'}
+
+
+def _plan_refresh(s, ctx, before, after, changed):
+    """Draw each document as it is now and refill the subject and body the person did not write. The message keeps
+    its number, recipients and history; the frozen rows are rewritten while it is a draft or held, and the event
+    keeps the old revision and SHA-256."""
+    read = reader(s, ctx)
+    company_id = s.company_row['id']
+    docs = _docs(s, [before['id']]).get(before['id'], [])
+    template = s.company.conn.execute(sa.select(c.delivery_templates).where(
+        c.delivery_templates.c.id == before['template_id'])).mappings().first()
+    updates, files, refreshed, src = [], [], [], None
+    filled = {}
+    for doc in docs:
+        if doc['role'] != 'document':
+            continue
+        identity = _identity(doc)
+        src = resolve_source(read, company_id, SimpleNamespace(
+            kind=doc['source_kind'], document=identity.get('document'), customer=identity.get('customer'),
+            date_from=identity.get('date_from'), date_to=identity.get('date_to')))
+        if template is not None and not filled:
+            rendered, *_, subject, body, _warn = compose(s, ctx, read, src, dict(template))
+            filled = {'subject': subject, 'body': body}
+        else:
+            rendered = drawn_now(read, company_id, doc)
+        sha = hashlib.sha256(rendered.content).hexdigest()
+        if sha == doc['sha256'] and src.revision == doc['source_revision']:
+            continue
+        new = dict(doc, source_revision=src.revision, file_name=rendered.filename, media_type=rendered.media_type,
+                   size_bytes=len(rendered.content), sha256=sha)
+        updates.append((doc, new))
+        files.append(dict(sha256=sha, size_bytes=len(rendered.content), media_type=rendered.media_type,
+                          content=rendered.content, created_at=after['updated_at']))
+        refreshed.append({'position': doc['position'], 'source_revision': [doc['source_revision'], src.revision],
+                          'sha256': [doc['sha256'], sha]})
+    kept = sorted(_edited_fields(s, before['id']) | {k for k in ('subject', 'body') if k in changed})
+    refilled = []
+    for name in ('subject', 'body'):
+        if name in filled and name not in kept and filled[name] != after[name]:
+            after[name] = filled[name]
+            refilled.append(name)
+    if src is not None and updates:
+        after['dedupe_key'] = _dedupe(before['kind'], before['customer_id'], src, json.loads(after['to_addresses']),
+                                      json.loads(after['cc_addresses']), json.loads(after['bcc_addresses']),
+                                      before['resend_of'])
+    plan = dict(updates=updates, files=files, prune=[] if _exported(s, before['id']) else
+                [old['sha256'] for old, _ in updates])
+    return plan, refreshed, refilled, kept
+
+
+def _apply_refresh(s, after, plan) -> list:
+    from sqlalchemy.dialects.sqlite import insert
+    conn, d = s.company.conn, c.delivery_message_documents
+    for file_row in plan['files']:
+        conn.execute(insert(c.delivery_files).values(**file_row).on_conflict_do_nothing(index_elements=['sha256']))
+    touched = []
+    for old, new in plan['updates']:
+        conn.execute(d.update().where(d.c.id == old['id']).values(
+            **{k: new[k] for k in ('source_revision', 'file_name', 'media_type', 'size_bytes', 'sha256')}))
+        touched.append(Touched('delivery_message_document', old['id'], 'update', None, None, new, old, db='company'))
+    prune_files(s, plan['prune'])
+    return touched
 
 
 def prepare_cancel(s, ctx, inp) -> Plan:
@@ -703,6 +864,7 @@ def prepare_mark_sent(s, ctx, inp) -> Plan:
 def prepare_send(s, ctx, inp) -> Plan:
     person = s.actor.kind == 'human'
     seen, plans, warnings = set(), [], []
+    read = reader(s, ctx)
     at = clock.now_iso()
     for selector in inp.messages:
         before = _row(s, selector)
@@ -711,16 +873,16 @@ def prepare_send(s, ctx, inp) -> Plan:
         seen.add(before['id'])
         if before['status'] != 'draft':
             raise _conflict(before, problem='only a draft can be released to the outbox')
-        docs = _docs(s, [before['id']]).get(before['id'], [])
-        stale = staleness(s, docs)
         if not json.loads(before['to_addresses']):
             raise _invalid('to', f"message {before['number']} has no To address; add one with delivery update",
                            number=before['number'])
+        stale = content_staleness(s, ctx, _docs(s, [before['id']]).get(before['id'], []), read)
         after = _touch(s, ctx, before, at)
         if stale:
             after.update(status='held', hold_reason=stale)
             plans.append((before, after, 'held', {'reason': stale, 'at': 'release'}))
-            warnings.append(f"Message {before['number']} is held: {HOLD_TEXT[stale]}. Cancel it and draft again.")
+            warnings.append(f"Message {before['number']} is held: {HOLD_TEXT[stale]}. "
+                            + _refresh_hint(before['number'], stale))
             continue
         after.update(status='ready', released_by=s.actor.id, released_at=at)
         details = {'released_by': s.actor.id}
@@ -750,6 +912,12 @@ def apply_send(plan, ctx, s) -> Applied:
 
 
 # ---------------------------------------------------------------- export
+
+def _refresh_hint(number, reason):
+    if reason == 'document_voided':
+        return 'Cancel it: a voided document is not emailed.'
+    return f'Attach the document as it is now with `delivery update {number} --refresh`, or cancel it.'
+
 
 def eml_bytes(s, row, docs) -> bytes:
     msg = EmailMessage(policy=policy.SMTP)
@@ -792,15 +960,19 @@ def prepare_export(s, ctx, inp) -> Plan:
             seen.add(row['id'])
             rows.append(row)
     docs = _docs(s, [r['id'] for r in rows])
-    files, holds, exported, warnings = [], [], [], []
+    files, holds, held, exported, warnings = [], [], [], [], []
+    read = reader(s, ctx)
     for row in rows:
         if row['status'] == 'cancelled':
             raise _conflict(row, problem='a cancelled message is not exported')
-        stale = staleness(s, docs.get(row['id'], [])) if row['status'] in LIVE else None
+        stale = content_staleness(s, ctx, docs.get(row['id'], []), read) if row['status'] in LIVE else None
         if stale:
-            holds.append((row, dict(_touch(s, ctx, row, at), status='held', hold_reason=stale)))
-            warnings.append(f"Message {row['number']} is held, not exported: {HOLD_TEXT[stale]}. Cancel it and "
-                            'draft again.')
+            held.append(row['number'])
+            # Asking again for a message already held for this reason holds nothing more.
+            if not (row['status'] == 'held' and row['hold_reason'] == stale):
+                holds.append((row, dict(_touch(s, ctx, row, at), status='held', hold_reason=stale)))
+            warnings.append(f"Message {row['number']} is held, not exported: {HOLD_TEXT[stale]}. "
+                            + _refresh_hint(row['number'], stale))
             continue
         files.append((f"message-{row['number']}.eml", eml_bytes(s, row, docs.get(row['id'], []))))
         exported.append(row)
@@ -819,7 +991,7 @@ def prepare_export(s, ctx, inp) -> Plan:
                         '`delivery mark-sent`.')
     out = m.ExportOutput(filename=filename, media_type=media, size_bytes=len(content),
                          content_base64=base64.b64encode(content).decode('ascii') if files else None,
-                         exported=[r['number'] for r in exported], held=[r['number'] for r, _ in holds],
+                         exported=[r['number'] for r in exported], held=held,
                          warnings=warnings)
     return Plan(out, dict(exported=exported, holds=holds, at=at, filename=filename,
                           sha=hashlib.sha256(content).hexdigest()))
@@ -844,11 +1016,17 @@ def apply_export(plan, ctx, s) -> Applied:
 
 # ---------------------------------------------------------------- reads
 
-def show(s, inp) -> m.MessageOutput:
-    out = project(s, _row(s, inp.message))
-    if getattr(inp, 'include_files', False):
+def show(s, inp, ctx=None) -> m.MessageOutput:
+    row = _row(s, inp.message)
+    include = getattr(inp, 'include_files', False)
+    stale = None
+    if ctx is not None and not include and row['status'] in LIVE:
+        stale = content_staleness(s, ctx, _docs(s, [row['id']]).get(row['id'], []))
+    out = project(s, row, stale=stale)
+    if include:
         out = out.model_copy(update={'documents': [
-            doc.model_copy(update={'content_base64': base64.b64encode(file_bytes(s, doc.sha256)).decode('ascii')})
+            doc.model_copy(update={'content_base64': base64.b64encode(file_bytes(s, doc.sha256)).decode('ascii')
+                                   if doc.pdf_path else None})
             for doc in out.documents]})
     return out
 

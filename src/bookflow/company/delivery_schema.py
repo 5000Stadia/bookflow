@@ -8,9 +8,11 @@ sends: this increment builds no transport, so a message is drafted, edited, rele
 - ``delivery_templates``: a subject and a plain-text body per kind, with a closed list of merge fields. Exactly one
   active default per kind (a partial unique index); a company starts with one seeded default per kind.
 - ``delivery_messages``: the message and its current state. Never deleted (a guard).
-- ``delivery_message_documents``: immutable. Each attached file: the source document, its revision when drafted,
-  the file name, size and SHA-256 of the frozen bytes.
-- ``delivery_files``: immutable, content-addressed. The frozen bytes, one row per SHA-256, so identical files share
+- ``delivery_message_documents``: each attached file: the source document, its revision when drafted, the file
+  name, size and SHA-256 of the frozen bytes. Fixed, except that a draft or held message's file may be refreshed
+  (``delivery update --refresh``; the event keeps the old revision and hash).
+- ``delivery_files``: immutable, content-addressed. A file no standing message carries (only cancelled messages that
+  were never exported) is pruned; the hash stays on the message's rows and in its history. The frozen bytes, one row per SHA-256, so identical files share
   one. (The attachment store's bodies live behind upload transfers and collection; a frozen PDF is the company's own
   output, so it lives in the company file, travels with its backups, and is never collected.)
 - ``delivery_events``: append-only. Every state change and every act on a message, with who and through what.
@@ -73,7 +75,8 @@ def define_tables(metadata, C, T, common):
         C('created_at', sa.String(32), 'UTC time these bytes were first frozen.', nullable=False),
         sa.CheckConstraint("length(sha256) = 64 AND sha256 NOT GLOB '*[^0-9a-f]*'", name='ck_delivery_file_sha256'),
         sa.CheckConstraint('size_bytes = length(content)', name='ck_delivery_file_size'),
-        description='Frozen attachment bytes, content-addressed: identical files share one row. Immutable.')
+        description='Frozen attachment bytes, content-addressed: identical files share one row. Immutable; '
+                    'pruned once no standing message carries them.')
 
     messages = T('delivery_messages', *common(),
         text('number', 'Message number from the delivery sequence (M-1001, M-1002, ...).', 64, nullable=False),
@@ -148,8 +151,8 @@ def define_tables(metadata, C, T, common):
         text('file_name', 'File name as attached.', 255, nullable=False),
         text('media_type', 'Media type as attached.', 127, nullable=False),
         C('size_bytes', sa.BigInteger, 'Size of the frozen bytes.', nullable=False),
-        C('sha256', sa.String(64), 'SHA-256 of the frozen bytes.', sa.ForeignKey('delivery_files.sha256'),
-          nullable=False),
+        C('sha256', sa.String(64), 'SHA-256 of the frozen bytes (delivery_files; pruned once no standing message '
+          'carries them, the hash kept here).', nullable=False),
         ident('attachment_id', 'Attachment-store file, for an attached file.', nullable=True),
         *created('attached file'),
         sa.CheckConstraint(f'role IN ({quoted(ROLES)})', name='ck_delivery_document_role'),
@@ -194,8 +197,10 @@ TABLES = ('delivery_events', 'delivery_message_documents', 'delivery_messages', 
           'delivery_templates')
 GUARDED = (
     ('delivery_events', ('UPDATE', 'DELETE'), 'delivery events are append-only'),
-    ('delivery_message_documents', ('UPDATE', 'DELETE'), 'attached files are frozen'),
-    ('delivery_files', ('UPDATE', 'DELETE'), 'frozen files are immutable'),
+    ('delivery_message_documents', ('UPDATE', 'DELETE'), 'attached files are frozen (a refresh of a draft or held '
+     "message's file excepted)"),
+    ('delivery_files', ('UPDATE', 'DELETE'), 'frozen files are immutable (deleted only once no standing message '
+     'carries them)'),
     ('delivery_messages', ('DELETE',), 'messages are never deleted'),
     ('delivery_templates', ('DELETE',), 'templates are deactivated, never deleted'),
 )
