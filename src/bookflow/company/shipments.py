@@ -1265,9 +1265,11 @@ def report(s, inp):
     as_of = inp.as_of or clock.today_iso()
     currency = _home(s)
     account = find_account(s.company)
+    from bookflow.company import ledger_reports as ledger
     if account is None or not has_shipments(s):
-        return ShippedNotInvoicedOutput(as_of=as_of, account_id=None, account_name=None, rows=[],
-                                        total=_money(0, currency), account_balance=_money(0, currency))
+        return ShippedNotInvoicedOutput(**ledger.page_of(s, inp, 'shipped-not-invoiced', [], date_to=as_of), as_of=as_of,
+                                        account_id=None, account_name=None, total=_money(0, currency),
+                                        account_balance=_money(0, currency))
     customer = None
     if inp.customer is not None:
         from bookflow.company import sales_defaults
@@ -1303,8 +1305,9 @@ def report(s, inp):
             f'Shipped Not Invoiced lists {Money(total, currency)} waiting on {as_of} but the account holds '
             f'{Money(balance_now, currency)}; the two must agree.'))
     rows.sort(key=lambda r: (r.customer_name or '', r.ship_date, r.shipment_number))
-    return ShippedNotInvoicedOutput(as_of=as_of, account_id=account['id'], account_name=account['full_name'],
-                                    rows=rows[:inp.limit], total=_money(total, currency),
+    return ShippedNotInvoicedOutput(**ledger.page_of(s, inp, 'shipped-not-invoiced', rows, date_to=as_of), as_of=as_of,
+                                    account_id=account['id'], account_name=account['full_name'],
+                                    total=_money(total, currency),
                                     account_balance=_money(balance_now, currency))
 
 

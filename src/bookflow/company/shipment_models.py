@@ -8,6 +8,7 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from bookflow.company import serial_lot_models as _SL
 from bookflow.company.journal_models import _Date as IsoDate
 from bookflow.company.journal_outputs import JournalMoneyOutput
+from bookflow.company.ledger_reports import ReportMetadata
 
 Selector = Annotated[str, Field(min_length=1, max_length=1004), BeforeValidator(lambda v: v.strip() if isinstance(v, str) else v)]
 Quantity = Annotated[str, Field(min_length=1, max_length=40)]
@@ -93,6 +94,7 @@ class ShippedNotInvoicedInput(_Strict):
     as_of: IsoDate | None = Field(default=None, description='Waiting on this date; default today.')
     customer: Selector | None = None
     limit: int = Field(default=200, ge=1, le=1000)
+    cursor: str | None = Field(default=None, max_length=4096, description='Continue from a previous page\'s next_cursor.')
 
 
 class ShipmentLineOutput(BaseModel):
@@ -203,6 +205,9 @@ class ShippedNotInvoicedRow(BaseModel):
 
 
 class ShippedNotInvoicedOutput(BaseModel):
+    metadata: ReportMetadata
+    count: int = Field(ge=0, le=1000, description='Rows on this page.')
+    next_cursor: str | None = None
     as_of: str
     account_id: str | None
     account_name: str | None
