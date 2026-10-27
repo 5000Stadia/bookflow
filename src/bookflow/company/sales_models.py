@@ -76,9 +76,7 @@ class SalesMoneyInput(StrictModel):
 
 
 class SalesPriceInput(StrictModel):
-    """A unit price or cost as money, the shape of SalesMoneyInput: ``amount`` may carry up to
-    three places beyond the minor unit (R150), and ``minor_units`` is then its nearest minor unit;
-    without ``amount`` the price is ``minor_units`` exactly."""
+    """A unit price as money; ``amount`` may carry three places beyond the minor unit (R150)."""
     minor_units: int = Field(ge=0, le=INT64_MAX)
     currency: str = Field(min_length=3, max_length=3)
     amount: str | None = None
@@ -146,14 +144,12 @@ class SalesLineInput(StrictModel):
     price_level: Selector | None = None
     price_basis_amount: str | SalesPriceInput | None = None
     percent: str | None = Field(default=None, description=(
-        "Percentage, 0 through 100, for a discount or percentage charge line, applied to the line or subtotal "
-        "directly above it. Omitted: the item's own; give net_amount for a fixed amount. A taxable discount reduces "
-        "taxable sales only down to zero; the rest comes off non-taxable sales."))
+        "Percentage, 0 through 100, of a discount or charge line, applied to the line or subtotal above it; "
+        "omitted, the item's own. A taxable discount reduces taxable sales only down to zero."))
     refresh_defaults: bool = False
     use_defaults: list[SalesLineDefault] = Field(default_factory=list, max_length=7)
     site: Selector | None = Field(default=None, description=(
-        "Inventory site a stocked line takes from (a sale), gives back to (a return) or commits at (an order), "
-        "by id or name. Omitted: the document's site, else the source line's, else the default site."))
+        "Inventory site of a stocked line, by id or name. Omitted: the document's site, else the default site."))
     bin: _SL.LineBin = Field(default=None, description=_SL.BIN_HELP)
     lot: _SL.LineLot = Field(default=None, description=_SL.LOT_HELP)
     lot_expiry: _SL.IsoDate | None = Field(default=None, description=_SL.EXPIRY_HELP)
@@ -202,8 +198,8 @@ class SalesFields(StrictModel):
             values.pop('count_position', None)
         return values
 
-    site: Selector | None = Field(None, description="Inventory site the stocked lines take from or give back to, by id or name, where a line names none; omitted, the default site.")
-    count_position: Literal['before', 'after'] | None = Field(None, description="Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after.")
+    site: Selector | None = Field(None, description="Inventory site for lines that name none, by id or name; omitted, the default site.")
+    count_position: Literal['before', 'after'] | None = Field(None, description="before (the default) or after a physical count of its site on the same date.")
     sales_tax_calculation: Policy = Field(None, description="Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects")
     number: _Number | None = None
     memo: Text | None = None

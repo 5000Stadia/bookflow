@@ -29,15 +29,13 @@ LineSerials = Annotated[list[Number] | None, BeforeValidator(_drop_blanks)]
 LineBin = Annotated[Selector | None, BeforeValidator(_blank_is_none)]
 
 NUMBER_FIELDS = ('lot', 'lot_expiry', 'serial_numbers', 'bin')
-BIN_HELP = ("Bin at the line's site, by id, full name (A:3) or label code; the site must track bins. \"(no bin)\" "
-            "names units outside every bin. Omitted: the bin the stock stood in (a correction), the sale's (a return), "
-            "else the item's default bin; an outgoing line never drives a bin below zero while units are elsewhere.")
-LOT_HELP = ("Lot of a lot-tracked item: the lot an incoming line receives into (made when new) or an outgoing line "
-            "takes from. Omitted on an outgoing line, the units leave unassigned.")
+BIN_HELP = ("Bin at the line's site (id, full name A:3 or label code); \"(no bin)\" is outside every bin. Omitted: "
+            "the bin the stock stood in, else the item's default bin.")
+LOT_HELP = ("Lot an incoming line receives into (made when new) or an outgoing line takes from; omitted, "
+            "outgoing units leave unassigned.")
 EXPIRY_HELP = "Expiry date of a new lot (ISO); change an existing lot's with `lot update`."
-SERIAL_HELP = ("Serial numbers of a serial-tracked item, one per unit, up to the quantity; units left unnumbered are "
-               "unassigned (`inventory assign` later). Never invent one: an unknown number is taken with a warning. "
-               "Omitted on a correction, the line keeps its numbers.")
+SERIAL_HELP = ("Serial numbers, one per unit, up to the quantity; unnumbered units stay unassigned. Never invent "
+               "one. Omitted on a correction, the line keeps its numbers.")
 
 
 def number_fields():

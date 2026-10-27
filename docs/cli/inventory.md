@@ -47,7 +47,7 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].new_value` | inside `--lines` JSON array | string \| object \| null | no | yes | null | The item's whole asset value on the date (the anchor's New Value); the change is worked out when written. Forbidden with a decrease. |
 | `lines[].negative_value` | inside `--lines` JSON array | boolean | no | no | false | With value_change: write the value down rather than up. |
 | `lines[].site` | inside `--lines` JSON array | string \| null | no | yes | null | Inventory site of this line; omitted, the adjustment's site, else the default site. |
-| `lines[].bin` | inside `--lines` JSON array | string \| null | no | yes | null | Bin at the line's site, by id, full name (A:3) or label code; the site must track bins. "(no bin)" names units outside every bin. Omitted: the bin the stock stood in (a correction), the sale's (a return), else the item's default bin; an outgoing line never drives a bin below zero while units are elsewhere. |
+| `lines[].bin` | inside `--lines` JSON array | string \| null | no | yes | null | Bin at the line's site (id, full name A:3 or label code); "(no bin)" is outside every bin. Omitted: the bin the stock stood in, else the item's default bin. |
 | `lines[].lot` | inside `--lines` JSON array | string \| null | no | yes | null | Lot the units go into (an increase) or leave from (a decrease), of a lot-tracked item. |
 | `lines[].lot_expiry` | inside `--lines` JSON array | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
 | `lines[].serial_numbers` | inside `--lines` JSON array | array[string] \| null | no | yes | null | Serial numbers of the units found (an increase) or gone (a decrease), of a serial-tracked item; the rest are unassigned. |
@@ -55,7 +55,7 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].description` | inside `--lines` JSON array | string \| null | no | yes | null | Line description on both posting lines. |
 | `class_id` | `--class-id` | string \| null | no | yes | null | Class captured on both posting lines. |
 | `site` | `--site` | string \| null | no | yes | null | Inventory site the quantity change is at, by id or name; omitted, the default site. |
-| `bin` | `--bin` | string \| null | no | yes | null | One-item form: Bin at the line's site, by id, full name (A:3) or label code; the site must track bins. "(no bin)" names units outside every bin. Omitted: the bin the stock stood in (a correction), the sale's (a return), else the item's default bin; an outgoing line never drives a bin below zero while units are elsewhere. |
+| `bin` | `--bin` | string \| null | no | yes | null | One-item form: Bin at the line's site (id, full name A:3 or label code); "(no bin)" is outside every bin. Omitted: the bin the stock stood in, else the item's default bin. |
 | `lot` | `--lot` | string \| null | no | yes | null | One-item form: lot the units go into or leave from, of a lot-tracked item. |
 | `lot_expiry` | `--lot-expiry` | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
 | `serial_numbers` | `--serial-numbers` | array[string] \| null | no | yes | null | One-item form: serial numbers of the units found or gone, of a serial-tracked item. |

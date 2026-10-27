@@ -64,8 +64,9 @@ def test_a_cut_list_sheds_empty_fields_first_and_says_plainly_when_rows_are_miss
 
     whole = fit({"count": 23, "items": [account(i) for i in range(23)]}, paging=paging)
     assert size(whole) <= BUDGET and len(whole["items"]) == 23 and list(whole)[0] == "result_compacted"
+    # A false flag is shed too (R183: the demo chart arrives whole again); active is always kept.
     assert whole["items"][0] == {"id": "01ACCOUNT00000000000000000", "name": "Account 0", "active": True,
-                                 "has_children": False, "balance": {"amount": "0.00", "currency": "USD"}}
+                                 "balance": {"amount": "0.00", "currency": "USD"}}
     cut = fit({"count": 200, "items": [account(i) for i in range(200)]}, paging=paging)
     kept = len(cut["items"])
     note = cut["result_compacted"]
