@@ -1304,7 +1304,9 @@ def report(s, inp):
         raise BookflowError('E_INTERNAL', message=(
             f'Shipped Not Invoiced lists {Money(total, currency)} waiting on {as_of} but the account holds '
             f'{Money(balance_now, currency)}; the two must agree.'))
-    rows.sort(key=lambda r: (r.customer_name or '', r.ship_date, r.shipment_number))
+    positions = {identity: int(balance.row['position']) for identity, balance in found.items()}
+    rows.sort(key=lambda r: (r.customer_name or '', r.ship_date, r.shipment_number, positions[r.line_identity],
+                             r.line_identity))
     return ShippedNotInvoicedOutput(**ledger.page_of(s, inp, 'shipped-not-invoiced', rows, date_to=as_of), as_of=as_of,
                                     account_id=account['id'], account_name=account['full_name'],
                                     total=_money(total, currency),

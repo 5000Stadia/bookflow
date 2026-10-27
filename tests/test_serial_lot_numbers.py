@@ -579,3 +579,20 @@ def test_an_empty_number_on_a_line_that_moves_no_stock_is_no_number(shop):
     assert 'only stocked lines' in str(refused.value.details)
     run('bill post', dict(vendor=books['vendor'], date='2017-03-05', items=[dict(
         item=books['labor'], quantity='1', serial_numbers=[], lot='')]), reason='Sub')
+
+
+def test_a_voided_return_gives_its_serial_number_back_to_be_returned_again(shop):
+    """Credit memo post, void, post: the void releases WH-1, so the second return may name it again."""
+    run = shop['run']
+    _receive(shop)
+    sale = _sell(shop, '2017-03-05', ['WH-1'])
+    line = run('invoice show', dict(invoice=sale['id']))['revision']['lines'][0]['line_id']
+    payload = dict(customer=shop['acme'], date='2017-03-09', lines=[dict(
+        source_invoice=sale['id'], source_line=line, quantity='1', serial_numbers=['WH-1'])])
+    credit = run('credit-memo post', payload, reason='Return')
+    run('credit-memo void', dict(credit_memo=credit['id'], expected_version=credit['version']), reason='Wrong day')
+    assert ('Water Heater', 'Warehouse', 'WH-1') not in _numbers(shop['books'])
+    again = run('credit-memo post', dict(payload, date='2017-03-10'), reason='Return again')
+    assert again['status'] == 'posted'
+    assert _numbers(shop['books'])[('Water Heater', 'Warehouse', 'WH-1')] == 1
+    _number_ties(shop['books'])

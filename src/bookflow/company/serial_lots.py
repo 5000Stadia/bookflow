@@ -239,6 +239,11 @@ def _issue_numbers(s, issue_id, made=()):
             unassigned += quantity
     returned = s.company.conn.execute(sa.text(
         'SELECT p.serial_number_id, p.lot_id, p.quantity_microunits, p.id, p.reverses_placement_id FROM inventory_placements p '
+        'JOIN inventory_movements m ON m.id = p.movement_id WHERE m.returns_movement_id = :issue '
+        # A voided return's reversal names no issue itself: its placements retire the return's, which
+        # gives those serial numbers and lots back to the issue to be returned again.
+        'UNION ALL SELECT r.serial_number_id, r.lot_id, r.quantity_microunits, r.id, r.reverses_placement_id '
+        'FROM inventory_placements r JOIN inventory_placements p ON p.id = r.reverses_placement_id '
         'JOIN inventory_movements m ON m.id = p.movement_id WHERE m.returns_movement_id = :issue'),
         {'issue': issue_id}).mappings().all()
     gone = [dict(row) for row in returned] + [row for row in made if row.get('_returns') == issue_id]

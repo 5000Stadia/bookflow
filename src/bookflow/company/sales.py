@@ -782,6 +782,18 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
         return Plan(SalesWriteOutput(**summary(old_header, old_revision, profile_row(s, old_revision)),
             revision=revision_output(s, old_revision), changed=False, warnings=warnings),
             dict(input=inp, operation=operation, document_type=document_type, changed=False))
+    if operation == 'void' and document_type == 'invoice':
+        # A credit memo that took stock back against this invoice stands on its sale: voiding the invoice
+        # under it would orphan the return's cost of goods sold credit (and, on billed shipments, count the
+        # returned units as still waiting to be invoiced).
+        from bookflow.company.credits import stock_returns_on
+        if memos := stock_returns_on(s, old_header['id']):
+            names = ', '.join(memos)
+            raise BookflowError('E_WORK_DEPENDENCY', message=(
+                f'Credit memo {names} returned stock this invoice sold; void the credit memo first '
+                f'(`credit-memo void {memos[0]}`), then void the invoice.'),
+                details=dict(problem='a credit memo returns stock against this invoice; void it first',
+                             credit_memos=memos, reason='invoice_returned'))
     if provenance is None:
         at, event = clock.now_iso(), new_id()
     else:

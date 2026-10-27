@@ -821,3 +821,19 @@ def test_the_command_help_says_what_the_command_actually_does():
     assert 'moving the inventory back and restoring the cost is not built' not in post
     for remedy in ('source_invoice', 'source_line', 'inventory adjust'):
         assert remedy in message and remedy in post
+
+
+def test_an_invoice_void_is_refused_while_a_credit_memo_returns_its_stock(books):
+    """Voiding the sale under a standing return would orphan the return's cost of goods sold credit."""
+    run = books['run']
+    item = _inventory_part(books)
+    invoice = _stocked_invoice(books, item)
+    credit = _return(books, invoice)
+    with pytest.raises(BookflowError) as refused:
+        run('invoice void', dict(invoice=invoice['id'], expected_version=invoice['version']), reason='Void')
+    assert refused.value.code == 'E_WORK_DEPENDENCY' and refused.value.details['reason'] == 'invoice_returned'
+    assert refused.value.details['credit_memos'] == [credit['number']]
+    assert f'credit-memo void {credit["number"]}' in refused.value.message
+    run('credit-memo void', dict(credit_memo=credit['id'], expected_version=credit['version']), reason='Undo')
+    assert run('invoice void', dict(invoice=invoice['id'], expected_version=invoice['version']),
+               reason='Void')['status'] == 'voided'

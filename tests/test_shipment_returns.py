@@ -155,6 +155,41 @@ def test_a_returned_serial_number_is_back_in_stock_at_its_bin_and_numbers_not_sh
     _tie(books)
 
 
+def test_a_voided_serial_return_gives_the_number_back_to_be_returned_again(books):
+    run = books['run']
+    heater = _tracked(books, 'Water Heater', cost='100.00', price='300.00', tracking='serial')
+    run('bill post', dict(vendor=books['vendor'], date='2017-03-01', items=[dict(
+        item=heater, quantity='2', unit_cost='100.00', serial_numbers=['WH-1', 'WH-2'])]), reason='In')
+    order = run('sales-order create', dict(customer=books['customer'], date='2017-03-01', lines=[dict(
+        item=heater, quantity='2', unit_price='300.00')]), reason='Two heaters')
+    run('shipment post', dict(sales_order=order['number'], date='2017-03-05', lines=[dict(
+        item=heater, quantity='2', serial_numbers=['WH-1', 'WH-2'])]), reason='Two went')
+    line = dict(item=heater, quantity='1', serial_numbers=['WH-1'])
+    first = run('shipment return', dict(shipment='1001', date='2017-03-06', lines=[line]), reason='WH-1 back')
+    run('shipment-return void', dict(shipment_return=first['number']), reason='Wrong day')
+    again = run('shipment return', dict(shipment='1001', date='2017-03-07', lines=[line]), reason='WH-1 back')
+    assert again['lines'][0]['serial_numbers'] == ['WH-1']
+    _tie(books)
+
+
+def test_an_invoice_void_is_refused_while_a_credit_memo_returns_units_it_billed(shop):
+    run, books = shop['run'], shop['books']
+    _ship(shop)
+    invoice = run('shipment invoice', dict(shipment='1001', date='2017-03-27'), reason='Bill')
+    line = invoice['revision']['lines'][0]['line_id']
+    credit = run('credit-memo post', dict(customer=books['customer'], date='2017-03-28', lines=[
+        dict(quantity='2', source_invoice=invoice['id'], source_line=line)]), reason='Two back')
+    version = run('invoice show', dict(invoice=invoice['id']))['version']
+    refused = _error(lambda: run('invoice void', dict(invoice=invoice['id'], expected_version=version), reason='Void'))
+    assert refused.code == 'E_WORK_DEPENDENCY' and refused.details['reason'] == 'invoice_returned'
+    assert refused.details['credit_memos'] == [credit['number']] and 'credit-memo void' in refused.message
+    run('credit-memo void', dict(credit_memo=credit['id'], expected_version=credit['version']), reason='Undo')
+    run('invoice void', dict(invoice=invoice['id'], expected_version=version), reason='Void')
+    waiting = run('report shipped-not-invoiced', dict(as_of='2017-12-31'))['rows']
+    assert [row['quantity'] for row in waiting] == ['6']
+    _tie(books)
+
+
 def test_an_invoiced_unit_comes_back_on_a_credit_memo_from_the_shipment_line_and_the_order_stays_invoiced(shop):
     run, books = shop['run'], shop['books']
     _ship(shop, quantity='2', date='2017-03-05')
