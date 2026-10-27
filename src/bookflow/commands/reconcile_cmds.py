@@ -79,7 +79,10 @@ def _reuse(s, operation_key):
 
 
 def _loaded(s, account_id):
-    return loading.load(s, account_id)
+    # Inside the command's own write transaction the proof made here also moves the account's
+    # verified watermark (`reconciliation_watermark`), so the proof after the write re-proves
+    # only what the write added.
+    return loading.load(s, account_id, advance=_kept(s, True) is not None and not s.dry_run)
 
 
 def _kept(s, value):

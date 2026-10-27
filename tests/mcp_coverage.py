@@ -281,6 +281,9 @@ SERIAL_LOT_COMMANDS = frozenset(('inventory assign', 'lot list', 'lot show', 'lo
 # schedules and withdraws a later switch, and reads show and the layers report, on every surface.
 FIFO_COMMANDS = frozenset(('costing-method set', 'costing-method withdraw', 'costing-method show',
     'report inventory-layers'))
+# R180 stage 2: the verified history watermark. Its witness verifies a reconciled demo copy whole and one account,
+# on every surface.
+VERIFY_COMMANDS = frozenset(('company verify',))
 
 LANDED_COST_COMMANDS = frozenset(('landed-cost setup', 'landed-cost charges', 'landed-cost post', 'landed-cost void',
     'landed-cost show', 'landed-cost query'))
@@ -289,7 +292,7 @@ BIN_COMMANDS = frozenset(('bin activate', 'bin create', 'bin deactivate', 'bin l
     'cycle-class activate', 'cycle-class create', 'cycle-class deactivate', 'cycle-class list', 'cycle-class show',
     'cycle-class update', 'cycle-count classify', 'cycle-count due', 'report items-by-bin'))
 
-FROZEN_COMMANDS = FIFO_COMMANDS | LANDED_COST_COMMANDS | BIN_COMMANDS | SERIAL_LOT_COMMANDS | PERF_COMMANDS | SCHEDULING_COMMANDS | INVENTORY_COUNT_COMMANDS | BARCODE_COMMANDS | CHECK_PRINTING_COMMANDS | ACCOUNTANT_REVIEW_COMMANDS | TIMEKEEPING_COMMANDS | INVENTORY_SITE_COMMANDS | PARTIAL_PO_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
+FROZEN_COMMANDS = VERIFY_COMMANDS | FIFO_COMMANDS | LANDED_COST_COMMANDS | BIN_COMMANDS | SERIAL_LOT_COMMANDS | PERF_COMMANDS | SCHEDULING_COMMANDS | INVENTORY_COUNT_COMMANDS | BARCODE_COMMANDS | CHECK_PRINTING_COMMANDS | ACCOUNTANT_REVIEW_COMMANDS | TIMEKEEPING_COMMANDS | INVENTORY_SITE_COMMANDS | PARTIAL_PO_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
 account create
 account deactivate
 account list
@@ -840,6 +843,7 @@ def execution_map():
     from tests.test_bins_surfaces import COMMANDS as BIN_SURFACE_COMMANDS
     from tests.test_landed_cost_surfaces import COMMANDS as LANDED_COST_SURFACE_COMMANDS
     from tests.test_fifo_surfaces import COMMANDS as FIFO_SURFACE_COMMANDS
+    from tests.test_verify_surfaces import COMMANDS as VERIFY_SURFACE_COMMANDS
     from tests.test_inventory_count_surfaces import COMMANDS as INVENTORY_COUNT_SURFACE_COMMANDS
     from tests.test_scheduling_surfaces import COMMANDS as SCHEDULING_SURFACE_COMMANDS
     from tests.test_perf_surfaces import COMMANDS as PERF_SURFACE_COMMANDS
@@ -939,6 +943,7 @@ def execution_map():
                    'tests/test_bins_surfaces.py::test_the_same_bins_and_cycle_counts_through_python_cli_http_and_mcp' if cmd.name in BIN_SURFACE_COMMANDS else  # all four
                    'tests/test_landed_cost_surfaces.py::test_the_same_landed_cost_through_python_cli_http_and_mcp' if cmd.name in LANDED_COST_SURFACE_COMMANDS else  # all four
                    'tests/test_fifo_surfaces.py::test_the_same_costing_method_switch_through_python_cli_http_and_mcp' if cmd.name in FIFO_SURFACE_COMMANDS else  # all four
+                   'tests/test_verify_surfaces.py::test_the_same_verification_through_python_cli_http_and_mcp' if cmd.name in VERIFY_SURFACE_COMMANDS else  # all four
                    'tests/test_inventory_count_surfaces.py::test_the_same_count_through_python_cli_http_and_mcp' if cmd.name in INVENTORY_COUNT_SURFACE_COMMANDS else  # all four
                    'tests/test_scheduling_surfaces.py::test_the_same_to_dos_notices_and_reminders_through_python_cli_http_and_mcp' if cmd.name in SCHEDULING_SURFACE_COMMANDS else  # all four
                    'tests/test_perf_surfaces.py::test_the_same_timings_report_through_python_cli_http_and_mcp' if cmd.name in PERF_SURFACE_COMMANDS else  # all four

@@ -77,7 +77,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # cycle-class create/update/activate/deactivate/show/list; cycle-count classify and due; report items-by-bin.
     # +6 landed cost (R104 increment 6): landed-cost setup/charges/post/void/show/query.
     # +4 FIFO costing (R104 increment 7): costing-method set/withdraw/show, report inventory-layers.
-    assert len(rows) == 738
+    # +1 company verify (R180 stage 2).
+    assert len(rows) == 739
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
@@ -347,10 +348,11 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # shipping_basis on item receipts -- their null branches. No new variant kind.
     # 3891 -> 3895 (R104 increment 7, FIFO costing), measured: inventory-layers' optional as_of and item, and
     # receipt_line on vendor credit item rows -- their null branches. No new variant kind.
-    # 3895 -> 3904 (build/m4-fixes: nine reports page like every other), measured: cursor on mileage-by-job,
+    # 3895 -> 3896 (R180 stage 2, company verify), measured: its optional account -- its null branch.
+    # 3896 -> 3905 (build/m4-fixes: nine reports page like every other), measured: cursor on mileage-by-job,
     # mileage-by-vehicle, customer-prepayments, accountant-changes, accountant-review, items-by-bin,
     # serial-lot-stock, serial-lot-history and lot-trace -- its null branch. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==3904
+    assert sum(len(group["paths"]) for group in mapped)==3905
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

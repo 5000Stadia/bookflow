@@ -1715,3 +1715,8 @@ EXAMPLES.update({
     'report inventory-layers': Example('bookflow report inventory-layers --as-of 2026-12-12' + _C + ' --json',
                                        {'as_of': '2026-12-12'}),
 })
+
+# The verified history watermark (R180 stage 2).
+EXAMPLES.update({
+    'company verify': Example('bookflow company verify' + _C + ' --json', {}),
+})

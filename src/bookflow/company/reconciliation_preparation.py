@@ -151,16 +151,17 @@ def snapshot(rows, *, source: adapters.Graph, captured_graphs, referenced_rows, 
     values=copy.deepcopy((rows,source,captured_graphs,referenced_rows))
     return _validated(values,authority_transactions)
 
-def owned_snapshot(rows, *, source: adapters.Graph, captured_graphs, referenced_rows, authority_transactions):
+def owned_snapshot(rows, *, source: adapters.Graph, captured_graphs, referenced_rows, authority_transactions, suffix=None):
     """`snapshot` for a caller that built every argument for this call and keeps none of them
-    (`reconciliation_loading.load`): the same checks, without the defensive deep copy."""
+    (`reconciliation_loading.load`): the same checks, without the defensive deep copy. With
+    `suffix`, the scoped validation over a verified watermark (`reconciliation_watermark`)."""
     require(authority_required(rows,source,captured_graphs)<=set(authority_transactions),'E_PERMISSION')
-    return _validated((rows,source,captured_graphs,referenced_rows),authority_transactions)
+    return _validated((rows,source,captured_graphs,referenced_rows),authority_transactions,suffix)
 
-def _validated(values,authority_transactions):
+def _validated(values,authority_transactions,suffix=None):
     proofs=_Memo()
     with adapter_errors():
-        validate(values[0],source=values[1],captured_graphs=values[2],referenced_rows=values[3],memo=proofs)
+        validate(values[0],source=values[1],captured_graphs=values[2],referenced_rows=values[3],memo=proofs,suffix=suffix)
     result=Snapshot(*values,tuple(sorted(set(authority_transactions))))
     # The proofs `validate` just made of this source graph are the ones every read repeats.
     object.__setattr__(result,'proofs',proofs)

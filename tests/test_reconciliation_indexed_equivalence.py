@@ -145,7 +145,9 @@ def compare_account(s, account_id):
         assert outcome(indexed_validate, rows, source=g, captured_graphs=captured, referenced_rows=whole) == old
     seen['validate'] = outcome(indexed_validate, rows, source=g, captured_graphs={}, referenced_rows=scoped)
     if seen['validate'] is None:
-        snapshot = loading.load(s, account_id)
+        # The full proof's snapshot: the oracle's population knows nothing of a scoped graph's
+        # verified documents (`reconciliation_watermark`, compared in test_reconciliation_watermark).
+        snapshot = loading.load(s, account_id, full=True)
         for owner in sorted({v['account_id'] for v in snapshot.rows['effect_versions']} | {account_id}):
             cutoffs = {'9999-12-31'} | {v['statement_date'] for v in rows['certificates']}
             for cutoff in sorted(cutoffs):
