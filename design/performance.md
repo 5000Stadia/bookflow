@@ -950,6 +950,7 @@ deposit revision; a one-shot CLI call pays it on its first load.
   single hot spot left. The next step is the verified-prefix watermark (re-prove only what is new
   since the last proved state), which moves old-file corruption detection to a verify command and
   is a decision for the owner; or proving a write from what was written instead of reloading.
-- **The 1,005-line void**: about 70% is the historical relation read of cause 5 above, decoding
-  the latest image of every identity of the related kinds. The 1,005-line post: the dependency
-  read set capture (about half) and the composition.
+- **The 1,005-line void**: about half (profiled) is the historical relation read of cause 5
+  above, decoding the latest image of every identity of the related kinds; then the composition
+  and the row writes. The 1,005-line post: the dependency read set capture (about a third), the
+  composition and validation of 1,005 rows.
