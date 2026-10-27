@@ -834,3 +834,122 @@ Both templates are kept on the storage drive, `/media/k/Blank/bookflow-scratch/p
 `bench-large-s180-co0095` (never reconciled, the bench's template, with the run file and logs)
 and `bench-large-s180-co0095-reconciled` (checking reconciled for all 60 months, with each
 month's timings in `recon_monthly.json`). Copy one to the NVMe drive before using it.
+
+## Increment 3 (2026-10-26): deposits and reconciliation
+
+The five causes named above, in their order there (cheapest and largest first). Each change is
+exact: the same outputs, the same refusals.
+
+### What changed
+
+1. **`Snapshot.versions` and `Snapshot.current` are computed once per snapshot**
+   (`reconciliation_preparation.py`). Both were properties that rebuilt a dictionary of every
+   effect version on each access, and `reconciliation_queries` read `current` once per listed
+   movement. They are now derived once from the snapshot's frozen rows and handed out read-only;
+   a copy of a snapshot starts without them, as its proofs do.
+2. **Deposit lookup indexes, migration co0099** (on co0097): `deposit_memberships
+   (source_transaction_id)`, `deposit_memberships (transaction_id)` and `deposit_operations
+   (transaction_id)`, which the deposit sources walk (`deposit_draft_validation.admit`) reads by.
+   Indexes only, no row changes (`tests/test_deposit_write_checks.py` rewinds a populated file and
+   compares every row; the backup rewind and the audit head test know co0099).
+3. **The foreign key check after a deposit write is scoped** (`deposit_drafts.final_foreign_keys`).
+   It exists because some keys are deferred: a write inside its savepoint could leave one broken
+   and SQLite would only refuse at COMMIT, outside the savepoint and without a deposit error. With
+   foreign keys on, every immediate key is enforced by each statement, so only deferred keys can
+   be left broken by the write. The check now reads every table whose stored definition can defer
+   a key (taken from the file, not the metadata) and every table the write's own statements wrote
+   (collected while it runs), with `PRAGMA foreign_key_check(table)`; when `defer_foreign_keys` is
+   on for the transaction it falls back to the whole check. A dangling reference planted in each of
+   those tables is refused by both the old and the new check (`test_deposit_write_checks.py`).
+   What it no longer reports is a key already broken in a table the write did not touch, which
+   no deposit write depends on.
+4. **A reconciliation or deposit write plans inside its own write transaction** (`plan_in_write`,
+   opt-in per command: `reconcile start`, `reconcile opening start`, `reconcile mark`, `reconcile
+   finish`, `deposit post`, `deposit update`, `deposit void`). `dispatch._apply` makes their plan
+   after `BEGIN IMMEDIATE`, the statement-effect drain and the principal upsert, immediately before
+   the apply; a dry run, a read, an advisory command and every command that does not opt in plan
+   exactly as before. Since nothing is written between plan and apply, the apply's own preparation
+   would read the same rows and return the same value, so it reuses the plan's: a reconciliation
+   write loads the account once before the write instead of twice (the proof after the write is
+   kept), and a deposit save no longer re-reads its recovery, re-compares its guard, re-prepares
+   or re-composes (the plan's composition writes nothing and is the one the preview showed).
+   `tests/test_plan_in_write.py` pins which commands opt in and that each prepares once.
+   Also: a deposit revision's stored facts are decoded and proved once per content (keyed by the
+   SHA-256 of their text, a pure function of it; only a success is kept), and a deposit save inserts
+   its rows in ordered runs of one `executemany` each (SQLite still inserts, triggers and checks
+   row by row in the same order).
+5. **Not changed: deposit post and void still read the whole audit history of the kinds they
+   relate** (`deposit_dependency_history._relation_index`, the historical view). An exact bound
+   needs either an index of the audit images' relation keys or a verified-prefix watermark. The
+   images are stored compressed, so SQLite cannot derive such an index itself; one written by the
+   application would need every audit writer to keep it and a backfill whose completeness this
+   increment cannot prove, and it would no longer meet a broken image of an unrelated record the
+   way the full read does. Left as it is; it is now the largest cost of the 1,005-line void.
+
+### Equivalence
+
+- The bench's own command sequence with every input and output logged, before (main c35a3d81) and
+  after, on fresh copies of a medium company: 147 commands (20-line deposits, deposit sources, the
+  300-line deposit, its void, and the whole reconciliation from opening to finish), outputs
+  identical once fresh ids, digests and clock times are replaced by first-seen placeholders.
+- The demo company: the reconciliation of Checking from opening to finish (10 commands), identical.
+- The damaged-books corpus (`test_deposit_history_bounded`, seven kinds of damage): the same
+  first refusal (outcome and code for each of the four calls) before and after.
+- `tests/reconciliation_oracle.py` (`test_reconciliation_indexed_equivalence`) and
+  `tests/deposit_history_oracle.py` (`test_deposit_history_bounded`) pass.
+
+### Measurements
+
+Medium company: the medium profile (600 customers, 24 months, 300 payments in Undeposited Funds)
+regenerated on main c35a3d81 as `bench-medium-s180-co0097`, because the co0085 template's hub
+holds a permission catalog this chain no longer has (`catalog_mismatch`, as noted for the parked
+large template). Large company: `bench-large-s180-co0095`; "before" is the after-increment-2 run
+above. Same bench, 5 timed repetitions (3 for the 300/1,005-line deposit and its void, 1 for start
+and finish). The deposit rows of the large company are from a second run after the last change
+(the composition reuse); the reconciliation rows from the run before it, which did not touch them.
+
+| scenario | company | before p50 ms | after p50 ms | before stmts | after stmts | load before / after |
+|---|---|---|---|---|---|---|
+| deposit post, 20 lines | medium | 3,777 | 633 | 1,580 | 713 | 37.6 / 34.7 |
+| deposit sources, first page | medium | 654 | 396 | 918 | 918 | 37.6 / 34.7 |
+| deposit post, 300 lines | medium | 28,086 | 8,499 | 10,765 | 3,315 | 41.6 / 36.1 |
+| deposit void, 300 lines | medium | 39,536 | 15,124 | 12,412 | 5,092 | 41.6 / 36.1 |
+| reconcile start, 243 rows | medium | 8,275 | 2,481 | 612 | 433 | 40.9 / 36.2 |
+| reconcile candidates | medium | 2,907 | 1,325 | 214 | 214 | 40.0 / 36.3 |
+| reconcile mark all | medium | 8,325 | 2,782 | 614 | 434 | 39.0 / 36.5 |
+| reconcile preview | medium | 3,017 | 1,460 | 214 | 214 | 39.0 / 36.6 |
+| reconcile finish | medium | 12,533 | 3,617 | 627 | 447 | 38.8 / 36.6 |
+| deposit post, 20 lines | large | 19,217 | **1,599** | 1,580 | 713 | 37.4 / 37.0 |
+| deposit sources, first page | large | 15,941 | **1,399** | 3,215 | 3,172 | 37.4 / 37.0 |
+| deposit post, 1,005 lines | large | 84,673 | 30,227 | 34,387 | 9,852 | 43.1 / 36.9 |
+| deposit void, 1,005 lines | large | 163,318 | 58,457 | 39,944 | 15,798 | 43.1 / 36.9 |
+| reconcile start, 1,859 rows | large | 57,852 | 15,292 | 1,476 | 1,009 | 44.7 / 36.6 |
+| reconcile candidates | large | 30,223 | **7,884** | 502 | 502 | 56.1 / 36.5 |
+| reconcile mark all, 1,859 rows | large | 123,431 | 18,215 | 1,478 | 1,010 | 49.0 / 36.7 |
+| reconcile preview | large | 18,600 | **8,717** | 502 | 502 | 40.9 / 35.4 |
+| reconcile finish, 1,859 rows | large | 95,469 | 22,916 | 1,491 | 1,023 | 42.3 / 35.1 |
+
+The whole 1,859-row statement (start, mark all, preview, finish) now takes about 65 s, against
+about 5 minutes after increment 2. The deposit-model decode is kept per process, so a long-running
+server or MCP host (and the bench, which runs its scenarios in one process) pays it once per
+deposit revision; a one-shot CLI call pays it on its first load.
+
+### Which scenarios meet "seconds" (10 s or less)
+
+- **Now meet it:** deposit post of 20 lines (1.6 s), deposit sources (1.4 s), reconcile
+  candidates (7.9 s) and preview (8.7 s) over 1,859 rows; on the medium company every deposit and
+  reconciliation scenario except the 300-line void (15 s).
+- **Still do not:** the 1,005-line deposit post (30 s) and void (58 s); reconcile start (15 s),
+  mark all (18 s) and finish (23 s) over 1,859 rows.
+
+### What remains, and why
+
+- **One reconciliation load is about 6 to 8 s on five years**, and a write makes two: the one its
+  plan reuses and the proof after the write (`reconciliation_loading.prove_written`). The time is
+  spread (building the graph, the referenced rows, `validate`, the row reads, authority), with no
+  single hot spot left. The next step is the verified-prefix watermark (re-prove only what is new
+  since the last proved state), which moves old-file corruption detection to a verify command and
+  is a decision for the owner; or proving a write from what was written instead of reloading.
+- **The 1,005-line void**: about 70% is the historical relation read of cause 5 above, decoding
+  the latest image of every identity of the related kinds. The 1,005-line post: the dependency
+  read set capture (about half) and the composition.

@@ -10,11 +10,11 @@ Database: `company`.
 |---|---|---|---|---|---|---|---|
 | `id` | VARCHAR(26) | no | — | primary key 1, unique with id + source_transaction_id + transaction_id | — | — | Immutable claim or exact release. |
 | `kind` | TEXT | no | — | — | — | — | claim or release. |
-| `transaction_id` | VARCHAR(26) | no | — | unique with id + source_transaction_id + transaction_id | — | deposit_profiles.transaction_id, deposit_row_keys.transaction_id, posting_batches.transaction_id | Owning deposit. |
+| `transaction_id` | VARCHAR(26) | no | — | unique with id + source_transaction_id + transaction_id | ix_deposit_memberships_transaction | deposit_profiles.transaction_id, deposit_row_keys.transaction_id, posting_batches.transaction_id | Owning deposit. |
 | `revision_id` | VARCHAR(26) | no | — | — | — | deposit_profiles.revision_id | Deposit revision. |
 | `batch_id` | VARCHAR(26) | no | — | — | — | posting_batches.id | Deposit accounting batch. |
 | `row_id` | VARCHAR(26) | no | — | — | — | deposit_row_keys.id | Deposit source occurrence. |
-| `source_transaction_id` | VARCHAR(26) | no | — | unique with id + source_transaction_id + transaction_id | — | posting_batches.transaction_id, transaction_revisions.transaction_id | Whole receipt identity. |
+| `source_transaction_id` | VARCHAR(26) | no | — | unique with id + source_transaction_id + transaction_id | ix_deposit_memberships_source | posting_batches.transaction_id, transaction_revisions.transaction_id | Whole receipt identity. |
 | `source_revision_id` | VARCHAR(26) | no | — | — | — | transaction_revisions.id | Exact source revision. |
 | `source_batch_id` | VARCHAR(26) | no | — | — | — | posting_batches.id | Exact source business batch. |
 | `amount_minor_units` | BIGINT | no | — | — | — | — | Whole source cash. |
