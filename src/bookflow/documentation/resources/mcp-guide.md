@@ -163,7 +163,7 @@ async def main():
 
             catalog = await tool("bookflow_list_commands", {"prefix": "invoice"})
             assert "invoice post" in {row["name"] for row in catalog["commands"]}
-            for name in ("journal post", "invoice post", "invoice update", "attachment add", "attachment get"):
+            for name in ("journal post", "invoice post", "attachment add", "attachment get"):
                 usage = await tool("bookflow_help", {"command": name})
                 full = await tool("bookflow_help", {"command": name, "view": "full"})
                 assert usage["input_schema"] == full["input_schema"]
