@@ -954,3 +954,162 @@ deposit revision; a one-shot CLI call pays it on its first load.
   above, decoding the latest image of every identity of the related kinds; then the composition
   and the row writes. The 1,005-line post: the dependency read set capture (about a third), the
   composition and validation of 1,005 rows.
+
+## Stage 2 (2026-10-26): the verified history watermark and `company verify`
+
+Approved by the owner on 2026-10-26 ("Totally fine go for it"). Every reconciliation load used to
+prove the account's whole history: about 6 to 8 s on five years, and a write makes two loads. Now
+each bank and card account keeps a verified watermark, and a load proves only what was written
+after it, plus every older closure that touches. `company verify`, every backup and every restore
+prove everything. Code: `company/reconciliation_watermark.py`, `reconciliation_loading.load`,
+`reconciliation_storage_validation.validate(suffix=...)`, `reconciliation_adapters.Graph.scope`.
+
+### What a watermark is (co0101 `statement_watermarks`)
+
+One row per account, written only after a validation of that account succeeds, in the same write
+transaction (the planning load of a reconciliation write, and the proof after it): the code
+version (a SHA-256 of every Bookflow source file), the census (for each append-only table the
+proof reads -- every reconciliation table outside `MUTABLE`, every ledger table the adapters read
+except the two updated in place, and `audit_events` -- its highest row number and row count), a
+fingerprint per proved document of the rows that can change under it (its `transactions` header,
+the `bank_effect_current` pointers of its keys, its stored effect heads), the accounts the proof
+reached, the ledger setup the derivation reads (each account's type and currency, the home
+currency), and a digest over all of it plus the database schema (`sqlite_master`). A read never
+writes one.
+
+### What a reconciliation load proves
+
+- **In full** (as before) when the watermark is *missing*, *stale* (other code: after any
+  upgrade or code change) or *broken*: the digest does not match the row, a counted prefix lost
+  a row or its highest row, the schema changed (a table rebuilt without its key or a trigger
+  would change it), a proved account changed type or currency, the home currency changed, the
+  snapshot reaches other accounts than it did, or a proved document is no longer the account's.
+  Any exception while reading the watermark is *broken*.
+- **Otherwise, scoped**, on top of what the watermark proved:
+  - documents *derived again* from the ledger and compared with every stored version, head and
+    transition (`source_facts`, `movement_facts`, `display_facts`, `provenance_facts`,
+    `physical_coverage`, links, `source_history_coverage`, `source_heads`, the transitions):
+    every statement document with a ledger row (any adapter table) or an effect row (keys,
+    versions, legs, sources, subtypes) written after the census, every document whose fingerprint
+    changed (a header updated in place, a moved head or bank-effect pointer), and every document
+    the watermark did not prove;
+  - `prove` over those documents (leg coverage, attribution, reversal bijections, the business
+    and current coverage), and the dated general-ledger equality of every account they post to,
+    over the whole account: the other documents contribute their stored current effects and
+    their posting lines (`Graph.verified`), which is what the watermark proved them to be;
+  - every reconciliation row written after the census and every row of a `MUTABLE` table, row
+    by row (types, formats, snapshots against their models) and through every foreign key; a
+    key from an older row into an append-only table is not proved again, since its target can
+    be neither changed nor deleted, and keys into tables whose rows can change are proved for
+    every row;
+  - every capture (opening, certificate) and draft revision written since or gaining a member,
+    and every older one holding a version whose movement group gained an active version since
+    (how an append reaches an old capture's `incomplete_movement`); a capture being written is
+    proved complete against the live graph exactly as before (`capture_population_completeness`
+    counts the verified documents' current heads);
+  - claims written since; consumptions written since or whose journal is derived again; every
+    event written since, and every older event's transitions of documents derived again;
+  - every check whose inputs can change in place, over every row: chains, the active-chain
+    projection, current claims and their owners, event accounts, draft and proposal projections,
+    receipts and attempts, discriminators, primary and unique keys.
+- **Any refusal of the scoped proof is never the answer**: the load runs the full proof, which
+  decides (and moves the watermark if it passes inside a write). So a scoped proof can never
+  refuse books the full proof accepts, and its first refusal is always the full proof's.
+- **What it gives up**: a row of the verified prefix changed in place behind Bookflow (an edit to
+  the company file, not a command) is not looked at again by a command. Deleting one is caught
+  (the census). `company verify` and every backup and restore prove everything.
+
+### An upgrade
+
+The code version is a hash of every source file, so any upgrade makes every watermark stale. The
+first reconciliation command on each account after it proves in full, exactly what every command
+proved before stage 2, and writes a new watermark; until then reads prove in full too. co0101
+only adds the table: nothing is backfilled and nothing migrates. When an upgrade changes the
+derivation so that stored effects no longer equal the new derivation, that first full proof
+refuses as it always did (the materialization's backfill is what rewrites the effects).
+
+### `company verify`, backups and restores
+
+`company verify` (`ledger.read`, member; people and agents; reads only; `verify-v1` on `fifo-v1`)
+proves every bank and card account (or `--account` one) in full, whatever its watermark, and
+reports each `proved`, `unsupported` (a document the adapters cannot represent), `pending`
+(posted documents still owe their effects to the next command) or `failed` with the refusing
+check, plus each account's watermark state. Without an account it also runs SQLite's
+`integrity_check` and `foreign_key_check`. `company backup` (and every scheduled backup) proves
+the copy it archives and refuses books that fail (`E_BACKUP_INVALID`, check `statement_proof`,
+with each failing account and check). `backup verify`, `backup rehearse` and `company restore`
+prove an archive at this schema; a restore of an older one proves it after migrating it.
+
+### Equivalence and the damaged books
+
+`tests/test_reconciliation_watermark.py`:
+- books reconciled through the commands (opening, June, a correction of a reconciled check that
+  moves its head, a voided reconciled deposit, new receipts, deposits and checks, July) give the
+  same snapshot facts scoped and in full: the rows, the population and ledger total at seven
+  cutoffs, the capture a finish would store, and the write-time proof of the newest certificate
+  against today's ledger (failing both ways once the ledger has moved). The commands' first load
+  proves in full and every later one is scoped;
+- a seeded random run (three months of checks, receipts and deposits, journals, corrections and
+  voids of checks and deposits, reconciled or not, each month finished): after every step the
+  scoped proof and the full proof agree, all 24 states compared through a holding watermark;
+- the damaged-books corpus of `test_reconciliation_indexed_equivalence`, one damage at a time,
+  over an account reconciled for June with July written after the watermark: 4,137 variants; of
+  the 3,774 the full proof refuses, 2,885 are refused by the per-command proof (damage in what was
+  written since, or in what that touches, or in a check that runs over every row), 17 by the census
+  (a verified row deleted), and 872 only by `company verify` (a verified row changed in place); the
+  ledger damaged within the scope, and the referenced tables damaged, are refused per command;
+- old verified history damaged in place (a reconciled check's stored display changed, the
+  table's guards lifted and put back word for word): a command's scoped load accepts it, and
+  (a) `company verify` refuses it (`display_facts`) and so does `company backup`; (b) with other
+  code the watermark is stale, the full proof runs and refuses it; (c) with the digest changed
+  the watermark is broken, the full proof runs and refuses it; a row deleted from the verified
+  prefix breaks it too;
+- a schema change, an account added, a header changed in place: broken, holds, holds with that
+  one document derived again.
+
+### Measurements
+
+Machine load 38 to 45 throughout (16 cores shared with other work), so single timings move by up to 2x;
+one run each, the same scripts, before = main at 2a7f5d8d. Each template copied to NVMe and upgraded by
+the code under test; ms per call, wall clock in-process.
+
+Large company reconciled monthly for five years (`bench-large-s180-co0095-reconciled`: checking, 60
+certificates, 111,240 certificate members). Twenty checks posted, then a statement started, its
+candidates paged, every movement marked, previewed and finished; month 61 is the first statement after
+the upgrade (its first load proves in full and writes the watermark), month 62 the steady state.
+
+| command | before m61 | after m61 | before m62 | after m62 |
+|---|---|---|---|---|
+| reconcile start | 32,303 | 26,451 | 30,081 | 9,474 |
+| reconcile candidates | 15,586 | 7,567 | 26,189 | 5,469 |
+| reconcile mark all | 36,095 | 27,724 | 54,255 | 16,038 |
+| reconcile preview | 15,462 | 19,338 | 16,003 | 5,513 |
+| reconcile finish | 33,384 | 18,583 | 34,493 | 17,659 |
+
+Large company never reconciled (`bench-large-s180-co0095`, 1,859 movements), the bench's own
+reconciliation scenarios (opening, then start; candidates and preview three times, best shown):
+
+| command | before | after |
+|---|---|---|
+| reconcile start | 10,138 | 5,890 |
+| reconcile candidates | 5,282 | 2,267 |
+| reconcile mark all, 1,859 rows | 12,291 | 7,190 |
+| reconcile preview | 5,312 | 2,713 |
+| reconcile finish, 1,859 rows | 14,364 | 8,211 |
+
+One scoped load of the reconciled checking at load about 40: about 4.5 s, against 12.6 s for the full
+proof (gather 1.9 s, authority 0.6 s, watermark state 0.3 s, scoped validation 1.5 s). What remains
+in a load is reading and closing over every stored reconciliation row (the 111,240 members are read
+each time, since commands read the snapshot whole) and the permission closure; a write still makes
+two loads, and mark all and finish their own work over every movement.
+
+### Deposits: not changed, and why
+
+The deposit history read (`deposit_dependency_history`'s historical view, the largest cost of the
+1,005-line void) was left as it is. A watermark there would have to store what the full read
+computes -- the latest decoded image, at a verified point, of every identity of the kinds it
+relates (tens of thousands on the large company) -- and keep it as a second copy of derived facts
+with its own invalidation, since the projections behind it span most of the deposit, payment and
+sales modules. And it would not be exact on its own: a guard's endpoint can precede the watermark
+(another write moved it between a preview and its commit), which needs the full read anyway. It
+does not fit cleanly and exactly, so it waits for the audit-side relation index increment 3 named.

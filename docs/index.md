@@ -415,6 +415,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`company/statement_effect_pending`](schema/company/statement_effect_pending.md)
 - [`company/statement_imports`](schema/company/statement_imports.md)
 - [`company/statement_lines`](schema/company/statement_lines.md)
+- [`company/statement_watermarks`](schema/company/statement_watermarks.md)
 - [`company/terms`](schema/company/terms.md)
 - [`company/time_clocks`](schema/company/time_clocks.md)
 - [`company/timekeeping_people`](schema/company/timekeeping_people.md)

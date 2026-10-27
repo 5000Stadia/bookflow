@@ -205,6 +205,9 @@ def apply_company_restore(plan: Plan, ctx: Context, s: Session) -> Applied:
                     db.raw.execute("UPDATE company_info SET id = ?", (cid,))
                     s.commits.commit(db, "hub.company_restore")
                 before, after = migrate.migrate_company(s, ctx, db, folder, None)
+                if before != after:
+                    # A backup from an older Bookflow is proved once it is at this schema.
+                    archive.prove_statements(db=db)
                 facts = db.raw.execute("SELECT legal_name, home_currency FROM company_info").fetchone()
                 db.raw.execute("BEGIN IMMEDIATE")
                 info.write_display_name_copy(db, display)

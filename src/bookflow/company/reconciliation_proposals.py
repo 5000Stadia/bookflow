@@ -36,6 +36,8 @@ def preview(session,ctx,s,draft,proposals,plans, *, opening_draft=None):
     """Current source admission precedes disclosure and exact Plan comparison."""
     access.require_resource(session,'ledger.post','standard')
     adapters.authority(session,s.authority_transactions)
+    # The staleness check rebuilds the whole graph; a scoped one (`reconciliation_watermark`) is not whole.
+    require(s.source.scope is None,'E_RECONCILIATION_UNSUPPORTED')
     with adapter_errors():
         current=adapters.graph(session,[v['id'] for v in s.source.rows['transactions']])
     require(current.rows==s.source.rows,'E_PREVIEW_STALE')

@@ -1296,6 +1296,17 @@ refuses and names the settlement; unapply it first. Retry the original operation
 only under current authority. There is no Restore command. `design/transaction-deletion.md`
 lists every posted family and, for each one without a delete command, the reason.
 
+## What reconciliation proves, and `company verify`
+
+Each reconciliation command proves what was written since the account's verified watermark,
+and every older reconciliation that touches, against the ledger; a doubt means it proves the
+whole account. It does not look again at an older record changed outside Bookflow (the company
+file edited directly). `company verify` proves the whole of every bank and card account (or
+`--account` one) and reports `proved`, `unsupported`, `pending` or `failed` with the check that
+refused; it only reads, and an agent may run it. A backup runs the same proof and refuses books
+that fail it (`E_BACKUP_INVALID`, check `statement_proof`). If an account fails, stop working on
+it and tell the owner what `company verify` reported: nothing you post fixes it.
+
 ## When a reconciliation will not tie
 
 Never post, change or tick an entry just to make a reconciliation's difference zero. If a
