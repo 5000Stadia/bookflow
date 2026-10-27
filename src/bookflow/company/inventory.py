@@ -97,7 +97,16 @@ def movements(s, *, item_id=None, transaction_id=None, as_of=None):
         query = query.where(t.c.transaction_id == transaction_id)
     if as_of is not None:
         query = query.where(t.c.effective_date <= as_of)
-    return [dict(row) for row in s.company.conn.execute(query).mappings()]
+    rows = [dict(row) for row in s.company.conn.execute(query).mappings()]
+    landed = [row for row in rows if row['kind'] == 'landed']
+    if landed:
+        # A receipt restated unchanged by an edit of its document carries its landed cost on (R104 increment 6):
+        # replay reads each landed cost on the receipt that stands for it now.
+        from bookflow.company.landed_costs import successors
+        moved = successors(s, {row['landed_on_movement_id'] for row in landed})
+        for row in landed:
+            row['landed_on_movement_id'] = moved.get(row['landed_on_movement_id'], row['landed_on_movement_id'])
+    return rows
 
 
 def fallback_cost(s, item_id, currency):
@@ -186,6 +195,7 @@ class _Document:
     after_persist: object = None      # callback(fresh, rows, provenance) -> extra persist entries
     reason: str | None = None         # a generated void's reason, when the caller gave none
     placements: list | None = None    # its own movements' placements, worked out when planned
+    trailing: object = None           # callback(fresh, rows, provenance) -> persist entries after the movements
 
 
 @dataclass
@@ -554,7 +564,7 @@ def correction_documents(s, change, sequence):
     # The adjusted items first, then any assembly a build made from them (R103): a correction of a
     # build's component issue is paired with one of the build's assembly receipt, and the assembly
     # is replayed with it. With no builds in the company this is each adjusted item's own replay.
-    from bookflow.company import assembly_builds
+    from bookflow.company import assembly_builds, inventory_effects
     planned = [movement.values for document in change.documents for movement in document.movements]
     working = {}
     for values in planned:
@@ -571,24 +581,21 @@ def correction_documents(s, change, sequence):
     by_date: dict[tuple, list] = {}
     for item_id, state in states:
         for correction in state.corrections:
-            by_date.setdefault((correction.effective_date, correction.filled_by is not None),
+            by_date.setdefault((correction.effective_date, inventory_effects.correction_kind(correction)),
                                []).append((item_id, correction))
     names = sorted({item_name(s, item_id) for item_id, _ in states if any(
         correction for correction in dict(states)[item_id].corrections)})
     label = names[0] if len(names) == 1 else f'{len(names)} items'
-    for date, true_up in sorted(by_date):
+    for date, kind in sorted(by_date):
+        true_up = kind != 0
         lines, pending = [], []
-        for item_id, correction in by_date[(date, true_up)]:
+        for item_id, correction in by_date[(date, kind)]:
             target = correction.target_movement
             lines.extend(pair(
                 target['asset_account_id'], target['offset_account_id'],
                 correction.delta_minor_units, change.currency, target['class_id'],
-                f'Provisional cost true-up for movement {target["id"]} dated '
-                f'{target["effective_date"]}, filled by receipt movement {correction.filled_by["id"]}'
-                if true_up else
-                f'Weighted-average cost correction for movement {target["id"]} '
-                f'dated {target["effective_date"]}'))
-            partner = partners.get(target['id']) if not true_up else None
+                inventory_effects.correction_description(correction)))
+            partner = partners.get((target['id'], correction.filled_by['id'] if correction.filled_by is not None else None))
             pending.append(_Movement(dict(
                 id=new_id(), kind='recost', item_id=item_id,
                 quantity_microunits=0, value_minor_units=correction.delta_minor_units,
@@ -606,7 +613,7 @@ def correction_documents(s, change, sequence):
                 partner['sequence'] = sequence
                 pending.append(_Movement(partner, line_index=len(lines)))
                 sequence += 1
-        memo = ('Provisional cost true-up' if true_up else 'Weighted-average cost correction')
+        memo = inventory_effects.CORRECTION_MEMOS[kind]
         change.documents.append(_Document(JournalPostInput(
             date=date, memo=f'{memo} for {label}',
             lines=lines), 'post', 'recost', pending))
@@ -816,7 +823,8 @@ def persist_change(s, ctx, change, *, command_name, persist, nouns=None):
                           audit_event_id=fresh.data['event'])
         marker = dict(transaction_id=fresh.data['header']['id'], type='journal_entry', kind=document.kind,
                       **provenance)
-        rows = [dict({key: value for key, value in movement.values.items() if key != 'number'}, **provenance)
+        rows = [dict({'landed_on_movement_id': None}, **{key: value for key, value in movement.values.items() if key != 'number'},
+                     **provenance)
                 for movement in document.movements]
         if persist:
             extra = [('inventory_documents', 'inventory_document', 'transaction_id', [marker])] \
@@ -830,6 +838,8 @@ def persist_change(s, ctx, change, *, command_name, persist, nouns=None):
             placed += placements.with_provenance(document.extra_placements, **provenance)
             extra.extend(placements.extras(placed))
             extra.append(('inventory_movements', 'inventory_movement', 'id', rows))
+            if document.trailing is not None:
+                extra.extend(document.trailing(fresh, rows, provenance))
             applied = journals.persist_prepared(
                 fresh, call, s, command_name=command_name, extra=tuple(extra),
                 noun=nouns.get(document.kind, 'inventory cost correction'))

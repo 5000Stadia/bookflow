@@ -1244,6 +1244,11 @@ sa.Index("ix_inventory_placements_lot", inventory_placements.c.lot_id)
 from bookflow.company import bin_cycle_schema as _bin_cycle_schema
 globals().update(_bin_cycle_schema.define_tables(metadata, _column, _table, _common))
 items.append_column(_bin_cycle_schema.cycle_class_column(_column))
+# Landed cost (co0098, R104 increment 6): allocations, their lines, and items' unit weight and volume.
+from bookflow.company import landed_cost_schema as _landed_cost_schema
+for _weight_column in _landed_cost_schema.weight_columns(_column):
+    items.append_column(_weight_column)
+globals().update(_landed_cost_schema.define_tables(metadata, _column, _table))
 # Deposit lookup indexes (co0099, R180 increment 3): membership and operations by transaction.
 sa.Index("ix_deposit_memberships_source", deposit_memberships.c.source_transaction_id)
 sa.Index("ix_deposit_memberships_transaction", deposit_memberships.c.transaction_id)

@@ -1685,3 +1685,19 @@ EXAMPLES.update({
                                     {'date_to': '2026-12-31'}),
     'cycle-count due': Example('bookflow cycle-count due --site Warehouse' + _C + ' --json', {'site': 'Warehouse'}),
 })
+
+# Landed cost (R104 increment 6).
+EXAMPLES.update({
+    'landed-cost setup': Example('bookflow landed-cost setup' + _C + ' --reason "Track freight on stock" --json', {}),
+    'landed-cost charges': Example('bookflow landed-cost charges' + _C + ' --json', {}),
+    'landed-cost post': Example(
+        'bookflow landed-cost post --charges \'[{"document":"DEMO-FREIGHT-1"}]\' --targets '
+        '\'[{"document":"DEMO-PIPE-1"},{"document":"DEMO-PIPE-2"}]\' --basis quantity' + _C
+        + ' --reason "Freight for last week\'s pipe" --dry-run --json',
+        {'charges': [{'document': 'DEMO-FREIGHT-1'}], 'targets': [{'document': 'DEMO-PIPE-1'}, {'document': 'DEMO-PIPE-2'}],
+         'basis': 'quantity'}),
+    'landed-cost void': Example('bookflow landed-cost void DEMO-LC-1' + _C + ' --reason "Allocated to the wrong receipt" '
+                                '--dry-run --json', {'allocation': 'DEMO-LC-1'}),
+    'landed-cost show': Example('bookflow landed-cost show DEMO-LC-1' + _C + ' --json', {'allocation': 'DEMO-LC-1'}),
+    'landed-cost query': Example('bookflow landed-cost query' + _C + ' --json', {}),
+})

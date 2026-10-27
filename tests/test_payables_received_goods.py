@@ -20,13 +20,15 @@ def test_billed_receipts_are_unpaid_bills_and_every_total_is_accounts_payable(cl
     listed = {row["number"]: row["balance"]["minor_units"] for row in unpaid["rows"]}
     # DEMO-KIT-BILL bills 4 received kits at 11.00; bill 1 bills 2 kits at 8.00 and 8.00 shipping.
     # DEMO-SERIAL-1 (R104 increment 4) bills two water heaters and two lots of sealant, 730.00.
-    assert listed == {"DEMO-KIT-BILL": 4400, "1": 2400, "DEMO-SERIAL-1": 73000}
+    # DEMO-PIPE-1, DEMO-PIPE-2 and DEMO-FREIGHT-1 (R104 increment 6): copper pipe and the freight on it, 270.00.
+    assert listed == {"DEMO-KIT-BILL": 4400, "1": 2400, "DEMO-SERIAL-1": 73000,
+                      "DEMO-PIPE-1": 8000, "DEMO-PIPE-2": 16000, "DEMO-FREIGHT-1": 3000}
     for number in listed:
         # `number` matches a part of the number, so bill 1 shares its page with every bill numbered ...1.
         bill = next(row for row in client.run("bill query", {"number": number, "limit": 50}, company=COMPANY)["items"]
                     if row["number"] == number)
         assert bill["settlement_current"]["open"]["minor_units"] == listed[number]
-    assert unpaid["totals"]["balance"]["minor_units"] == 6800 + 73000
+    assert unpaid["totals"]["balance"]["minor_units"] == 6800 + 73000 + 27000
 
     payable = DEMO_POSITION["balances"]["Accounts Payable"]
     aging = _run(client, "report ap-aging", {"as_of": DEMO_AS_OF})
@@ -34,4 +36,4 @@ def test_billed_receipts_are_unpaid_bills_and_every_total_is_accounts_payable(cl
     assert -aging["totals"]["total"]["minor_units"] == payable == -summary["totals"]["balance"]["minor_units"]
     # Owed: the two open bills 68.00, two kits and 12.00 of shipping received but not billed
     # (20.00 + 12.00), less the 21.90 vendor credit not yet applied.
-    assert aging["totals"]["total"]["minor_units"] == 6800 + 73000 + 3200 - 2190
+    assert aging["totals"]["total"]["minor_units"] == 6800 + 73000 + 27000 + 3200 - 2190

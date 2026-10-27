@@ -2673,3 +2673,49 @@ reason = "Water heaters are counted monthly"
 command = "item update"
 input = { item = "${sealant_item.id}", cycle_class = "B" }
 reason = "Sealant is counted quarterly"
+
+# Landed cost (R104 increment 6): copper pipe received on two bills (DEMO-PIPE-1, 10 at 8.00, and DEMO-PIPE-2,
+# 20 at 8.00), five sold on DEMO-PIPE-INV-1, then a 30.00 freight bill (DEMO-FREIGHT-1) charged to Landed Cost
+# Clearing and spread over both receipts by quantity on 2026-12-08 (10.00 and 20.00). The five sold before the
+# allocation owe their share forward: a 5.00 true-up to cost of goods sold dated 2026-12-08; 25.00 stays in stock.
+[[commands]]
+command = "landed-cost setup"
+capture = "landed_clearing"
+input = {}
+reason = "Track freight on stock"
+
+[[commands]]
+command = "item create"
+capture = "pipe_item"
+input = { name = "Copper Pipe", type = "inventory_part", description = "Copper pipe, 10 ft", purchase_description = "Copper pipe, 10 ft", sales_enabled = true, purchase_enabled = true, price = "15.00", cost = "8.00", income_account_id = "${income_account.id}", cogs_account_id = "${cogs_account.id}", asset_account_id = "${inventory_account.id}" }
+reason = "Copper pipe is stocked"
+
+[[commands]]
+command = "bill post"
+capture = "pipe_bill_1"
+input = { vendor = "${vendor.id}", date = "2026-12-03", number = "DEMO-PIPE-1", items = [{ item = "${pipe_item.id}", quantity = "10", unit_cost = "8.00", site = "Warehouse" }] }
+reason = "Ten lengths of copper pipe arrived"
+
+[[commands]]
+command = "bill post"
+capture = "pipe_bill_2"
+input = { vendor = "${vendor.id}", date = "2026-12-04", number = "DEMO-PIPE-2", items = [{ item = "${pipe_item.id}", quantity = "20", unit_cost = "8.00", site = "Warehouse" }] }
+reason = "Twenty more lengths arrived"
+
+[[commands]]
+command = "invoice post"
+capture = "pipe_invoice"
+input = { date = "2026-12-05", number = "DEMO-PIPE-INV-1", customer = "${customer.id}", lines = [{ item = "${pipe_item.id}", quantity = "5", unit_price = "15.00" }] }
+reason = "Five lengths of pipe for a repipe job"
+
+[[commands]]
+command = "bill post"
+capture = "freight_bill"
+input = { vendor = "${vendor.id}", date = "2026-12-08", number = "DEMO-FREIGHT-1", expenses = [{ account = "${landed_clearing.account_id}", amount = "30.00", memo = "Freight on the pipe deliveries" }] }
+reason = "The freight bill for last week's pipe came in"
+
+[[commands]]
+command = "landed-cost post"
+capture = "pipe_landed"
+input = { charges = [{ document = "${freight_bill.id}" }], targets = [{ document = "${pipe_bill_1.id}" }, { document = "${pipe_bill_2.id}" }], basis = "quantity", number = "DEMO-LC-1" }
+reason = "Spread the freight over both pipe deliveries"

@@ -124,7 +124,7 @@ def test_co0099_adds_three_indexes_and_changes_no_row(books, tmp_path):
     with sqlite3.connect(copy) as conn:
         for index in m.INDEX_NAMES:
             conn.execute(f'DROP INDEX {index}')
-        conn.execute("UPDATE alembic_version SET version_num='co0097'")
+        conn.execute("UPDATE alembic_version SET version_num='co0098'")
         conn.commit()
         names = [r[0] for r in conn.execute("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' "
                                             "AND name != 'alembic_version'")]

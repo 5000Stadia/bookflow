@@ -1,0 +1,54 @@
+{% extends "base.html" %}{% block title %}Landed cost{% endblock %}{% block body %}<section id="landed-cost">
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/items">Items</a> / Landed cost</nav>
+<h1>Landed cost</h1>
+<p>Freight, duty and broker's fees charged to {{ charges.clearing_account or 'Landed Cost Clearing' }} wait here until they are spread over the stock they came with. Stock already sold by the allocation date takes its share to cost of goods sold on that date; the rest stays in stock.</p>
+{% if result %}<div role="status" class="notice" data-landed-result><strong>{{ result }}</strong></div>{% endif %}
+{% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
+{% if not charges.clearing_account_id %}
+<section class="workspace-card" aria-label="Set up">
+<h2>Set up</h2>
+<p>{{ charges.message }}</p>
+{% if can_write %}<form method="post" action="/c/{{ company_id }}/inventory/landed-cost" hx-post="/c/{{ company_id }}/inventory/landed-cost" hx-target="body" hx-swap="outerHTML" data-landed-setup>
+<label>Reason <input name="ctx:reason" placeholder="Track freight on stock"></label>
+<div class="actions"><button type="submit" name="action" value="setup">Make the clearing account</button></div>
+</form>{% endif %}
+</section>
+{% else %}
+<form method="post" action="/c/{{ company_id }}/inventory/landed-cost" hx-post="/c/{{ company_id }}/inventory/landed-cost" hx-target="body" hx-swap="outerHTML" data-landed-form>
+<section class="workspace-card" aria-label="Unallocated charges">
+<h2>Unallocated charges</h2>
+<p>{{ charges.clearing_account }} holds {{ display_money(charges.clearing_balance) }}, all of it unallocated charges.</p>
+{% if charges.rows %}<div class="table-wrap"><table class="list-table" data-landed-charges><thead><tr>{% if can_write %}<th>Allocate</th>{% endif %}<th>Vendor</th><th>Document</th><th>Date</th><th>Description</th><th>Amount</th><th>Unallocated</th>{% if can_write %}<th>Allocate now</th>{% endif %}</tr></thead><tbody>
+{% for r in charges.rows %}<tr>{% if can_write %}<td data-label="Allocate"><input type="checkbox" name="charge:{{ r.charge }}" aria-label="Allocate {{ r.document_type|replace('_', ' ') }} {{ r.document_number or '' }}" {% if values.get('charge:' ~ r.charge) == 'on' %}checked{% endif %}></td>{% endif %}<td data-label="Vendor">{{ r.vendor or '' }}</td><td data-label="Document">{{ r.document_type|replace('_', ' ') }} {{ r.document_number or '' }}</td><td data-label="Date">{{ r.date }}</td><td data-label="Description">{{ r.description or '' }}</td><td data-label="Amount">{{ display_money(r.amount) }}</td><td data-label="Unallocated">{{ display_money(r.unallocated) }}</td>{% if can_write %}<td data-label="Allocate now"><input name="amount:{{ r.charge }}" inputmode="decimal" size="8" placeholder="all" value="{{ values.get('amount:' ~ r.charge, '') }}" aria-label="Amount to allocate"></td>{% endif %}</tr>{% endfor %}
+</tbody></table></div>{% else %}<p>No charges are waiting. Charge freight to {{ charges.clearing_account }} on a bill's expense line, then spread it here.</p>{% endif %}
+</section>
+{% if can_write and charges.rows %}
+<section class="workspace-card" aria-label="Allocate">
+<h2>Allocate</h2>
+<p>Name the receipts the stock came on: an item receipt, or a bill, check or card charge with item lines, by its number.</p>
+<label>Basis <select name="basis">{% for b, label in [('quantity', 'Quantity'), ('value', 'Value'), ('weight', 'Weight'), ('volume', 'Volume'), ('amounts', 'Amounts I enter')] %}<option value="{{ b }}" {% if values.get('basis', 'quantity') == b %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+<label>Date <input type="date" name="date" value="{{ values.get('date', '') }}" aria-describedby="landed-date-help"></label>
+<p id="landed-date-help"><small>Left blank: the latest charge date, never before a receipt, moved to the first open date when the period is closed.</small></p>
+<div class="table-wrap"><table class="list-table" data-landed-targets><thead><tr><th>Receipt document</th><th>Only item</th><th>Amount (basis Amounts)</th></tr></thead><tbody>
+{% for n in range(targets) %}<tr><td data-label="Receipt document"><input name="target_{{ n }}" value="{{ values.get('target_' ~ n, '') }}" aria-label="Receipt {{ n + 1 }}"></td><td data-label="Only item"><input name="item_{{ n }}" value="{{ values.get('item_' ~ n, '') }}" aria-label="Item {{ n + 1 }}"></td><td data-label="Amount"><input name="share_{{ n }}" inputmode="decimal" size="8" value="{{ values.get('share_' ~ n, '') }}" aria-label="Amount {{ n + 1 }}"></td></tr>{% endfor %}
+</tbody></table></div>
+<label>Memo <input name="memo" value="{{ values.get('memo', '') }}"></label>
+<label>Reason (shown in the audit trail) <input name="ctx:reason" value="{{ values.get('ctx:reason', '') }}" placeholder="Freight for last week's delivery"></label>
+<div class="actions"><button type="submit" name="action" value="preview" class="secondary" data-landed-preview>Preview</button> <button type="submit" name="action" value="post" data-landed-post>Allocate</button></div>
+{% if preview %}<div class="notice" data-landed-preview-result><p><strong>Preview, nothing saved:</strong> {{ display_money(preview.total) }} on {{ preview.date }} by {{ preview.basis }}.</p>
+<div class="table-wrap"><table class="list-table"><thead><tr><th>Target</th><th>Item</th><th>Share</th><th>Stays in stock</th><th>Issued before</th></tr></thead><tbody>
+{% for t in preview.targets %}<tr><td data-label="Target">{{ t.target_document or t.account_name }}</td><td data-label="Item">{{ t.item_name or '' }}</td><td data-label="Share">{{ display_money(t.amount) }}</td><td data-label="Stays in stock">{{ display_money(t.to_stock) }}</td><td data-label="Issued before">{{ display_money(t.issued_before) }}</td></tr>{% endfor %}
+</tbody></table></div></div>{% endif %}
+</section>
+{% endif %}
+</form>
+{% endif %}
+<section class="workspace-card" aria-label="Allocations">
+<h2>Allocations</h2>
+{% if allocations %}<form method="post" action="/c/{{ company_id }}/inventory/landed-cost" hx-post="/c/{{ company_id }}/inventory/landed-cost" hx-target="body" hx-swap="outerHTML"><div class="table-wrap"><table class="list-table" data-landed-list><thead><tr><th>Number</th><th>Kind</th><th>Date</th><th>Basis</th><th>Total</th><th>Targets</th><th>Status</th>{% if can_write %}<th></th>{% endif %}</tr></thead><tbody>
+{% for a in allocations %}<tr><td data-label="Number">{{ a.number }}</td><td data-label="Kind">{{ 'receipt shipping' if a.kind == 'receipt_shipping' else 'freight' }}</td><td data-label="Date">{{ a.date }}</td><td data-label="Basis">{{ a.basis }}</td><td data-label="Total">{{ display_money(a.total) }}</td><td data-label="Targets">{{ a.targets }}</td><td data-label="Status">{{ a.status }}</td>{% if can_write %}<td>{% if a.status == 'posted' and a.kind == 'allocation' %}<button type="submit" name="action" value="void:{{ a.number }}" aria-label="Void allocation {{ a.number }}">Void</button>{% endif %}</td>{% endif %}</tr>{% endfor %}
+</tbody></table></div>
+{% if can_write %}<label>Reason for a void <input name="ctx:reason" placeholder="Allocated to the wrong receipt"></label>{% endif %}
+</form>{% else %}<p>No allocations yet.</p>{% endif %}
+</section>
+</section>{% endblock %}

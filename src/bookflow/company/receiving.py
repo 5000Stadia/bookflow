@@ -213,8 +213,11 @@ def prepare(s, ctx, inp, operation):
         shipping = money(inp.shipping, saved['profile']['currency'] if saved else s.company_info_row['home_currency'], field='shipping').minor_units
     elif 'shipping' in inp.model_fields_set:
         raise journals.invalid('shipping', 'enter 0 or omit shipping; null is not a cost')
+    # How shipping is spread (R104 increment 6): quantity, as always, unless the receipt says otherwise.
+    basis = getattr(inp, 'shipping_basis', None) or (saved.get('shipping_basis') if saved else None) or 'quantity'
     metadata = old is not None and operation == 'update' and not any(
-        field in inp.model_fields_set for field in ('date', 'vendor', 'ap_account', 'items')) and shipping == saved.get('shipping', {}).get('minor_units', 0)
+        field in inp.model_fields_set for field in ('date', 'vendor', 'ap_account', 'items')) and shipping == saved.get('shipping', {}).get('minor_units', 0) \
+        and basis == (saved.get('shipping_basis') or 'quantity')
     if operation == 'void' or metadata:
         profile = BillProfile.model_validate(saved['profile'])
         items = previous_items
@@ -246,12 +249,26 @@ def prepare(s, ctx, inp, operation):
     total = journals.checked_sum((product_total, shipping), 'shipping')
     profile = profile.model_copy(update={'item_total_minor_units': total})
     quantities = sum(i['profile'].quantity_microunits for i in items)
-    position, landed_items = 0, []
-    for item in items:
-        end = position + item['profile'].quantity_microunits
-        allocated = cumulative(quantities, shipping, end) - cumulative(quantities, shipping, position)
-        position = end
+    from bookflow.company import landed_costs
+    if basis in ('weight', 'volume'):
+        for item in items:
+            item[f'unit_{basis}'] = s.company.conn.execute(sa.select(getattr(c.items.c, f'unit_{basis}_microunits')).where(
+                c.items.c.id == item['profile'].item.id)).scalar()
+    if basis == 'quantity':
+        # Today's rule exactly, through this module's own cumulative endpoints.
+        shares, measures, position = [], [], 0
+        for item in items:
+            end = position + item['profile'].quantity_microunits
+            shares.append(cumulative(quantities, shipping, end) - cumulative(quantities, shipping, position)
+                          if shipping else 0)
+            measures.append(item['profile'].quantity_microunits)
+            position = end
+    else:
+        shares, measures = landed_costs.receipt_shipping_shares(shipping, items, basis)
+    landed_items = []
+    for item, allocated, measure in zip(items, shares, measures):
         item['shipping_minor_units'] = allocated
+        item['shipping_measure'] = measure
         facts = item['profile']
         if allocated:
             facts = facts.model_copy(update=dict(amount_basis='amount', unit_cost_minor_units=None, unit_cost_fraction=None,
@@ -262,7 +279,7 @@ def prepare(s, ctx, inp, operation):
     if sum(i['shipping_minor_units'] for i in items) != shipping:
         raise BookflowError('E_INTERNAL', details={'problem': 'receipt shipping does not conserve the header cost'})
     boundary = 0
-    for item in items:
+    for item in items if basis == 'quantity' else ():
         end = boundary + item['profile'].quantity_microunits
         expected = (2 * shipping * end + quantities) // (2 * quantities) - (2 * shipping * boundary + quantities) // (2 * quantities)
         if item['shipping_minor_units'] != expected:
@@ -291,7 +308,7 @@ def prepare(s, ctx, inp, operation):
         header.update(version=old['version'] + 1, updated_at=at, updated_by=s.actor.id, updated_via=ctx.interface.value)
     memo = getattr(inp, 'memo', None) if 'memo' in inp.model_fields_set else saved.get('memo') if saved else None
     reference = getattr(inp, 'reference', None) if 'reference' in inp.model_fields_set else saved.get('reference') if saved else None
-    journal, stock, physical_rows = None, None, []
+    journal, stock, physical_rows, shipping_lines = None, None, [], []
     view_lines = saved['items'] if saved else []
     if not metadata:
         if operation == 'void':
@@ -333,6 +350,8 @@ def prepare(s, ctx, inp, operation):
                     unbilled_quantity_microunits=facts.quantity_microunits,
                     description=item['memo'], profile=facts.model_dump(), order_line_id=item.get('order_line_id'))
                 view_lines.append(line)
+                shipping_lines.append(dict(movement_id=line['movement_id'], item_id=facts.item.id,
+                                           shipping=item['shipping_minor_units'], measure=item['shipping_measure']))
                 physical_rows.append(dict(id=line['id'], receipt_id=header['id'],
                     financial_revision_id=financial_revision, movement_id=line['movement_id'], item_id=facts.item.id,
                     quantity_microunits=facts.quantity_microunits, value_minor_units=item['amount_minor_units'] + item['shipping_minor_units'],
@@ -344,6 +363,8 @@ def prepare(s, ctx, inp, operation):
         profile=profile.model_dump(), total=Money(total, currency).to_dict(), items=view_lines)
     if shipping or (saved and 'shipping' in saved):
         snapshot['shipping'] = Money(shipping, currency).to_dict()
+    if basis != 'quantity':
+        snapshot['shipping_basis'] = basis
     if operation == 'void':
         header['status'] = 'voided'
         snapshot['void_reason'] = ctx.reason.strip()
@@ -364,7 +385,8 @@ def prepare(s, ctx, inp, operation):
                 **provenance) for line in view_lines]
     result = ReceiptWriteOutput(**output(s, header, rev, snapshot=snapshot).model_dump())
     return Plan(result, dict(input=inp, operation=operation, changed=True, header=header, before=old,
-                             pending=pending, journal=journal, stock=stock, event=event,
+                             pending=pending, journal=journal, stock=stock, event=event, metadata=metadata,
+                             shipping_basis=basis, shipping_lines=shipping_lines, date=date, currency=currency,
                              order_transition=_order_transition(s, order_id, pending, provenance) if not metadata else None))
 
 
@@ -392,6 +414,19 @@ def apply(plan, ctx, s):
         own.append(Touched('purchase_order_revision', order_rev['id'], 'create', None, 1, order_rev, db='company'))
         own.extend(Touched('purchase_order_line', line['id'], 'create', None, 1, line, db='company') for line in order_lines)
     summary = data['operation'] + ' item receipt ' + header['number']
+    # Its shipping shares are allocation lines (R104 increment 6): the old revision's retired, the new one's written.
+    from bookflow.company import landed_costs
+    shipping_provenance = dict(created_at=header.get('updated_at') or clock.now_iso(), created_by=s.actor.id, created_via=ctx.interface.value,
+                               audit_event_id=data['event'])
+    shipping_retire = landed_costs.plan_void_receipt_shipping(s, old['id'], shipping_provenance) \
+        if old and not data['metadata'] else ([], [])
+    shipping_rows = landed_costs.receipt_shipping_rows(
+        s, receipt_id=header['id'], number=header['number'], transaction_id=header['transaction_id'],
+        date=data['date'], basis=data['shipping_basis'], lines=data['shipping_lines'],
+        provenance=shipping_provenance, currency=data['currency']) if data['shipping_lines'] else ([], [])
+    own.extend(shipping_retire[1])
+    own.extend(Touched(name, row['id'], 'create', None, 1, row, db='company') for name, rows in (
+        ('landed_cost_allocation', shipping_rows[0]), ('landed_cost_allocation_line', shipping_rows[1])) for row in rows)
     audit.write_event_to(s.company, ctx, command, summary, own, actor_id=s.actor.id,
         actor_kind=s.actor.kind, directive_code=getattr(s, 'directive_code', None), event_id=data['event'])
     if old:
@@ -414,6 +449,7 @@ def apply(plan, ctx, s):
             if name != 'purchase_order_receipt_claims' or 'ordered capacity' not in str(exc):
                 raise
             _dependency('Received quantity exceeds this ordered line’s remaining quantity.')
+    landed_costs.write_receipt_shipping(s, shipping_retire[0], shipping_rows)
     if transition:
         n = s.company.conn.execute(c.purchase_orders.update().where(c.purchase_orders.c.id == old_order['id'], c.purchase_orders.c.version == old_order['version']).values(**new_order)).rowcount
         if n != 1:

@@ -81,6 +81,10 @@ class ItemUpdateInput(StrictInput):
     tax_percent: str | None = None
     tax_agency_vendor_id: str | None = Field(default=None, min_length=26, max_length=26)
     assembly_build_point: str | None = None
+    unit_weight: str | None = Field(default=None, description=(
+        "Weight of one base unit, for landed cost by weight (R104 increment 6); null clears it."))
+    unit_volume: str | None = Field(default=None, description=(
+        "Volume of one base unit, for landed cost by volume; null clears it."))
     asset_number: str | None = Field(default=None, max_length=128)
     purchase_date: str | None = None
     original_cost: Any | None = None

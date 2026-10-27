@@ -920,6 +920,63 @@ jobs at night; the van ends as counted.
   bin-to-bin transfer; the heater's home bin is A1 and the sealant's A2; the heater is class A and the sealant B.
   No oracle moves: nothing posts.
 
+## As built: increment 6
+
+- **Migration co0098** (on co0097) adds `landed_cost_allocations`, `landed_cost_allocation_lines` and
+  `items.unit_weight_microunits` / `unit_volume_microunits`; it uses co0093's `landed` kind, `landed_cost` document
+  kind and `landed_on_movement_id` unchanged. Guards: allocation lines are immutable, a header moves posted -> voided
+  once, a reversing line mirrors a live line of its own allocation, and a share and a `landed` movement land on a
+  bought receipt of their own item dated on or before them. co0093's true-up guard is widened so a landed cost may own
+  forward true-ups of issues, customer returns and found quantities. Each guard reads one row or standing rows only;
+  the clearing-account tie is not a trigger (it is checked by `landed-cost charges` and the seeded checker).
+  Existing receipts' stored shipping shares become `receipt_shipping` allocations (basis quantity), so no row moves.
+- **The clearing account is made by `landed-cost setup`** (and is listed as missing by `landed-cost charges`): the
+  account has to exist before a freight bill can be charged to it, so "first use" is the person's setup, not the post.
+  It is owned by the inventory ledger (`journals.OWNED_SYSTEM_ROLES`), so bill, check, card charge and vendor credit
+  expense lines (which post as that owner) may charge it and the journal editor may not.
+- **A charge is a document's Landed Cost Clearing lines taken together**, named by the document's id (what
+  `landed-cost charges` lists as `charge`): an edit that gives a line a new identity, reorders it or adds another
+  line leaves the charge the same charge. Its amount on a date is the sum of its clearing postings dated by then
+  (read through `posting_line_sources`). Only an edit that takes it below what live allocations took of it is
+  refused; raising it, adding other lines or moving its date passes.
+- **Replay** walks a `landed` movement at its receipt's position and recognises it at its own date by walking once
+  more per live landed movement of the item, in (date, position, sequence) order, each pass adding the next: every
+  replay-decided value (an issue, a return, a found quantity, and a shortfall true-up recognised at its filler's date)
+  keeps what the pass holding the landed costs dated on or before its own date says, and each later landed cost owes
+  it the difference from the pass before -- a forward true-up keyed (movement, landed), dated at the landed cost. The
+  passes telescope, so the parts sum exactly to the full walk. Only the full pass refuses. Cost: one more walk per
+  landed movement of the item; a later increment may cache it if an item ever carries many.
+- **One landed movement per target receipt per allocation**, carrying every charge's share of it; the allocation
+  lines (one per charge and target) all name it. A build component's forward true-up carries a `landed` partner on
+  the assembly receipt (partners are keyed by (issue, filler)), so the assembly's own forward true-ups follow.
+- **Shares** use the receipt's existing rule -- cumulative endpoints rounded half up (`receiving_intervals.cumulative`),
+  sign-symmetric for a credit -- so a receipt's shipping reads exactly as before; each charge is shared on its own, so
+  order never matters. `amounts` lays charges and stated target amounts end to end; it is the only basis that may
+  send a share to an expense or cost-of-goods `account`. A post mixing charges and freight credits is refused.
+- **`value`** reads the receipt movement's value plus its receipt-targeted price corrections, less its receipt's own
+  shipping share. Weight and volume measures are base microunits times the per-unit figure in microunits.
+- **Guards** run where the change happens. A target receipt is refused a void, or any change to its stock -- its
+  line, item, quantity, cost, date, count position, accounts, class, or places (site, bin, lot, serial numbers) -- in
+  `inventory_effects.plan` (`landed_costs.check_targets`). An edit that touches no stock (a memo, a supplier
+  reference) passes (Kabe's decision, 2026-10-26): the document reposts, and the restated receipt carries the landed
+  cost on through `landed_cost_carries` (co0098), which every movement read follows, so replay and every allocation
+  read see the cost on the receipt standing now. A charge voided or reduced below its live allocations is refused
+  after every company write (a posting-line watermark in dispatch, cheap when the company has no clearing account).
+  Voiding an allocation that a later freight credit needs is refused.
+- **Voiding a build** whose components owe forward true-ups retires its assembly receipt with the landed partners
+  on it: each is backed out by an opposite partner in the same change, so landed costs on a retired receipt net to
+  nothing; replay refuses only landed costs that do not.
+- **Item receipts** gain `shipping_basis` (quantity, the default and unchanged; value; weight; volume), and every
+  change of a receipt retires its old shipping allocation and records the new one.
+- **Browser.** Inventory > Landed cost lists unallocated charges with an allocation form (Preview shows each target's
+  share split into stays in stock / issued before) and the allocations with Void; bill, item receipt, check and card
+  charge pages show each stock line's landed cost and landed unit cost (unit cost to four places, assuming a
+  two-decimal home currency).
+- **Demo:** copper pipe on DEMO-PIPE-1 (10) and DEMO-PIPE-2 (20), five sold (DEMO-PIPE-INV-1), freight DEMO-FREIGHT-1
+  30.00 spread as DEMO-LC-1 (10.00 and 20.00), a 5.00 forward true-up. Oracle moves are stated in `demo_oracle.py`.
+- **Permissions** (layer `landed-cost-v1`): post, void and setup `ledger.post` standard; charges, show, query
+  `ledger.read` member. Nothing is people-only.
+
 ## 10. Open questions
 
 Each default stands if nobody decides.

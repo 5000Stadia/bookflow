@@ -131,6 +131,7 @@ asset account -- which is the property that a stated return cost silently broke.
 
 from __future__ import annotations
 
+from bisect import bisect_right
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
@@ -270,12 +271,21 @@ def _posted(rows, retired):
     return own, true_ups
 
 
-def replay(rows: Iterable[Mapping]) -> Replay:
-    """Canonical on-hand quantity and value, plus the corrections the posted rows still owe."""
-    rows = ordered(rows)
-    retired = _retired(rows)
-    posted, posted_true_ups = _posted(rows, retired)
+@dataclass
+class _Walk:
+    quantity: int
+    value: int
+    targets: dict
+    true_ups: dict
+    shortfalls: list
+    found: list
+    stale: set
 
+
+def _walk(rows, retired, posted, landed, strict) -> _Walk:
+    """One pass over the inputs, with ``landed`` (receipt id -> value) added to each receipt where it is
+    walked. Only the strict pass refuses; a pass that leaves some landed costs out is a decomposition step and
+    stands only as a difference from its neighbour (``replay``)."""
     quantity = value = 0
     rate: tuple[int, int] | None = None   # (value, quantity) of the last known average
     targets: dict[str, int] = {}
@@ -289,6 +299,7 @@ def replay(rows: Iterable[Mapping]) -> Replay:
     cancelled_worth: dict[str, int] = {}  # issue id -> provisional value its returns cancelled
     stale: set[str] = set()             # returns this walk cannot speak for
     found: list[Found] = []
+    walked: set[str] = set()            # bought receipts walked, which a landed cost may name
     for row in rows:
         if row['kind'] not in INPUT_KINDS or row['id'] in retired:
             continue
@@ -308,7 +319,8 @@ def replay(rows: Iterable[Mapping]) -> Replay:
             elif issue_id is None:
                 # Receipt-targeted purchase-price corrections belong at acquisition,
                 # even when a bill is recorded after intervening issues.
-                worth = int(row['value_minor_units']) + posted.get(row['id'], 0)
+                worth = int(row['value_minor_units']) + posted.get(row['id'], 0) + landed.get(row['id'], 0)
+                walked.add(row['id'])
             elif issue_id not in targets:
                 # The issue it mirrors is retired, or is dated after it and so has no cost
                 # yet at this point in the walk. Nothing here can say what that return is
@@ -388,11 +400,11 @@ def replay(rows: Iterable[Mapping]) -> Replay:
                 if quantity <= 0:
                     rate = (incoming_worth, incoming)
         elif row['kind'] == 'value':
-            if quantity <= 0:
+            if quantity <= 0 and strict:
                 raise StockRefusal('unvalued_stock', row, quantity_microunits=quantity,
                                    problem='an item with nothing on hand cannot carry inventory value')
             proposed = value + int(row['value_minor_units'])
-            if proposed <= 0:
+            if proposed <= 0 and strict:
                 raise StockRefusal('unvalued_stock', row, quantity_microunits=quantity,
                                    value_minor_units=proposed,
                                    problem='stock on hand must be worth more than nothing; '
@@ -404,12 +416,12 @@ def replay(rows: Iterable[Mapping]) -> Replay:
             # on the shelf is worth the difference: its average moves. Only stock that is on
             # hand can go back, so a return never reaches below zero or into a shortfall.
             issue = -change
-            if issue > quantity:
+            if issue > quantity and strict:
                 raise StockRefusal(
                     'negative_stock', row, quantity_microunits=quantity,
                     problem=('only ' + format_quantity_micro_units(max(quantity, 0))
                              + ' on hand, so no more than that can go back to the vendor'))
-            if issue == quantity and value + int(row['value_minor_units']) != 0:
+            if strict and issue == quantity and value + int(row['value_minor_units']) != 0:
                 from bookflow.core.money import Money
                 worth = Money(value, row['currency'])
                 raise StockRefusal(
@@ -454,6 +466,8 @@ def replay(rows: Iterable[Mapping]) -> Replay:
                 shortfalls.append(Shortfall(row, quantity, short, provisional, basis))
         if quantity > 0:
             rate = (value, quantity)
+        if not strict:
+            continue
         if quantity >= 0 and value < 0:
             raise StockRefusal('negative_stock', row, quantity_microunits=quantity,
                                value_minor_units=value, problem='the value of the stock would go below zero')
@@ -465,6 +479,82 @@ def replay(rows: Iterable[Mapping]) -> Replay:
                 entry['units'] - entry['cancelled']) for entry in open_shortfalls):
             raise StockRefusal('residual_value', row, value_minor_units=value,
                                problem='stock below zero must carry exactly its unsettled provisional cost')
+
+    if strict:
+        # A landed cost on a receipt that no longer stands is carried by nothing. That is right only when such
+        # costs net to nothing on it: a build voided with its assembly receipt takes the landed partners of its
+        # component true-ups with it, each backed out by its own opposite (R104 increment 6).
+        stranded: dict[str, int] = {}
+        for row in rows:
+            if row['kind'] == 'landed' and row['id'] not in retired and row.get('landed_on_movement_id') not in walked:
+                stranded[row['landed_on_movement_id']] = stranded.get(row['landed_on_movement_id'], 0) + int(row['value_minor_units'])
+        orphan = next((row for row in rows if row['kind'] == 'landed' and stranded.get(row.get('landed_on_movement_id'))
+                       and row['id'] not in retired), None)
+        if orphan is not None:
+            raise StockRefusal('landed_orphan', orphan, problem=(
+                'a landed cost is allocated to a receipt that no longer stands; void the landed-cost '
+                'allocation first'))
+    return _Walk(quantity, value, targets, true_ups, shortfalls, found, stale)
+
+
+def _landed_values(rows):
+    """Receipt id -> the landed costs ``rows`` add to it."""
+    added: dict[str, int] = {}
+    for row in rows:
+        added[row['landed_on_movement_id']] = added.get(row['landed_on_movement_id'], 0) + int(row['value_minor_units'])
+    return added
+
+
+def replay(rows: Iterable[Mapping]) -> Replay:
+    """Canonical on-hand quantity and value, plus the corrections the posted rows still owe.
+
+    A ``landed`` movement (R104 increment 6, design §5) is walked at its receipt's position, as if the
+    charge had been on the receipt from the start, but recognised at its own date. So with landed costs on
+    the item the walk runs once per landed movement more, in (date, position, sequence) order, each pass
+    adding the next: every value replay decides -- an issue's, a return's, a found quantity's, and a
+    shortfall true-up (recognised at its filler's date) -- keeps what the pass holding the landed costs
+    dated on or before its own date says, and each later landed cost owes it the difference between the
+    pass that adds it and the one before, a **forward true-up** keyed ``(movement, landed)`` and dated at
+    the landed cost. The passes telescope, so the parts sum exactly to the full walk's figures.
+    """
+    rows = ordered(rows)
+    retired = _retired(rows)
+    posted, posted_true_ups = _posted(rows, retired)
+    by_id = {row['id']: row for row in rows}
+    # Landed costs on a retired receipt add to nothing (they net to nothing there, or the strict pass refuses).
+    landed_rows = [row for row in rows if row['kind'] == 'landed' and row['id'] not in retired
+                   and row.get('landed_on_movement_id') not in retired]
+    final = _walk(rows, retired, posted, _landed_values(landed_rows), True)
+    quantity, value, shortfalls, found, stale = final.quantity, final.value, final.shortfalls, final.found, final.stale
+    if not landed_rows:
+        targets, true_ups = final.targets, final.true_ups
+    else:
+        walks = [_walk(rows, retired, posted, _landed_values(landed_rows[:k]), False)
+                 for k in range(len(landed_rows))] + [final]
+        dates = [row['effective_date'] for row in landed_rows]
+        targets, true_ups = {}, {}
+
+        def split(value_in, recognised):
+            """Own value at the pass for ``recognised``, and each later landed cost's step."""
+            start = bisect_right(dates, recognised)
+            steps = [(landed_rows[k - 1]['id'], value_in(walks[k]) - value_in(walks[k - 1]))
+                     for k in range(start + 1, len(walks))]
+            return value_in(walks[start]), steps
+
+        def forward(movement_id, steps):
+            for landed_id, delta in steps:
+                if delta:
+                    true_ups[(movement_id, landed_id)] = true_ups.get((movement_id, landed_id), 0) + delta
+
+        for movement_id in final.targets:
+            own, steps = split(lambda walk: walk.targets.get(movement_id, 0), by_id[movement_id]['effective_date'])
+            targets[movement_id] = own
+            forward(movement_id, steps)
+        keys = {key for walk in walks for key in walk.true_ups}
+        for key in sorted(keys, key=lambda key: (order_key(by_id[key[1]]), order_key(by_id[key[0]]))):
+            own, steps = split(lambda walk: walk.true_ups.get(key, 0), by_id[key[1]]['effective_date'])
+            true_ups[key] = true_ups.get(key, 0) + own
+            forward(key[0], steps)
 
     corrections = []
     for row in rows:

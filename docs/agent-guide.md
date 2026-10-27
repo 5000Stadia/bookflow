@@ -1173,6 +1173,30 @@ names the earliest-expiring lot there; name it as `lot` to take it. `report seri
 numbers in stock (with `expiring_by`), and `report lot-trace` answers a recall: every vendor and
 customer of a lot, and the builds it went into. A scanned serial or lot label works in `barcode lookup`.
 
+## The freight bill for last week's delivery came in at $90; spread it over what came in
+
+Freight, duty and broker's fees that belong in the cost of stock go to the **Landed Cost Clearing** account
+(`landed-cost setup` makes it once). Enter the freight bill as an ordinary bill with an expense line on that
+account; a vendor credit for freight on it is a freight credit. Then find the charge and spread it over the
+receipts the stock came on -- item receipts, or the bills, checks and card charges whose item lines brought it in:
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "landed-cost charges", "input": {}}
+{"command": "landed-cost post", "reason": "Freight for last week's delivery", "dry_run": true,
+ "input": {"charges": [{"document": "FRT-88"}], "targets": [{"document": "IR-1001"}, {"document": "IR-1002"}],
+           "basis": "quantity"}}
+```
+
+`basis` is `quantity` (the default), `value` (each line's own cost, before any landed cost), `weight` or
+`volume` (the items' `unit_weight` or `unit_volume`, set with `item update`), or `amounts` (each target's
+`amount`, summing exactly to the charges; the only basis that may also send a share to an expense account with
+`account`). The dry run shows each target's share and how much of it stays in stock and how much was issued
+before the allocation date. Stock sold before then gets a forward true-up to cost of goods sold dated at the
+allocation; nothing earlier moves, and a date in a closed period moves to the first open date. Allocate part of
+a charge with `amount`; `landed-cost void` takes an allocation back. A freight bill, or a receipt, an allocation
+names cannot be voided or reduced until that allocation is voided (E_WORK_DEPENDENCY says which).
+
 ## Stock sent back to a vendor
 
 Enter it as one `vendor-credit post` with `items`: one row per thing sent back, each with

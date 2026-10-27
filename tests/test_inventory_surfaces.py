@@ -117,9 +117,10 @@ def test_running_a_stock_report_in_the_workbench_renders_the_money(workbench):
         assert 'id="stock-rows"' in body
         # The figures on the page are the figures the command computed.
         result = run(f"report {verb}", {"as_of": "2026-12-31", "limit": 50})
-        assert re.findall(r'data-total="asset_value">([^<]*)<', body) == \
+        # The page groups thousands (1,374.65); the command does not.
+        assert [v.replace(",", "") for v in re.findall(r'data-total="asset_value">([^<]*)<', body)] == \
             [result["totals"]["asset_value"]["amount"]]
-        assert re.findall(r'data-value="asset_value">([^<]*)<', body) == \
+        assert [v.replace(",", "") for v in re.findall(r'data-value="asset_value">([^<]*)<', body)] == \
             [row["asset_value"]["amount"] for row in result["rows"]]
         assert re.findall(r'data-value="quantity_on_hand">([^<]*)<', body) == \
             [row["quantity_on_hand"] for row in result["rows"]]

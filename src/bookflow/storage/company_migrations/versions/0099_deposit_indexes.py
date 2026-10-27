@@ -10,7 +10,7 @@ DDL below is frozen: this migration never imports current application metadata.
 from alembic import op
 
 revision = 'co0099'
-down_revision = 'co0097'
+down_revision = 'co0098'
 branch_labels = depends_on = None
 
 INDEXES = (
@@ -18,7 +18,7 @@ INDEXES = (
     'CREATE INDEX ix_deposit_memberships_transaction ON deposit_memberships (transaction_id)',
     'CREATE INDEX ix_deposit_operations_transaction ON deposit_operations (transaction_id)',
 )
-# What a test rewinding a head file to co0097 drops.
+# What a test rewinding a head file to co0098 drops.
 INDEX_NAMES = tuple(statement.split()[2] for statement in INDEXES)
 
 

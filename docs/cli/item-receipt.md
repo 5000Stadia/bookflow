@@ -277,6 +277,7 @@ The same example as complete `bookflow_run` arguments:
 | `purchase_order` | `--purchase-order` | string \| null | no | yes | null | — |
 | `purchase_order_version` | `--purchase-order-version` | integer \| null | no | yes | null | — |
 | `shipping` | `--shipping` | string \| object \| null | no | yes | null | Shipping charged by this receipt vendor, allocated only over received quantities. Product costs exclude shipping. Omit to retain on edits; enter 0 to clear. |
+| `shipping_basis` | `--shipping-basis` | literal["quantity", "value", "weight", "volume"] \| null | no | yes | null | How shipping is spread over the lines: quantity (received base units, the default), value (each line's product cost), weight or volume (quantity times the item's unit weight or volume). Omit to retain on edits. |
 | `items[].line_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
 | `items[].item` | inside `--items` JSON array | string | yes | no | — | minimum length 1 |
 | `items[].description` | inside `--items` JSON array | string \| null | no | yes | null | — |
@@ -1160,6 +1161,7 @@ The same example as complete `bookflow_run` arguments:
 | `reference` | `--reference` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `shipping` | `--shipping` | string \| object \| null | no | yes | null | Shipping charged by this receipt vendor, allocated only over received quantities. Product costs exclude shipping. Omit to retain on edits; enter 0 to clear. |
+| `shipping_basis` | `--shipping-basis` | literal["quantity", "value", "weight", "volume"] \| null | no | yes | null | How shipping is spread over the lines: quantity (received base units, the default), value (each line's product cost), weight or volume (quantity times the item's unit weight or volume). Omit to retain on edits. |
 | `items[].line_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
 | `items[].item` | inside `--items` JSON array | string | yes | no | — | minimum length 1 |
 | `items[].description` | inside `--items` JSON array | string \| null | no | yes | null | — |

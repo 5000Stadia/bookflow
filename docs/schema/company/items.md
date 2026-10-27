@@ -87,3 +87,5 @@ Database: `company`.
 | `tax_basis_currency` | VARCHAR(3) | yes | — | — | — | — | ISO 4217 currency for fixed-asset tax basis; null with its amount. |
 | `tracking` | VARCHAR(8) | no | "none" | — | — | — | Number tracking of an inventory part or assembly: none, serial or lot. |
 | `cycle_class_id` | VARCHAR(26) | yes | — | — | — | cycle_classes.id | Cycle-count class of the item; null when it is never due for a cycle count. |
+| `unit_weight_microunits` | BIGINT | yes | — | — | — | — | Weight of one base unit in micro-units of the company's weight unit, for landed cost by weight; null when not set. |
+| `unit_volume_microunits` | BIGINT | yes | — | — | — | — | Volume of one base unit in micro-units of the company's volume unit, for landed cost by volume; null when not set. |

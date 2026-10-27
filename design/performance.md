@@ -847,7 +847,7 @@ exact: the same outputs, the same refusals.
    effect version on each access, and `reconciliation_queries` read `current` once per listed
    movement. They are now derived once from the snapshot's frozen rows and handed out read-only;
    a copy of a snapshot starts without them, as its proofs do.
-2. **Deposit lookup indexes, migration co0099** (on co0097): `deposit_memberships
+2. **Deposit lookup indexes, migration co0099** (on co0098, landed cost): `deposit_memberships
    (source_transaction_id)`, `deposit_memberships (transaction_id)` and `deposit_operations
    (transaction_id)`, which the deposit sources walk (`deposit_draft_validation.admit`) reads by.
    Indexes only, no row changes (`tests/test_deposit_write_checks.py` rewinds a populated file and

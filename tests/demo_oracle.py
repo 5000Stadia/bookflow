@@ -223,17 +223,17 @@ def posting_documents(client, company):
 DEMO_POSITION = {
     'balances': {
         'Checking': 651945,                # 657295 - 3850 DEMO-ASK-1 - 1500 DEMO-BOUNCE-1 (the bank's 15.00 fee; the 200.00 came and went)
-        'Accounts Receivable': 84121,      # 61621 + 20000 (DEMO-BOUNCE-INV-1 reopened) + 2500 (DEMO-BOUNCE-FEE-1)
-        'Inventory Asset': 109289,         # 36184 + 105 DEMO-VAN-COUNT: a valve short (-10.95), a shipping kit over (+12.00); + 73000 DEMO-SERIAL-1
-        'Accounts Payable': -80810,        # -7810 - 73000 DEMO-SERIAL-1 (two heaters, two lots of sealant)
-        'Sales Tax Payable': -7856,         # -7646 - 210 DEMO-STADJ-1
+        'Accounts Receivable': 92240,      # + 8119 DEMO-PIPE-INV-1 (75.00 and 6.19 tax);  61621 + 20000 (DEMO-BOUNCE-INV-1 reopened) + 2500 (DEMO-BOUNCE-FEE-1)
+        'Inventory Asset': 131789,         # + 22500 copper pipe: 240.00 in, 45.00 out (40.00 at the sale, 5.00 trued up by DEMO-LC-1), 30.00 freight landed;  36184 + 105 DEMO-VAN-COUNT: a valve short (-10.95), a shipping kit over (+12.00); + 73000 DEMO-SERIAL-1
+        'Accounts Payable': -107810,       # - 27000 DEMO-PIPE-1, DEMO-PIPE-2, DEMO-FREIGHT-1;  -7810 - 73000 DEMO-SERIAL-1 (two heaters, two lots of sealant)
+        'Sales Tax Payable': -8475,         # - 619 DEMO-PIPE-INV-1;  -7646 - 210 DEMO-STADJ-1
         'Opening Balance Equity': -500000,
         # Early-payment discounts: +500.00 invoiced, 490.00 received plus a 10.00 discount;
         # a 300.00 bill paid with 294.00 plus a 6.00 discount, both through the example bank.
         # DEMO-LINE-KINDS (R147): 456.00 sold less the 15.60 discount = 441.40 income, 36.42
         # tax, 477.82 still owed (it is unpaid, so it is in Accounts Receivable above).
-        'Service Income': -309770,         # -215630 - 50000 - 44140
-        'Cost of Goods Sold': 418,         # 523 - 105 DEMO-VAN-COUNT
+        'Service Income': -317270,         # - 7500 DEMO-PIPE-INV-1;  -215630 - 50000 - 44140
+        'Cost of Goods Sold': 4918,        # + 4500 DEMO-PIPE-INV-1 (40.00) and its landed-cost true-up (5.00);  523 - 105 DEMO-VAN-COUNT
         'Professional Fees': 369823,       # 339823 + 30000
         'Business Credit Card': -20000,
         'Discounts Given': 1000,
@@ -249,12 +249,12 @@ DEMO_POSITION = {
         # DEMO-WO-PAY-1 (R177): a 150.00 invoice written off with a receipt of 0.00.
         'Bad Debt': 15000,
     },
-    'trial_balance': 1237156,              # + 73000 DEMO-SERIAL-1; 1047664 + 30000 + 1000 + 47782 + 210 (DEMO-STADJ-1) + 37500 (DEMO-BOUNCE-, DEMO-WO-: receivable +22500, Bank Fees +1500, Bad Debt +15000, Checking -1500)
-    'journal_entries': 22,                # + the DEMO-VAN-COUNT differences (journal 10)
+    'trial_balance': 1272275,              # + 35119 DEMO-PIPE-/DEMO-FREIGHT-/DEMO-LC- (receivable, stock, cost of goods sold);  + 73000 DEMO-SERIAL-1; 1047664 + 30000 + 1000 + 47782 + 210 (DEMO-STADJ-1) + 37500 (DEMO-BOUNCE-, DEMO-WO-: receivable +22500, Bank Fees +1500, Bad Debt +15000, Checking -1500)
+    'journal_entries': 24,                # + DEMO-LC-1 and its landed-cost true-up; + the DEMO-VAN-COUNT differences (journal 10)
                    # + DEMO-ASK-1, + the bank's fee entry of DEMO-BOUNCE-1
-    'net_income': -25931,                  # + 105 DEMO-VAN-COUNT
+    'net_income': -22931,                  # + 3000 copper pipe sold for 75.00, cost 45.00; + 105 DEMO-VAN-COUNT
                      # -106716 + 50000 - 1000 - 30000 + 600 + 44140 - 3850 (DEMO-ASK-1) - 210 (DEMO-STADJ-1) + 21000 (DEMO-BOUNCE-/DEMO-WO-: income 375.00 less 15.00 bank fee and 150.00 bad debt)
-    'total_equity': 474069,                # + 105 DEMO-VAN-COUNT
+    'total_equity': 477069,                # + 3000 copper pipe; + 105 DEMO-VAN-COUNT
                    # 393284 + 19600 + 44140 - 3850 (DEMO-ASK-1) - 210 (DEMO-STADJ-1) + 21000 (DEMO-BOUNCE-/DEMO-WO-)
 }
 
@@ -279,6 +279,9 @@ DEMO_ARCS = {
     'DEMO-FEE': 'a bank fee',
     'DEMO-JPY': 'a foreign-tagged entry posting in home currency',
     'DEMO-COUNT': 'the inventory count adjustment',
+    'DEMO-PIPE-': 'landed cost: copper pipe received on two bills and partly sold',
+    'DEMO-FREIGHT-': 'landed cost: the freight bill on Landed Cost Clearing',
+    'DEMO-LC-': 'landed cost: the freight spread over the two pipe receipts',
     'DEMO-SERIAL-': 'serial and lot numbers: two serial-numbered water heaters and two lots of sealant received',
     'DEMO-KIT-': 'service-kit restock: free sample, and the bill that confirms a cost',
     'REG-': 'register-entry examples: split, payment, card, card payment and deposit',
@@ -312,6 +315,7 @@ DEMO_ARCS = {
     '8': 'shipping-kit receipt: three units and their allocated shipping',
     '9': "the bank's fee for the returned check of DEMO-BOUNCE-1",
     '10': 'the van count DEMO-VAN-COUNT: a valve short and a shipping kit over (the half kit was misplaced)',
+    '11': "DEMO-LC-1's forward true-up: the five lengths of pipe sold before the freight was spread",
 }
 
 # Arcs that deliberately post nothing. They are declared because they exist and are seeded, and
