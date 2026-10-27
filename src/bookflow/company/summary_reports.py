@@ -77,6 +77,7 @@ than merely smaller. ``totals`` plus ``scope.excluded`` is ``scope.period``, and
 report refuses to print figures that do not.
 """
 from __future__ import annotations
+from bookflow.core.clock import TODAY_DEFAULT, today_default
 
 from bookflow.core import unit_price
 from bookflow.company.party_merges import survivor_sql
@@ -163,7 +164,7 @@ _CAPTURED_REPS = "\n UNION ALL ".join(
 class PeriodInput(StrictModel):
     basis: Basis | None = basis_field()
     date_from: str = Field(min_length=10, max_length=10, description="Inclusive first accounting date, YYYY-MM-DD.")
-    date_to: str = Field(min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD.")
+    date_to: str = Field(default_factory=today_default, json_schema_extra=TODAY_DEFAULT, min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD.")
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=4096)
 

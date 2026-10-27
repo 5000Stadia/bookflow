@@ -29,6 +29,7 @@ from bookflow.company.ledger_reports import (
 )
 from bookflow.core.errors import BookflowError
 from bookflow.company.party_merges import survivor_sql
+from bookflow.core.clock import TODAY_DEFAULT, today_default
 
 # A merged account's lines read as its survivor's (R117).
 _ACCOUNT = survivor_sql("account", "l.account_id")
@@ -40,7 +41,7 @@ Flag = Literal['reconciled_period', 'closed_period', 'cleared_on_arrival', 'open
 
 
 class EntriesToReviewInput(StrictModel):
-    as_of: str = Field(min_length=10, max_length=10, description="Inclusive date, YYYY-MM-DD; entries dated after it are left out.")
+    as_of: str = Field(default_factory=today_default, json_schema_extra=TODAY_DEFAULT, min_length=10, max_length=10, description="Inclusive date, YYYY-MM-DD; entries dated after it are left out.")
     include_reviewed: bool = Field(default=False, description="Also list entries an owner already marked reviewed.")
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=4096)
@@ -211,7 +212,7 @@ def entries_to_review(inp: EntriesToReviewInput, s, *, principal_id=None) -> Ent
 # ------------------------------------------------------------------ prior balances
 
 class PriorBalancesInput(StrictModel):
-    as_of: str = Field(min_length=10, max_length=10, description="Inclusive date, YYYY-MM-DD; reviews of dates after it are left out.")
+    as_of: str = Field(default_factory=today_default, json_schema_extra=TODAY_DEFAULT, min_length=10, max_length=10, description="Inclusive date, YYYY-MM-DD; reviews of dates after it are left out.")
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=4096)
 

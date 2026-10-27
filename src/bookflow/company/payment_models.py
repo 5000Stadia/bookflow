@@ -5,6 +5,7 @@ from pydantic import Field, model_validator, model_serializer
 
 from bookflow.company.custom_fields import CustomFieldKindExpectations, CustomFieldValuePatch
 from bookflow.company.journal_models import _Date, _Number, _Version
+from bookflow.core.clock import TODAY_DEFAULT, today_default
 from bookflow.company.sales_models import StrictModel, Selector, Fingerprint, SalesMoneyInput
 from bookflow.company.sales_models import InvoiceUpdateInput
 
@@ -88,7 +89,21 @@ class Page(StrictModel):
 
 
 class PaymentInvoicesInput(PaymentContext, Page):
+    # R183: the list a receipt is applied against has safe defaults -- a new receipt, unless a
+    # payment is named, and today's date (the company's).
+    mode: Literal['new_receipt', 'existing_credit'] = Field(default='new_receipt', description=(
+        'new_receipt (the default) lists a customer\'s open invoices for a new receipt; existing_credit, '
+        'the default when payment is given, lists them for a receipt already holding unapplied money.'))
+    date: _Date = Field(default_factory=today_default, json_schema_extra=TODAY_DEFAULT,
+                        description='The receipt date, YYYY-MM-DD; defaults to today.')
     q: str | None = Field(default=None, max_length=200)
+
+    @model_validator(mode='before')
+    @classmethod
+    def _mode_from_payment(cls, data):
+        if isinstance(data, dict) and 'mode' not in data and data.get('payment') is not None:
+            return {**data, 'mode': 'existing_credit'}
+        return data
 
 
 class PaymentSuggestInput(PaymentContext, Page):

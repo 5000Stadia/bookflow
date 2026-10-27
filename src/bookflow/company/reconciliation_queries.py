@@ -53,6 +53,10 @@ def component_items(s,movement,group_hash, *, authority_transactions, limit=50,o
 
 def _mark_all(s,draft,filters,fingerprint,action,revision_id,*,skip_claimed):
     from bookflow.company.reconciliation_drafts import editable,revised
+    if action=='unmark' and skip_claimed and filters==m.CandidateFilter():
+        # "Unmark all" takes back every tick, including one on an entry edited or voided since it was
+        # ticked (R183): nothing is cleared by unticking, so nothing needs a fresh look first.
+        return revised(draft,revision_id,selections=())
     first=candidates(s,draft,filters,authority_transactions=s.authority_transactions,limit=200,expected_fingerprint=fingerprint)
     result=list(first.items);offset=first.next_offset
     while offset is not None:
@@ -62,10 +66,10 @@ def _mark_all(s,draft,filters,fingerprint,action,revision_id,*,skip_claimed):
     allgroups={group_fingerprint(v):v for v in groups(s.current.values()).values()}
     for row in result:
         if skip_claimed and (not row.eligible or (action=='mark' and row.claimed)):continue
-        require(not row.stale and row.eligible,'E_RECONCILIATION_SELECTION_STALE')
+        require(action=='unmark' or (not row.stale and row.eligible),'E_RECONCILIATION_SELECTION_STALE')
         if action=='mark':require(not row.claimed,'E_RECONCILIATION_MEMBERSHIP_CONFLICT')
         for v in allgroups[row.group_fingerprint]:
-            require(v['key_id'] not in choices or choices[v['key_id']].version_id==v['id'],'E_RECONCILIATION_SELECTION_STALE')
+            require(action=='unmark' or v['key_id'] not in choices or choices[v['key_id']].version_id==v['id'],'E_RECONCILIATION_SELECTION_STALE')
             if action=='unmark':choices.pop(v['key_id'],None)
             else:choices[v['key_id']]=m.Selection(key_id=v['key_id'],version_id=v['id'],action='mark')
     return revised(draft,revision_id,selections=tuple(choices[k] for k in sorted(choices)))

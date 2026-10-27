@@ -611,3 +611,57 @@ reconcile_preview = command(
                 'records the same list, and refuses nothing for it.',
     input_model=m.Preview, output_model=m.PreviewOutput, required_role='member',
     capability='ledger.read', positional=['draft'], error_codes=list(ERRORS))(_preview)
+
+
+# ---------------------------------------------------------------- discard (R183)
+
+def _discard_prepare(inp, ctx, s, ids):
+    _reuse(s, inp.operation_key)
+    account_id = _account_of(s, inp.draft)
+    snapshot = _loaded(s, account_id)
+    value = _draft(snapshot, inp.draft)
+    preparation.require(inp.draft == value.id, 'E_RECONCILIATION_MANIFEST')
+    return snapshot, drafts.lifecycle(snapshot, value, 'cancel', expected_version=inp.expected_version,
+                                      revision_id=ids['revision'], operation_id=ids['operation'])
+
+
+def _discard_planner(inp, ctx, s):
+    ids = dict(revision=new_id(), operation=new_id(), event=new_id())
+    snapshot, value = _discard_prepare(inp, ctx, s, ids)
+    return Plan(m.DraftOutput(draft=value), dict(ids=ids, input=inp, prepared=_kept(s, (snapshot, value))))
+
+
+reconcile_discard = command(
+    'reconcile discard', scope='company',
+    description='Discard an open reconciliation draft (statement, opening or amendment) that will not be '
+                'finished: it becomes canceled, leaves the Overview and entries-to-review, and keeps its '
+                'history and notes. Nothing it ticked was cleared, so nothing changes in the books; start '
+                'the statement again with `reconcile start`. A person or an agent may discard, with a reason; '
+                'it is audited. Preview it with --dry-run.',
+    input_model=m.Discard, output_model=m.DraftOutput, writes={'company'}, required_role='standard',
+    capability='ledger.post', accepts_idempotency_key=True, positional=['draft'],
+    error_codes=list(ERRORS))(_discard_planner)
+reconcile_discard.ledger = True
+reconcile_discard.plan_in_write = True
+
+
+@reconcile_discard.applier
+def _discard_apply(plan, ctx, s):
+    inp, ids = plan.data['input'], plan.data['ids']
+    snapshot, value = plan.data.get('prepared') or _discard_prepare(inp, ctx, s, ids)
+    previous = snapshot.by('drafts')[value.id]['current_revision_id']
+    table = c.reconciliation_drafts
+    summary = f'discarded reconciliation draft {value.id}'
+    _commit(s, ctx, 'reconcile discard', account_id=value.account_id, operation_id=ids['operation'],
+            event_id=ids['event'], kind='draft_change', summary=summary,
+            document=dict(operation_key=inp.operation_key, request=inp.model_dump(mode='json'),
+                          effect=dict(draft=value.id, version=value.version, state=value.state)),
+            targets=_targets(value.account_id, drafts=[value.id]),
+            rows=lambda made: {k: v for k, v in persistence.draft(
+                value, made=made, previous_revision_id=previous).items() if k != 'drafts'},
+            updates=[table.update().where(table.c.id == value.id).values(
+                version=value.version, current_revision_id=value.current_revision_id,
+                state=value.state, terminal_operation_id=value.terminal_operation_id)],
+            touched=[Touched('reconciliation_draft', value.id, 'update', value.version - 1,
+                             value.version, dict(state=value.state), db='company')])
+    return Applied(m.DraftOutput(draft=value), [], summary, audited=True)

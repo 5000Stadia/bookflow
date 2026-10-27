@@ -10,6 +10,7 @@ from pydantic import field_validator
 from bookflow.company import ledger_reports as ledger
 from bookflow.company.journal_models import _Date as IsoDate
 from bookflow.company.ledger_reports import MoneyOutput, StrictModel, iso_date
+from bookflow.core.clock import TODAY_DEFAULT, today_default
 
 Selector = Annotated[str, Field(min_length=1, max_length=1004), BeforeValidator(lambda v: v.strip() if isinstance(v, str) else v)]
 Method = Literal['average', 'fifo']
@@ -87,7 +88,7 @@ class CostingMethodWriteOutput(BaseModel):
 
 
 class InventoryLayersInput(StrictModel):
-    as_of: str = Field(min_length=10, max_length=10, description='Report date, YYYY-MM-DD: the layers on hand at its end.')
+    as_of: str = Field(default_factory=today_default, json_schema_extra=TODAY_DEFAULT, min_length=10, max_length=10, description='Report date, YYYY-MM-DD: the layers on hand at its end.')
     item: str | None = Field(default=None, max_length=1000, description='Only this item, by name, id or barcode.')
     basis: Literal['accrual'] = 'accrual'
     limit: int = Field(default=50, ge=1, le=200)

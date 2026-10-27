@@ -32,6 +32,7 @@ from bookflow.company.ledger_reports import MoneyOutput, StrictModel, iso_date, 
 from bookflow.company.ledger_schema import SETTLEABLE_RECEIVABLE_TYPES
 from bookflow.company.receivable_reports import ArAgingTotals
 from bookflow.core.errors import BookflowError
+from bookflow.core.clock import TODAY_DEFAULT, today_default
 
 # A customer is being chased when something sits at or past the chosen column. The
 # current column is not a chase, so it is never a starting point.
@@ -44,7 +45,7 @@ CONTACT_FIELDS = ("role", "display_name", "salutation", "first_name", "last_name
 
 
 class CollectionsInput(StrictModel):
-    as_of: str = Field(min_length=10, max_length=10, description="Inclusive accounting as-of date, YYYY-MM-DD; receivables are aged against it.")
+    as_of: str = Field(default_factory=today_default, json_schema_extra=TODAY_DEFAULT, min_length=10, max_length=10, description="Inclusive accounting as-of date, YYYY-MM-DD; receivables are aged against it.")
     basis: Literal["accrual"] = "accrual"
     minimum_bucket: Literal["days_1_30", "days_31_60", "days_61_90", "over_90"] = Field(default="days_1_30", description="The oldest-first aging column a customer must reach before it is chased; anything in that column or past it counts.")
     limit: int = Field(default=50, ge=1, le=200)

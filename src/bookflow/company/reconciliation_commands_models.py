@@ -196,6 +196,10 @@ class Mark(DraftChange):
         if not self.all and (self.all_action!='mark' or self.filters!=CandidateFilter()):raise ValueError('filters and all_action need all=true')
         return self
 
+class Discard(DraftChange):
+    """Drop an open draft (R183): it is kept, canceled, with its history; nothing it ticked is cleared."""
+
+
 class MarkAll(DraftChange):
     filters: CandidateFilter
     query_fingerprint: Fingerprint

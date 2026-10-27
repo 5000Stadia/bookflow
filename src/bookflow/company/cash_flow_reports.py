@@ -70,6 +70,7 @@ from pydantic import Field, field_validator, model_validator
 
 from bookflow.company import accounts as chart
 from bookflow.company import ledger_reports as ledger
+from bookflow.core.clock import TODAY_DEFAULT, today_default
 
 
 # The chart vocabulary this statement runs on, named here and declared once in
@@ -117,7 +118,7 @@ SECTION_ORDER = "CASE section " + " ".join(
 class CashFlowsInput(ledger.TrialBalanceInput):
     basis: Basis | None = basis_field()
     date_from: str = Field(min_length=10, max_length=10, description="Inclusive first accounting date, YYYY-MM-DD.")
-    date_to: str = Field(min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD.")
+    date_to: str = Field(default_factory=today_default, json_schema_extra=TODAY_DEFAULT, min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD.")
     include_zero: bool = Field(default=False, description="Include accounts whose balance did not change over the period, including inactive and never-posted balance-sheet accounts.")
 
     _date_from = field_validator("date_from")(ledger.iso_date)

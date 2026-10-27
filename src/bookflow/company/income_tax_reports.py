@@ -41,6 +41,7 @@ from pydantic import Field, field_validator, model_validator
 from bookflow.company import accounts as chart
 from bookflow.company import ledger_reports as ledger
 from bookflow.company.party_merges import survivor_sql
+from bookflow.core.clock import TODAY_DEFAULT, today_default
 # What a posting line's account reads as: its survivor when it was merged into another (R117).
 _ACCOUNT = survivor_sql("account", "l.account_id")
 
@@ -63,7 +64,7 @@ def _in(types) -> str:
 class IncomeTaxSummaryInput(ledger.TrialBalanceInput):
     basis: Basis | None = basis_field()
     date_from: str = Field(min_length=10, max_length=10, description="Inclusive first accounting date, YYYY-MM-DD.")
-    date_to: str = Field(min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD.")
+    date_to: str = Field(default_factory=today_default, json_schema_extra=TODAY_DEFAULT, min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD.")
     include_zero: bool = Field(default=False, description="Include income and expense accounts with no period activity, including inactive and never-posted ones.")
 
     _date_from = field_validator("date_from")(ledger.iso_date)

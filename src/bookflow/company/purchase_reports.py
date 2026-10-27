@@ -43,13 +43,14 @@ from bookflow.company.payable_reports import NO_VENDOR
 from bookflow.company.summary_reports import NO_ITEM, _percent
 from bookflow.core.errors import BookflowError
 from bookflow.core.exact import format_quantity_micro_units, round_ratio_half_even
+from bookflow.core.clock import TODAY_DEFAULT, today_default
 
 QUANTITY_SCALE = 10 ** 6
 
 
 class _Period(StrictModel):
     date_from: str = Field(min_length=10, max_length=10, description="Inclusive first accounting date, YYYY-MM-DD.")
-    date_to: str = Field(min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD.")
+    date_to: str = Field(default_factory=today_default, json_schema_extra=TODAY_DEFAULT, min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD.")
     basis: Literal["accrual"] = "accrual"
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=4096)
@@ -72,7 +73,7 @@ class PurchasesByItemInput(_Period):
 
 
 class OpenPurchaseOrdersInput(StrictModel):
-    date_to: str = Field(min_length=10, max_length=10, description="Inclusive last order date, YYYY-MM-DD; orders dated after it are left out. What is still open is what has not been received today.")
+    date_to: str = Field(default_factory=today_default, json_schema_extra=TODAY_DEFAULT, min_length=10, max_length=10, description="Inclusive last order date, YYYY-MM-DD; orders dated after it are left out. What is still open is what has not been received today.")
     vendor: str | None = Field(default=None, min_length=1, max_length=1000, description="Optional vendor ID or name; omit for every vendor with an open order.")
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=4096)

@@ -14,6 +14,7 @@ from pydantic import Field, field_validator, model_validator
 
 from bookflow.company import ledger_reports as ledger
 from bookflow.company.ledger_reports import MoneyOutput, StrictModel, iso_date, money
+from bookflow.core.clock import TODAY_DEFAULT, today_default
 
 
 def _date(value):
@@ -25,7 +26,7 @@ class OpenSalesOrdersInput(StrictModel):
     customer: str | None = Field(None, min_length=1, max_length=1000, description="Only this customer or job: ID or full name.")
     item: str | None = Field(None, min_length=1, max_length=1000, description="Only this item: ID or full name.")
     date_from: str | None = Field(None, min_length=10, max_length=10, json_schema_extra={"format": "date"}, description="Earliest order date, YYYY-MM-DD.")
-    date_to: str = Field(min_length=10, max_length=10, json_schema_extra={"format": "date"}, description="Inclusive last order date, YYYY-MM-DD; orders dated after it are left out. What is still open is what has not been invoiced today.")
+    date_to: str = Field(default_factory=today_default, min_length=10, max_length=10, json_schema_extra={**TODAY_DEFAULT, "format": "date"}, description="Inclusive last order date, YYYY-MM-DD; orders dated after it are left out. What is still open is what has not been invoiced today.")
     short_only: bool = Field(False, description="Only lines for stocked items with more committed than on hand (available below zero).")
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=4096)

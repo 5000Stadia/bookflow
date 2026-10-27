@@ -25,6 +25,7 @@ from bookflow.company.ledger_schema import TRANSACTION_TYPES
 from bookflow.company.money_out_schema import KINDS as MONEY_OUT_KINDS
 from bookflow.company.query import permission_fingerprint
 from bookflow.company.party_merges import survivor_sql
+from bookflow.core.clock import TODAY_DEFAULT, today_default
 
 I64_MIN, I64_MAX = -(2**63), 2**63 - 1
 # Read off the schema rather than retyped: a report that closes this set by hand stops
@@ -127,7 +128,7 @@ def iso_date(value: str) -> str:
 
 
 class TrialBalanceInput(StrictModel):
-    date_to: str = Field(min_length=10, max_length=10, description="Inclusive accounting as-of date, YYYY-MM-DD.")
+    date_to: str = Field(default_factory=today_default, json_schema_extra=TODAY_DEFAULT, min_length=10, max_length=10, description="Inclusive accounting as-of date, YYYY-MM-DD.")
     basis: Literal["accrual"] = "accrual"
     include_zero: bool = Field(default=False, description="Include zero ending balances, including inactive and never-posted accounts.")
     limit: int = Field(default=50, ge=1, le=200)
@@ -138,7 +139,7 @@ class TrialBalanceInput(StrictModel):
 
 class GeneralLedgerInput(StrictModel):
     date_from: str = Field(min_length=10, max_length=10, description="Inclusive first accounting date, YYYY-MM-DD.")
-    date_to: str = Field(min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD.")
+    date_to: str = Field(default_factory=today_default, json_schema_extra=TODAY_DEFAULT, min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD.")
     basis: Literal["accrual"] = "accrual"
     account: str | None = Field(default=None, min_length=1, max_length=1000, description="Optional account ID or canonical full name; includes inactive accounts.")
     limit: int = Field(default=50, ge=1, le=200)
@@ -155,7 +156,7 @@ class GeneralLedgerInput(StrictModel):
 
 class TransactionDetailInput(StrictModel):
     date_from: str = Field(min_length=10, max_length=10, description="Inclusive first accounting date, YYYY-MM-DD.")
-    date_to: str = Field(min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD.")
+    date_to: str = Field(default_factory=today_default, json_schema_extra=TODAY_DEFAULT, min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD.")
     basis: Literal["accrual"] = "accrual"
     accounts: list[Annotated[str, Field(min_length=1, max_length=1000)]] | None = Field(
         default=None, max_length=500,
