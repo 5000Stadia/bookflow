@@ -57,7 +57,7 @@ def test_the_same_landed_cost_through_python_cli_http_and_mcp(root, tmp_path):
         assert not r['setup']['created'], surface                              # the demo made it already
         assert [row['unallocated']['minor_units'] for row in r['charges']['rows']] == [1200], surface
         assert r['first']['allocation']['number'] == r['again']['allocation']['number'], surface
-        assert 'nothing of that charge is left' in str(r['over']), surface
+        assert 'nothing left to allocate on bill' in str(r['over']), surface
         shares = [t['amount']['minor_units'] for t in r['first']['allocation']['targets']]
         assert shares == [400, 800] == [t['amount']['minor_units'] for t in r['preview']['allocation']['targets']], surface
         assert r['shown']['allocation']['status'] == 'posted' and r['voided']['allocation']['status'] == 'voided', surface

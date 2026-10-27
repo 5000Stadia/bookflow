@@ -414,10 +414,10 @@ def test_seeded_freight_paperwork_keeps_every_tie(shop, seed):
                 charges.append(document)
             if op == 'void_receipt':
                 receipts.append(document)
-            # A memo edit of an allocated receipt, a void of a build and a freight edit that keeps the amount are
-            # valid paperwork: never refused.
-            assert op not in ('void_build', 'edit_receipt') and not (op == 'edit_freight' and error.code ==
-                                                                      'E_WORK_DEPENDENCY'), (seed, step, op, error)
+            # A void of a build is valid paperwork; a memo edit of an allocated receipt and a freight edit that keeps
+            # the amount are never refused for the allocation (a repost can still leave a same-day build short).
+            assert op != 'void_build' and not (op in ('edit_freight', 'edit_receipt') and error.code ==
+                                               'E_WORK_DEPENDENCY'), (seed, step, op, error)
             if _os.environ.get('BF_LANDED_DEBUG'):
                 print(op, error.message)
             # Refusals a person can act on are fine (an allocation naming the document, a closed or short build, a
