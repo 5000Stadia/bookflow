@@ -203,7 +203,7 @@ The same example as complete `bookflow_run` arguments:
 | `date` | `--date` | string \| null | no | yes | null | Date of the count; omitted, today. Its differences post at this date. |
 | `items` | `--items` | array[string] \| null | no | yes | null | Count only these items (id, name or barcode). |
 | `category` | `--category` | string \| null | no | yes | null | Count only the items in this item category. |
-| `bins` | `--bins` | array[string] \| null | no | yes | null | Count these bins of the site (id, full name such as A:3, or label), and the bins inside them: the sheet lists exactly what they hold. Entries naming no bin count in the one bin named. |
+| `bins` | `--bins` | array[string] \| null | no | yes | null | Count these bins of the site (id, full name such as A3, or Aisle:3 for a bin inside another, or label), and the bins inside them: the sheet lists exactly what they hold. Entries naming no bin count in the one bin named. |
 | `cycle` | `--cycle` | boolean | no | no | false | Count the next items due by cycle class at the site (`cycle-count due`), most overdue first; recording the count moves their due dates on, so the next cycle count takes the next ones. |
 | `limit` | `--limit` | integer \| null | no | yes | null | With cycle: how many due items to count (default 25). |
 | `blind` | `--blind` | boolean | no | no | false | Hide expected quantities and differences on the sheet; they show only in the post preview. |
@@ -544,7 +544,7 @@ Example JSON output:
 
 ## `inventory-count post`
 
-Record a count. Its counted quantities are fixed, and each line's difference is derived at the count's position in its day: counted less what the books hold at that place from documents dated before the count date, or on it and placed before the count (the default for every document; a document that happened after the count says count_position after). Per item the net posts as one movement -- an issue for less, found units valued at the average for more -- in one journal entry dated the count date against adjustment_account. Unchanged and uncounted lines post nothing. Run it as a dry run first: the preview shows each item's difference and value, the documents entered after counting began, and a preview_fingerprint; pass that fingerprint to post (E_PREVIEW_STALE if anything changed). A document later dated before the count derives the difference again, so the shelf stays as counted. Example: `bookflow inventory-count post C-1 --expected-version 1 --adjustment-account "Inventory Shrinkage" --preview-fingerprint <from the dry run> --reason "Van count" --json`.
+Record a count. Its counted quantities are fixed, and each line's difference is derived at the count's position in its day: counted less what the books hold at that place from documents dated before the count date, or on it and placed before the count (the default for every document; a document that happened after the count says count_position after). Per item the net posts as one movement -- an issue for less, found units valued at the average for more -- in one journal entry dated the count date against adjustment_account. Unchanged and uncounted lines post nothing. Run it as a dry run first: the preview shows each item's difference and value, the documents entered after counting began, and a preview_fingerprint; pass that fingerprint to post (E_PREVIEW_STALE if anything changed). A document later dated before the count derives the difference again, so the shelf stays as counted. Example: `bookflow inventory-count post C-1 --expected-version 1 --adjustment-account "Cost of Goods Sold" --preview-fingerprint <from the dry run> --reason "Van count" --json`.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -576,7 +576,7 @@ The same example as complete `bookflow_run` arguments:
 |---|---|---|---|---|---|---|
 | `count` | `COUNT` | string | yes | no | — | Count id or number.; minimum length 1; maximum length 1000 |
 | `expected_version` | `--expected-version` | integer | yes | no | — | Version of the count this post is for, from its show or sheet.; minimum 1 |
-| `adjustment_account` | `--adjustment-account` | string | yes | no | — | Account carrying the other side of the differences, such as Inventory Shrinkage or Cost of Goods Sold.; minimum length 1; maximum length 1000 |
+| `adjustment_account` | `--adjustment-account` | string | yes | no | — | Account carrying the other side of the differences, such as Cost of Goods Sold, or an Inventory Shrinkage account if the company keeps one.; minimum length 1; maximum length 1000 |
 | `class_id` | `--class-id` | string \| null | no | yes | null | Class captured on the posted differences. |
 | `preview_fingerprint` | `--preview-fingerprint` | string \| null | no | yes | null | From the dry run of this post. The count is recorded only if what it would post is still exactly what that preview showed (E_PREVIEW_STALE otherwise). |
 

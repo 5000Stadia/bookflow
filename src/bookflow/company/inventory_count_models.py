@@ -47,7 +47,7 @@ class CountCreateInput(_Input):
                                          description='Count only these items (id, name or barcode).')
     category: Selector | None = Field(None, description='Count only the items in this item category.')
     bins: list[Selector] | None = Field(None, min_length=1, max_length=200, description=(
-        'Count these bins of the site (id, full name such as A:3, or label), and the bins inside them: the sheet '
+        'Count these bins of the site (id, full name such as A3, or Aisle:3 for a bin inside another, or label), and the bins inside them: the sheet '
         'lists exactly what they hold. Entries naming no bin count in the one bin named.'))
     cycle: bool = Field(False, description=(
         'Count the next items due by cycle class at the site (`cycle-count due`), most overdue first; recording the '
@@ -110,7 +110,7 @@ class CountPostInput(_Input):
     count: Selector = Field(description='Count id or number.')
     expected_version: Version = Field(description='Version of the count this post is for, from its show or sheet.')
     adjustment_account: Selector = Field(description='Account carrying the other side of the differences, such as '
-                                                     'Inventory Shrinkage or Cost of Goods Sold.')
+                                                     'Cost of Goods Sold, or an Inventory Shrinkage account if the company keeps one.')
     class_id: Selector | None = Field(None, description='Class captured on the posted differences.')
     preview_fingerprint: str | None = Field(None, max_length=128, description=(
         'From the dry run of this post. The count is recorded only if what it would post is still exactly what that '

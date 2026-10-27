@@ -161,7 +161,7 @@ review cb5fcd7 (gate g96052d).
 - [x] R101 Sales orders: a non-posting customer order that reserves stock, invoices partly as items ship, tracks backorders, and can raise a purchase order for shortfalls.
 - [x] R102 Reservation-aware stock: stock status shows on hand, committed to open sales orders, on order and available, so buying decisions see real demand.
 - [x] R103 Assembly builds: building a finished item from its bill of materials consumes the components and moves their cost into the assembly.
-- [~] R104 Advanced inventory: multiple sites and bins, transfers, serial and lot numbers, physical counts, a choice of costing method, and allocating a later freight bill to received stock.
+- [x] R104 Advanced inventory: multiple sites and bins, transfers, serial and lot numbers, physical counts, a choice of costing method, and allocating a later freight bill to received stock.
 - [ ] R181 Pick, pack and ship: picking lists, packing slips and shipments recorded apart from invoicing, so a warehouse can ship before it bills (Kabe 2026-10-22: after R104).
 - [ ] R182 Agent-facing easy deployment: an AI agent given only the GitHub address installs Bookflow, sets up a company and connects to it in as few, plain steps as possible, from one install guide written for agents (Kabe 2026-10-26: "agent facing easy deployment").
 - [ ] R183 Colony deployment trial: a simulated business owner (a separate test-user agent) works with a fresh colony test-deployment project that starts from nothing but the GitHub address. It deploys Bookflow, then invoices, receives payments, posts expenses and deposits the payments; the books are checked afterwards, every friction is fixed, and the trial is rerun until it goes smoothly (Kabe 2026-10-26: "see that everything goes smoothly from an agent controlled engagement of book flow").
@@ -189,7 +189,7 @@ review cb5fcd7 (gate g96052d).
 - [ ] R128 Wider exposure: cursor key rotation, same-company hardening, encryption at rest and hosted demo sessions, for use beyond a trusted local network. On hold: needs Kabe's yes before starting (his 10-24 approved set did not include it).
 - [ ] R130 Windows: a supported Windows build with an authenticated local hand-off. On hold: no Windows machine here to build and test on.
 - [x] R138 Find any transaction: search across every transaction type by name, number, amount or date range
-- [~] R139 Barcode and cycle counts: scan items for sales, receiving and counts, and count stock by rotating cycles instead of all at once
+- [x] R139 Barcode and cycle counts: scan items for sales, receiving and counts, and count stock by rotating cycles instead of all at once
 - [x] R148 Customer collections: short payments and bad-debt write-offs, bounced payments, moving a credit between jobs
 - [x] R149 Vendor refunds received as deposits against vendor credits
 - [x] R150 Unit prices finer than a cent
