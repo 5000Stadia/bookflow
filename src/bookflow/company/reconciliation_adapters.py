@@ -60,6 +60,13 @@ class Graph:
     """
     rows: dict
     accounts: dict
+    # A scoped graph (`reconciliation_watermark`): None means every document's rows are here.
+    # Otherwise only the documents named in `scope` have their rows here; `rows['transactions']`
+    # still holds every document's header, and `verified` stands for the rest -- what a verified
+    # watermark proved of them and nothing since has touched. `enumerate_graph` derives only the
+    # scope, and `prove` adds the verified documents' current effects and legs to its totals.
+    scope: frozenset | None = None
+    verified: 'Verified | None' = None
 
     def __post_init__(self):
         rows = MappingProxyType({name: tuple(values) for name, values in self.rows.items()})
@@ -75,14 +82,15 @@ class Graph:
     def __eq__(self, other):
         if not isinstance(other, Graph):
             return NotImplemented
-        return dict(self.rows) == dict(other.rows) and self.accounts == other.accounts
+        return (dict(self.rows) == dict(other.rows) and self.accounts == other.accounts
+                and self.scope == other.scope and self.verified == other.verified)
 
     __hash__ = None
 
     def __deepcopy__(self, memo):
         from copy import deepcopy
         copied = Graph({name: deepcopy(list(values), memo) for name, values in self.rows.items()},
-                       deepcopy(self.accounts, memo))
+                       deepcopy(self.accounts, memo), self.scope, self.verified)
         memo[id(self)] = copied
         return copied
 
@@ -97,17 +105,32 @@ class Graph:
         return found
 
 
-def graph(s, identifiers, *, pending=None, headers=()):
+@dataclass(frozen=True)
+class Verified:
+    """What a verified watermark stands for, for the documents outside a scoped graph's scope.
+
+    `current`: (version id, account, active, effective date, signed debit) of each stored current
+    effect version of those documents -- equal to what their derivation gives, which is what the
+    watermark proved and what their unchanged rows, headers and heads keep true.
+    `legs`: (account, batch effective date, signed amount) of each of their posting lines.
+    """
+    current: tuple
+    legs: tuple
+
+
+def graph(s, identifiers, *, pending=None, headers=(), only=None, verified=None):
     ids = sorted(set(identifiers))
+    scoped = sorted(set(only)) if only is not None else ids
     rows = {name: [] for name in TABLES}
     for name in TABLES:
         table = getattr(c, name)
         if name == 'bank_effect_current':
-            rows[name] = [dict(r) for r in s.company.conn.execute(sa.select(table).join(c.bank_effect_keys,c.bank_effect_keys.c.id==table.c.key_id).where(c.bank_effect_keys.c.transaction_id.in_(ids))).mappings()]
+            rows[name] = [dict(r) for r in s.company.conn.execute(sa.select(table).join(c.bank_effect_keys,c.bank_effect_keys.c.id==table.c.key_id).where(c.bank_effect_keys.c.transaction_id.in_(scoped))).mappings()]
             continue
         field = table.c.id if name == 'transactions' else table.c.transaction_id
-        for offset in range(0, len(ids), 200):
-            rows[name].extend(dict(r) for r in s.company.conn.execute(sa.select(table).where(field.in_(ids[offset:offset+200]))).mappings())
+        wanted = ids if name == 'transactions' else scoped
+        for offset in range(0, len(wanted), 200):
+            rows[name].extend(dict(r) for r in s.company.conn.execute(sa.select(table).where(field.in_(wanted[offset:offset+200]))).mappings())
     if pending:
         for name in TABLES:
             incoming = [{col.name:r.get(col.name) for col in getattr(c,name).columns} for r in pending.get(name, ())]
@@ -118,7 +141,11 @@ def graph(s, identifiers, *, pending=None, headers=()):
     replaced = {h['id']: dict(h) for h in headers}
     rows['transactions'] = [replaced.pop(r['id'], r) for r in rows['transactions']] + list(replaced.values())
     accounts = {r['id']: dict(r) for r in s.company.conn.execute(sa.select(c.accounts)).mappings()}
-    return Graph(rows, accounts)
+    if only is None:
+        return Graph(rows, accounts)
+    if pending or headers:
+        raise ValueError('a scoped graph takes no pending rows')
+    return Graph(rows, accounts, frozenset(only), verified)
 
 
 # Every table that records one document settling another, and the two columns that name them.
@@ -408,6 +435,8 @@ UNCOVERED_PRODUCERS = tuple(name for name in TRANSACTION_TYPES if name not in RE
 def enumerate_graph(g):
     history, current = [], []
     for header in sorted(g.rows['transactions'], key=lambda r: r['id']):
+        if g.scope is not None and header['id'] not in g.scope:
+            continue
         adapter = REGISTRY.get(header['type'])
         if adapter is None:
             raise Unsupported('unknown_producer')

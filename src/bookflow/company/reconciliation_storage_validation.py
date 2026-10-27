@@ -246,7 +246,22 @@ def proved(memo, graph, account_id, cutoff):
     return found[1]
 
 
-def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None, memo=None):
+class Suffix:
+    """What a scoped validation re-proves on top of a verified watermark (`reconciliation_watermark`).
+
+    `rows`: for each insert-only table, the primary keys of its rows written after the watermark.
+    A scoped validation is given a scoped source graph (`Graph.scope`) with it and re-proves the
+    documents in that scope, every row in `rows`, every row of a mutable table, and every older
+    closure those touch (a capture or draft revision whose movement group gained a version, an
+    event whose transitions name a document in scope). Everything else stands as the watermark
+    proved it. Its refusals are only ever a reason to run the full validation instead
+    (`reconciliation_loading.load`), so a scoped refusal never reaches a caller.
+    """
+    def __init__(self, rows):
+        self.rows = {name: frozenset(keys) for name, keys in rows.items()}
+
+
+def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None, memo=None, suffix=None):
     """Validate a complete N-table snapshot; return no partial decoded output.
 
     `memo` lets a caller keep the source enumeration and proofs made here for the snapshot it
@@ -258,9 +273,22 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None, m
     future public action models/authorization and execution are not implemented.
     """
     from bookflow.company.schema import metadata
+    from bookflow.company.reconciliation_schema import MUTABLE
     tables = {n.removeprefix(PREFIX):t for n,t in metadata.tables.items() if n.startswith(PREFIX)}
     require(set(rows) == set(tables), 'table_inventory')
     r = {n:[dict(v) for v in values] for n,values in rows.items()}
+    scope = None
+    if suffix is not None:
+        require(source is not None and source.scope is not None, 'source_proof_required')
+        scope = source.scope
+    mutable = {n.removeprefix(PREFIX) for n in MUTABLE}
+    def fresh(name, value):
+        """Whether this row is re-proved: always without a suffix; with one, a mutable table's
+        rows and the rows written after the watermark."""
+        if suffix is None or name in mutable: return True
+        written = suffix.rows.get(name)
+        return bool(written) and tuple(value[c.name] for c in tables[name].primary_key) in written
+    renewed = {}
     for name, values in r.items():
         t = tables[name]
         seen = set()
@@ -269,14 +297,26 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None, m
                 tuples=[tuple(v[c.name] for c in constraint.columns) for v in values]
                 tuples=[v for v in tuples if None not in v]
                 require(len(set(tuples))==len(tuples),'duplicate_unique_key')
+        # Each table's shape read once, not once per row.
+        names = set(t.c.keys()); key = [c.name for c in t.primary_key]
+        shape = [(c.name, c.info['kind'], c.nullable) for c in t.c]
+        decoded_only = [c for c, kind, _ in shape if kind == 'json']
+        written = None if suffix is None or name in mutable else suffix.rows.get(name, frozenset())
+        renewed[name] = again = []
         for value in values:
-            require(set(value) == set(t.c.keys()), 'row_columns')
-            pk = tuple(value[c.name] for c in t.primary_key)
+            require(set(value) == names, 'row_columns')
+            pk = tuple(value[c] for c in key)
             require(pk not in seen, 'duplicate_primary_key'); seen.add(pk)
-            for c in t.c:
-                v = value[c.name]; kind = c.info['kind']
+            if written is not None and pk not in written:
+                # Proved when the watermark was written and unchanged since: only decoded.
+                for c in decoded_only:
+                    if value[c] is not None: value[c] = json.loads(value[c])
+                continue
+            again.append(value)
+            for column, kind, nullable in shape:
+                v = value[column]
                 if v is None:
-                    require(c.nullable, 'null_required'); continue
+                    require(nullable, 'null_required'); continue
                 if kind in ('int','positive','count','bool'):
                     require(type(v) is int and -(2**63) <= v < 2**63, 'integer_range')
                     require(kind != 'positive' or v > 0, 'positive_integer')
@@ -290,11 +330,11 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None, m
                         except ValueError as exc: raise InvalidStorage('date_format') from exc
                     if kind == 'json':
                         decoded = _decode(v); require(type(decoded) is dict, 'json_object')
-                        if (name,c.name) in MODELS:
-                            if 'format' in MODELS[name,c.name].model_fields:require(type(decoded.get('format')) is int,'snapshot_format')
-                            try: MODELS[name,c.name].model_validate(decoded,strict=True)
+                        if (name,column) in MODELS:
+                            if 'format' in MODELS[name,column].model_fields:require(type(decoded.get('format')) is int,'snapshot_format')
+                            try: MODELS[name,column].model_validate(decoded,strict=True)
                             except ValueError as exc: raise InvalidStorage('snapshot_format') from exc
-                        value[c.name] = decoded
+                        value[column] = decoded
     # The rows are final from here on, so every lookup below is an index built once from them
     # (lazily, on first use) rather than a scan per question. `by` keeps the last row of a
     # repeated key and `matching` keeps table order, as the scans they replace did.
@@ -316,11 +356,16 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None, m
     # tuples become one set, built the first time a non-null key asks for it.
     referenced_rows = referenced_rows or {}
     targets={}
+    from bookflow.company.reconciliation_loading import KEYED_ONLY
     for name,t in tables.items():
         for constraint in t.foreign_key_constraints:
             remote=constraint.referred_table.name
             columns=tuple(e.column.name for e in constraint.elements)
-            for value in r[name]:
+            # A key into an insert-only table cannot be broken after it was proved: the target
+            # can be neither deleted nor changed. So a scoped validation proves those keys for
+            # the rows it re-proves, and every key into a table whose rows can change.
+            settled = suffix is not None and (remote in KEYED_ONLY or (remote.startswith(PREFIX) and remote.removeprefix(PREFIX) not in mutable))
+            for value in (renewed[name] if settled else r[name]):
                 key=tuple(value[e.parent.name] for e in constraint.elements)
                 if any(v is None for v in key): continue
                 candidates = r[remote.removeprefix(PREFIX)] if remote.startswith(PREFIX) else referenced_rows.get(remote)
@@ -408,7 +453,12 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None, m
         for account in {v.account_id for v in history}: proved(memo,source,account,'9999-12-31')
         expected={(v.ref.producer,v.ref.transaction_id,v.ref.role,v.ref.component_id,v.version_id):v for v in history}
         actual={}
+        def derived(v):
+            """Whether this stored version is re-derived: always, or with a suffix when its
+            document (or its key's) is in the scope. The rest stand as the watermark proved them."""
+            return scope is None or v['transaction_id'] in scope or keys[v['key_id']]['transaction_id'] in scope
         for v in versions.values():
+            if not derived(v): continue
             k=keys[v['key_id']]
             ref=(k['producer'],k['transaction_id'],k['role'],component(k),v['source_version'])
             require(ref not in actual,'duplicate_source_version'); actual[ref]=v
@@ -440,7 +490,7 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None, m
             transitions[audit,key]=transition
             previous[key]=stored['id']
 
-        heads={v['key_id']:v['version_id'] for v in r['effect_heads']}
+        heads={v['key_id']:v['version_id'] for v in r['effect_heads'] if scope is None or keys[v['key_id']]['transaction_id'] in scope}
         first_key={}
         for k in keys.values(): first_key.setdefault((k['producer'],k['transaction_id'],k['role'],component(k)),k['id'])
         expected_heads={}
@@ -454,6 +504,21 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None, m
     whole_movements={}
     for e in versions.values():
         if e['active']: whole_movements.setdefault(_frozen(e['movement_snapshot']),set()).add(e['key_id'])
+    # With a suffix, the owners re-proved below: every capture and draft revision written after
+    # the watermark or gaining a member since, and every older one holding a version whose
+    # movement group gained a version since (which is how an append reaches an old capture's
+    # `incomplete_movement`). The rest hold only rows that cannot change and stand proved.
+    reproved=None
+    if suffix is not None:
+        grown={_frozen(v['movement_snapshot']) for v in versions.values() if v['active'] and fresh('effect_versions',v)}
+        reached={i for i,v in versions.items() if _frozen(v['movement_snapshot']) in grown} if grown else set()
+        reproved=set()
+        for name,owner,field in (('openings','opening_members','opening_id'),('certificates','certificate_members','certificate_id'),('draft_revisions','draft_members','revision_id')):
+            reproved.update((name,v['id']) for v in renewed[name])
+            reproved.update((name,m[field]) for m in renewed[owner])
+            if reached: reproved.update((name,m[field]) for m in r[owner] if m['version_id'] in reached)
+    def owed(name,owner):
+        return reproved is None or (name,owner) in reproved
     def members(name,owner_field,owner):
         values=matching(name,owner_field,owner)
         require(sorted(v['ordinal'] for v in values)==list(range(len(values))),'member_ordinals')
@@ -489,6 +554,8 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None, m
     captured_graphs = captured_graphs or {}
     expected_captures={v['id'] for name in ('openings','certificates') for v in r[name]}
     require(set(captured_graphs)<=expected_captures,'capture_proof_inventory')
+    if reproved is not None:
+        reproved.update((name,v['id']) for name in ('openings','certificates') for v in r[name] if v['id'] in captured_graphs)
     def capture(owner,pop,opening=False):
         """The write-time proof. Absent a graph the stored-row ties below stand alone."""
         if owner['id'] not in captured_graphs:return
@@ -498,11 +565,18 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None, m
         values=[v for v in current if v.account_id==owner['account_id'] and (not opening or v.active and v.effective_date<=pop['cutoff'])]
         identity={ (keys[v['key_id']]['producer'],keys[v['key_id']]['transaction_id'],keys[v['key_id']]['role'],component(keys[v['key_id']]),v['source_version']):v['id'] for v in versions.values() }
         expected=[identity.get((v.ref.producer,v.ref.transaction_id,v.ref.role,v.ref.component_id,v.version_id)) for v in values]
+        if graph.verified is not None:
+            # A scoped graph: the documents outside its scope are current as the watermark proved.
+            expected.extend(i for i,account,active,date,_ in graph.verified.current
+                            if account==owner['account_id'] and (not opening or active and date<=pop['cutoff']))
         require(None not in expected and Counter(expected)==Counter(pop['version_ids']),'capture_population_completeness')
         require(pop['signed_gl_total']==total==gl,'capture_gl')
     def amount(m):
         v=versions[m['version_id']]; return -v['signed_debit'] if v['account_type']=='credit_card' else v['signed_debit']
     for o in r['openings']:
+        if not owed('openings',o['id']):
+            require(get('drafts',get('draft_revisions',o['origin_draft_revision_id'])['draft_id'])['kind']=='opening','opening_draft_kind')
+            continue
         ms=members('opening_members','opening_id',o['id']); pop=o['authorized_source_snapshot']
         capture(o,pop,opening=True)
         require(get('drafts',get('draft_revisions',o['origin_draft_revision_id'])['draft_id'])['kind']=='opening','opening_draft_kind')
@@ -518,6 +592,9 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None, m
         if found is None: found=selected_keys[certificate]={m['key_id'] for m in matching('certificate_members','certificate_id',certificate) if m['classification']=='selected'}
         return found
     for c in r['certificates']:
+        if not owed('certificates',c['id']):
+            require(get('drafts',get('draft_revisions',c['origin_draft_revision_id'])['draft_id'])['kind'] in ('statement','amendment'),'certificate_draft_kind')
+            continue
         ms=members('certificate_members','certificate_id',c['id']); pop=c['captured_source_snapshot']
         capture(c,pop)
         require(get('drafts',get('draft_revisions',c['origin_draft_revision_id'])['draft_id'])['kind'] in ('statement','amendment'),'certificate_draft_kind')
@@ -557,7 +634,7 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None, m
             require((previous is None)==(v['revision_number']==1),'revision_origin')
             if previous: require(get(name,previous)['revision_number']+1==v['revision_number'],'revision_sequence')
     for d in r['draft_revisions']:
-        members('draft_members','revision_id',d['id'])
+        if owed('draft_revisions',d['id']): members('draft_members','revision_id',d['id'])
         header=d['header_snapshot']; kind=get('drafts',d['draft_id'])['kind']
         require((kind=='opening')==(header['opening_date'] is not None),'draft_header_kind')
         require(kind=='opening' or header['statement_date'] is not None,'draft_statement_date')
@@ -568,6 +645,7 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None, m
         if get('proposals',p['proposal_id'])['role']=='force_adjustment': require(bool(p['reason']),'force_reason')
     claims=by('claims'); released={v['claim_id'] for v in r['releases']}
     for c in claims.values():
+        if not fresh('claims',c): continue
         table,field,key,classification=('opening_members','opening_id',c['opening_id'],'covered') if c['opening_id'] else ('certificate_members','certificate_id',c['certificate_id'],'selected')
         found=indexes.get(('claimable',table,field,key))
         if found is None: found=indexes['claimable',table,field,key]={(m['key_id'],m['version_id'],m['classification']) for m in matching(table,field,key)}
@@ -596,6 +674,7 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None, m
         if e['before_chain_version']:
             require((e['account_id'],e['before_chain_version'],e['before_opening_id'],e['before_head_id']) in afters,'event_history_gap')
     for consumption in r['proposal_consumptions']:
+        if not fresh('proposal_consumptions',consumption) and consumption['journal_transaction_id'] not in scope: continue
         proposal=get('proposals',consumption['proposal_id']); saved=get('proposal_revisions',consumption['proposal_revision_id'])
         account=get('drafts',proposal['draft_id'])['account_id']
         effects=[v for v in versions.values() if v['transaction_id']==consumption['journal_transaction_id'] and v['revision_id']==consumption['journal_revision_id'] and v['active'] and v['account_id']==account]
@@ -621,7 +700,12 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None, m
         expected=by_audit.get(audit,set())
         actual=set()
         targets={v['transaction_id'] for v in matching('operation_transactions','operation_id',event['operation_id'])}
-        for link in matching('event_effects','event_id',event['id']):
+        links=matching('event_effects','event_id',event['id'])
+        if scope is not None and not fresh('events',event):
+            # An older event: only its transitions of documents in scope are derived again, and
+            # its links to the rest stand as the watermark proved them.
+            links=[v for v in links if versions[v['new_version_id']]['transaction_id'] in scope]
+        for link in links:
             new=versions[link['new_version_id']]
             require(link['source_audit_event_id']==new['source_audit_event_id']==audit,'event_causality')
             require(new['transaction_id'] in targets,'event_source_target')
