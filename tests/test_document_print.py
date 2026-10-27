@@ -222,6 +222,18 @@ def test_every_printable_kind_is_reachable_and_none_is_declared_twice(books, hos
     keyed("company update", {"overdue_notice_days": 1, "overdue_notice_template": "letter"})
     keyed("notice generate", {"as_of": "2026-08-10"})
     records["notice"] = books["run"]("notice list", {})["items"][0]
+    # R181 increment 4: a packing slip, of a shipment of a stocked part.
+    run = books["run"]
+    cogs = run("account create", {"name": "Print cogs", "type": "cost_of_goods_sold"})["id"]
+    valve = run("item create", {"name": "Brass valve", "type": "inventory_part", "description": "Valve",
+                                "price": "30.00", "purchase_description": "Valve", "cost": "9.00",
+                                "cogs_account_id": cogs, "income_account_id": books["income"]})["id"]
+    vendor = run("vendor create", {"name": "Valve Supply"})["id"]
+    run("bill post", {"vendor": vendor, "date": "2026-06-01", "items": [{"item": valve, "quantity": "3",
+                                                                          "unit_cost": "9.00"}]})
+    shipped_order = run("sales-order create", {"date": "2026-06-12", "customer": books["customer"],
+                                               "lines": [{"item": valve, "quantity": "3"}]})
+    records["packing-slip"] = run("shipment post", {"sales_order": shipped_order["id"], "date": "2026-06-13"})
     expected = set(KINDS) - IDENTIFIED_OTHERWISE
     assert set(records) == expected, (
         "a printable kind has no record here, so this witness would skip it: "
