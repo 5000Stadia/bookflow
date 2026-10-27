@@ -1267,3 +1267,8 @@ company_info.append_column(_shipment_schema.company_info_column(_column))
 # Shipment returns (co0103, R181 increment 2): unbilled shipped units back into stock.
 from bookflow.company import shipment_return_schema as _shipment_return_schema
 globals().update(_shipment_return_schema.define_tables(metadata, _column, _table))
+# Pick lists (co0104, R181 increment 3): picking as an optional layer on shipping, a staging bin per site.
+from bookflow.company import pick_list_schema as _pick_list_schema
+globals().update(_pick_list_schema.define_tables(metadata, _column, _table))
+company_info.append_column(_pick_list_schema.company_info_column(_column))
+inventory_sites.append_column(_pick_list_schema.staging_column(_column))

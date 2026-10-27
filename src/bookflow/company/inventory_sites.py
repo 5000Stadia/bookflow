@@ -94,9 +94,14 @@ def site_output(s, row, *, cls=SiteOutput, detail=False, as_of=None, **extra):
         transfers = [dict(number=t.number, date=t.date, status=t.status, from_site=t.from_site_name,
                           to_site=t.to_site_name, lines=len(t.lines))
                      for t in query_rows(s, site_id=row['id'], limit=20)]
+    staging = row.get('staging_bin_id')
+    if staging:
+        from bookflow.company import bins
+        staging = bins.bin_names(s, [staging]).get(staging)
     return cls(id=row['id'], version=row['version'], name=row['name'], description=row['description'],
                address=row['address'], is_default=bool(row['is_default']), tracks_bins=bool(row['tracks_bins']),
-               active=bool(row['active']), item_count=len(held), stock=stock, transfers=transfers, **extra)
+               active=bool(row['active']), staging_bin=staging or None, item_count=len(held), stock=stock,
+               transfers=transfers, **extra)
 
 
 def plan_site_create(s, ctx, inp) -> Plan:
@@ -128,7 +133,17 @@ def plan_site_update(s, ctx, inp) -> Plan:
             from bookflow.company import bins
             bins.check_tracking_off(s, old)
         new['tracks_bins'] = bool(inp.tracks_bins)
-    changed = any(new[k] != old[k] for k in ('name', 'description', 'address', 'is_default', 'tracks_bins'))
+    if 'staging_bin' in inp.model_fields_set:
+        # Pick lists (R181 increment 3): picked units move to this bin until they ship.
+        from bookflow.company import bins
+        if inp.staging_bin is None or bins.is_no_bin(inp.staging_bin) or not inp.staging_bin.strip():
+            new['staging_bin_id'] = None
+        else:
+            if not new['tracks_bins']:
+                raise _invalid('staging_bin', f'"{new["name"]}" does not track bins; turn tracks_bins on first')
+            new['staging_bin_id'] = bins.resolve_bin(s, old['id'], inp.staging_bin, field='staging_bin')['id']
+    changed = any(new.get(k) != old.get(k) for k in ('name', 'description', 'address', 'is_default', 'tracks_bins',
+                                                     'staging_bin_id'))
     if changed:
         new = _bumped(new, s, ctx)
     out = site_output(s, new, cls=SiteWriteOutput, changed=changed)

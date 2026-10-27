@@ -23,3 +23,4 @@ Database: `company`.
 | `is_default` | BOOLEAN | no | — | — | uq_inventory_site_default | — | Whether stock lines naming no site are placed here; exactly one active site is. |
 | `tracks_bins` | BOOLEAN | no | — | — | — | — | Whether stock at this site is located to bins (bins arrive in a later increment). |
 | `active` | BOOLEAN | no | — | — | — | — | Whether new stock lines and transfers may name this site. |
+| `staging_bin_id` | VARCHAR(26) | yes | — | — | — | inventory_bins.id | Bin picked units move to until they ship; null: picks move nothing. |

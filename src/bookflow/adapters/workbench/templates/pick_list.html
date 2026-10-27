@@ -1,0 +1,39 @@
+{% extends "base.html" %}{% block title %}Pick list {{ pick.number }}{% endblock %}{% block body %}<link rel="stylesheet" href="{{ static_urls['picks.css'] }}"><section id="pick-list" data-pick="{{ pick.number }}" data-pick-status="{{ pick.status }}">
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/items">Items</a> / <a href="/c/{{ company_id }}/inventory/pick-lists">Pick lists</a> / {{ pick.number }}</nav>
+<h1>Pick list {{ pick.number }}</h1>
+<p>{{ pick.status|capitalize }} · {{ pick.site_name }} · {{ pick.date }}{% if pick.picker %} · {{ pick.picker }}{% endif %}{% if pick.staging_bin %} · staging to {{ pick.staging_bin }}{% endif %} · <a href="/c/{{ company_id }}/inventory/pick-lists/{{ pick.number|urlencode }}/print" target="_blank" rel="noopener">Print</a></p>
+{% if result %}<div role="status" class="notice" data-pick-result><strong>{{ result }}</strong></div>{% endif %}
+{% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
+{% set url = '/c/' ~ company_id ~ '/inventory/pick-lists/' ~ (pick.number|urlencode) %}
+{% if pick.status == 'open' and can_enter %}
+<form method="post" action="{{ url }}" hx-post="{{ url }}" hx-target="body" hx-swap="outerHTML" class="pick-entry" data-pick-entry>
+{% from "scan_field.html" import scan_field %}{{ scan_field(company_id, 'pick', label='Scan a bin, item or serial number') }}<input type="hidden" name="code" value="">
+<input type="hidden" name="serial_number" value="">
+<label class="bin">Bin <input name="bin" list="pick-bins" autocomplete="off" value="{{ values.get('bin', '') }}" placeholder="Scan a bin label" data-scan-bin></label>{% if bins %}<datalist id="pick-bins">{% for b in bins %}<option value="{{ b }}">{% endfor %}</datalist>{% endif %}
+<label class="lot">Lot <input name="lot" autocomplete="off" value="{{ values.get('lot', '') }}" data-scan-lot></label>
+<label class="qty">Quantity <input name="quantity" inputmode="decimal" autocomplete="off" value="" placeholder="1"></label>
+<label class="mode"><input type="checkbox" name="mode" value="set"> Set to it</label>
+<input type="hidden" name="action" value="enter">
+<button type="submit" data-pick-enter>Pick</button>
+</form>
+<script src="{{ static_urls['scan.js'] }}" defer></script>
+{% endif %}
+<section class="workspace-card" aria-label="Lines">
+<h2>To pick</h2>
+{% for heading, rows in groups %}<h3 data-pick-group>{{ heading }}</h3>
+<div class="table-wrap"><table class="list-table pick-lines" data-pick-lines><thead><tr><th>Item</th><th>Order</th><th class="num">To pick</th><th class="num">Picked</th>{% if pick.status == 'open' and can_enter %}<th></th>{% endif %}</tr></thead><tbody>
+{% for l in rows %}<tr class="{% if l.short %}short{% elif l.over %}over{% elif l.to_pick == '0' %}done{% endif %}" data-line="{{ l.position }}" data-item="{{ l.item_name }}"><td data-label="Item">{{ l.item_name }}{% if l.lot %} <small>lot {{ l.lot }}{% if l.lot_expiry %}, expires {{ l.lot_expiry }}{% endif %}</small>{% endif %}{% if l.short %} <small class="flag">short</small>{% endif %}{% if l.serial_hints %}<br><small>In the bin: {{ l.serial_hints|join(', ') }}</small>{% endif %}{% if l.picked_serial_numbers %}<br><small>Picked: {{ l.picked_serial_numbers|join(', ') }}</small>{% endif %}</td><td data-label="Order">{{ l.sales_order }}{% if l.customer %} <small>{{ l.customer }}</small>{% endif %}</td><td class="num" data-label="To pick">{{ l.quantity }}</td><td class="num" data-label="Picked">{{ l.picked }}</td>{% if pick.status == 'open' and can_enter %}<td data-label=""><form method="post" action="{{ url }}" hx-post="{{ url }}" hx-target="body" hx-swap="outerHTML" class="inline"><input type="hidden" name="action" value="enter"><input type="hidden" name="line" value="{{ l.position }}"><input type="hidden" name="mode" value="set"><input type="hidden" name="quantity" value="{{ l.quantity }}"><button type="submit" class="secondary" data-pick-all>All</button></form></td>{% endif %}</tr>{% endfor %}
+</tbody></table></div>{% endfor %}
+</section>
+{% for w in pick.warnings %}<p class="warning">{{ w }}</p>{% endfor %}
+<section class="workspace-card" aria-label="Orders" data-pick-orders>
+<h2>Orders</h2>
+<ul>{% for o in pick.orders %}<li>Sales order {{ o.sales_order }}{% if o.customer %} · {{ o.customer }}{% endif %}{% if o.shipments %} · shipped as {% for n in o.shipments %}<a href="/c/{{ company_id }}/shipments/{{ n|urlencode }}">{{ n }}</a>{% endfor %}{% elif pick.status != 'cancelled' and can_ship %}<form method="post" action="{{ url }}" hx-post="{{ url }}" hx-target="body" hx-swap="outerHTML" class="inline"><input type="hidden" name="action" value="ship"><input type="hidden" name="sales_order" value="{{ o.sales_order }}"> <input type="date" name="date" value="{{ [pick.date, today]|max }}" aria-label="Ship date"> <button type="submit" data-pick-ship>Ship what was picked</button></form>{% endif %}</li>{% endfor %}</ul>
+</section>
+{% if pick.status == 'open' and can_enter %}
+<form method="post" action="{{ url }}" hx-post="{{ url }}" hx-target="body" hx-swap="outerHTML" class="pick-foot">
+<label>Reason (to cancel) <input name="ctx:reason" placeholder="Order changed"></label>
+<div class="actions"><button type="submit" name="action" value="close" data-pick-close>Close list</button> <button type="submit" name="action" value="cancel" class="secondary">Cancel list</button></div>
+</form>
+{% endif %}
+</section>{% endblock %}

@@ -1442,7 +1442,7 @@ Example JSON output:
 
 ## `shipment post`
 
-Ship a sales order before invoicing it: the units leave stock on the ship date (default today) and their cost waits in Shipped Not Invoiced, an asset, until the invoice moves it to cost of goods sold beside its income. Nothing reaches income or receivables. With no `lines` it ships every order line's quantity still to ship, up to what is available to the order (on hand less what other orders commit); the rest stays backordered on the order. `lines` name an order line (`order_line`, its line_id) or an `item`, a `quantity` in the order line's unit, and optionally `bin`, `lot` and `serial_numbers`; shipping past what is on hand is allowed with a warning, costed provisionally until the receipt arrives. Carrier and tracking numbers are recorded as text. The dry run shows each line's cost and what stays to ship. The result gives the next command, `shipment invoice <number>`. Example: {"sales_order": "1001"}.
+Ship a sales order before invoicing it: the units leave stock on the ship date (default today) and their cost waits in Shipped Not Invoiced, an asset, until the invoice moves it to cost of goods sold beside its income. Nothing reaches income or receivables. With no `lines` it ships every order line's quantity still to ship, up to what is available to the order (on hand less what other orders commit); the rest stays backordered on the order. `lines` name an order line (`order_line`, its line_id) or an `item`, a `quantity` in the order line's unit, and optionally `bin`, `lot` and `serial_numbers`; shipping past what is on hand is allowed with a warning, costed provisionally until the receipt arrives. Carrier and tracking numbers are recorded as text. The dry run shows each line's cost and what stays to ship. The result gives the next command, `shipment invoice <number>`. `pick_list` ships what was picked on it instead. Example: {"sales_order": "1001"}.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -1478,7 +1478,8 @@ The same example as complete `bookflow_run` arguments:
 | `carrier` | `--carrier` | string \| null | no | yes | null | Carrier or service, as text. |
 | `tracking_numbers` | `--tracking-numbers` | array[string] \| null | no | yes | null | Tracking numbers, recorded and printed as text. |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
-| `sales_order` | `--sales-order` | string | yes | no | — | The sales order shipped, by number or id.; minimum length 1; maximum length 1004 |
+| `sales_order` | `--sales-order` | string \| null | no | yes | null | The sales order shipped, by number or id; with pick_list, needed only when the list covers several. |
+| `pick_list` | `--pick-list` | string \| null | no | yes | null | Ship what was picked on this pick list for the order (bins, lots and serial numbers as picked). |
 | `date` | `--date` | string \| null | no | yes | null | The ship date: the date the stock left; default today. |
 | `site` | `--site` | string \| null | no | yes | null | Inventory site the shipment leaves; default the order lines' site, else the default site. One shipment leaves one site. |
 | `lines[].order_line` | inside `--lines` JSON array | string \| null | no | yes | null | The order line's line_id (as `sales-order show` lists it). Give this or item. |

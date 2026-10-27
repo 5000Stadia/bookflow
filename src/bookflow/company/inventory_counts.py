@@ -409,8 +409,16 @@ def plan_create(s, ctx, inp) -> Plan:
              for position, (item_id, key) in enumerate(_sheet_lines(s, count, items, named=named, bin_ids=bin_ids), 1)]
     if not lines and bin_ids is None:
         raise _invalid('site', f'{site["name"]} holds nothing to count on {date}; name the items to count')
-    return Plan(count_output(s, count, status='will_create', lines=lines),
+    return Plan(count_output(s, count, status='will_create', lines=lines, warnings=picked_words(s, count, lines)),
                 {'count': count, 'lines': lines, 'sequence': sequence})
+
+
+def picked_words(s, count, lines):
+    """Units picked for an order and not shipped that still sit in the counted places (R181 increment 3)."""
+    from bookflow.company import pick_lists
+    bin_ids = {line['bin_id'] for line in lines}
+    return pick_lists.picked_in_place(s, count['site_id'], {line['item_id'] for line in lines},
+                                      bin_ids if any(bin_ids) else None)
 
 
 def apply_create(plan, ctx, s) -> Applied:
@@ -434,7 +442,8 @@ def apply_create(plan, ctx, s) -> Applied:
         from sqlalchemy.dialects.sqlite import insert
         stmt = insert(c.sequences).values(**sequence)
         conn.execute(stmt.on_conflict_do_update(index_elements=['name'], set_=sequence))
-    return Applied(count_output(s, count), touched, f'create inventory count {count["number"]}', audited=True)
+    return Applied(count_output(s, count, warnings=picked_words(s, count, lines)), touched,
+                   f'create inventory count {count["number"]}', audited=True)
 
 
 # ---------------------------------------------------------------- enter
@@ -903,6 +912,7 @@ def _post(s, ctx, inp, *, persist):
     all_differences = [(item_id, entry, valued.get(item_id)) for item_id, entry in derived.items()]
     total = sum(int(values['value_minor_units']) for _, _, values in differences if values)
     warnings = list(dict.fromkeys(change.warnings)) if change else []
+    warnings += picked_words(s, count, lines)
     status = 'will_record'
     touched = []
     if persist:

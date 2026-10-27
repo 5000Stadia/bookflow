@@ -22,7 +22,8 @@ so cost (one average per item, company-wide) and the inventory asset are untouch
 """
 import sqlalchemy as sa
 
-PLACEMENT_SOURCES = ('movement', 'transfer', 'assignment', 'count')
+# ``pick`` moves picked units to a site's staging bin (R181 increment 3, co0104).
+PLACEMENT_SOURCES = ('movement', 'transfer', 'assignment', 'count', 'pick')
 COUNT_POSITIONS = ('before', 'after')
 # A placement may also be a count's own difference, between that date's before and after (increment 2).
 PLACEMENT_POSITIONS = ('before', 'count', 'after')

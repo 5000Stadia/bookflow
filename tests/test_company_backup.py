@@ -192,9 +192,27 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
 
     co0102 = importlib.import_module("bookflow.storage.company_migrations.versions.0102_shipments")
     co0103 = importlib.import_module("bookflow.storage.company_migrations.versions.0103_shipment_returns")
+    co0104 = importlib.import_module("bookflow.storage.company_migrations.versions.0104_pick_lists")
 
     def older(conn):
-        # Newest first: co0103 (on co0102): its guards and three tables, inventory_documents' kind CHECK put back.
+        # Newest first: co0104 (on co0103): its guards and five tables, inventory_placements' source CHECK put back,
+        # company_info.pick_and_pack_enabled and inventory_sites.staging_bin_id (a column with a foreign key, which
+        # DROP COLUMN refuses: its text is taken out of the schema, every value in it being null here).
+        for trigger in co0104.TRIGGERS:
+            conn.execute(f"DROP TRIGGER {trigger}")
+        for table in co0104.TABLES:
+            conn.execute(f"DROP TABLE {table}")
+        conn.execute("PRAGMA writable_schema=ON")
+        for old_text, new_text in co0104.REPLACEMENTS["inventory_placements"]:
+            assert conn.execute("UPDATE sqlite_schema SET sql = replace(sql, ?, ?) WHERE name = 'inventory_placements'",
+                                (new_text, old_text)).rowcount == 1
+        assert conn.execute("UPDATE sqlite_schema SET sql = replace(sql, ', staging_bin_id VARCHAR(26) REFERENCES "
+                            "inventory_bins (id)', '') WHERE name = 'inventory_sites'").rowcount == 1
+        conn.execute("PRAGMA writable_schema=OFF")
+        for column in co0104.COMPANY_COLUMNS:
+            conn.execute(f"ALTER TABLE company_info DROP COLUMN {column}")
+        # Then co0103 (on co0102).
+        # co0103 (on co0102): its guards and three tables, inventory_documents' kind CHECK put back.
         for trigger in co0103.TRIGGERS:
             conn.execute(f"DROP TRIGGER {trigger}")
         for table in co0103.TABLES:
@@ -375,7 +393,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))
     restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older",
                                               "organization": "Older Books Organization"})
-    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0103"
+    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0104"
     folder = _folder(client, restored["company_id"])
     # The migration took its verified backup of the restored database first, as every migration does.
     assert list((folder / "backups").glob("*-from-co0062.db"))

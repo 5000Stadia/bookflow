@@ -14,6 +14,7 @@ import sqlalchemy as sa
 from bookflow.company import schema as c
 from bookflow.company.sales_models import _invalid
 from bookflow.core.errors import BookflowError
+from bookflow.core.exact import format_quantity_micro_units
 from bookflow.core.money import Money
 
 # The documents whose lines carry ordered, invoiced, cancelled and open quantities.
@@ -191,6 +192,7 @@ def protect(s, header, before, after):
     from bookflow.company import work_tax
     from bookflow.company.billing import dependency
     shipment_guard(s, header, before, after)
+    pick_guard(s, header, before, after)
     taken = consumed(s, header)
     if not taken:
         return
@@ -268,14 +270,55 @@ def shipment_guard(s, header, before, after):
                        'below what was delivered', source_line_id=key)
 
 
+def pick_guard(s, header, before, after):
+    """An order a live pick list holds is not closed, and no line it holds drops or falls below what the list picked
+    or plans for it (R181 increment 3): the list would ship or keep units the order no longer wants."""
+    from bookflow.company import pick_lists, shipments, work
+    if header is None:
+        return
+    held = pick_lists.holding(s, order_id=header['id'])
+    if not held:
+        return
+    if after.get('status') == 'closed' and before.get('status') != 'closed':
+        pick_lists.refuse_held(held, 'it cannot be closed')
+    identities = {row['id']: (row['root_document_id'], row['root_line_id'])
+                  for row in s.company.conn.execute(sa.select(c.work_line_identities).where(
+                      c.work_line_identities.c.document_id == header['id'])).mappings()}
+    new = {entry['line_id']: entry['facts'] for entry in after.get('lines', ())}
+    parts = shipments.waiting_parts(s, order_ids=[header['id']]) if shipments.has_shipments(s) else {}
+    for entry in before.get('lines', ()):
+        key = entry['line_id']
+        root = identities.get(key, (header['id'], key))
+        if root not in held:
+            continue
+        quantity, numbers = held[root]
+        if key not in new:
+            pick_lists.refuse_held({root: held[root]}, 'a line it holds cannot be removed')
+        line = work.line_facts(dict(facts_snapshot=new[key])) if not hasattr(new[key], 'quantity_microunits') \
+            else new[key]
+        waiting = shipments._to_selected(sum(p.waiting for p in parts.get(root, ())), line.unit_factor_nanounits)
+        remaining = (line.quantity_microunits - line.cancelled_quantity_microunits
+                     - invoiced_microunits(s, root, line, _policy(s, header)) - waiting)
+        if line.item_id != entry['facts'].get('item_id') or \
+                shipments._to_base(max(remaining, Fraction(0)), line.unit_factor_nanounits) < quantity:
+            pick_lists.refuse_held({root: held[root]}, (
+                f'line {key} cannot fall below the {format_quantity_micro_units(quantity)} the list picked or plans '
+                'for it'), remedy=(f'Put units back on the list first (`pick-list enter` with mode set), or cancel '
+                                   f'it (`pick-list cancel {numbers[0]}`).'))
+
+
 def _policy(s, header):
     from bookflow.company import tax_policy, work
     return tax_policy.effective(work.facts(work.revision(s, header)).profile)
 
 
 def void_guard(s, header):
-    """`sales-order void` is refused while an active invoice consumes any root or a prepayment is held."""
-    from bookflow.company import shipments
+    """`sales-order void` is refused while an active invoice consumes any root or a prepayment is held, or a live
+    pick list holds its units."""
+    from bookflow.company import pick_lists, shipments
+    held = pick_lists.holding(s, order_id=header['id'])
+    if held:
+        pick_lists.refuse_held(held, 'it cannot be voided')
     if shipments.has_shipments(s):
         live = sorted({row['number'] for row in shipments.shipped_lines(s, order_ids=[header['id']])})
         if live:
@@ -319,6 +362,31 @@ def _micro(fraction):
 
 
 def billing_choice(s, inp, header, rev, lines, identities):
+    """What an order invoice bills (``_billing_choice``), refused while a live pick list holds a line it would issue
+    stock for: those units ship from the list (R181 increment 3)."""
+    choice = _billing_choice(s, inp, header, rev, lines, identities)
+    from bookflow.company import pick_lists
+    held = pick_lists.holding(s, order_id=header['id'])
+    if not held:
+        return choice
+    if choice.selections is not None:
+        issuing = {entry.line_id for entry in choice.selections}
+    elif choice.line_ids is not None:
+        issuing = set(choice.line_ids)
+    else:
+        issuing = {line['line_id'] for line in lines}
+    issuing -= set(choice.from_shipments)
+    found = {root: held[root] for root in {_root(s, identities, line) for line in lines
+                                           if line['line_id'] in issuing} if root in held}
+    if found:
+        first = min((n for _, names in found.values() for n in names), key=pick_lists._natural)
+        pick_lists.refuse_held(found, 'invoicing it from the order would issue those units a second time', remedy=(
+            f'Ship from the list (`shipment post --pick-list {first}`) and invoice the shipment, or cancel the list '
+            f'(`pick-list cancel {first}`) first.'))
+    return choice
+
+
+def _billing_choice(s, inp, header, rev, lines, identities):
     """What an order invoice bills, shipped units first (R181, design/pick-pack-ship.md §3).
 
     `shipments` bills exactly those shipments' units not yet invoiced. With no selection the invoice bills every

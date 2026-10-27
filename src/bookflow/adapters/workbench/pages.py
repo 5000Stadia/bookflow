@@ -258,9 +258,14 @@ def _role_allows(cmd: registry.Command, record: dict[str, Any], *, hub_admin: bo
     return role in ROLE_RANK and ROLE_RANK[role] >= ROLE_FOR_REQUIRED[required]
 
 
+def _feature_offers(cmd: registry.Command, info: dict[str, Any]) -> bool:
+    """Whether the company's feature switches offer this command: picking (R181 K3) is off until turned on."""
+    return bool(info.get("pick_and_pack_enabled", False)) or not cmd.name.startswith("pick-list ")
+
+
 def _company_offers(cmd: registry.Command, company_view: dict[str, Any], *, hub_admin: bool = False) -> bool:
     """Whether a company page may offer this command: the role allows it and the company enables it."""
-    return _role_allows(cmd, company_view, hub_admin=hub_admin) and (
+    return _role_allows(cmd, company_view, hub_admin=hub_admin) and _feature_offers(cmd, company_view.get("info", {})) and (
         company_view.get("info", {}).get("estimates_enabled", True)
         or cmd.name not in ("estimate create", "estimate copy", "proposal estimate"))
 
@@ -633,7 +638,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js", "timekeeping.css", "scan.js", "counts.css")
+        for name in ("workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js", "timekeeping.css", "scan.js", "counts.css", "picks.css")
     }
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
@@ -645,6 +650,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         ctx['math_company_currency'] = (company_view or {}).get('home_currency', '') if company_view and company_view.get('company_id') == ctx.get('company_id') else ''
         if company_view and company_view["company_id"] == (ctx.get("company_id") or ctx.get("header_company_id")):
             ctx["company_label"] = company_view["display_name"]
+            # Picking (R181 K3) is an optional layer: its buttons show only while the company has it on.
+            ctx.setdefault("company_picks", bool(company_view.get("info", {}).get("pick_and_pack_enabled", False)))
             if _role_allows(registry.get('company update'), company_view, hub_admin=credential(request).hub_admin):
                 ctx.setdefault('preferences_settings_url', f"/c/{company_view['company_id']}/company/self/update")
         flash_id = request.query_params.get("flash")
@@ -785,6 +792,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     from bookflow.adapters.workbench import shipment_pages as ShipmentPages
     ShipmentPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                         role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
+    # R181 increment 3: pick lists and the pick screen, shown only while the company has picking on.
+    from bookflow.adapters.workbench import pick_list_pages as PickListPages
+    PickListPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                        role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     from bookflow.adapters.workbench import finance_charges as FinanceCharges
     FinanceCharges.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                          role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
@@ -902,7 +913,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     def company_noun_rows(request: Request, show: dict[str, Any]) -> list[tuple[str, list[registry.Command]]]:
         """The company's nouns and the verbs this credential may use, as the grid has always built them."""
         permits = company_permits(request, show)
-        return [(n, [cmd for cmd in _verbs(n, "company") if permits(cmd)]) for n in _nouns("company")]
+        info = show.get("info", {})
+        # A noun every command of which a feature switch hides (pick lists while picking is off) is not shown at all.
+        return [(n, [cmd for cmd in _verbs(n, "company") if permits(cmd)]) for n in _nouns("company")
+                if any(_feature_offers(cmd, info) for cmd in _verbs(n, "company")) or not _verbs(n, "company")]
 
     def _open_clocks(request: Request, company_id: str):
         """Who is clocked in, for the home page (R106); nothing when the caller cannot read the clock."""
@@ -1344,6 +1358,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                           if not cmd.is_write or _role_allows(cmd, role_view, hub_admin=cred.hub_admin)]
             if not role_view.get('info', {}).get('estimates_enabled', True):
                 page_verbs = [cmd for cmd in page_verbs if cmd.name not in ('estimate create', 'estimate copy', 'proposal estimate')]
+            page_verbs = [cmd for cmd in page_verbs if _feature_offers(cmd, role_view.get('info', {}))]
         else:
             page_verbs = [cmd for cmd in page_verbs if _role_allows(cmd, {}, hub_admin=cred.hub_admin)]
         meta = _noun_meta(noun)
@@ -1591,6 +1606,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                           and command_noun.replace("-", "_") not in c.input_model.model_fields)]
         if company_id and not company_view.get('info', {}).get('estimates_enabled', True):
             verbs = [cmd for cmd in verbs if cmd.name not in ('estimate copy', 'proposal estimate')]
+        if company_id:
+            verbs = [cmd for cmd in verbs if _feature_offers(cmd, company_view.get('info', {}))]
         if command_noun in ("customer", "agent"):
             verbs = [
                 command
@@ -2133,6 +2150,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             from bookflow.company.work_preferences import disabled_error
             return page_error(request, disabled_error('estimates', [change for change in authorized_company['preference_changes']
                 if change['field'] == 'estimates_enabled']), company_id=company_id)
+        if request.method == 'GET' and authorized_company and cmd.name.startswith('pick-list ') and \
+                not authorized_company['info'].get('pick_and_pack_enabled'):
+            # Picking is off (K3): no pick form renders, as no pick menu or button shows.
+            from bookflow.company.pick_lists import disabled_error as picking_off
+            return page_error(request, picking_off(), company_id=company_id)
         billing = None
         if noun in Billing.NOUNS and record_id and (verb == 'billing' or Billing.is_conversion(noun, verb)):
             try:

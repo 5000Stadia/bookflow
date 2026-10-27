@@ -292,7 +292,9 @@ SETUP_TRIAL_COMMANDS = frozenset(('owner-link', 'agent run', 'reconcile discard'
 SHIPMENT_COMMANDS = frozenset(('shipment post', 'shipment update', 'shipment void', 'shipment show', 'shipment query',
     'shipment history', 'shipment invoice', 'report shipped-not-invoiced',
     # R181 increment 2: a return of one (retried), read back through show and query, and voided.
-    'shipment return', 'shipment-return show', 'shipment-return query', 'shipment-return void'))
+    'shipment return', 'shipment-return show', 'shipment-return query', 'shipment-return void',
+    # R181 increment 3: picking on, a list made, a pick retried, read back, shipped from; another closed, cancelled.
+    'pick-list create', 'pick-list enter', 'pick-list show', 'pick-list query', 'pick-list close', 'pick-list cancel'))
 
 LANDED_COST_COMMANDS = frozenset(('landed-cost setup', 'landed-cost charges', 'landed-cost post', 'landed-cost void',
     'landed-cost show', 'landed-cost query'))

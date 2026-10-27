@@ -565,6 +565,7 @@ SECTIONS: tuple[Section, ...] = (
             Action("Physical counts", READ, ("inventory-count query",), "/inventory/counts"),
             Action("Landed cost", READ, ("landed-cost charges",), "/inventory/landed-cost"),
             Action("Ship an order", WRITE, ("shipment post",), "/shipments/new"),
+            Action("Pick lists", READ, ("pick-list query",), "/inventory/pick-lists"),
             Action("Shipments", READ, ("shipment query",), "/shipments"),
             _report("Shipped not invoiced", "shipped-not-invoiced"),
             _report("Physical inventory worksheet", "physical-inventory-worksheet"),

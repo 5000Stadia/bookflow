@@ -51,9 +51,12 @@ def company_form_groups(leaves):
         scheduler_catch_up_days='Enter missed automatic transactions up to (days back; blank for all)',
         overdue_notice_days='Prepare a notice when an invoice is this many days overdue (blank: off)',
         overdue_notice_frequency='Prepare notices', overdue_notice_minimum='Only for an overdue balance of at least',
-        overdue_notice_template='Each notice is')
+        overdue_notice_template='Each notice is',
+        invoice_when_shipping='After a shipment, offer an invoice for it',
+        pick_and_pack_enabled='Use pick lists (pick before shipping; off ships straight from the order)')
     payment_preferences = {'automatically_apply_payments', 'automatically_calculate_payments', 'use_undeposited_funds_for_payments'}
     display_preferences = {'negative_number_style'}
+    shipping_preferences = {'invoice_when_shipping', 'pick_and_pack_enabled'}
     finance_preferences = {'finance_charge_annual_rate', 'finance_charge_minimum', 'finance_charge_grace_days',
         'finance_charge_account_id', 'finance_charge_on_overdue_charges', 'finance_charge_from', 'finance_charge_mark_to_print'}
     reminder_preferences = {'scheduler_catch_up_days', 'overdue_notice_days', 'overdue_notice_frequency',
@@ -64,11 +67,12 @@ def company_form_groups(leaves):
     groups = [dict(title=title, open=True, leaves=[leaf for leaf in leaves if leaf['path'] in fields])
         for title, fields in [('Customer work preferences', preferences), ('Customer payment preferences', payment_preferences),
             ('Finance charges', finance_preferences), ('Reminders and overdue notices', reminder_preferences),
-            ('Reports and lists', display_preferences),
+            ('Shipping and fulfillment', shipping_preferences), ('Reports and lists', display_preferences),
             ('Company information', {leaf['path'] for leaf in leaves} - preferences - payment_preferences - display_preferences
-             - finance_preferences - reminder_preferences)]]
+             - finance_preferences - reminder_preferences - shipping_preferences)]]
     return [group for group in groups if group['leaves'] or group['title'] not in ('Reports and lists', 'Finance charges',
-                                                                                   'Reminders and overdue notices')]
+                                                                                   'Reminders and overdue notices',
+                                                                                   'Shipping and fulfillment')]
 
 
 def customer_form_groups(leaves: list[dict[str, Any]]) -> list[dict[str, Any]]:
