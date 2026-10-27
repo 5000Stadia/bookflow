@@ -606,6 +606,36 @@ def order_note(s, customer_id, context, output=None):
     bills the order instead; for a payment that would sit unapplied while the customer has an open
     order, work order or accepted estimate, it says how to take it as a deposit. Never a refusal.
     """
+    shipped = shipment_note(s, customer_id, context)
+    note = _order_note(s, customer_id, context, output)
+    return ' '.join(part for part in (shipped, note) if part) or None
+
+
+def shipment_note(s, customer_id, context):
+    """The customer's shipments not yet invoiced, with the exact command that bills each (R181 §7). Advice only."""
+    from bookflow.company import shipments
+    if context not in ('invoice', 'sales_receipt', 'payment') or not shipments.has_shipments(s):
+        return None
+    waiting = {}
+    for parts in shipments.waiting_parts(s).values():
+        for part in parts:
+            if part.waiting > 0:
+                waiting.setdefault(part.number, part)
+    numbers = [number for number, part in sorted(waiting.items(), key=lambda kv: (kv[1].ship_date, kv[0]))
+               if s.company.conn.execute(sa.select(c.shipments.c.customer_id).where(
+                   c.shipments.c.number == number)).scalar() == customer_id]
+    if not numbers:
+        return None
+    listed = ', '.join(f'{number} (shipped {waiting[number].ship_date})' for number in numbers)
+    if context == 'payment':
+        return (f'This customer has goods shipped and not yet invoiced on shipment {listed}; bill them with '
+                f'`shipment invoice {numbers[0]}` and apply the payment to that invoice.')
+    return (f'This customer has goods shipped and not yet invoiced on shipment {listed}. Bill those goods with '
+            f'`shipment invoice {numbers[0]}` rather than on a new invoice line, which would issue them from stock '
+            'a second time.')
+
+
+def _order_note(s, customer_id, context, output=None):
     from bookflow.company import commitments, work
     rows = commitments.open_lines(s, stocked_only=False, kinds=('sales_order',))
     rows = [row for row in rows if row.customer_id == customer_id]

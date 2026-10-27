@@ -1206,6 +1206,31 @@ is a person's act, on the accountant's advice: `costing-method set` and `costing
 agent (E_PERMISSION). When asked to switch, say so and leave it to your principal. Everything else -- sales,
 receipts, returns, counts, freight -- works the same under either method; replay costs it.
 
+## Ship Acme's order now, bill it later
+
+A warehouse that ships before it bills records the shipment on its own. `shipment post` takes the order and ships,
+on the ship date (default today), what it still has to ship up to what is available to it; name `lines` (an order
+line's `order_line` or an `item`, a `quantity`, and `bin`, `lot` or `serial_numbers` where they matter) to ship
+less or past what is on hand. The units leave stock at the ship date and their cost waits in **Shipped Not
+Invoiced**, an asset, until an invoice bills them; nothing reaches income or receivables. What is not shipped stays
+on the order to ship (its backorder); no backorder document is made.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "shipment post", "reason": "Shipped Acme's order", "dry_run": true, "input": {"sales_order": "1001"}}
+{"command": "shipment invoice", "reason": "Bill last week's shipment", "input": {"shipment": "1004", "date": "2026-12-12"}}
+```
+
+Bill shipped goods with `shipment invoice <number>`, or `sales-order invoice` with no selection (it bills shipped
+units first): that invoice moves no stock and moves their cost to cost of goods sold, so profit and loss reads as if
+the invoice had shipped them. **Never retype shipped goods on `invoice post`**: that issues them from stock a second
+time. `invoice post`, `sales-order invoice` and `payment receive` warn when the customer has shipments not yet
+invoiced and give the command. An invoice may not be dated before the ship date. `sales-order show` gives each line
+`shipped`, `shipped_not_invoiced` and `to_ship`; committed stock is what is still to ship. `shipment update` corrects
+date, lines, places or tracking (carrier and tracking numbers are text only); `shipment void` puts the units back,
+and both are refused below what an invoice billed (void or correct that invoice first; its cost goes back to
+Shipped Not Invoiced). `report shipped-not-invoiced` lists what waits and always equals the account.
+
 ## Stock sent back to a vendor
 
 Enter it as one `vendor-credit post` with `items`: one row per thing sent back, each with

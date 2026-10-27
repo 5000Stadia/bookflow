@@ -77,7 +77,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # cycle-class create/update/activate/deactivate/show/list; cycle-count classify and due; report items-by-bin.
     # +6 landed cost (R104 increment 6): landed-cost setup/charges/post/void/show/query.
     # +4 FIFO costing (R104 increment 7): costing-method set/withdraw/show, report inventory-layers.
-    assert len(rows) == 738
+    # +8 shipments (R181 increment 1): shipment post/update/void/show/query/history/invoice, report shipped-not-invoiced.
+    assert len(rows) == 746
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).

@@ -2519,3 +2519,41 @@ MATRIX['costing-method set'] = dict(_COSTING_WRITE)
 MATRIX['costing-method withdraw'] = dict(_COSTING_WRITE)
 MATRIX['costing-method show'] = {'E_VALIDATION': 'invalid input'}
 MATRIX['report inventory-layers'] = {'E_VALIDATION': 'invalid input', 'E_RECORD_NOT_FOUND': 'unknown item'}
+
+# Shipments (R181 increment 1).
+_SHIPMENT_WRITE = {
+    'E_VALIDATION': 'a line not on the order, more than it has to ship, another site, nothing to ship, units worth nothing',
+    'E_RECORD_NOT_FOUND': 'unknown order, shipment, line, item, bin, site or ship method',
+    'E_INACTIVE_REFERENCE': 'an inactive site or item',
+    'E_VALUE_RANGE': 'a quantity outside storage bounds',
+    'E_PERIOD_CLOSED': 'the ship date, or a cost correction or cost move it owes, on or before the closing date',
+    'E_VERSION_CONFLICT': 'a stale expected_version',
+    'E_WORK_DEPENDENCY': 'a closed or voided order, or an invoice billing the shipment (below its quantity, or a void)',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+MATRIX['shipment post'] = dict(_SHIPMENT_WRITE)
+MATRIX['shipment update'] = dict(_SHIPMENT_WRITE)
+MATRIX['shipment void'] = dict(_SHIPMENT_WRITE, E_REASON_REQUIRED='a void without --reason')
+MATRIX['shipment show'] = {'E_RECORD_NOT_FOUND': 'unknown shipment'}
+MATRIX['shipment history'] = {'E_RECORD_NOT_FOUND': 'unknown shipment'}
+MATRIX['shipment query'] = {'E_RECORD_NOT_FOUND': 'unknown order or customer', 'E_VALIDATION': 'invalid input'}
+MATRIX['report shipped-not-invoiced'] = {'E_RECORD_NOT_FOUND': 'unknown customer', 'E_VALIDATION': 'invalid input'}
+MATRIX['shipment invoice'] = {
+    'E_VALIDATION': 'an invoice dated before the ship date, nothing left to invoice',
+    'E_RECORD_NOT_FOUND': 'unknown shipment or account',
+    'E_VERSION_CONFLICT': 'the order changed while the invoice was made',
+    'E_WORK_DEPENDENCY': 'a voided or closed order',
+    'E_CONVERSION_KEY_REUSED': 'a conversion key used for another request',
+    'E_PERIOD_CLOSED': 'the invoice date on or before the closing date',
+    'E_DUPLICATE_NUMBER': 'the supplied invoice number is already used',
+    'E_INACTIVE_REFERENCE': 'an inactive customer, item or account',
+    'E_VALUE_RANGE': 'an amount outside storage bounds',
+    'E_AMOUNT_PRECISION': 'an amount with too many decimals',
+    'E_PREVIEW_STALE': 'a stale expected_facts_fingerprint',
+    'E_FEATURE_DISABLED': 'a disabled billing mode',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
