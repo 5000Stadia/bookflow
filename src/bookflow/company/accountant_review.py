@@ -557,13 +557,14 @@ def _copy_accountant(s, selector):
 def _seed_copy(row):
     """Turn the snapshot into the accountant's copy: its own terms, the audit cursor, no other copy's key."""
     def inspect(snapshot: Path):
-        with closing(sqlite3.connect(str(snapshot))) as db:
+        # The snapshot is a private file, not the live books: its own transaction, committed by
+        # the connection's context on success (no bare commit outside the traced connection).
+        with closing(sqlite3.connect(str(snapshot))) as db, db:
             base = db.execute('SELECT COALESCE(MAX(seq), 0) FROM audit_events').fetchone()[0]
             db.execute('UPDATE accountant_copies SET mac_key=?', (WIPED_KEY,))
             values = dict(row, side='accountant', status='working', base_audit_seq=base)
             db.execute(f"INSERT INTO accountant_copies ({', '.join(values)}) VALUES ({', '.join('?' for _ in values)})",
                        tuple(values.values()))
-            db.commit()
         return base
     return inspect
 

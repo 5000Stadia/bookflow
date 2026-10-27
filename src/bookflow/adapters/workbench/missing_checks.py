@@ -13,6 +13,8 @@ COMMANDS = {"report missing-checks"}
 TOTALS = (("gaps", "Holes in the sequence"), ("missing_numbers", "Numbers missing"),
           ("legacy_uncertain_gaps", "Holes that cannot be confirmed"),
           ("retired_numbers", "Numbers a correction gave up"),
+          ("spoiled_numbers", "Numbers spoiled in the printer"),
+          ("numbers_in_printer", "Numbers still in the printer"),
           ("duplicate_numbers", "Numbers used twice"), ("duplicate_checks", "Checks sharing a number"),
           ("checks_examined", "Checks examined"), ("numbered_checks", "In a numbered sequence"),
           ("unnumbered_checks", "Numbered some other way"),
@@ -20,7 +22,8 @@ TOTALS = (("gaps", "Holes in the sequence"), ("missing_numbers", "Numbers missin
           ("checks_numbered_before_the_upgrade", "Numbered before the upgrade"))
 
 # What each kind of row is called where a person reads it, rather than by its stored spelling.
-KINDS = {"gap": "Missing", "duplicate": "Used twice", "retired": "Given up by a correction"}
+KINDS = {"gap": "Missing", "duplicate": "Used twice", "retired": "Given up by a correction",
+         "spoiled": "Spoiled in the printer", "printing": "In the printer"}
 
 
 def _range(row):
