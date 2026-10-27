@@ -318,6 +318,7 @@ FIELDS = {
         'overdue_notice_frequency': ('str', False, False, 'dependency_field'),
         'overdue_notice_minimum': ('str', True, False, 'dependency_field'),
         'overdue_notice_template': ('str', False, False, 'dependency_field'),
+        'invoice_when_shipping': ('str', False, False, 'dependency_field'),
     },
     'custom_field_defs': {
         'active': ('bool', False, False, 'dependency_field'),
