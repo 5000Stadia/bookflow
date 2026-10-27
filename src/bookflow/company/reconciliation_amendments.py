@@ -24,6 +24,9 @@ class Closure(m.Model):
 
 def derive(s,seeds, *, before_source,authority_transactions):
     require({r['id'] for r in before_source.rows['transactions']}<=set(authority_transactions),'E_PERMISSION')
+    # Changed effects are found by enumerating both whole graphs; a scoped graph
+    # (`reconciliation_watermark`) derives only part of its documents.
+    require(before_source.scope is None and s.source.scope is None,'E_RECONCILIATION_UNSUPPORTED')
     with adapter_errors():
         old_history,old=adapters.enumerate_graph(before_source);new_history,new=adapters.enumerate_graph(s.source)
         for account in {v.account_id for v in old+new}:

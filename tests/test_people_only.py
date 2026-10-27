@@ -49,6 +49,7 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # bins-v1 adds none: bins, cycle classes and what is due to count are bookkeeping.
     # landed-cost-v1 adds none: spreading freight over stock is bookkeeping (ledger.post, as inventory adjust).
     # fifo-v1 adds setting and withdrawing the costing method: how stock is costed is the company's policy.
+    # verify-v1 and shipments-v1 add none: `company verify` only reads; shipments are ledger writes.
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {
         'journal restore', 'invoice restore', 'customer merge', 'customer unmerge', 'vendor merge', 'vendor unmerge',

@@ -188,10 +188,12 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0097 = importlib.import_module("bookflow.storage.company_migrations.versions.0097_bins_cycle_counts")
     co0099 = importlib.import_module("bookflow.storage.company_migrations.versions.0099_deposit_indexes")
     co0100 = importlib.import_module("bookflow.storage.company_migrations.versions.0100_costing_methods")
+    co0101 = importlib.import_module("bookflow.storage.company_migrations.versions.0101_statement_watermarks")
+
     co0102 = importlib.import_module("bookflow.storage.company_migrations.versions.0102_shipments")
 
     def older(conn):
-        # Newest first: co0102 (on co0100): its guards and five tables, inventory_documents' kind CHECK put back
+        # Newest first: co0102 (on co0101): its guards and five tables, inventory_documents' kind CHECK put back
         # (the table is empty here), and company_info.invoice_when_shipping.
         for trigger in co0102.TRIGGERS:
             conn.execute(f"DROP TRIGGER {trigger}")
@@ -204,7 +206,10 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
         conn.execute("PRAGMA writable_schema=OFF")
         for column in co0102.COMPANY_COLUMNS:
             conn.execute(f"ALTER TABLE company_info DROP COLUMN {column}")
-        # Newest first: co0100 (on co0099): its guards, co0079's dimensions guard put back, costing_methods.
+        # Then co0101 (on co0100): statement_watermarks.
+        for table in co0101.TABLES:
+            conn.execute(f"DROP TABLE {table}")
+        # Then co0100 (on co0099): its guards, co0079's dimensions guard put back, costing_methods.
         for trigger in co0100.TRIGGERS:
             conn.execute(f"DROP TRIGGER {trigger}")
         conn.execute("DROP TRIGGER receipt_cost_correction_dimensions")

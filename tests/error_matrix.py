@@ -2520,6 +2520,8 @@ MATRIX['costing-method withdraw'] = dict(_COSTING_WRITE)
 MATRIX['costing-method show'] = {'E_VALIDATION': 'invalid input'}
 MATRIX['report inventory-layers'] = {'E_VALIDATION': 'invalid input', 'E_RECORD_NOT_FOUND': 'unknown item'}
 
+# The verified history watermark (R180 stage 2).
+MATRIX['company verify'] = {'E_RECORD_NOT_FOUND': 'unknown account', 'E_VALIDATION': 'invalid input'}
 # Shipments (R181 increment 1).
 _SHIPMENT_WRITE = {
     'E_VALIDATION': 'a line not on the order, more than it has to ship, another site, nothing to ship, units worth nothing',

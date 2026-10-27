@@ -601,7 +601,7 @@ For the builder, defaults standing unless review finds otherwise:
 
 ## As built: increment 1
 
-- **Migration co0102** (on co0100; main's R180 co0101 re-chains at merge) adds `shipments` (immutable header: number
+- **Migration co0102** (on co0101) adds `shipments` (immutable header: number
   from the `shipment` sequence starting 1001, order, customer, journal entry), `shipment_revisions` (append-only; the
   newest is current, its number the version, its status the shipment's), `shipment_lines` (per revision, stable
   `line_identity`, the order line's billing root, item, base quantity, accounts, class, the issue movement),

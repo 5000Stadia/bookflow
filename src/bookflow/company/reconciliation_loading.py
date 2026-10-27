@@ -20,6 +20,9 @@ from bookflow.company import schema as c
 from bookflow.company import reconciliation_adapters as adapters
 from bookflow.company import reconciliation_materialization as materialization
 from bookflow.company import reconciliation_preparation as preparation
+from bookflow.company.reconciliation_schema import MUTABLE
+
+MUTABLE_SHORT = frozenset(name.removeprefix('reconciliation_') for name in MUTABLE)
 
 PREFIX = 'reconciliation_'
 # Where a reconciliation row says which account it belongs to. Everything else is reached from
@@ -49,6 +52,18 @@ def statement_transactions(db, account_id):
     return ids
 
 
+def _read(db, table):
+    """Every row of one reconciliation table, in table order, read through the driver.
+
+    The same values `db.conn.execute(sa.select(table)).mappings()` gives: this family's columns
+    are Text and BigInteger, which SQLAlchemy hands back from SQLite unchanged. Read this way
+    because its per-row result machinery was most of the time on a table of 100,000 members.
+    """
+    columns = [col.name for col in table.columns]
+    sql = 'SELECT ' + ', '.join('"%s"' % name for name in columns) + ' FROM "%s"' % table.name
+    return [dict(zip(columns, values)) for values in db.raw.execute(sql)]
+
+
 def _rows_for(db, accounts, identifiers):
     """Stored rows owned by these accounts or derived from these documents, plus their closure.
 
@@ -59,11 +74,12 @@ def _rows_for(db, accounts, identifiers):
     would surface as a missing owner rather than as a scoping bug anyone could read.
     """
     tables = _tables()
-    rows = {name: [dict(v) for v in db.conn.execute(sa.select(t)).mappings()] for name, t in tables.items()}
+    rows = {name: _read(db, t) for name, t in tables.items()}
     keep = {name: set() for name in tables}
+    primary = {name: [col.name for col in t.primary_key.columns] for name, t in tables.items()}
 
     def identity(name, row):
-        return tuple(row[col.name] for col in tables[name].primary_key.columns)
+        return tuple(row[col] for col in primary[name])
 
     indexed = {name: {identity(name, row): row for row in values} for name, values in rows.items()}
     for name in ACCOUNT_OWNED:
@@ -90,32 +106,43 @@ def _rows_for(db, accounts, identifiers):
             groups = pointed[target, remote] = {}
             for key, row in indexed[target].items():
                 groups.setdefault(tuple(row[col] for col in remote), []).append(key)
-    while True:
-        grew = False
-        for name, columns, target, remote in edges:
-            wanted = set()
-            for key in keep[name]:
-                row = indexed[name][key]
+    # And each edge's source rows grouped by the columns they point with, for the other
+    # direction: a kept row's own children belong with it, because what `validate` checks about
+    # an operation or an attempt is the completeness of its items.
+    pointing = {}
+    for name, columns, _, _ in edges:
+        if (name, columns) not in pointing:
+            groups = pointing[name, columns] = {}
+            for key, row in indexed[name].items():
                 value = tuple(row[col] for col in columns)
                 if None not in value:
-                    wanted.add(value)
-            for value in wanted:
-                for key in pointed[target, remote].get(value, ()):
-                    if key not in keep[target]:
-                        keep[target].add(key)
-                        grew = True
-            # The other direction: a kept row's own children belong with it, because what
-            # `validate` checks about an operation or an attempt is the completeness of its items.
-            held = {tuple(indexed[target][key][col] for col in remote) for key in keep[target]}
-            for key, row in indexed[name].items():
-                if key in keep[name]:
-                    continue
-                value = tuple(row[col] for col in columns)
-                if None not in value and value in held:
-                    keep[name].add(key)
-                    grew = True
-        if not grew:
-            break
+                    groups.setdefault(value, []).append(key)
+    outward, inward = {}, {}
+    for edge in edges:
+        outward.setdefault(edge[0], []).append(edge)
+        inward.setdefault(edge[2], []).append(edge)
+    # The closure is the least set closed under both directions, so one pass over a work list
+    # reaches the same rows the repeated sweeps did, each kept row visited once.
+    work = [(name, key) for name in tables for key in keep[name]]
+    while work:
+        name, key = work.pop()
+        row = indexed[name][key]
+        for _, columns, target, remote in outward.get(name, ()):
+            value = tuple(row[col] for col in columns)
+            if None in value:
+                continue
+            for found in pointed[target, remote].get(value, ()):
+                if found not in keep[target]:
+                    keep[target].add(found)
+                    work.append((target, found))
+        for source, columns, _, remote in inward.get(name, ()):
+            value = tuple(row[col] for col in remote)
+            if None in value:
+                continue
+            for found in pointing[source, columns].get(value, ()):
+                if found not in keep[source]:
+                    keep[source].add(found)
+                    work.append((source, found))
     return {name: [row for key, row in indexed[name].items() if key in keep[name]] for name in tables}
 
 
@@ -176,16 +203,19 @@ def referenced_rows(db, rows=None):
     return result
 
 
-def load(s, account_id, *, prove_captures=()):
-    """The Snapshot for one account, as the stored rows have it.
+# How the last load in this process was proved ('full' or 'scoped'), why, and over how many
+# documents: read by the tests and the bench, never by a command.
+last_proof = {}
+
+
+def gather(db, account_id):
+    """The accounts, documents and stored rows one account's snapshot is made of.
 
     Widens to a fixed point rather than assuming one account is self-contained: if the closure
     reaches another account's rows -- which a single operation spanning two accounts would do --
     that account's documents join the graph too, so the population proved is always the whole of
     what the rows describe.
     """
-    db = s.company
-    materialization.assert_materialized(db)
     accounts, identifiers, rows = {account_id}, set(), None
     while True:
         identifiers = set().union(*(statement_transactions(db, account) for account in accounts))
@@ -195,7 +225,46 @@ def load(s, account_id, *, prove_captures=()):
         if found == accounts:
             break
         accounts = found
+    return accounts, identifiers, rows
+
+
+def load(s, account_id, *, prove_captures=(), advance=False, full=False):
+    """The Snapshot for one account, as the stored rows have it, proved.
+
+    With a holding verified watermark (`reconciliation_watermark`) only what was written after it
+    is proved again, with every older closure it touches; a refusal there falls back to the full
+    proof, which decides. With `advance` -- a load inside a command's own write transaction -- a
+    successful proof moves the account's watermark to the state just proved. `full` proves in full
+    whatever the watermark says.
+    """
+    from bookflow.company import reconciliation_watermark as watermark
+    db = s.company
+    materialization.assert_materialized(db)
+    accounts, identifiers, rows = gather(db, account_id)
     authorized = adapters.authority(s, identifiers)
+    try:
+        reason, scope = ('asked', None) if full else watermark.state(db, account_id, accounts, identifiers)
+    except Exception:  # any doubt about the watermark is a full proof
+        reason, scope = 'broken', None
+    found = None
+    if scope is not None:
+        try:
+            found = _scoped(db, rows, identifiers, scope, prove_captures, authorized)
+            last_proof.update(proof='scoped', reason=reason, documents=len(scope.documents))
+        except Exception as exc:
+            # A scoped refusal is never the answer: the full proof decides, refusing or not.
+            found = None
+            reason = 'scoped refusal: ' + str(getattr(exc, 'details', None) or exc)
+    if found is None:
+        last_proof.update(proof='full', reason=reason, documents=len(identifiers))
+        found = _full(db, rows, identifiers, prove_captures, authorized)
+    if advance and db.write_transaction:
+        current = scope.current if scope is not None else watermark.fingerprints(db, identifiers)
+        watermark.advance(db, account_id, accounts, current)
+    return found
+
+
+def _full(db, rows, identifiers, prove_captures, authorized):
     source = adapters.graph(SimpleNamespace(company=db), identifiers)
     # Every argument below was built by this call and is referenced nowhere else, so the
     # snapshot can own it without the defensive copy `preparation.snapshot` makes for a caller
@@ -204,6 +273,38 @@ def load(s, account_id, *, prove_captures=()):
                                       captured_graphs={identity: source for identity in prove_captures},
                                       referenced_rows=referenced_rows(db, rows),
                                       authority_transactions=authorized)
+
+
+def prove_whole(db, rows, identifiers):
+    """The full proof of these rows, with no record-level authority (`reconciliation_watermark.verify`)."""
+    source = adapters.graph(SimpleNamespace(company=db), identifiers)
+    required = preparation.authority_required(rows, source, {})
+    return preparation.owned_snapshot(rows, source=source, captured_graphs={},
+                                      referenced_rows=referenced_rows(db, rows), authority_transactions=required)
+
+
+def _scoped(db, rows, identifiers, scope, prove_captures, authorized):
+    """The same snapshot, proved on top of a holding watermark (`reconciliation_watermark`)."""
+    from bookflow.company import reconciliation_watermark as watermark
+    from bookflow.company.reconciliation_storage_validation import Suffix
+    documents = scope.documents
+    source = adapters.graph(SimpleNamespace(company=db), identifiers, only=documents,
+                            verified=watermark.verified(db, rows, identifiers, documents))
+    suffix = Suffix(scope.written)
+    # The foreign keys a scoped validation proves into the keyed-only ledger tables are those of
+    # the rows it re-proves, so only their targets are read.
+    tables = _tables()
+    proving = {}
+    for name, values in rows.items():
+        written = suffix.rows.get(name)
+        columns = [col.name for col in tables[name].primary_key.columns]
+        proving[name] = (list(values) if name in MUTABLE_SHORT else
+                         [row for row in values if written and tuple(row[col] for col in columns) in written])
+    references = referenced_rows(db, proving)
+    return preparation.owned_snapshot(rows, source=source,
+                                      captured_graphs={identity: source for identity in prove_captures},
+                                      referenced_rows=references, authority_transactions=authorized,
+                                      suffix=suffix)
 
 
 def prove_written(s, account_id, operation_id):
@@ -226,4 +327,4 @@ def prove_written(s, account_id, operation_id):
             sa.select(table.c[field]).join(capture, capture.c.id == table.c[field])
             .where(table.c.operation_id == operation_id,
                    capture.c.audit_event_id == audit_event_id)).scalars())
-    return load(s, account_id, prove_captures=written)
+    return load(s, account_id, prove_captures=written, advance=True)

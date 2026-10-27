@@ -3341,9 +3341,12 @@ still off: the loader, the persister and four registered commands exist -- see
 *Reconciling an account* below -- and what the feature revision still gates is the
 deposit family's own dependency on reconciliation, which nothing yet supplies a
 resolver for. Authoritative history is no longer absent either; see *Statement
-effect materialization* below. The accepted source has no public
-`company verify` command; private
-validation and SQLite integrity/FK checks do not claim to implement that command.
+effect materialization* below. `company verify` (R180 stage 2,
+design/performance.md "Stage 2") proves every bank and card account's statement
+effect storage in full and, for the whole company, runs SQLite's integrity and
+foreign key checks; it does not yet implement the rest of the blueprint's ledger
+invariants (batch balance, document totals, application and allocation
+reconciliation).
 
 Opening evidence has closed `transaction` and `transaction_attachment` kinds.
 Both retain a real transaction FK; attachment evidence additionally retains the
