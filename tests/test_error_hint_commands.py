@@ -68,7 +68,7 @@ def test_the_walk_finds_a_command_that_does_not_exist(tmp_path):
     """Negative control: the checker is not blind to the failure it exists for."""
     (tmp_path / 'hints.py').write_text(
         "A = {'next': 'deposit coordinate'}\n"
-        "B = 'Run `company verify` first, then `reconcile mark --all` and `bill payment unapply`.'\n"
+        "B = 'Run `company inspect` first, then `reconcile mark --all` and `bill payment unapply`.'\n"
         "C = held_next('payment', 'payment cancel')\n"
         "D = {'next': 'deposit delete'}\n")
-    assert sorted(text for _, text in unknown_commands(tmp_path)) == ['company verify', 'deposit coordinate', 'payment cancel']
+    assert sorted(text for _, text in unknown_commands(tmp_path)) == ['company inspect', 'deposit coordinate', 'payment cancel']
