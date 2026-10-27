@@ -8,6 +8,7 @@
 {% if count.status == 'open' and can_enter %}
 <form method="post" action="{{ url }}" hx-post="{{ url }}" hx-target="body" hx-swap="outerHTML" class="count-entry" data-count-entry>
 {% from "scan_field.html" import scan_field %}{{ scan_field(company_id, 'count') }}<input type="hidden" name="scan" value="{{ values.get('scan', '') }}">
+{% if bins %}<label class="bin">Bin <input name="bin" list="count-bins" autocomplete="off" value="{{ values.get('bin', '') }}" placeholder="Scan a bin label" data-scan-bin></label><datalist id="count-bins">{% for b in bins %}<option value="{{ b }}">{% endfor %}</datalist>{% endif %}
 <label class="qty">Quantity <input name="quantity" inputmode="decimal" autocomplete="off" value="{{ values.get('quantity', '') }}" placeholder="1"></label>
 <label class="mode"><input type="checkbox" name="mode" value="add" {% if values.get('mode') == 'add' %}checked{% endif %}> Add to it</label>
 <input type="hidden" name="action" value="enter">
@@ -17,10 +18,9 @@
 {% endif %}
 <section class="workspace-card" aria-label="Lines">
 <h2>Lines</h2>
-{% set grouped = count.lines|groupby('place') %}
-{% for place, rows in grouped %}{% if grouped|length > 1 %}<h3>{{ place|capitalize }}</h3>{% endif %}
+{% for place, rows in groups %}{% if groups|length > 1 %}<h3 data-count-group>{{ place }}</h3>{% endif %}
 <div class="table-wrap"><table class="list-table count-lines" data-count-lines><thead><tr><th>Item</th>{% if not count.blind or count.status != 'open' %}<th class="num">Expected</th>{% endif %}<th class="num">Counted</th>{% if not count.blind or count.status != 'open' %}<th class="num">Difference</th>{% endif %}</tr></thead><tbody>
-{% for l in rows %}{% set d = l.difference %}<tr class="{% if l.counted is none %}uncounted{% elif d and d.startswith('-') %}short{% elif d and d != '0' %}over{% endif %}" data-line="{{ l.item_name }}"><td data-label="Item">{{ l.item_name }}{% if l.origin == 'found' %} <small>(found)</small>{% endif %}{% if l.description %}<br><small>{{ l.description }}</small>{% endif %}</td>{% if not count.blind or count.status != 'open' %}<td class="num" data-label="Expected">{{ l.expected if l.expected is not none else '' }}</td>{% endif %}<td class="num" data-label="Counted">{{ l.counted if l.counted is not none else '' }}</td>{% if not count.blind or count.status != 'open' %}<td class="num diff" data-label="Difference">{{ d if d is not none else '' }}</td>{% endif %}</tr>{% endfor %}
+{% for l in rows %}{% set d = l.difference %}<tr class="{% if l.counted is none %}uncounted{% elif d and d.startswith('-') %}short{% elif d and d != '0' %}over{% endif %}" data-line="{{ l.item_name }}"><td data-label="Item">{{ l.item_name }}{% if bins and l.place != 'unassigned' %} <small>{{ l.place }}</small>{% endif %}{% if l.origin == 'found' %} <small>(found)</small>{% endif %}{% if l.description %}<br><small>{{ l.description }}</small>{% endif %}</td>{% if not count.blind or count.status != 'open' %}<td class="num" data-label="Expected">{{ l.expected if l.expected is not none else '' }}</td>{% endif %}<td class="num" data-label="Counted">{{ l.counted if l.counted is not none else '' }}</td>{% if not count.blind or count.status != 'open' %}<td class="num diff" data-label="Difference">{{ d if d is not none else '' }}</td>{% endif %}</tr>{% endfor %}
 </tbody></table></div>{% endfor %}
 </section>
 {% if preview %}

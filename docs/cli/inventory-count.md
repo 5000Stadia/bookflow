@@ -81,7 +81,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `site_name` | string | yes | no | — | — |
 | `date` | string | yes | no | — | — |
 | `blind` | boolean | yes | no | — | — |
-| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, or category. |
+| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, category, bins or cycle. |
 | `memo` | string \| null | no | yes | null | — |
 | `adjustment_account_id` | string \| null | no | yes | null | — |
 | `recorded_at` | string \| null | no | yes | null | — |
@@ -93,7 +93,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].item_name` | string | yes | no | — | — |
 | `lines[].description` | string \| null | no | yes | null | — |
 | `lines[].unit` | string \| null | no | yes | null | The item's base unit, where it has one. |
-| `lines[].place` | string | yes | no | — | Where at the site: "unassigned" until bins, lots and serial numbers arrive. |
+| `lines[].bin` | string \| null | no | yes | null | Bin full name of the place; null for no bin. |
+| `lines[].place` | string | yes | no | — | Which units at the bin: "unassigned", "lot L-1" or "serial WH-1". |
 | `lines[].origin` | literal["sheet", "found"] | yes | no | — | — |
 | `lines[].expected` | string \| null | no | yes | null | What the books hold at the place at the count's position; null on a blind sheet. |
 | `lines[].counted` | string \| null | no | yes | null | What was counted; null while nobody has counted the place. |
@@ -146,6 +147,7 @@ Example JSON output:
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
@@ -201,9 +203,9 @@ The same example as complete `bookflow_run` arguments:
 | `date` | `--date` | string \| null | no | yes | null | Date of the count; omitted, today. Its differences post at this date. |
 | `items` | `--items` | array[string] \| null | no | yes | null | Count only these items (id, name or barcode). |
 | `category` | `--category` | string \| null | no | yes | null | Count only the items in this item category. |
-| `bins` | `--bins` | array[string] \| null | no | yes | null | Count these bins (bins arrive with a later increment). |
-| `cycle` | `--cycle` | boolean | no | no | false | Count the next items due by cycle class (arrives with bins and cycle counts). |
-| `limit` | `--limit` | integer \| null | no | yes | null | With cycle: how many due items to count. |
+| `bins` | `--bins` | array[string] \| null | no | yes | null | Count these bins of the site (id, full name such as A3, or Aisle:3 for a bin inside another, or label), and the bins inside them: the sheet lists exactly what they hold. Entries naming no bin count in the one bin named. |
+| `cycle` | `--cycle` | boolean | no | no | false | Count the next items due by cycle class at the site (`cycle-count due`), most overdue first; recording the count moves their due dates on, so the next cycle count takes the next ones. |
+| `limit` | `--limit` | integer \| null | no | yes | null | With cycle: how many due items to count (default 25). |
 | `blind` | `--blind` | boolean | no | no | false | Hide expected quantities and differences on the sheet; they show only in the post preview. |
 | `memo` | `--memo` | string \| null | no | yes | null | Memo for the count. |
 | `number` | `--number` | string \| null | no | yes | null | Count number; omit for the next (C-1, C-2, ...). |
@@ -252,7 +254,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `site_name` | string | yes | no | — | — |
 | `date` | string | yes | no | — | — |
 | `blind` | boolean | yes | no | — | — |
-| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, or category. |
+| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, category, bins or cycle. |
 | `memo` | string \| null | no | yes | null | — |
 | `adjustment_account_id` | string \| null | no | yes | null | — |
 | `recorded_at` | string \| null | no | yes | null | — |
@@ -264,7 +266,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].item_name` | string | yes | no | — | — |
 | `lines[].description` | string \| null | no | yes | null | — |
 | `lines[].unit` | string \| null | no | yes | null | The item's base unit, where it has one. |
-| `lines[].place` | string | yes | no | — | Where at the site: "unassigned" until bins, lots and serial numbers arrive. |
+| `lines[].bin` | string \| null | no | yes | null | Bin full name of the place; null for no bin. |
+| `lines[].place` | string | yes | no | — | Which units at the bin: "unassigned", "lot L-1" or "serial WH-1". |
 | `lines[].origin` | literal["sheet", "found"] | yes | no | — | — |
 | `lines[].expected` | string \| null | no | yes | null | What the books hold at the place at the count's position; null on a blind sheet. |
 | `lines[].counted` | string \| null | no | yes | null | What was counted; null while nobody has counted the place. |
@@ -318,6 +321,7 @@ Example JSON output:
 | `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |
@@ -373,9 +377,9 @@ The same example as complete `bookflow_run` arguments:
 | `count` | `COUNT` | string | yes | no | — | Count id or number.; minimum length 1; maximum length 1000 |
 | `entries[].item` | inside `--entries` JSON array | string \| null | no | yes | null | Item counted, by id, name or barcode. |
 | `entries[].code` | inside `--entries` JSON array | string \| null | no | yes | null | A scanned barcode naming the item. |
-| `entries[].bin` | inside `--entries` JSON array | string \| null | no | yes | null | Bin counted (bins arrive with a later increment). |
-| `entries[].lot` | inside `--entries` JSON array | string \| null | no | yes | null | Lot counted (lots arrive with a later increment). |
-| `entries[].serial_number` | inside `--entries` JSON array | string \| null | no | yes | null | Serial number counted (a later increment). |
+| `entries[].bin` | inside `--entries` JSON array | string \| null | no | yes | null | Bin counted, by id, full name or label (a scanned bin label sets it). Omitted: the one bin a bins count names, else the one bin the sheet lists the item in, else no bin. |
+| `entries[].lot` | inside `--entries` JSON array | string \| null | no | yes | null | Lot counted, of a lot-tracked item; omitted, the units are counted unassigned. |
+| `entries[].serial_number` | inside `--entries` JSON array | string \| null | no | yes | null | Serial number counted, of a serial-tracked item (quantity 1 when there, 0 when not); units whose number cannot be read are counted without one, unassigned. |
 | `entries[].quantity` | inside `--entries` JSON array | string | yes | no | — | Quantity counted at the place, in the item's base unit; 0 counts it empty.; minimum length 1; maximum length 40 |
 | `entries[].mode` | inside `--entries` JSON array | literal["set", "add"] | no | no | "set" | set (the default): the place holds this many. add: this many more (a scan adds 1). |
 
@@ -423,7 +427,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `site_name` | string | yes | no | — | — |
 | `date` | string | yes | no | — | — |
 | `blind` | boolean | yes | no | — | — |
-| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, or category. |
+| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, category, bins or cycle. |
 | `memo` | string \| null | no | yes | null | — |
 | `adjustment_account_id` | string \| null | no | yes | null | — |
 | `recorded_at` | string \| null | no | yes | null | — |
@@ -435,7 +439,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].item_name` | string | yes | no | — | — |
 | `lines[].description` | string \| null | no | yes | null | — |
 | `lines[].unit` | string \| null | no | yes | null | The item's base unit, where it has one. |
-| `lines[].place` | string | yes | no | — | Where at the site: "unassigned" until bins, lots and serial numbers arrive. |
+| `lines[].bin` | string \| null | no | yes | null | Bin full name of the place; null for no bin. |
+| `lines[].place` | string | yes | no | — | Which units at the bin: "unassigned", "lot L-1" or "serial WH-1". |
 | `lines[].origin` | literal["sheet", "found"] | yes | no | — | — |
 | `lines[].expected` | string \| null | no | yes | null | What the books hold at the place at the count's position; null on a blind sheet. |
 | `lines[].counted` | string \| null | no | yes | null | What was counted; null while nobody has counted the place. |
@@ -456,7 +461,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `entered[].item_name` | string | yes | no | — | — |
 | `entered[].description` | string \| null | no | yes | null | — |
 | `entered[].unit` | string \| null | no | yes | null | The item's base unit, where it has one. |
-| `entered[].place` | string | yes | no | — | Where at the site: "unassigned" until bins, lots and serial numbers arrive. |
+| `entered[].bin` | string \| null | no | yes | null | Bin full name of the place; null for no bin. |
+| `entered[].place` | string | yes | no | — | Which units at the bin: "unassigned", "lot L-1" or "serial WH-1". |
 | `entered[].origin` | literal["sheet", "found"] | yes | no | — | — |
 | `entered[].expected` | string \| null | no | yes | null | What the books hold at the place at the count's position; null on a blind sheet. |
 | `entered[].counted` | string \| null | no | yes | null | What was counted; null while nobody has counted the place. |
@@ -469,7 +475,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `uncounted[].item_name` | string | yes | no | — | — |
 | `uncounted[].description` | string \| null | no | yes | null | — |
 | `uncounted[].unit` | string \| null | no | yes | null | The item's base unit, where it has one. |
-| `uncounted[].place` | string | yes | no | — | Where at the site: "unassigned" until bins, lots and serial numbers arrive. |
+| `uncounted[].bin` | string \| null | no | yes | null | Bin full name of the place; null for no bin. |
+| `uncounted[].place` | string | yes | no | — | Which units at the bin: "unassigned", "lot L-1" or "serial WH-1". |
 | `uncounted[].origin` | literal["sheet", "found"] | yes | no | — | — |
 | `uncounted[].expected` | string \| null | no | yes | null | What the books hold at the place at the count's position; null on a blind sheet. |
 | `uncounted[].counted` | string \| null | no | yes | null | What was counted; null while nobody has counted the place. |
@@ -516,6 +523,7 @@ Example JSON output:
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
@@ -536,7 +544,7 @@ Example JSON output:
 
 ## `inventory-count post`
 
-Record a count. Its counted quantities are fixed, and each line's difference is derived at the count's position in its day: counted less what the books hold at that place from documents dated before the count date, or on it and placed before the count (the default for every document; a document that happened after the count says count_position after). Per item the net posts as one movement -- an issue for less, found units valued at the average for more -- in one journal entry dated the count date against adjustment_account. Unchanged and uncounted lines post nothing. Run it as a dry run first: the preview shows each item's difference and value, the documents entered after counting began, and a preview_fingerprint; pass that fingerprint to post (E_PREVIEW_STALE if anything changed). A document later dated before the count derives the difference again, so the shelf stays as counted. Example: `bookflow inventory-count post C-1 --expected-version 1 --adjustment-account "Inventory Shrinkage" --preview-fingerprint <from the dry run> --reason "Van count" --json`.
+Record a count. Its counted quantities are fixed, and each line's difference is derived at the count's position in its day: counted less what the books hold at that place from documents dated before the count date, or on it and placed before the count (the default for every document; a document that happened after the count says count_position after). Per item the net posts as one movement -- an issue for less, found units valued at the average for more -- in one journal entry dated the count date against adjustment_account. Unchanged and uncounted lines post nothing. Run it as a dry run first: the preview shows each item's difference and value, the documents entered after counting began, and a preview_fingerprint; pass that fingerprint to post (E_PREVIEW_STALE if anything changed). A document later dated before the count derives the difference again, so the shelf stays as counted. Example: `bookflow inventory-count post C-1 --expected-version 1 --adjustment-account "Cost of Goods Sold" --preview-fingerprint <from the dry run> --reason "Van count" --json`.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -568,7 +576,7 @@ The same example as complete `bookflow_run` arguments:
 |---|---|---|---|---|---|---|
 | `count` | `COUNT` | string | yes | no | — | Count id or number.; minimum length 1; maximum length 1000 |
 | `expected_version` | `--expected-version` | integer | yes | no | — | Version of the count this post is for, from its show or sheet.; minimum 1 |
-| `adjustment_account` | `--adjustment-account` | string | yes | no | — | Account carrying the other side of the differences, such as Inventory Shrinkage or Cost of Goods Sold.; minimum length 1; maximum length 1000 |
+| `adjustment_account` | `--adjustment-account` | string | yes | no | — | Account carrying the other side of the differences, such as Cost of Goods Sold, or an Inventory Shrinkage account if the company keeps one.; minimum length 1; maximum length 1000 |
 | `class_id` | `--class-id` | string \| null | no | yes | null | Class captured on the posted differences. |
 | `preview_fingerprint` | `--preview-fingerprint` | string \| null | no | yes | null | From the dry run of this post. The count is recorded only if what it would post is still exactly what that preview showed (E_PREVIEW_STALE otherwise). |
 
@@ -616,7 +624,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `site_name` | string | yes | no | — | — |
 | `date` | string | yes | no | — | — |
 | `blind` | boolean | yes | no | — | — |
-| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, or category. |
+| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, category, bins or cycle. |
 | `memo` | string \| null | no | yes | null | — |
 | `adjustment_account_id` | string \| null | no | yes | null | — |
 | `recorded_at` | string \| null | no | yes | null | — |
@@ -628,7 +636,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].item_name` | string | yes | no | — | — |
 | `lines[].description` | string \| null | no | yes | null | — |
 | `lines[].unit` | string \| null | no | yes | null | The item's base unit, where it has one. |
-| `lines[].place` | string | yes | no | — | Where at the site: "unassigned" until bins, lots and serial numbers arrive. |
+| `lines[].bin` | string \| null | no | yes | null | Bin full name of the place; null for no bin. |
+| `lines[].place` | string | yes | no | — | Which units at the bin: "unassigned", "lot L-1" or "serial WH-1". |
 | `lines[].origin` | literal["sheet", "found"] | yes | no | — | — |
 | `lines[].expected` | string \| null | no | yes | null | What the books hold at the place at the count's position; null on a blind sheet. |
 | `lines[].counted` | string \| null | no | yes | null | What was counted; null while nobody has counted the place. |
@@ -711,6 +720,7 @@ Example JSON output:
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |
@@ -805,7 +815,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `counts[].site_name` | string | yes | no | — | — |
 | `counts[].date` | string | yes | no | — | — |
 | `counts[].blind` | boolean | yes | no | — | — |
-| `counts[].selection` | dict | no | no | {} | What the sheet was made from: kind all, items, or category. |
+| `counts[].selection` | dict | no | no | {} | What the sheet was made from: kind all, items, category, bins or cycle. |
 | `counts[].memo` | string \| null | no | yes | null | — |
 | `counts[].adjustment_account_id` | string \| null | no | yes | null | — |
 | `counts[].recorded_at` | string \| null | no | yes | null | — |
@@ -817,7 +827,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `counts[].lines[].item_name` | string | yes | no | — | — |
 | `counts[].lines[].description` | string \| null | no | yes | null | — |
 | `counts[].lines[].unit` | string \| null | no | yes | null | The item's base unit, where it has one. |
-| `counts[].lines[].place` | string | yes | no | — | Where at the site: "unassigned" until bins, lots and serial numbers arrive. |
+| `counts[].lines[].bin` | string \| null | no | yes | null | Bin full name of the place; null for no bin. |
+| `counts[].lines[].place` | string | yes | no | — | Which units at the bin: "unassigned", "lot L-1" or "serial WH-1". |
 | `counts[].lines[].origin` | literal["sheet", "found"] | yes | no | — | — |
 | `counts[].lines[].expected` | string \| null | no | yes | null | What the books hold at the place at the count's position; null on a blind sheet. |
 | `counts[].lines[].counted` | string \| null | no | yes | null | What was counted; null while nobody has counted the place. |
@@ -853,6 +864,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
 | `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
@@ -936,7 +948,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `site_name` | string | yes | no | — | — |
 | `date` | string | yes | no | — | — |
 | `blind` | boolean | yes | no | — | — |
-| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, or category. |
+| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, category, bins or cycle. |
 | `memo` | string \| null | no | yes | null | — |
 | `adjustment_account_id` | string \| null | no | yes | null | — |
 | `recorded_at` | string \| null | no | yes | null | — |
@@ -948,7 +960,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].item_name` | string | yes | no | — | — |
 | `lines[].description` | string \| null | no | yes | null | — |
 | `lines[].unit` | string \| null | no | yes | null | The item's base unit, where it has one. |
-| `lines[].place` | string | yes | no | — | Where at the site: "unassigned" until bins, lots and serial numbers arrive. |
+| `lines[].bin` | string \| null | no | yes | null | Bin full name of the place; null for no bin. |
+| `lines[].place` | string | yes | no | — | Which units at the bin: "unassigned", "lot L-1" or "serial WH-1". |
 | `lines[].origin` | literal["sheet", "found"] | yes | no | — | — |
 | `lines[].expected` | string \| null | no | yes | null | What the books hold at the place at the count's position; null on a blind sheet. |
 | `lines[].counted` | string \| null | no | yes | null | What was counted; null while nobody has counted the place. |
@@ -999,6 +1012,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
 | `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
@@ -1082,7 +1096,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `site_name` | string | yes | no | — | — |
 | `date` | string | yes | no | — | — |
 | `blind` | boolean | yes | no | — | — |
-| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, or category. |
+| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, category, bins or cycle. |
 | `memo` | string \| null | no | yes | null | — |
 | `adjustment_account_id` | string \| null | no | yes | null | — |
 | `recorded_at` | string \| null | no | yes | null | — |
@@ -1094,7 +1108,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].item_name` | string | yes | no | — | — |
 | `lines[].description` | string \| null | no | yes | null | — |
 | `lines[].unit` | string \| null | no | yes | null | The item's base unit, where it has one. |
-| `lines[].place` | string | yes | no | — | Where at the site: "unassigned" until bins, lots and serial numbers arrive. |
+| `lines[].bin` | string \| null | no | yes | null | Bin full name of the place; null for no bin. |
+| `lines[].place` | string | yes | no | — | Which units at the bin: "unassigned", "lot L-1" or "serial WH-1". |
 | `lines[].origin` | literal["sheet", "found"] | yes | no | — | — |
 | `lines[].expected` | string \| null | no | yes | null | What the books hold at the place at the count's position; null on a blind sheet. |
 | `lines[].counted` | string \| null | no | yes | null | What was counted; null while nobody has counted the place. |
@@ -1145,6 +1160,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
 | `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
@@ -1241,7 +1257,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `site_name` | string | yes | no | — | — |
 | `date` | string | yes | no | — | — |
 | `blind` | boolean | yes | no | — | — |
-| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, or category. |
+| `selection` | dict | no | no | {} | What the sheet was made from: kind all, items, category, bins or cycle. |
 | `memo` | string \| null | no | yes | null | — |
 | `adjustment_account_id` | string \| null | no | yes | null | — |
 | `recorded_at` | string \| null | no | yes | null | — |
@@ -1253,7 +1269,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].item_name` | string | yes | no | — | — |
 | `lines[].description` | string \| null | no | yes | null | — |
 | `lines[].unit` | string \| null | no | yes | null | The item's base unit, where it has one. |
-| `lines[].place` | string | yes | no | — | Where at the site: "unassigned" until bins, lots and serial numbers arrive. |
+| `lines[].bin` | string \| null | no | yes | null | Bin full name of the place; null for no bin. |
+| `lines[].place` | string | yes | no | — | Which units at the bin: "unassigned", "lot L-1" or "serial WH-1". |
 | `lines[].origin` | literal["sheet", "found"] | yes | no | — | — |
 | `lines[].expected` | string \| null | no | yes | null | What the books hold at the place at the count's position; null on a blind sheet. |
 | `lines[].counted` | string \| null | no | yes | null | What was counted; null while nobody has counted the place. |
@@ -1306,6 +1323,7 @@ Example JSON output:
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |

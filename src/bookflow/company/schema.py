@@ -1234,3 +1234,25 @@ from bookflow.company.inventory_count_schema import define_tables as _define_inv
 globals().update(_define_inventory_count_tables(metadata, _column, _table, _common))
 from bookflow.company.scheduling_schema import define_tables as _define_scheduling_tables
 globals().update(_define_scheduling_tables(metadata, _column, _table, _common))
+# Serial and lot numbers (co0095, R104 increment 4): items.tracking and inventory assignments.
+from bookflow.company import serial_lot_schema as _serial_lot_schema
+items.append_column(_serial_lot_schema.tracking_column(_column))
+globals().update(_serial_lot_schema.define_tables(metadata, _column, _table))
+sa.Index("ix_inventory_placements_serial", inventory_placements.c.serial_number_id)
+sa.Index("ix_inventory_placements_lot", inventory_placements.c.lot_id)
+# Bins and cycle counts (co0097, R104 increment 5): cycle classes and items.cycle_class_id.
+from bookflow.company import bin_cycle_schema as _bin_cycle_schema
+globals().update(_bin_cycle_schema.define_tables(metadata, _column, _table, _common))
+items.append_column(_bin_cycle_schema.cycle_class_column(_column))
+# Landed cost (co0098, R104 increment 6): allocations, their lines, and items' unit weight and volume.
+from bookflow.company import landed_cost_schema as _landed_cost_schema
+for _weight_column in _landed_cost_schema.weight_columns(_column):
+    items.append_column(_weight_column)
+globals().update(_landed_cost_schema.define_tables(metadata, _column, _table))
+# Deposit lookup indexes (co0099, R180 increment 3): membership and operations by transaction.
+sa.Index("ix_deposit_memberships_source", deposit_memberships.c.source_transaction_id)
+sa.Index("ix_deposit_memberships_transaction", deposit_memberships.c.transaction_id)
+sa.Index("ix_deposit_operations_transaction", deposit_operations.c.transaction_id)
+# Costing method timeline (co0100, R104 increment 7): dated switches between average and FIFO.
+from bookflow.company import costing_method_schema as _costing_method_schema
+globals().update(_costing_method_schema.define_tables(metadata, _column, _table))

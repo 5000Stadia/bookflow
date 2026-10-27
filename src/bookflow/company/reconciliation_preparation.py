@@ -8,6 +8,7 @@ import copy
 import json
 from dataclasses import dataclass, field
 from collections import defaultdict
+from types import MappingProxyType
 from bookflow.company import reconciliation_adapters as adapters
 from bookflow.company.reconciliation_proof import prove
 from bookflow.company.reconciliation_storage_validation import validate, canonical, digest, InvalidStorage, proved
@@ -125,13 +126,20 @@ class Snapshot:
     referenced_rows: dict
     authority_transactions: tuple[str,...]
     proofs: _Memo = field(default_factory=_Memo, init=False, compare=False, repr=False)
+    # `versions` and `current` are derived once from the frozen rows and handed out read-only;
+    # a copy starts empty (as `proofs` does), so a copy whose rows are then changed derives again.
+    derived: _Memo = field(default_factory=_Memo, init=False, compare=False, repr=False)
     def by(self,name):return {r['id']:r for r in self.rows[name]}
     @property
-    def versions(self):return self.by('effect_versions')
+    def versions(self):
+        if 'versions' not in self.derived:self.derived['versions']=MappingProxyType(self.by('effect_versions'))
+        return self.derived['versions']
     @property
     def current(self):
-        versions=self.versions
-        return {r['key_id']:versions[r['version_id']] for r in self.rows['effect_heads']}
+        if 'current' not in self.derived:
+            versions=self.versions
+            self.derived['current']=MappingProxyType({r['key_id']:versions[r['version_id']] for r in self.rows['effect_heads']})
+        return self.derived['current']
 
 def snapshot(rows, *, source: adapters.Graph, captured_graphs, referenced_rows, authority_transactions):
     """Identity coverage only; caller must first run real current authority.

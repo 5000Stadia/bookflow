@@ -112,6 +112,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `sales_tax_code` | string \| null | yes | yes | — | — |
 | `manufacturer_part_number` | string \| null | yes | yes | — | — |
 | `barcode` | string \| null | yes | yes | — | — |
+| `tracking` | string | no | no | "none" | — |
+| `cycle_class_id` | string \| null | no | yes | null | — |
 | `unit_of_measure_set_id` | string \| null | yes | yes | — | — |
 | `unit_of_measure_set` | string \| null | yes | yes | — | — |
 | `reorder_point_min` | string \| null | yes | yes | — | — |
@@ -131,6 +133,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `tax_percent` | string \| null | yes | yes | — | — |
 | `tax_agency_vendor_id` | string \| null | yes | yes | — | — |
 | `assembly_build_point` | string \| null | yes | yes | — | — |
+| `unit_weight` | string \| null | no | yes | null | — |
+| `unit_volume` | string \| null | no | yes | null | — |
 | `asset_number` | string \| null | yes | yes | — | — |
 | `purchase_date` | string \| null | yes | yes | — | — |
 | `original_cost` | object \| null | yes | yes | — | — |
@@ -253,6 +257,7 @@ Example JSON output:
   "created_by": "value",
   "created_via": "cli",
   "custom_fields": [],
+  "cycle_class_id": null,
   "default_class": null,
   "default_class_id": null,
   "deposit_account_id": null,
@@ -310,9 +315,12 @@ Example JSON output:
   "tax_agency_vendor_id": null,
   "tax_basis": null,
   "tax_percent": null,
+  "tracking": "none",
   "type": "service",
   "unit_of_measure_set": null,
   "unit_of_measure_set_id": null,
+  "unit_volume": null,
+  "unit_weight": null,
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
   "updated_via": "cli",
@@ -339,6 +347,7 @@ Example JSON output:
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_HIERARCHY_CYCLE` | The requested parent would create a hierarchy cycle. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |
@@ -500,6 +509,7 @@ Example JSON output:
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |
@@ -573,6 +583,8 @@ The same example as complete `bookflow_run` arguments:
 | `sales_tax_code_id` | `--sales-tax-code-id` | string \| null | no | yes | null | — |
 | `manufacturer_part_number` | `--manufacturer-part-number` | string \| null | no | yes | null | — |
 | `barcode` | `--barcode` | string \| null | no | yes | null | — |
+| `tracking` | `--tracking` | literal["none", "serial", "lot"] \| null | no | yes | null | Number tracking of an inventory part or assembly: none (the default), serial (each unit carries its own serial number) or lot (units carry a lot number and its expiry). Turning it on leaves the stock on hand unassigned; number it with `inventory assign`. |
+| `cycle_class_id` | `--cycle-class-id` | string \| null | no | yes | null | Cycle-count class of an inventory part or assembly (R104 increment 5): how often it is due to be counted at each site. Null: never due. |
 | `unit_of_measure_set_id` | `--unit-of-measure-set-id` | string \| null | no | yes | null | — |
 | `reorder_point_min` | `--reorder-point-min` | string \| null | no | yes | null | — |
 | `reorder_point_max` | `--reorder-point-max` | string \| null | no | yes | null | — |
@@ -587,6 +599,8 @@ The same example as complete `bookflow_run` arguments:
 | `tax_percent` | `--tax-percent` | string \| null | no | yes | null | — |
 | `tax_agency_vendor_id` | `--tax-agency-vendor-id` | string \| null | no | yes | null | — |
 | `assembly_build_point` | `--assembly-build-point` | string \| null | no | yes | null | — |
+| `unit_weight` | `--unit-weight` | string \| null | no | yes | null | Weight of one base unit, in whatever weight unit the company uses for freight, for landed cost by weight (R104 increment 6); null for none. |
+| `unit_volume` | `--unit-volume` | string \| null | no | yes | null | Volume of one base unit, in whatever volume unit the company uses for freight, for landed cost by volume; null for none. |
 | `asset_number` | `--asset-number` | string \| null | no | yes | null | — |
 | `purchase_date` | `--purchase-date` | string \| null | no | yes | null | — |
 | `original_cost` | `--original-cost` | any \| null | no | yes | null | — |
@@ -697,6 +711,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `sales_tax_code` | string \| null | yes | yes | — | — |
 | `manufacturer_part_number` | string \| null | yes | yes | — | — |
 | `barcode` | string \| null | yes | yes | — | — |
+| `tracking` | string | no | no | "none" | — |
+| `cycle_class_id` | string \| null | no | yes | null | — |
 | `unit_of_measure_set_id` | string \| null | yes | yes | — | — |
 | `unit_of_measure_set` | string \| null | yes | yes | — | — |
 | `reorder_point_min` | string \| null | yes | yes | — | — |
@@ -716,6 +732,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `tax_percent` | string \| null | yes | yes | — | — |
 | `tax_agency_vendor_id` | string \| null | yes | yes | — | — |
 | `assembly_build_point` | string \| null | yes | yes | — | — |
+| `unit_weight` | string \| null | no | yes | null | — |
+| `unit_volume` | string \| null | no | yes | null | — |
 | `asset_number` | string \| null | yes | yes | — | — |
 | `purchase_date` | string \| null | yes | yes | — | — |
 | `original_cost` | object \| null | yes | yes | — | — |
@@ -834,6 +852,7 @@ Example JSON output:
   "created_by": "value",
   "created_via": "cli",
   "custom_fields": [],
+  "cycle_class_id": null,
   "default_class": null,
   "default_class_id": null,
   "deposit_account_id": null,
@@ -891,9 +910,12 @@ Example JSON output:
   "tax_agency_vendor_id": null,
   "tax_basis": null,
   "tax_percent": null,
+  "tracking": "none",
   "type": "service",
   "unit_of_measure_set": null,
   "unit_of_measure_set_id": null,
+  "unit_volume": null,
+  "unit_weight": null,
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
   "updated_via": "cli",
@@ -921,6 +943,7 @@ Example JSON output:
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_HIERARCHY_CYCLE` | The requested parent would create a hierarchy cycle. |
 | `E_HIERARCHY_DEPTH` | The requested hierarchy would exceed the maximum depth. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
@@ -1055,6 +1078,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `sales_tax_code` | string \| null | yes | yes | — | — |
 | `manufacturer_part_number` | string \| null | yes | yes | — | — |
 | `barcode` | string \| null | yes | yes | — | — |
+| `tracking` | string | no | no | "none" | — |
+| `cycle_class_id` | string \| null | no | yes | null | — |
 | `unit_of_measure_set_id` | string \| null | yes | yes | — | — |
 | `unit_of_measure_set` | string \| null | yes | yes | — | — |
 | `reorder_point_min` | string \| null | yes | yes | — | — |
@@ -1074,6 +1099,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `tax_percent` | string \| null | yes | yes | — | — |
 | `tax_agency_vendor_id` | string \| null | yes | yes | — | — |
 | `assembly_build_point` | string \| null | yes | yes | — | — |
+| `unit_weight` | string \| null | no | yes | null | — |
+| `unit_volume` | string \| null | no | yes | null | — |
 | `asset_number` | string \| null | yes | yes | — | — |
 | `purchase_date` | string \| null | yes | yes | — | — |
 | `original_cost` | object \| null | yes | yes | — | — |
@@ -1196,6 +1223,7 @@ Example JSON output:
   "created_by": "value",
   "created_via": "cli",
   "custom_fields": [],
+  "cycle_class_id": null,
   "default_class": null,
   "default_class_id": null,
   "deposit_account_id": null,
@@ -1253,9 +1281,12 @@ Example JSON output:
   "tax_agency_vendor_id": null,
   "tax_basis": null,
   "tax_percent": null,
+  "tracking": "none",
   "type": "service",
   "unit_of_measure_set": null,
   "unit_of_measure_set_id": null,
+  "unit_volume": null,
+  "unit_weight": null,
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
   "updated_via": "cli",
@@ -1283,6 +1314,7 @@ Example JSON output:
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
 | `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
@@ -1408,6 +1440,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].sales_tax_code` | string \| null | yes | yes | — | — |
 | `items[].manufacturer_part_number` | string \| null | yes | yes | — | — |
 | `items[].barcode` | string \| null | yes | yes | — | — |
+| `items[].tracking` | string | no | no | "none" | — |
+| `items[].cycle_class_id` | string \| null | no | yes | null | — |
 | `items[].unit_of_measure_set_id` | string \| null | yes | yes | — | — |
 | `items[].unit_of_measure_set` | string \| null | yes | yes | — | — |
 | `items[].reorder_point_min` | string \| null | yes | yes | — | — |
@@ -1427,6 +1461,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].tax_percent` | string \| null | yes | yes | — | — |
 | `items[].tax_agency_vendor_id` | string \| null | yes | yes | — | — |
 | `items[].assembly_build_point` | string \| null | yes | yes | — | — |
+| `items[].unit_weight` | string \| null | no | yes | null | — |
+| `items[].unit_volume` | string \| null | no | yes | null | — |
 | `items[].asset_number` | string \| null | yes | yes | — | — |
 | `items[].purchase_date` | string \| null | yes | yes | — | — |
 | `items[].original_cost` | object \| null | yes | yes | — | — |
@@ -1536,6 +1572,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
 | `E_LIST_FILTER` | The requested list filter or sort field is not supported. |
@@ -1692,6 +1729,7 @@ Example JSON output:
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
@@ -1843,6 +1881,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
 | `E_LIST_FILTER` | The requested list filter or sort field is not supported. |
@@ -1961,6 +2000,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `sales_tax_code` | string \| null | yes | yes | — | — |
 | `manufacturer_part_number` | string \| null | yes | yes | — | — |
 | `barcode` | string \| null | yes | yes | — | — |
+| `tracking` | string | no | no | "none" | — |
+| `cycle_class_id` | string \| null | no | yes | null | — |
 | `unit_of_measure_set_id` | string \| null | yes | yes | — | — |
 | `unit_of_measure_set` | string \| null | yes | yes | — | — |
 | `reorder_point_min` | string \| null | yes | yes | — | — |
@@ -1980,6 +2021,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `tax_percent` | string \| null | yes | yes | — | — |
 | `tax_agency_vendor_id` | string \| null | yes | yes | — | — |
 | `assembly_build_point` | string \| null | yes | yes | — | — |
+| `unit_weight` | string \| null | no | yes | null | — |
+| `unit_volume` | string \| null | no | yes | null | — |
 | `asset_number` | string \| null | yes | yes | — | — |
 | `purchase_date` | string \| null | yes | yes | — | — |
 | `original_cost` | object \| null | yes | yes | — | — |
@@ -2096,6 +2139,7 @@ Example JSON output:
   "created_by": "value",
   "created_via": "cli",
   "custom_fields": [],
+  "cycle_class_id": null,
   "default_class": null,
   "default_class_id": null,
   "deposit_account_id": null,
@@ -2152,9 +2196,12 @@ Example JSON output:
   "tax_agency_vendor_id": null,
   "tax_basis": null,
   "tax_percent": null,
+  "tracking": "none",
   "type": "service",
   "unit_of_measure_set": null,
   "unit_of_measure_set_id": null,
+  "unit_volume": null,
+  "unit_weight": null,
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
   "updated_via": "cli",
@@ -2178,6 +2225,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
 | `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
@@ -2300,6 +2348,7 @@ Example JSON output:
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
@@ -2373,6 +2422,8 @@ The same example as complete `bookflow_run` arguments:
 | `sales_tax_code_id` | `--sales-tax-code-id` | string \| null | no | yes | null | — |
 | `manufacturer_part_number` | `--manufacturer-part-number` | string \| null | no | yes | null | — |
 | `barcode` | `--barcode` | string \| null | no | yes | null | — |
+| `tracking` | `--tracking` | literal["none", "serial", "lot"] \| null | no | yes | null | Number tracking: none, serial or lot. Turning it on leaves stock on hand unassigned (`inventory assign` numbers it); turning it off is refused while units carry numbers. |
+| `cycle_class` | `--cycle-class` | string \| null | no | yes | null | Cycle-count class by name or id (A, B, C, ...): how often the item is due to be counted at each site; an empty string clears it (never due). `cycle-count classify` proposes classes from issued cost. |
 | `unit_of_measure_set_id` | `--unit-of-measure-set-id` | string \| null | no | yes | null | — |
 | `reorder_point_min` | `--reorder-point-min` | string \| null | no | yes | null | — |
 | `reorder_point_max` | `--reorder-point-max` | string \| null | no | yes | null | — |
@@ -2387,6 +2438,8 @@ The same example as complete `bookflow_run` arguments:
 | `tax_percent` | `--tax-percent` | string \| null | no | yes | null | — |
 | `tax_agency_vendor_id` | `--tax-agency-vendor-id` | string \| null | no | yes | null | — |
 | `assembly_build_point` | `--assembly-build-point` | string \| null | no | yes | null | — |
+| `unit_weight` | `--unit-weight` | string \| null | no | yes | null | Weight of one base unit, for landed cost by weight (R104 increment 6); null clears it. |
+| `unit_volume` | `--unit-volume` | string \| null | no | yes | null | Volume of one base unit, for landed cost by volume; null clears it. |
 | `asset_number` | `--asset-number` | string \| null | no | yes | null | — |
 | `purchase_date` | `--purchase-date` | string \| null | no | yes | null | — |
 | `original_cost` | `--original-cost` | any \| null | no | yes | null | — |
@@ -2422,6 +2475,7 @@ The same example as complete `bookflow_run` arguments:
 | `site_settings[].site` | inside `--site-settings` JSON array | string | yes | no | — | Inventory site id or name.; minimum length 1; maximum length 200 |
 | `site_settings[].reorder_point_min` | inside `--site-settings` JSON array | string \| null | no | yes | null | Reorder minimum at this site in the base unit; null for none. |
 | `site_settings[].reorder_point_max` | inside `--site-settings` JSON array | string \| null | no | yes | null | Reorder maximum at this site in the base unit; null for none. |
+| `site_settings[].default_bin` | inside `--site-settings` JSON array | string \| null | no | yes | null | Bin stock of this item goes to and leaves from at this site when a line names none (id, full name or label); an empty string clears it. The site must track bins. |
 
 ### Command and context options
 
@@ -2499,6 +2553,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `sales_tax_code` | string \| null | yes | yes | — | — |
 | `manufacturer_part_number` | string \| null | yes | yes | — | — |
 | `barcode` | string \| null | yes | yes | — | — |
+| `tracking` | string | no | no | "none" | — |
+| `cycle_class_id` | string \| null | no | yes | null | — |
 | `unit_of_measure_set_id` | string \| null | yes | yes | — | — |
 | `unit_of_measure_set` | string \| null | yes | yes | — | — |
 | `reorder_point_min` | string \| null | yes | yes | — | — |
@@ -2518,6 +2574,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `tax_percent` | string \| null | yes | yes | — | — |
 | `tax_agency_vendor_id` | string \| null | yes | yes | — | — |
 | `assembly_build_point` | string \| null | yes | yes | — | — |
+| `unit_weight` | string \| null | no | yes | null | — |
+| `unit_volume` | string \| null | no | yes | null | — |
 | `asset_number` | string \| null | yes | yes | — | — |
 | `purchase_date` | string \| null | yes | yes | — | — |
 | `original_cost` | object \| null | yes | yes | — | — |
@@ -2641,6 +2699,7 @@ Example JSON output:
   "created_by": "value",
   "created_via": "cli",
   "custom_fields": [],
+  "cycle_class_id": null,
   "default_class": null,
   "default_class_id": null,
   "deposit_account_id": null,
@@ -2699,9 +2758,12 @@ Example JSON output:
   "tax_agency_vendor_id": null,
   "tax_basis": null,
   "tax_percent": null,
+  "tracking": "none",
   "type": "service",
   "unit_of_measure_set": null,
   "unit_of_measure_set_id": null,
+  "unit_volume": null,
+  "unit_weight": null,
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
   "updated_via": "cli",
@@ -2729,6 +2791,7 @@ Example JSON output:
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_HIERARCHY_CYCLE` | The requested parent would create a hierarchy cycle. |
 | `E_HIERARCHY_DEPTH` | The requested hierarchy would exceed the maximum depth. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |

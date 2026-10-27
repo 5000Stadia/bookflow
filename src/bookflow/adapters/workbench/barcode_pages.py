@@ -28,6 +28,19 @@ def _item(call, text):
 def answer(call, company_id: str, code: str) -> dict:
     """What the Scan field shows for ``code``; ``call(name, raw)`` runs a command as the viewer."""
     looked = call('barcode lookup', {'code': code})
+    if looked['found'] and looked['match']['kind'] == 'bin':
+        # A bin label (R104 increment 5): it names no item; it sets the current bin for the next scans.
+        match = looked['match']
+        return {'found': bool(match['active']), 'kind': 'bin', 'bin': match['line_fields']['bin'],
+                'site': match['line_fields']['site'], 'code': code, 'message': looked['message']}
+    if looked['found'] and looked['match']['kind'] in ('serial_number', 'lot'):
+        # A unit's serial or lot label (R104 increment 4): the item it belongs to, with the number for the line.
+        match = looked['match']
+        item = _item(call, match['line_fields']['item'])
+        if item is not None:
+            numbers = {key: value for key, value in match['line_fields'].items() if key != 'item'}
+            return {'found': bool(item.get('active', True)), 'item_id': item['id'], 'item_name': item['full_name'],
+                    'code': code, 'message': looked['message'], **numbers}
     if looked['found']:
         match = looked['match']
         message = f"{match['name']} (code {code})."

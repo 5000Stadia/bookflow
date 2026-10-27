@@ -15,6 +15,7 @@ terms, the payable or the posting is named after either family.
 from __future__ import annotations
 
 import unicodedata
+from bookflow.company import serial_lot_models as _SL
 from typing import Annotated, Literal, Self
 
 from pydantic import Field, model_serializer, model_validator
@@ -115,13 +116,17 @@ class BillItemInput(_Input):
     site: _Selector | None = Field(default=None, description=(
         'Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the '
         "document's site, else the purchase-order line's, else the default site."))
+    bin: _SL.LineBin = Field(default=None, description=_SL.BIN_HELP)
+    lot: _SL.LineLot = Field(default=None, description=_SL.LOT_HELP)
+    lot_expiry: _SL.IsoDate | None = Field(default=None, description=_SL.EXPIRY_HELP)
+    serial_numbers: _SL.LineSerials = Field(default=None, max_length=10000, description=_SL.SERIAL_HELP)
 
     @model_serializer(mode='wrap')
     def unset_site(self, handler):
         values = handler(self)
         if 'site' not in self.model_fields_set:
             values.pop('site', None)
-        return values
+        return _SL.drop_unset(self, values)
 
     @model_validator(mode='after')
     def one_basis(self) -> Self:

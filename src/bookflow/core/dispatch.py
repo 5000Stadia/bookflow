@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,7 +25,7 @@ from bookflow.core.registry import Command, Plan, Touched
 from bookflow.core.session import Actor, Session
 from bookflow.hub import access, schema as h
 from bookflow.hub.audit import write_event
-from bookflow.storage.engine import io_error, open_database
+from bookflow.storage.engine import guard_refusal_text, guard_refused, guard_tables, io_error, open_database
 from bookflow.storage.migrate import HEADS, backup, classify, current_revision_open, current_revision_raw, migrate_to_head
 from bookflow.storage.paths import name_key, resolve_data_root
 
@@ -78,6 +79,9 @@ def parse_when(value: str, zone: str | None, end: bool = False) -> str:
     except (ValueError, KeyError) as e:
         raise BookflowError("E_VALIDATION", details={"fields": [{"field": "since/until", "problem": f"not a date or timestamp: {value!r}"}]})
     return dt.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+_log = logging.getLogger("bookflow.dispatch")
 
 
 def redact_error(err: BookflowError, allowed: bool) -> BookflowError:
@@ -379,10 +383,13 @@ def _close(s: Session) -> None:
                 s._hub_cm = None  # type: ignore[attr-defined]
 
 
-def guard(fn, allowed=False):
+def guard(fn, allowed=False, refusal_facts=None):
     """The one error boundary: named errors redacted for non-admins; OS and SQLite failures become E_IO.
 
     ``allowed`` may be a callable evaluated when the error happens, since the actor is known only part-way through run().
+    A write refused by one of Bookflow's own guard triggers is not an I/O failure: it becomes E_GUARD_REFUSED with the
+    trigger's message, plus whatever ``refusal_facts(message)`` adds (the guarded tables, the request), and is logged
+    so the disagreement between the application's check and the schema's can be reported.
     """
     def ok() -> bool:
         return bool(allowed()) if callable(allowed) else bool(allowed)
@@ -390,10 +397,33 @@ def guard(fn, allowed=False):
         return fn()
     except BookflowError as e:
         raise redact_error(e, ok())
+    except (sqlite3.IntegrityError, sa.exc.IntegrityError) as e:
+        message = guard_refusal_text(e)
+        if message is None:
+            inner = e.orig if isinstance(e, sa.exc.DBAPIError) and isinstance(e.orig, sqlite3.Error) else e
+            raise redact_error(io_error("command", inner, getattr(inner, "filename", None)), ok())
+        facts: dict[str, Any] = {}
+        if refusal_facts is not None:
+            try:
+                facts = refusal_facts(message) or {}
+            except Exception:  # the lookup only enriches the report; it must never mask the refusal
+                facts = {}
+        _log.error("guard trigger refused a write: guard=%r facts=%r", message, facts, exc_info=True)
+        raise redact_error(guard_refused(message, facts), ok()) from None
     except (OSError, sqlite3.Error) as e:
         raise redact_error(io_error("command", e, getattr(e, "filename", None)), ok())
     except sa.exc.DBAPIError as e:
         raise redact_error(io_error("command", e.orig if isinstance(e.orig, sqlite3.Error) else e), ok())
+
+
+def _refusal_facts(s: Session, cmd: Command, ctx: Context, message: str) -> dict[str, Any]:
+    """What a guard refusal report needs: the command, the request and the tables whose guard says this."""
+    tables: list[str] = []
+    for db in (s.company, s.hub):
+        raw = getattr(db, "raw", None) if db is not None else None
+        if raw is not None:
+            tables += [t for t in guard_tables(raw, message) if t not in tables]
+    return {"command": cmd.name, "request_id": ctx.request_id, "tables": tables}
 
 
 def execute(cmd: Command, raw_input: dict[str, Any], ctx: Context, s: Session, *, company_selector: str | None = None,
@@ -426,7 +456,7 @@ def execute(cmd: Command, raw_input: dict[str, Any], ctx: Context, s: Session, *
     from bookflow.core.config import load_scope
     try:
         with performance.span("command.execute", command=cmd.name), load_scope():
-            result = guard(body, s.is_hub_admin)
+            result = guard(body, s.is_hub_admin, lambda message: _refusal_facts(s, cmd, ctx, message))
     except BaseException as e:
         timings.end(call, command=cmd.name, ctx=ctx, session=s, raw_input=raw_input, error=e)
         raise
@@ -684,6 +714,16 @@ def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, co
                     replay["dry_run"] = True
                 return redact_paths(replay, s.is_hub_admin)
     inp = _dated_today(cmd, inp, s)
+    if _plans_in_write(cmd, s, dry_run):
+        # The plan runs inside the write transaction `_apply` opens (BEGIN IMMEDIATE, the drain,
+        # the principal upsert), so the apply may reuse what the plan prepared: nothing can be
+        # written between them. Opt-in per command; every other command keeps the order below.
+        applied = _apply(cmd, None, ctx, s, key=(key_db, ihash), planner=lambda: cmd.plan(inp, ctx, s))
+        with performance.span("command.serialize"):
+            out = applied.output.model_dump(mode="json")
+        if "warnings" in out:
+            out["warnings"] = list(out.get("warnings") or []) + list(s.warnings)
+        return redact_paths(out, s.is_hub_admin)
     with performance.span("command.plan", command=cmd.name):
         plan = cmd.plan(inp, ctx, s)
     if dry_run or not cmd.is_write:
@@ -780,8 +820,22 @@ def _accepts_selector(cmd: Command) -> bool:
     return False
 
 
-def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None)):
-    """Apply with one transaction per database, events where the touched records live, commits in truth order."""
+def _plans_in_write(cmd: Command, s: Session, dry_run: bool) -> bool:
+    """Whether this call plans inside its own write transaction (`plan_in_write`, R180 increment 3).
+
+    Only a real (not dry-run) company-only write that opted in: a preview, a read, an advisory
+    command or one that also writes the hub or config plans before any transaction, as before.
+    """
+    return (getattr(cmd, "plan_in_write", False) and not dry_run and cmd.is_write
+            and cmd.kind != "advisory" and set(cmd.writes) == {"company"} and s.company is not None)
+
+
+def _apply(cmd: Command, plan: Plan | None, ctx: Context, s: Session, key=(None, None), planner=None):
+    """Apply with one transaction per database, events where the touched records live, commits in truth order.
+
+    With `planner` (a command that opted in with `plan_in_write`), the plan is made here, after
+    the transaction is open, drained and the principals upserted, and just before the apply.
+    """
     with s.commits.operation("dispatch.apply", s.hub, s.company):
         from bookflow.core import idempotency
         from bookflow.core.audit import write_event_to
@@ -805,6 +859,13 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
         try:
             if co_tx:
                 _upsert_principals(s, ctx)
+            if planner is not None:
+                s.plan_in_write = True
+                try:
+                    with performance.span("command.plan", command=cmd.name):
+                        plan = planner()
+                finally:
+                    s.plan_in_write = False
             # An agent's write is checked, after it is made, against the owner's review flags
             # (`company/entry_review.py`); a match comes back as a warning and nothing is refused.
             review_before = None
@@ -817,12 +878,19 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
             if co_tx:
                 from bookflow.company import inventory_counts
                 stock_mark = inventory_counts.watermark(s)
+            # A freight charge a landed-cost allocation took may not be voided or reduced below it (R104 inc 6).
+            landed_mark = None
+            if co_tx:
+                from bookflow.company import landed_costs
+                landed_mark = landed_costs.watermark(s)
             with performance.span("command.apply", command=cmd.name):
                 applied = cmd.apply(plan, ctx, s)
             if stock_mark is not None and not applied.finalized:
                 from bookflow.company import inventory_counts, reconciliation_changes
                 applied.output = reconciliation_changes.with_warnings(
                     applied.output, inventory_counts.settle_in_command(s, ctx, stock_mark))
+            if landed_mark is not None and not applied.finalized:
+                landed_costs.check_charges(s, landed_mark)
             # Everything this command posted becomes stored statement effects inside the
             # command's own transaction. The work list is filled by a trigger on
             # `posting_batches`, so a writer added tomorrow is covered without being listed
@@ -895,7 +963,7 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
                     if s.hub.write_transaction:
                         s.hub.raw.execute("ROLLBACK")
                     durable = sorted({t.record_type for t in co_entries})
-                    raise BookflowError("E_PARTIAL_WRITE", message=f"Saved {', '.join(durable)}; the registry copy was not updated and will be on the next write.", details={"durable": durable, "request_id": ctx.request_id, "cause": getattr(e, "code", "E_IO")})
+                    raise BookflowError("E_PARTIAL_WRITE", message=f"Saved {', '.join(durable)}; the registry copy was not updated and will be on the next write.", details={"durable": durable, "request_id": ctx.request_id, "cause": getattr(e, "code", "E_GUARD_REFUSED" if guard_refusal_text(e) else "E_IO")})
             else:
                 if hub_tx and not applied.audited and changed:
                     write_event_to(s.hub, ctx, cmd.name, applied.summary, hub_entries, actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code)

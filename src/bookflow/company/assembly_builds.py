@@ -49,6 +49,7 @@ from bookflow.company.assembly_build_models import (
     AssemblyBuildListOutput, AssemblyBuildListRow, AssemblyBuildOutput, AssemblyComponentOutput,
     AssemblyCorrectionOutput,
 )
+from bookflow.company import costing_methods
 from bookflow.company.inventory_costing import MICRO, StockRefusal, replay
 from bookflow.company.journal_models import JournalPostInput, JournalUpdateInput, JournalVoidInput
 from bookflow.company.ledger_reports import money
@@ -139,21 +140,24 @@ def _depths(s):
     return depth
 
 
-def replay_items(s, working, load, refuse):
+def replay_items(s, working, load, refuse, planned=None):
     """Replay every item in ``working``, components before the assemblies built from them.
 
     ``working`` maps item id to its movement rows, planned ones included; ``load(item_id)`` returns
     (creating if needed) that list for an item not yet in it; ``refuse(refusal, item_id)`` turns a
     ``StockRefusal`` into the caller's error. Returns the ``(item_id, Replay)`` pairs in the order they
-    were replayed, and ``partners``: for each correction of a build's component issue, the cost
-    correction of that build's assembly receipt that carries the other side of it.
+    were replayed, and ``partners``: for each correction of a build's component issue, keyed by (issue id,
+    filling movement id or None), the cost correction -- or, for a landed cost's forward true-up, the landed
+    cost -- of that build's assembly receipt that carries the other side of it.
     """
     builds = build_transactions(s)
+    planned = planned or {}
+    methods = costing_methods.timeline(s)
     order, partners = [], {}
-    if not builds:
+    if not builds and not planned:
         for item_id in list(working):
             try:
-                order.append((item_id, replay(working[item_id])))
+                order.append((item_id, replay(working[item_id], methods)))
             except StockRefusal as refusal:
                 raise refuse(refusal, item_id) from None
         return order, partners
@@ -165,11 +169,11 @@ def replay_items(s, working, load, refuse):
         waiting.discard(item_id)
         history = load(item_id)
         try:
-            state = replay(history)
+            state = replay(history, methods)
         except StockRefusal as refusal:
             raise refuse(refusal, item_id) from None
         issues = {row['id']: row for row in history
-                  if row['kind'] == 'issue' and row.get('transaction_id') in builds}
+                  if row['kind'] == 'issue' and (row.get('transaction_id') in builds or row['id'] in planned)}
         for shortfall in state.shortfalls:
             if shortfall.movement['id'] in issues:
                 row = shortfall.movement
@@ -178,14 +182,16 @@ def replay_items(s, working, load, refuse):
                     f'"{inventory.item_name(s, item_id)}": a build consumes stock on hand, so it cannot be '
                     'left below zero. Void or edit that build first, or date this change after it.'),
                     details={'fields': [{'field': 'date', 'problem': 'would leave an earlier build short of a component'}],
-                             'item_id': item_id, 'build_transaction_id': row['transaction_id'],
+                             'item_id': item_id, 'build_transaction_id': row.get('transaction_id'),
                              'effective_date': row['effective_date'], 'reason': 'build_left_short'})
         for correction in state.corrections:
             target = correction.target_movement
             if target['id'] not in issues:
                 continue
-            key = (target['transaction_id'], target['revision_id'])
-            if key not in receipts:
+            key = (target.get('transaction_id'), target.get('revision_id'))
+            if target['id'] in planned:
+                receipts[key] = planned[target['id']]
+            elif key not in receipts:
                 receipts[key] = next(row for row in inventory.movements(s, transaction_id=target['transaction_id'])
                                      if row['kind'] == 'receipt' and row['revision_id'] == target['revision_id'])
             receipt = receipts[key]
@@ -194,16 +200,21 @@ def replay_items(s, working, load, refuse):
                     'Assembly builds consume one another in a cycle, so the cost of one cannot be settled before the '
                     'other. Void one of the builds that made an assembly from an item it was itself built into, then '
                     'enter this change again.'), details={'reason': 'assembly_cycle', 'item_id': receipt['item_id']})
+            # A landed cost's forward true-up of a component issue (R104 increment 6) is carried by a landed
+            # cost of the assembly receipt at the same date, so the assembly's own forward true-ups follow;
+            # any other correction by a cost correction of the assembly receipt, at the receipt's position.
+            landed = correction.filled_by is not None and correction.filled_by['kind'] == 'landed'
             partner = dict(
-                id=new_id(), item_id=receipt['item_id'], kind='recost', quantity_microunits=0,
+                id=new_id(), item_id=receipt['item_id'], kind='landed' if landed else 'recost', quantity_microunits=0,
                 value_minor_units=-correction.delta_minor_units, effective_date=correction.effective_date,
                 sequence=0, currency=receipt['currency'], asset_account_id=receipt['asset_account_id'],
                 offset_account_id=receipt['offset_account_id'], class_id=receipt['class_id'],
-                corrects_movement_id=receipt['id'], reverses_movement_id=None, returns_movement_id=None,
+                corrects_movement_id=None if landed else receipt['id'], reverses_movement_id=None,
+                returns_movement_id=None, landed_on_movement_id=receipt['id'] if landed else None,
                 filled_by_movement_id=None, fallback_unit_cost_minor_units=None, fallback_unit_cost_fraction=None,
                 count_position=receipt.get('count_position') or 'before')
             load(receipt['item_id']).append(partner)
-            partners[target['id']] = partner
+            partners[(target['id'], correction.filled_by['id'] if correction.filled_by is not None else None)] = partner
             waiting.add(receipt['item_id'])
         order.append((item_id, state))
         done.add(item_id)
@@ -372,7 +383,24 @@ def _on_hand(history, date):
     return sum(int(row['quantity_microunits']) for row in history if row['effective_date'] <= date)
 
 
-def _plan(s, item, components, quantity, date, *, reversing=(), exclude=None, site_id=None):
+def build_numbers(s, inp):
+    """``{'assembly': Numbers, component item id: Numbers}`` a build input names (R104 increment 4)."""
+    from bookflow.company import serial_lots
+    out = {}
+    numbers = serial_lots.from_line(inp)
+    if numbers is not None:
+        out['assembly'] = numbers
+    for index, entry in enumerate(getattr(inp, 'components', None) or ()):
+        component = item_service.resolve_item(s.company, entry.item)
+        stated = serial_lots.from_line(entry)
+        if stated is not None:
+            out[component['id']] = stated
+    return out
+
+
+def _plan(s, item, components, quantity, date, *, reversing=(), exclude=None, site_id=None, numbers=None):
+    from bookflow.company import serial_lots
+    numbers = numbers or {}
     currency = _home(s)
     build = _Build(item, components, quantity, date, currency)
     build.site_id = site_id
@@ -409,7 +437,7 @@ def _plan(s, item, components, quantity, date, *, reversing=(), exclude=None, si
     issues = [inventory_effects.Entry(
         key=f'c{index}', item_id=entry['item']['id'], item_name=entry['item']['full_name'], kind='issue',
         quantity_microunits=entry['need'], asset_account_id=entry['component']['account_id'],
-        offset_account_id=item['asset_account_id'], site_id=site_id)
+        offset_account_id=item['asset_account_id'], site_id=site_id, numbers=numbers.get(entry['item']['id']))
         for index, entry in enumerate(build.rows) if entry['component']['kind'] == 'stock' and entry['need'] > 0]
     # The first pass prices the components. It carries the assembly's receipt too, at a provisional value
     # (what the build being restated received, else nothing): without it, a later build that consumed this
@@ -422,7 +450,7 @@ def _plan(s, item, components, quantity, date, *, reversing=(), exclude=None, si
                                           offset_account_id=item['asset_account_id'], value_minor_units=max(provisional, 0),
                                           site_id=site_id)
     first = inventory_effects.plan(s, entries=issues + [placeholder], reversing=reversing, date=date, currency=currency,
-                                   field='quantity')
+                                   field='quantity', assembly_key='assembly')
     total = 0
     for index, entry in enumerate(build.rows):
         if entry['component']['kind'] == 'stock':
@@ -449,9 +477,10 @@ def _plan(s, item, components, quantity, date, *, reversing=(), exclude=None, si
         entry['component']['account_id'] for entry in build.rows if entry['cost'])
     receipt = inventory_effects.Entry(key='assembly', item_id=item['id'], item_name=item['full_name'], kind='receipt',
                                       quantity_microunits=quantity, asset_account_id=item['asset_account_id'],
-                                      offset_account_id=offset, value_minor_units=total, site_id=site_id)
+                                      offset_account_id=offset, value_minor_units=total, site_id=site_id,
+                                      numbers=numbers.get('assembly'))
     build.change = inventory_effects.plan(s, entries=issues + [receipt], reversing=reversing, date=date,
-                                          currency=currency, field='quantity')
+                                          currency=currency, field='quantity', assembly_key='assembly')
     for index, entry in enumerate(build.rows):
         if entry['component']['kind'] == 'stock' and build.change.costs.get(f'c{index}', 0) != -entry['cost']:
             raise BookflowError('E_INTERNAL', message='A build component was costed two ways.')
@@ -528,7 +557,8 @@ def _output(s, build, *, status, current=None, number=None, transaction_id=None,
         assembly_quantity_on_hand=format_quantity_micro_units(build.on_hand_after),
         posts_to_ledger=bool(build.lines) and _posts_to_ledger(build),
         corrections=[AssemblyCorrectionOutput(item_id=values['item_id'], effective_date=values['effective_date'],
-                                              corrects_movement_id=values['corrects_movement_id'],
+                                              corrects_movement_id=values['corrects_movement_id']
+                                              or values.get('landed_on_movement_id') or '',
                                               delta=money(int(values['value_minor_units']), currency))
                      for values in corrections],
         reason=current.get('reason') if current else None, warnings=list(dict.fromkeys(warnings)),
@@ -612,7 +642,7 @@ def _post(s, ctx, build, journal, operation, *, command_name, revision_row, pers
     extra = [('assembly_builds', 'assembly_build', 'id', [row])]
     if movements:
         # Placed before the movements, which the database refuses unless their placements sum to them (R104).
-        extra.append(placements.extra(placements.placements_for_rows(
+        extra.extend(placements.extras(placements.placements_for_rows(
             s, movements, build.change.sites, build.change.placements)))
         extra.append(('inventory_movements', 'inventory_movement', 'id', movements))
     applied = journals.persist_prepared(fresh, ctx, s, command_name=command_name, extra=tuple(extra),
@@ -671,7 +701,7 @@ def _run(s, ctx, inp, operation, *, persist):
         components = capture(s, item, currency)
         _require_open(s, inp.date)
         site_id = placements.site_id_for(s, getattr(inp, 'site', None))
-        build = _plan(s, item, components, quantity, inp.date, site_id=site_id)
+        build = _plan(s, item, components, quantity, inp.date, site_id=site_id, numbers=build_numbers(s, inp))
         if build.shortfall and not inp.pending:
             raise _short(build)
         build_id = new_id()

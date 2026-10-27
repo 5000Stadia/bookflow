@@ -5,6 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
+from bookflow.company import serial_lot_models as _SL
 from bookflow.company.journal_models import _Date, _Number, _Version
 from bookflow.company.sales_models import Selector
 
@@ -23,6 +24,7 @@ class SiteCreateInput(_Strict):
     description: str | None = Field(None, max_length=1000, description='What or where the site is.')
     address: str | None = Field(None, max_length=2000, description='Postal address of the site, as free text.')
     is_default: bool = Field(False, description='Make this the default site: stock lines naming no site are placed here.')
+    tracks_bins: bool = Field(False, description='Locate stock at this site to bins (add them with `bin create`).')
 
 
 class SiteUpdateInput(_Strict):
@@ -32,6 +34,7 @@ class SiteUpdateInput(_Strict):
     description: str | None = Field(None, max_length=1000)
     address: str | None = Field(None, max_length=2000)
     is_default: Literal[True] | None = Field(None, description='true makes this the default site (the previous default stops being it).')
+    tracks_bins: bool | None = Field(None, description='true locates stock here to bins; false is refused while any bin holds stock.')
 
     @model_serializer(mode='wrap')
     def only_supplied(self, handler):
@@ -91,6 +94,18 @@ class TransferLineInput(_Strict):
     item: Selector = Field(description='Inventory part or assembly to move, by id or name.')
     quantity: str = Field(min_length=1, max_length=40, description='Quantity to move in the item base unit, a positive decimal.')
     description: str | None = Field(None, max_length=2000)
+    from_bin: _SL.LineBin = Field(None, description=(
+        "Bin the stock leaves at the from site (a site that tracks bins), by id, full name or label; \"(no bin)\" "
+        "names the units outside every bin. Omitted, the units leave from where they are: the item's default bin "
+        "when it holds them, else no bin, else the bins holding them."))
+    to_bin: _SL.LineBin = Field(None, description=(
+        "Bin the stock arrives in at the to site; \"(no bin)\" puts it outside every bin; omitted, the item's "
+        "default bin there, else no bin. Moving between two bins of one site names the same site as from_site and "
+        "to_site."))
+    lot: _SL.LineLot = Field(None, description='Lot moved, of a lot-tracked item; omitted, the units move unassigned.')
+    serial_numbers: _SL.LineSerials = Field(None, max_length=10000, description=(
+        'Serial numbers moved, one per unit, of a serial-tracked item; each must be at the from site on the date. '
+        'Units left unnumbered move unassigned.'))
 
 
 class TransferPostInput(_Strict):
@@ -138,6 +153,10 @@ class TransferLineOutput(_Strict):
     item_name: str
     quantity: str
     description: str | None
+    from_bin: str | None = None
+    to_bin: str | None = None
+    lot: str | None = None
+    serial_numbers: list[str] = Field(default_factory=list)
 
 
 class TransferSiteStock(_Strict):

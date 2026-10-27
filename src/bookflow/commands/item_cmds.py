@@ -33,6 +33,9 @@ class SiteSettingInput(StrictInput):
     site: str = Field(min_length=1, max_length=200, description="Inventory site id or name.")
     reorder_point_min: str | None = Field(default=None, description="Reorder minimum at this site in the base unit; null for none.")
     reorder_point_max: str | None = Field(default=None, description="Reorder maximum at this site in the base unit; null for none.")
+    default_bin: str | None = Field(default=None, max_length=1000, description=(
+        "Bin stock of this item goes to and leaves from at this site when a line names none (id, full name or label); "
+        "an empty string clears it. The site must track bins."))
 
 
 class ItemUpdateInput(StrictInput):
@@ -58,6 +61,12 @@ class ItemUpdateInput(StrictInput):
     sales_tax_code_id: str | None = Field(default=None, min_length=26, max_length=26)
     manufacturer_part_number: str | None = Field(default=None, max_length=128)
     barcode: str | None = Field(default=None, max_length=128)
+    tracking: Literal["none", "serial", "lot"] | None = Field(default=None, description=(
+        "Number tracking: none, serial or lot. Turning it on leaves stock on hand unassigned (`inventory assign` "
+        "numbers it); turning it off is refused while units carry numbers."))
+    cycle_class: str | None = Field(default=None, max_length=200, description=(
+        "Cycle-count class by name or id (A, B, C, ...): how often the item is due to be counted at each site; "
+        "an empty string clears it (never due). `cycle-count classify` proposes classes from issued cost."))
     unit_of_measure_set_id: str | None = Field(default=None, min_length=26, max_length=26)
     reorder_point_min: str | None = None
     reorder_point_max: str | None = None
@@ -72,6 +81,10 @@ class ItemUpdateInput(StrictInput):
     tax_percent: str | None = None
     tax_agency_vendor_id: str | None = Field(default=None, min_length=26, max_length=26)
     assembly_build_point: str | None = None
+    unit_weight: str | None = Field(default=None, description=(
+        "Weight of one base unit, for landed cost by weight (R104 increment 6); null clears it."))
+    unit_volume: str | None = Field(default=None, description=(
+        "Volume of one base unit, for landed cost by volume; null clears it."))
     asset_number: str | None = Field(default=None, max_length=128)
     purchase_date: str | None = None
     original_cost: Any | None = None
@@ -221,8 +234,13 @@ def plan_item_update(inp: ItemUpdateInput, ctx: Context, session: Session) -> Pl
     changes = {
         field: getattr(inp, field)
         for field in inp.model_fields_set
-        if field not in {"item", "expected_version", "site_settings"}
+        if field not in {"item", "expected_version", "site_settings", "cycle_class"}
     }
+    if "cycle_class" in inp.model_fields_set:
+        from bookflow.company import cycle_counts
+        changes["cycle_class_id"], cycle_seed = cycle_counts.class_id_for(session, ctx, inp.cycle_class)
+    else:
+        cycle_seed = []
     from bookflow.company import placements
     site_settings = (placements.plan_site_settings(session, ctx, current, inp.site_settings)
                      if inp.site_settings is not None else [])
@@ -253,13 +271,14 @@ def plan_item_update(inp: ItemUpdateInput, ctx: Context, session: Session) -> Pl
     })
     if site_settings:
         preview.changed_fields = list(dict.fromkeys([*preview.changed_fields, "site_settings"]))
-    return Plan(preview=preview, data={"update": update, "site_settings": site_settings})
+    return Plan(preview=preview, data={"update": update, "site_settings": site_settings, "cycle_seed": cycle_seed})
 
 
 def apply_item_update(plan: Plan, ctx: Context, session: Session) -> Applied:
     update = plan.data["update"]
-    from bookflow.company import placements
-    settled = placements.apply_site_settings(session, plan.data.get("site_settings") or [])
+    from bookflow.company import cycle_counts, placements
+    seeded = cycle_counts.insert_seed(session, plan.data.get("cycle_seed") or [])
+    settled = seeded + placements.apply_site_settings(session, plan.data.get("site_settings") or [])
     if update.mutation is None:
         if settled:
             return Applied(plan.preview, settled, "updated item site settings")

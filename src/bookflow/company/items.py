@@ -147,6 +147,13 @@ class ItemInput(StrictModel):
     sales_tax_code_id: str | None = Field(default=None, min_length=26, max_length=26)
     manufacturer_part_number: str | None = Field(default=None, max_length=128)
     barcode: str | None = Field(default=None, max_length=128)
+    tracking: Literal["none", "serial", "lot"] | None = Field(default=None, description=(
+        "Number tracking of an inventory part or assembly: none (the default), serial (each unit carries its own "
+        "serial number) or lot (units carry a lot number and its expiry). Turning it on leaves the stock on hand "
+        "unassigned; number it with `inventory assign`."))
+    cycle_class_id: str | None = Field(default=None, min_length=26, max_length=26, description=(
+        "Cycle-count class of an inventory part or assembly (R104 increment 5): how often it is due to be counted at "
+        "each site. Null: never due."))
     unit_of_measure_set_id: str | None = Field(default=None, min_length=26, max_length=26)
     reorder_point_min: str | None = None
     reorder_point_max: str | None = None
@@ -161,6 +168,12 @@ class ItemInput(StrictModel):
     tax_percent: str | None = None
     tax_agency_vendor_id: str | None = Field(default=None, min_length=26, max_length=26)
     assembly_build_point: str | None = None
+    unit_weight: str | None = Field(default=None, description=(
+        "Weight of one base unit, in whatever weight unit the company uses for freight, for landed cost by weight "
+        "(R104 increment 6); null for none."))
+    unit_volume: str | None = Field(default=None, description=(
+        "Volume of one base unit, in whatever volume unit the company uses for freight, for landed cost by volume; "
+        "null for none."))
     asset_number: str | None = Field(default=None, max_length=128)
     purchase_date: str | None = None
     original_cost: Any | None = None
@@ -189,7 +202,7 @@ class ItemInput(StrictModel):
         return value or None
 
     @field_validator(
-        "reorder_point_min", "reorder_point_max", "assembly_build_point",
+        "reorder_point_min", "reorder_point_max", "assembly_build_point", "unit_weight", "unit_volume",
     )
     @classmethod
     def _nonnegative_quantities(cls, value: str | None, info) -> str | None:
@@ -308,6 +321,8 @@ class ItemOutput(StrictModel):
     sales_tax_code: str | None
     manufacturer_part_number: str | None
     barcode: str | None
+    tracking: str = "none"
+    cycle_class_id: str | None = None
     unit_of_measure_set_id: str | None
     unit_of_measure_set: str | None
     reorder_point_min: str | None
@@ -324,6 +339,8 @@ class ItemOutput(StrictModel):
     tax_percent: str | None
     tax_agency_vendor_id: str | None
     assembly_build_point: str | None
+    unit_weight: str | None = None
+    unit_volume: str | None = None
     asset_number: str | None
     purchase_date: str | None
     original_cost: MoneyOutput | None
@@ -369,7 +386,7 @@ _IDENTITY = frozenset({"name", "type", "parent_id", "category_id", "default_clas
 _SALES = frozenset({"description", "sales_enabled", "price", "income_account_id", "sales_tax_code_id"})
 _PURCHASE = frozenset({"purchase_description", "purchase_enabled", "cost", "expense_account_id", "preferred_vendor_id", "vendor_profiles"})
 _INVENTORY_PURCHASE = frozenset({"purchase_description", "purchase_enabled", "cost", "preferred_vendor_id", "vendor_profiles"})
-_STOCK = frozenset({"cogs_account_id", "asset_account_id", "manufacturer_part_number", "barcode", "unit_of_measure_set_id", "reorder_point_min", "reorder_point_max"})
+_STOCK = frozenset({"cogs_account_id", "asset_account_id", "manufacturer_part_number", "barcode", "tracking", "cycle_class_id", "unit_of_measure_set_id", "reorder_point_min", "reorder_point_max", "unit_weight", "unit_volume"})
 _FIXED = frozenset({
     "asset_number", "purchase_date", "original_cost", "vendor_id", "location", "serial_number",
     "warranty_expiration", "disposal_status", "disposal_date", "disposal_proceeds",
@@ -418,6 +435,8 @@ _QUANTITY_FIELDS = {
     "reorder_point_min": "reorder_point_min_microunits",
     "reorder_point_max": "reorder_point_max_microunits",
     "assembly_build_point": "assembly_build_point_microunits",
+    "unit_weight": "unit_weight_microunits",   # landed cost by weight and volume (R104 increment 6)
+    "unit_volume": "unit_volume_microunits",
 }
 _DIRECT_FIELDS = (
     "category_id", "description", "purchase_description", "income_account_id",
@@ -808,6 +827,8 @@ def _owner_values(db: Database, parsed: ItemInput, *, supplied: set[str], refere
     for field in _DIRECT_FIELDS:
         values[field] = getattr(parsed, field)
     values["preferred_vendor_id"] = parsed.preferred_vendor_id
+    values["tracking"] = parsed.tracking or "none"   # R104 increment 4
+    values["cycle_class_id"] = parsed.cycle_class_id   # R104 increment 5
     for field in _MONEY_FIELDS:
         values.update(_money(getattr(parsed, field), db, field))
     for field, column in _PERCENT_FIELDS.items():
@@ -816,6 +837,9 @@ def _owner_values(db: Database, parsed: ItemInput, *, supplied: set[str], refere
     for field, column in _QUANTITY_FIELDS.items():
         raw = getattr(parsed, field)
         values[column] = None if raw is None else parse_quantity_micro_units(raw, field=field)
+    for field in ("unit_weight", "unit_volume"):
+        if values[_QUANTITY_FIELDS[field]] == 0:
+            raise _validation(field, "must be more than zero; leave it out for none")
     if values["reorder_point_min_microunits"] is not None and values["reorder_point_max_microunits"] is not None and values["reorder_point_max_microunits"] < values["reorder_point_min_microunits"]:
         raise _validation("reorder_point_max", "cannot be below reorder_point_min")
 
@@ -1111,6 +1135,10 @@ def _payload_from_state(owner: Mapping[str, Any], members: Sequence[Mapping[str,
         "purchase_enabled": bool(owner["purchase_enabled"]), "preferred_vendor_id": owner["preferred_vendor_id"],
     }
     payload.update({field: owner[field] for field in _DIRECT_FIELDS if field not in {"category_id", "description", "purchase_description"}})
+    if (owner.get("tracking") or "none") != "none":
+        payload["tracking"] = owner["tracking"]
+    if owner.get("cycle_class_id"):
+        payload["cycle_class_id"] = owner["cycle_class_id"]
     for field in _MONEY_FIELDS:
         payload[field] = _money_input(owner, field)
     for field, column in _PERCENT_FIELDS.items():
@@ -1145,6 +1173,21 @@ def _validate_type_change(db: Database, current: Mapping[str, Any], target_type:
     ).mappings().all()
     if any(row["type"] != target_type for row in related):
         raise BookflowError("E_TYPE_CHANGE", details={"record_id": current["id"], "from": old_type, "to": target_type, "hierarchy": True})
+
+
+def _assert_tracking_change(db: Database, current: Mapping[str, Any], tracking: str) -> None:
+    """Tracking turns on freely (stock on hand stays unassigned); it turns off, or changes kind, only while no
+    unit on hand or owed carries a number of the old kind (R104 increment 4)."""
+    old = current.get("tracking") or "none"
+    if old == "none":
+        return
+    column = schema.inventory_placements.c.serial_number_id if old == "serial" else schema.inventory_placements.c.lot_id
+    held = db.conn.execute(sa.select(column, sa.func.sum(schema.inventory_placements.c.quantity_microunits)).where(
+        schema.inventory_placements.c.item_id == current["id"], column.is_not(None)).group_by(column)).all()
+    if any(int(quantity) for _, quantity in held):
+        kind = "serial numbers" if old == "serial" else "lots"
+        raise _validation("tracking", f"{current['full_name']} still holds units under {kind}; unassign them with "
+                                      "`inventory assign --direction unassign` first")
 
 
 def assert_barcode_available(db: Database, barcode: str | None, *, exclude_id: str | None = None,
@@ -1347,6 +1390,7 @@ def plan_item_update(
     changed_fields: set[str] = set()
     storage_groups = {
         **{field: (field,) for field in _DIRECT_FIELDS},
+        "tracking": ("tracking",),
         "name": ("name", "full_name"), "parent_id": ("parent_id", "full_name"),
         "type": ("type",), "sales_enabled": ("sales_enabled",),
         "purchase_enabled": ("purchase_enabled",), "preferred_vendor_id": ("preferred_vendor_id",),
@@ -1374,6 +1418,8 @@ def plan_item_update(
         return ItemUpdatePlan(None, (), ())
     if "barcode" in changed_fields:
         assert_barcode_available(db, after_candidate.get("barcode"), exclude_id=record_id)
+    if "tracking" in changed_fields:
+        _assert_tracking_change(db, current, after_candidate.get("tracking") or "none")
     after = {
         **after_candidate,
         **list_service.update_metadata(current, actor_id, via, at=at or now_iso()),
@@ -1938,7 +1984,7 @@ def project_item(
             "purchase_description", "sales_enabled", "purchase_enabled", "income_account_id",
             "expense_account_id", "cogs_account_id", "asset_account_id", "deposit_account_id",
             "liability_account_id", "default_class_id", "sales_tax_code_id",
-            "manufacturer_part_number", "barcode", "unit_of_measure_set_id", "preferred_vendor_id",
+            "manufacturer_part_number", "barcode", "tracking", "cycle_class_id", "unit_of_measure_set_id", "preferred_vendor_id",
             "notes", "print_members", "payment_method_id", "use_undeposited_funds",
             "tax_agency_vendor_id", "asset_number", "purchase_date", "vendor_id", "location",
             "serial_number", "warranty_expiration", "disposal_status", "disposal_date",
@@ -1958,6 +2004,8 @@ def project_item(
         discount_percent=(None if owner["discount_percent_millionths"] is None else format_percentage_millionths(owner["discount_percent_millionths"])),
         tax_percent=(None if owner["tax_percent_millionths"] is None else format_percentage_millionths(owner["tax_percent_millionths"])),
         assembly_build_point=(None if owner["assembly_build_point_microunits"] is None else format_quantity_micro_units(owner["assembly_build_point_microunits"])),
+        unit_weight=(None if owner.get("unit_weight_microunits") is None else format_quantity_micro_units(owner["unit_weight_microunits"])),
+        unit_volume=(None if owner.get("unit_volume_microunits") is None else format_quantity_micro_units(owner["unit_volume_microunits"])),
         original_cost=_money_output(owner, "original_cost"), disposal_proceeds=_money_output(owner, "disposal_proceeds"),
         disposal_costs=_money_output(owner, "disposal_costs"), book_basis=_money_output(owner, "book_basis"),
         tax_basis=_money_output(owner, "tax_basis"),

@@ -82,6 +82,10 @@ class BillItemProfile(StrictModel):
     # not it was used, so a reader can see the line was entered off the standard or against it.
     standard_cost_minor_units: int | None = None
     receipt_product_minor_units: int | None = Field(default=None, exclude_if=lambda v: v is None)
+    # A vendor credit's item row may name the receipt line it sends back (R104 increment 7): the line identity of
+    # the bill, check, card charge or item receipt line that brought the units in. Under FIFO the return takes
+    # that receipt's layer; under average it is recorded and changes nothing.
+    receipt_line_id: str | None = Field(default=None, exclude_if=lambda v: v is None)
     receipt_shipping_minor_units: int | None = Field(default=None, exclude_if=lambda v: v is None)
     receipt_product_unit_cost_minor_units: int | None = Field(default=None, exclude_if=lambda v: v is None)
     # R150: each cost's thousandths of a minor unit beyond its rounded minor units; absent when whole.

@@ -68,9 +68,56 @@ def _items(s, code: str, sites: dict[str, str], as_of: str) -> list[dict[str, An
     return [_item_match(s, row, sites, as_of) for row in rows]
 
 
-# The look-up order of §7. Bins (increment 5), serial numbers and lots (increment 4) slot in here,
-# each a function returning its matches in the same shape with its own ``kind`` and ``line_fields``.
-_KINDS = (("item", _items),)
+def _numbers(kind):
+    """A scanned serial-number or lot label (R104 increment 4): the number of a tracked item, where it is, and
+    the line fields that name it."""
+    table = c.serial_numbers if kind == "serial_number" else c.lots
+    column = "serial_number_id" if kind == "serial_number" else "lot_id"
+
+    def finder(s, code: str, sites: dict[str, str], as_of: str) -> list[dict[str, Any]]:
+        from bookflow.company import serial_lots
+        rows = s.company.conn.execute(sa.select(table.c.id, table.c.number, c.items.c.id.label("item_id"),
+                                                c.items.c.full_name, c.items.c.type, c.items.c.active)
+                                      .join(c.items, c.items.c.id == table.c.item_id)
+                                      .where(table.c.number_key == serial_lots.number_key(code))).mappings().all()
+        out = []
+        for row in rows:
+            held = s.company.conn.execute(sa.text(
+                f"SELECT site_id, sum(quantity_microunits) FROM inventory_placements WHERE {column} = :id "
+                "AND effective_date <= :as_of GROUP BY site_id"), {"id": row["id"], "as_of": as_of}).all()
+            on_hand = [{"site_id": site, "site": sites.get(site, site), "quantity": format_quantity_micro_units(int(q))}
+                       for site, q in sorted(held, key=lambda pair: sites.get(pair[0], pair[0]).casefold()) if int(q)]
+            fields = {"item": row["full_name"]}
+            fields.update({"serial_numbers": [row["number"]]} if kind == "serial_number" else {"lot": row["number"]})
+            out.append({"kind": kind, "id": row["id"], "name": f"{row['full_name']} {row['number']}", "type": row["type"],
+                        "active": bool(row["active"]), "barcode": None, "on_hand": on_hand, "line_fields": fields})
+        return out
+    return finder
+
+
+def _bins(s, code: str, sites: dict[str, str], as_of: str) -> list[dict[str, Any]]:
+    """A scanned bin label (R104 increment 5): the bin, what it holds by item, and the line fields that name it."""
+    t = c.inventory_bins
+    rows = s.company.conn.execute(sa.select(t).where(t.c.barcode == code)).mappings().all()
+    out = []
+    for row in rows:
+        held = s.company.conn.execute(sa.text(
+            "SELECT p.item_id, i.full_name, sum(p.quantity_microunits) FROM inventory_placements p JOIN items i "
+            "ON i.id = p.item_id WHERE p.bin_id = :id AND p.effective_date <= :as_of GROUP BY p.item_id"),
+            {"id": row["id"], "as_of": as_of}).all()
+        site = sites.get(row["site_id"], row["site_id"])
+        on_hand = [{"site_id": row["site_id"], "site": site, "item_id": item, "item": name,
+                    "quantity": format_quantity_micro_units(int(q))}
+                   for item, name, q in sorted(held, key=lambda r: r[1].casefold()) if int(q)]
+        out.append({"kind": "bin", "id": row["id"], "name": f"bin {row['full_name']} at {site}", "type": "bin",
+                    "active": bool(row["active"]), "barcode": row["barcode"], "on_hand": on_hand,
+                    "line_fields": {"site": site, "bin": row["full_name"]}})
+    return out
+
+
+# The look-up order of §7: items, bins (increment 5), then serial numbers and lots (increment 4), each a function
+# returning its matches in the same shape with its own ``kind`` and ``line_fields``.
+_KINDS = (("item", _items), ("bin", _bins), ("serial_number", _numbers("serial_number")), ("lot", _numbers("lot")))
 
 
 def lookup(s, inp) -> dict[str, Any]:
@@ -88,12 +135,18 @@ def lookup(s, inp) -> dict[str, Any]:
     ambiguous = len(chosen) > 1
     found = chosen[0] if len(chosen) == 1 else None
     if not matches:
-        message = f"No item carries the code {code!r}. Assign it to an item with `item update <item> --barcode {code}`."
+        message = f"No item, bin, serial number or lot carries the code {code!r}. Assign it to an item with `item update <item> --barcode {code}`."
     elif ambiguous:
         message = (f"The code {code!r} is on {len(chosen)} items: {', '.join(m['name'] for m in chosen)}. "
                    "Name the item instead, or give one of them a different code.")
     elif not found["active"]:
         message = f"The code {code!r} is on {found['name']}, which is inactive."
+    elif found["kind"] == "bin":
+        held = ", ".join(f"{place['item']} {place['quantity']}" for place in found["on_hand"]) or "empty"
+        message = f"{code} is {found['name']} ({held})."
+    elif found["kind"] != "item":
+        where = ", ".join(f"{place['site']} {place['quantity']}" for place in found["on_hand"]) or "not in stock"
+        message = f"{code} is {found['kind'].replace('_', ' ')} {code} of {found['line_fields']['item']} ({where})."
     else:
         message = f"{code} is {found['name']}."
     return {

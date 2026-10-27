@@ -563,8 +563,10 @@ SECTIONS: tuple[Section, ...] = (
             _report("Inventory stock status by item", "stock-status"),
             Action("Sites and transfers", READ, ("inventory-site list",), "/inventory/sites"),
             Action("Physical counts", READ, ("inventory-count query",), "/inventory/counts"),
+            Action("Landed cost", READ, ("landed-cost charges",), "/inventory/landed-cost"),
             _report("Physical inventory worksheet", "physical-inventory-worksheet"),
             _report("Inventory valuation detail", "inventory-valuation-detail"),
+            _report("Inventory layers", "inventory-layers"),
             _report("Quantity on hand by site", "quantity-by-site"),
             _report("Open sales orders", "open-sales-orders"),
             _report("Sales by item", "sales-by-item"),
@@ -685,6 +687,7 @@ SECTIONS: tuple[Section, ...] = (
             ("Company setup", (
                 Action("Company information", READ, ("company show",), "/company/self"),
                 Action("Preferences", WRITE, ("company update",), "/company/self/update"),
+                Action("Costing method", READ, ("costing-method show",), "/inventory/costing-method"),
                 Action("Users and permissions", READ, (), "/users"),
                 Action("Apply a setup profile", WRITE, ("profile apply",), "/profile/apply"),
                 Action("Apply a chart of accounts", WRITE, ("chart apply",), "/chart/apply"),
@@ -950,6 +953,14 @@ def overview(company_id: str, today: str, ask: Ask) -> dict[str, Any]:
         attention["bills"] = soon[:ATTENTION_ROWS]
         attention["bills_more"] = len(soon) > ATTENTION_ROWS
         attention["bills_href"] = report("unpaid-bills", as_of=today)
+
+    # Tracked items with units that carry no serial number or lot yet (R104 increment 4).
+    numbers = ask("report serial-lot-stock", {"as_of": today, "limit": 500})
+    if numbers is not None:
+        loose = [dict(row, href=f"{base}/item/{row['item_id']}#item-numbers") for row in numbers["rows"]
+                 if row["number"] is None and not row["quantity"].startswith("-")]
+        attention["unassigned"] = loose[:ATTENTION_ROWS]
+        attention["unassigned_more"] = len(loose) > ATTENTION_ROWS
 
     month = ask("report profit-and-loss", {"date_from": month_start, "date_to": today, "limit": 1})
     if month is not None:

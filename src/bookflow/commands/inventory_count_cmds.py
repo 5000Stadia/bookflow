@@ -87,7 +87,7 @@ count_post = _write(
     'difference and value, the documents entered after counting began, and a preview_fingerprint; pass that '
     'fingerprint to post (E_PREVIEW_STALE if anything changed). A document later dated before the count derives '
     'the difference again, so the shelf stays as counted. Example: `bookflow inventory-count post C-1 '
-    '--expected-version 1 --adjustment-account "Inventory Shrinkage" --preview-fingerprint <from the dry run> '
+    '--expected-version 1 --adjustment-account "Cost of Goods Sold" --preview-fingerprint <from the dry run> '
     '--reason "Van count" --json`.',
     m.CountPostInput, m.CountPostOutput, plan_count_post, counts.apply_post, capability='ledger.post',
     errors=[*_ERRORS, 'E_VERSION_CONFLICT', 'E_PREVIEW_STALE', 'E_UNBALANCED_ENTRY'], version=_VERSION)

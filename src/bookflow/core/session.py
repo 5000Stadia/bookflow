@@ -52,6 +52,10 @@ class Session:
     hub_touched: list = field(default_factory=list)  # entries the dispatcher adds to the command's hub event (migrations, projection repair)
     company_touched: list = field(default_factory=list)
     company_info_row: dict | None = None
+    # True only while `dispatch._apply` runs the plan of a command that opted in with
+    # `plan_in_write`: inside the command's own write transaction, after its drain and principal
+    # upsert, with nothing written between that plan and the apply. Never set anywhere else.
+    plan_in_write: bool = False
     transfer: Any = None  # internal owned binary resource; never command JSON
     # host hook: the authenticated hosted producer, set by the trusted executor for command
     # families that revalidate bearer liveness inside their own transaction. Never from command

@@ -32,6 +32,8 @@ ACT_SUBJECTS = {
     'clock link': "Linking a person's login to an employee",
     'accountant add': 'Making someone the external accountant', 'accountant remove': 'Ending an external accountant designation',
     'accountant-copy cancel': "Cancelling an accountant's copy", 'accountant-copy import': "Importing an accountant's changes",
+    # fifo-v1: how stock is costed is the company's policy, changed on the accountant's advice.
+    'costing-method set': 'Changing the costing method', 'costing-method withdraw': 'Withdrawing a costing method switch',
 }
 
 

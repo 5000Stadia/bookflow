@@ -2596,3 +2596,126 @@ command = "inventory-transfer post"
 capture = "van_unload"
 input = { date = "2026-12-12", number = "DEMO-VAN-UNLOAD", from_site = "Van 1", to_site = "Warehouse", lines = [{ item = "${purchase_demo_item.id}", quantity = "0.5" }], memo = "Half kit taken back to the shelf before the count" }
 reason = "The slip for the half kit moved back this morning"
+
+# Serial and lot numbers (R104 increment 4): a serial-tracked water heater and a lot-tracked sealant
+# with two lots, received on one bill (DEMO-SERIAL-1); one heater goes on the van by serial number.
+# The bill moves Inventory Asset and Accounts Payable by 730.00 (two heaters at 350.00, ten tubes of
+# sealant at 3.00); the transfer moves nothing.
+[[commands]]
+command = "item create"
+capture = "heater_item"
+input = { name = "Water Heater", barcode = "4006381334013", type = "inventory_part", description = "40-gallon water heater", purchase_description = "40-gallon water heater", sales_enabled = true, purchase_enabled = true, price = "899.00", cost = "350.00", income_account_id = "${income_account.id}", cogs_account_id = "${cogs_account.id}", asset_account_id = "${inventory_account.id}", tracking = "serial" }
+reason = "Water heaters carry serial numbers for their warranties"
+
+[[commands]]
+command = "item create"
+capture = "sealant_item"
+input = { name = "Pipe Sealant", barcode = "4006381334020", type = "inventory_part", description = "Thread sealant, 50 ml", purchase_description = "Thread sealant", sales_enabled = true, purchase_enabled = true, price = "7.50", cost = "3.00", income_account_id = "${income_account.id}", cogs_account_id = "${cogs_account.id}", asset_account_id = "${inventory_account.id}", tracking = "lot" }
+reason = "Sealant is tracked by lot and expiry"
+
+[[commands]]
+command = "bill post"
+capture = "serial_demo_bill"
+input = { vendor = "${vendor.id}", date = "2026-12-05", number = "DEMO-SERIAL-1", supplier_reference = "WH-INV-77", items = [{ item = "${heater_item.id}", quantity = "2", unit_cost = "350.00", serial_numbers = ["WH-1001", "WH-1002"], site = "Warehouse" }, { item = "${sealant_item.id}", quantity = "4", unit_cost = "3.00", lot = "S-2611", lot_expiry = "2027-03-31", site = "Warehouse" }, { item = "${sealant_item.id}", quantity = "6", unit_cost = "3.00", lot = "S-2702", lot_expiry = "2027-09-30", site = "Warehouse" }] }
+reason = "Two water heaters and two lots of sealant arrived"
+
+[[commands]]
+command = "inventory-transfer post"
+capture = "heater_to_van"
+input = { date = "2026-12-06", number = "DEMO-VAN-HEATER", from_site = "Warehouse", to_site = "Van 1", lines = [{ item = "${heater_item.id}", quantity = "1", serial_numbers = ["WH-1001"] }, { item = "${sealant_item.id}", quantity = "2", lot = "S-2611" }], memo = "A heater and sealant for tomorrow's install" }
+reason = "Load the van for the install"
+
+# Bins and cycle counts (R104 increment 5): the warehouse tracks bins A1-A3, each with a label a scanner reads;
+# the heater on the shelf and the sealant are put away into bins (transfers between bins of one site move
+# quantity only), the heater's home bin is A1 and the sealant's A2, and the water heater and sealant get cycle classes A and B (which
+# stores the default classes A 30, B 90 and C 365). No money figure moves.
+[[commands]]
+command = "inventory-site update"
+input = { site = "Warehouse", tracks_bins = true }
+reason = "Shelving with bin labels went in"
+
+[[commands]]
+command = "bin create"
+input = { site = "Warehouse", name = "A1", barcode = "2000000001005", description = "Aisle A, first bay: water heaters" }
+reason = "Label the first bay"
+
+[[commands]]
+command = "bin create"
+input = { site = "Warehouse", name = "A2", barcode = "2000000001012", description = "Aisle A, second bay: sealants and fittings" }
+reason = "Label the second bay"
+
+[[commands]]
+command = "bin create"
+input = { site = "Warehouse", name = "A3", barcode = "2000000001029", description = "Aisle A, third bay: kits" }
+reason = "Label the third bay"
+
+[[commands]]
+command = "inventory-transfer post"
+input = { date = "2026-12-07", number = "DEMO-BIN-PUTAWAY", from_site = "Warehouse", to_site = "Warehouse", lines = [{ item = "${heater_item.id}", quantity = "1", serial_numbers = ["WH-1002"], to_bin = "A1" }, { item = "${sealant_item.id}", quantity = "6", lot = "S-2702", to_bin = "A2" }], memo = "Put away the delivery" }
+reason = "Shelve the heater and the sealant in their bays"
+
+[[commands]]
+command = "item update"
+input = { item = "${sealant_item.id}", site_settings = [{ site = "Warehouse", default_bin = "A2" }] }
+reason = "Sealant lives in A2"
+
+[[commands]]
+command = "item update"
+input = { item = "${heater_item.id}", site_settings = [{ site = "Warehouse", default_bin = "A1" }] }
+reason = "Water heaters live in A1"
+
+[[commands]]
+command = "item update"
+input = { item = "${heater_item.id}", cycle_class = "A" }
+reason = "Water heaters are counted monthly"
+
+[[commands]]
+command = "item update"
+input = { item = "${sealant_item.id}", cycle_class = "B" }
+reason = "Sealant is counted quarterly"
+
+# Landed cost (R104 increment 6): copper pipe received on two bills (DEMO-PIPE-1, 10 at 8.00, and DEMO-PIPE-2,
+# 20 at 8.00), five sold on DEMO-PIPE-INV-1, then a 30.00 freight bill (DEMO-FREIGHT-1) charged to Landed Cost
+# Clearing and spread over both receipts by quantity on 2026-12-08 (10.00 and 20.00). The five sold before the
+# allocation owe their share forward: a 5.00 true-up to cost of goods sold dated 2026-12-08; 25.00 stays in stock.
+[[commands]]
+command = "landed-cost setup"
+capture = "landed_clearing"
+input = {}
+reason = "Track freight on stock"
+
+[[commands]]
+command = "item create"
+capture = "pipe_item"
+input = { name = "Copper Pipe", type = "inventory_part", description = "Copper pipe, 10 ft", purchase_description = "Copper pipe, 10 ft", sales_enabled = true, purchase_enabled = true, price = "15.00", cost = "8.00", income_account_id = "${income_account.id}", cogs_account_id = "${cogs_account.id}", asset_account_id = "${inventory_account.id}" }
+reason = "Copper pipe is stocked"
+
+[[commands]]
+command = "bill post"
+capture = "pipe_bill_1"
+input = { vendor = "${vendor.id}", date = "2026-12-03", number = "DEMO-PIPE-1", items = [{ item = "${pipe_item.id}", quantity = "10", unit_cost = "8.00", site = "Warehouse" }] }
+reason = "Ten lengths of copper pipe arrived"
+
+[[commands]]
+command = "bill post"
+capture = "pipe_bill_2"
+input = { vendor = "${vendor.id}", date = "2026-12-04", number = "DEMO-PIPE-2", items = [{ item = "${pipe_item.id}", quantity = "20", unit_cost = "8.00", site = "Warehouse" }] }
+reason = "Twenty more lengths arrived"
+
+[[commands]]
+command = "invoice post"
+capture = "pipe_invoice"
+input = { date = "2026-12-05", number = "DEMO-PIPE-INV-1", customer = "${customer.id}", lines = [{ item = "${pipe_item.id}", quantity = "5", unit_price = "15.00" }] }
+reason = "Five lengths of pipe for a repipe job"
+
+[[commands]]
+command = "bill post"
+capture = "freight_bill"
+input = { vendor = "${vendor.id}", date = "2026-12-08", number = "DEMO-FREIGHT-1", expenses = [{ account = "${landed_clearing.account_id}", amount = "30.00", memo = "Freight on the pipe deliveries" }] }
+reason = "The freight bill for last week's pipe came in"
+
+[[commands]]
+command = "landed-cost post"
+capture = "pipe_landed"
+input = { charges = [{ document = "${freight_bill.id}" }], targets = [{ document = "${pipe_bill_1.id}" }, { document = "${pipe_bill_2.id}" }], basis = "quantity", number = "DEMO-LC-1" }
+reason = "Spread the freight over both pipe deliveries"

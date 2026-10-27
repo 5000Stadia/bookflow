@@ -588,9 +588,15 @@ def _read_collection(
                     marker = "collection:" + ":".join((*item_path, name))
                     nested_prefix = _collection_prefix((*item_path, name))
                     if marker in form or any(key.startswith(nested_prefix) for key in form):
-                        row[name] = _read_collection(
+                        found_rows = _read_collection(
                             field.annotation, (*item_path, name), form, coerce=coerce
                         )
+                        # A line's serial numbers left empty are no statement at all, so a correction keeps the
+                        # numbers its stock carries and an untouched grid matches its baseline (R104 increment 4).
+                        if (name == "serial_numbers" and not found_rows
+                                and form.get("empty:" + ":".join((*item_path, name))) != "1"):
+                            continue
+                        row[name] = found_rows
                     continue
                 key = "c:" + ":".join((*item_path, name))
                 if key not in form:

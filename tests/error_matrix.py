@@ -222,7 +222,7 @@ RECONCILIATION_MATRIX = {
 
 INFRASTRUCTURE = ["E_USAGE", "E_VALIDATION", "E_CONTEXT_IN_INPUT", "E_NOT_INITIALIZED", "E_NO_ACTOR", "E_PERMISSION", "E_COMPANY_NOT_FOUND",
                   "E_COMPANY_AMBIGUOUS", "E_ORGANIZATION_NOT_FOUND", "E_DB_BUSY", "E_NETWORK_SHARE", "E_FS_UNKNOWN", "E_SCHEMA_UNKNOWN",
-                  "E_SCHEMA_BEHIND", "E_MIGRATION_FAILED", "E_CONFIG_INVALID", "E_IO", "E_PARTIAL_WRITE", "E_REASON_REQUIRED", "E_FEATURE_DISABLED", "E_UNAUTHENTICATED", "E_INTERNAL"]
+                  "E_SCHEMA_BEHIND", "E_MIGRATION_FAILED", "E_CONFIG_INVALID", "E_IO", "E_PARTIAL_WRITE", "E_REASON_REQUIRED", "E_FEATURE_DISABLED", "E_UNAUTHENTICATED", "E_GUARD_REFUSED", "E_INTERNAL"]
 
 _LEDGER_WRITE_ERRORS = {
     'E_RECORD_NOT_FOUND': 'journal, account, party or class absent from selected company',
@@ -2334,14 +2334,14 @@ MATRIX['barcode generate'] = {'E_RECORD_NOT_FOUND': 'a named item is unknown', '
                               'E_DIRECTIVE_NOT_FOUND': 'unknown --directive', 'E_DIRECTIVE_INACTIVE': 'deactivated --directive'}
 # Physical counts (R104 increment 2).
 MATRIX['inventory-count create'] = {
-    'E_VALIDATION': 'an unknown site (the sites are listed), a non-stock item, bins or cycle (later increments), or nothing to count',
+    'E_VALIDATION': 'an unknown site (the sites are listed), a non-stock item, an unknown bin or a site that does not track bins, a cycle count with nothing due, or nothing to count',
     'E_RECORD_NOT_FOUND': 'item or category absent from selected company',
     'E_INACTIVE_REFERENCE': 'an inactive site',
     'E_PERIOD_CLOSED': 'a count date on or before the closing date',
     'E_DUPLICATE_NUMBER': 'the count number is already used',
     **_SITE_COMMON}
 MATRIX['inventory-count enter'] = {
-    'E_VALIDATION': 'a count that is not open, a non-stock item, an unknown or ambiguous code, a negative quantity, or a bin, lot or serial number',
+    'E_VALIDATION': 'a count that is not open, a non-stock item, an unknown or ambiguous code, a negative quantity, an unknown bin, a lot or serial number of a kind the item does not track, a serial number the books hold at another site, or a serial number counted other than 0 or 1',
     'E_RECORD_NOT_FOUND': 'count or item absent from selected company',
     **_SITE_COMMON}
 MATRIX['inventory-count post'] = {
@@ -2418,3 +2418,104 @@ MATRIX['reminders'] = {'E_VALIDATION': 'a malformed as_of date'}
 # R111 review X6: a person's entry names the revision it will post; a template changed since the preview is refused.
 for _name in ('memorized enter', 'memorized process', 'memorized retry', 'memorized-group enter'):
     MATRIX[_name]['E_PREVIEW_STALE'] = 'a template was changed after the preview that named the revision to post'
+# Serial and lot numbers (R104 increment 4).
+MATRIX['inventory assign'] = {
+    'E_VALIDATION': 'an untracked item, numbers of the wrong kind, a serial number named twice, already in stock or already gone, more units than the place (or the document line) holds unassigned, an unknown or ambiguous document, or a number not held there to unassign',
+    'E_RECORD_NOT_FOUND': 'item or site absent from selected company',
+    'E_INACTIVE_REFERENCE': 'an inactive site',
+    'E_PERIOD_CLOSED': 'a date on or before the closing date',
+    **_SITE_COMMON}
+for _noun in ('lot', 'serial-number'):
+    MATRIX[f'{_noun} update'] = {
+        'E_VALIDATION': 'a number two items share without the item named',
+        'E_RECORD_NOT_FOUND': 'no such number',
+        'E_VERSION_CONFLICT': 'the number changed since expected_version',
+        **_SITE_COMMON}
+    for _verb in ('show', 'list'):
+        MATRIX[f'{_noun} {_verb}'] = {'E_RECORD_NOT_FOUND': 'number, item or site absent from selected company',
+                                      'E_VALIDATION': 'a number two items share without the item named, or an unknown site'}
+for _report in ('serial-lot-stock', 'serial-lot-history', 'lot-trace'):
+    MATRIX[f'report {_report}'] = {'E_RECORD_NOT_FOUND': 'number, item or site absent from selected company',
+                                   'E_VALIDATION': 'a number that is both a serial number and a lot without kind, or an unknown site'}
+# Bins and cycle counts (R104 increment 5).
+MATRIX['bin create'] = {
+    'E_VALIDATION': 'a blank name or one with a colon, a site that does not track bins, a fourth level, or a label another active bin carries',
+    'E_NAME_TAKEN': 'a bin of that full name at the site',
+    'E_RECORD_NOT_FOUND': 'site absent from selected company',
+    'E_INACTIVE_REFERENCE': 'an inactive site or parent bin',
+    **_SITE_COMMON}
+MATRIX['bin update'] = {
+    'E_VALIDATION': 'an unknown or ambiguous bin, a blank name, or a label another active bin carries',
+    'E_NAME_TAKEN': 'a bin of that full name at the site',
+    'E_RECORD_NOT_FOUND': 'site absent from selected company',
+    'E_VERSION_CONFLICT': 'the bin changed since expected_version',
+    **_SITE_COMMON}
+for _verb in ('activate', 'deactivate'):
+    MATRIX[f'bin {_verb}'] = {
+        'E_VALIDATION': 'an unknown or ambiguous bin, a parent that is inactive, or a label another active bin now carries',
+        'E_RECORD_NOT_FOUND': 'site absent from selected company',
+        'E_VERSION_CONFLICT': 'the bin changed since expected_version',
+        **({'E_RECORD_IN_USE': 'the bin or a bin inside it holds stock, or active bins sit inside it'} if _verb == 'deactivate' else {}),
+        **_SITE_COMMON}
+MATRIX['bin show'] = {'E_VALIDATION': 'an unknown or ambiguous bin', 'E_RECORD_NOT_FOUND': 'site absent from selected company'}
+MATRIX['bin list'] = {'E_VALIDATION': 'an unknown site'}
+MATRIX['report items-by-bin'] = {'E_VALIDATION': 'an unknown site or bin', 'E_RECORD_NOT_FOUND': 'item absent from selected company',
+                                 'E_INTERNAL': 'placements disagree with the stock ledger (the quantity tie)'}
+MATRIX['cycle-class create'] = {'E_VALIDATION': 'a blank name or an interval outside 1-3660 days', 'E_NAME_TAKEN': 'another class has the name', **_SITE_COMMON}
+MATRIX['cycle-class update'] = {'E_VALIDATION': 'an unknown class, a blank name or an interval outside 1-3660 days',
+                                'E_NAME_TAKEN': 'another class has the name', 'E_RECORD_NOT_FOUND': 'class absent',
+                                'E_VERSION_CONFLICT': 'the class changed since expected_version', **_SITE_COMMON}
+for _verb in ('activate', 'deactivate'):
+    MATRIX[f'cycle-class {_verb}'] = {
+        'E_VALIDATION': 'an unknown class', 'E_RECORD_NOT_FOUND': 'class absent',
+        'E_VERSION_CONFLICT': 'the class changed since expected_version',
+        **({'E_RECORD_IN_USE': 'items are still in the class'} if _verb == 'deactivate' else {}),
+        **_SITE_COMMON}
+MATRIX['cycle-class show'] = {'E_VALIDATION': 'an unknown class', 'E_RECORD_NOT_FOUND': 'class absent'}
+MATRIX['cycle-count classify'] = {
+    'E_VALIDATION': 'a share outside 0-100, shares passing 100, a period that ends before it starts, or an unknown class',
+    'E_RECORD_NOT_FOUND': 'class absent', 'E_INACTIVE_REFERENCE': 'an inactive class', **_SITE_COMMON}
+MATRIX['cycle-count due'] = {'E_VALIDATION': 'an unknown site or a malformed date', 'E_RECORD_NOT_FOUND': 'site absent from selected company'}
+
+# Landed cost (R104 increment 6).
+_LANDED_WRITE = {
+    'E_VALIDATION': 'no clearing account, a charge or target not found among what may take part, nothing left to '
+                    'allocate, more than is unallocated, charges and credits mixed, a target weighing nothing, a date '
+                    'before a target receipt, a freight credit taking a receipt below zero, stock that cannot stand',
+    'E_RECORD_NOT_FOUND': 'unknown allocation, item or account',
+    'E_INACTIVE_REFERENCE': 'inactive clearing or target account',
+    'E_PERIOD_CLOSED': 'the allocation date or a true-up or void date falls in a closed period',
+    'E_WORK_DEPENDENCY': 'voiding an allocation a later freight credit needs',
+    'E_DUPLICATE_NUMBER': 'the supplied allocation number is already used',
+    'E_REASON_REQUIRED': 'a write without --reason',
+    'E_VALUE_RANGE': 'an amount outside signed 64-bit storage',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+MATRIX['landed-cost setup'] = {'E_VALIDATION': 'invalid input', 'E_REASON_REQUIRED': 'a write without --reason',
+                               'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+                               'E_DIRECTIVE_NOT_FOUND': 'unknown --directive', 'E_DIRECTIVE_INACTIVE': 'deactivated --directive'}
+MATRIX['landed-cost charges'] = {'E_VALIDATION': 'the clearing account does not equal the unallocated charges on a date',
+                                 'E_RECORD_NOT_FOUND': 'unknown vendor'}
+MATRIX['landed-cost post'] = dict(_LANDED_WRITE)
+MATRIX['landed-cost void'] = dict(_LANDED_WRITE)
+MATRIX['landed-cost show'] = {'E_RECORD_NOT_FOUND': 'unknown allocation', 'E_VALIDATION': 'invalid input'}
+MATRIX['landed-cost query'] = {'E_RECORD_NOT_FOUND': 'unknown document', 'E_VALIDATION': 'invalid input'}
+
+# FIFO costing (R104 increment 7).
+_COSTING_WRITE = {
+    'E_VALIDATION': 'a date not after the last switch, the method already in force on that date, a switch whose date '
+                    'has come (withdraw), a correction that cannot stand',
+    'E_RECORD_NOT_FOUND': 'unknown switch (withdraw), an item a correction names',
+    'E_PERIOD_CLOSED': 'the switch date, or a correction date, on or before the closing date',
+    'E_PERMISSION': 'an agent: changing the costing method is a person\'s act',
+    'E_REASON_REQUIRED': 'a write without --reason',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+MATRIX['costing-method set'] = dict(_COSTING_WRITE)
+MATRIX['costing-method withdraw'] = dict(_COSTING_WRITE)
+MATRIX['costing-method show'] = {'E_VALIDATION': 'invalid input'}
+MATRIX['report inventory-layers'] = {'E_VALIDATION': 'invalid input', 'E_RECORD_NOT_FOUND': 'unknown item'}

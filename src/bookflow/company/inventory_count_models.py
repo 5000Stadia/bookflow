@@ -46,9 +46,13 @@ class CountCreateInput(_Input):
     items: list[Selector] | None = Field(None, min_length=1, max_length=500,
                                          description='Count only these items (id, name or barcode).')
     category: Selector | None = Field(None, description='Count only the items in this item category.')
-    bins: list[Selector] | None = Field(None, description='Count these bins (bins arrive with a later increment).')
-    cycle: bool = Field(False, description='Count the next items due by cycle class (arrives with bins and cycle counts).')
-    limit: int | None = Field(None, ge=1, le=500, description='With cycle: how many due items to count.')
+    bins: list[Selector] | None = Field(None, min_length=1, max_length=200, description=(
+        'Count these bins of the site (id, full name such as A3, or Aisle:3 for a bin inside another, or label), and the bins inside them: the sheet '
+        'lists exactly what they hold. Entries naming no bin count in the one bin named.'))
+    cycle: bool = Field(False, description=(
+        'Count the next items due by cycle class at the site (`cycle-count due`), most overdue first; recording the '
+        'count moves their due dates on, so the next cycle count takes the next ones.'))
+    limit: int | None = Field(None, ge=1, le=500, description='With cycle: how many due items to count (default 25).')
     blind: bool = Field(False, description='Hide expected quantities and differences on the sheet; they show only in the post preview.')
     memo: str | None = Field(None, max_length=2000, description='Memo for the count.')
     number: str | None = Field(None, min_length=1, max_length=64, description='Count number; omit for the next (C-1, C-2, ...).')
@@ -67,9 +71,13 @@ class CountCreateInput(_Input):
 class CountEntryInput(_Input):
     item: Selector | None = Field(None, description='Item counted, by id, name or barcode.')
     code: str | None = Field(None, min_length=1, max_length=128, description="A scanned barcode naming the item.")
-    bin: Selector | None = Field(None, description='Bin counted (bins arrive with a later increment).')
-    lot: Selector | None = Field(None, description='Lot counted (lots arrive with a later increment).')
-    serial_number: Selector | None = Field(None, description='Serial number counted (a later increment).')
+    bin: Selector | None = Field(None, description=(
+        'Bin counted, by id, full name or label (a scanned bin label sets it). Omitted: the one bin a bins count '
+        'names, else the one bin the sheet lists the item in, else no bin.'))
+    lot: Selector | None = Field(None, description='Lot counted, of a lot-tracked item; omitted, the units are counted unassigned.')
+    serial_number: Selector | None = Field(None, description=(
+        'Serial number counted, of a serial-tracked item (quantity 1 when there, 0 when not); units whose number '
+        'cannot be read are counted without one, unassigned.'))
     quantity: Quantity = Field(description='Quantity counted at the place, in the item\'s base unit; 0 counts it empty.')
     mode: Literal['set', 'add'] = Field('set', description='set (the default): the place holds this many. add: this many more '
                                                           '(a scan adds 1).')
@@ -102,7 +110,7 @@ class CountPostInput(_Input):
     count: Selector = Field(description='Count id or number.')
     expected_version: Version = Field(description='Version of the count this post is for, from its show or sheet.')
     adjustment_account: Selector = Field(description='Account carrying the other side of the differences, such as '
-                                                     'Inventory Shrinkage or Cost of Goods Sold.')
+                                                     'Cost of Goods Sold, or an Inventory Shrinkage account if the company keeps one.')
     class_id: Selector | None = Field(None, description='Class captured on the posted differences.')
     preview_fingerprint: str | None = Field(None, max_length=128, description=(
         'From the dry run of this post. The count is recorded only if what it would post is still exactly what that '
@@ -121,7 +129,8 @@ class CountLineOutput(_Output):
     item_name: str
     description: str | None = None
     unit: str | None = Field(None, description="The item's base unit, where it has one.")
-    place: str = Field(description='Where at the site: "unassigned" until bins, lots and serial numbers arrive.')
+    bin: str | None = Field(None, description='Bin full name of the place; null for no bin.')
+    place: str = Field(description='Which units at the bin: "unassigned", "lot L-1" or "serial WH-1".')
     origin: Literal['sheet', 'found']
     expected: str | None = Field(None, description="What the books hold at the place at the count's position; null on a blind sheet.")
     counted: str | None = Field(None, description='What was counted; null while nobody has counted the place.')
@@ -163,7 +172,7 @@ class CountOutput(_Output):
     site_name: str
     date: str
     blind: bool
-    selection: dict = Field(default_factory=dict, description='What the sheet was made from: kind all, items, or category.')
+    selection: dict = Field(default_factory=dict, description='What the sheet was made from: kind all, items, category, bins or cycle.')
     memo: str | None = None
     adjustment_account_id: str | None = None
     recorded_at: str | None = None

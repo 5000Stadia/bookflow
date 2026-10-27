@@ -82,6 +82,10 @@ ACCEPTED = {
     'inventory-counts-v1': (685, 'cbf2b5f35092aa7691fde5b0abb64a0f7c72ea55cf02820051a2649d44d639f5'),
     'scheduling-v1': (696, '445b102fcbce9835b1edceafe75f8d5dc573d18f03c0db73c83085ad1ceb7568'),
     'performance-v1': (698, '4e60dbb727be31efe9804b77a51cf36648ec37efde2dae1b6e323739504ea6a4'),
+    'serial-lot-v1': (708, '4b340c8c2715584586326a1ee9698cc097af5993ab61cf68b25644a859768d03'),
+    'bins-v1': (723, '5b61fdbac14da296bfe5c87ba003b4acaf6fbec991d31b1675acb87a66209b91'),
+    'landed-cost-v1': (729, '1031c961c6bd10b761157ec1c255240324aaa2237f06f96f168bf26b7c4f5350'),
+    'fifo-v1': (733, '724f7e0e052f9255d45480af689cf2861870cac19a18c71783918af73b04bc88'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -184,6 +188,16 @@ CHAIN_ADDITIONS = {
     'scheduling-v1': {'todo create', 'todo update', 'todo complete', 'todo show', 'todo list', 'notice generate',
                       'notice list', 'notice show', 'notice mark-sent', 'notice dismiss', 'reminders'},
     'performance-v1': {'perf report', 'perf settings'},
+    'serial-lot-v1': {'inventory assign', 'lot list', 'lot show', 'lot update', 'report lot-trace',
+                      'report serial-lot-history', 'report serial-lot-stock', 'serial-number list',
+                      'serial-number show', 'serial-number update'},
+    'bins-v1': {'bin activate', 'bin create', 'bin deactivate', 'bin list', 'bin show', 'bin update',
+                'cycle-class activate', 'cycle-class create', 'cycle-class deactivate', 'cycle-class list',
+                'cycle-class show', 'cycle-class update', 'cycle-count classify', 'cycle-count due',
+                'report items-by-bin'},
+    'landed-cost-v1': {'landed-cost charges', 'landed-cost post', 'landed-cost query', 'landed-cost setup',
+                       'landed-cost show', 'landed-cost void'},
+    'fifo-v1': {'costing-method set', 'costing-method show', 'costing-method withdraw', 'report inventory-layers'},
 }
 
 _ANCESTOR_EDIT = """

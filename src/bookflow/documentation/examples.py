@@ -1637,3 +1637,81 @@ EXAMPLES.update({
                               {"notice": "01JNOTICE00000000000000000", "note": "Called; paying Friday"}),
     "reminders": Example('bookflow reminders --mine' + _C, {"mine": True}),
 })
+# Serial and lot numbers (R104 increment 4).
+_C = ' --company "Demo Plumbing Co"'
+EXAMPLES.update({
+    'inventory assign': Example(
+        'bookflow inventory assign --item "Water Heater" --document "invoice 1001" --serial-numbers \'["WH-1003"]\''
+        + _C + ' --reason "Serial read off the job sheet" --json',
+        {'item': 'Water Heater', 'document': 'invoice 1001', 'serial_numbers': ['WH-1003']}),
+    'lot show': Example('bookflow lot show S-2611 --item "Pipe Sealant"' + _C + ' --json',
+                        {'number': 'S-2611', 'item': 'Pipe Sealant'}),
+    'lot list': Example('bookflow lot list --expiring-by 2027-06-30' + _C + ' --json', {'expiring_by': '2027-06-30'}),
+    'lot update': Example('bookflow lot update S-2611 --expiry-date 2027-04-30' + _C
+                          + ' --reason "Supplier corrected the expiry" --json', {'number': 'S-2611', 'expiry_date': '2027-04-30'}),
+    'serial-number show': Example('bookflow serial-number show WH-1001' + _C + ' --json', {'number': 'WH-1001'}),
+    'serial-number list': Example('bookflow serial-number list --item "Water Heater" --in-stock' + _C + ' --json',
+                                  {'item': 'Water Heater', 'in_stock': True}),
+    'serial-number update': Example('bookflow serial-number update WH-1001 --memo "Warranty registered"' + _C
+                                    + ' --reason "Warranty card sent" --json', {'number': 'WH-1001', 'memo': 'Warranty registered'}),
+    'report serial-lot-stock': Example('bookflow report serial-lot-stock --site "Van 1"' + _C + ' --json', {'site': 'Van 1'}),
+    'report serial-lot-history': Example('bookflow report serial-lot-history --number WH-1001' + _C + ' --json',
+                                         {'number': 'WH-1001'}),
+    'report lot-trace': Example('bookflow report lot-trace --number S-2611' + _C + ' --json', {'number': 'S-2611'}),
+})
+# Bins and cycle counts (R104 increment 5).
+_C = ' --company "Demo Plumbing Co"'
+EXAMPLES.update({
+    'bin create': Example('bookflow bin create --site Warehouse --name Top --parent A3 --barcode 2000000001036' + _C
+                          + ' --reason "Top shelf of bay A3" --json',
+                          {'site': 'Warehouse', 'name': 'Top', 'parent': 'A3', 'barcode': '2000000001036'}),
+    'bin update': Example('bookflow bin update A3 --site Warehouse --description "Kits and fittings"' + _C
+                          + ' --reason "Bay contents changed" --json',
+                          {'bin': 'A3', 'site': 'Warehouse', 'description': 'Kits and fittings'}),
+    'bin activate': Example('bookflow bin activate A3:Top' + _C + ' --reason "Shelf back in use" --json', {'bin': 'A3:Top'}),
+    'bin deactivate': Example('bookflow bin deactivate A3:Top' + _C + ' --reason "Shelf removed" --json', {'bin': 'A3:Top'}),
+    'bin show': Example('bookflow bin show A2 --site Warehouse' + _C + ' --json', {'bin': 'A2', 'site': 'Warehouse'}),
+    'bin list': Example('bookflow bin list --site Warehouse' + _C + ' --json', {'site': 'Warehouse'}),
+    'report items-by-bin': Example('bookflow report items-by-bin --site Warehouse' + _C + ' --json', {'site': 'Warehouse'}),
+    'cycle-class create': Example('bookflow cycle-class create --name D --interval-days 730' + _C
+                                  + ' --reason "Obsolete stock every two years" --json', {'name': 'D', 'interval_days': 730}),
+    'cycle-class update': Example('bookflow cycle-class update A --interval-days 28' + _C
+                                  + ' --reason "Count fast movers every four weeks" --json', {'cycle_class': 'A', 'interval_days': 28}),
+    'cycle-class activate': Example('bookflow cycle-class activate D' + _C + ' --reason "Back in use" --json', {'cycle_class': 'D'}),
+    'cycle-class deactivate': Example('bookflow cycle-class deactivate D' + _C + ' --reason "Not used" --json', {'cycle_class': 'D'}),
+    'cycle-class show': Example('bookflow cycle-class show A' + _C + ' --json', {'cycle_class': 'A'}),
+    'cycle-class list': Example('bookflow cycle-class list' + _C + ' --json', {}),
+    'cycle-count classify': Example('bookflow cycle-count classify --date-to 2026-12-31 --dry-run' + _C + ' --json',
+                                    {'date_to': '2026-12-31'}),
+    'cycle-count due': Example('bookflow cycle-count due --site Warehouse' + _C + ' --json', {'site': 'Warehouse'}),
+})
+
+# Landed cost (R104 increment 6).
+EXAMPLES.update({
+    'landed-cost setup': Example('bookflow landed-cost setup' + _C + ' --reason "Track freight on stock" --json', {}),
+    'landed-cost charges': Example('bookflow landed-cost charges' + _C + ' --json', {}),
+    'landed-cost post': Example(
+        'bookflow landed-cost post --charges \'[{"document":"DEMO-FREIGHT-1"}]\' --targets '
+        '\'[{"document":"DEMO-PIPE-1"},{"document":"DEMO-PIPE-2"}]\' --basis quantity' + _C
+        + ' --reason "Freight for last week\'s pipe" --dry-run --json',
+        {'charges': [{'document': 'DEMO-FREIGHT-1'}], 'targets': [{'document': 'DEMO-PIPE-1'}, {'document': 'DEMO-PIPE-2'}],
+         'basis': 'quantity'}),
+    'landed-cost void': Example('bookflow landed-cost void DEMO-LC-1' + _C + ' --reason "Allocated to the wrong receipt" '
+                                '--dry-run --json', {'allocation': 'DEMO-LC-1'}),
+    'landed-cost show': Example('bookflow landed-cost show DEMO-LC-1' + _C + ' --json', {'allocation': 'DEMO-LC-1'}),
+    'landed-cost query': Example('bookflow landed-cost query' + _C + ' --json', {}),
+})
+
+# FIFO costing (R104 increment 7).
+EXAMPLES.update({
+    'costing-method set': Example(
+        'bookflow costing-method set --method fifo --from 2027-01-01' + _C
+        + ' --reason "FIFO from the new year, on our accountant\'s advice" --dry-run --json',
+        {'method': 'fifo', 'effective_from': '2027-01-01'}),
+    'costing-method withdraw': Example('bookflow costing-method withdraw 2027-01-01' + _C
+                                       + ' --reason "Staying on average for now" --dry-run --json',
+                                       {'switch': '2027-01-01'}),
+    'costing-method show': Example('bookflow costing-method show' + _C + ' --json', {}),
+    'report inventory-layers': Example('bookflow report inventory-layers --as-of 2026-12-12' + _C + ' --json',
+                                       {'as_of': '2026-12-12'}),
+})

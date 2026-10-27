@@ -1,0 +1,38 @@
+{% extends "base.html" %}{% block title %}Costing method{% endblock %}{% block body %}<section id="costing-method">
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/settings">Settings</a> / Costing method</nav>
+<h1>Costing method</h1>
+<p>How stock is costed for every item: <strong>average cost</strong> (each sale takes the running average) or <strong>FIFO</strong> (first in, first out: each sale takes the oldest units' cost). A method is meant to be kept; change it only on your accountant's advice. A switch revalues nothing: the stock on hand that day carries on at its value, and from then on cost of goods sold follows the new method.</p>
+{% if result %}<div role="status" class="notice" data-costing-result><strong>{{ result }}</strong></div>{% endif %}
+{% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
+<section class="workspace-card" aria-label="In force">
+<h2>In force today</h2>
+<p data-costing-today><strong>{{ shown.message }}</strong></p>
+{% if shown.switches %}<form method="post" action="/c/{{ company_id }}/inventory/costing-method" hx-post="/c/{{ company_id }}/inventory/costing-method" hx-target="body" hx-swap="outerHTML"><div class="table-wrap"><table class="list-table" data-costing-switches><thead><tr><th>From</th><th>Method</th><th>Status</th><th>Reason</th>{% if can_write %}<th></th>{% endif %}</tr></thead><tbody>
+{% for row in shown.switches %}<tr><td data-label="From">{{ row.effective_from }}</td><td data-label="Method">{{ 'FIFO' if row.method == 'fifo' else 'Average' }}</td><td data-label="Status">{{ 'withdrawn' if row.status == 'withdrawn' else ('scheduled' if row.effective_from > today else 'in force') }}</td><td data-label="Reason">{{ row.reason or '' }}</td>{% if can_write %}<td>{% if row.status == 'standing' and row.effective_from > today %}<button type="submit" name="action" value="withdraw:{{ row.effective_from }}" aria-label="Withdraw the switch from {{ row.effective_from }}">Withdraw</button>{% endif %}</td>{% endif %}</tr>{% endfor %}
+</tbody></table></div>
+{% if can_write %}<label>Reason for a withdrawal <input name="ctx:reason" placeholder="Staying on average for now"></label>{% endif %}
+</form>{% endif %}
+</section>
+{% if can_write %}
+<section class="workspace-card" aria-label="Switch">
+<h2>Switch</h2>
+<form method="post" action="/c/{{ company_id }}/inventory/costing-method" hx-post="/c/{{ company_id }}/inventory/costing-method" hx-target="body" hx-swap="outerHTML" data-costing-form>
+<label>Method <select name="method">{% for m, label in [('fifo', 'FIFO'), ('average', 'Average cost')] %}<option value="{{ m }}" {% if values.get('method', 'fifo' if shown.method_today == 'average' else 'average') == m %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+<label>From <input type="date" name="effective_from" value="{{ values.get('effective_from', '') }}" aria-describedby="costing-from-help" required></label>
+<p id="costing-from-help"><small>After the closing date and after the last switch. Sales already dated on or after it are costed again, each corrected on its own date.</small></p>
+<label>Reason (shown in the audit trail) <input name="ctx:reason" value="{{ values.get('ctx:reason', '') }}" placeholder="FIFO from the new year, on our accountant's advice"></label>
+<div class="actions"><button type="submit" name="action" value="preview" class="secondary" data-costing-preview>Preview</button> <button type="submit" name="action" value="set" data-costing-set>Switch</button></div>
+</form>
+{% if preview %}<div class="notice" data-costing-preview-result><p><strong>Preview, nothing saved:</strong> {{ preview.message }}</p>
+<p>Stock value changes by <strong>{{ preview.stock_value_change }}</strong>; cost of goods sold by <strong>{{ preview.cost_of_goods_sold_change }}</strong>.</p>
+{% if preview['items'] %}<div class="table-wrap"><table class="list-table" data-costing-items><thead><tr><th>Item</th><th>Stock value</th><th>Cost of goods sold</th></tr></thead><tbody>
+{% for i in preview['items'] %}<tr><td data-label="Item">{{ i.item }}</td><td data-label="Stock value">{{ i.stock_value_change }}</td><td data-label="Cost of goods sold">{{ i.cost_of_goods_sold_change }}</td></tr>{% endfor %}
+</tbody></table></div>{% endif %}
+{% if preview.entries %}<div class="table-wrap"><table class="list-table" data-costing-entries><thead><tr><th>Date</th><th>Correction entry</th><th>Items</th><th>Stock change</th></tr></thead><tbody>
+{% for e in preview.entries %}<tr><td data-label="Date">{{ e.date }}</td><td data-label="Correction entry">{{ e.memo }}</td><td data-label="Items">{{ e['items'] }}</td><td data-label="Stock change">{{ e.amount }}</td></tr>{% endfor %}
+</tbody></table></div>{% endif %}
+{% for w in preview.warnings %}<p><small>{{ w }}</small></p>{% endfor %}
+</div>{% endif %}
+</section>
+{% else %}<p>Only a company administrator, as a person, can change the costing method.</p>{% endif %}
+</section>{% endblock %}

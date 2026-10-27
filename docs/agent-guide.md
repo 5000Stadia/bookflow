@@ -1120,11 +1120,99 @@ wrong is voided (`inventory-count void`), never adjusted around. `inventory adju
 value is valued at the running average. `report physical-inventory-worksheet` prints a blank sheet
 and `report inventory-valuation-detail` shows each movement's effect on quantity and value.
 
+## I counted bin A3, and what should we count this week?
+
+A site that tracks bins (`inventory-site update <site> --tracks-bins true`) locates its stock to bins up to
+three levels deep (`bin create --name 3 --parent A` makes A:3). Every stock line, transfer line, count entry,
+`inventory adjust` line and `inventory assign` takes `bin` (a transfer line `from_bin` and `to_bin`); a line
+naming none goes to the item's default bin at the site (`item update --site-settings
+'[{"site":"Warehouse","default_bin":"A2"}]'`), a correction keeps the bin its stock stood in, and a return goes
+back to its sale's bin. Moving stock between two bins of one site is an `inventory-transfer post` with the same
+`from_site` and `to_site`: it posts nothing. A scanned bin label is a `bin` anywhere a bin is named, and
+`barcode lookup` answers `kind` `bin`.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "inventory-count create", "reason": "Count bin A3", "input": {"site": "Warehouse", "bins": ["A3"]}}
+{"command": "inventory-count enter", "reason": "Counted bin A3",
+ "input": {"count": "C-2", "entries": [{"item": "Widget", "quantity": "12"}, {"code": "0012345678905", "quantity": "3"}]}}
+{"command": "cycle-count due", "reason": "What to count this week", "input": {"site": "Warehouse"}}
+{"command": "inventory-count create", "reason": "This week's cycle count", "input": {"site": "Warehouse", "cycle": true, "limit": 25}}
+```
+
+A bins count lists exactly what the bins hold (and the bins inside them); entries naming no bin count in the
+one bin named. Each item's cycle class (A every 30 days, B 90, C 365, stored on first use; `cycle-class`
+changes them) makes it due at a site once that many days have passed since its last recorded count there, or
+when it was never counted there. `cycle-count due` lists the due items, most overdue first; a `cycle` count
+takes the next ones, and recording it moves them on. `cycle-count classify --dry-run` proposes classes from
+the cost of goods each item issued (the items making 80% are A, the next 15% B), and running it sets them.
+`report items-by-bin` shows each bin's items, and the bins adding up to the site.
+
+## Which customer got water heater WH-1?
+
+An item with `tracking` `serial` carries a serial number per unit; one with `lot` carries lot numbers
+and their expiry. Every stock line (and a transfer line, a count entry, `inventory adjust` and
+`assembly build`) takes `serial_numbers` (one per unit, up to the quantity) or `lot` (with `lot_expiry`
+when the lot is new). Name only numbers you were given: a unit whose number you do not know is left
+out and stays unassigned, and a person or you number it later with `inventory assign`, either units on
+hand or the units one document line moved:
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "report serial-lot-history", "reason": "Warranty call", "input": {"number": "WH-1"}}
+{"command": "inventory assign", "reason": "Serial read off the job sheet",
+ "input": {"item": "Water Heater", "document": "invoice 1001", "serial_numbers": ["WH-7"]}}
+```
+
+The history lists every move of the number in order with its document and customer or vendor; its last
+sale row answers the question, and `serial-number show` says where it is now. A number already in stock
+is refused, and one that has left is refused naming the document that took it; a number never on file
+is accepted with a warning and shows -1 until its receipt. A return names no numbers when its sale took
+them all: they come back. An outgoing sealant line that names no lot leaves unassigned, and the result
+names the earliest-expiring lot there; name it as `lot` to take it. `report serial-lot-stock` lists
+numbers in stock (with `expiring_by`), and `report lot-trace` answers a recall: every vendor and
+customer of a lot, and the builds it went into. A scanned serial or lot label works in `barcode lookup`.
+
+## The freight bill for last week's delivery came in at $90; spread it over what came in
+
+Freight, duty and broker's fees that belong in the cost of stock go to the **Landed Cost Clearing** account
+(`landed-cost setup` makes it once). Enter the freight bill as an ordinary bill with an expense line on that
+account; a vendor credit for freight on it is a freight credit. Then find the charge and spread it over the
+receipts the stock came on -- item receipts, or the bills, checks and card charges whose item lines brought it in:
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "landed-cost charges", "input": {}}
+{"command": "landed-cost post", "reason": "Freight for last week's delivery", "dry_run": true,
+ "input": {"charges": [{"document": "FRT-88"}], "targets": [{"document": "IR-1001"}, {"document": "IR-1002"}],
+           "basis": "quantity"}}
+```
+
+`basis` is `quantity` (the default), `value` (each line's own cost, before any landed cost), `weight` or
+`volume` (the items' `unit_weight` or `unit_volume`, set with `item update`), or `amounts` (each target's
+`amount`, summing exactly to the charges; the only basis that may also send a share to an expense account with
+`account`). The dry run shows each target's share and how much of it stays in stock and how much was issued
+before the allocation date. Stock sold before then gets a forward true-up to cost of goods sold dated at the
+allocation; nothing earlier moves, and a date in a closed period moves to the first open date. Allocate part of
+a charge with `amount`; `landed-cost void` takes an allocation back. A freight bill, or a receipt, an allocation
+names cannot be voided or reduced until that allocation is voided (E_WORK_DEPENDENCY says which).
+
+## Costing method: average or FIFO
+
+Stock is costed by weighted average unless a person switched the company to FIFO. `costing-method show` says
+which method is in force and lists every switch; `report inventory-layers` lists each item's cost layers on a
+date (under FIFO a sale takes the oldest layer first; under average each item is one row). Changing the method
+is a person's act, on the accountant's advice: `costing-method set` and `costing-method withdraw` refuse an
+agent (E_PERMISSION). When asked to switch, say so and leave it to your principal. Everything else -- sales,
+receipts, returns, counts, freight -- works the same under either method; replay costs it.
+
 ## Stock sent back to a vendor
 
 Enter it as one `vendor-credit post` with `items`: one row per thing sent back, each with
 `item`, `quantity` and either `unit_cost` (what the vendor credits for one) or `amount` (the whole
-line), plus the bill's optional `customer`, `billable` and class. Do not take the stock out with
+line), plus the bill's optional `customer`, `billable` and class. A row may name the receipt line it goes
+back against as `receipt_line` (the `line_id` from `bill show` or `item-receipt show`): under FIFO the units
+leave that receipt's cost layer first; under average it is only recorded. Do not take the stock out with
 `inventory adjust` into a clearing account and then credit the clearing account: that costs the
 units at the average, not at what the vendor credited, and leaves two documents where one credit
 note arrived. `expenses` rows (an account and an amount) stay for things that are not items,

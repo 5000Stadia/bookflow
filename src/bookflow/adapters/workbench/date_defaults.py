@@ -27,7 +27,7 @@ PERIOD_REPORTS = (
     'transaction-list-by-date', 'profit-and-loss-comparison',
 )
 AS_OF_REPORTS = (
-    'ap-aging', 'ar-aging', 'collections', 'inventory-valuation', 'missing-checks',
+    'ap-aging', 'ar-aging', 'collections', 'inventory-valuation', 'inventory-layers', 'missing-checks',
     'open-invoices', 'stock-status', 'unbilled-costs', 'unpaid-bills',
     'customer-balance-summary', 'customer-balance-detail', 'vendor-balance-summary',
     'vendor-balance-detail', 'reconciliation-discrepancy', 'entries-to-review', 'prior-balances',

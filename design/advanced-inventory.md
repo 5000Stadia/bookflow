@@ -711,7 +711,7 @@ jobs at night; the van ends as counted.
   site and the lines, as it does for stock still held there.
 - **Inventory Sales by Site** (`report sales-by-item --site`) lists stocked item lines by the site their
   stock left; discounts and other adjusting lines are not split by site.
-- Transfer lines are in base units; moving between bins of one site waits for bins (increment 5).
+- Transfer lines are in base units; moving between bins of one site arrived with bins (increment 5).
 
 ## As built: increment 2
 
@@ -797,6 +797,240 @@ jobs at night; the van ends as counted.
   code is 2000000000022), Service Call Kit 0036000291452, Received Shipping Kit 4006381333931; the Brass
   Shutoff Valve keeps its 100000000050. No oracle moves: codes change no quantity or amount.
 
+## As built: increment 4
+
+- **Migration co0095** adds `items.tracking` (`none`, `serial`, `lot`; every existing item `none`), the
+  `inventory_assignments` table and two placement indexes (serial number, lot). No existing row changes.
+- **The number tie in the database.** Triggers refuse: a serial-number placement of anything but one whole
+  unit; a placement naming a lot or serial number of another item, or of a kind its item does not track
+  (reversals excepted); a serial number whose running quantity in replay order (date, count position,
+  sequence, a sequence group taken as one step) leaves -1 to 1 -- checked when a movement or a transfer
+  revision row is written (its placements are all in by then) and, for assignments and counts, as each
+  placement is written; an assignment whose placements do not net to zero at its item, site and bin on its
+  own date, or a placement added to one already written. A number's placements plus the unassigned bucket
+  sum to the place's quantity by construction; the seeded checker asserts it at every place on every date.
+- **Only standing placements count** for the serial range, in the database as in the application: a placement
+  a reversal retires, and the reversal (which keeps its original's date and position under a later sequence),
+  are left out together, so a correction or void dated around another document never reads as two steps. A
+  reversal is checked with the change it belongs to, not on its own row. A count derived again retires its old
+  loose placements before it posts, and places its new ones after, so a unit now posted as found never meets the
+  loose placement it replaces.
+- **Late paperwork can split a serial number over two sites** (a sale backdated before the transfer that moved
+  the unit: one site shows -1, the other +1). The quantity and number ties hold; the write warns, naming both
+  sites, and a transfer or a count of where the unit really is puts it right.
+- **The application check is stricter than the database.** Reversed pairs left out, a serial number may
+  stand at -1 only before anything has brought it in; once it has been in stock and left, taking it again is
+  refused naming the document that took it (`serial_lots.check`). It runs on every document, transfer,
+  assignment, count post and count re-derivation.
+- **Where a numbered unit goes.** Out: from the site the books hold it at (the result says so when that is
+  not the line's site). In: where it stands at -1 when sold before its receipt, so it comes back to 0 there;
+  else the line's site. A transfer refuses a serial number that is not at the from site on its date.
+- **Assignments** are one item at one site: serial numbers, or a lot and a quantity, `assign` or `unassign`.
+  With `document` (and `line` when it has two lines of the item) they number the units that line moved, at its
+  date, position and site; a correction or void of that document retires them with the line's movement (the
+  reversal's placements include the assignment's), so a voided sale takes its numbering back. On hand, they are
+  refused beyond the unassigned units the site holds.
+- **Corrections keep numbers.** A line that restates nothing about numbers keeps the ones its stock carried
+  (and an assignment made against it); `serial_numbers: []` takes them off. A change of numbers alone is a change.
+- **Return defaults.** A return naming no numbers takes back its sale's serial numbers when they are exactly
+  the units returned, or the sale's one lot; otherwise the units come back unassigned. Naming a number the sale
+  did not take is refused.
+- **Whole units.** Every stock line of a serial-tracked item moves whole base units.
+- **Tracking** turns on freely (stock on hand stays unassigned and shows on the item page and the Overview); it
+  turns off or changes kind only while no unit carries a number of the old kind.
+- **Counts** create lines per lot and serial number the books hold, take `lot` or `serial_number` on entries
+  (a number not on file is made; a serial number the books hold at another site is refused, pointing to the
+  transfer), and refuse a serial line counted other than 0 or 1.
+- **Builds** take `lot`, `lot_expiry` and `serial_numbers` for the assembly and `components` (item, lot, serial
+  numbers) for tracked components; `report lot-trace` links them through the build's own transaction. A build
+  update restates no numbers yet (it keeps none); later.
+- **Barcode lookup** answers a serial or lot label after items (`kind` `serial_number` or `lot`, `line_fields`
+  naming the item and the number); the Scan route gives the item.
+- **Shown and printed.** Invoice, sales receipt and credit memo lines show `lot`, `lot_expiry` and
+  `serial_numbers` (absent when none), and the printed line adds "SN ..." or "Lot ..., expires ...". Sales
+  orders carry no numbers (they move no stock), so their printed lines do not either.
+- **Permissions** (layer `serial-lot-v1`): `inventory assign`, `lot update` and `serial-number update` are
+  `item` standard; shows and lists `item` member; the three reports `reports` member.
+- **Browser.** Sale and bill item grids gain Serial numbers and Lot columns for a company with a tracked item
+  (the controls are in each row's panel otherwise); the item page lists its numbers and unassigned units with
+  Assign numbers; the Overview lists unassigned units of tracked items.
+
+## As built: increment 5
+
+- **Migration co0097** adds `cycle_classes` and `items.cycle_class_id` (null everywhere: nothing is due), and
+  guards that each read only their own row and the bin it names, never anything in replay order: a placement
+  names only a bin of its own site; a bin sits in a bin of its own site one level up and never changes site,
+  parent or level; bins and cycle classes are never deleted; an item's default bin at a site is a bin of that
+  site. Bins sum to their site by construction (a placement carries both); the seeded checker asserts it, with
+  the number tie at every bin, on every date. No trigger that counts placements was added or widened.
+- **A correction that moves a line's stock to another bin or site** is refused (E_VALIDATION, naming the count)
+  when a recorded count at or after the line counted the item at the old place: the count keeps that shelf as
+  counted, so the moved units would be counted twice. Record a transfer dated after the count instead. Changes of
+  quantity or price, and voids, go through and derive the count again; a refusal raised while a count is derived
+  again names that count ("Count C-1, derived again: ...").
+- **"(no bin)"** names the units outside every bin on any line, transfer side or count entry. An outgoing line or
+  transfer side that names no bin (and keeps none from a correction or a sale) takes its units from the item's
+  default bin when it holds them all, else from no bin, else from the one bin that does, else from each place
+  holding some (default bin first); only what nothing at the site holds goes below zero, at the default bin,
+  with a warning. A transfer line records the place most of its units left from.
+- **A serial number split over two bins of one site** by late paperwork warns, as one split over two sites does.
+- **A line's bin** is resolved where its site is (`inventory_effects.plan`, `inventory adjust`, transfers,
+  assignments): the line's `bin`, else -- on a correction -- the bin its stock stood in, else a return's sale's
+  bin, both only when at the same site; else the item's default bin at the site (`item update --site-settings
+  [{site, default_bin}]`), else no bin. Naming a bin at a site that does not track bins is refused. A change
+  of bin alone is a change: bills, credits and vendor credits carry the bin in the line's numbers semantic, a
+  sale through `numbers_changed`, and fingerprints carry it only when a line names one, so nothing else moves.
+- **Bins are found** by id, full name at the site (`A3:Top`) or label code; with no site, a name only one site
+  has. A site stops tracking bins only while none of its bins holds stock; a bin is deactivated only while it
+  and the bins inside it hold nothing and no active bin sits inside it. Renaming a bin renames those inside it.
+- **Numbered units in bins.** A serial number leaves from the bin the books hold it in (the result says so when
+  that is not the line's bin), and comes back where it is owed; a transfer of a serial number takes it from its
+  bin at the from site. Lots stay site-wide for the earliest-expiry suggestion.
+- **Transfers** take `from_bin` and `to_bin` per line; the same site as from and to moves between its bins (it
+  must track bins, and each line's bins must differ). A bin taken below zero warns, naming the site's other
+  bins that hold the item.
+- **Counts by bin.** `bins` counts exactly what those bins (and the bins inside them) hold; an entry naming no
+  bin counts in the one bin named, else the one bin the sheet lists the item in, else no bin. Count lines carry
+  `bin` beside `place` (unassigned, lot or serial), so place labels read as before.
+- **Cycle classes are stored on first use** (the first write that names one: `item update --cycle-class`,
+  `cycle-class create`, `cycle-count classify`); `cycle-class list` shows the defaults with empty ids until then.
+  Classify ranks by issued cost (issues net of their reversals and cost corrections, leaving out count
+  differences and inventory adjustments); an item is A while the items before it make less than `a_share`
+  percent, B while less than `a_share + b_share`, and C after or when it issued nothing.
+- **Due** is exactly the interval passed since the last recorded count at the site, among items with stock
+  history there; a never-counted item is due since its first stock date there. A count of bins counts an item
+  only when every bin holding it at the count was counted (a site-wide count needs one counted line). The list
+  ranks by days overdue over the class interval. `inventory-count create --cycle` takes the first `limit`
+  (default 25) and fills places left over with items falling due within the next six days, soonest first: a
+  simulation showed that ranking alone lets a cohort of A items fill a round and push B items a round late
+  every quarter, and the lookahead keeps a 30-item weekly rotation within each interval plus one round.
+- **Classify** over a period with no issued cost proposes no change and says why (`message`).
+- **Barcodes.** `barcode lookup` answers bin labels (kind `bin`, after items, before serial numbers and lots,
+  `line_fields` site and bin); the Scan field takes a bin label as the current bin, which the count screen's Bin
+  field keeps for the next scans. `barcode generate` does not yet number bins (later).
+- **Inventory adjust's one-item form** now passes its own `lot`, `lot_expiry`, `serial_numbers` and `bin` (the
+  one-line form had dropped its lot and serial numbers).
+- **Permissions** (layer `bins-v1`): bin and cycle-class writes and `cycle-count classify` are `item` standard;
+  their reads and `cycle-count due` `item` member; `report items-by-bin` `reports` member.
+- **Browser.** The Sites page lists bins, adds one, turns bin tracking on and off per site, and its transfer form
+  has From bin and To bin per line. The Counts page counts named bins or the next due items, and lists each
+  site's due items with "Count the next N". The count screen groups lines by bin and has a Bin field a scanned
+  bin label fills. Sale and bill item grids gain a Bin column once a site tracks bins.
+- **Demo:** the warehouse tracks bins A1-A3 with labels; WH-1002 and lot S-2702 are put away into A1 and A2 by a
+  bin-to-bin transfer; the heater's home bin is A1 and the sealant's A2; the heater is class A and the sealant B.
+  No oracle moves: nothing posts.
+
+## As built: increment 6
+
+- **Migration co0098** (on co0097) adds `landed_cost_allocations`, `landed_cost_allocation_lines` and
+  `items.unit_weight_microunits` / `unit_volume_microunits`; it uses co0093's `landed` kind, `landed_cost` document
+  kind and `landed_on_movement_id` unchanged. Guards: allocation lines are immutable, a header moves posted -> voided
+  once, a reversing line mirrors a live line of its own allocation, and a share and a `landed` movement land on a
+  bought receipt of their own item dated on or before them. co0093's true-up guard is widened so a landed cost may own
+  forward true-ups of issues, customer returns and found quantities. Each guard reads one row or standing rows only;
+  the clearing-account tie is not a trigger (it is checked by `landed-cost charges` and the seeded checker).
+  Existing receipts' stored shipping shares become `receipt_shipping` allocations (basis quantity), so no row moves.
+- **The clearing account is made by `landed-cost setup`** (and is listed as missing by `landed-cost charges`): the
+  account has to exist before a freight bill can be charged to it, so "first use" is the person's setup, not the post.
+  It is owned by the inventory ledger (`journals.OWNED_SYSTEM_ROLES`), so bill, check, card charge and vendor credit
+  expense lines (which post as that owner) may charge it and the journal editor may not.
+- **A charge is a document's Landed Cost Clearing lines taken together**, named by the document's id (what
+  `landed-cost charges` lists as `charge`): an edit that gives a line a new identity, reorders it or adds another
+  line leaves the charge the same charge. Its amount on a date is the sum of its clearing postings dated by then
+  (read through `posting_line_sources`). Only an edit that takes it below what live allocations took of it is
+  refused; raising it, adding other lines or moving its date passes.
+- **Replay** walks a `landed` movement at its receipt's position and recognises it at its own date by walking once
+  more per live landed movement of the item, in (date, position, sequence) order, each pass adding the next: every
+  replay-decided value (an issue, a return, a found quantity, and a shortfall true-up recognised at its filler's date)
+  keeps what the pass holding the landed costs dated on or before its own date says, and each later landed cost owes
+  it the difference from the pass before -- a forward true-up keyed (movement, landed), dated at the landed cost. The
+  passes telescope, so the parts sum exactly to the full walk. Only the full pass refuses. Cost: one more walk per
+  landed movement of the item; a later increment may cache it if an item ever carries many.
+- **One landed movement per target receipt per allocation**, carrying every charge's share of it; the allocation
+  lines (one per charge and target) all name it. A build component's forward true-up carries a `landed` partner on
+  the assembly receipt (partners are keyed by (issue, filler)), so the assembly's own forward true-ups follow.
+- **Shares** use the receipt's existing rule -- cumulative endpoints rounded half up (`receiving_intervals.cumulative`),
+  sign-symmetric for a credit -- so a receipt's shipping reads exactly as before; each charge is shared on its own, so
+  order never matters. `amounts` lays charges and stated target amounts end to end; it is the only basis that may
+  send a share to an expense or cost-of-goods `account`. A post mixing charges and freight credits is refused.
+- **`value`** reads the receipt movement's value plus its receipt-targeted price corrections, less its receipt's own
+  shipping share. Weight and volume measures are base microunits times the per-unit figure in microunits.
+- **Guards** run where the change happens. A target receipt is refused a void, or any change to its stock -- its
+  line, item, quantity, cost, date, count position, accounts, class, or places (site, bin, lot, serial numbers) -- in
+  `inventory_effects.plan` (`landed_costs.check_targets`). An edit that touches no stock (a memo, a supplier
+  reference) passes (Kabe's decision, 2026-10-26): the document reposts, and the restated receipt carries the landed
+  cost on through `landed_cost_carries` (co0098), which every movement read follows, so replay and every allocation
+  read see the cost on the receipt standing now. A charge voided or reduced below its live allocations is refused
+  after every company write (a posting-line watermark in dispatch, cheap when the company has no clearing account).
+  Voiding an allocation that a later freight credit needs is refused.
+- **Voiding a build** whose components owe forward true-ups retires its assembly receipt with the landed partners
+  on it: each is backed out by an opposite partner in the same change, so landed costs on a retired receipt net to
+  nothing; replay refuses only landed costs that do not.
+- **Item receipts** gain `shipping_basis` (quantity, the default and unchanged; value; weight; volume), and every
+  change of a receipt retires its old shipping allocation and records the new one.
+- **Browser.** Inventory > Landed cost lists unallocated charges with an allocation form (Preview shows each target's
+  share split into stays in stock / issued before) and the allocations with Void; bill, item receipt, check and card
+  charge pages show each stock line's landed cost and landed unit cost (unit cost to four places, assuming a
+  two-decimal home currency).
+- **Demo:** copper pipe on DEMO-PIPE-1 (10) and DEMO-PIPE-2 (20), five sold (DEMO-PIPE-INV-1), freight DEMO-FREIGHT-1
+  30.00 spread as DEMO-LC-1 (10.00 and 20.00), a 5.00 forward true-up. Oracle moves are stated in `demo_oracle.py`.
+- **Permissions** (layer `landed-cost-v1`): post, void and setup `ledger.post` standard; charges, show, query
+  `ledger.read` member. Nothing is people-only.
+
+## As built: increment 7
+
+- **Migration co0100** (on co0099) adds `costing_methods` (method, `effective_from`, status `standing` or
+  `withdrawn`, reason and provenance; a standing date is unique). Guards: never deleted; a row moves standing ->
+  withdrawn once and nothing else about it changes. Neither reads another row. No existing row changes; the demo
+  and every company today have no row, so average from the beginning.
+- **co0100 also widens co0079's receipt-correction dimensions guard**, which required a correction of a customer
+  return to carry the return's own date: a return's forward true-up (increment 6) is dated at its landed cost, so
+  a freight allocation reaching a sale that was partly returned before it was refused by the guard. A correction
+  naming its filler (co0098's true-up guard dates it there) may now carry the filler's date.
+- **The timeline reaches every replay.** `costing_methods.timeline(s)` is passed to `inventory_costing.replay` at
+  every call with a session (sales, credits, adjustments, counts, builds, landed cost, validators), so FIFO decides
+  every value replay decides. A switch being previewed stands in for the stored timeline while its corrections are
+  worked out.
+- **`costing-method set --method fifo --from 2027-01-01`** (the input field is `effective_from`; the CLI flag is
+  `--from`). Refused: on or before the closing date (E_PERIOD_CLOSED); on or before the last standing switch; the
+  method already in force on that date. It records the switch and posts, each at its own date, the corrections
+  owed to movements already dated on or after it (only items with a movement on or after the date are replayed).
+  The dry run gives per item and in total the change in stock value and in cost of goods sold (corrections whose
+  offset is not an inventory-asset account: a build's component corrections move to its assembly instead), and
+  each correction entry. `withdraw` takes a standing switch by id or date while its date is after today, with the
+  corrections that takes. Both are a person's act (people-only, R168's mechanism, also refused in the service for
+  a caller with no actor).
+- **The opening layer.** On the switch date, before any movement dated that day, the stock on hand becomes one
+  layer dated at the switch; a purchase dated on or after the switch, however late it is entered, is a layer after
+  it. Switching back merges the layers; open shortfalls carry over both ways.
+- **Vendor credits name a receipt line** with `receipt_line` on an item row: the `line_id` of the bill, check, card
+  charge or item receipt line, a standing bought receipt of the same item dated on or before the credit. It is
+  captured on the row's facts (`receipt_line_id`, absent when not named, so nothing else fingerprints differently)
+  and kept by a correction that leaves it out; `null` takes it off. The `vendor_return` movement carries the
+  receipt in `returns_movement_id` (co0093's reserved use); a receipt restated since by an edit of its document is
+  followed by its document line identity. Under FIFO the return takes that receipt's layer first and any units
+  beyond it from the oldest layers; with no name, the oldest layers. The credit's difference from those units'
+  worth stays in stock, spread over what is left by units (question 1's default); emptying the stock still has to
+  credit exactly its worth. Under average the link is recorded and changes nothing.
+- **A write-down under FIFO** is spread over the layers by units, so a layer much cheaper than the rest can be
+  left worth less than nothing while the item's total stays positive; issuing it then credits cost of goods sold.
+  The total is what replay refuses on, as under average.
+- **Shortfalls under FIFO** are costed at the newest layer's unit cost (else the last seen, then the average's
+  fallbacks); `Shortfall.basis` is `newest_layer`, and the warning says "at the newest layer's unit cost".
+  Correction entries dated where FIFO is in force are memoed "FIFO cost correction".
+- **`report inventory-layers`** (as_of, item; paged like the stock reports) replays each item's movements dated by
+  as_of with the switches dated by then: under FIFO each layer's source document and date ("Opening (FIFO from
+  ...)" for a switch's opening layer), quantity, value and unit cost to four places; under average one "Average"
+  row. It does not refuse on the asset tie: its total is replay's value on that date, which equals the books
+  except on a date between a correction and the later-dated cause it answers.
+- **Browser.** Settings > Company setup > Costing method: the method today, every switch (Withdraw on scheduled
+  ones) and a switch form whose Preview is the dry run (per item, totals, entries). Inventory > Inventory layers
+  opens the report at today.
+- **Permissions** (layer `fifo-v1`): `costing-method set` and `withdraw` `company` admin and people-only; `show`
+  `ledger.read` member; `report inventory-layers` `reports` member.
+- **Demo:** stays on average; no oracle moves. The seeded checker's fixture company (`tests/test_fifo_seeded.py`)
+  switches both ways at random dates.
+
 ## 10. Open questions
 
 Each default stands if nobody decides.
@@ -817,3 +1051,4 @@ Each default stands if nobody decides.
    per-user default site (each technician's van) is not in these increments.
 7. **Pick, pack and ship.** Neither item includes it, though [sales orders](sales-orders.md) left it
    here. *Default:* not built in these increments; it needs its own place on the roadmap.
+   Placed as R181; its design is [pick, pack and ship](pick-pack-ship.md).

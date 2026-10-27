@@ -326,6 +326,7 @@ def _stock_entries(s, lines, *, date):
             issue_id=issue['id'], class_id=line['envelope']['class_id'])
         entry.site_id = line.get('site_id')
         entry.line_identity = line['envelope'].get('line_id')
+        entry.numbers = line.get('numbers')
         entries.append(entry)
     return entries
 
@@ -388,6 +389,11 @@ def commercial(s, inp, *, document_id, pending, previous=None):
             if entered.site is not None:
                 from bookflow.company import placements
                 resolved['site_id'] = placements.site_id_for(s, entered.site, field='lines.site')
+            from bookflow.company import serial_lots
+            from bookflow.company import inventory as _stock
+            numbers = serial_lots.for_line(entered, resolved["profile"].item_type in _stock.TRACKED_TYPES)
+            if numbers is not None:
+                resolved['numbers'] = numbers
             lines.append(resolved)
         else:
             supplied = {name: getattr(entered, name) for name in entered.model_fields_set
@@ -478,6 +484,8 @@ def _line_semantic(line):
     values['intervals'] = [list(interval) for interval in line['intervals']]
     if line.get('site_semantic'):
         values['site_id'] = line['site_semantic']
+    if line.get('numbers_semantic'):
+        values['numbers'] = line['numbers_semantic']
     return values
 
 
@@ -493,6 +501,8 @@ def place_lines(s, lines, old_revision):
         if site:
             line['site_id'] = site
             line['site_semantic'] = placements.semantic_site(s, site)
+    from bookflow.company import bills
+    bills.number_lines(s, [line for line in lines if line['profile'].item_type in inventory.TRACKED_TYPES], old_revision)
     return lines
 
 
@@ -1005,6 +1015,11 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
     profiles = {row['document_line_id']: row for row in details}
     lines = []
     from bookflow.company.sales import shown_amount
+    from bookflow.company import serial_lots
+    revisions = {envelope['revision_id'] for envelope in envelopes}
+    numbered = {}
+    for revision_id in revisions:
+        numbered.update(serial_lots.revision_display(s, revision_id))
     for envelope in envelopes:
         detail = profiles[envelope['id']]
         cells = [CreditTaxComponentOutput(
@@ -1033,7 +1048,8 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
             tax=Money(detail['tax_minor_units'], currency).to_dict(),
             gross=Money(detail['gross_minor_units'], currency).to_dict(),
             item_snapshot=_decoded(detail['item_snapshot']),
-            tax_components=cells, claims=owned, **shown_amount(detail, currency)))
+            tax_components=cells, claims=owned, **shown_amount(detail, currency),
+            **{k: v for k, v in (numbered.get(envelope['line_id']) or {}).items() if v is not None}))
     snapshot = json.loads(revision['custom_fields_snapshot'])
     return CreditRevisionOutput(**values, profile=json.loads(profile['profile_snapshot']), lines=lines,
                                 issuer_snapshot=json.loads(revision['issuer_snapshot']),

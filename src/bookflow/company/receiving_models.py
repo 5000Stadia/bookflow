@@ -21,6 +21,7 @@ class ReceiptPostInput(_Input):
     purchase_order: _Selector | None = None
     purchase_order_version: _Version | None = None
     shipping: str | SalesMoneyInput | None = Field(default=None, description='Shipping charged by this receipt vendor, allocated only over received quantities. Product costs exclude shipping. Omit to retain on edits; enter 0 to clear.')
+    shipping_basis: Literal['quantity', 'value', 'weight', 'volume'] | None = Field(default=None, description='How shipping is spread over the lines: quantity (received base units, the default), value (each line\'s product cost), weight or volume (quantity times the item\'s unit weight or volume). Omit to retain on edits.')
     items: list[ReceiptItemInput] = Field(min_length=1, max_length=100)
     site: _Selector | None = Field(default=None, description="Inventory site the stock arrives at where a line names none; omitted, the purchase-order line's site, else the default site.")
     count_position: Literal['before', 'after'] | None = Field(None, description="Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after.")
@@ -43,6 +44,7 @@ class ReceiptUpdateInput(_Input):
     reference: str | None = Field(default=None, max_length=128)
     memo: str | None = Field(default=None, max_length=2000)
     shipping: str | SalesMoneyInput | None = Field(default=None, description='Shipping charged by this receipt vendor, allocated only over received quantities. Product costs exclude shipping. Omit to retain on edits; enter 0 to clear.')
+    shipping_basis: Literal['quantity', 'value', 'weight', 'volume'] | None = Field(default=None, description='How shipping is spread over the lines: quantity (received base units, the default), value (each line\'s product cost), weight or volume (quantity times the item\'s unit weight or volume). Omit to retain on edits.')
     items: list[ReceiptItemInput] | None = Field(default=None, min_length=1, max_length=100)
     purchase_order_version: _Version | None = None
     site: _Selector | None = Field(default=None, description='Inventory site for restated lines that name none.')

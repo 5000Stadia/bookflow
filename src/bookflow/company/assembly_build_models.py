@@ -5,6 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from bookflow.company import serial_lot_models as _SL
 from bookflow.company.inventory_models import _Date, _Selector, _Version
 from bookflow.company.ledger_reports import MoneyOutput
 
@@ -16,6 +17,13 @@ class _Strict(BaseModel):
 _QUANTITY = 'Quantity of the assembly to build, a positive decimal with at most six places.'
 
 
+class BuildComponentNumbers(_Strict):
+    item: _Selector = Field(description='Component item, by id or full name.')
+    bin: _SL.LineBin = Field(None, description='Bin the component is taken from; omitted, its default bin at the site, else no bin.')
+    lot: _SL.LineLot = Field(None, description='Lot the component is taken from.')
+    serial_numbers: _SL.LineSerials = Field(None, max_length=10000, description='Serial numbers of the component units taken.')
+
+
 class AssemblyBuildInput(_Strict):
     item: _Selector = Field(description='The inventory assembly item to build, by id or full name.')
     quantity: str = Field(min_length=1, max_length=40, description=_QUANTITY)
@@ -25,6 +33,14 @@ class AssemblyBuildInput(_Strict):
                                              'nothing is posted, the components are reserved, and `assembly finalize` builds it later. '
                                              'A build that can be built is built; pending applies only to a shortfall.')
     site: _Selector | None = Field(None, description='Inventory site the components are taken from and the assembly put at, by id or name; omitted, the default site.')
+    bin: _SL.LineBin = Field(None, description='Bin the built assemblies go into; omitted, its default bin at the site, else no bin.')
+    lot: _SL.LineLot = Field(None, description='Lot the built assemblies receive into, when the assembly is lot-tracked.')
+    lot_expiry: _SL.IsoDate | None = Field(None, description=_SL.EXPIRY_HELP)
+    serial_numbers: _SL.LineSerials = Field(None, max_length=10000, description=(
+        'Serial numbers of the built units, when the assembly is serial-tracked; the rest are unassigned.'))
+    components: list[BuildComponentNumbers] | None = Field(None, max_length=200, description=(
+        'Lot or serial numbers the tracked components are taken from, one entry per component item; components '
+        'not named leave unassigned. The build links them to the assembly for `report lot-trace`.'))
 
 
 class AssemblyBuildSelectInput(_Strict):

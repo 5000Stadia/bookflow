@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from bookflow.company import serial_lot_models as _SL
 from typing import Annotated, ClassVar, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_serializer, model_validator
@@ -155,6 +156,10 @@ class SalesLineInput(StrictModel):
     site: Selector | None = Field(default=None, description=(
         "Inventory site a stocked line takes from (a sale), gives back to (a return) or commits at (an order), "
         "by id or name. Omitted: the document's site, else the source line's, else the default site."))
+    bin: _SL.LineBin = Field(default=None, description=_SL.BIN_HELP)
+    lot: _SL.LineLot = Field(default=None, description=_SL.LOT_HELP)
+    lot_expiry: _SL.IsoDate | None = Field(default=None, description=_SL.EXPIRY_HELP)
+    serial_numbers: _SL.LineSerials = Field(default=None, max_length=10000, description=_SL.SERIAL_HELP)
 
     @model_serializer(mode="wrap")
     def legacy_line_request(self, handler):
@@ -163,7 +168,7 @@ class SalesLineInput(StrictModel):
             values.pop("percent", None)
         if "site" not in self.model_fields_set:
             values.pop("site", None)
-        return values
+        return _SL.drop_unset(self, values)
 
     @model_validator(mode="after")
     def defaults(self):

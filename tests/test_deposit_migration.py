@@ -17,6 +17,8 @@ from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS,migrate_to_head,FeatureRevision,feature_admission
 from bookflow.core.errors import BookflowError
 from tests.payment_raw_evidence import table,attachments,preserved
+# Indexes a later migration added to these tables (co0099, R180 increment 3); not in this frozen DDL.
+LATER_INDEXES=set(importlib.import_module('bookflow.storage.company_migrations.versions.0099_deposit_indexes').INDEX_NAMES)
 
 BASE='57314722e8b2cd7e4402feaf059a244794f0efca'
 M=importlib.import_module('bookflow.storage.company_migrations.versions.0020_deposits')
@@ -67,7 +69,8 @@ def test_frozen_ddl_metadata_and_shared_feature_admission(tmp_path):
     for name in M.NEW_TABLES:
         t=schema.metadata.tables[name]
         expected.append(str(CreateTable(t).compile(dialect=dialect())).strip())
-        expected.extend(str(CreateIndex(i).compile(dialect=dialect())) for i in sorted(t.indexes,key=lambda i:i.name))
+        expected.extend(str(CreateIndex(i).compile(dialect=dialect())) for i in sorted(t.indexes,key=lambda i:i.name)
+                        if i.name not in LATER_INDEXES)
     assert M.DDL==expected
     with open_database(tmp_path/'fresh.db',writable=True,create=True) as db:
         assert migrate_to_head(db,'company',None)==(None,HEADS['company'])

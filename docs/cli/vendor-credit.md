@@ -351,6 +351,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_line_id` | string \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |
@@ -597,6 +598,7 @@ Example JSON output:
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
@@ -803,6 +805,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
 | `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
@@ -873,6 +876,11 @@ The same example as complete `bookflow_run` arguments:
 | `items[].class_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
 | `items[].class_mode` | inside `--items` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
 | `items[].site` | inside `--items` JSON array | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
+| `items[].bin` | inside `--items` JSON array | string \| null | no | yes | null | Bin at the line's site the units go to or leave from (R104 increment 5), by id, full name such as A:3 or label code; the site must track bins. "(no bin)" names the units outside every bin. Omitted: the bin the line's stock stood in (a correction), its sale's bin (a return), else the item's default bin at the site, else no bin -- and an outgoing line takes its units from the default bin when it holds them, else from no bin, else from the bins holding them, never driving a bin below zero while the units are elsewhere at the site. |
+| `items[].lot` | inside `--items` JSON array | string \| null | no | yes | null | Lot number of a lot-tracked item: the lot an incoming line receives into (made when new), or the lot an outgoing line takes from. Omitted on an outgoing line, the units leave unassigned and the result names the earliest-expiring lot in stock there. |
+| `items[].lot_expiry` | inside `--items` JSON array | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
+| `items[].serial_numbers` | inside `--items` JSON array | array[string] \| null | no | yes | null | Serial numbers of a serial-tracked item, one per unit, up to the line's quantity; units left unnumbered are unassigned (number them later with `inventory assign`). Never make one up. An outgoing number leaves from where the books hold it; a number never on file is accepted with a warning and shows -1 until its receipt. Omitted on a correction, the line keeps the numbers it had. |
+| `items[].receipt_line` | inside `--items` JSON array | string \| null | no | yes | null | The receipt line these units go back against (R104 increment 7): the line_id of the bill, check, card charge or item receipt line that brought them in, as its `show` lists it. Under FIFO the return takes that receipt's layer first; under average it is recorded and changes nothing. A correction that leaves it out keeps the one the row had; null takes it off. |
 | `number` | `--number` | string \| null | no | yes | null | — |
 | `ap_account` | `--ap-account` | string \| null | no | yes | null | — |
 | `supplier_reference` | `--supplier-reference` | string \| null | no | yes | null | — |
@@ -1187,6 +1195,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_line_id` | string \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |
@@ -1431,6 +1440,7 @@ Example JSON output:
 | `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |
@@ -1608,6 +1618,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
 | `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
@@ -1785,6 +1796,7 @@ Example JSON output:
 | `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |
@@ -2135,6 +2147,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_line_id` | string \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |
@@ -2369,6 +2382,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
 | `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
@@ -2730,6 +2744,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_line_id` | string \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |
@@ -2973,6 +2988,7 @@ Example JSON output:
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
@@ -3046,6 +3062,11 @@ The same example as complete `bookflow_run` arguments:
 | `items[].class_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
 | `items[].class_mode` | inside `--items` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
 | `items[].site` | inside `--items` JSON array | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
+| `items[].bin` | inside `--items` JSON array | string \| null | no | yes | null | Bin at the line's site the units go to or leave from (R104 increment 5), by id, full name such as A:3 or label code; the site must track bins. "(no bin)" names the units outside every bin. Omitted: the bin the line's stock stood in (a correction), its sale's bin (a return), else the item's default bin at the site, else no bin -- and an outgoing line takes its units from the default bin when it holds them, else from no bin, else from the bins holding them, never driving a bin below zero while the units are elsewhere at the site. |
+| `items[].lot` | inside `--items` JSON array | string \| null | no | yes | null | Lot number of a lot-tracked item: the lot an incoming line receives into (made when new), or the lot an outgoing line takes from. Omitted on an outgoing line, the units leave unassigned and the result names the earliest-expiring lot in stock there. |
+| `items[].lot_expiry` | inside `--items` JSON array | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
+| `items[].serial_numbers` | inside `--items` JSON array | array[string] \| null | no | yes | null | Serial numbers of a serial-tracked item, one per unit, up to the line's quantity; units left unnumbered are unassigned (number them later with `inventory assign`). Never make one up. An outgoing number leaves from where the books hold it; a number never on file is accepted with a warning and shows -1 until its receipt. Omitted on a correction, the line keeps the numbers it had. |
+| `items[].receipt_line` | inside `--items` JSON array | string \| null | no | yes | null | The receipt line these units go back against (R104 increment 7): the line_id of the bill, check, card charge or item receipt line that brought them in, as its `show` lists it. Under FIFO the return takes that receipt's layer first; under average it is recorded and changes nothing. A correction that leaves it out keeps the one the row had; null takes it off. |
 | `number` | `--number` | string \| null | no | yes | null | — |
 | `supplier_reference` | `--supplier-reference` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
@@ -3361,6 +3382,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_line_id` | string \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |
@@ -3608,6 +3630,7 @@ Example JSON output:
 | `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |
@@ -3972,6 +3995,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_line_id` | string \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |
@@ -4214,6 +4238,7 @@ Example JSON output:
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INTERNAL` | Internal failure. |

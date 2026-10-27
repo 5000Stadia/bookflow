@@ -499,6 +499,7 @@ def _movements(s, data):
     """
     from bookflow.company import document_effects as effects, inventory, inventory_effects
     from bookflow.company.inventory_costing import replay
+    from bookflow.company import costing_methods
     from bookflow.company.sales_facts import SalesLineProfile
 
     change = data.get('stock')
@@ -581,7 +582,7 @@ def _movements(s, data):
     own_ids = {row['id'] for row in movements}
     for item_id in {row['item_id'] for row in movements}:
         stored = inventory.movements(s, item_id=item_id)
-        state = replay(stored + [row for row in movements if row['item_id'] == item_id])
+        state = replay(stored + [row for row in movements if row['item_id'] == item_id], costing_methods.timeline(s))
         _require(not any(correction.target_movement['id'] in own_ids and correction.filled_by is None
                          for correction in state.corrections),
                  'a stock movement is posted at a cost the ledger does not agree with')

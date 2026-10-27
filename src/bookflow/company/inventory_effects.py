@@ -92,6 +92,7 @@ import sqlalchemy as sa
 
 from bookflow.company import assembly_builds, inventory, item_conversions, journals, placements, schema as c
 from bookflow.company.document_effects import allocate
+from bookflow.company import costing_methods
 from bookflow.company.inventory_costing import StockRefusal, replay, shortfall_warning
 from bookflow.company.inventory_schema import INPUT_KINDS
 from bookflow.company.journal_models import JournalPostInput
@@ -124,8 +125,10 @@ class Entry:
     class_id: str | None = None
     value_minor_units: int | None = None   # a bought receipt and a vendor return state it; the rest ask costing
     returns_movement_id: str | None = None # the issue this receipt gives back, on a return
+    sends_back_movement_id: str | None = None  # a vendor return's named receipt (R104 increment 7)
     site_id: str | None = None             # the inventory site the line names (else its document's); None defaults
     line_identity: str | None = None       # the entered line's stable identity, to keep its site across revisions
+    numbers: object = None                 # serial_lots.Numbers the line states (R104 increment 4); None states none
 
 
 def purchase_entry(facts, *, key, amount, offset_account_id, class_id):
@@ -222,6 +225,9 @@ class Change:
     warnings: list = field(default_factory=list)       # sales this leaves below zero
     placements: list = field(default_factory=list)     # where its own movements' units are (R104)
     sites: dict = field(default_factory=dict)          # movement id -> site, for its own movements
+    numbers: dict = field(default_factory=dict)        # movement id -> what its line says of lot and serial numbers
+    identities: dict = field(default_factory=dict)     # movement id -> its entered line's stable identity (R104 inc 6)
+    carries: list = field(default_factory=list)        # (retired receipt, its restatement) carrying a landed cost
 
     @property
     def moves_stock(self):
@@ -232,7 +238,7 @@ class Change:
 
     def rows(self, *, created_at, created_by, created_via, audit_event_id):
         """The document's own movement rows, ready to insert."""
-        return [dict(movement.values, created_at=created_at, created_by=created_by,
+        return [dict({'landed_on_movement_id': None}, **movement.values, created_at=created_at, created_by=created_by,
                      created_via=created_via, audit_event_id=audit_event_id)
                 for movement in self.movements]
 
@@ -269,7 +275,7 @@ def document_position(s, transaction_id):
 
 
 def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequence=None, repricing=(),
-         count_position=None):
+         count_position=None, assembly_key=None):
     """Every movement and every correction this document implies, and nothing written yet.
 
     ``reversing`` is what the previous revision moved, from ``own_movements``; ``entries`` is
@@ -297,8 +303,10 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
     # the revision being replaced put the same item, else the default site.
     # Keyed by the entered line's stable identity, so two lines of one item at two sites keep their
     # own; a line with no identity (a build's) falls back to where the same item was.
-    prior_sites, prior_item_sites = {}, {}
+    prior_sites, prior_item_sites, prior_numbers, prior_bins, prior_when = {}, {}, {}, {}, {}
     if reversing:
+        from bookflow.company import serial_lots
+        carried = serial_lots.line_numbers(s, [row['id'] for row in reversing if row['kind'] in INPUT_KINDS])
         stored_places = placements.movement_placements(s, [row['id'] for row in reversing])
         identities = dict(s.company.conn.execute(sa.select(c.document_lines.c.id, c.document_lines.c.line_id).where(
             c.document_lines.c.id.in_([row['document_line_id'] for row in reversing]))).all())
@@ -308,6 +316,10 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
                 identity = identities.get(row['document_line_id'])
                 if identity:
                     prior_sites.setdefault(identity, places[0]['site_id'])
+                    prior_bins.setdefault(identity, (places[0]['site_id'], places[0]['bin_id']))
+                    prior_when.setdefault(identity, (row['effective_date'], row.get('count_position') or 'before'))
+                    if row['id'] in carried:
+                        prior_numbers.setdefault(identity, carried[row['id']])
                 prior_item_sites.setdefault(row['item_id'], places[0]['site_id'])
     # A correction that states no position keeps the one its stock stood at (R104 increment 2).
     stated = count_position
@@ -366,7 +378,8 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
             effective_date=date, sequence=sequence, currency=currency,
             asset_account_id=entry.asset_account_id, offset_account_id=entry.offset_account_id,
             class_id=entry.class_id, corrects_movement_id=None, reverses_movement_id=None,
-            returns_movement_id=entry.returns_movement_id, filled_by_movement_id=None,
+            returns_movement_id=(entry.sends_back_movement_id if entry.kind == 'vendor_return'
+                                 else entry.returns_movement_id), filled_by_movement_id=None,
             **inventory.fallback_columns(s, entry.item_id, currency, entry.kind),
             count_position=position)
         if entry.kind == 'issue' or entry.returns_movement_id is not None:
@@ -375,7 +388,7 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
             # asks what the running average consumes; a return asks for its share of the issue
             # it gives back. Neither is a number this module is entitled to invent.
             try:
-                computed = replay(history + [values]).targets.get(identity)
+                computed = replay(history + [values], costing_methods.timeline(s)).targets.get(identity)
             except StockRefusal as refusal:
                 raise refuse(refusal, entry.item_id, entry.item_name) from None
             if computed is None:
@@ -388,6 +401,45 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
                 or (prior_item_sites.get(entry.item_id) if entry.line_identity is None else None))
         if site is not None:
             change.sites[identity] = site
+        # The line's bin (R104 increment 5): the one it names, else where its stock stood (a correction) or its
+        # sale's (a return) when at this same site, else the item's default bin there, else none.
+        from bookflow.company import bins
+        placed_at = site or placements.default_site_id(s)
+        fallback = bins.UNSET
+        prior_place = prior_bins.get(entry.line_identity) if entry.line_identity else None
+        if prior_place is not None and prior_place[0] == placed_at:
+            fallback = prior_place[1]
+        elif entry.returns_movement_id:
+            issued = placements.place_of_movement(s, entry.returns_movement_id)
+            if issued is not None and issued[0] == placed_at:
+                fallback = issued[1]
+        bin_id = bins.line_bin(s, entry.item_id, placed_at, entry.numbers.bin if entry.numbers is not None else None,
+                               field=f'{field}.bin', fallback=fallback)
+        if prior_place is not None and (placed_at, bin_id) != tuple(prior_place):
+            # A correction moving a line's stock to another place, after a count found it at the old place, would
+            # leave the count's shelf as counted and put the units at the new place too: the stock doubles.
+            from bookflow.company import inventory_counts
+            when = prior_when.get(entry.line_identity) or (date, 'before')
+            number = inventory_counts.covering_count(s, entry.item_id, prior_place[0], prior_place[1], *when)
+            if number is not None:
+                old, new = bins.place_words(s, *prior_place), bins.place_words(s, placed_at, bin_id)
+                raise BookflowError('E_VALIDATION', message=(
+                    f'Count {number} found these {entry.item_name} in {old}; record a transfer from {old} to {new} '
+                    'dated after the count instead of moving this line.'),
+                    details={'fields': [{'field': f'{field}.bin', 'problem': (
+                        f'count {number} found these in {old}; record a transfer from {old} to {new} dated after '
+                        'the count instead')}], 'count': number})
+        # An outgoing line that names no bin, and keeps none from a correction or a sale, takes its units from
+        # where they are at the site (R104 increment 5 review).
+        named = entry.numbers is not None and entry.numbers.bin is not None
+        auto = (not named and fallback is bins.UNSET and entry.kind in ('issue', 'vendor_return')
+                and bins.site_tracks_bins(s, placed_at))
+        change.numbers[identity] = dict(
+            spec=entry.numbers, item_name=entry.item_name, returns=entry.returns_movement_id, field=field,
+            prior=prior_numbers.get(entry.line_identity) if entry.line_identity else None, bin_id=bin_id,
+            bin_auto=auto)
+        if entry.line_identity:
+            change.identities[identity] = entry.line_identity
         history.append(values)
         change.movements.append(Movement(values, key=entry.key))
         change.costs[entry.key] = values['value_minor_units']
@@ -414,20 +466,37 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
             lines, [Movement(values, line_index=1)]))
         sequence += 1
 
+    if reversing:
+        # A receipt restated unchanged carries its landed cost on, so replay reads it there (R104 increment 6);
+        # whether its places are unchanged too is checked once they are worked out, below.
+        from bookflow.company import landed_costs
+        for old, new in landed_costs.check_targets(s, reversing, change, places_known=False):
+            for history in working.values():
+                for index, row in enumerate(history):
+                    if row['kind'] == 'landed' and row.get('landed_on_movement_id') == old:
+                        history[index] = dict(row, landed_on_movement_id=new)
     owed = []
     own = {movement.values['id'] for movement in change.movements}
     names = {entry.item_id: entry.item_name for entry in entries}
     # Components before the assemblies built from them (R103): a correction of a build's component
     # issue carries a partner correction of the build's assembly receipt, and the assembly is then
     # replayed with it. With no builds in the company this is one replay per item, as before.
+    # A build being written (``assembly_key`` names its assembly receipt entry): its own component issues are a
+    # build's too, so a landed cost's forward true-up of one is carried by its new assembly receipt (R104 inc 6).
+    planned = {}
+    if assembly_key is not None:
+        made = next((m.values for m in change.movements if m.key == assembly_key), None)
+        if made is not None:
+            planned = {m.values['id']: made for m in change.movements
+                       if m.values['kind'] == 'issue' and m.key != assembly_key}
     states, partners = assembly_builds.replay_items(
         s, working, rows, lambda refusal, item_id: refuse(
-            refusal, item_id, names.get(item_id) or inventory.item_name(s, item_id)))
+            refusal, item_id, names.get(item_id) or inventory.item_name(s, item_id)), planned=planned)
     for item_id, state in states:
         owed.extend((item_id, correction) for correction in state.corrections)
         if state.shortfalls:
             try:
-                before = {shortfall.movement['id'] for shortfall in replay(stored[item_id]).shortfalls}
+                before = {shortfall.movement['id'] for shortfall in replay(stored[item_id], costing_methods.timeline(s)).shortfalls}
             except StockRefusal:
                 before = set()
             for shortfall in state.shortfalls:
@@ -440,21 +509,18 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
     # a person reads in the journal is the kind its memo says it is.
     by_date: dict[tuple, list] = {}
     for item_id, correction in owed:
-        by_date.setdefault((correction.effective_date, correction.filled_by is not None),
+        by_date.setdefault((correction.effective_date, correction_kind(correction)),
                            []).append((item_id, correction))
-    for affected, true_up in sorted(by_date):
+    for affected, kind in sorted(by_date):
+        true_up = kind != 0
         lines, movements = [], []
-        for item_id, correction in by_date[(affected, true_up)]:
+        for item_id, correction in by_date[(affected, kind)]:
             target = correction.target_movement
-            description = (f'Provisional cost true-up for movement {target["id"]} dated '
-                           f'{target["effective_date"]}, filled by receipt movement '
-                           f'{correction.filled_by["id"]}' if true_up else
-                           f'Weighted-average cost correction for movement {target["id"]} '
-                           f'dated {target["effective_date"]}')
+            description = correction_description(correction)
             lines.extend(inventory.pair(
                 target['asset_account_id'], target['offset_account_id'],
                 correction.delta_minor_units, currency, target['class_id'], description))
-            partner = partners.get(target['id']) if not true_up else None
+            partner = partners.get((target['id'], correction.filled_by['id'] if correction.filled_by is not None else None))
             movements.append(Movement(dict(
                 id=new_id(), item_id=item_id, kind=CORRECTION_KIND,
                 quantity_microunits=0, value_minor_units=correction.delta_minor_units,
@@ -473,12 +539,52 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
                 partner['sequence'] = sequence
                 movements.append(Movement(partner, line_index=len(lines)))
                 sequence += 1
-        change.corrections.append(Correction(
-            affected, 'Provisional cost true-up' if true_up else 'Weighted-average cost correction',
-            lines, movements))
-    change.placements = placements.for_movements(s, [movement.values for movement in change.movements], change.sites)
+        change.corrections.append(Correction(affected, correction_memo(kind, [c for _, c in by_date[(affected, kind)]]), lines, movements))
+    from bookflow.company import serial_lots
+    numbering = serial_lots.Numbering(s)
+    change.placements = placements.for_movements(s, [movement.values for movement in change.movements], change.sites,
+                                                 change.numbers, numbering)
     change.warnings.extend(placements.warnings(s, change.placements, names))
+    change.warnings.extend(w for w in numbering.warnings if w not in change.warnings)
+    if reversing:
+        # A receipt a landed-cost allocation lands on is not voided, and its stock is not changed under it; one
+        # restated unchanged (a memo edit) carries its landed cost on (R104 increment 6).
+        from bookflow.company import landed_costs
+        change.carries = landed_costs.check_targets(s, reversing, change)
     return change
+
+
+# A correction document holds one kind of correction, so its memo says what each line is: a correction at a
+# movement's own date, a provisional cost's true-up at the receipt that filled it, or a landed cost's forward
+# true-up at the allocation (R104 increment 6).
+CORRECTION_MEMOS = ('Weighted-average cost correction', 'Provisional cost true-up', 'Landed cost true-up')
+
+
+def correction_memo(kind, corrections):
+    """A correction entry's memo: a cost correction under FIFO says so (R104 increment 7)."""
+    if kind == 0 and any(getattr(c, 'method', 'average') == 'fifo' for c in corrections):
+        return 'FIFO cost correction'
+    return CORRECTION_MEMOS[kind]
+
+
+def correction_kind(correction):
+    if correction.filled_by is None:
+        return 0
+    return 2 if correction.filled_by['kind'] == 'landed' else 1
+
+
+def correction_description(correction):
+    """One correction line's description: what it corrects, and what filled or landed on it."""
+    target = correction.target_movement
+    kind = correction_kind(correction)
+    if kind == 2:
+        return (f'Landed cost true-up for movement {target["id"]} dated {target["effective_date"]}, '
+                f'landed cost movement {correction.filled_by["id"]}')
+    if kind == 1:
+        return (f'Provisional cost true-up for movement {target["id"]} dated {target["effective_date"]}, '
+                f'filled by receipt movement {correction.filled_by["id"]}')
+    what = 'FIFO cost correction' if getattr(correction, 'method', 'average') == 'fifo' else 'Weighted-average cost correction'
+    return f'{what} for movement {target["id"]} dated {target["effective_date"]}'
 
 
 def open_dates(s, change, dates=()):
@@ -570,11 +676,11 @@ def write_corrections(s, ctx, change, *, command_name, created_at=None):
                           audit_event_id=fresh.data['event'])
         marker = dict(transaction_id=fresh.data['header']['id'], type='journal_entry',
                       kind=CORRECTION_KIND, **provenance)
-        rows = [dict(movement.values, **provenance) for movement in correction.movements]
+        rows = [dict({'landed_on_movement_id': None}, **movement.values, **provenance) for movement in correction.movements]
         applied = journals.persist_prepared(
             fresh, ctx, s, command_name=command_name,
             extra=(('inventory_documents', 'inventory_document', 'transaction_id', [marker]),
-                   placements.extra(placements.placements_for_rows(s, rows)),
+                   *placements.extras(placements.placements_for_rows(s, rows)),
                    ('inventory_movements', 'inventory_movement', 'id', rows)),
             noun='inventory cost correction')
         touched.extend(applied.touched)
@@ -597,15 +703,22 @@ def write_movements(s, ctx, change, *, command_name, summary, created_at):
     # Placed first: the database refuses a movement whose placements, already written, do not sum
     # to its quantity (R104).
     placed = placements.placements_for_rows(s, rows, change.sites, change.placements)
-    touched = [Touched('inventory_placement', row['id'], 'create', None, 1, row, db='company')
-               for row in placed]
+    touched, clean = placements.number_touched(placed)
+    touched += [Touched('inventory_placement', row['id'], 'create', None, 1, row, db='company')
+                for row in clean]
     touched += [Touched('inventory_movement', row['id'], 'create', None, 1, row, db='company')
                 for row in rows]
+    carries = [dict(id=new_id(), from_movement_id=old, to_movement_id=new, created_at=created_at,
+                    created_by=s.actor.id, created_via=ctx.interface.value, audit_event_id=event)
+               for old, new in getattr(change, 'carries', ())]
+    touched += [Touched('landed_cost_carry', row['id'], 'create', None, 1, row, db='company') for row in carries]
     audit.write_event_to(s.company, ctx, command_name, summary, touched, actor_id=s.actor.id,
                          actor_kind=s.actor.kind,
                          directive_code=getattr(s, 'directive_code', None), event_id=event)
     placements.insert(s, placed)
     s.company.conn.execute(c.inventory_movements.insert(), rows)
+    if carries:
+        s.company.conn.execute(c.landed_cost_carries.insert(), carries)
     return touched
 
 

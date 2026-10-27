@@ -324,6 +324,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "percent"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines[].site` | string \| null | no | yes | null | Inventory site a stocked line takes from (a sale), gives back to (a return) or commits at (an order), by id or name. Omitted: the document's site, else the source line's, else the default site. Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].bin` | string \| null | no | yes | null | Bin at the line's site the units go to or leave from (R104 increment 5), by id, full name such as A:3 or label code; the site must track bins. "(no bin)" names the units outside every bin. Omitted: the bin the line's stock stood in (a correction), its sale's bin (a return), else the item's default bin at the site, else no bin -- and an outgoing line takes its units from the default bin when it holds them, else from no bin, else from the bins holding them, never driving a bin below zero while the units are elsewhere at the site. Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].lot` | string \| null | no | yes | null | Lot number of a lot-tracked item: the lot an incoming line receives into (made when new), or the lot an outgoing line takes from. Omitted on an outgoing line, the units leave unassigned and the result names the earliest-expiring lot in stock there. Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].lot_expiry` | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers of a serial-tracked item, one per unit, up to the line's quantity; units left unnumbered are unassigned (number them later with `inventory assign`). Never make one up. An outgoing number leaves from where the books hold it; a number never on file is accepted with a warning and shows -1 until its receipt. Omitted on a correction, the line keeps the numbers it had. Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.release_to_order` | literal["reopen", "cancel"] | no | no | "reopen" | For lines made from a sales order or work order that this correction takes back: reopen (the default) leaves that quantity open on the order again, committed and billable; cancel cancels it on the order in the same transaction. The preview and result name the order lines either way. Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.settlement_versions` | array[object] | no | no | [] | For a changed invoice with active payment applications, supply every funding payment and its current expected_version, or supply settlement_guard instead. Read invoice settlement to review current settlement evidence; do not provide both alternatives. Present in InvoiceUpdatePreviewRequest. |
@@ -459,6 +463,7 @@ Example JSON output:
 | `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
@@ -689,6 +694,7 @@ Example JSON output:
 | `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_HAS_REFUND` | A refund has consumed this credit; void the refund before changing the credit memo. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
@@ -844,6 +850,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
@@ -985,6 +992,7 @@ Example JSON output:
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
 | `E_HAS_REFUND` | A refund has consumed this credit; void the refund before changing the credit memo. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
@@ -1196,6 +1204,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
 | `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
@@ -1355,6 +1364,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
@@ -1491,6 +1501,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
@@ -1855,6 +1866,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "percent"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines[].site` | string \| null | no | yes | null | Inventory site a stocked line takes from (a sale), gives back to (a return) or commits at (an order), by id or name. Omitted: the document's site, else the source line's, else the default site. Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].bin` | string \| null | no | yes | null | Bin at the line's site the units go to or leave from (R104 increment 5), by id, full name such as A:3 or label code; the site must track bins. "(no bin)" names the units outside every bin. Omitted: the bin the line's stock stood in (a correction), its sale's bin (a return), else the item's default bin at the site, else no bin -- and an outgoing line takes its units from the default bin when it holds them, else from no bin, else from the bins holding them, never driving a bin below zero while the units are elsewhere at the site. Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].lot` | string \| null | no | yes | null | Lot number of a lot-tracked item: the lot an incoming line receives into (made when new), or the lot an outgoing line takes from. Omitted on an outgoing line, the units leave unassigned and the result names the earliest-expiring lot in stock there. Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].lot_expiry` | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers of a serial-tracked item, one per unit, up to the line's quantity; units left unnumbered are unassigned (number them later with `inventory assign`). Never make one up. An outgoing number leaves from where the books hold it; a number never on file is accepted with a warning and shows -1 until its receipt. Omitted on a correction, the line keeps the numbers it had. Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.release_to_order` | literal["reopen", "cancel"] | no | no | "reopen" | For lines made from a sales order or work order that this correction takes back: reopen (the default) leaves that quantity open on the order again, committed and billable; cancel cancels it on the order in the same transaction. The preview and result name the order lines either way. Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.settlement_versions` | array[object] | no | no | [] | For a changed invoice with active payment applications, supply every funding payment and its current expected_version, or supply settlement_guard instead. Read invoice settlement to review current settlement evidence; do not provide both alternatives. Present in InvoiceUpdatePreviewRequest. |
@@ -1990,6 +2005,7 @@ Example JSON output:
 | `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
@@ -2234,6 +2250,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
 | `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
@@ -2530,6 +2547,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
 | `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
@@ -2670,6 +2688,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
@@ -3007,6 +3026,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "percent"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines[].site` | string \| null | no | yes | null | Inventory site a stocked line takes from (a sale), gives back to (a return) or commits at (an order), by id or name. Omitted: the document's site, else the source line's, else the default site. Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].bin` | string \| null | no | yes | null | Bin at the line's site the units go to or leave from (R104 increment 5), by id, full name such as A:3 or label code; the site must track bins. "(no bin)" names the units outside every bin. Omitted: the bin the line's stock stood in (a correction), its sale's bin (a return), else the item's default bin at the site, else no bin -- and an outgoing line takes its units from the default bin when it holds them, else from no bin, else from the bins holding them, never driving a bin below zero while the units are elsewhere at the site. Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].lot` | string \| null | no | yes | null | Lot number of a lot-tracked item: the lot an incoming line receives into (made when new), or the lot an outgoing line takes from. Omitted on an outgoing line, the units leave unassigned and the result names the earliest-expiring lot in stock there. Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].lot_expiry` | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers of a serial-tracked item, one per unit, up to the line's quantity; units left unnumbered are unassigned (number them later with `inventory assign`). Never make one up. An outgoing number leaves from where the books hold it; a number never on file is accepted with a warning and shows -1 until its receipt. Omitted on a correction, the line keeps the numbers it had. Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.release_to_order` | literal["reopen", "cancel"] | no | no | "reopen" | For lines made from a sales order or work order that this correction takes back: reopen (the default) leaves that quantity open on the order again, committed and billable; cancel cancels it on the order in the same transaction. The preview and result name the order lines either way. Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.settlement_versions` | array[object] | no | no | [] | For a changed invoice with active payment applications, supply every funding payment and its current expected_version, or supply settlement_guard instead. Read invoice settlement to review current settlement evidence; do not provide both alternatives. Present in InvoiceUpdatePreviewRequest. |
@@ -3143,6 +3166,7 @@ Example JSON output:
 | `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
@@ -3498,6 +3522,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "percent"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines[].site` | string \| null | no | yes | null | Inventory site a stocked line takes from (a sale), gives back to (a return) or commits at (an order), by id or name. Omitted: the document's site, else the source line's, else the default site. Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].bin` | string \| null | no | yes | null | Bin at the line's site the units go to or leave from (R104 increment 5), by id, full name such as A:3 or label code; the site must track bins. "(no bin)" names the units outside every bin. Omitted: the bin the line's stock stood in (a correction), its sale's bin (a return), else the item's default bin at the site, else no bin -- and an outgoing line takes its units from the default bin when it holds them, else from no bin, else from the bins holding them, never driving a bin below zero while the units are elsewhere at the site. Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].lot` | string \| null | no | yes | null | Lot number of a lot-tracked item: the lot an incoming line receives into (made when new), or the lot an outgoing line takes from. Omitted on an outgoing line, the units leave unassigned and the result names the earliest-expiring lot in stock there. Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].lot_expiry` | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers of a serial-tracked item, one per unit, up to the line's quantity; units left unnumbered are unassigned (number them later with `inventory assign`). Never make one up. An outgoing number leaves from where the books hold it; a number never on file is accepted with a warning and shows -1 until its receipt. Omitted on a correction, the line keeps the numbers it had. Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.release_to_order` | literal["reopen", "cancel"] | no | no | "reopen" | For lines made from a sales order or work order that this correction takes back: reopen (the default) leaves that quantity open on the order again, committed and billable; cancel cancels it on the order in the same transaction. The preview and result name the order lines either way. Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.settlement_versions` | array[object] | no | no | [] | For a changed invoice with active payment applications, supply every funding payment and its current expected_version, or supply settlement_guard instead. Read invoice settlement to review current settlement evidence; do not provide both alternatives. Present in InvoiceUpdatePreviewRequest. |
@@ -3635,6 +3663,7 @@ Example JSON output:
 | `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
@@ -3976,6 +4005,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "percent"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines[].site` | string \| null | no | yes | null | Inventory site a stocked line takes from (a sale), gives back to (a return) or commits at (an order), by id or name. Omitted: the document's site, else the source line's, else the default site. Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].bin` | string \| null | no | yes | null | Bin at the line's site the units go to or leave from (R104 increment 5), by id, full name such as A:3 or label code; the site must track bins. "(no bin)" names the units outside every bin. Omitted: the bin the line's stock stood in (a correction), its sale's bin (a return), else the item's default bin at the site, else no bin -- and an outgoing line takes its units from the default bin when it holds them, else from no bin, else from the bins holding them, never driving a bin below zero while the units are elsewhere at the site. Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].lot` | string \| null | no | yes | null | Lot number of a lot-tracked item: the lot an incoming line receives into (made when new), or the lot an outgoing line takes from. Omitted on an outgoing line, the units leave unassigned and the result names the earliest-expiring lot in stock there. Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].lot_expiry` | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers of a serial-tracked item, one per unit, up to the line's quantity; units left unnumbered are unassigned (number them later with `inventory assign`). Never make one up. An outgoing number leaves from where the books hold it; a number never on file is accepted with a warning and shows -1 until its receipt. Omitted on a correction, the line keeps the numbers it had. Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.release_to_order` | literal["reopen", "cancel"] | no | no | "reopen" | For lines made from a sales order or work order that this correction takes back: reopen (the default) leaves that quantity open on the order again, committed and billable; cancel cancels it on the order in the same transaction. The preview and result name the order lines either way. Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.settlement_versions` | array[object] | no | no | [] | For a changed invoice with active payment applications, supply every funding payment and its current expected_version, or supply settlement_guard instead. Read invoice settlement to review current settlement evidence; do not provide both alternatives. Present in InvoiceUpdatePreviewRequest. |
@@ -4112,6 +4145,7 @@ Example JSON output:
 | `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
 | `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
 | `E_HAS_REFUND` | A refund has consumed this credit; void the refund before changing the credit memo. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |

@@ -72,7 +72,15 @@ Expenses = Annotated[list[VendorCreditExpenseInput], Field(min_length=0, max_len
 # The Items tab is the bill's, row for row: the same input, the same validation. A row names an
 # item, a quantity and a cost; the item decides which account is credited, and for stock that
 # account is Inventory Asset and the quantity leaves the shelf at the credited amount.
-Items = Annotated[list[BillItemInput], Field(min_length=0, max_length=200)]
+class VendorCreditItemInput(BillItemInput):
+    receipt_line: _Selector | None = Field(default=None, description=(
+        'The receipt line these units go back against (R104 increment 7): the line_id of the bill, check, card '
+        'charge or item receipt line that brought them in, as its `show` lists it. Under FIFO the return takes that '
+        "receipt's layer first; under average it is recorded and changes nothing. A correction that leaves it out "
+        'keeps the one the row had; null takes it off.'))
+
+
+Items = Annotated[list[VendorCreditItemInput], Field(min_length=0, max_length=200)]
 
 
 class VendorCreditPostInput(_Input):

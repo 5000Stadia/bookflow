@@ -53,6 +53,7 @@ import sqlalchemy as sa
 from bookflow.core import unit_price
 from bookflow.company import accounts, items as item_service, journals, list_service, placements, schema as c
 from bookflow.company.document_effects import allocate
+from bookflow.company import costing_methods
 from bookflow.company.inventory_costing import StockRefusal, replay, shortfall_warning
 from bookflow.company.inventory_models import (
     InventoryAdjustmentLineSummary, InventoryAdjustmentSummary, InventoryCorrectionOutput, InventoryOutput,
@@ -97,7 +98,41 @@ def movements(s, *, item_id=None, transaction_id=None, as_of=None):
         query = query.where(t.c.transaction_id == transaction_id)
     if as_of is not None:
         query = query.where(t.c.effective_date <= as_of)
-    return [dict(row) for row in s.company.conn.execute(query).mappings()]
+    rows = [dict(row) for row in s.company.conn.execute(query).mappings()]
+    landed = [row for row in rows if row['kind'] == 'landed']
+    if landed:
+        # A receipt restated unchanged by an edit of its document carries its landed cost on (R104 increment 6):
+        # replay reads each landed cost on the receipt that stands for it now.
+        from bookflow.company.landed_costs import successors
+        moved = successors(s, {row['landed_on_movement_id'] for row in landed})
+        for row in landed:
+            row['landed_on_movement_id'] = moved.get(row['landed_on_movement_id'], row['landed_on_movement_id'])
+    sent = [row for row in rows if row['kind'] == 'vendor_return' and row.get('returns_movement_id')]
+    if sent:
+        # A vendor return names the receipt it sends back (R104 increment 7); when an edit of that receipt's
+        # document has restated it since, replay reads the receipt standing for the same line now.
+        moved = receipt_successors(s, {row['returns_movement_id'] for row in sent})
+        for row in sent:
+            row['returns_movement_id'] = moved.get(row['returns_movement_id'], row['returns_movement_id'])
+    return rows
+
+
+def receipt_successors(s, ids):
+    """Retired receipt movement id -> the standing bought receipt of the same item on the same document line
+    identity, for those that have one."""
+    out = {}
+    for old, new in s.company.conn.execute(sa.text(
+            "SELECT o.id, (SELECT n.id FROM inventory_movements n JOIN document_lines dn ON dn.id = n.document_line_id "
+            "  WHERE dn.line_id = do.line_id AND n.kind = 'receipt' AND n.returns_movement_id IS NULL "
+            "  AND n.item_id = o.item_id AND NOT EXISTS (SELECT 1 FROM inventory_movements y WHERE y.reverses_movement_id = n.id) "
+            "  ORDER BY n.sequence DESC LIMIT 1) "
+            "FROM inventory_movements o JOIN document_lines do ON do.id = o.document_line_id "
+            "WHERE o.id IN (SELECT value FROM json_each(:ids)) "
+            "AND EXISTS (SELECT 1 FROM inventory_movements x WHERE x.reverses_movement_id = o.id)"),
+            dict(ids=__import__('json').dumps(sorted(ids)))):
+        if new is not None:
+            out[old] = new
+    return out
 
 
 def fallback_cost(s, item_id, currency):
@@ -186,6 +221,7 @@ class _Document:
     after_persist: object = None      # callback(fresh, rows, provenance) -> extra persist entries
     reason: str | None = None         # a generated void's reason, when the caller gave none
     placements: list | None = None    # its own movements' placements, worked out when planned
+    trailing: object = None           # callback(fresh, rows, provenance) -> persist entries after the movements
 
 
 @dataclass
@@ -215,14 +251,15 @@ class _Change:
     states: dict = field(default_factory=dict)  # item id -> its replay with this change
     lines: list = field(default_factory=list)   # _Line per adjusted line
     placements: list = field(default_factory=list)  # planned placements for its own movements
+    numbers: dict = field(default_factory=dict)  # movement id -> what its line says of lot and serial numbers
 
 
-def _warnings(item, history, state, own):
+def _warnings(item, history, state, own, methods=()):
     """One line per issue this change leaves below zero: its own, or one it newly leaves short."""
     if not state.shortfalls:
         return []
     try:
-        before = {shortfall.movement['id'] for shortfall in replay(history).shortfalls}
+        before = {shortfall.movement['id'] for shortfall in replay(history, methods).shortfalls}
     except StockRefusal:
         before = set()
     return [shortfall_warning(item['full_name'], shortfall) for shortfall in state.shortfalls
@@ -376,13 +413,13 @@ def value_movements(s, planned, items, refuse):
             working[item_id] = movements(s, item_id=item_id)
         if values['kind'] in ('issue', 'found'):
             try:
-                values['value_minor_units'] = replay(working[item_id] + [values]).targets[values['id']]
+                values['value_minor_units'] = replay(working[item_id] + [values], costing_methods.timeline(s)).targets[values['id']]
             except StockRefusal as refusal:
                 raise refuse(refusal, items[item_id]) from None
         working[item_id].append(values)
     for item_id, rows in working.items():
         try:
-            states[item_id] = replay(rows)
+            states[item_id] = replay(rows, costing_methods.timeline(s))
         except StockRefusal as refusal:
             raise refuse(refusal, items[item_id]) from None
     return working, states
@@ -410,12 +447,17 @@ def _adjustment_change(s, ctx, inp, currency, sequence):
         klass = class_row(s, line.class_id) if line.class_id is not None else header_class
         site_id = placements.site_id_for(s, line.site, field=prefix + 'site') if line.site is not None else header_site
         place = site_id or placements.default_site_id(s)
-        key = (item['id'], place)
+        from bookflow.company import bins
+        bin_id = bins.line_bin(s, item['id'], place, getattr(line, 'bin', None), field=prefix + 'bin')
+        key = (item['id'], place, bin_id)
         if line.new_quantity is not None:
-            # What the place holds on the date, with this adjustment's earlier lines there.
+            # What the place holds on the date, with this adjustment's earlier lines there: the line's bin at a
+            # site that tracks bins (R104 increment 5), else the whole site.
             reading = placements.held(s, [item['id']], place, inp.date,
                                       ('before',) if position == 'before' else ('before', 'count', 'after'))
-            books = sum(quantity for (each, _), quantity in reading.items() if each == item['id'])
+            tracked = bins.site_tracks_bins(s, place)
+            books = sum(quantity for (each, where), quantity in reading.items() if each == item['id']
+                        and (not tracked or (where.split('|')[0] or None) == bin_id))
             target = parse_quantity_micro_units(line.new_quantity, field=prefix + 'new_quantity')
             quantity = target - books - held_cache.get(key, 0)
         else:
@@ -450,7 +492,9 @@ def _adjustment_change(s, ctx, inp, currency, sequence):
             fallback=fallback_cost(s, item['id'], currency) if kind in ('issue', 'found') else None)
         sequence += 1
         planned.append(values)
-        written.append((values, item, site_id, line, 'stated' if stated is not None else None))
+        auto = (quantity < 0 and line.new_quantity is None and getattr(line, 'bin', None) is None
+                and bins.site_tracks_bins(s, place))
+        written.append((values, item, site_id, line, 'stated' if stated is not None else None, (bin_id, auto)))
     if not planned:
         raise invalid('lines', 'every line already holds what it says; this adjustment changes nothing')
 
@@ -462,8 +506,9 @@ def _adjustment_change(s, ctx, inp, currency, sequence):
         raise invalid('quantity_change' if not many else 'lines',
                       'this adjustment is worth nothing at the current average cost, and '
                       'Bookflow posts no zero-amount entry')
-    journal_lines, movements_out, change_lines, sites = [], [], [], {}
-    for values, item, site_id, line, basis in written:
+    from bookflow.company import serial_lots
+    journal_lines, movements_out, change_lines, sites, numbers = [], [], [], {}, {}
+    for values, item, site_id, line, basis, (bin_id, auto) in written:
         description = line.description or inp.memo or f'Inventory adjustment for {item["full_name"]}'
         index = None
         if int(values['value_minor_units']):
@@ -473,13 +518,16 @@ def _adjustment_change(s, ctx, inp, currency, sequence):
         movements_out.append(_Movement(values, index))
         if site_id:
             sites[values['id']] = site_id
+        stated_numbers = serial_lots.from_line(line)
+        numbers[values['id']] = dict(spec=stated_numbers, item_name=item['full_name'], field='lines' if many else 'item',
+                                     bin_id=bin_id, bin_auto=auto)
         change_lines.append(_Line(item, values['id'], site_id or placements.default_site_id(s),
                                   basis or found_basis.get(values['id'], 'average')))
     warnings = []
     for item_id, state in states.items():
         own = {values['id'] for values in planned if values['item_id'] == item_id}
         history = [row for row in working[item_id] if row['id'] not in own]
-        warnings += _warnings(items[item_id], history, state, own)
+        warnings += _warnings(items[item_id], history, state, own, costing_methods.timeline(s))
         warnings += found_warnings(items[item_id], state, own)
     journal = JournalPostInput(
         date=inp.date, memo=inp.memo, custom_fields=inp.custom_fields,
@@ -488,9 +536,11 @@ def _adjustment_change(s, ctx, inp, currency, sequence):
     document = _Document(journal, 'post', 'adjustment', movements_out)
     first = planned[0]
     first_item = items[first['item_id']]
-    return _Change([document], first_item, states[first['item_id']], currency, int(first['quantity_microunits']),
-                   int(first['value_minor_units']), first['kind'], first['asset_account_id'], offset['id'],
-                   warnings, sites, items, states, change_lines)
+    change = _Change([document], first_item, states[first['item_id']], currency, int(first['quantity_microunits']),
+                     int(first['value_minor_units']), first['kind'], first['asset_account_id'], offset['id'],
+                     warnings, sites, items, states, change_lines)
+    change.numbers = numbers
+    return change
 
 
 def _void_change(s, inp, currency, sequence):
@@ -507,7 +557,7 @@ def _void_change(s, inp, currency, sequence):
                if row['kind'] == 'reversal'}
     if header['status'] == 'voided' or all(row['id'] in retired for row in own):
         # Already reversed; the journal writer answers "no change" and nothing else runs.
-        return _Change([], item, replay(movements(s, item_id=item['id'])), currency, items=items)
+        return _Change([], item, replay(movements(s, item_id=item['id']), costing_methods.timeline(s)), currency, items=items)
     revision = journals.revision(s, header)
     reversals = []
     for row in own:
@@ -518,10 +568,10 @@ def _void_change(s, inp, currency, sequence):
     for item_id, each in items.items():
         history = movements(s, item_id=item_id)
         try:
-            states[item_id] = replay(history + [m.values for m in reversals if m.values['item_id'] == item_id])
+            states[item_id] = replay(history + [m.values for m in reversals if m.values['item_id'] == item_id], costing_methods.timeline(s))
         except StockRefusal as refusal:
             raise refuse_stock(refusal, each) from None
-        warnings += _warnings(each, history, states[item_id], set())
+        warnings += _warnings(each, history, states[item_id], set(), costing_methods.timeline(s))
     journal = JournalVoidInput(journal=header['id'], expected_version=inp.expected_version)
     first = reversals[0].values
     change = _Change([_Document(journal, 'void', 'adjustment', reversals)], item, states[item['id']], currency,
@@ -531,7 +581,7 @@ def _void_change(s, inp, currency, sequence):
     return change
 
 
-def correction_documents(s, change, sequence):
+def correction_documents(s, change, sequence, also=()):
     """One dated document per affected date, one line pair per corrected movement.
 
     A true-up -- the settlement of a provisional cost, dated at the receipt that settled it --
@@ -540,9 +590,9 @@ def correction_documents(s, change, sequence):
     # The adjusted items first, then any assembly a build made from them (R103): a correction of a
     # build's component issue is paired with one of the build's assembly receipt, and the assembly
     # is replayed with it. With no builds in the company this is each adjusted item's own replay.
-    from bookflow.company import assembly_builds
+    from bookflow.company import assembly_builds, inventory_effects
     planned = [movement.values for document in change.documents for movement in document.movements]
-    working = {}
+    working = {item_id: movements(s, item_id=item_id) for item_id in also}   # a costing-method switch's items
     for values in planned:
         if values['item_id'] not in working:
             working[values['item_id']] = movements(s, item_id=values['item_id'])
@@ -557,24 +607,21 @@ def correction_documents(s, change, sequence):
     by_date: dict[tuple, list] = {}
     for item_id, state in states:
         for correction in state.corrections:
-            by_date.setdefault((correction.effective_date, correction.filled_by is not None),
+            by_date.setdefault((correction.effective_date, inventory_effects.correction_kind(correction)),
                                []).append((item_id, correction))
     names = sorted({item_name(s, item_id) for item_id, _ in states if any(
         correction for correction in dict(states)[item_id].corrections)})
     label = names[0] if len(names) == 1 else f'{len(names)} items'
-    for date, true_up in sorted(by_date):
+    for date, kind in sorted(by_date):
+        true_up = kind != 0
         lines, pending = [], []
-        for item_id, correction in by_date[(date, true_up)]:
+        for item_id, correction in by_date[(date, kind)]:
             target = correction.target_movement
             lines.extend(pair(
                 target['asset_account_id'], target['offset_account_id'],
                 correction.delta_minor_units, change.currency, target['class_id'],
-                f'Provisional cost true-up for movement {target["id"]} dated '
-                f'{target["effective_date"]}, filled by receipt movement {correction.filled_by["id"]}'
-                if true_up else
-                f'Weighted-average cost correction for movement {target["id"]} '
-                f'dated {target["effective_date"]}'))
-            partner = partners.get(target['id']) if not true_up else None
+                inventory_effects.correction_description(correction)))
+            partner = partners.get((target['id'], correction.filled_by['id'] if correction.filled_by is not None else None))
             pending.append(_Movement(dict(
                 id=new_id(), kind='recost', item_id=item_id,
                 quantity_microunits=0, value_minor_units=correction.delta_minor_units,
@@ -592,7 +639,7 @@ def correction_documents(s, change, sequence):
                 partner['sequence'] = sequence
                 pending.append(_Movement(partner, line_index=len(lines)))
                 sequence += 1
-        memo = ('Provisional cost true-up' if true_up else 'Weighted-average cost correction')
+        memo = inventory_effects.correction_memo(kind, [c for _, c in by_date[(date, kind)]])
         change.documents.append(_Document(JournalPostInput(
             date=date, memo=f'{memo} for {label}',
             lines=lines), 'post', 'recost', pending))
@@ -605,7 +652,10 @@ def complete(s, change):
                    for movement in document.movements) + 1
     correction_documents(s, change, sequence)
     own = [movement.values for movement in change.documents[0].movements]
-    change.placements = change.placements or placements.for_movements(s, own, change.sites)
+    from bookflow.company import serial_lots
+    numbering = serial_lots.Numbering(s)
+    change.placements = change.placements or placements.for_movements(s, own, change.sites, change.numbers, numbering)
+    change.warnings.extend(w for w in numbering.warnings if w not in change.warnings)
     change.warnings.extend(placements.warnings(s, change.placements + list(change.documents[0].extra_placements),
                                                {item_id: item['full_name'] for item_id, item in change.items.items()}
                                                or {change.item['id']: change.item['full_name']}))
@@ -799,7 +849,8 @@ def persist_change(s, ctx, change, *, command_name, persist, nouns=None):
                           audit_event_id=fresh.data['event'])
         marker = dict(transaction_id=fresh.data['header']['id'], type='journal_entry', kind=document.kind,
                       **provenance)
-        rows = [dict({key: value for key, value in movement.values.items() if key != 'number'}, **provenance)
+        rows = [dict({'landed_on_movement_id': None}, **{key: value for key, value in movement.values.items() if key != 'number'},
+                     **provenance)
                 for movement in document.movements]
         if persist:
             extra = [('inventory_documents', 'inventory_document', 'transaction_id', [marker])] \
@@ -811,8 +862,10 @@ def persist_change(s, ctx, change, *, command_name, persist, nouns=None):
                 change.placements if position == 0 else None)
             placed = placements.placements_for_rows(s, rows, change.sites, planned)
             placed += placements.with_provenance(document.extra_placements, **provenance)
-            extra.append(placements.extra(placed))
+            extra.extend(placements.extras(placed))
             extra.append(('inventory_movements', 'inventory_movement', 'id', rows))
+            if document.trailing is not None:
+                extra.extend(document.trailing(fresh, rows, provenance))
             applied = journals.persist_prepared(
                 fresh, call, s, command_name=command_name, extra=tuple(extra),
                 noun=nouns.get(document.kind, 'inventory cost correction'))
@@ -874,7 +927,7 @@ def document_summary(s, header, currency=None):
     for row in own:
         if row['item_id'] not in items:
             items[row['item_id']] = item_service.resolve_item(s.company, row['item_id'])
-            states[row['item_id']] = replay(movements(s, item_id=row['item_id']))
+            states[row['item_id']] = replay(movements(s, item_id=row['item_id']), costing_methods.timeline(s))
     item = items[movement['item_id']]
     sites = {}
     for movement_id, rows in placements.movement_placements(s, [row['id'] for row in own]).items():

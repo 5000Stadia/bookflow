@@ -131,7 +131,7 @@ interpreter start), 5 repetitions after one warm-up, on a fresh copy of the gene
 - reads: home (`company show`), register (checking, newest page), customer list, item list,
   A/R aging, profit and loss and balance sheet over the five years;
 - writes: invoice post, bill post, payment receive, a 20-line deposit;
-- the R180 cases: the 1,000-line deposit, reconciliation start and preview over 1,000+
+- the R180 cases: the 1,000-line deposit, reconciliation start, candidates, mark all, preview and finish over 1,000+
   uncleared rows, an invoice post at the end of the five-year history;
 - the known slow case: an organisation-wide `membership grant` over 200 companies.
 
@@ -399,7 +399,7 @@ The fixes:
 
 Left for lane B: admitting deposit sources per row (`deposit_draft_validation.admit`, called again for
 each listed row at the end of `deposit_source_queries.query`, after `candidates` has already admitted
-them) and the dependency history reads.
+them) and the dependency history reads. Both were done in lane C, below.
 
 **The first catalog build, once per process (lane B's finding).**
 - `permission_runtime.known_catalog` is built and verified once per process, not once per command:
@@ -574,3 +574,383 @@ about 0.4 s: the layers share most descriptor objects, so each is encoded once, 
 version is compressed. Each version is stored whole; compressed, the file is 0.86 MB (19 MB
 uncompressed). The timing table above was taken before compression; compression only made
 the load faster (60 ms to 3 ms) and the first write about 0.2 s slower.
+
+## Increment 2, lane C (2026-10-26): deposits read what they prove, once
+
+A deposit command proves its read set (every record and relation its dependency guard covers) in
+three places: the plan's capture, and the apply's comparison of the current read set with the one
+reconstructed at the guard's endpoint. Each read set used to read every row and every audit entry of
+about 28 owner kinds, row by row, and the apply built the current one twice. What each read set
+proves is unchanged; only how it reads changed.
+
+**Bounded reads** (`deposit_dependency_history.History`).
+- A selected record's row and its complete audit history are read by id, in sets of 400
+  (`_KindStore`). `History.raw[kind]` and `History.entries[kind]` keep their meaning: iterating one
+  still reads the whole kind, for callers that need every identity (a selector by name, a predicate
+  with no row bound).
+- Not every owner table is insert-only: transactions, company_info, custom field definitions and
+  deposit drafts are updated in place. So a relation is never inferred from history alone, and
+  nothing assumes an old row cannot change.
+- A current relation (the rows whose field names an owner) is one indexed SQL read, plus every
+  identity that has audit entries but no row, indexed from its latest image exactly as the full
+  scan did. A row never failed that scan, so the first refusal (an undecodable image, a missing
+  field) is the same one, in the same order.
+- `find` takes an optional row bound that its predicate implies (`where={'transaction_id': ...}`),
+  and evaluates only the rows SQL selects by it, plus the audit-only identities. Takes keep their
+  order relative to a refusal.
+- A historical relation still indexes the latest image at the cutoff of every identity of the
+  kind. It cannot be bounded exactly without an audit-side index: an image that does not decode, or
+  that names another owner than its row, must still be met. It now reads only the columns it
+  needs, and decodes each image once per read set.
+
+**Once per preparation.** `deposit_dependency_history.preparation(s)` scopes one DML-free
+preparation (`lifecycle.prepare`, a source page). It holds nothing past its end, and a plan and its
+apply are separate preparations, with principal upserts written between them.
+- Authorization: a set of transactions and events covered by what already passed for the same
+  binding and write level is not checked again. A set's requirements are the union of its members'
+  (ledger access, customer work where any is linked, each event's own). So a set that passed covers
+  its subsets, and two that passed cover their union. The binding is revalidated on every call, and
+  a refusal is always recomputed.
+- Read set: when the comparison's current read set resolved every selector (none fell back to
+  "missing"), capture reuses it. It is the same computation, in the same snapshot. A post now builds
+  three read sets, not four, and a guarded void four, not six.
+- Pure owner chains (projections that depend only on the entries) and decoded commercial revisions
+  are shared by the current and historical readers of one comparison. Each use gets its own copy.
+
+**Admitted once.** `deposit sources` no longer admits each listed receipt again at the end.
+`candidates()` has already admitted every listed receipt, in the same snapshot and binding: either
+the whole set at once (which covers each receipt) or, after a refusal, each receipt on its own. A
+receipt it could not admit is not listed.
+
+**Fetched in sets.** The deposit's current claims, its source headers, capture's root checks and
+the current claim rows are each read with `IN` lists.
+
+**How it is proven.**
+- `tests/deposit_history_oracle.py` keeps the full-scan reader as a test-only oracle.
+- `test_deposit_history_bounded` builds a history with renames, a closing-date change, a void, a
+  draft consumed by a post, an edit draft consumed by an update, and a planted audit-only
+  membership. Both readers must give equal read sets (records, relations, digest, unknowns): current
+  (with and without missing selectors) and historical at several endpoints, for every deposit,
+  payment, sales receipt and a void request: over 60 comparisons.
+- A corruption corpus (a missing owner row, a dangling relation, an undecodable image inside and
+  outside the deposit's graph, an undecodable audit-only image, a tampered draft, a rename behind
+  the books) must give the same outcome under both readers for a void preview, its guarded commit,
+  a source page and a post preview. The outcomes were also recorded with the base build's code and
+  matched it, guard tokens aside.
+
+**Measured** on the medium template (the lane A company, upgraded once to co0096 and copied fresh for
+each run): `perf.bench.run_bench`, 3 timed repetitions. Before is main at db5d39c9.
+
+| scenario | before p50 ms | after p50 ms | before stmts | after stmts | load before / after |
+|---|---|---|---|---|---|
+| deposit post, 20 lines | 12,194 | 3,322 | 2,058 | 1,580 | 43.3 / 40.7 |
+| deposit sources, page of 200 | 2,142 | 617 | 11,958 | 918 | 42.9 / 40.7 |
+| deposit post, all 300 undeposited | 35,401 | 25,624 | 14,492 | 10,765 | 37.7 / 42.7 |
+| deposit void of that deposit | 53,948 | 38,798 | 16,930 | 12,412 | 37.7 / 42.7 |
+
+The 300-line post and void run as three post/void pairs over the same receipts. Each pair adds a
+claim and a release to every receipt's history, and the old deposits stay in each receipt's graph,
+so the repetitions grow: 24.4, 35.4 and 43.1 s before; 14.7, 25.6 and 36.3 s after. The first
+repetition (a fresh history) compares best: post 24.4 → 14.7 s, void 40.8 → 23.2 s.
+
+**What remains.**
+- The historical read set is still O(the audit history of the kinds it relates): about 60,000
+  images decoded on the medium company, about half of a 20-line post now. It will dominate on the
+  large company. Bounding it exactly needs an audit-side relation index, or the verified-prefix
+  watermark; both need a migration.
+- A post's own work (resolution, validation, composition, writes) is now about half of the
+  300-line post. Most of the rest is proof per record (each selected record's chain and current
+  row compared).
+- Reusing the plan's preparation in the apply needs one snapshot for both. That means dispatch
+  opening its write transactions (BEGIN IMMEDIATE, the materialization drain, the principal
+  upserts) before `cmd.plan` for non-dry-run writes. It is a change to every write command, not to
+  deposits.
+
+## After increment 2 (2026-10-26)
+
+The closing measurement of R180: the large company regenerated on main 87077028 (lanes A to D),
+with the same profile and seed as the baseline, and the same bench, plus the reconciliation
+steps the baseline could not reach. Machine and method as in the baseline (16 cores, other
+projects running; the 1-minute load is given beside every figure).
+
+### The generated company
+
+`perf generate --profile large --seed 180` (template `bench-large-s180-co0095`): the same
+documents as the baseline, count for count (7,800 invoices with 19,551 lines, 6,490 payments,
+354 deposits, 1,800 bills, 1,500 bill payments; 1,000 payments in Undeposited Funds; 200
+companies).
+
+| | baseline (co0088) | after increment 2 (co0095) |
+|---|---|---|
+| whole run | 22,646 s (6.3 h), load 33 to 45 | **9,648 s (2.7 h)**, load 34 to 57 |
+| history (60 months) | 20,412 s | 7,687 s |
+| six-month block, first / last | 15 min / 51 min | 6.7 min / 16 min |
+| invoice post, first / last tenth | 416 / 583 ms | 218 / 195 ms |
+| the 1,000 undeposited payments | 339 s | 139 s |
+| the 200 companies | 1,673 s | 1,647 s |
+| disk | 2.1 GB (company 927 MB) | 2.2 GB (company 928 MB) |
+
+Posting no longer slows as the history grows: an invoice post costs the same at the end of five
+years as at the start. The six-month blocks still grow (6.7 to 16 min), from the deposits (a
+post's dependency history; see below). Creating the 200 companies did not change, about 8 s a
+company, and is now a sixth of the run.
+
+### Scenario timings
+
+`perf bench` (run `after-inc2-2026-10-26`, stored beside the template), 5 timed repetitions after
+a warm-up except where the reps column says otherwise; the columns are those of the baseline.
+"max" is the largest client wall time over the timed repetitions.
+
+| scenario | command | reps | baseline p50 ms | p50 ms | max ms | stmts | SQL ms (p50) | rows | load |
+|---|---|---|---|---|---|---|---|---|---|
+| home | company show | 5 | 43 | 33 | 33 | 44 | 17 | 7 | 37.6 |
+| register, newest 50 | register query | 5 | 3,552 | 3,013 | 3,055 | 223 | 2,870 | 50 | 37.6 |
+| customer list | customer list | 5 | 170,055 | **672** | 691 | 62 | 30 | 2,001 | 37.6 |
+| item list | item list | 5 | 153 | 114 | 121 | 48 | 21 | 400 | 37.6 |
+| A/R aging | report ar-aging | 5 | 1,180 | 1,163 | 1,200 | 46 | 903 | 50 | 38.0 |
+| profit and loss, 5 years | report profit-and-loss | 5 | 729 | 687 | 890 | 49 | 667 | 7 | 38.0 |
+| balance sheet | report balance-sheet | 5 | 1,024 | 978 | 1,008 | 50 | 952 | 4 | 37.8 |
+| invoice post (2 lines) | invoice post | 5 | 617 | 211 | 9,791 (the first, cold) | 447 | 63 | 2 | 37.8 |
+| bill post | bill post | 5 | 175 | 117 | 134 | 216 | 44 | 1 | 37.8 |
+| payment receive | payment receive | 5 | 346 | 140 | 174 | 253 | 64 | 1 | 37.8 |
+| deposit post, 20 lines | deposit post | 5 | 107,769 | **19,217** | 23,874 | 1,580 | 3,675 | 20 | 37.4 |
+| deposit sources, first page | deposit sources | 5 | 18,698 | 15,941 | 16,371 | 3,215 | 13,897 | 200 | 37.4 |
+| deposit post, 1,005 lines | deposit post | 3 | 184,591 | **84,673** | 109,525 | 34,387 | 12,856 | 1,005 | 43.1 |
+| deposit void, 1,005 lines | deposit void | 3 | 265,643 | **163,318** | 219,684 | 39,944 | 47,811 | 1,005 | 43.1 |
+| reconcile start, 1,859 uncleared rows (after its opening) | reconcile start | 1 | 7,825,364 | **57,852** | 57,852 | 1,476 | 485 | 0 | 44.7 |
+| reconcile candidates, first page | reconcile candidates | 5 | 3,425,318 | **30,223** | 46,101 | 502 | 140 | 200 | 56.1 |
+| reconcile mark all, 1,859 rows (new) | reconcile mark | 5 | not reached | 123,431 | 153,671 | 1,478 | 753 | 1,859 | 49.0 |
+| reconcile preview, 1,859 rows (new) | reconcile preview | 5 | not reached | 18,600 | 24,505 | 502 | 135 | 0 | 40.9 |
+| reconcile finish, 1,859 rows (new) | reconcile finish | 1 | not reached | 95,469 | 95,469 | 1,491 | 751 | 1,859 | 42.3 |
+| membership grant, organisation of 200 | membership grant | 3 | 17,385 | **2,653** | 2,871 | 208 | 14 | 0 | 41.0 |
+| membership revoke, organisation of 200 | membership revoke | 3 | 16,984 | 2,697 | 2,703 | 210 | 10 | 0 | 41.0 |
+
+The bench now enters checking's real balance as the statement's ending balance, ends mark all
+on a mark, and certifies the draft with `reconcile finish`, so the whole 1,000+ row
+reconciliation is measured: start 58 s, mark all 123 s, preview 19 s and finish 95 s, about
+5 minutes for the statement, against more than 16 hours that did not reach the end in the
+baseline. The 1,859 rows are 354 deposits and 1,500 bill payments over five years, plus the
+bench's own five 20-line deposits.
+
+### Reconciling the five years monthly
+
+The baseline company was never reconciled. A copy of the template
+(`bench-large-s180-co0095-reconciled`) had its checking account reconciled for each of the 60
+months through the commands (opening start for the first, then start, mark all, preview and
+finish), the ending balance being the ledger's checking balance at each month end. Each month
+has about 31 movements (6 deposits, 25 bill payments). All 60 certified.
+
+| | whole month | start | mark all | preview | finish | load |
+|---|---|---|---|---|---|---|
+| months 1 to 12 (median) | 101 s | 27.8 s | 30.9 s | 9.1 s | 32.0 s | 36 to 48 |
+| months 49 to 60 (median) | 202 s | 50.4 s | 79.7 s | 16.5 s | 55.1 s | 36 to 48 |
+| all 60 months | **9,594 s (2.7 h)** | | | | | 35.5 to 48.2 |
+
+The statement counts stay flat (1,417 to 1,432 for start, mark and finish; 482 for preview), so
+the time is Python, and it doubles over the five years as certificates accumulate, while each
+month marks only 31 rows. A month of 31 rows costs as much as the 1,859-row statement above: the
+cost follows the account's history, not the statement.
+
+### Which scenarios meet "seconds"
+
+Threshold: a p50 of **10 s or less** at this machine's load (37 to 56), for the 1,000-row
+operations and for everything else alike.
+
+- **Meet it:** every read (home, register 3.0 s, customer list 0.7 s, item list, A/R aging
+  1.2 s, profit and loss, balance sheet), the single-document writes (invoice post 0.2 s, bill
+  post, payment receive), and the organisation-wide membership grant and revoke (2.7 s).
+- **Do not:** every deposit and reconciliation scenario.
+  - deposit post, 20 lines: 19 s; deposit sources, a page: 16 s;
+  - deposit post, 1,005 lines: 85 s; its void: 163 s;
+  - reconciliation over 1,859 rows: start 58 s, candidates 30 s, mark all 123 s, preview 19 s,
+    finish 95 s;
+  - a monthly reconciliation of 31 rows: 100 s a month at the start of the history, 200 s at
+    the end.
+
+So the target, "bring posting, deposits and reconciliation of 1,000+ rows down to seconds", is
+met for posting and not yet for deposits or reconciliation. Increment 2 took those from hours to
+minutes (reconciliation start 2.2 h → 58 s; the 1,005-line deposit 185 → 85 s), and the rest is
+named below.
+
+### What remains, and where the time goes
+
+Profiled with the same 20 ms stack sampler, one call each on a fresh copy of the template (load
+37 to 38), and month 61 on a copy of the reconciled company (load 49 to 53).
+
+1. **Reconciliation: every load rebuilds and re-proves the account's whole graph, up to three
+   times per write.** 97% of a start is `reconciliation_loading.load`.
+   - Each write loads in the plan (`reconcile_cmds.py:153` → `_loaded`, `reconcile_cmds.py:82`),
+     again in the apply, and a third time after the write to prove it
+     (`reconcile_cmds.py:112` → `reconciliation_loading.prove_written`,
+     `reconciliation_loading.py:229`). That is about 1,420 statements each time.
+   - Inside each load, `reconciliation_storage_validation.validate` (`:407` → `enumerated`
+     `:233`) calls `reconciliation_adapters.enumerate_graph` (`:393`), which for every deposit
+     ever made to the account decodes and re-validates its stored financial facts:
+     `reconciliation_adapters.py:346` (`Effect.model_validate_json` and
+     `deposit_validation.validate`), with `deposit_models.py:158` (`Dimensions.pairs`) the hottest
+     leaf. That is 35 to 48% of a start, preview or finish on the unreconciled company.
+   - On the reconciled company, certificates add their own share: `population_fingerprint`
+     and `canonical` (`reconciliation_storage_validation.py:553` → `:62`, `:31`) about 11%, and
+     `reconciliation_loading._rows_for` (`:62`) about 10 to 21%.
+   - Fix direction: one load per command (reuse the plan's in the apply; prove the write from
+     what was written, not by reloading everything), and prove a stored deposit's facts once,
+     not on every load (an effect's facts do not change once written; a verified-prefix
+     watermark per account would let a load re-prove only what is new).
+2. **Reconcile mark all, candidates and preview: `Snapshot.current` is rebuilt for every
+   movement.** `reconciliation_queries.py:34` calls `s.current` once per listed movement inside
+   a generator; `current` (`reconciliation_preparation.py:132-134`) is a property that rebuilds
+   `versions` (`:128-130`, a dict of every effect version) and the head map on every access. That
+   is O(movements x versions): 51% of mark all on the unreconciled company (mark all runs it in
+   the plan and again in the apply), 26% on the reconciled one, and part of preview
+   (`whole_selection`, `reconciliation_preparation.py:192`). Fix direction: compute `current` once
+   per snapshot (a cached property; the snapshot is frozen). A small change with a large effect.
+3. **Deposit post and void: the historical read set still reads the whole audit history of the
+   kinds it relates.** As lane C expected, it dominates on five years.
+   - 20-line post: 68% in `deposit_dependency_history.reconstruct` (`:1510`) →
+     `find_owners` (`:1033`) → `_relation_index` (`:1064`) → `_historical_candidates`
+     (`:840-843`), which takes the latest image at the cutoff of every identity of a kind
+     (`_latest`, `:830`) and decodes each one (`core/audit.py:44`, `decode_snapshot`, 34%).
+   - The void of 1,005 lines: the same, plus `prefetch_owners` (`:795`, 25%).
+   - 21.5% of a 20-line post (13.7% of the 1,005-line one) is one statement:
+     `deposit_drafts.py:297`, `final_foreign_keys`, a `PRAGMA main.foreign_key_check` over the
+     **whole** company database after every deposit write. Fix direction: check only the tables
+     the write touched (`PRAGMA foreign_key_check(table)`), or the rows it wrote.
+   - Fix direction for the read set, as lane C named it: an audit-side relation index or the
+     verified-prefix watermark, both a migration.
+4. **Deposit sources, a page: 16 s, 87% of it in one query shape.**
+   `deposit_draft_validation.admit` walks deposit membership and operation targets per frontier
+   group (`deposit_draft_validation.py:68-72`). The operation-targets query at `:72` joins
+   `deposit_operation_targets` to `deposit_operations` on `transaction_id IN (group)`; neither
+   table has an index led by `transaction_id`, so SQLite scans all 6,844 targets and probes each
+   against the IN list. The membership query at `:68` (`source_transaction_id IN ... OR
+   transaction_id IN ...`) has the same problem on `deposit_memberships` (indexes lead with
+   `id`). Fix direction: indexes on `deposit_operations(transaction_id)`,
+   `deposit_memberships(source_transaction_id)` and `(transaction_id)`, a migration.
+5. **Smaller, still worth noting.** The register's newest page is 3.0 s: with no period it still
+   sums the whole history (lane A's fix helps a dated page). Creating a company is about 8 s
+   (unchanged). The first write after a fresh copy pays about 9.6 s cold (invoice post max).
+
+Both templates are kept on the storage drive, `/media/k/Blank/bookflow-scratch/perf/`:
+`bench-large-s180-co0095` (never reconciled, the bench's template, with the run file and logs)
+and `bench-large-s180-co0095-reconciled` (checking reconciled for all 60 months, with each
+month's timings in `recon_monthly.json`). Copy one to the NVMe drive before using it.
+
+## Increment 3 (2026-10-26): deposits and reconciliation
+
+The five causes named above, in their order there (cheapest and largest first). Each change is
+exact: the same outputs, the same refusals.
+
+### What changed
+
+1. **`Snapshot.versions` and `Snapshot.current` are computed once per snapshot**
+   (`reconciliation_preparation.py`). Both were properties that rebuilt a dictionary of every
+   effect version on each access, and `reconciliation_queries` read `current` once per listed
+   movement. They are now derived once from the snapshot's frozen rows and handed out read-only;
+   a copy of a snapshot starts without them, as its proofs do.
+2. **Deposit lookup indexes, migration co0099** (on co0098, landed cost): `deposit_memberships
+   (source_transaction_id)`, `deposit_memberships (transaction_id)` and `deposit_operations
+   (transaction_id)`, which the deposit sources walk (`deposit_draft_validation.admit`) reads by.
+   Indexes only, no row changes (`tests/test_deposit_write_checks.py` rewinds a populated file and
+   compares every row; the backup rewind and the audit head test know co0099).
+3. **The foreign key check after a deposit write is scoped** (`deposit_drafts.final_foreign_keys`).
+   It exists because some keys are deferred: a write inside its savepoint could leave one broken
+   and SQLite would only refuse at COMMIT, outside the savepoint and without a deposit error. With
+   foreign keys on, every immediate key is enforced by each statement, so only deferred keys can
+   be left broken by the write. The check now reads every table whose stored definition can defer
+   a key (taken from the file, not the metadata) and every table the write's own statements wrote
+   (collected while it runs), with `PRAGMA foreign_key_check(table)`; when `defer_foreign_keys` is
+   on for the transaction it falls back to the whole check. A dangling reference planted in each of
+   those tables is refused by both the old and the new check (`test_deposit_write_checks.py`).
+   What it no longer reports is a key already broken in a table the write did not touch, which
+   no deposit write depends on.
+4. **A reconciliation or deposit write plans inside its own write transaction** (`plan_in_write`,
+   opt-in per command: `reconcile start`, `reconcile opening start`, `reconcile mark`, `reconcile
+   finish`, `deposit post`, `deposit update`, `deposit void`). `dispatch._apply` makes their plan
+   after `BEGIN IMMEDIATE`, the statement-effect drain and the principal upsert, immediately before
+   the apply; a dry run, a read, an advisory command and every command that does not opt in plan
+   exactly as before. Since nothing is written between plan and apply, the apply's own preparation
+   would read the same rows and return the same value, so it reuses the plan's: a reconciliation
+   write loads the account once before the write instead of twice (the proof after the write is
+   kept), and a deposit save no longer re-reads its recovery, re-compares its guard, re-prepares
+   or re-composes (the plan's composition writes nothing and is the one the preview showed).
+   `tests/test_plan_in_write.py` pins which commands opt in and that each prepares once.
+   Also: a deposit revision's stored facts are decoded and proved once per content (keyed by the
+   SHA-256 of their text, a pure function of it; only a success is kept), and a deposit save inserts
+   its rows in ordered runs of one `executemany` each (SQLite still inserts, triggers and checks
+   row by row in the same order).
+5. **Not changed: deposit post and void still read the whole audit history of the kinds they
+   relate** (`deposit_dependency_history._relation_index`, the historical view). An exact bound
+   needs either an index of the audit images' relation keys or a verified-prefix watermark. The
+   images are stored compressed, so SQLite cannot derive such an index itself; one written by the
+   application would need every audit writer to keep it and a backfill whose completeness this
+   increment cannot prove, and it would no longer meet a broken image of an unrelated record the
+   way the full read does. Left as it is; it is now the largest cost of the 1,005-line void.
+
+### Equivalence
+
+- The bench's own command sequence with every input and output logged, before (main c35a3d81) and
+  after, on fresh copies of a medium company: 147 commands (20-line deposits, deposit sources, the
+  300-line deposit, its void, and the whole reconciliation from opening to finish), outputs
+  identical once fresh ids, digests and clock times are replaced by first-seen placeholders.
+- The demo company: the reconciliation of Checking from opening to finish (10 commands), identical.
+- The damaged-books corpus (`test_deposit_history_bounded`, seven kinds of damage): the same
+  first refusal (outcome and code for each of the four calls) before and after.
+- `tests/reconciliation_oracle.py` (`test_reconciliation_indexed_equivalence`) and
+  `tests/deposit_history_oracle.py` (`test_deposit_history_bounded`) pass.
+
+### Measurements
+
+Medium company: the medium profile (600 customers, 24 months, 300 payments in Undeposited Funds)
+regenerated on main c35a3d81 as `bench-medium-s180-co0097`, because the co0085 template's hub
+holds a permission catalog this chain no longer has (`catalog_mismatch`, as noted for the parked
+large template). Large company: `bench-large-s180-co0095`; "before" is the after-increment-2 run
+above. Same bench, 5 timed repetitions (3 for the 300/1,005-line deposit and its void, 1 for start
+and finish). The deposit rows of the large company are from a second run after the last change
+(the composition reuse); the reconciliation rows from the run before it, which did not touch them.
+
+| scenario | company | before p50 ms | after p50 ms | before stmts | after stmts | load before / after |
+|---|---|---|---|---|---|---|
+| deposit post, 20 lines | medium | 3,777 | 633 | 1,580 | 713 | 37.6 / 34.7 |
+| deposit sources, first page | medium | 654 | 396 | 918 | 918 | 37.6 / 34.7 |
+| deposit post, 300 lines | medium | 28,086 | 8,499 | 10,765 | 3,315 | 41.6 / 36.1 |
+| deposit void, 300 lines | medium | 39,536 | 15,124 | 12,412 | 5,092 | 41.6 / 36.1 |
+| reconcile start, 243 rows | medium | 8,275 | 2,481 | 612 | 433 | 40.9 / 36.2 |
+| reconcile candidates | medium | 2,907 | 1,325 | 214 | 214 | 40.0 / 36.3 |
+| reconcile mark all | medium | 8,325 | 2,782 | 614 | 434 | 39.0 / 36.5 |
+| reconcile preview | medium | 3,017 | 1,460 | 214 | 214 | 39.0 / 36.6 |
+| reconcile finish | medium | 12,533 | 3,617 | 627 | 447 | 38.8 / 36.6 |
+| deposit post, 20 lines | large | 19,217 | **1,599** | 1,580 | 713 | 37.4 / 37.0 |
+| deposit sources, first page | large | 15,941 | **1,399** | 3,215 | 3,172 | 37.4 / 37.0 |
+| deposit post, 1,005 lines | large | 84,673 | 30,227 | 34,387 | 9,852 | 43.1 / 36.9 |
+| deposit void, 1,005 lines | large | 163,318 | 58,457 | 39,944 | 15,798 | 43.1 / 36.9 |
+| reconcile start, 1,859 rows | large | 57,852 | 15,292 | 1,476 | 1,009 | 44.7 / 36.6 |
+| reconcile candidates | large | 30,223 | **7,884** | 502 | 502 | 56.1 / 36.5 |
+| reconcile mark all, 1,859 rows | large | 123,431 | 18,215 | 1,478 | 1,010 | 49.0 / 36.7 |
+| reconcile preview | large | 18,600 | **8,717** | 502 | 502 | 40.9 / 35.4 |
+| reconcile finish, 1,859 rows | large | 95,469 | 22,916 | 1,491 | 1,023 | 42.3 / 35.1 |
+
+The whole 1,859-row statement (start, mark all, preview, finish) now takes about 65 s, against
+about 5 minutes after increment 2. The deposit-model decode is kept per process, so a long-running
+server or MCP host (and the bench, which runs its scenarios in one process) pays it once per
+deposit revision; a one-shot CLI call pays it on its first load.
+
+### Which scenarios meet "seconds" (10 s or less)
+
+- **Now meet it:** deposit post of 20 lines (1.6 s), deposit sources (1.4 s), reconcile
+  candidates (7.9 s) and preview (8.7 s) over 1,859 rows; on the medium company every deposit and
+  reconciliation scenario except the 300-line void (15 s).
+- **Still do not:** the 1,005-line deposit post (30 s) and void (58 s); reconcile start (15 s),
+  mark all (18 s) and finish (23 s) over 1,859 rows.
+
+### What remains, and why
+
+- **One reconciliation load is about 6 to 8 s on five years**, and a write makes two: the one its
+  plan reuses and the proof after the write (`reconciliation_loading.prove_written`). The time is
+  spread (building the graph, the referenced rows, `validate`, the row reads, authority), with no
+  single hot spot left. The next step is the verified-prefix watermark (re-prove only what is new
+  since the last proved state), which moves old-file corruption detection to a verify command and
+  is a decision for the owner; or proving a write from what was written instead of reloading.
+- **The 1,005-line void**: about half (profiled) is the historical relation read of cause 5
+  above, decoding the latest image of every identity of the related kinds; then the composition
+  and the row writes. The 1,005-line post: the dependency read set capture (about a third), the
+  composition and validation of 1,005 rows.

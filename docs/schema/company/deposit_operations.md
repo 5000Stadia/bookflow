@@ -11,7 +11,7 @@ Database: `company`.
 | `id` | VARCHAR(26) | no | — | primary key 1, unique with id + transaction_id | — | — | Permanent deposit-family operation. |
 | `operation_key` | TEXT | no | — | unique | — | — | Company-wide key shared by every deposit financial verb. |
 | `command` | TEXT | no | — | — | — | — | Original private deposit post, update, void, delete, or coordinate command. |
-| `transaction_id` | VARCHAR(26) | no | — | unique with id + transaction_id | — | transactions.id | Owning deposit. |
+| `transaction_id` | VARCHAR(26) | no | — | unique with id + transaction_id | ix_deposit_operations_transaction | transactions.id | Owning deposit. |
 | `request_hash` | TEXT | no | — | — | — | — | Canonical typed intent and context hash. |
 | `request_snapshot` | TEXT | no | — | — | — | — | Complete immutable submitted request and omission provenance. |
 | `effect_snapshot` | TEXT | no | — | — | — | — | Complete original ordinary v1 or coordinate v2 output; current facts are separately loaded. |

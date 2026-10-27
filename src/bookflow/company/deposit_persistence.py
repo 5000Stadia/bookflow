@@ -240,13 +240,13 @@ def compose(s,ctx,fresh):
         consumed=consumed,collections=collections)
 
 
-def preview(s,ctx,fresh):
+def preview(s,ctx,fresh,composed=None):
     """Dry-run projection of a prepared aggregate; no row is written or reserved.
 
     Every identity this operation would allocate is replaced by its logical
     token, so a preview never publishes a provisional physical ID.
     """
-    composed=compose(s,ctx,fresh)
+    composed=composed or compose(s,ctx,fresh)
     data=composed['bundle']['data']
     mapping=dict(data['mapping'])
     # A row carried from a saved draft is recorded against its draft row, as
@@ -274,20 +274,47 @@ def preview(s,ctx,fresh):
     return LifecycleOutput.model_validate_json(q.canonical(projected)).model_copy(update={'operation_id':None})
 
 
-def _execute(s,ctx,plan):
-    """Re-resolve and validate inside caller's already-open writer transaction."""
+def _insert_in_order(s,table,rows):
+    """Insert `rows` in their order, one statement per run of rows naming the same columns.
+
+    Each run is one executemany: SQLite still inserts row by row, in this order, firing every
+    trigger and checking every key per row exactly as one INSERT per row did; only the per-row
+    statement building is saved."""
+    run=[]
+    for row in rows:
+        if run and row.keys()!=run[0].keys():
+            s.company.conn.execute(table.insert(),run);run=[]
+        run.append(row)
+    if run:s.company.conn.execute(table.insert(),run)
+
+
+def _execute(s,ctx,plan,planned_in_write=False,composed=None):
+    """Re-resolve and validate inside caller's already-open writer transaction.
+
+    `planned_in_write`: `plan` was prepared inside this same writer transaction, after its drain
+    and principal upsert, with nothing written since (`core.dispatch._plans_in_write`). Then the
+    re-resolution below would read the same rows as `plan` did: `recover` finds nothing (the plan
+    found nothing), the guard comparison matches the guard the plan just computed, and the fresh
+    preparation has the plan's facts fingerprint. So `plan` is used as it stands, and so is the
+    plan's own composition of it (`composed`, which writes nothing), when the planner kept one.
+    """
     if not s.company.raw.in_transaction or s.dry_run:
         raise RuntimeError('Private deposit execution requires an owned writer transaction')
     inp=lifecycle.INPUTS[plan.verb].model_validate_json(plan.input_json)
-    recovered=lifecycle.recover(s,ctx,inp,plan.verb,plan.binding,posting=plan.posting)
-    if recovered is not None:return recovered,None
+    if not planned_in_write:
+        recovered=lifecycle.recover(s,ctx,inp,plan.verb,plan.binding,posting=plan.posting)
+        if recovered is not None:return recovered,None
     if plan.verb!='post' and getattr(inp,'dependency_guard',None) is None:
         raise BookflowError('E_PREVIEW_STALE',details={'reason':'complete deposit guard required'})
-    # Retain the authenticated preview producer, including bearer liveness.
-    # Re-deriving OS identity here would change a hosted agent's admission.
-    fresh=lifecycle.prepare(s,ctx,inp,plan.verb,binding=plan.binding,expected_guard=plan.dependency_guard,posting=plan.posting)
-    if fresh.facts_fingerprint!=plan.facts_fingerprint:raise BookflowError('E_PREVIEW_STALE')
-    composed=compose(s,ctx,fresh)
+    if planned_in_write:
+        fresh=plan
+    else:
+        # Retain the authenticated preview producer, including bearer liveness.
+        # Re-deriving OS identity here would change a hosted agent's admission.
+        fresh=lifecycle.prepare(s,ctx,inp,plan.verb,binding=plan.binding,expected_guard=plan.dependency_guard,posting=plan.posting)
+        if fresh.facts_fingerprint!=plan.facts_fingerprint:raise BookflowError('E_PREVIEW_STALE')
+    if not (planned_in_write and composed is not None):
+        composed=compose(s,ctx,fresh)
     bundle=composed['bundle'];output=composed['output'];touched=composed['touched']
     operation=composed['operation'];targets=composed['targets'];consumed=composed['consumed']
     collections=composed['collections']
@@ -300,8 +327,7 @@ def _execute(s,ctx,plan):
         else:s.company.conn.execute(c.transactions.insert().values(**h))
         for before,after in bundle['source_headers']:
             s.company.conn.execute(c.transactions.update().where(c.transactions.c.id==after['id']).values(**after))
-        for name in TABLES:
-            for row in pending[name]:s.company.conn.execute(getattr(c,name).insert().values(**row))
+        for name in TABLES:_insert_in_order(s,getattr(c,name),pending[name])
         for claim in data['claims']:
             s.company.conn.execute(c.deposit_current_memberships.delete().where(c.deposit_current_memberships.c.membership_id==claim['id']))
         for claim in bundle['claims']:
@@ -315,23 +341,23 @@ def _execute(s,ctx,plan):
             stmt=insert(c.sequences).values(**data['sequence'])
             s.company.conn.execute(stmt.on_conflict_do_update(index_elements=['name'],set_=data['sequence']))
     s.company.conn.execute(c.deposit_operations.insert().values(**operation))
-    for target in targets:s.company.conn.execute(c.deposit_operation_targets.insert().values(operation_id=operation['id'],transaction_id=target))
-    for kind,values in collections.items():
-        for ordinal,value in enumerate(values):
-            s.company.conn.execute(c.deposit_operation_items.insert().values(operation_id=operation['id'],kind=kind,ordinal=ordinal,facts_snapshot=q.canonical(value)))
+    _insert_in_order(s,c.deposit_operation_targets,[dict(operation_id=operation['id'],transaction_id=target) for target in targets])
+    _insert_in_order(s,c.deposit_operation_items,[dict(operation_id=operation['id'],kind=kind,ordinal=ordinal,facts_snapshot=q.canonical(value))
+                                                  for kind,values in collections.items() for ordinal,value in enumerate(values)])
     consumption.persist(s,consumed)
     return output,consumed
 
 
-def execute(s,ctx,plan):
+def execute(s,ctx,plan,*,planned_in_write=False,composed=None):
     """One financial rollback boundary, including deferred consumption heads."""
     if not s.company.raw.in_transaction or s.dry_run:
         raise RuntimeError('Private deposit execution requires an owned writer transaction')
     s.company.raw.execute('SAVEPOINT bookflow_deposit_financial')
     try:
-        output,consumed=_execute(s,ctx,plan)
-        from bookflow.company.deposit_drafts import final_foreign_keys
-        final_foreign_keys(s)
+        from bookflow.company.deposit_drafts import final_foreign_keys,written_tables
+        with written_tables(s) as written:
+            output,consumed=_execute(s,ctx,plan,planned_in_write,composed)
+        final_foreign_keys(s,written)
         from bookflow.company import deposit_draft_consumption as consumption
         consumption.validate_persisted(s,consumed)
         s.company.raw.execute('RELEASE bookflow_deposit_financial')

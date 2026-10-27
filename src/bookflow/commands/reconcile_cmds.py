@@ -82,6 +82,18 @@ def _loaded(s, account_id):
     return loading.load(s, account_id)
 
 
+def _kept(s, value):
+    """What a planner hands its apply: the prepared value, only when the plan ran inside the
+    command's own write transaction (`plan_in_write`; see `core.dispatch._plans_in_write`).
+
+    Then nothing is written between plan and apply -- the transaction is already open, drained
+    and the principals upserted -- so the apply's own `prepare` over the same input and ids would
+    read the same rows and return the same value, and reusing it is exact. Any other plan (a dry
+    run, a preview) keeps nothing, and the apply prepares again as before.
+    """
+    return value if s.plan_in_write and s.company is not None and s.company.write_transaction else None
+
+
 def _draft(snapshot, identity):
     return drafts.load(snapshot, identity, authority_transactions=snapshot.authority_transactions)
 
@@ -167,17 +179,18 @@ def _start_family(verb, model, description):
         if isinstance(inp, m.Start):
             inp = _follow_opening_draft(s, inp)
         value = prepare(inp, ctx, s, ids)
-        return Plan(m.DraftOutput(draft=value), dict(ids=ids, input=inp))
+        return Plan(m.DraftOutput(draft=value), dict(ids=ids, input=inp, prepared=_kept(s, value)))
 
     cmd = command('reconcile ' + verb, scope='company', description=description,
                   input_model=model, output_model=m.DraftOutput, writes={'company'},
                   required_role='standard', capability='ledger.post',
                   accepts_idempotency_key=True, error_codes=list(ERRORS))(planner)
     cmd.ledger = True
+    cmd.plan_in_write = True
 
     def apply(plan, ctx, s):
         inp, ids = plan.data['input'], plan.data['ids']
-        value = prepare(inp, ctx, s, ids)
+        value = plan.data.get('prepared') or prepare(inp, ctx, s, ids)
         _commit(s, ctx, cmd.name, account_id=value.account_id, operation_id=ids['operation'],
                 event_id=ids['event'], kind='draft_change',
                 summary='started a ' + value.kind + ' reconciliation',
@@ -233,8 +246,8 @@ def _mark_prepare(inp, ctx, s, ids):
 
 def _mark_planner(inp, ctx, s):
     ids = dict(revision=new_id(), operation=new_id(), event=new_id())
-    _, value = _mark_prepare(inp, ctx, s, ids)
-    return Plan(m.DraftOutput(draft=value), dict(ids=ids, input=inp))
+    snapshot, value = _mark_prepare(inp, ctx, s, ids)
+    return Plan(m.DraftOutput(draft=value), dict(ids=ids, input=inp, prepared=_kept(s, (snapshot, value))))
 
 
 reconcile_mark = command(
@@ -251,12 +264,13 @@ reconcile_mark = command(
     capability='ledger.post', accepts_idempotency_key=True, positional=['draft'],
     error_codes=list(ERRORS))(_mark_planner)
 reconcile_mark.ledger = True
+reconcile_mark.plan_in_write = True
 
 
 @reconcile_mark.applier
 def _mark_apply(plan, ctx, s):
     inp, ids = plan.data['input'], plan.data['ids']
-    snapshot, value = _mark_prepare(inp, ctx, s, ids)
+    snapshot, value = plan.data.get('prepared') or _mark_prepare(inp, ctx, s, ids)
     previous = snapshot.by('drafts')[value.id]['current_revision_id']
     table = c.reconciliation_drafts
     _commit(s, ctx, 'reconcile mark', account_id=value.account_id, operation_id=ids['operation'],
@@ -335,11 +349,12 @@ reconcile_finish = command(
     error_codes=list(ERRORS) + ['E_PERMISSION', 'E_PERIOD_CLOSED'])(
     lambda inp, ctx, s: _finish_planner(inp, ctx, s))
 reconcile_finish.ledger = True
+reconcile_finish.plan_in_write = True
 
 
 def _finish_planner(inp, ctx, s):
     ids = dict(opening=new_id(), certificate=new_id(), operation=new_id(), event=new_id(), consume={})
-    snapshot, value, opening_draft, totals = _finish_prepare(inp, ctx, s, ids)
+    snapshot, value, opening_draft, totals = prepared = _finish_prepare(inp, ctx, s, ids)
     for d in (value, opening_draft):
         if d is not None:
             ids['consume'][d.id] = new_id()
@@ -363,13 +378,13 @@ def _finish_planner(inp, ctx, s):
                                certificate_id=ids['certificate'], totals=totals,
                                cleared_without_statement_line=_gaps(s, snapshot, value),
                                original_difference=original, adjustment=adjustment),
-                dict(ids=ids, input=inp))
+                dict(ids=ids, input=inp, prepared=_kept(s, prepared)))
 
 
 @reconcile_finish.applier
 def _finish_apply(plan, ctx, s):
     inp, ids = plan.data['input'], plan.data['ids']
-    snapshot, value, opening_draft, totals = _finish_prepare(inp, ctx, s, ids)
+    snapshot, value, opening_draft, totals = plan.data.get('prepared') or _finish_prepare(inp, ctx, s, ids)
     gaps = _gaps(s, snapshot, value)
     account_id = value.account_id
     original, adjustment, journal_ids, created_touches = totals.difference, None, [], []
