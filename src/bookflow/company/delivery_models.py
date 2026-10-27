@@ -102,7 +102,8 @@ class TemplateUpdateInput(_Strict):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     subject: str | None = Field(default=None, min_length=1, max_length=500)
     body: str | None = Field(default=None, max_length=20000)
-    is_default: Literal[True] | None = Field(default=None, description="true makes it the kind's default.")
+    is_default: bool | None = Field(default=None, description="true makes it the kind's default (false is refused: "
+                                    'make another template the default instead).')
     expected_version: int | None = Field(default=None, ge=1)
 
 

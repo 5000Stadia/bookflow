@@ -492,3 +492,57 @@ Each default stands if nobody decides. D1 to D3 are the person's to decide; the 
 - 6. **Message numbers.** *Default:* a sequence from 1001. **Bcc to self:** off; `delivery_copy_to` enables.
 - 7. **Inbound replies and bounces by mailbox.** *Default:* not built; bounces arrive only as a transport's
   `events`.
+
+## As built: increment 1 (2026-10-27)
+
+**What exists.** co0105 (`delivery_templates`, `delivery_files`, `delivery_messages`, `delivery_message_documents`,
+`delivery_events`; `company_info.delivery_reply_to`, `delivery_copy_to`, `delivery_auto_flag_from`), one seeded
+default template per kind, and sixteen commands under the `delivery-v1` layer (on `picking-v1`): `delivery draft`,
+`update`, `send` (draft to ready only), `cancel`, `mark-sent` (people-only), `export`, `show`, `query`, `history`, and
+`delivery-template create`, `update`, `deactivate`, `show`, `query`, `fields`, `preview`. `company update` gains
+reply-to and copy-to. The browser has the Email panel (Email… beside Print on invoices, sales receipts, estimates,
+statement rows and ready overdue notices), the Outbox (Customers menu), a message page with its frozen PDF and
+history, and Email and sending settings (addresses, templates, "Connections: none"). Code:
+`company/delivery*.py`, `commands/delivery_cmds.py`, `adapters/workbench/delivery_pages.py`.
+
+**Decisions taken in the build, each reversible:**
+
+- **No new capability, no hub migration.** The brief allowed one migration, so messages are admitted as R111's
+  overdue notices are: `customer` at `member` (reads, export) and `standard` (writes), and every `delivery` command
+  also needs `ledger.read` and `customer-work` at `member`, so a principal who cannot read an invoice or an estimate
+  cannot see it in the outbox. Drafting and previewing read the document as the principal, so its own read is
+  checked too. No capability or role default changes. A `delivery` capability (§7) can be added later by its own hub
+  migration if a company needs to grant email separately from customers.
+- **Frozen bytes live in `delivery_files`, in the company file,** content-addressed (one row per SHA-256), not in the
+  attachment store: that store's bodies arrive through upload transfers and are subject to collection, while a frozen
+  PDF is the company's own output that must never be collected. It travels with backups. `delivery_message_documents`
+  keeps `attachment_id` for linked files (`--with-attached-files`, later).
+- **PDFs are drawn invariant** (`documents/pdf.py`): no creation clock, no random file id, so the same document gives
+  the same bytes and "the attached bytes equal `render`'s" is checkable by hash. `render` was split into `build` and
+  `drawn`; drafting describes the document once, fills the template from that description and draws it.
+- **One live message per document.** Beyond §3's dedupe key: a second, different draft for a document already in the
+  outbox is refused (E_WORK_DEPENDENCY naming it), not added beside it. `--again` makes one more, naming the newest sent
+  message or else the original; asking again returns that same message.
+- **Staleness is derived** on every read; release and export hold a stale message (`document_changed`,
+  `document_voided`) instead of acting. Until `retry --refresh` (increment 2) a held message is edited, marked sent or
+  cancelled and drafted again.
+- **The notice hand-off:** marking a notice's message sent calls `notices.mark_sent(..., 'email')` in the same write;
+  `notice mark-sent` *and* `notice dismiss` are refused while a live message carries the notice.
+- Message numbers are `M-1001`, `M-1002`, ...; Message-IDs are `<id@bookflow.invalid>`. `sender.name` is the drafting
+  person, or the company name for an agent. `statement.overdue` is the statement's aging total less its current
+  column. The `.eml` uses CRLF line ends (RFC 5322) and `X-Unsent: 1`; several messages export as a zip.
+- In the browser, Save draft, Send, Mark sent and Cancel post through htmx; Export .eml is a plain form post because
+  its answer is the file. `delivery show --include-files` returns the frozen bytes the message page links to.
+
+**Not in this increment:** `approve`, `retry`, connections, dispatch (increment 2); `--combine`,
+`--with-attached-files`, flags, the auto-flag setting in `company update` (its column exists) and batches
+(increment 3); schedules (increment 4); the contact-point picker and demo messages (increment 5).
+
+**Measured:** draft time per kind through the HTTP host, demo copy, after a warm-up: invoice 0.25 s, sales receipt
+0.14 s, estimate 0.12 s, statement 0.15 s, notice 0.15 s (`tests/test_delivery.py`, printed with `-s`).
+
+**Tests:** `tests/test_delivery.py` (a draft per kind against `render`, templates, dedupe and `--again`, stale and
+voided sources, `.eml` parsed with the standard library, people-only `mark-sent` and an agent's release waiting for a
+go, the notice hand-off, the workbench through the test client), `tests/test_delivery_seeded.py` (five seeds of thirty
+random acts), `tests/test_delivery_surfaces.py` (Python, CLI, HTTP and MCP agree), `tests/test_delivery_browser.py`
+(a real Chrome submit of the Email panel at 1440 and 390).

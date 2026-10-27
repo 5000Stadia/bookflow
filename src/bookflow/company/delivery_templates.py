@@ -126,6 +126,8 @@ def prepare_update(s, ctx, inp) -> Plan:
             after[name] = getattr(inp, name)
     merge.check(before['kind'], after['subject'], after['body'])
     retire = None
+    if inp.is_default is False and before['is_default']:
+        raise _invalid('is_default', 'make another template the default instead')
     if inp.is_default and not before['is_default']:
         if not before['active']:
             raise _invalid('is_default', 'an inactive template cannot be the default')
