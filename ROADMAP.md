@@ -153,7 +153,6 @@ review cb5fcd7 (gate g96052d).
 
 ## M4 — After V1.5: concepts to develop
 
-- [ ] R171 measured parity with the anchor: replay real QuickBooks Desktop books (a shipped sample company, then Kabe's own file with his yes) into Bookflow and compare every standard report to the cent on both bases; each difference becomes a defect, a documented choice or a known limit (needs the QuickBooks Desktop SDK on Windows) On hold: needs the anchor desktop software and its SDK on a Windows machine, and a sample company file; none is on this machine.
 - [ ] R172 a local agent: rerun the week-of-work trial on open-weight models served on a small business's own hardware, classify their failures, and test interface changes (typed everyday tools, shorter help and results) that let a smaller model pass without hurting hosted ones On hold: Kabe 2026-10-22 "Not now" (large downloads, no GPU).
 - [x] R151 Restore a deleted document from its preserved history
 - [x] R117 Merge duplicates: combine duplicate customers, vendors, items or accounts and move every reference to the survivor. (Customers and vendors 2026-10-09; accounts and items 2026-10-22, with refusals for stocked items and settlement accounts: design/list-merge.md)
@@ -199,3 +198,8 @@ review cb5fcd7 (gate g96052d).
 - [x] R153 Very large deposits (over 200 rows) and billing part of a purchase order
 - [x] R154 Convert a non-inventory item into an inventory item
 - [ ] R155 Compact storage: pack company files to about 500 MB per 100,000 transactions On hold: needs Kabe's yes before starting (his 10-24 approved set did not include it).
+
+
+## Later
+
+- [ ] R171 measured parity with the anchor: replay real QuickBooks Desktop books (a shipped sample company, then Kabe's own file with his yes) into Bookflow and compare every standard report to the cent on both bases; each difference becomes a defect, a documented choice or a known limit (needs the QuickBooks Desktop SDK on Windows) Set aside (Kabe 2026-10-27): correctness is shown by Bookflow's own output being logically right (an invoice totals correctly, its payment pays it, the reports say so), not by comparing output with the desktop product. The checks that already do this (hand-worked figures, seeded ties) are the standard.
