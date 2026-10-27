@@ -784,9 +784,13 @@ For the builder, defaults standing unless review finds otherwise:
   newest boxed first. A numbered unit scanned moves exactly that unit. Weights: contents x item `unit_weight` plus
   tare, else the measured weight; the shipment total adds unboxed lines and counts units with no weight.
 - **Freight to bill** (`freight_amount`, and `freight_item` default `company_info.shipping_item_id`, an other-charge or service
-  item) is billed by the shipment's first invoice (`shipment invoice`, or `--invoice`) as one more line, billed from no
-  order line; `shipment_freight_billings` records it, live while that invoice line stands. Once billed it is fixed
-  (E_WORK_DEPENDENCY `freight_invoiced`); voiding the invoice frees it for the next one.
+  item) is billed by the first invoice that bills any of the shipment's units, whichever command makes it
+  (`shipment invoice`, `--invoice`, or `sales-order invoice` by default, `--shipments` or a selection of shipped
+  units), as one more line billed from no order line; `shipment_freight_billings` records it, live while that invoice
+  line stands. Once billed it is fixed (E_WORK_DEPENDENCY `freight_invoiced`); with every unit billed and no freight
+  billed, freight cannot be added either (`units_invoiced`) and the page no longer calls it to bill (`freight.to_bill`).
+  Voiding the invoice frees it for the next one. `shipment invoice` of a shipment with nothing left refuses
+  E_WORK_DEPENDENCY `nothing_to_invoice`, naming the invoice that billed it.
 - **`shipment post --invoice`** posts the shipment, then `shipment invoice` dated the ship date, in the one command
   transaction: a refused invoice takes the shipment back with it; a retry under the same idempotency key replays both,
   and the invoice's conversion key derives from the shipment, so it is never made twice. The browser's ship form offers
@@ -800,9 +804,16 @@ For the builder, defaults standing unless review finds otherwise:
   tracking and type, Print packing slip (`/shipments/<n>/packing-slip`, `?per_box=1`), Ship for a draft. The ship
   form gains Freight to bill, Create the invoice now and Make a draft to pack; the shipment page shows freight,
   boxes, Pack and Print packing slip. Refusals on the pack screen answer htmx with 200.
-- **Not in this increment:** pick-list suggestions do not yet subtract open drafts (posting re-checks, so nothing
-  ships twice); an order-made invoice issuing stock a draft holds is not refused (the draft's post then is);
-  `barcode lookup`'s fulfillment; the anchor's packing-slip template preference (R113).
+- **Drafts hold against every other path** (review fixes): pick-list suggestions subtract units live drafts hold
+  (the notes name the draft); `sales-order invoice` issuing stock for a line a draft holds and a `shipment update`
+  shipping more of it refuse E_WORK_DEPENDENCY `held_by_draft`, naming the draft and saying to post or cancel it
+  first, as picking guards its lists. A draft's memo becomes the shipment journal's memo. A Box on the pack screen
+  that is not a whole number is a validation refusal shown in place.
+- **Migration renumbered co0106** (on R112's co0105) when main took document delivery; `packing-v1` sits on
+  `delivery-v1`.
+- **Not in this increment:** `barcode lookup`'s fulfillment; the anchor's packing-slip template preference (R113);
+  the review's lows 5 (dry run of `--invoice` does not foresee a refused invoice; no invoice-now on the pack screen's
+  Ship) and 6 (`_freight_facts` compares an omitted item as the company default).
 
 ## Decided (2026-10-26)
 
