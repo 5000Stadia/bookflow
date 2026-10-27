@@ -2532,7 +2532,7 @@ _SHIPMENT_WRITE = {
     'E_VALUE_RANGE': 'a quantity outside storage bounds',
     'E_PERIOD_CLOSED': 'the ship date, or a cost correction or cost move it owes, on or before the closing date',
     'E_VERSION_CONFLICT': 'a stale expected_version',
-    'E_WORK_DEPENDENCY': 'a closed or voided order, or an invoice billing the shipment (below its quantity, or a void)',
+    'E_WORK_DEPENDENCY': 'a closed or voided order, an invoice billing the shipment (below its quantity, or a void), or a return giving back its units',
     'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
     'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
     'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
@@ -2540,6 +2540,24 @@ _SHIPMENT_WRITE = {
 MATRIX['shipment post'] = dict(_SHIPMENT_WRITE)
 MATRIX['shipment update'] = dict(_SHIPMENT_WRITE)
 MATRIX['shipment void'] = dict(_SHIPMENT_WRITE, E_REASON_REQUIRED='a void without --reason')
+# Shipment returns (R181 increment 2).
+_SHIPMENT_RETURN_WRITE = {
+    'E_VALIDATION': 'more than is out and not invoiced, a date before the ship date, a serial number the shipment did not take, nothing to return, units worth nothing',
+    'E_RECORD_NOT_FOUND': 'unknown shipment, return, line, item or bin',
+    'E_INACTIVE_REFERENCE': 'an inactive site or item',
+    'E_VALUE_RANGE': 'a quantity outside storage bounds',
+    'E_PERIOD_CLOSED': 'the return date, or a cost move it owes, on or before the closing date',
+    'E_VERSION_CONFLICT': 'a stale expected_version',
+    'E_WORK_DEPENDENCY': 'the reopened units shipped or billed since, or an order no longer carrying the cancellation',
+    'E_REASON_REQUIRED': 'a void without --reason',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+MATRIX['shipment return'] = dict(_SHIPMENT_RETURN_WRITE)
+MATRIX['shipment-return void'] = dict(_SHIPMENT_RETURN_WRITE)
+MATRIX['shipment-return show'] = {'E_RECORD_NOT_FOUND': 'unknown shipment return'}
+MATRIX['shipment-return query'] = {'E_RECORD_NOT_FOUND': 'unknown shipment or customer', 'E_VALIDATION': 'invalid input'}
 MATRIX['shipment show'] = {'E_RECORD_NOT_FOUND': 'unknown shipment'}
 MATRIX['shipment history'] = {'E_RECORD_NOT_FOUND': 'unknown shipment'}
 MATRIX['shipment query'] = {'E_RECORD_NOT_FOUND': 'unknown order or customer', 'E_VALIDATION': 'invalid input'}

@@ -54,6 +54,18 @@ def test_ship_part_of_an_order_and_bill_it_from_the_shipment_page(register_brows
     assert waiting == shipment['cost']['amount'] and shipment['cost']['minor_units'] > 0, waiting
     if width == 390:
         _fits(b)
+    # R181 increment 2: one of the three comes back before it is billed, through the page's Return form.
+    b.evaluate('''(() => { const f = document.querySelector('[data-shipment-return]');
+        f.querySelector('[name=quantity]').value = '1'; f.querySelector('[name=date]').value = %r;
+        f.querySelector('[name="ctx:reason"]').value = 'One came back';
+        f.querySelector('button[value=return]').click(); })()''' % DEMO_AS_OF)
+    b.wait_for('!!document.querySelector("[data-shipment-returned]") || !!document.querySelector("[role=alert]")', timeout=30)
+    assert b.evaluate('!!document.querySelector("[data-shipment-returned]")'), _text(b)[-1500:]
+    returns = run('shipment-return.query', {'shipment': '1001'})['rows']
+    assert [(r['status'], r['quantity']) for r in returns] == [('returned', '1')]
+    assert b.evaluate('!!document.querySelector("[data-shipment-returns]")')
+    if width == 390:
+        _fits(b)
     b.evaluate('''(() => { document.querySelector('[data-shipment-invoice] [name=date]').value = %r;
         document.querySelector('[data-shipment-invoice] [name="ctx:reason"]').value = 'Bill the three';
         document.querySelector('[data-shipment-invoice] button[value=invoice]').click(); })()''' % DEMO_AS_OF)
@@ -61,3 +73,5 @@ def test_ship_part_of_an_order_and_bill_it_from_the_shipment_page(register_brows
     assert b.evaluate('!!document.querySelector("[data-shipment-invoiced]")'), _text(b)[-1500:]
     assert b.evaluate('document.querySelector("[data-shipment-waiting]").innerText') == '0.00'
     assert run('report.shipped-not-invoiced', {'as_of': DEMO_AS_OF})['total']['minor_units'] == 0
+    assert [line['quantity'] for line in run('shipment.show', {'shipment': '1001'})['lines']] == ['3']
+    assert run('shipment.show', {'shipment': '1001'})['lines'][0]['invoiced'] == '2'

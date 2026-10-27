@@ -76,6 +76,56 @@ def _recognized(value, paid, total):
     return (abs(value) * paid // total) * (1 if value >= 0 else -1)
 
 
+def _shipped_cost(raw, as_of, headers, revisions, documents, profiles, sources, ar_fraction, emit):
+    """Cost of shipped goods billed later (R181), read as the billing invoice line's own cost of goods sold.
+
+    A stock-moving invoice's cost line is recognised as that invoice line is paid. An invoice billing a shipment
+    carries no cost line: its cost reaches cost of goods sold in ``shipment_cost`` entries the derived balance posts.
+    So the cost each shipment line has recognised by the cutoff is split across the live invoice lines billing it
+    (endpoint shares by quantity, in billing order) and deferred by each one's paid fraction, exactly as that invoice
+    line's own cost would be. The deferral is attributed to the invoice line (its item and receivable).
+    """
+    from bookflow.core.exact import endpoint_share
+    recognised = defaultdict(int)
+    template = {}
+    for row in _rows(raw, """SELECT r.shipment_line_identity, r.amount_minor_units, r.transaction_id, r.effective_date,
+            l.cogs_account_id FROM shipment_recognitions r
+            JOIN shipment_lines l ON l.line_identity = r.shipment_line_identity AND l.id = (
+                SELECT x.id FROM shipment_lines x WHERE x.line_identity = r.shipment_line_identity LIMIT 1)
+            WHERE r.effective_date <= ? ORDER BY r.effective_date, r.rowid""".replace('?', repr(as_of))):
+        recognised[row['shipment_line_identity']] += row['amount_minor_units']
+        found = [r for r in sources if r['transaction_id'] == row['transaction_id']
+                 and r['account_id'] == row['cogs_account_id']]
+        if found:
+            template[row['shipment_line_identity']] = found[0]
+    if not recognised:
+        return
+    billings = defaultdict(list)
+    by_line = {(d['revision_id'], d['line_id']): d for d in documents.values()}
+    for row in _rows(raw, """SELECT b.shipment_line_identity, b.quantity_microunits, b.transaction_id, b.line_id
+            FROM shipment_billings b JOIN transactions t ON t.id = b.transaction_id
+            WHERE t.status = 'posted' ORDER BY b.rowid"""):
+        revision_id = headers[row['transaction_id']]['current_revision_id']
+        if revisions[revision_id]['date'] > as_of:
+            continue
+        line = by_line.get((revision_id, row['line_id']))
+        if line is not None:
+            billings[row['shipment_line_identity']].append((row['quantity_microunits'], line, revision_id))
+    for identity, cost in recognised.items():
+        parts = billings.get(identity)
+        if not cost or not parts or identity not in template:
+            continue
+        whole, low = sum(quantity for quantity, _, _ in parts), 0
+        for quantity, line, revision_id in parts:
+            share = endpoint_share(cost, whole, low, low + quantity)
+            low += quantity
+            profile = profiles.get(revision_id)
+            if not share or profile is None:
+                continue
+            paid, total = ar_fraction(line, profile[0])
+            emit(template[identity], _recognized(share, paid, total) - share, profile[1], line['id'])
+
+
 def cutoff_adjustments(db, as_of: str) -> tuple[Adjustment, ...]:
     """Balanced cash-basis deferrals at ISO date ``as_of``.
 
@@ -308,6 +358,8 @@ def cutoff_adjustments(db, as_of: str) -> tuple[Adjustment, ...]:
             accumulated_cost[owner['id']] += cost
             recognized = _recognized(accumulated_cost[owner['id']], paid, total) - _recognized(previous, paid, total)
             emit(row, recognized - cost, profile[1], owner['document_line_id'])
+
+    _shipped_cost(raw, as_of, headers, revisions, documents, profiles, sources, ar_fraction, emit)
 
     for source_id, amount in amounts.items():
         if not amount or source_id in movement_sources:

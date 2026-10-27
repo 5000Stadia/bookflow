@@ -290,7 +290,9 @@ AGENT_SETUP_COMMANDS = frozenset(('setup',))
 # R183 setup-trial fixes: owner-link (local bootstrap), agent run (standalone), reconcile discard.
 SETUP_TRIAL_COMMANDS = frozenset(('owner-link', 'agent run', 'reconcile discard'))
 SHIPMENT_COMMANDS = frozenset(('shipment post', 'shipment update', 'shipment void', 'shipment show', 'shipment query',
-    'shipment history', 'shipment invoice', 'report shipped-not-invoiced'))
+    'shipment history', 'shipment invoice', 'report shipped-not-invoiced',
+    # R181 increment 2: a return of one (retried), read back through show and query, and voided.
+    'shipment return', 'shipment-return show', 'shipment-return query', 'shipment-return void'))
 
 LANDED_COST_COMMANDS = frozenset(('landed-cost setup', 'landed-cost charges', 'landed-cost post', 'landed-cost void',
     'landed-cost show', 'landed-cost query'))

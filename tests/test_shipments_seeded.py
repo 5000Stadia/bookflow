@@ -71,10 +71,17 @@ def _derived_balance_holds(path):
             "JOIN transaction_revisions r ON r.id = t.current_revision_id WHERE t.status = 'posted' AND EXISTS ("
             "SELECT 1 FROM document_lines d WHERE d.revision_id = r.id AND d.line_id = b.line_id)")]
         recognised = [dict(row) for row in conn.execute('SELECT * FROM shipment_recognitions')]
+        returned = [dict(row) for row in conn.execute(
+            "SELECT l.*, h.return_date FROM shipment_return_lines l JOIN shipment_returns h ON h.id = l.return_id "
+            "WHERE (SELECT status FROM shipment_return_revisions r WHERE r.return_id = h.id "
+            "ORDER BY revision_number DESC LIMIT 1) = 'returned'")]
+        back_movements = [dict(row) for row in conn.execute('SELECT * FROM shipment_return_lines')]
         postings = [dict(row) for row in conn.execute(
             'SELECT b.effective_date, l.debit_minor_units - l.credit_minor_units AS amount FROM posting_lines l '
             'JOIN posting_batches b ON b.id = l.batch_id WHERE l.account_id = ?', (account,))]
     owner = {line['movement_id']: line['line_identity'] for line in lines if line['movement_id']}
+    # A shipment return's receipt posts against Shipped Not Invoiced too: the line's cost there is net of it.
+    owner.update({row['movement_id']: row['shipment_line_identity'] for row in back_movements})
     quantity = {}
     for line in lines:
         rev = current[line['shipment_id']]
@@ -90,8 +97,9 @@ def _derived_balance_holds(path):
                 or owner.get(m['corrects_movement_id']) == identity))
             billed = sum(b['quantity_microunits'] for b in billings
                          if b['shipment_line_identity'] == identity and b['date'] <= date)
-            whole = quantity.get(identity, 0)
-            target = endpoint_share(cost, whole, 0, min(billed, whole)) if whole else 0
+            whole = quantity.get(identity, 0) - sum(r['quantity_microunits'] for r in returned
+                                                    if r['shipment_line_identity'] == identity and r['return_date'] <= date)
+            target = endpoint_share(cost, whole, 0, min(billed, whole)) if whole > 0 and quantity.get(identity) else 0
             posted = sum(r['amount_minor_units'] for r in recognised
                          if r['shipment_line_identity'] == identity and r['effective_date'] <= date)
             assert posted == target, (date, identity, posted, target)
@@ -107,7 +115,7 @@ def _waiting_shipments(run):
 def _scenario(shop, seed):
     books, run = shop['books'], shop['run']
     rnd = random.Random(seed)
-    receipts, invoices, orders, charges, counts = [], [], [], [], []
+    receipts, invoices, orders, charges, counts, credits = [], [], [], [], [], []
     last_switch, method = None, 'average'
     done, refused = {}, {}
     before_close = _closed_counts(books)
@@ -115,7 +123,10 @@ def _scenario(shop, seed):
     ops = ['buy', 'buy', 'sell', 'return', 'order', 'order_free', 'ship', 'ship', 'ship_lines', 'ship_lines', 'ship_short',
            'invoice_shipment', 'invoice_shipment', 'invoice_shipment', 'invoice_order', 'void_invoice', 'void_invoice',
            'void_shipment', 'update_shipment', 'update_shipment', 'late_buy', 'late_buy', 'freight', 'allocate',
-           'allocate', 'count', 'switch', 'void_receipt']
+           'allocate', 'count', 'switch', 'void_receipt',
+           # Increment 2: returns of unbilled units, credit memos for billed ones, every correction row, voids.
+           'ship_return', 'ship_return', 'ship_return_all', 'void_ship_return', 'credit_shipped', 'credit_shipped',
+           'void_credit', 'text_shipment', 'move_shipment']
     for quantity in ('4', '7'):
         orders.append(run('sales-order create', dict(customer=shop['acme'], date=DATES[0], lines=[
             dict(item=shop['widget'], quantity=quantity, unit_price='30.00'),
@@ -188,6 +199,55 @@ def _scenario(shop, seed):
                                                 date=date, lines=[dict(order_line=line['order_line_id'],
                                                                        quantity=str(rnd.randint(1, 3)))]),
                         reason='Corrected')
+            elif op in ('ship_return', 'ship_return_all'):
+                waiting = _waiting_shipments(run)
+                if not waiting:
+                    continue
+                shipment = run('shipment show', dict(shipment=rnd.choice(waiting)))
+                body = dict(shipment=shipment['number'], date=max(date, shipment['date']), reopen=rnd.random() < .7)
+                if op == 'ship_return':
+                    line = rnd.choice(shipment['lines'])
+                    out = int(float(line['not_invoiced']))
+                    if out <= 0:
+                        continue
+                    body['lines'] = [dict(shipment_line=str(line['position']), quantity=str(rnd.randint(1, out)))]
+                run('shipment return', body, reason='Came back unbilled')
+            elif op == 'void_ship_return':
+                rows = run('shipment-return query', dict(status='returned'))['rows']
+                if not rows:
+                    continue
+                run('shipment-return void', dict(shipment_return=rnd.choice(rows)['number']), reason='Did not come back')
+            elif op == 'credit_shipped':
+                billed = [row for row in run('shipment query', dict(status='shipped'))['rows']]
+                shown = [run('shipment show', dict(shipment=row['number'])) for row in billed]
+                billed_invoices = [bill for item in shown for bill in item['invoices']]
+                if not billed_invoices:
+                    continue
+                bill = rnd.choice(billed_invoices)
+                invoice = run('invoice show', dict(invoice=bill['invoice_id']))
+                line = next((l for l in invoice['revision']['lines'] if l['line_id']), None)
+                if line is None:
+                    continue
+                credits.append(run('credit-memo post', dict(customer=shop['acme'], date=max(date, invoice['revision']['date']),
+                    lines=[dict(quantity='1', source_invoice=invoice['id'], source_line=line['line_id'])]),
+                    reason='Billed unit came back')['id'])
+            elif op == 'void_credit' and credits:
+                credit_id = credits.pop(rnd.randrange(len(credits)))
+                credit = run('credit-memo show', dict(credit_memo=credit_id))
+                run('credit-memo void', dict(credit_memo=credit_id, expected_version=credit['version']), reason='Void')
+            elif op in ('text_shipment', 'move_shipment'):
+                rows = run('shipment query', dict(status='shipped'))['rows']
+                if not rows:
+                    continue
+                shipment = run('shipment show', dict(shipment=rnd.choice(rows)['number']))
+                body = dict(shipment=shipment['number'], expected_version=shipment['version'])
+                if op == 'text_shipment':
+                    body.update(carrier=rnd.choice(['UPS', 'FedEx']), tracking_numbers=[f'1Z{step}'])
+                else:
+                    line = rnd.choice(shipment['lines'])
+                    body.update(lines=[dict(order_line=line['order_line_id'], quantity=line['quantity'])],
+                                date=rnd.choice(DATES))
+                run('shipment update', body, reason='Corrected')
             elif op == 'freight':
                 charges.append(run('bill post', dict(vendor=books['vendor'], date=date, expenses=[dict(
                     account=shop['clearing'], amount=rnd.choice(['10.00', '33.33']))]), reason='Freight')['id'])
@@ -316,7 +376,17 @@ def test_the_invoice_later_equals_the_invoice_at_once(tmp_path, monkeypatch, see
             ('allocate', rnd.choice([d for d in days if ship_day <= d <= bill_day])),
             ('count', rnd.choice([d for d in outside if d > bill_day]), rnd.randint(0, 6)),
             ('sell', rnd.choice([d for d in outside if d > bill_day]), 1)]))
+    returned = rnd.random() < .5
+    if returned:
+        # Increment 2: some shipped units come back before the bill on a shipment return. The twin that never ships
+        # bills them all at B and takes them back on a credit memo dated B: a return is worth its endpoint share of
+        # the issue it names in both, so profit and loss is the same to the cent (billing only the rest would cost a
+        # fresh issue of fewer units, which rounds differently).
+        plan.append(('return', rnd.choice([d for d in days if ship_day <= d <= bill_day])))
     plan.append(('bill', bill_day))
+    if not returned and rnd.random() < .5:
+        # A billed unit comes back on a credit memo naming the invoice line, in both twins.
+        plan.append(('credit', rnd.choice([d for d in days if d >= bill_day])))
     for _ in range(rnd.randint(0, 3)):
         plan.append(rnd.choice([('buy', rnd.choice([d for d in outside if d < ship_day]), 2, '8.00'),
                                 ('sell', rnd.choice([d for d in outside if d > bill_day]), 1),
@@ -365,14 +435,33 @@ def test_the_invoice_later_equals_the_invoice_at_once(tmp_path, monkeypatch, see
                 elif op == 'ship' and twin is late:
                     mine['shipment'] = run('shipment post', dict(sales_order=mine['order']['number'], date=step[1],
                         lines=[dict(item='Widget', quantity=str(mine['quantity']))]), reason='Shipped')['number']
+                elif op == 'return':
+                    back = min(mine['quantity'] - 1, 1 + seed % 2)
+                    if back <= 0:
+                        continue
+                    mine['returned'] = back
+                    if twin is late:
+                        run('shipment return', dict(shipment=mine['shipment'], date=step[1], reopen=False, lines=[dict(
+                            shipment_line='1', quantity=str(back))]), reason='Came back')
+                elif op == 'credit':
+                    invoice = mine['invoice']
+                    run('credit-memo post', dict(customer=twin['customer'], date=step[1], lines=[dict(
+                        quantity='1', source_invoice=invoice['id'],
+                        source_line=invoice['revision']['lines'][0]['line_id'])]), reason='One came back')
                 elif op == 'bill':
                     if twin is late:
-                        run('shipment invoice', dict(shipment=mine['shipment'], date=step[1]), reason='Billed later')
+                        mine['invoice'] = run('shipment invoice', dict(shipment=mine['shipment'], date=step[1]),
+                                              reason='Billed later')
                     else:
                         order = run('sales-order show', dict(sales_order=mine['order']['number']))
-                        run('sales-order invoice', dict(sales_order=order['number'], expected_version=order['version'],
-                                                        conversion_key='at-once', date=step[1], all_open=True),
-                            reason='Shipped and billed')
+                        mine['invoice'] = run('sales-order invoice', dict(
+                            sales_order=order['number'], expected_version=order['version'], conversion_key='at-once',
+                            date=step[1], all_open=True), reason='Shipped and billed')
+                        if mine.get('returned'):
+                            invoice = mine['invoice']
+                            run('credit-memo post', dict(customer=twin['customer'], date=step[1], lines=[dict(
+                                quantity=str(mine['returned']), source_invoice=invoice['id'],
+                                source_line=invoice['revision']['lines'][0]['line_id'])]), reason='Came back')
             except BookflowError as error:
                 assert error.code not in NEVER, (seed, step, error)
                 raise AssertionError(f'{twin["name"]} refused {step}: {error.code} {error.message}') from None

@@ -254,6 +254,7 @@ class CompanyUpdateInput(BaseModel):
     overdue_notice_frequency: Literal["weekly", "monthly"] | None = Field(None, description="Overdue notices: generate them once a month (the first scheduler run of each month) or once a week (from each Monday).")
     overdue_notice_minimum: str | None = Field(None, description="Overdue notices: the least overdue balance that earns a notice, in the home currency (e.g. 25.00); null for any amount.")
     overdue_notice_template: Literal["statement", "letter"] | None = Field(None, description="Overdue notices: what each notice is, the customer statement or a short collection letter listing the overdue invoices.")
+    invoice_when_shipping: Literal["ask", "always", "never"] | None = Field(None, description="Shipments: after a shipment posts, ask (the default) whether to invoice it now, always offer to, or never; it drives the browser's prompt and the agent's next-command hint. `shipment post` itself does only what it is told.")
 
     @field_validator("legal_name", "tax_id", "industry", "contact_name", "phone", "fax", "email", "website", "timezone", "closing_date", "free_on_board", "finance_charge_annual_rate", "finance_charge_minimum", "finance_charge_account_id", "overdue_notice_minimum", mode="before")
     @classmethod
@@ -273,7 +274,7 @@ NOT_NULLABLE = {
     "sales_tax_enabled", "sales_tax_liability_basis", "sales_tax_remittance_frequency",
     "order_printable_checks", "attachment_max_bytes", "negative_number_style",
     "finance_charge_grace_days", "finance_charge_on_overdue_charges", "finance_charge_from", "finance_charge_mark_to_print",
-    "overdue_notice_frequency", "overdue_notice_template",
+    "overdue_notice_frequency", "overdue_notice_template", "invoice_when_shipping",
 }
 
 

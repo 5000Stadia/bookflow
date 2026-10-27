@@ -213,9 +213,32 @@ def billed_line_ids(s, transaction_id):
     return out
 
 
+def live_returns(s, identities=None):
+    """Lines of shipment returns not voided (R181 increment 2), oldest first: identity, date, quantity, movement."""
+    if not has_shipments(s):
+        return []
+    params = {}
+    where = ["cur.status = 'returned'"]
+    if identities is not None:
+        where.append(f"l.shipment_line_identity IN ({_marks('id', list(identities), params)})")
+    return _rows(s, f"""
+        SELECT l.*, h.return_date, h.number, h.reopen, h.shipment_id, h.transaction_id
+        FROM shipment_return_lines l JOIN shipment_returns h ON h.id = l.return_id
+        JOIN shipment_return_revisions cur ON cur.return_id = h.id AND cur.revision_number = (
+            SELECT max(x.revision_number) FROM shipment_return_revisions x WHERE x.return_id = h.id)
+        WHERE {' AND '.join(where)} ORDER BY h.return_date, h.number, l.position""", params)
+
+
+def returned_by_identity(s, identities=None):
+    out = {}
+    for row in live_returns(s, identities):
+        out[row['shipment_line_identity']] = out.get(row['shipment_line_identity'], 0) + int(row['quantity_microunits'])
+    return out
+
+
 @dataclass
 class Part:
-    """Shipped units of one shipment line still waiting for an invoice."""
+    """Shipped units of one shipment line, what invoices billed and what came back on shipment returns."""
     shipment_id: str
     number: str
     ship_date: str
@@ -223,10 +246,16 @@ class Part:
     item_id: str
     shipped: int
     billed: int
+    returned: int = 0
+
+    @property
+    def out(self):
+        """Shipped and not brought back on a shipment return."""
+        return self.shipped - self.returned
 
     @property
     def waiting(self):
-        return self.shipped - self.billed
+        return self.shipped - self.billed - self.returned
 
 
 def waiting_parts(s, roots=None, *, order_ids=None, exclude_shipment=None):
@@ -235,13 +264,16 @@ def waiting_parts(s, roots=None, *, order_ids=None, exclude_shipment=None):
     if not lines:
         return {}
     billed = {}
-    for row in live_billings(s, [line['line_identity'] for line in lines]):
+    identities = [line['line_identity'] for line in lines]
+    for row in live_billings(s, identities):
         billed[row['shipment_line_identity']] = billed.get(row['shipment_line_identity'], 0) + int(row['quantity_microunits'])
+    returned = returned_by_identity(s, identities)
     out = {}
     for line in lines:
         out.setdefault((line['root_document_id'], line['root_line_id']), []).append(Part(
             line['shipment_id'], line['number'], line['ship_date'], line['line_identity'], line['item_id'],
-            int(line['quantity_microunits']), billed.get(line['line_identity'], 0)))
+            int(line['quantity_microunits']), billed.get(line['line_identity'], 0),
+            returned.get(line['line_identity'], 0)))
     return out
 
 
@@ -251,10 +283,10 @@ def waiting_base_by_root(s, roots=None):
 
 
 def order_line_figures(s, roots):
-    """``{root: (shipped, waiting)}`` in base microunits, for an order's figures."""
+    """``{root: (shipped, waiting)}`` in base microunits, for an order's figures; shipped is net of shipment returns."""
     out = {}
     for root, parts in waiting_parts(s, roots).items():
-        out[root] = (sum(p.shipped for p in parts), sum(p.waiting for p in parts))
+        out[root] = (sum(p.out for p in parts), sum(p.waiting for p in parts))
     return out
 
 
@@ -267,8 +299,13 @@ def _families(s, identities):
     if not identities:
         return {}
     params = {}
-    owners = _rows(s, f"SELECT line_identity, movement_id FROM shipment_lines WHERE movement_id IS NOT NULL "
-                      f"AND line_identity IN ({_marks('id', identities, params)})", params)
+    marks = _marks('id', identities, params)
+    owners = _rows(s, f"SELECT line_identity, movement_id, 0 AS back FROM shipment_lines WHERE movement_id IS NOT NULL "
+                      f"AND line_identity IN ({marks}) UNION SELECT shipment_line_identity, movement_id, 1 "
+                      f"FROM shipment_return_lines WHERE shipment_line_identity IN ({marks})", params)
+    back = {row['movement_id'] for row in owners if row['back']}
+    # A shipment line's issue and every shipment return giving part of it back: all post against Shipped Not
+    # Invoiced, so the line's cost there is net of what its returns took back (design §3).
     owner = {row['movement_id']: row['line_identity'] for row in owners}
     if not owner:
         return {}
@@ -280,6 +317,7 @@ def _families(s, identities):
     out = {}
     for row in rows:
         key = owner.get(row['id']) or owner.get(row['reverses_movement_id']) or owner.get(row['corrects_movement_id'])
+        row['back'] = bool({row['id'], row['reverses_movement_id'], row['corrects_movement_id']} & back)
         out.setdefault(key, []).append(row)
     return out
 
@@ -316,23 +354,31 @@ class LineBalance:
     identity: str
     quantity: int
     row: dict
-    cost: list = field(default_factory=list)          # (date, Shipped Not Invoiced amount)
+    cost: list = field(default_factory=list)          # (date, Shipped Not Invoiced amount), returns netted
     billed: list = field(default_factory=list)        # (date, quantity)
     posted: list = field(default_factory=list)        # (date, amount moved to cost of goods sold)
+    returned: list = field(default_factory=list)      # (date, quantity) brought back on shipment returns
+    issued: list = field(default_factory=list)        # (date, amount) of the issue alone, before returns
 
     def at(self, events, date):
         return sum(amount for when, amount in events if when <= date)
 
+    def out(self, date):
+        """Shipped and still out on ``date``: the quantity less what shipment returns dated by then took back."""
+        return self.quantity - self.at(self.returned, date)
+
     def recognised(self, date):
-        """What cost of goods sold should hold for this line on ``date``."""
-        if self.quantity <= 0:
+        """What cost of goods sold should hold for this line on ``date``: the endpoint share of its net cost for
+        the quantity billed, over the quantity still out (design §3)."""
+        out = self.out(date)
+        if self.quantity <= 0 or out <= 0:
             return 0
-        billed = min(self.at(self.billed, date), self.quantity)
-        return endpoint_share(self.at(self.cost, date), self.quantity, 0, max(billed, 0))
+        billed = min(self.at(self.billed, date), out)
+        return endpoint_share(self.at(self.cost, date), out, 0, max(billed, 0))
 
     def owed(self):
         """``[(date, amount)]`` still to post so the posted recognitions equal the derived balance on every date."""
-        dates = sorted({when for when, _ in self.cost + self.billed + self.posted})
+        dates = sorted({when for when, _ in self.cost + self.billed + self.posted + self.returned})
         out, planned = [], 0
         for date in dates:
             delta = self.recognised(date) - (self.at(self.posted, date) + planned)
@@ -360,10 +406,15 @@ def balances(s, identities):
         balance = LineBalance(identity, quantity, row, posted=posted.get(identity, []))
         balance.cost = [(m['effective_date'], -int(m['value_minor_units'])) for m in families.get(identity, ())
                         if int(m['value_minor_units'])]
+        balance.issued = [(m['effective_date'], -int(m['value_minor_units'])) for m in families.get(identity, ())
+                          if int(m['value_minor_units']) and not m['back']]
         out[identity] = balance
     for row in live_billings(s, identities):
         if row['shipment_line_identity'] in out:
             out[row['shipment_line_identity']].billed.append((row['invoice_date'], int(row['quantity_microunits'])))
+    for row in live_returns(s, identities):
+        if row['shipment_line_identity'] in out:
+            out[row['shipment_line_identity']].returned.append((row['return_date'], int(row['quantity_microunits'])))
     return out
 
 
@@ -406,7 +457,12 @@ def _affected(s, mark):
             WHERE m.transaction_id IN ({marks})
         UNION SELECT l.line_identity FROM shipment_lines l JOIN inventory_movements m ON m.reverses_movement_id = l.movement_id
             WHERE m.transaction_id IN ({marks})
-        UNION SELECT shipment_line_identity FROM shipment_billings WHERE transaction_id IN ({marks})"""), params)}
+        UNION SELECT shipment_line_identity FROM shipment_billings WHERE transaction_id IN ({marks})
+        UNION SELECT l.shipment_line_identity FROM shipment_return_lines l JOIN shipment_returns h ON h.id = l.return_id
+            WHERE h.transaction_id IN ({marks})
+        UNION SELECT l.shipment_line_identity FROM shipment_return_lines l JOIN inventory_movements m
+            ON m.corrects_movement_id = l.movement_id OR m.reverses_movement_id = l.movement_id
+            WHERE m.transaction_id IN ({marks})"""), params)}
     return sorted(identities)
 
 
@@ -775,6 +831,41 @@ def _guard_billed(s, current, prior_lines, shipment=None, date=None):
                                     'that. Correct the invoice first.'))
 
 
+def standing_returns(s, movement_ids):
+    """``[(kind, number)]`` of every return not voided that gives back units of these issues: shipment returns and
+    credit memos returning invoiced units (R181 increment 2)."""
+    movement_ids = [m for m in movement_ids if m]
+    if not movement_ids:
+        return []
+    params = {}
+    marks = _marks('mv', movement_ids, params)
+    rows = _rows(s, f"""SELECT m.id, m.transaction_id, t.number AS tx_number, t.type, h.number AS return_number
+        FROM inventory_movements m JOIN transactions t ON t.id = m.transaction_id
+        LEFT JOIN shipment_returns h ON h.transaction_id = m.transaction_id
+        WHERE m.kind = 'receipt' AND m.returns_movement_id IN ({marks})
+          AND NOT EXISTS (SELECT 1 FROM inventory_movements r WHERE r.reverses_movement_id = m.id)""", params)
+    return sorted({('shipment return', row['return_number']) if row['return_number'] else
+                   (row['type'].replace('_', ' '), row['tx_number'] or row['transaction_id']) for row in rows})
+
+
+def _guard_returns(s, prior_lines, *, void):
+    """A shipment whose units came back, on a shipment return or a credit memo, keeps its stock as shipped: the
+    return names its issue. Void (or correct) the return first; to take units off it, record a return."""
+    found = standing_returns(s, [row.get('movement_id') for row in prior_lines])
+    if not found:
+        return
+    names = ', '.join(f'{kind} {number}' for kind, number in found)
+    first = found[0]
+    remedy = (f'void the return first (`shipment-return void {first[1]}`)' if first[0] == 'shipment return'
+              else f'void or correct {first[0]} {first[1]} first')
+    raise BookflowError('E_WORK_DEPENDENCY', message=(
+        f'Units of this shipment came back on {names}; {"voiding" if void else "restating the stock of"} the '
+        f'shipment would leave that return naming stock that never left. {remedy[0].upper() + remedy[1:]}.'
+        + ('' if void else ' To take units off the shipment, record a return (`shipment return`) instead.')),
+        details=dict(problem='a return gives back units of this shipment', returns=[f'{k} {n}' for k, n in found],
+                     reason='shipment_returned'))
+
+
 def _line_rows(s, shipment, revision_id, shipment_id, provenance):
     rows = []
     by_key = {m.key: m.values['id'] for m in shipment.change.movements if m.key is not None}
@@ -824,6 +915,10 @@ def _run(s, ctx, inp, operation, *, persist):
         rev = work.revision(s, header)
         date = getattr(inp, 'date', None) or current_rev['ship_date']
         current = dict(current, **{k: current_rev[k] for k in ('site_id', 'ship_date')})
+    if operation == 'update' and _text_only(inp, current):
+        return _restate_text(s, ctx, inp, current, prior_lines, header, rev, persist=persist)
+    if operation != 'post':
+        _guard_returns(s, prior_lines, void=operation == 'void')
     if operation == 'void':
         if not ctx.reason or not ctx.reason.strip():
             raise BookflowError('E_REASON_REQUIRED')
@@ -930,6 +1025,50 @@ def _run(s, ctx, inp, operation, *, persist):
         f'{operation} shipment {number}'
 
 
+def _text_only(inp, current):
+    """An update restating only packing and carrier facts: ship method, carrier, tracking numbers, memo."""
+    rev = current['revision']
+    return (inp.lines is None and (inp.date is None or inp.date == rev['ship_date'])
+            and (inp.count_position is None or inp.count_position == rev['count_position']))
+
+
+def _restate_text(s, ctx, inp, current, prior_lines, header, rev, *, persist):
+    """The correction table's first row: a new revision, nothing reposts (design §6). The lines are carried across
+    unchanged, each still standing behind the issue it posted."""
+    current_rev = current['revision']
+    facts = dict(
+        ship_method_id=(_ship_method(s, inp.ship_method, rev) if inp.ship_method is not None
+                        else current_rev['ship_method_id']),
+        carrier=inp.carrier if inp.carrier is not None else current_rev['carrier'],
+        tracking_numbers=json.dumps(list(inp.tracking_numbers) if inp.tracking_numbers is not None
+                                    else json.loads(current_rev['tracking_numbers'])),
+        memo=inp.memo if inp.memo is not None else current_rev['memo'])
+    if not persist:
+        shown = show_output(s, current['id'])
+        return shown.model_copy(update=dict(status='will_ship', ship_method_id=facts['ship_method_id'],
+                                            carrier=facts['carrier'], memo=facts['memo'],
+                                            tracking_numbers=json.loads(facts['tracking_numbers']))), [], 'preview'
+    at = clock.now_iso()
+    event = new_id()
+    provenance = dict(created_at=at, created_by=s.actor.id, created_via=ctx.interface.value, audit_event_id=event)
+    revision_row = dict(id=new_id(), shipment_id=current['id'], revision_number=current_rev['revision_number'] + 1,
+                        status=current_rev['status'], ship_date=current_rev['ship_date'],
+                        count_position=current_rev['count_position'], site_id=current_rev['site_id'],
+                        ship_to=current_rev['ship_to'], reason=(ctx.reason or '').strip() or None, **facts, **provenance)
+    line_rows = [dict(row, id=new_id(), revision_id=revision_row['id'], **provenance) for row in prior_lines]
+    touched = [Touched('shipment_revision', revision_row['id'], 'create', None, 1, dict(revision_row), None,
+                       db='company')]
+    touched += [Touched('shipment_line', row['id'], 'create', None, 1, dict(row), None, db='company')
+                for row in line_rows]
+    summary = f'update shipment {current["number"]}'
+    audit.write_event_to(s.company, ctx, 'shipment update', summary, touched, actor_id=s.actor.id,
+                         actor_kind=s.actor.kind, directive_code=getattr(s, 'directive_code', None), event_id=event)
+    s.company.conn.execute(c.shipment_revisions.insert().values(**revision_row))
+    if line_rows:
+        s.company.conn.execute(c.shipment_lines.insert(), line_rows)
+    return show_output(s, current['id']), touched, summary
+
+
 # ---------------------------------------------------------------- output
 
 
@@ -984,6 +1123,7 @@ def show_output(s, shipment_id, warnings=()):
     identities = [row['line_identity'] for row in rows]
     found = balances(s, identities)
     billed = _billed_by_identity(s, identities)
+    returned = returned_by_identity(s, identities)
     from bookflow.company import bins, serial_lots
     names = dict(s.company.conn.execute(sa.select(c.items.c.id, c.items.c.full_name).where(
         c.items.c.id.in_([row['item_id'] for row in rows] or ['']))).all())
@@ -996,10 +1136,11 @@ def show_output(s, shipment_id, warnings=()):
         order_lines[line['line_id']] = line
     for row in rows:
         balance = found.get(row['line_identity'])
-        cost = balance.at(balance.cost, '9999-12-31') if balance else 0
+        cost = balance.at(balance.issued, '9999-12-31') if balance else 0
         waiting = balance.waiting('9999-12-31') if balance else 0
         quantity = int(row['quantity_microunits']) if rev['status'] == 'shipped' else 0
         billed_quantity = sum(int(r['quantity_microunits']) for r in billed.get(row['line_identity'], ()))
+        back = returned.get(row['line_identity'], 0) if rev['status'] == 'shipped' else 0
         total += cost
         waiting_total += waiting
         place = placements.place_of_movement(s, row['movement_id']) if row['movement_id'] else None
@@ -1010,8 +1151,8 @@ def show_output(s, shipment_id, warnings=()):
             item_id=row['item_id'], item_name=names.get(row['item_id'], row['item_id']), quantity=_plain(quantity),
             bin=bin_name, lot=number.lot if number else None,
             serial_numbers=list(number.serial_numbers) if number and number.serial_numbers else None,
-            cost=_money(cost, currency), invoiced=_plain(billed_quantity),
-            not_invoiced=_plain(max(quantity - billed_quantity, 0)), waiting=_money(waiting, currency)))
+            cost=_money(cost, currency), invoiced=_plain(billed_quantity), returned=_plain(back),
+            not_invoiced=_plain(max(quantity - billed_quantity - back, 0)), waiting=_money(waiting, currency)))
         for r in billed.get(row['line_identity'], ()):
             invoices.append(ShipmentBillingOutput(invoice_id=r['transaction_id'], invoice_number=r['invoice_number'],
                                                   date=r['invoice_date'], quantity=_plain(r['quantity_microunits']),
@@ -1025,8 +1166,18 @@ def show_output(s, shipment_id, warnings=()):
     customer = s.company.conn.execute(sa.select(c.customers.c.full_name).where(
         c.customers.c.id == header['customer_id'])).scalar_one_or_none()
     next_commands = []
-    if rev['status'] == 'shipped' and any(Fraction(line.not_invoiced) > 0 for line in lines):
+    preference = s.company.conn.execute(sa.select(c.company_info.c.invoice_when_shipping)).scalar()
+    if rev['status'] == 'shipped' and preference != 'never' and any(Fraction(line.not_invoiced) > 0 for line in lines):
         next_commands.append(f'bookflow shipment invoice {header["number"]} --json')
+    from bookflow.company.shipment_models import ShipmentReturnRef
+    returns = [ShipmentReturnRef(return_id=row['id'], number=row['number'], date=row['return_date'],
+                                 status=row['status'], reopen=bool(row['reopen']), quantity=_plain(row['quantity']))
+               for row in _rows(s, """SELECT h.id, h.number, h.return_date, h.reopen, cur.status,
+                       (SELECT sum(l.quantity_microunits) FROM shipment_return_lines l WHERE l.return_id = h.id) AS quantity
+                   FROM shipment_returns h JOIN shipment_return_revisions cur ON cur.return_id = h.id
+                   AND cur.revision_number = (SELECT max(x.revision_number) FROM shipment_return_revisions x
+                                              WHERE x.return_id = h.id)
+                   WHERE h.shipment_id = :id ORDER BY h.return_date, h.number""", {'id': header['id']})]
     return ShipmentOutput(
         id=header['id'], number=header['number'], version=rev['revision_number'], status=rev['status'],
         sales_order_id=order['id'], sales_order_number=order['number'], customer_id=header['customer_id'],
@@ -1034,7 +1185,8 @@ def show_output(s, shipment_id, warnings=()):
         site_name=placements.site_names(s).get(rev['site_id']), ship_method_id=rev['ship_method_id'],
         carrier=rev['carrier'], tracking_numbers=json.loads(rev['tracking_numbers']), memo=rev['memo'],
         transaction_id=header['transaction_id'], lines=lines, cost=_money(total, currency),
-        shipped_not_invoiced=_money(waiting_total, currency), invoices=invoices, order_to_ship=after, history=history,
+        shipped_not_invoiced=_money(waiting_total, currency), invoices=invoices, returns=returns, order_to_ship=after,
+        history=history,
         warnings=list(dict.fromkeys(warnings)), next_commands=next_commands)
 
 
@@ -1087,10 +1239,10 @@ def query(s, inp):
         lines = _revision_lines(s, row['revision_id'])
         identities = [line['line_identity'] for line in lines]
         state = balances(s, identities)
-        cost = sum(b.at(b.cost, '9999-12-31') for b in state.values())
+        cost = sum(b.at(b.issued, '9999-12-31') for b in state.values())
         waiting = sum(b.waiting('9999-12-31') for b in state.values())
         if inp.not_invoiced and not (row['status'] == 'shipped' and any(
-                b.quantity > min(b.at(b.billed, '9999-12-31'), b.quantity) for b in state.values())):
+                b.out('9999-12-31') > min(b.at(b.billed, '9999-12-31'), b.out('9999-12-31')) for b in state.values())):
             continue
         rows.append(ShipmentListRow(
             id=row['id'], number=row['number'], version=row['revision_number'], status=row['status'], date=row['ship_date'],
@@ -1113,9 +1265,11 @@ def report(s, inp):
     as_of = inp.as_of or clock.today_iso()
     currency = _home(s)
     account = find_account(s.company)
+    from bookflow.company import ledger_reports as ledger
     if account is None or not has_shipments(s):
-        return ShippedNotInvoicedOutput(as_of=as_of, account_id=None, account_name=None, rows=[],
-                                        total=_money(0, currency), account_balance=_money(0, currency))
+        return ShippedNotInvoicedOutput(**ledger.page_of(s, inp, 'shipped-not-invoiced', [], date_to=as_of), as_of=as_of,
+                                        account_id=None, account_name=None, total=_money(0, currency),
+                                        account_balance=_money(0, currency))
     customer = None
     if inp.customer is not None:
         from bookflow.company import sales_defaults
@@ -1133,8 +1287,9 @@ def report(s, inp):
         row = balance.row
         dates = [when for when, _ in balance.cost]
         ship_date = min(dates) if dates else as_of
-        billed = min(balance.at(balance.billed, as_of), balance.quantity)
-        quantity = balance.quantity - billed if ship_date <= as_of else 0
+        out = balance.out(as_of)
+        billed = min(balance.at(balance.billed, as_of), max(out, 0))
+        quantity = out - billed if ship_date <= as_of else 0
         if not waiting and not quantity:
             continue
         if customer is not None and row['customer_id'] != customer:
@@ -1149,9 +1304,12 @@ def report(s, inp):
         raise BookflowError('E_INTERNAL', message=(
             f'Shipped Not Invoiced lists {Money(total, currency)} waiting on {as_of} but the account holds '
             f'{Money(balance_now, currency)}; the two must agree.'))
-    rows.sort(key=lambda r: (r.customer_name or '', r.ship_date, r.shipment_number))
-    return ShippedNotInvoicedOutput(as_of=as_of, account_id=account['id'], account_name=account['full_name'],
-                                    rows=rows[:inp.limit], total=_money(total, currency),
+    positions = {identity: int(balance.row['position']) for identity, balance in found.items()}
+    rows.sort(key=lambda r: (r.customer_name or '', r.ship_date, r.shipment_number, positions[r.line_identity],
+                             r.line_identity))
+    return ShippedNotInvoicedOutput(**ledger.page_of(s, inp, 'shipped-not-invoiced', rows, date_to=as_of), as_of=as_of,
+                                    account_id=account['id'], account_name=account['full_name'],
+                                    total=_money(total, currency),
                                     account_balance=_money(balance_now, currency))
 
 
@@ -1172,22 +1330,45 @@ def guard_invoice_lines(s, billed, pending):
                          'reason': 'shipment_billing_quantity'})
 
 
-def refuse_shipped_return(s, transaction_id, document_line_id):
-    """A credit memo returning goods an invoice billed from a shipment: refused until shipment returns arrive
-    (design/pick-pack-ship.md §6, increment 2), naming the shipment."""
+def billed_issue(s, transaction_id, document_line_id, intervals):
+    """The shipment issue a credit memo returning units of an invoice line gives back, or None when the line billed no
+    shipment (R181 increment 2, design §6: its place, numbers and cost come from the shipment line it billed).
+
+    An invoice line's billings cover it in the order they were made: the first billing its units [0, q1), the next
+    [q1, q1 + q2), and so on. A return takes intervals of the line (``credit_returns.take``); each must fall within
+    one billing, so one credited line names one shipment issue."""
     identity = s.company.conn.execute(sa.select(c.document_lines.c.line_id).where(
         c.document_lines.c.id == document_line_id)).scalar()
-    if identity is None or identity not in billed_line_ids(s, transaction_id):
-        return
-    numbers = sorted({row[0] for row in s.company.conn.execute(sa.select(c.shipments.c.number).join(
-        c.shipment_billings, c.shipment_billings.c.shipment_id == c.shipments.c.id).where(
-        c.shipment_billings.c.transaction_id == transaction_id, c.shipment_billings.c.line_id == identity))})
-    raise BookflowError('E_VALIDATION', message=(
-        f'This invoice line billed goods shipment {", ".join(numbers)} shipped; returning them to stock on a credit '
-        'memo is not available yet. Credit the amount without returning stock, or void or correct the invoice '
-        '(its goods go back to shipped and not invoiced) and void or correct the shipment.'),
-        details={'fields': [{'field': 'lines', 'problem': 'the invoice line billed shipped goods'}],
-                 'shipments': numbers, 'reason': 'shipped_goods_return'})
+    if identity is None or not has_shipments(s):
+        return None
+    rows = _rows(s, """SELECT b.shipment_line_identity, b.quantity_microunits, h.number FROM shipment_billings b
+        JOIN shipments h ON h.id = b.shipment_id WHERE b.transaction_id = :tx AND b.line_id = :line
+        ORDER BY b.rowid""", {'tx': transaction_id, 'line': identity})
+    if not rows:
+        return None
+    spans, low = [], 0
+    for row in rows:
+        spans.append((low, low + int(row['quantity_microunits']), row))
+        low += int(row['quantity_microunits'])
+    hit = []
+    for start, end in intervals:
+        for low, high, row in spans:
+            if start < high and end > low and row not in hit:
+                hit.append(row)
+    if not hit:
+        hit = [spans[0][2]]
+    if len(hit) > 1:
+        sizes = ', '.join(f'{_plain(high - low)} from shipment {row["number"]}' for low, high, row in spans)
+        raise _invalid('lines', 'these units were billed from more than one shipment line', message=(
+            f'This invoice line billed {sizes}; one credit memo line returns units of one of them. Return them on '
+            'separate lines, each no more than one shipment\'s units, or return fewer.'),
+            reason='return_spans_shipments', shipments=[row['number'] for row in hit])
+    current = _current_quantities(s, [hit[0]['shipment_line_identity']]).get(hit[0]['shipment_line_identity'])
+    movement_id = current[1].get('movement_id') if current and current[0] else None
+    if movement_id is None:
+        raise _invalid('lines', 'the shipment this invoice line billed is no longer shipped')
+    return dict(s.company.conn.execute(sa.select(c.inventory_movements).where(
+        c.inventory_movements.c.id == movement_id)).mappings().one())
 
 
 def check_invoice_date(s, transaction_id, line_ids, date):

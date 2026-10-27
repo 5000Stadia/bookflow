@@ -561,9 +561,19 @@ def _movements(s, data):
         own = claims.get(row['document_line_id'], [])
         issue = inventory_effects.live_issue(
             s, line['source_transaction_id'], line['source_document_line_id'])
-        _require(bool(own) and issue is not None
-                 and -int(issue['quantity_microunits']) == own[0]['source_base_quantity_microunits'],
-                 'the returned invoice line issued no stock, or not the quantity it captured')
+        if issue is None:
+            # An invoice line that billed shipped units issued nothing itself: the return names the shipment line's
+            # issue it billed (R181 increment 2).
+            from bookflow.company import shipments
+            shipped = shipments.billed_issue(s, line['source_transaction_id'], line['source_document_line_id'],
+                                             [(r['start_microunits'], r['end_microunits']) for r in own])
+            _require(bool(own) and shipped is not None,
+                     'the returned invoice line issued no stock, or not the quantity it captured')
+            issue = shipped
+        else:
+            _require(bool(own)
+                     and -int(issue['quantity_microunits']) == own[0]['source_base_quantity_microunits'],
+                     'the returned invoice line issued no stock, or not the quantity it captured')
         _require(row['returns_movement_id'] == issue['id'],
                  'a returned line does not name the issue it gives back')
         _require(row['effective_date'] >= issue['effective_date'],

@@ -1264,3 +1264,6 @@ globals().update(_costing_method_schema.define_tables(metadata, _column, _table)
 from bookflow.company import shipment_schema as _shipment_schema
 globals().update(_shipment_schema.define_tables(metadata, _column, _table))
 company_info.append_column(_shipment_schema.company_info_column(_column))
+# Shipment returns (co0103, R181 increment 2): unbilled shipped units back into stock.
+from bookflow.company import shipment_return_schema as _shipment_return_schema
+globals().update(_shipment_return_schema.define_tables(metadata, _column, _table))

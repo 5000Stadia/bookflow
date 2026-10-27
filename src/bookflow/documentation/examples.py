@@ -1752,3 +1752,15 @@ EXAMPLES.update({
     'report shipped-not-invoiced': Example('bookflow report shipped-not-invoiced --as-of 2026-12-12' + _C + ' --json',
                                            {'as_of': '2026-12-12'}),
 })
+
+# Shipment returns (R181 increment 2).
+EXAMPLES.update({
+    'shipment return': Example('bookflow shipment return 1001 --lines \'[{"shipment_line": "1", "quantity": "1"}]\''
+                               + _C + ' --reason "Acme sent one back before we billed it" --dry-run --json',
+                               {'shipment': '1001', 'lines': [{'shipment_line': '1', 'quantity': '1'}]}),
+    'shipment-return void': Example('bookflow shipment-return void 1001' + _C
+                                    + ' --reason "It never came back" --dry-run --json', {'shipment_return': '1001'}),
+    'shipment-return show': Example('bookflow shipment-return show 1001' + _C + ' --json', {'shipment_return': '1001'}),
+    'shipment-return query': Example('bookflow shipment-return query --shipment 1001' + _C + ' --json',
+                                     {'shipment': '1001'}),
+})

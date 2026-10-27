@@ -644,6 +644,46 @@ For the builder, defaults standing unless review finds otherwise:
   (`/shipments/<number>`: cost waiting, invoices, Create invoice, Void, history), Shipments list; the order page gains
   Shipped and To ship columns and Ship and Shipments links.
 
+## As built: increment 2
+
+- **Migration co0103** (on co0102) adds `shipment_returns` (immutable header: number from the `shipment_return`
+  sequence starting 1001, shipment, order, customer, return date, `reopen`, journal entry), `shipment_return_revisions`
+  (append-only: `returned`, then `voided`) and `shipment_return_lines` (shipment line identity, base quantity, the
+  receipt movement); `inventory_documents` admits `shipment_return` (a rebuild as co0102 does). Every row immutable; no
+  guard counts rows. Permission layer `shipments-returns-v1` on `setup-trial-v1` (the brief's spelling).
+- **`shipment return`** writes one receipt movement per line naming the shipment line's issue, so the replay values it
+  as any return (the endpoint share of the issue, recosted with it); its offset account is Shipped Not Invoiced, so
+  its entry is Dr Inventory Asset, Cr Shipped Not Invoiced and its later corrections post there too. Lines name a
+  shipment line by position or identity (or an item), a base quantity, a bin, lot or serial numbers; omitted, every
+  unit out and not invoiced comes back. More than is out and not invoiced, a date before the ship date, or a number the
+  shipment did not take is refused. `reopen: false` cancels the units on the order in the same transaction
+  (`order_releases.cancel`). `shipment-return void` reverses the entry and movements; it un-cancels a cancelled
+  return's units, and is refused when a reopened return's units were shipped or billed since.
+- **The derived balance** nets returns: cost is everything posted against Shipped Not Invoiced for the line, its
+  returns included; the quantity out on a date is shipped less returns dated by then; cost of goods sold holds
+  `endpoint_share(net cost, out, 0, billed)`. Waiting to invoice is shipped less billed less returned; an order
+  line's `shipped` reads net of returns. The settle reaches a return through its own transaction and through
+  corrections of its movements.
+- **Credit memos** returning an invoice line that billed shipments name that shipment line's issue
+  (`shipments.billed_issue`): the line's billings cover it in billing order, and one credited line must fall within one
+  shipment line's billing (else E_VALIDATION `return_spans_shipments`: split it). Place, numbers and cost follow the
+  shipment line; the entry is Dr Inventory Asset, Cr Cost of Goods Sold; the order stays invoiced.
+- **Correction table.** Ship method, carrier, tracking and memo alone write a revision and repost nothing (increment
+  1 restated the entry). Every other row as increment 1 built it, and reposting or voiding a shipment is refused
+  (E_WORK_DEPENDENCY naming them) while a shipment return or a credit memo gives back its units, since the return
+  names its issue; to take units off a shipment, record a return.
+- **Cash basis** defers the cost a billed shipment moved by the paid fraction of each invoice line billing it (its
+  share by quantity), as a stock-moving invoice line's own cost is; attributed to that invoice line.
+- **`invoice_when_shipping`** is set with `company update` (admin); `never` drops the `shipment invoice` next command
+  and the page's Create invoice.
+- **Twin, as tested.** A shipment return between S and B is twinned by billing every unit at B and crediting the
+  returned ones back at B: both value the return at its endpoint share of the same issue, so profit and loss agrees to
+  the cent. Billing only the rest at B is not an exact twin (a fresh issue of fewer units rounds differently by a cent).
+- **Not in this increment:** the demo order shipped in part (oracle moves across the demo); returns of goods from a
+  voided shipment (refused: void the return first).
+- **Browser.** The shipment page gains a Returned column, its returns with Void return, and a Return form (line,
+  quantity, date, to ship again).
+
 ## Decided (2026-10-26)
 
 - K1 carrier integration: none. Carrier and tracking are recorded and printed as text only (Kabe, gate gba01e0).

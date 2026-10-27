@@ -159,6 +159,22 @@ def active_source_claims(s, source_transaction_id, source_line_id, pending=None)
     return rows
 
 
+def stock_returns_on(s, invoice_id):
+    """``[credit memo number]`` of each credit memo not voided whose returned lines gave back stock an invoice's
+    lines sold or billed: voiding the invoice would leave that return's cost of goods sold credit with no sale
+    under it (and Shipped Not Invoiced counting the returned units as still out)."""
+    rows = s.company.conn.execute(sa.text(
+        'SELECT DISTINCT t.id, t.number FROM credit_source_claims cl '
+        'JOIN transactions t ON t.id = cl.credit_transaction_id '
+        'JOIN inventory_movements m ON m.transaction_id = cl.credit_transaction_id '
+        "  AND m.document_line_id = cl.credit_document_line_id AND m.kind = 'receipt' "
+        "WHERE cl.source_transaction_id = :invoice AND cl.kind = 'claim' AND t.status != 'voided' "
+        "  AND cl.id NOT IN (SELECT reverses_claim_id FROM credit_source_claims WHERE kind = 'release') "
+        '  AND NOT EXISTS (SELECT 1 FROM inventory_movements r WHERE r.reverses_movement_id = m.id)'),
+        {'invoice': invoice_id}).mappings().all()
+    return sorted({row['number'] or row['id'] for row in rows})
+
+
 def _returned(s, entered, source, pending):
     """Price one returned line from the captured source cell and the residue still there."""
     line, taxes = source['line'], source['taxes']
@@ -309,10 +325,15 @@ def _stock_entries(s, lines, *, date):
         if source is None:      # refused by `_refuse_stocked` before any of this is reached
             raise BookflowError('E_INTERNAL', message='A standalone credit line carries stock.')
         issue = inventory_effects.live_issue(s, source['transaction_id'], source['document_line_id'])
+        shipped = False
         if issue is None:
+            # An invoice line billing shipped units issued nothing itself: the units came off the shelf on the
+            # shipment, so the return names that shipment line's issue and takes its place, numbers and cost (R181).
             from bookflow.company import shipments
-            shipments.refuse_shipped_return(s, source['transaction_id'], source['document_line_id'])
-        if issue is None or -int(issue['quantity_microunits']) != int(source['base_quantity_microunits']):
+            issue = shipments.billed_issue(s, source['transaction_id'], source['document_line_id'],
+                                           line.get('intervals') or ())
+            shipped = issue is not None
+        if issue is None or (not shipped and -int(issue['quantity_microunits']) != int(source['base_quantity_microunits'])):
             raise BookflowError('E_INTERNAL', message=(
                 'The invoice line being returned issued no stock, or issued a quantity its '
                 'own capture does not name.'))
