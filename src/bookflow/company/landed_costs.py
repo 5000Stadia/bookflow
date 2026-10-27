@@ -1058,7 +1058,7 @@ def watermark(s):
 
 def check_charges(s, mark):
     """After a command: refuse when it reduced or voided a charge below what live allocations took of it."""
-    if mark is None:
+    if mark is None or s.company is None:  # a command that closed or replaced the company (rename, upgrade)
         return
     account = find_account(s.company)
     touched = set(s.company.conn.execute(sa.select(c.posting_lines.c.transaction_id).where(

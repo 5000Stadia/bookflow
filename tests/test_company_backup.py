@@ -186,17 +186,21 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0098 = importlib.import_module("bookflow.storage.company_migrations.versions.0098_landed_cost")
 
     co0097 = importlib.import_module("bookflow.storage.company_migrations.versions.0097_bins_cycle_counts")
+    co0099 = importlib.import_module("bookflow.storage.company_migrations.versions.0099_deposit_indexes")
     co0100 = importlib.import_module("bookflow.storage.company_migrations.versions.0100_costing_methods")
 
     def older(conn):
-        # Newest first: co0100 (on co0098): its guards, co0079's dimensions guard put back, costing_methods.
+        # Newest first: co0100 (on co0099): its guards, co0079's dimensions guard put back, costing_methods.
         for trigger in co0100.TRIGGERS:
             conn.execute(f"DROP TRIGGER {trigger}")
         conn.execute("DROP TRIGGER receipt_cost_correction_dimensions")
         conn.execute(co0100.OLD_DIMENSIONS_GUARD)
         for table in co0100.TABLES:
             conn.execute(f"DROP TABLE {table}")
-        # Newest first: co0098 (on co0097): its guards, co0093's true-up guard put back, its tables and item columns.
+        # Then co0099 (on co0098): its three deposit lookup indexes.
+        for index in co0099.INDEX_NAMES:
+            conn.execute(f"DROP INDEX {index}")
+        # Then co0098 (on co0097): its guards, co0093's true-up guard put back, its tables and item columns.
         for trigger in co0098.TRIGGERS:
             conn.execute(f"DROP TRIGGER {trigger}")
         conn.execute("DROP TRIGGER inventory_movements_true_up_link")

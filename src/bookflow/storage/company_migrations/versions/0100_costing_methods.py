@@ -10,7 +10,7 @@ never imports current application metadata.
 from alembic import op
 
 revision = 'co0100'
-down_revision = 'co0098'
+down_revision = 'co0099'
 branch_labels = depends_on = None
 
 DDL = ("\nCREATE TABLE costing_methods (\n\tid VARCHAR(26) NOT NULL, \n\tmethod VARCHAR(8) NOT NULL, \n\teffective_from VARCHAR(10) NOT NULL, \n\tstatus VARCHAR(10) NOT NULL, \n\treason TEXT, \n\tcreated_at VARCHAR(32) NOT NULL, \n\tcreated_by VARCHAR(26) NOT NULL, \n\tcreated_via VARCHAR(16) NOT NULL, \n\taudit_event_id VARCHAR(26) NOT NULL, \n\twithdrawn_at VARCHAR(32), \n\twithdrawn_by VARCHAR(26), \n\twithdrawn_via VARCHAR(16), \n\twithdraw_reason TEXT, \n\twithdraw_audit_event_id VARCHAR(26), \n\tPRIMARY KEY (id), \n\tCONSTRAINT ck_costing_method_method CHECK (method IN ('average', 'fifo')), \n\tCONSTRAINT ck_costing_method_status CHECK (status IN ('standing', 'withdrawn')), \n\tCONSTRAINT ck_costing_method_date CHECK (effective_from LIKE '____-__-__'), \n\tCONSTRAINT ck_costing_method_withdrawn CHECK ((status = 'withdrawn') = (withdrawn_at IS NOT NULL)), \n\tFOREIGN KEY(audit_event_id) REFERENCES audit_events (id), \n\tFOREIGN KEY(withdraw_audit_event_id) REFERENCES audit_events (id)\n)\n\n",)

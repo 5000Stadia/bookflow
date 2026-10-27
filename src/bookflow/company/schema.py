@@ -1249,6 +1249,10 @@ from bookflow.company import landed_cost_schema as _landed_cost_schema
 for _weight_column in _landed_cost_schema.weight_columns(_column):
     items.append_column(_weight_column)
 globals().update(_landed_cost_schema.define_tables(metadata, _column, _table))
+# Deposit lookup indexes (co0099, R180 increment 3): membership and operations by transaction.
+sa.Index("ix_deposit_memberships_source", deposit_memberships.c.source_transaction_id)
+sa.Index("ix_deposit_memberships_transaction", deposit_memberships.c.transaction_id)
+sa.Index("ix_deposit_operations_transaction", deposit_operations.c.transaction_id)
 # Costing method timeline (co0100, R104 increment 7): dated switches between average and FIFO.
 from bookflow.company import costing_method_schema as _costing_method_schema
 globals().update(_costing_method_schema.define_tables(metadata, _column, _table))

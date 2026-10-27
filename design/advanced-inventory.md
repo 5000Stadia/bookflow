@@ -979,7 +979,7 @@ jobs at night; the van ends as counted.
 
 ## As built: increment 7
 
-- **Migration co0100** (on co0098) adds `costing_methods` (method, `effective_from`, status `standing` or
+- **Migration co0100** (on co0099) adds `costing_methods` (method, `effective_from`, status `standing` or
   `withdrawn`, reason and provenance; a standing date is unique). Guards: never deleted; a row moves standing ->
   withdrawn once and nothing else about it changes. Neither reads another row. No existing row changes; the demo
   and every company today have no row, so average from the beginning.
