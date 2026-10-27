@@ -85,6 +85,8 @@ setup_cmd = command(
                  "it repairs what is missing and reports the rest; it never makes anything twice."),
     input_model=SetupInput, output_model=SetupOutput, writes={"hub", "config", "company"},
     error_codes=["E_INIT_CONFLICT", "E_VALIDATION", "E_PERMISSION", "E_IO", "E_NETWORK_NOT_ALLOWED"], bootstrap=True, local_only=True,
+    # `init`'s own capability: setup is init plus existing commands, so it adds no capability (agent-setup-v1).
+    capability="init",
     authorization="the local operating-system login, which becomes or already is the installation's administrator",
 )(_plan_setup)
 

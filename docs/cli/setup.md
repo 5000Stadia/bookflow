@@ -13,7 +13,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | Scope | hub |
 | Kind | write |
 | Required role | the local operating-system login, which becomes or already is the installation's administrator |
-| Capability | setup |
+| Capability | init |
 | Feature | — |
 | HTTP | Local only; no HTTP route. |
 | External binary body | none |
