@@ -875,6 +875,9 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
     shipped = _shipments.billed_line_ids(s, old_header['id']) if old_header else {}
     if shipped and operation != 'void':
         _shipments.guard_invoice_lines(s, shipped, pending)
+        kept = [row['line_id'] for row in pending['document_lines'] if row['line_id'] in shipped]
+        if kept:
+            _shipments.check_invoice_date(s, header['id'], kept, revision['date'])
     shipment_billings = []
     if operation != 'void' and resolved is not None:
         for envelope, line in zip(pending['document_lines'], resolved['lines']):

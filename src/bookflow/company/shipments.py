@@ -380,15 +380,21 @@ def owed(s, identities=None):
 
 
 def watermark(s):
-    """Where the company's posting lines stand before a command; None while it has no shipment."""
+    """Where posting lines, audit entries and billings stand before a command; None while it has no shipment."""
     if s.company is None or find_account(s.company) is None:
         return None
-    return int(s.company.conn.execute(sa.text('SELECT coalesce(max(rowid), 0) FROM posting_lines')).scalar_one())
+    return tuple(int(s.company.conn.execute(sa.text(f'SELECT coalesce(max(rowid), 0) FROM {table}')).scalar_one())
+                 for table in ('posting_lines', 'audit_entries', 'shipment_billings'))
 
 
 def _affected(s, mark):
-    touched = [row[0] for row in s.company.conn.execute(sa.text(
-        'SELECT DISTINCT transaction_id FROM posting_lines WHERE rowid > :mark'), {'mark': mark})]
+    # A transaction the command posted to, wrote (a new revision, a void: its audit entry) or billed shipped units on;
+    # a zero-total invoice posts no line at all and must still be reached.
+    lines, audited, billed = mark
+    touched = sorted({row[0] for row in s.company.conn.execute(sa.text(
+        'SELECT transaction_id FROM posting_lines WHERE rowid > :a '
+        "UNION SELECT record_id FROM audit_entries WHERE rowid > :b AND record_type = 'transaction' "
+        'UNION SELECT transaction_id FROM shipment_billings WHERE rowid > :c'), {'a': lines, 'b': audited, 'c': billed})})
     if not touched:
         return []
     params = {}
@@ -521,13 +527,19 @@ def _order_lines(s, header, rev, exclude_shipment=None):
         if derived(facts) or facts.profile.item_type not in TRACKED_TYPES:
             continue
         rows.append((line, facts, _root(s, identities, line)))
-    parts = waiting_parts(s, [root for _, _, root in rows], exclude_shipment=exclude_shipment)
+    every = waiting_parts(s, [root for _, _, root in rows])
+    parts = {root: [p for p in found if p.shipment_id != exclude_shipment] for root, found in every.items()}
+    # A shipment being corrected may hold its units again: those an invoice billed from it count in invoiced, so
+    # they are added back with the ones still waiting (left out of parts).
+    own_billed = {root: sum(p.billed for p in found if p.shipment_id == exclude_shipment)
+                  for root, found in every.items()} if exclude_shipment else {}
     out = []
     running = header['status'] == 'open' and bool(header['active'])
     for line, facts, root in rows:
         invoiced = invoiced_microunits(s, root, facts, policy)
         waiting = _to_selected(sum(p.waiting for p in parts.get(root, ())), facts.unit_factor_nanounits)
-        to_ship = facts.quantity_microunits - invoiced - facts.cancelled_quantity_microunits - waiting
+        to_ship = (facts.quantity_microunits - invoiced - facts.cancelled_quantity_microunits - waiting
+                   + _to_selected(own_billed.get(root, 0), facts.unit_factor_nanounits))
         out.append(dict(line=line, facts=facts, root=root, to_ship=max(to_ship, Fraction(0)) if running else Fraction(0)))
     return out
 
@@ -1176,3 +1188,20 @@ def refuse_shipped_return(s, transaction_id, document_line_id):
         '(its goods go back to shipped and not invoiced) and void or correct the shipment.'),
         details={'fields': [{'field': 'lines', 'problem': 'the invoice line billed shipped goods'}],
                  'shipments': numbers, 'reason': 'shipped_goods_return'})
+
+
+def check_invoice_date(s, transaction_id, line_ids, date):
+    """An invoice correction may not date the invoice before a shipment its remaining lines bill (R181 §3)."""
+    rows = s.company.conn.execute(sa.text(
+        'SELECT DISTINCT h.number, r.ship_date FROM shipment_billings b JOIN shipments h ON h.id = b.shipment_id '
+        'JOIN shipment_revisions r ON r.shipment_id = h.id WHERE b.transaction_id = :tx AND r.revision_number = '
+        '(SELECT max(x.revision_number) FROM shipment_revisions x WHERE x.shipment_id = h.id) '
+        f"AND b.line_id IN ({_marks('ln', list(line_ids), params := {'tx': transaction_id})})"), params).all()
+    later = sorted((ship_date, number) for number, ship_date in rows if ship_date > date)
+    if later:
+        ship_date, number = later[-1]
+        raise BookflowError('E_VALIDATION', message=(
+            f'Shipment {number} shipped on {ship_date}, after the invoice date {date}; an invoice may not bill goods '
+            'before they ship. Date it on or after the ship date, or remove that line.'),
+            details={'fields': [{'field': 'date', 'problem': 'before the ship date of a shipment it bills'}],
+                     'ship_date': ship_date})

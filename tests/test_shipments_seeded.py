@@ -112,7 +112,7 @@ def _scenario(shop, seed):
     done, refused = {}, {}
     before_close = _closed_counts(books)
     costs = ['3.10', '4.00', '7.25', '11.00']
-    ops = ['buy', 'buy', 'sell', 'return', 'order', 'ship', 'ship', 'ship_lines', 'ship_lines', 'ship_short',
+    ops = ['buy', 'buy', 'sell', 'return', 'order', 'order_free', 'ship', 'ship', 'ship_lines', 'ship_lines', 'ship_short',
            'invoice_shipment', 'invoice_shipment', 'invoice_shipment', 'invoice_order', 'void_invoice', 'void_invoice',
            'void_shipment', 'update_shipment', 'update_shipment', 'late_buy', 'late_buy', 'freight', 'allocate',
            'allocate', 'count', 'switch', 'void_receipt']
@@ -138,10 +138,13 @@ def _scenario(shop, seed):
                 line = invoice['revision']['lines'][0]
                 run('credit-memo post', dict(customer=shop['acme'], date=max(date, invoice['revision']['date']), lines=[dict(
                     quantity='1', source_invoice=invoice['id'], source_line=line['line_id'])]), reason='Came back')
-            elif op == 'order':
-                lines = [dict(item=shop['widget'], quantity=str(rnd.randint(1, 6)), unit_price='30.00')]
+            elif op in ('order', 'order_free'):
+                # A zero-price order bills shipments on invoices of total zero, which post no line (review).
+                lines = [dict(item=shop['widget'], quantity=str(rnd.randint(1, 6)),
+                              unit_price='0.00' if op == 'order_free' else '30.00')]
                 if rnd.random() < .5:
-                    lines.append(dict(item=shop['gadget'], quantity=str(rnd.randint(1, 6)), unit_price='20.00'))
+                    lines.append(dict(item=shop['gadget'], quantity=str(rnd.randint(1, 6)),
+                                      unit_price='0.00' if op == 'order_free' else '20.00'))
                 orders.append(run('sales-order create', dict(customer=shop['acme'], date=DATES[0], lines=lines),
                                   reason='Acme ordered')['number'])
             elif op == 'ship' and orders:

@@ -238,3 +238,44 @@ def test_a_credit_memo_returning_billed_shipped_goods_is_refused_cleanly_until_r
         dict(quantity='1', source_invoice=invoice['id'], source_line=line)]), reason='One came back'))
     assert refused.code == 'E_VALIDATION' and refused.details['shipments'] == ['1001']
     _tie(shop['books'])
+
+
+def test_a_zero_price_invoice_billing_a_shipment_still_moves_its_cost(books):
+    """Review finding: an invoice of total zero posts no line, and its billing must still reach the derived balance."""
+    run = books['run']
+    widget = _inventory_part(books, 'Free Widget')
+    run('bill post', dict(vendor=books['vendor'], date='2017-03-01', items=[dict(
+        item=widget, quantity='10', unit_cost='5.00')]), reason='In')
+    order = run('sales-order create', dict(customer=books['customer'], date='2017-03-01', lines=[dict(
+        item=widget, quantity='2', unit_price='0.00')]), reason='Two free samples')
+    shipped = run('shipment post', dict(sales_order=order['number'], date='2017-03-05'), reason='Samples went')
+    invoice = run('shipment invoice', dict(shipment=shipped['number'], date='2017-03-06'), reason='Bill at nothing')
+    assert _balances(books, '2017-03-06')['sni'] == 0 and _balances(books, '2017-03-06')['cogs'] == 1000
+    current = run('invoice show', dict(invoice=invoice['id']))
+    run('invoice void', dict(invoice=invoice['id'], expected_version=current['version']), reason='Not billed')
+    assert _balances(books, '2017-03-31')['sni'] == 1000 and _balances(books, '2017-03-31')['cogs'] == 0
+    _tie(books)
+
+
+def test_a_billed_shipment_takes_other_serial_numbers_and_an_invoice_keeps_its_date_after_the_ship_date(books):
+    """Review findings: correcting a billed shipment's numbers is valid paperwork; an invoice update may not date the
+    invoice before the shipment it bills."""
+    from tests.test_bins_cycle_counts import _part as _tracked
+    run = books['run']
+    heater = _tracked(books, 'Water Heater', cost='100.00', price='300.00', tracking='serial')
+    run('bill post', dict(vendor=books['vendor'], date='2017-03-01', items=[dict(
+        item=heater, quantity='4', unit_cost='100.00', serial_numbers=['WH-1', 'WH-2', 'WH-3', 'WH-4'])]), reason='In')
+    order = run('sales-order create', dict(customer=books['customer'], date='2017-03-01', lines=[dict(
+        item=heater, quantity='2', unit_price='300.00')]), reason='Two heaters')
+    run('shipment post', dict(sales_order=order['number'], date='2017-03-05', lines=[dict(
+        item=heater, quantity='2', serial_numbers=['WH-1', 'WH-2'])]), reason='Two went')
+    invoice = run('shipment invoice', dict(shipment='1001', date='2017-03-06'), reason='Bill')
+    swapped = run('shipment update', dict(shipment='1001', expected_version=1, lines=[dict(
+        item=heater, quantity='2', serial_numbers=['WH-3', 'WH-4'])]), reason='It was the other two')
+    assert swapped['version'] == 2 and swapped['lines'][0]['serial_numbers'] == ['WH-3', 'WH-4']
+    assert swapped['lines'][0]['invoiced'] == '2'
+    current = run('invoice show', dict(invoice=invoice['id']))
+    early = _error(lambda: run('invoice update', dict(invoice=invoice['id'], expected_version=current['version'],
+                                                      date='2017-03-04'), reason='Earlier'))
+    assert early.code == 'E_VALIDATION' and early.details['ship_date'] == '2017-03-05'
+    _tie(books)
