@@ -455,13 +455,17 @@ def _suggest(s, inp, site, date):
     rows.sort(key=lambda r: (r['rev']['date'], _natural(r['order']['number']), r['line']['position']))
     items = {row['facts'].item_id for row in rows}
     held = holds(s, roots={row['root'] for row in rows})
+    # Units a live draft shipment holds (R181 increment 4) ship from the draft: never planned on a list.
+    from bookflow.company import shipment_packing
+    drafts = shipment_packing.draft_holding(s, roots={row['root'] for row in rows})
     order_ids = {header['id'] for header, _ in orders}
     on_hand = placements.on_hand(s, date, site_id=site['id'], item_ids=list(items))
     elsewhere = _committed_elsewhere(s, site['id'], items, order_ids, bool(site['is_default']))
     pool = {}
     for item in items:
         pool[item] = on_hand.get((item, site['id']), 0) - elsewhere.get(item, 0) - sum(
-            held.get(row['root'], 0) for row in rows if row['facts'].item_id == item)
+            held.get(row['root'], 0) + drafts.get(row['root'], (0, []))[0] for row in rows
+            if row['facts'].item_id == item)
     places = {item: _place_holdings(s, item, site['id'], date, staging_id,
                                     _reserved_by_bin(s, site['id'], item, staging_id)) for item in items}
     notes, plan, by_order, taken_orders = [], [], {}, []
@@ -480,12 +484,16 @@ def _suggest(s, inp, site, date):
         wants = []
         for row in mine:
             base = shipments._to_base(row['to_ship'], row['facts'].unit_factor_nanounits)
-            want = base - held.get(row['root'], 0)
+            in_draft, draft_names = drafts.get(row['root'], (0, []))
+            want = base - held.get(row['root'], 0) - in_draft
             if want <= 0:
                 lists = holders(s, row['root'])
                 if named and lists:
                     notes.append(f'{row["facts"].profile.item.label} on sales order {header["number"]} is already on '
                                  f'pick list {", ".join(lists)}.')
+                if named and draft_names:
+                    notes.append(f'{row["facts"].profile.item.label} on sales order {header["number"]} is held by '
+                                 f'draft shipment {", ".join(draft_names)}; post or cancel it first.')
                 continue
             take = max(0, min(want, trial_pool.get(row['facts'].item_id, 0)))
             trial_pool[row['facts'].item_id] = trial_pool.get(row['facts'].item_id, 0) - take

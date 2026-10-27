@@ -202,6 +202,22 @@ def live_billings(s, identities=None, *, transaction_ids=None):
         ORDER BY r.date, b.created_at, b.id""", params)
 
 
+def billing_state(s, shipment_id):
+    """``(units waiting to be invoiced, [invoice numbers that billed its units])`` of one shipment."""
+    lines = shipped_lines(s, shipment_ids=[shipment_id])
+    if not lines:
+        return 0, []
+    roots = [(row['root_document_id'], row['root_line_id']) for row in lines]
+    waiting = sum(part.waiting for parts in waiting_parts(s, roots).values() for part in parts
+                  if part.shipment_id == shipment_id)
+    invoices = []
+    for row in live_billings(s, [row['line_identity'] for row in lines]):
+        name = row['invoice_number'] or row['transaction_id']
+        if name not in invoices:
+            invoices.append(name)
+    return waiting, invoices
+
+
 def billed_line_ids(s, transaction_id):
     """``{invoice line identity: base quantity it bills}`` for one invoice's stored billings, live or not."""
     if not has_shipments(s) or transaction_id is None:
@@ -699,6 +715,10 @@ def _from_picks(s, candidates, picked, warnings):
         chosen.append((row, base, Numbers(lot=numbers[part['lot_id']]['number'] if part['lot_id'] else None,
                                           serial_numbers=tuple(serials) or None, bin=place or bins.NO_BIN)))
     if not chosen:
+        from bookflow.company import shipment_packing as packing
+        found = packing.draft_holding(s, roots={part['root'] for part in picked})
+        if found:
+            packing.refuse_drafted(found, 'the units picked for it are not left to ship from the list')
         raise BookflowError('E_VALIDATION', message=(
             'Nothing picked for this order is left to ship: it has shipped or been billed since it was picked.'),
             details=dict(reason='nothing_to_ship'))
@@ -963,6 +983,26 @@ def _guard_picked(s, header, shipment, prior_lines):
         pick_lists.refuse_held(found, 'shipping it from the order would issue those units a second time')
 
 
+def _increased(shipment, prior_lines):
+    before, after = {}, {}
+    for row in prior_lines:
+        root = (row['root_document_id'], row['root_line_id'])
+        before[root] = before.get(root, 0) + int(row['quantity_microunits'])
+    for line in shipment.lines:
+        after[line.root] = after.get(line.root, 0) + line.base
+    return {root for root in after if after[root] > before.get(root, 0)}
+
+
+def _guard_drafted(s, header, shipment, prior_lines):
+    """A correction shipping more of an order line a live draft holds would take the draft's units (R181 increment
+    4): post or cancel the draft first, as a pick list's units ship from the list."""
+    from bookflow.company import shipment_packing as packing
+    held = packing.draft_holding(s, order_id=header['id'])
+    found = {root: held[root] for root in _increased(shipment, prior_lines) if root in held}
+    if found:
+        packing.refuse_drafted(found, 'shipping more of it here would take the units the draft holds')
+
+
 def standing_returns(s, movement_ids):
     """``[(kind, number)]`` of every return not voided that gives back units of these issues: shipment returns and
     credit memos returning invoiced units (R181 increment 2)."""
@@ -1146,6 +1186,14 @@ def _freight_facts(s, inp, rev, current, draft, operation):
             raise BookflowError('E_WORK_DEPENDENCY', message=(
                 f'Invoice {billed} billed this shipment\'s freight, so it is fixed; correct the invoice instead.'),
                 details=dict(problem='freight already billed', invoices=[billed], reason='freight_invoiced'))
+        waiting, invoices = billing_state(s, current['id'])
+        if invoices and not waiting:
+            # Freight rides on the invoice that bills the units; with every unit billed, none is left to carry it.
+            names = ', '.join(invoices)
+            raise BookflowError('E_WORK_DEPENDENCY', message=(
+                f'Invoice {names} billed every unit of this shipment, so its freight is fixed; add the charge to the '
+                'invoice instead.'), details=dict(problem='units already billed', invoices=invoices,
+                                                    reason='units_invoiced'))
     return fresh
 
 
@@ -1233,8 +1281,11 @@ def _run(s, ctx, inp, operation, *, persist):
             _guard_billed(s, current, prior_lines, shipment, date if date != current['ship_date'] else None)
         if picked is None:
             _guard_picked(s, header, shipment, prior_lines)
+        if current is not None:
+            _guard_drafted(s, header, shipment, prior_lines)
         inventory_effects.open_dates(s, shipment.change)
-        memo = inp.memo if inp.memo is not None else (current['revision']['memo'] if current else None)
+        memo = inp.memo if inp.memo is not None else (current['revision']['memo'] if current else
+                                                       draft['memo'] if draft else None)
         journal = (JournalPostInput(date=date, memo=memo or f'Shipment for sales order {header["number"]}',
                                     lines=shipment.journal_lines) if current is None else
                    JournalUpdateInput(journal=current['transaction_id'],
@@ -1414,8 +1465,10 @@ def _freight_output(s, shipment_id, facts, currency):
     from bookflow.company.shipment_models import FreightOutput
     name = s.company.conn.execute(sa.select(c.items.c.full_name).where(
         c.items.c.id == facts['freight_item_id'])).scalar()
+    billed_by = freight_billed(s, shipment_id) if shipment_id else None
+    to_bill = billed_by is None and (shipment_id is None or bool(billing_state(s, shipment_id)[0]))
     return FreightOutput(amount=_money(facts['freight_minor_units'], currency), item_id=facts['freight_item_id'],
-                         item_name=name, billed_by=freight_billed(s, shipment_id) if shipment_id else None)
+                         item_name=name, billed_by=billed_by, to_bill=to_bill)
 
 
 # ---------------------------------------------------------------- output

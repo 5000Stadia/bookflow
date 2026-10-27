@@ -108,6 +108,11 @@ def test_pack_a_draft_by_scanning_and_ship_it(register_browser, width):
     b.evaluate(f'''(() => {{ const f = document.querySelector('[data-pack-scan]');
         f.querySelector('[name=code]').value = 'NOT-A-THING'; f.querySelector('[data-pack-put]').click(); }})()''')
     b.wait_for('!!document.querySelector("[data-pack-error]")', timeout=30)
+    # A Box that is not a whole number is the screen's own refusal, shown in place (it was a 500 htmx never swapped).
+    b.evaluate(f'''(() => {{ const f = document.querySelector('[data-pack-scan]');
+        f.querySelector('[name=code]').value = {HEATER!r}; f.querySelector('[name=box]').value = '1.5';
+        f.querySelector('[data-pack-put]').click(); }})()''')
+    b.wait_for('(document.querySelector("[data-pack-error]")?.innerText || "").includes("whole number")', timeout=30)
 
     b.evaluate('document.querySelector("[data-pack-ship]").click()')
     b.wait_for('(document.querySelector("[data-pack-result]")?.innerText || "").includes("shipped")', timeout=30)

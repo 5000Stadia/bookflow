@@ -122,6 +122,35 @@ def drafted(s, order_id, *, exclude=None):
     return out
 
 
+def draft_holding(s, *, order_id=None, roots=None, exclude=None):
+    """``{root: (base, [draft numbers])}`` live drafts hold of this order (or of these order lines)."""
+    sql = ("SELECT d.number, l.root_document_id, l.root_line_id, l.quantity_microunits FROM shipment_draft_lines l "
+           "JOIN (" + _CURRENT_DRAFT + ") d ON d.id = l.draft_id WHERE d.status = 'draft' AND d.id != :x")
+    params = {'x': exclude or ''}
+    if order_id is not None:
+        sql += " AND d.sales_order_id = :o"
+        params['o'] = order_id
+    wanted = set(roots) if roots is not None else None
+    out = {}
+    for number, doc, line, quantity in s.company.conn.execute(sa.text(sql), params).all():
+        root = (doc, line)
+        if wanted is not None and root not in wanted:
+            continue
+        base, numbers = out.get(root, (0, []))
+        out[root] = (base + int(quantity), sorted(set(numbers) | {number}))
+    return out
+
+
+def refuse_drafted(found, doing):
+    """E_WORK_DEPENDENCY naming the live drafts that hold an order's units (``found`` from ``draft_holding``)."""
+    numbers = sorted({number for _, names in found.values() for number in names})
+    first = numbers[0]
+    raise BookflowError('E_WORK_DEPENDENCY', message=(
+        f'Draft shipment {", ".join(numbers)} holds units of this order, so {doing}. Post the draft '
+        f'(`shipment post --shipment {first}`) or cancel it (`shipment cancel {first}`) first.'),
+        details=dict(problem='a draft shipment holds units of this order', drafts=numbers, reason='held_by_draft'))
+
+
 # ---------------------------------------------------------------- lines a packing reads
 
 

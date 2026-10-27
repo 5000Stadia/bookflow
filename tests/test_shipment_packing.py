@@ -322,3 +322,74 @@ def test_co0105_ddl_is_the_metadata():
     assert m.DDL == tuple(str(CreateTable(c.metadata.tables[t]).compile(dialect=dialect()))
                           for t in reversed(m.TABLES))
     assert m.GUARDS == shipment_packing_schema.GUARDS
+
+
+def _order_invoice(dock, key, **extra):
+    run = dock['run']
+    version = run('sales-order show', dict(sales_order=dock['order']))['version']
+    return run('sales-order invoice', dict(sales_order=dock['order'], conversion_key=key, date='2017-03-27',
+                                           expected_version=version, **extra), reason='Bill the order')
+
+
+def test_freight_rides_on_whichever_invoice_bills_the_units_and_is_fixed_after(dock):
+    """Review medium 1: `sales-order invoice` billing a shipment's units carries its freight once, as `shipment
+    invoice` does; after, the freight is fixed and `shipment invoice` says there is nothing left."""
+    run = dock['run']
+    first = run('shipment post', dict(sales_order=dock['order'], date='2017-03-20', freight_amount='9.00',
+                                      freight_item=dock['shipping'], lines=[
+        dict(order_line=dock['lines'][dock['widget']], quantity='3')]), reason='Truck')
+    invoice = _order_invoice(dock, 'k1')
+    freight = [l for l in invoice['revision']['lines'] if l['item_id'] == dock['shipping']]
+    assert len(freight) == 1 and freight[0]['net_minor_units'] == 900
+    shown = run('shipment show', dict(shipment=first['number']))
+    assert shown['freight']['billed_by'] == invoice['number'] and shown['freight']['to_bill'] is False
+    error = _error(lambda: run('shipment update', dict(shipment=first['number'], expected_version=shown['version'],
+                                                       freight_amount='20.00', freight_item=dock['shipping']),
+                               reason='More'))
+    assert error.code == 'E_WORK_DEPENDENCY' and 'freight' in error.message
+    error = _error(lambda: run('shipment invoice', dict(shipment=first['number'], date='2017-03-28'), reason='Again'))
+    assert error.code == 'E_WORK_DEPENDENCY' and error.details['reason'] == 'nothing_to_invoice'
+    assert invoice['number'] in error.message
+    # Freight added after every unit was billed has no invoice left to ride on: refused, not left "to bill".
+    second = run('shipment post', dict(sales_order=dock['order'], date='2017-03-21', lines=[
+        dict(order_line=dock['lines'][dock['widget']], quantity='2')]), reason='Truck')
+    _order_invoice(dock, 'k2', shipments=[second['number']])
+    error = _error(lambda: run('shipment update', dict(shipment=second['number'], expected_version=second['version'],
+                                                       freight_amount='4.00', freight_item=dock['shipping']),
+                               reason='Forgot'))
+    assert error.code == 'E_WORK_DEPENDENCY' and error.details['reason'] == 'units_invoiced'
+
+
+def test_a_live_draft_keeps_its_units_from_the_order_invoice_and_from_a_correction(dock):
+    """Review medium 3: units a draft holds are refused to an order invoice that issues stock and to a shipment
+    correction shipping more, naming the draft. Low 5: the draft's memo is the shipment journal's memo."""
+    run = dock['run']
+    _on(run)
+    shipped = run('shipment post', dict(sales_order=dock['order'], date='2017-03-20', lines=[
+        dict(order_line=dock['lines'][dock['widget']], quantity='3')]), reason='Truck')
+    draft = run('shipment create', dict(sales_order=dock['order'], memo='Dock 4', lines=[
+        dict(order_line=dock['lines'][dock['heater']], quantity='1', serial_numbers=['WH-1001']),
+        dict(order_line=dock['lines'][dock['widget']], quantity='2')]), reason='Pack it')
+    error = _error(lambda: _order_invoice(dock, 'k1', selections=[
+        dict(line_id=dock['lines'][dock['heater']], quantity='1')]))
+    assert error.code == 'E_WORK_DEPENDENCY' and error.details['reason'] == 'held_by_draft'
+    assert draft['number'] in error.message and 'post' in error.message
+    error = _error(lambda: run('shipment update', dict(shipment=shipped['number'], expected_version=shipped['version'],
+                                                       lines=[dict(order_line=dock['lines'][dock['widget']],
+                                                                   quantity='5')]), reason='All five'))
+    assert error.code == 'E_WORK_DEPENDENCY' and draft['number'] in error.message
+    posted = run('shipment post', dict(shipment=draft['number'], date='2017-03-22'), reason='Ship')
+    with sqlite3.connect(_db(dock['books'])) as conn:
+        memo = conn.execute('SELECT r.memo FROM transactions t JOIN transaction_revisions r '
+                            'ON r.id = t.current_revision_id WHERE t.id = ?', (posted['transaction_id'],)).fetchone()
+    assert memo == ('Dock 4',)
+
+
+def test_pick_list_suggestions_leave_out_what_a_draft_holds(floor):
+    """Review medium 2: a draft holding the whole order leaves nothing for a list to plan, and the refusal says so."""
+    run = floor['run']
+    run('company update', dict(pick_and_pack_enabled=True), reason='We pick and pack')
+    draft = run('shipment create', dict(sales_order=floor['second']), reason='Pack it')
+    error = _error(lambda: run('pick-list create', dict(orders=[floor['second']], date='2017-03-05'), reason='Pick'))
+    assert error.code == 'E_VALIDATION' and error.details['reason'] == 'nothing_to_pick'
+    assert f'draft shipment {draft["number"]}' in error.message

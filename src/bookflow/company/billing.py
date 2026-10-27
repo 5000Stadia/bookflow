@@ -266,6 +266,25 @@ def billed_lines(s, rev, selected, profile, retax=None):
     return lines, sources
 
 
+def _shipment_freight(s, selected):
+    """``(shipment id, item id, minor units)`` of each shipment whose units these lines bill and whose freight no
+    live invoice has billed yet, oldest shipment first."""
+    seen = []
+    for item in selected:
+        for part in getattr(item, 'shipments', None) or ():
+            if part.shipment_id not in seen:
+                seen.append(part.shipment_id)
+    if not seen:
+        return []
+    from bookflow.company import shipments
+    out = []
+    for shipment_id in seen:
+        rev = shipments.resolve(s, shipment_id)['revision']
+        if rev.get('freight_minor_units') and not shipments.freight_billed(s, shipment_id):
+            out.append((shipment_id, rev['freight_item_id'], int(rev['freight_minor_units'])))
+    return out
+
+
 def resolve_commercial(s, inp, document_type, *, document_id, kind):
     header, rev, selected = source_selection(s, inp, kind)
     warnings = posting_eligibility(s, rev, selected)
@@ -277,13 +296,12 @@ def resolve_commercial(s, inp, document_type, *, document_id, kind):
         profile = sales_orders.invoice_day_profile(s, rev, profile)
         retax = sales_orders.retax(s, profile)
     lines, sources = billed_lines(s, rev, selected, profile, retax)
-    freight = getattr(inp, '_shipment_freight', None) if kind == 'sales_order' else None
-    if freight:
-        # A shipment's freight to bill (R181 increment 4): one more line, billed from no order line.
+    for shipment_id, item_id, amount in (_shipment_freight(s, selected) if kind == 'sales_order' else ()):
+        # A shipment's freight to bill (R181 increment 4) rides on the first invoice that bills any of its units,
+        # whichever command makes it: one more line, billed from no order line.
         from bookflow.company import sales_defaults
         from bookflow.company.sales_models import SalesLineInput
         from bookflow.core.money import Money
-        shipment_id, item_id, amount = freight
         entry, extra = sales_defaults.resolve_line(s, SalesLineInput(
             item=item_id, quantity='1', net_amount=Money(amount, rev['currency']).to_dict()['amount']),
             profile, defer_tax=True, date=inp.date)

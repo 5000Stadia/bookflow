@@ -220,6 +220,7 @@ class FreightOutput(BaseModel):
     item_id: str
     item_name: str | None = None
     billed_by: str | None = Field(default=None, description='Invoice number that billed it; null: not yet billed.')
+    to_bill: bool = Field(default=True, description='Still to bill: a later invoice of its units carries it.')
 
 
 class ShipmentInvoiceRef(BaseModel):

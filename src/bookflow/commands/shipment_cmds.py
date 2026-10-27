@@ -118,6 +118,15 @@ def _order_input(s, inp):
     from bookflow.company import billing_models, work
     from bookflow.core import clock
     header = shipments.resolve(s, inp.shipment)
+    if header['revision']['status'] == 'shipped':
+        waiting, invoices = shipments.billing_state(s, header['id'])
+        if not waiting:
+            from bookflow.core.errors import BookflowError
+            names = ', '.join(invoices)
+            raise BookflowError('E_WORK_DEPENDENCY', message=(
+                f'Shipment {header["number"]} has nothing left to invoice'
+                + (f': invoice {names} billed its units.' if invoices else ': its units came back on a return.')),
+                details=dict(problem='nothing left to invoice', invoices=invoices, reason='nothing_to_invoice'))
     order = work.resolve(s, header['sales_order_id'], 'sales_order')
     billed = len({row['transaction_id'] for row in s.company.conn.execute(
         shipments.sa.select(shipments.c.shipment_billings.c.transaction_id).where(
@@ -129,10 +138,6 @@ def _order_input(s, inp):
         if getattr(inp, name) is not None:
             body[name] = getattr(inp, name)
     made = billing_models.SalesOrderInvoiceInput.model_validate(body)
-    rev = header['revision']
-    if rev.get('freight_minor_units') and not shipments.freight_billed(s, header['id']):
-        # Freight to bill rides on the shipment's first invoice (R181 increment 4).
-        made._shipment_freight = (header['id'], rev['freight_item_id'], int(rev['freight_minor_units']))
     return made
 
 

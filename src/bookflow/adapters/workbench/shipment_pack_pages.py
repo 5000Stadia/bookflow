@@ -16,6 +16,16 @@ from starlette.concurrency import run_in_threadpool
 
 from bookflow.core.errors import BookflowError
 
+
+def _box(text):
+    """The Box field as a whole box number (blank: box 1); anything else is the screen's own refusal."""
+    text = (text or '').strip() or '1'
+    if not (text.isascii() and text.isdigit()):
+        raise BookflowError('E_VALIDATION', message='Box is a whole number: 1, 2, 3 (0 takes a unit out of its box).',
+                            details={'fields': [{'field': 'box', 'problem': 'a whole box number'}]})
+    return int(text)
+
+
 _PASS = ('E_UNAUTHENTICATED', 'E_WORKBENCH_HEADER')
 
 
@@ -66,14 +76,14 @@ def mount(app, *, render, run, credential, page_error, role_allows):
                 if not code:
                     raise BookflowError('E_VALIDATION', message='Scan or type a serial number or item first.',
                                         details={'fields': [{'field': 'unit', 'problem': 'scan or type a unit'}]})
-                raw = {'shipment': number, 'unit': code, 'box': int(values['box'] or 1)}
+                raw = {'shipment': number, 'unit': code, 'box': _box(values['box'])}
                 if (form.get('quantity') or '').strip():
                     raw['quantity'] = form['quantity'].strip()
                 out = run(request, 'shipment pack', raw, company_id, headers=headers(form, 'Packed'))
                 where = 'out of its box' if raw['box'] == 0 else f"in box {raw['box']}"
                 result = f'{code} {where}.' + (' Everything is packed.' if (out.get('packing') or {}).get('packed') else '')
             elif action == 'box':
-                raw = {'shipment': number, 'box': int(form.get('box') or 1)}
+                raw = {'shipment': number, 'box': _box(form.get('box'))}
                 for key in ('package_type', 'weight', 'dimensions', 'tracking_number'):
                     if key in form:
                         raw[key] = (form.get(key) or '').strip()
@@ -81,7 +91,7 @@ def mount(app, *, render, run, credential, page_error, role_allows):
                 result = f"Box {raw['box']} saved."
             elif action == 'all':
                 lines = (form.get('line') or '').strip()
-                raw = {'shipment': number, 'line': lines, 'box': int(values['box'] or 1),
+                raw = {'shipment': number, 'line': lines, 'box': _box(values['box']),
                        'quantity': (form.get('quantity') or '').strip() or None}
                 raw = {k: v for k, v in raw.items() if v is not None}
                 out = run(request, 'shipment pack', raw, company_id, headers=headers(form, 'Packed'))
