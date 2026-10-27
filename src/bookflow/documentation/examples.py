@@ -1719,6 +1719,8 @@ EXAMPLES.update({
 # The verified history watermark (R180 stage 2).
 EXAMPLES.update({
     'company verify': Example('bookflow company verify' + _C + ' --json', {}),
+})
+
 # Shipments (R181 increment 1).
 EXAMPLES.update({
     'shipment post': Example('bookflow shipment post --sales-order 1001' + _C + ' --reason "Shipped Acme\'s order" --dry-run --json',
