@@ -66,7 +66,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `clearing_account_id` | string \| null | yes | yes | — | — |
 | `clearing_account` | string \| null | yes | yes | — | — |
 | `rows` | array[object] | yes | no | — | — |
-| `rows[].charge` | string | yes | no | — | The charge line's id: pass it as `charges[].charge`. |
+| `rows[].charge` | string | yes | no | — | The charge's id (its document's): pass it as `charges[].charge`. |
 | `rows[].transaction_id` | string | yes | no | — | — |
 | `rows[].document_type` | string | yes | no | — | — |
 | `rows[].document_number` | string \| null | yes | yes | — | — |
@@ -178,8 +178,8 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `charges[].charge` | inside `--charges` JSON array | string \| null | no | yes | null | A charge line, by the `charge` id `landed-cost charges` lists. Give this or document. |
-| `charges[].document` | inside `--charges` JSON array | string \| null | no | yes | null | The bill, check, card charge or vendor credit holding the charge, by id or number: every unallocated Landed Cost Clearing line on it. |
+| `charges[].charge` | inside `--charges` JSON array | string \| null | no | yes | null | A charge, by the `charge` id `landed-cost charges` lists (the document's id). Give this or document. |
+| `charges[].document` | inside `--charges` JSON array | string \| null | no | yes | null | The bill, check, card charge or vendor credit holding the charge, by id or number: its Landed Cost Clearing lines together are one charge. |
 | `charges[].amount` | inside `--charges` JSON array | string \| null | no | yes | null | How much of the charge to allocate now, at most what is unallocated; omitted, all of it. A freight credit (a vendor credit line) is negative; give its amount as a positive number or leave it out. |
 | `targets[].document` | inside `--targets` JSON array | string \| null | no | yes | null | An item receipt, or a bill, check or card charge whose item lines brought the stock in, by id or number: each of its stock lines, or the one line or item named below. |
 | `targets[].movement` | inside `--targets` JSON array | string \| null | no | yes | null | One receipt movement by id (as `landed-cost show` lists). |

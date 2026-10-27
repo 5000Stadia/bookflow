@@ -275,6 +275,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`company/journal_deletions`](schema/company/journal_deletions.md)
 - [`company/landed_cost_allocation_lines`](schema/company/landed_cost_allocation_lines.md)
 - [`company/landed_cost_allocations`](schema/company/landed_cost_allocations.md)
+- [`company/landed_cost_carries`](schema/company/landed_cost_carries.md)
 - [`company/list_merge_references`](schema/company/list_merge_references.md)
 - [`company/list_merges`](schema/company/list_merges.md)
 - [`company/loan_payments`](schema/company/loan_payments.md)

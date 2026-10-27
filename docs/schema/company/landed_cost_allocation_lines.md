@@ -12,7 +12,7 @@ Database: `company`.
 | `allocation_id` | VARCHAR(26) | no | — | — | ix_landed_cost_lines_allocation | landed_cost_allocations.id | Allocation this line belongs to. |
 | `position` | INTEGER | no | — | — | ix_landed_cost_lines_allocation | — | One-based position within the allocation; a reversal repeats its original's. |
 | `charge_transaction_id` | VARCHAR(26) | yes | — | — | ix_landed_cost_lines_charge | transactions.id | Document holding the charge line; null for a receipt's own shipping. |
-| `charge_line_id` | VARCHAR(26) | yes | — | — | ix_landed_cost_lines_charge | — | Stable line identity of the charge line; null for a receipt's own shipping. |
+| `charge_line_id` | VARCHAR(26) | yes | — | — | ix_landed_cost_lines_charge | — | The charge: the id of the document whose Landed Cost Clearing lines it is (they are one charge whatever an edit does to its lines); null for a receipt's own shipping. |
 | `target_movement_id` | VARCHAR(26) | yes | — | — | ix_landed_cost_lines_target | inventory_movements.id | Receipt movement the share lands on; null when allocated to an account. |
 | `target_account_id` | VARCHAR(26) | yes | — | — | — | accounts.id | Expense or cost-of-goods account a share not capitalised goes to; null for a receipt. |
 | `item_id` | VARCHAR(26) | yes | — | — | — | items.id | Item of the target receipt; null when allocated to an account. |
