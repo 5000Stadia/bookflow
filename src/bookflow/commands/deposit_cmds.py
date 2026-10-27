@@ -73,8 +73,9 @@ def _financial(verb, model):
         # Prepared inside the command's own write transaction (`plan_in_write`): the save uses
         # it as it stands rather than resolving it again (`deposit_persistence._execute`).
         in_write = bool(s.plan_in_write and s.company is not None and s.company.write_transaction)
-        return Plan(outputs.write_output(persistence.preview(s, ctx, prepared), dry_run=s.dry_run),
-                    data={'prepared': prepared, 'planned_in_write': in_write})
+        composed = persistence.compose(s, ctx, prepared) if in_write else None
+        return Plan(outputs.write_output(persistence.preview(s, ctx, prepared, composed), dry_run=s.dry_run),
+                    data={'prepared': prepared, 'planned_in_write': in_write, 'composed': composed})
 
     def apply(plan, ctx, s):
         if plan.data.get('recovered'):
@@ -83,7 +84,8 @@ def _financial(verb, model):
         # transaction; dispatch must not write a second event over its own.
         _refund_guard(s, verb, plan.data['prepared'])
         output = persistence.execute(s, ctx, plan.data['prepared'],
-                                     planned_in_write=plan.data.get('planned_in_write', False))
+                                     planned_in_write=plan.data.get('planned_in_write', False),
+                                     composed=plan.data.get('composed'))
         if verb == 'void' and output.changed:
             # Voiding a vendor's refund check reopens the credit it settled (vendor_refunds).
             from bookflow.company import vendor_refunds
