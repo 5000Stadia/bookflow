@@ -135,7 +135,8 @@ class FoundTransaction(StrictModel):
     type_label: str
     show_command: str = Field(description='The read that opens this document, given `id`.')
     date: str
-    number: str
+    number: str | None = Field(description='The document or check number; null for a bank payment, a check with no '
+                               'cheque behind it, and for a check still waiting to be printed.')
     name: str | None
     name_type: Literal['customer', 'vendor', 'employee', 'other_name'] | None
     name_id: str | None
@@ -176,7 +177,8 @@ SELECT * FROM (
  SELECT CASE WHEN m.kind IS NOT NULL THEN m.kind WHEN i.kind='adjustment' THEN 'inventory_adjustment'
              WHEN ir.id IS NOT NULL THEN 'item_receipt' ELSE t.type END AS family,
         coalesce(ir.id, t.id) AS id, t.id AS tx, r.id AS rev, r.date AS date,
-        coalesce(ci.check_number, r.number) AS number, r.number AS stored_number, ci.check_number_key AS check_key,
+        CASE WHEN ci.check_number IS NOT NULL THEN ci.check_number WHEN m.kind='check' THEN NULL
+             ELSE r.number END AS number, r.number AS stored_number, ci.check_number_key AS check_key,
         r.memo AS memo, r.total_minor_units AS amount, t.status AS state, r.name_type AS name_type, r.name_id AS name_id
  FROM transactions t JOIN transaction_revisions r ON r.id=t.current_revision_id
  LEFT JOIN money_out_documents m ON m.transaction_id=t.id
@@ -189,7 +191,7 @@ SELECT * FROM (
         WHERE list_kind='account' AND survivor_id=:account AND undone_at IS NULL)))
    AND (:named=0 OR {_party_sql('r.name_type', 'r.name_id')}
         OR t.id IN (SELECT transaction_id FROM posting_lines WHERE {_party_sql('name_type', 'name_id')}))
-   AND (:number IS NULL OR lower(r.number)=:number OR lower(ci.check_number)=:number)
+   AND (:number IS NULL OR (lower(r.number)=:number AND coalesce(m.kind,'')<>'check') OR lower(ci.check_number)=:number)
    AND (:memo IS NULL OR instr(lower(coalesce(r.memo,'')), :memo)>0
         OR EXISTS (SELECT 1 FROM document_lines dl WHERE dl.revision_id=r.id AND instr(lower(dl.description), :memo)>0))
 ) WHERE {_TYPES} AND {_COMMON}
@@ -428,10 +430,18 @@ def _detail(raw, rows, currency) -> list[FoundTransaction]:
             pairs.add((row['name_type'], row['name_id']))
     labels = _labels(raw, sorted(pairs))
     owed = _owed(raw, [row for row in rows if row['family'] in _SETTLED and row['state'] == 'posted'])
+    from bookflow.company import check_numbers
+    pending = [row['tx'] for row in rows if row['family'] == 'check' and row['number'] is None]
+    # A check with no number that is not waiting to be printed is a bank payment (R183).
+    unnumbered = {tx for (tx,) in raw.execute(
+        'SELECT value FROM json_each(?) WHERE value NOT IN (SELECT transaction_id FROM check_print_marks)',
+        (json.dumps(pending),))} if pending else set()
     items = []
     for row in rows:
         family = row['family']
         label, noun = FAMILIES[family]
+        if row['tx'] in unnumbered:
+            label = check_numbers.BANK_PAYMENT
         account = None
         if lines.get(row['rev']):
             account = min(lines[row['rev']], key=lambda line: (_RANK.get(line['account_type'], 9), line['line_no']))

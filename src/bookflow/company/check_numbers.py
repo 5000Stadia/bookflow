@@ -415,3 +415,26 @@ def by_number(s, selector):
         .where(sa.or_(t.c.check_number == literal, t.c.check_number_key.in_(sorted(keys))))
         .order_by(a.c.name, t.c.transaction_id)).mappings()
     return [dict(row) for row in rows]
+
+
+BANK_PAYMENT = 'Bank payment'
+
+
+def bank_payments(conn, transaction_ids):
+    """Which of these documents are bank payments with no cheque behind them (R183 `no_number`).
+
+    A check document with no number in its account's chequebook that is not waiting to be
+    printed either: a debit-card purchase, an online bill payment, an automatic withdrawal.
+    Every reader shows it without a number and calls it a bank payment, because the shared
+    document reference its journal posts under is not a cheque number and must never read as one.
+    """
+    ids = sorted({tx for tx in transaction_ids if tx})
+    if not ids:
+        return set()
+    m, t = c.money_out_documents, c.check_instruments
+    query = sa.select(m.c.transaction_id).where(
+        m.c.transaction_id.in_(ids), m.c.kind == 'check',
+        m.c.transaction_id.not_in(sa.select(t.c.transaction_id)))
+    if sa.inspect(conn).has_table('check_print_marks'):
+        query = query.where(m.c.transaction_id.not_in(sa.select(c.check_print_marks.c.transaction_id)))
+    return {row[0] for row in conn.execute(query)}

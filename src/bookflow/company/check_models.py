@@ -383,6 +383,10 @@ class MoneyOutSummary(_Input):
     print_status: Literal['queued', 'in_run', 'printed'] | None = Field(default=None, exclude_if=lambda value: value is None, description=(
         'For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting '
         '"Did checks print OK?") or printed.'))
+    bank_payment: bool = Field(default=False, exclude_if=lambda value: not value, description=(
+        'True for a check with no cheque behind it (posted with `no_number`: a debit-card purchase, '
+        'an online payment, an automatic withdrawal). It has no check number; the journal\'s own '
+        'document reference is not one, and every reader calls it a bank payment instead.'))
 
 
 class PurchaseDeletionInfo(_Input):

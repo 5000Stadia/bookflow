@@ -61,3 +61,49 @@ def test_reports_and_the_receipt_list_default_to_today(books):
     customer = run('customer create', {'name': 'Maple'}, write=True)
     listed = run('payment invoices', {'customer': customer['id']})
     assert listed['items'] == [] and listed['customer_id'] == customer['id']
+
+
+def test_a_bank_payment_never_shows_its_document_reference_as_a_check_number(books):
+    """R183 run 3: a debit purchase read "post check 2" in the audit and number 2 in find and the register."""
+    run, pick = books
+    bank, expense = pick('bank'), pick('expense')
+    vendor = run('vendor create', {'name': 'Home Depot'}, write=True)['id']
+    paid = run('check post', {'account': bank, 'date': '2026-10-20', 'amount': '12.00', 'no_number': True,
+                              'pay_to': {'name_type': 'vendor', 'name_id': vendor},
+                              'expenses': [{'account': expense, 'amount': '12.00'}]}, write=True)
+    cheque = run('check post', {'account': bank, 'date': '2026-10-21', 'amount': '5.00',
+                                'expenses': [{'account': expense, 'amount': '5.00'}]}, write=True)
+    assert paid['document']['bank_payment'] is True and paid['document']['check_number'] is None
+    assert 'bank_payment' not in cheque['document'], 'a real cheque is not a bank payment'
+    number = cheque['document']['check_number']
+
+    # The audit: a bank payment by no number, a cheque by the number on its face.
+    summaries = {e['request_id']: e['summary'] for e in run('audit list', {'command': 'check post', 'limit': 5})['items']}
+    assert sorted(summaries.values()) == sorted(['post bank payment', f'post check {number}'])
+    fixed = run('check update', {'check': paid['id'], 'memo': 'Fuel', 'expected_version': paid['version']}, write=True)
+    assert fixed['document']['bank_payment'] is True
+    [update] = run('audit list', {'command': 'check update', 'limit': 1})['items']
+    assert update['summary'] == 'update bank payment'
+
+    # Find: no number, and called a bank payment; its journal reference does not find it as a number.
+    found = {row['id']: row for row in run('transaction find', {'types': ['check']})['items']}
+    assert found[paid['id']]['number'] is None and found[paid['id']]['type_label'] == 'Bank payment'
+    assert found[cheque['id']]['number'] == number and found[cheque['id']]['type_label'] == 'Check'
+    reference = run('check show', {'check': paid['id']})['number']
+    assert paid['id'] not in {row['id'] for row in run('transaction find', {'number': reference})['items']}
+
+    # Show and the list carry the flag; the register calls it a bank payment, with no check number.
+    assert run('check show', {'check': paid['id']})['document']['bank_payment'] is True
+    listed = {row['id']: row['document'] for row in run('check query', {})['items']}
+    assert listed[paid['id']].get('bank_payment') is True and not listed[cheque['id']].get('bank_payment')
+    rows = {row['transaction_id']: row for row in run('register query', {'account': bank, 'date_from': '2026-10-01',
+                                                                          'date_to': '2026-10-31'})['rows']}
+    assert rows[paid['id']]['bank_payment'] is True and rows[paid['id']]['check_number'] is None
+    assert rows[cheque['id']]['bank_payment'] is False and rows[cheque['id']]['check_number'] == number
+
+    # A cheque saved to be printed has no number yet, but it is a cheque, not a bank payment.
+    queued = run('check post', {'account': bank, 'date': '2026-10-22', 'amount': '7.00', 'to_be_printed': True,
+                                'expenses': [{'account': expense, 'amount': '7.00'}]}, write=True)
+    assert 'bank_payment' not in queued['document']
+    [event] = run('audit list', {'command': 'check post', 'limit': 1})['items']
+    assert event['summary'] == 'post check to print'

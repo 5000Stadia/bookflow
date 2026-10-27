@@ -262,7 +262,8 @@ def _build_command(cmd: registry.Command):
 
     def run(**kw: Any) -> None:
         ctx_obj = click_globals.get_current_context().obj or {}
-        as_json = kw.pop("json_", False) or ctx_obj.get("json", False)
+        # `agent run` is read by a program: its stdout is the result as JSON and nothing else (R183).
+        as_json = kw.pop("json_", False) or ctx_obj.get("json", False) or cmd.name == "agent run"
         table_columns = kw.pop("columns_", None)
         as_csv = kw.pop("csv_", False)
         if cmd.protocol_stdout and as_json:

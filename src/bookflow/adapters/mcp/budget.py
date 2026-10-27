@@ -46,9 +46,14 @@ def _page_field(document):
 _AUDIT = ("created_at", "created_by", "created_via", "updated_at", "updated_by", "updated_via")
 
 
+# A false flag says nothing a reader would miss, except that a record is inactive.
+_KEPT_FLAGS = ("active",)
+
+
 def _slim(row):
     return {key: value for key, value in row.items()
-            if key not in _AUDIT and value is not None and value != [] and value != {}}
+            if key not in _AUDIT and value is not None and value != [] and value != {}
+            and (value is not False or key in _KEPT_FLAGS)}
 
 
 def fit(document, *, show=None, paging=None, budget=BUDGET, result_files=True):
@@ -97,8 +102,8 @@ def fit(document, *, show=None, paging=None, budget=BUDGET, result_files=True):
             room -= cost
         result[page] = kept
         if slimmed:
-            how.append(f"Each of the {page} leaves out its null or empty fields and its created_/updated_ audit "
-                       "stamps; a show command reads one whole.")
+            how.append(f"Each of the {page} leaves out its null or empty fields, its false flags (a missing flag is "
+                       "false; active is always kept) and its created_/updated_ audit stamps; a show command reads one whole.")
         if len(kept) < len(rows):
             omitted.insert(0, {"field": page, "items": len(rows), "kept": len(kept)})
             showing = f"showing {len(kept)} of {len(rows)} {page}"

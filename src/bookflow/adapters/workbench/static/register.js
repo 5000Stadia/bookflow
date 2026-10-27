@@ -437,8 +437,10 @@
       // A bank register's Number column is a chequebook column: a cheque shows the number
       // written on its face, and the shared document reference follows it so the journal is
       // still reachable from the row.
+      // A bank payment has no cheque behind it: no number reads as a check number (R183).
       const reference = row.check_number
         ? `${row.check_number} · Check · ${row.transaction_number}`
+        : row.bank_payment ? 'Bank payment'
         : `${row.transaction_number} · ${document?.label || TYPE_LABELS[row.transaction_type] || row.transaction_type || ''}`;
       const when = node('td', null, 'reg-date'), effective = node('time', day(row.effective_date));
       effective.dateTime = row.effective_date; when.append(effective, ' ', node('small', row.recorded_at, 'reg-recorded'));

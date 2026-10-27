@@ -643,7 +643,9 @@ def persist_prepared(fresh, ctx, s, *, command_name, extra=(), noun='journal', n
     instrument = d.get('check_instrument')
     if instrument is not None:
         touched.extend(check_numbers.touches(instrument))
-    summary_text = f"{d['operation']} {noun} {number or h['number']}"
+    # An empty number (R183): a document whose journal reference is not what a person calls it by.
+    reference = h['number'] if number is None else number
+    summary_text = f"{d['operation']} {noun} {reference}".rstrip()
     audit.write_event_to(s.company, ctx, command_name, summary_text, touched,
         actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=getattr(s, 'directive_code', None), event_id=d['event'])
     if old:

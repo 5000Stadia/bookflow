@@ -114,4 +114,5 @@ def test_export_refuses_a_name_that_is_not_a_report_and_names_bad_filters(client
     with pytest.raises(bookflow.BookflowError) as caught:
         client.run("report export", {"report": "trial-balance", "filters": {"bogus": 1}}, company="Demo Plumbing Co")
     fields = {f["field"] for f in caught.value.details["fields"]}
-    assert "filters.bogus" in fields and "filters.date_to" in fields
+    # date_to defaults to today (R183 trial fixes), so only the unknown filter is refused.
+    assert fields == {"filters.bogus"}

@@ -76,6 +76,9 @@ class RegisterRow(reports.GeneralLedgerRow):
     # the other side of its own entry.
     check_number: str | None = None
     purchase_noun: Literal['check', 'card-charge', 'card-credit'] | None = None
+    # A check with no cheque behind it (R183 `no_number`): no check number, and the document
+    # reference is not one, so the Number column calls it a bank payment.
+    bank_payment: bool = False
     # A check, card charge or card credit is stored as a journal entry; its row names the
     # document a person entered (its money-out marker), as that document's own results do.
     transaction_type: reports.TransactionType | Literal['check', 'card_charge', 'card_credit'] | None = None
@@ -294,6 +297,8 @@ def query(inp: RegisterQueryInput, s, *, principal_id=None) -> RegisterQueryOutp
             for row in db.conn.execute(sa.select(markers.c.transaction_id, markers.c.kind).where(
                 markers.c.transaction_id.in_({row.transaction_id for row in result.rows if row.transaction_id}),
                 markers.c.kind.in_(('check', 'card_charge', 'card_credit'))))}
+        from bookflow.company import check_numbers
+        unnumbered = check_numbers.bank_payments(db.conn, {tx for tx, noun in purchases.items() if noun == 'check'})
         rows = []
         for row in result.rows:
             values = row.model_dump()
@@ -320,7 +325,8 @@ def query(inp: RegisterQueryInput, s, *, principal_id=None) -> RegisterQueryOutp
                 revision_number=summary['revision_number'] if summary else None,
                 memo=memo, category_label=category, class_summary=class_label,
                 check_number=cheques.get(row.transaction_id),
-                purchase_noun=purchases.get(row.transaction_id)))
+                purchase_noun=purchases.get(row.transaction_id),
+                bank_payment=row.transaction_id in unnumbered))
         net = db.raw.execute('SELECT bookflow_sum_int(debit_minor_units-credit_minor_units) FROM posting_lines '
                              f'WHERE account_id IN ({",".join("?" * len(members))})', tuple(members)).fetchone()[0]
         current = CurrentBalanceSnapshot(balance=reports.money(int(net or 0) * normal_sign, currency),

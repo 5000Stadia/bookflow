@@ -46,6 +46,16 @@ class SetupInput(BaseModel):
     serve: bool = Field(True, description="Start the host in the background if it is not answering, and wait until it does")
     link_minutes: int = Field(120, ge=1, le=1440, description="Minutes the owner's one-time password link stays valid")
     new_token: bool = Field(False, description="Issue the agent a new token even though its last one was revoked; a person's decision")
+    entity_type: Literal["sole_proprietor", "partnership", "llc", "s_corp", "c_corp", "nonprofit", "other"] | None = Field(
+        None, description="The business's legal form, as `company update --entity-type` takes it; set while the company has none (or other), kept as it is otherwise")
+    opening_balance: str | None = Field(
+        None, max_length=300, pattern=r"^[^=]+=-?[0-9][0-9,]*(\.[0-9]+)?$",
+        description=('A bank account\'s opening balance, ACCOUNT=AMOUNT (e.g. "Checking=5000.00"): posted once as a journal entry, the '
+                     'bank account against Opening Balance Equity, on --opening-date. A rerun never posts it again; it reports '
+                     'the opening balance the account already has'))
+    opening_date: str | None = Field(
+        None, pattern=r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+        description="Date of the opening balance, YYYY-MM-DD; defaults to the first day of the current fiscal year, where the books start")
 
 
 class SetupStep(BaseModel):
@@ -75,6 +85,9 @@ class SetupOutput(BaseModel):
     host: dict[str, Any] = Field(description="status (running, started, not_started), pid and log")
     owner_link: dict[str, Any] | None = Field(description="url and expires_at of the owner's one-time password link; null when they have a password")
     owner_checklist: list[OwnerStep] = Field(description="What only the owner does, still to do: set their password, turn on daily backups; each with the exact command")
+    opening_balance: dict[str, Any] | None = Field(None, description=(
+        "The bank account's opening balance: account, amount, date, transaction_id and status (created, or exists when "
+        "the account already had one, which is what is reported); null when none was asked for"))
     steps: list[SetupStep]
     next_steps: list[str]
     content: str = Field(description="The same result as plain text, for a person")
@@ -182,8 +195,11 @@ def owner_steps(root: Path, *, company_id: str, company_name: str, has_password:
         backups = OwnerStep(step="backups", done=False,
                             command=(f"mkdir -p {folder} && bookflow backup schedule {_quoted(company_name)} "
                                      f"--daily-at 02:00 --destination {folder} --keep 14{flag}"),
-                            detail="Turn on daily backups (a person's decision; an agent cannot). Another disk or "
-                                   "machine is safer than this one: change --destination to it.")
+                            detail="Turn on daily backups. Only the owner does this, in their own terminal: where and "
+                                   "when the books are copied, and how many old copies are deleted, is a person's decision. "
+                                   "An assistant must not run it for them, even where its shell could, because it would be "
+                                   "recorded as the owner's own act. Another disk or machine is safer than this one: "
+                                   "change --destination to it.")
     return [password, backups]
 
 
@@ -254,6 +270,68 @@ def run_owner_link(cmd, inp: OwnerLinkInput, ctx: Context, s: Session) -> dict[s
                            content=text).model_dump(mode="json")
 
 
+OPENING_SOURCE = "cutover:setup-opening-balance"
+
+
+def _opening_balance(run, inp: SetupInput, company_id: str, shown: dict[str, Any], step) -> dict[str, Any]:
+    """Post a bank account's opening balance once, as the agent guide recommends; report the one it has after that.
+
+    A journal entry on the date the books start: the bank account against Opening Balance Equity. It is
+    the move-in (its source reference starts ``cutover:``), so the owner's review does not list it.
+    """
+    from datetime import date
+    from decimal import Decimal, InvalidOperation
+    name, _, raw_amount = inp.opening_balance.rpartition("=")
+    name = name.strip()
+    try:
+        amount = Decimal(raw_amount.replace(",", "").strip())
+    except InvalidOperation:
+        amount = None
+    if amount is None or amount == 0:
+        raise BookflowError("E_VALIDATION", details={"fields": [{"field": "opening_balance", "problem": "give a non-zero amount, e.g. Checking=5000.00"}]})
+    accounts = run("account list", company=company_id)["items"]
+    banks = [a for a in accounts if a["type"] == "bank" and a.get("active", True)]
+    folded = name.casefold()
+    bank = next((a for a in banks if a["id"] == name or a["full_name"].casefold() == folded), None) \
+        or next((a for a in banks if a["name"].casefold() == folded), None)
+    if bank is None:
+        raise BookflowError("E_VALIDATION", details={"fields": [{"field": "opening_balance", "problem": (
+            f"no bank account named {name}; the bank accounts are: " + ", ".join(a["full_name"] for a in banks))}]})
+    equity = next((a for a in accounts if a.get("system_role") == "opening_balance_equity"), None)
+    if equity is None:
+        raise BookflowError("E_VALIDATION", details={"fields": [{"field": "opening_balance", "problem": "the chart has no Opening Balance Equity account"}]})
+    # Whatever already moved this account against Opening Balance Equity is its opening balance:
+    # setup's own entry from an earlier run, or one entered by hand before setup was asked to.
+    touching = {row["transaction_id"] for row in run("transaction find", {"account": equity["id"], "limit": 200}, company=company_id)["items"]}
+    found = [row for row in run("transaction find", {"account": bank["id"], "limit": 200}, company=company_id)["items"]
+             if row["transaction_id"] in touching and row["status"] != "void"]
+    if found:
+        row = found[0]
+        result = {"account": bank["full_name"], "account_id": bank["id"], "amount": row["amount"]["amount"],
+                  "currency": row["amount"]["currency"], "date": row["date"], "transaction_id": row["transaction_id"], "status": "exists"}
+        step("opening balance", "exists", f"{bank['full_name']} already has its opening balance, {row['amount']['amount']} "
+                                          f"{row['amount']['currency']} on {row['date']}; nothing was posted"
+             + ("" if Decimal(row["amount"]["amount"]) == abs(amount) else
+                f" (correct it with `bookflow journal update {row['transaction_id']}`)"))
+        return result
+    if inp.opening_date:
+        day = inp.opening_date
+    else:
+        today = date.today()
+        month = int((shown.get("info") or {}).get("fiscal_year_start_month") or 1)
+        day = date(today.year if today.month >= month else today.year - 1, month, 1).isoformat()
+    value = f"{abs(amount):.2f}"
+    side, other = ("debit", "credit") if amount > 0 else ("credit", "debit")
+    posted = run("journal post", {"date": day, "memo": f"Opening balance, {bank['full_name']}", "lines": [
+        {"account": bank["id"], "side": side, "amount": value},
+        {"account": equity["id"], "side": other, "amount": value}]}, company=company_id, write=True,
+        source_ref=f"{OPENING_SOURCE}:{bank['id']}")
+    step("opening balance", "created", f"{bank['full_name']} {'' if amount > 0 else '-'}{value} {shown.get('home_currency', inp.currency)} "
+                                       f"on {day}, against {equity['full_name']}")
+    return {"account": bank["full_name"], "account_id": bank["id"], "amount": f"{amount:.2f}",
+            "currency": shown.get("home_currency", inp.currency), "date": day, "transaction_id": posted["id"], "status": "created"}
+
+
 def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
     """The bootstrap path for `setup` (dispatch._run_bootstrap): existing commands, in order, each only if needed."""
     import sqlalchemy as sa
@@ -284,8 +362,9 @@ def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
     if s.os_login:
         client._login = s.os_login
 
-    def run(name: str, data: dict[str, Any] | None = None, *, company: str | None = None, write: bool = False) -> dict[str, Any]:
-        return client.run(name, data or {}, company=company, reason=REASON if write else None)
+    def run(name: str, data: dict[str, Any] | None = None, *, company: str | None = None, write: bool = False,
+            source_ref: str | None = None) -> dict[str, Any]:
+        return client.run(name, data or {}, company=company, reason=REASON if write else None, source_ref=source_ref)
 
     # 1. The data root and its owner.
     if not (root / "hub.db").exists():
@@ -314,7 +393,8 @@ def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
             org = run("organization new", {"name": inp.company}, write=True)
             step("organization", "created", org["display_name"])
         made = run("company new", {"legal_name": inp.company, "home_currency": inp.currency, "chart": inp.chart,
-                                   "organization": org["organization_id"]}, write=True)
+                                   "organization": org["organization_id"],
+                                   **({"entity_type": inp.entity_type} if inp.entity_type else {})}, write=True)
         company_id = made["company_id"]
         step("company", "created", f"{inp.company} ({inp.currency}, {inp.chart} chart)")
     else:
@@ -323,6 +403,17 @@ def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
     shown = run("company show", company=company_id)
     if shown.get("home_currency") and shown["home_currency"] != inp.currency:
         raise BookflowError("E_VALIDATION", details={"fields": [{"field": "currency", "problem": f"{inp.company} keeps its books in {shown['home_currency']}"}]})
+    if inp.entity_type is not None:
+        current = (shown.get("info") or {}).get("entity_type")
+        if current == inp.entity_type:
+            step("entity type", "created" if found is None else "exists", current)
+        elif current in (None, "", "other"):
+            run("company update", {"entity_type": inp.entity_type, "expected_version": shown["info_version"]},
+                company=company_id, write=True)
+            step("entity type", "created" if not current else "updated", inp.entity_type)
+        else:
+            step("entity type", "exists", f"kept {current}; a person changes it with `bookflow company update --entity-type`")
+    opening = _opening_balance(run, inp, company_id, shown, step) if inp.opening_balance else None
 
     # 3. The agent's own identity, working for the owner in this company.
     agent = None
@@ -509,5 +600,5 @@ def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
         agent={"user_id": agent["agent_id"], "username": agent["username"], "role": role, "stopped": bool(stopped),
                "acts_for": owner_row["username"], "acts_for_user_id": owner_id},
         mcp_config=str(config_path), mcp_server=server, token_file=str(token_file), url=url, host=host,
-        owner_link=owner_link, owner_checklist=checklist, steps=steps, next_steps=next_steps, content="\n".join(lines) + "\n",
+        owner_link=owner_link, owner_checklist=checklist, opening_balance=opening, steps=steps, next_steps=next_steps, content="\n".join(lines) + "\n",
     ).model_dump(mode="json")

@@ -833,10 +833,10 @@ The same example as complete `bookflow_run` arguments:
 | `items[].class_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
 | `items[].class_mode` | inside `--items` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
 | `items[].site` | inside `--items` JSON array | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
-| `items[].bin` | inside `--items` JSON array | string \| null | no | yes | null | Bin at the line's site, by id, full name (A:3) or label code; the site must track bins. "(no bin)" names units outside every bin. Omitted: the bin the stock stood in (a correction), the sale's (a return), else the item's default bin; an outgoing line never drives a bin below zero while units are elsewhere. |
-| `items[].lot` | inside `--items` JSON array | string \| null | no | yes | null | Lot of a lot-tracked item: the lot an incoming line receives into (made when new) or an outgoing line takes from. Omitted on an outgoing line, the units leave unassigned. |
+| `items[].bin` | inside `--items` JSON array | string \| null | no | yes | null | Bin at the line's site (id, full name A:3 or label code); "(no bin)" is outside every bin. Omitted: the bin the stock stood in, else the item's default bin. |
+| `items[].lot` | inside `--items` JSON array | string \| null | no | yes | null | Lot an incoming line receives into (made when new) or an outgoing line takes from; omitted, outgoing units leave unassigned. |
 | `items[].lot_expiry` | inside `--items` JSON array | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
-| `items[].serial_numbers` | inside `--items` JSON array | array[string] \| null | no | yes | null | Serial numbers of a serial-tracked item, one per unit, up to the quantity; units left unnumbered are unassigned (`inventory assign` later). Never invent one: an unknown number is taken with a warning. Omitted on a correction, the line keeps its numbers. |
+| `items[].serial_numbers` | inside `--items` JSON array | array[string] \| null | no | yes | null | Serial numbers, one per unit, up to the quantity; unnumbered units stay unassigned. Never invent one. Omitted on a correction, the line keeps its numbers. |
 
 ### Command and context options
 
@@ -2340,10 +2340,10 @@ The same example as complete `bookflow_run` arguments:
 | `items[].class_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
 | `items[].class_mode` | inside `--items` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
 | `items[].site` | inside `--items` JSON array | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
-| `items[].bin` | inside `--items` JSON array | string \| null | no | yes | null | Bin at the line's site, by id, full name (A:3) or label code; the site must track bins. "(no bin)" names units outside every bin. Omitted: the bin the stock stood in (a correction), the sale's (a return), else the item's default bin; an outgoing line never drives a bin below zero while units are elsewhere. |
-| `items[].lot` | inside `--items` JSON array | string \| null | no | yes | null | Lot of a lot-tracked item: the lot an incoming line receives into (made when new) or an outgoing line takes from. Omitted on an outgoing line, the units leave unassigned. |
+| `items[].bin` | inside `--items` JSON array | string \| null | no | yes | null | Bin at the line's site (id, full name A:3 or label code); "(no bin)" is outside every bin. Omitted: the bin the stock stood in, else the item's default bin. |
+| `items[].lot` | inside `--items` JSON array | string \| null | no | yes | null | Lot an incoming line receives into (made when new) or an outgoing line takes from; omitted, outgoing units leave unassigned. |
 | `items[].lot_expiry` | inside `--items` JSON array | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
-| `items[].serial_numbers` | inside `--items` JSON array | array[string] \| null | no | yes | null | Serial numbers of a serial-tracked item, one per unit, up to the quantity; units left unnumbered are unassigned (`inventory assign` later). Never invent one: an unknown number is taken with a warning. Omitted on a correction, the line keeps its numbers. |
+| `items[].serial_numbers` | inside `--items` JSON array | array[string] \| null | no | yes | null | Serial numbers, one per unit, up to the quantity; unnumbered units stay unassigned. Never invent one. Omitted on a correction, the line keeps its numbers. |
 
 ### Command and context options
 

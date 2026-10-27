@@ -46,8 +46,8 @@ def test_money_errors_name_the_accepted_shape_not_validator_internals(client):
 def test_missing_dates_say_what_to_pass(client):
     error = _refusal(client, "report general-ledger", {"account": "Checking"})
     problems = {f["field"]: f["problem"] for f in error.details["fields"]}
-    assert problems == {"date_from": 'required: a date like "2026-09-27" (YYYY-MM-DD)',
-                        "date_to": 'required: a date like "2026-09-27" (YYYY-MM-DD)'}
+    # date_to defaults to today (R183 trial fixes); only the start of the period must be named.
+    assert problems == {"date_from": 'required: a date like "2026-09-27" (YYYY-MM-DD)'}
 
 
 def test_union_branch_tags_never_reach_the_field_path(client):

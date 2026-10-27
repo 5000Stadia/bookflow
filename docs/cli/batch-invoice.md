@@ -48,14 +48,14 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].tax_code` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].price_level` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].price_basis_amount` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
-| `lines[].percent` | inside `--lines` JSON array | string \| null | no | yes | null | Percentage, 0 through 100, for a discount or percentage charge line, applied to the line or subtotal directly above it. Omitted: the item's own; give net_amount for a fixed amount. A taxable discount reduces taxable sales only down to zero; the rest comes off non-taxable sales. |
+| `lines[].percent` | inside `--lines` JSON array | string \| null | no | yes | null | Percentage, 0 through 100, of a discount or charge line, applied to the line or subtotal above it; omitted, the item's own. A taxable discount reduces taxable sales only down to zero. |
 | `lines[].refresh_defaults` | inside `--lines` JSON array | boolean | no | no | false | — |
 | `lines[].use_defaults` | inside `--lines` JSON array | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "percent"]] | no | no | [] | — |
-| `lines[].site` | inside `--lines` JSON array | string \| null | no | yes | null | Inventory site a stocked line takes from (a sale), gives back to (a return) or commits at (an order), by id or name. Omitted: the document's site, else the source line's, else the default site. |
-| `lines[].bin` | inside `--lines` JSON array | string \| null | no | yes | null | Bin at the line's site, by id, full name (A:3) or label code; the site must track bins. "(no bin)" names units outside every bin. Omitted: the bin the stock stood in (a correction), the sale's (a return), else the item's default bin; an outgoing line never drives a bin below zero while units are elsewhere. |
-| `lines[].lot` | inside `--lines` JSON array | string \| null | no | yes | null | Lot of a lot-tracked item: the lot an incoming line receives into (made when new) or an outgoing line takes from. Omitted on an outgoing line, the units leave unassigned. |
+| `lines[].site` | inside `--lines` JSON array | string \| null | no | yes | null | Inventory site of a stocked line, by id or name. Omitted: the document's site, else the default site. |
+| `lines[].bin` | inside `--lines` JSON array | string \| null | no | yes | null | Bin at the line's site (id, full name A:3 or label code); "(no bin)" is outside every bin. Omitted: the bin the stock stood in, else the item's default bin. |
+| `lines[].lot` | inside `--lines` JSON array | string \| null | no | yes | null | Lot an incoming line receives into (made when new) or an outgoing line takes from; omitted, outgoing units leave unassigned. |
 | `lines[].lot_expiry` | inside `--lines` JSON array | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
-| `lines[].serial_numbers` | inside `--lines` JSON array | array[string] \| null | no | yes | null | Serial numbers of a serial-tracked item, one per unit, up to the quantity; units left unnumbered are unassigned (`inventory assign` later). Never invent one: an unknown number is taken with a warning. Omitted on a correction, the line keeps its numbers. |
+| `lines[].serial_numbers` | inside `--lines` JSON array | array[string] \| null | no | yes | null | Serial numbers, one per unit, up to the quantity; unnumbered units stay unassigned. Never invent one. Omitted on a correction, the line keeps its numbers. |
 | `memo` | `--memo` | string \| null | no | yes | null | Memo written on every invoice in this batch. |
 | `customer_message` | `--customer-message` | string \| null | no | yes | null | Message written on every invoice in this batch; omit to take each customer's own default message. |
 
