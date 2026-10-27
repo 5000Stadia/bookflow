@@ -173,7 +173,7 @@ review cb5fcd7 (gate g96052d).
 - [x] R109 Budgets and comparisons: budget entry, budget-versus-actual, prior-period and prior-year comparisons, and saved custom report layouts.
 - [x] R110 Advanced pricing: promotions and rules by quantity, customer and date, beyond today's price levels.
 - [x] R111 Unattended scheduling and reminders: the host runs memorized transactions on schedule, assigns to-dos, and sends overdue notices without a person pressing a button.
-- [ ] R112 Document delivery: send invoices and statements from Bookflow, track delivery, and schedule recurring sends. On hold: needs Kabe's yes before starting (his 10-24 approved set did not include it).
+- [ ] R112 Document delivery: send invoices and statements from Bookflow, track delivery, and schedule recurring sends. Scope (Kabe 2026-10-27): build it whole, drafted email with the PDF attached, the outbox, tracking and schedules, wired to a sending connection that is decided later; until one is connected, nothing leaves the machine and messages wait in the outbox, ready to send.
 - [ ] R113 Custom forms and print layouts: a visual designer for invoices and other documents, plus receipt, envelope and label profiles and mixed print batches. On hold: needs Kabe's yes before starting (his 10-24 approved set did not include it).
 - [ ] R114 POS and commissions: a touch checkout screen, a POS start screen, per-line salesperson attribution, and commission calculation and payout. On hold: needs Kabe's yes before starting (his 10-24 approved set did not include it).
 - [ ] R115 CRM: leads, a sales pipeline, follow-ups and customer communication history beyond contact records. On hold: needs Kabe's yes before starting (his 10-24 approved set did not include it).
