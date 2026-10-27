@@ -83,7 +83,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].type_label` | string | yes | no | — | — |
 | `items[].show_command` | string | yes | no | — | The read that opens this document, given `id`. |
 | `items[].date` | string | yes | no | — | — |
-| `items[].number` | string | yes | no | — | — |
+| `items[].number` | string \| null | yes | yes | — | The document or check number; null for a bank payment, a check with no cheque behind it, and for a check still waiting to be printed. |
 | `items[].name` | string \| null | yes | yes | — | — |
 | `items[].name_type` | literal["customer", "vendor", "employee", "other_name"] \| null | yes | yes | — | — |
 | `items[].name_id` | string \| null | yes | yes | — | — |

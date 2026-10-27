@@ -994,7 +994,7 @@ Example JSON output:
 
 ## `agent run`
 
-Run one Bookflow command as the AI agent `bookflow setup` made, without an MCP client: it reads the MCP configuration setup wrote (host, token file, company) and makes the same `bookflow_run` call a connected client makes, so the books record it exactly as an MCP call: the agent, working for the owner. For an agent whose MCP client has not reloaded .mcp.json yet. Writes need --reason.
+Run one Bookflow command as the AI agent `bookflow setup` made, without an MCP client: it reads the MCP configuration setup wrote (host, token file, company) and makes the same `bookflow_run` call a connected client makes, so the books record it exactly as an MCP call: the agent, working for the owner. For an agent whose MCP client has not reloaded .mcp.json yet. Writes need --reason. Stdout is the command's result as one JSON document and nothing else, with or without --json; warnings and refusals go to stderr, so do not merge the two streams (no 2>&1) when parsing it.
 
 | Contract | Value |
 |---|---|

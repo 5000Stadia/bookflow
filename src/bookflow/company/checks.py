@@ -109,6 +109,8 @@ def document(s, noun, header, lines, check_number=None):
         expense_total=Money(total, currency).to_dict(), expense_lines=len(expenses),
         check_number=check_number, funding_details=funding if not funding['amount_minor_units'] else None,
         print_status=_print_status(s, noun, header),
+        bank_payment=(noun == 'check' and header is not None and not check_number
+                      and header['id'] in check_numbers.bank_payments(s.company.conn, [header['id']])),
         item_total=Money(checked_sum((row['amount_minor_units'] for row in captured), 'items.total'), currency).to_dict(),
         items=[check_items.output(row, row['line_id'], currency) for row in captured])
 
@@ -229,8 +231,9 @@ def _register(facts, s, noun, inp, header):
     # no request at all and the journal it posts keeps its own document reference alone.
     instrument = (check_numbers.request(account['id'], facts['number'])
                   if noun == 'check' and not _stays_unnumbered(s, facts, header) else None)
-    if noun == 'check' and instrument is None and _queued(s, facts, header):
-        summary = summary.model_copy(update={'print_status': 'queued'})
+    if noun == 'check' and instrument is None:
+        summary = summary.model_copy(update={'print_status': 'queued'} if _queued(s, facts, header)
+                                     else {'bank_payment': summary.check_number is None})
     return register, summary, instrument, facts["items"]
 
 
@@ -255,6 +258,24 @@ def _stays_unnumbered(s, facts, header):
     # Still unnumbered: waiting in the print queue, or a payment with no cheque behind it
     # (`no_number`, R183), which a correction that types no number leaves as it is.
     return True
+
+
+def _audit_name(s, noun, summary, planned, header):
+    """What the audit summary calls this document, and by which number (R183).
+
+    A cheque by the number on its face; one waiting to be printed by no number yet; a bank
+    payment with no cheque behind it by none at all, so its journal reference never reads as a
+    cheque number. A card charge keeps its journal reference.
+    """
+    if noun != 'check':
+        return dict(noun=WORDS[noun][0], number=None)
+    held = planned['instrument']['check_number'] if planned else (
+        (check_numbers.current(s, header['id']) or {}).get('check_number') if header else None)
+    if held:
+        return dict(noun='check', number=held)
+    if summary.bank_payment or (header is not None and header['id'] in check_numbers.bank_payments(s.company.conn, [header['id']])):
+        return dict(noun='bank payment', number='')
+    return dict(noun='check to print', number='')
 
 
 def _queued(s, facts, header):
@@ -499,8 +520,8 @@ def apply(plan, ctx, s):
         extra += (('money_out_item_lines', 'money_out_item_line', 'document_line_id', item_rows),)
     planned = fresh.data.get('check_instrument') if fresh.data['changed'] else None
     applied = journals.persist_prepared(
-        fresh, ctx, s, command_name=f'{noun} {operation}', extra=extra, noun=WORDS[noun][0],
-        number=planned['instrument']['check_number'] if planned else None)
+        fresh, ctx, s, command_name=f'{noun} {operation}', extra=extra,
+        **_audit_name(s, noun, summary, planned, fresh.data.get('header') or header))
     if stock is not None:
         applied = inventory_effects.settle(applied, stock, ctx, s,
             command_name=f'{noun} {operation}', summary=applied.summary)

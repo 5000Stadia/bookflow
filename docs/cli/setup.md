@@ -39,6 +39,9 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `serve` | `--serve` | boolean | no | no | true | Start the host in the background if it is not answering, and wait until it does |
 | `link_minutes` | `--link-minutes` | integer | no | no | 120 | Minutes the owner's one-time password link stays valid; minimum 1; maximum 1440 |
 | `new_token` | `--new-token` | boolean | no | no | false | Issue the agent a new token even though its last one was revoked; a person's decision |
+| `entity_type` | `--entity-type` | literal["sole_proprietor", "partnership", "llc", "s_corp", "c_corp", "nonprofit", "other"] \| null | no | yes | null | The business's legal form, as `company update --entity-type` takes it; set while the company has none (or other), kept as it is otherwise |
+| `opening_balance` | `--opening-balance` | string \| null | no | yes | null | A bank account's opening balance, ACCOUNT=AMOUNT (e.g. "Checking=5000.00"): posted once as a journal entry, the bank account against Opening Balance Equity, on --opening-date. A rerun never posts it again; it reports the opening balance the account already has |
+| `opening_date` | `--opening-date` | string \| null | no | yes | null | Date of the opening balance, YYYY-MM-DD; defaults to the first day of the current fiscal year, where the books start |
 
 ### Command and context options
 
@@ -76,6 +79,7 @@ This command has no HTTP route.
 | `owner_checklist[].done` | boolean | yes | no | — | — |
 | `owner_checklist[].detail` | string | yes | no | — | — |
 | `owner_checklist[].command` | string \| null | no | yes | null | The exact command the owner runs; null when nothing is left to run |
+| `opening_balance` | object[string, any] \| null | no | yes | null | The bank account's opening balance: account, amount, date, transaction_id and status (created, or exists when the account already had one, which is what is reported); null when none was asked for |
 | `steps` | array[object] | yes | no | — | — |
 | `steps[].step` | string | yes | no | — | — |
 | `steps[].status` | literal["created", "exists", "updated", "skipped", "stopped"] | yes | no | — | — |
@@ -98,6 +102,7 @@ Example JSON output:
   "mcp_server": {},
   "media_type": "text/plain",
   "next_steps": [],
+  "opening_balance": null,
   "owner": {},
   "owner_checklist": [],
   "owner_link": null,

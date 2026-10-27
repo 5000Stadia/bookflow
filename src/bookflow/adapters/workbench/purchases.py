@@ -77,7 +77,7 @@ def detail_context(record):
     if isinstance(funding.get('account_snapshot'), str):
         funding['account_snapshot'] = json.loads(funding['account_snapshot'])
     return dict(document=document, funding=funding, revision=record['revision'],
-        title='Check' if document['kind'] == 'check' else 'Credit card charge',
+        title=('Bank payment' if document.get('bank_payment') else 'Check') if document['kind'] == 'check' else 'Credit card charge',
         items=[dict(item, unit_cost=unit_price.to_dict(unit_price.row_units(item['profile'], 'unit_cost'), document['currency'])
                     if item['profile']['unit_cost_minor_units'] is not None else None)
                for item in document['items']],

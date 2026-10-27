@@ -1724,6 +1724,13 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         )
         if command_noun in ("journal", *Document.NOUNS, *Work.DOCUMENTS):
             record_title = out["revision"]["number"]
+        record_noun_label = None
+        if command_noun == "check" and isinstance(out.get("document"), dict):
+            # A check is named by the number on its face, never by its journal reference; a bank
+            # payment has no cheque behind it and so no number at all (R183).
+            record_title = out["document"].get("check_number") or ""
+            if out["document"].get("bank_payment"):
+                record_noun_label = "Bank payment"
         contact_copy = None
         if company_id is not None and command_noun in ("customer", "vendor"):
             target_noun = "vendor" if command_noun == "customer" else "customer"
@@ -1809,7 +1816,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             # Each stock line's landed cost and landed unit cost, from live allocations (R104 increment 6).
             from bookflow.adapters.workbench import landed_cost_pages
             landed = landed_cost_pages.record_panel(request, run, company_id, out, record_id)
-        return render("record.html", request, company_id=company_id, noun=noun, record_id=record_id, record=visible_record, record_title=record_title, audit=audit, meta=meta, verbs=verbs,
+        return render("record.html", request, company_id=company_id, noun=noun, record_id=record_id, record=visible_record, record_title=record_title, record_noun_label=record_noun_label, audit=audit, meta=meta, verbs=verbs,
                       item_numbers=item_numbers, landed=landed,
                       details_url=_details_url(request, company_id, noun, record_id),
                       source_report_watermark=_source_watermark(request),

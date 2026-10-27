@@ -698,6 +698,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].class_summary` | string \| null | no | yes | null | — |
 | `rows[].check_number` | string \| null | no | yes | null | — |
 | `rows[].purchase_noun` | literal["check", "card-charge", "card-credit"] \| null | no | yes | null | — |
+| `rows[].bank_payment` | boolean | no | no | false | — |
 
 Example JSON output:
 

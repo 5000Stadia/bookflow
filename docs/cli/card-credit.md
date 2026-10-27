@@ -200,6 +200,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `items[].document.check_number` | string \| null | no | yes | null | — |
 | `items[].document.print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
+| `items[].document.bank_payment` | boolean | no | no | false | True for a check with no cheque behind it (posted with `no_number`: a debit-card purchase, an online payment, an automatic withdrawal). It has no check number; the journal's own document reference is not one, and every reader calls it a bank payment instead. |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -557,6 +558,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `document.check_number` | string \| null | no | yes | null | — |
 | `document.print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
+| `document.bank_payment` | boolean | no | no | false | True for a check with no cheque behind it (posted with `no_number`: a debit-card purchase, an online payment, an automatic withdrawal). It has no check number; the journal's own document reference is not one, and every reader calls it a bank payment instead. |
 
 Example JSON output:
 
@@ -883,6 +885,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `items[].document.check_number` | string \| null | no | yes | null | — |
 | `items[].document.print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
+| `items[].document.bank_payment` | boolean | no | no | false | True for a check with no cheque behind it (posted with `no_number`: a debit-card purchase, an online payment, an automatic withdrawal). It has no check number; the journal's own document reference is not one, and every reader calls it a bank payment instead. |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -1202,6 +1205,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `document.check_number` | string \| null | no | yes | null | — |
 | `document.print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
+| `document.bank_payment` | boolean | no | no | false | True for a check with no cheque behind it (posted with `no_number`: a debit-card purchase, an online payment, an automatic withdrawal). It has no check number; the journal's own document reference is not one, and every reader calls it a bank payment instead. |
 
 Example JSON output:
 
@@ -1644,6 +1648,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `document.check_number` | string \| null | no | yes | null | — |
 | `document.print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
+| `document.bank_payment` | boolean | no | no | false | True for a check with no cheque behind it (posted with `no_number`: a debit-card purchase, an online payment, an automatic withdrawal). It has no check number; the journal's own document reference is not one, and every reader calls it a bank payment instead. |
 
 Example JSON output:
 
@@ -2084,6 +2089,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `document.check_number` | string \| null | no | yes | null | — |
 | `document.print_status` | literal["queued", "in_run", "printed"] \| null | no | yes | null | For a check saved to be printed: queued (waiting, no number yet), in_run (in a print run awaiting "Did checks print OK?") or printed. |
+| `document.bank_payment` | boolean | no | no | false | True for a check with no cheque behind it (posted with `no_number`: a debit-card purchase, an online payment, an automatic withdrawal). It has no check number; the journal's own document reference is not one, and every reader calls it a bank payment instead. |
 
 Example JSON output:
 

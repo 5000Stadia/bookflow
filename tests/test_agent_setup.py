@@ -459,3 +459,68 @@ def test_setup_will_not_take_another_program_for_its_host(books):
         assert error.value.code == "E_IO" and "not this data root's host" in error.value.message
     finally:
         stranger.shutdown()
+
+
+# ---------------------------------------------------------------- R183 run 3: opening balance, entity type, clean stdout
+
+@pytest.mark.timeout(600)
+def test_setup_posts_the_opening_balance_once_and_sets_the_entity_type(books):
+    client, root, project = books
+    first = _setup(client, root, project, entity_type="sole_proprietor", opening_balance="Checking=5,000.00")
+    company = first["company"]["company_id"]
+    opening = first["opening_balance"]
+    assert opening["status"] == "created" and opening["amount"] == "5000.00" and opening["account"] == "Checking"
+    assert opening["date"].endswith("-01-01"), "the books start on the first day of the fiscal year"
+    assert _steps(first)["entity type"] == "created" and _steps(first)["opening balance"] == "created"
+    assert "opening balance" in first["content"] and "5000.00 USD" in first["content"]
+    assert client.run("company show", {}, company=company)["info"]["entity_type"] == "sole_proprietor"
+    balances = {a["full_name"]: a["balance"] for a in client.run("account list", {}, company=company)["items"]}
+    assert balances["Checking"]["amount"] == "5000.00" and balances["Opening Balance Equity"]["amount"] in ("5000.00", "-5000.00")
+    # The move-in: the owner's review does not list it.
+    assert client.run("report entries-to-review", {}, company=company)["count"] == 0
+
+    # A rerun never posts it twice, even with another amount; it reports the balance the account has,
+    # and keeps an entity type a person chose.
+    again = _setup(client, root, project, entity_type="llc", opening_balance="Checking=6000", opening_date="2026-03-01")
+    assert again["opening_balance"]["status"] == "exists" and again["opening_balance"]["amount"] == "5000.00"
+    assert again["opening_balance"]["transaction_id"] == opening["transaction_id"]
+    assert "journal update" in [s for s in again["steps"] if s["step"] == "opening balance"][0]["detail"]
+    assert _steps(again)["entity type"] == "exists"
+    assert client.run("company show", {}, company=company)["info"]["entity_type"] == "sole_proprietor"
+    found = client.run("transaction find", {"account": opening["account_id"]}, company=company)["items"]
+    assert len(found) == 1
+
+    # A company left at `other` takes the type a rerun gives; an account that is not a bank is refused.
+    client.run("company update", {"entity_type": "other"}, company=company, reason="owner resets it")
+    assert _steps(_setup(client, root, project, entity_type="llc"))["entity type"] == "updated"
+    from bookflow import BookflowError
+    with pytest.raises(BookflowError) as refused:
+        _setup(client, root, project, opening_balance="Savings Jar=10")
+    assert refused.value.code == "E_VALIDATION" and "Checking" in json.dumps(refused.value.details)
+
+
+def test_agent_run_stdout_is_one_json_document_even_with_a_warning(tmp_path, monkeypatch, capsys):
+    """R183 run 3: a warning line once broke an agent's JSON parse. Stdout holds the result alone."""
+    from types import SimpleNamespace
+    from bookflow.adapters.cli import app as cli
+    from bookflow.adapters.mcp import launcher
+
+    token = tmp_path / "agent.token"
+    token.write_text("secret\n")
+    os.chmod(token, 0o600)
+    config = tmp_path / ".mcp.json"
+    config.write_text(json.dumps({"mcpServers": {"bookflow": {"command": "bookflow", "args": [
+        "mcp", "--url", "http://127.0.0.1:9/", "--token-file", str(token)], "env": {"BOOKFLOW_COMPANY": "C1"}}}}))
+
+    async def serve(*_args, **_kwargs):
+        print("chatter a library printed on the way")  # never reaches stdout
+        return SimpleNamespace(structured_content={"company_id": "C1", "warnings": ["the period is closed"]},
+                               content=[], is_error=False)
+
+    monkeypatch.setattr(launcher, "serve", serve)
+    for extra in ([], ["--json"]):
+        monkeypatch.setattr(sys, "argv", ["bookflow", "agent", "run", "company show", "--mcp-config", str(config), *extra])
+        cli.main()
+        out = capsys.readouterr()
+        assert json.loads(out.out) == {"company_id": "C1", "warnings": ["the period is closed"]}
+        assert "warning: the period is closed" in out.err and "chatter" in out.err
