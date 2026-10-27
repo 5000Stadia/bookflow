@@ -63,6 +63,8 @@ def mount(app, *, render, run, credential, page_error, role_allows):
             raw['tracking_numbers'] = tracking
         if values.get('memo'):
             raw['memo'] = values['memo']
+        if values.get('freight'):
+            raw['freight'] = {'amount': values['freight']}
         chosen = [dict(order_line=key[4:], quantity=value.strip()) for key, value in lines_from.items()
                   if key.startswith('qty:') and value.strip() not in ('', '0')]
         if chosen:
@@ -79,10 +81,22 @@ def mount(app, *, render, run, credential, page_error, role_allows):
     def ship_submit(request, company_id, form):
         values = {key: (value or '').strip() for key, value in form.items() if not key.startswith('ctx:')}
         action = form.get('action')
-        if action not in ('preview', 'ship') or not values.get('sales_order'):
+        if action not in ('preview', 'ship', 'draft') or not values.get('sales_order'):
             return ship_page(request, company_id, values=values)
         raw = ship_input(values, values)
+        if action != 'draft' and values.get('invoice') == '1':
+            raw['invoice'] = True
         try:
+            if action == 'draft':
+                # The packing layer (R181 increment 4): a draft to pack on the pack screen, then ship.
+                from fastapi.responses import RedirectResponse
+                out = run(request, 'shipment create', raw, company_id,
+                          headers=headers((form.get('ctx:reason') or '').strip() or 'Draft to pack'))
+                target = f"/c/{quote(company_id, safe='')}/shipments/{quote(out['number'], safe='')}/pack"
+                if request.headers.get('HX-Request'):
+                    from fastapi.responses import Response
+                    return Response(status_code=200, headers={'HX-Redirect': target})
+                return RedirectResponse(target, status_code=303)
             if action == 'preview':
                 out = run(request, POST, raw, company_id, dry_run=True)
                 return ship_page(request, company_id, values=values, preview=out)
@@ -91,7 +105,8 @@ def mount(app, *, render, run, credential, page_error, role_allows):
             if e.code in _PASS:
                 return page_error(request, e)
             return ship_page(request, company_id, values=values, error=e.to_dict(), status_code=400)
-        return shipment_view(request, company_id, out['number'], result=out)
+        return shipment_view(request, company_id, out['number'], result=out,
+                             invoice=out.get('invoice') if out.get('invoice') else None)
 
     @app.post('/c/{company_id}/shipments/new')
     async def shipment_new_submit(request: Request, company_id: str):
@@ -125,7 +140,9 @@ def mount(app, *, render, run, credential, page_error, role_allows):
         return render('shipment.html', request, status_code=status_code, company=company,
                       company_id=company['company_id'], shipment=shipment, result=result, invoice=invoice,
                       returned=returned,
-                      error=error, can_write=can(POST, company, request), quote=quote)
+                      error=error, can_write=can(POST, company, request), quote=quote,
+                      packs=bool(company.get('info', {}).get('pick_and_pack_enabled'))
+                      and can('shipment pack', company, request))
 
     @app.get('/c/{company_id}/shipments/{number}')
     def shipment_page(request: Request, company_id: str, number: str):

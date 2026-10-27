@@ -53,10 +53,11 @@ def company_form_groups(leaves):
         overdue_notice_frequency='Prepare notices', overdue_notice_minimum='Only for an overdue balance of at least',
         overdue_notice_template='Each notice is',
         invoice_when_shipping='After a shipment, offer an invoice for it',
-        pick_and_pack_enabled='Use pick lists (pick before shipping; off ships straight from the order)')
+        pick_and_pack_enabled='Use pick lists and packing (pick and box before shipping; off ships straight from the order)',
+        weight_unit='Weight unit (lb, kg, oz)', shipping_item_id='Freight to bill is billed as')
     payment_preferences = {'automatically_apply_payments', 'automatically_calculate_payments', 'use_undeposited_funds_for_payments'}
     display_preferences = {'negative_number_style'}
-    shipping_preferences = {'invoice_when_shipping', 'pick_and_pack_enabled'}
+    shipping_preferences = {'invoice_when_shipping', 'pick_and_pack_enabled', 'weight_unit', 'shipping_item_id'}
     finance_preferences = {'finance_charge_annual_rate', 'finance_charge_minimum', 'finance_charge_grace_days',
         'finance_charge_account_id', 'finance_charge_on_overdue_charges', 'finance_charge_from', 'finance_charge_mark_to_print'}
     reminder_preferences = {'scheduler_catch_up_days', 'overdue_notice_days', 'overdue_notice_frequency',

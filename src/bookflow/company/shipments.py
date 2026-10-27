@@ -1105,7 +1105,7 @@ def freight_item(s, selector):
         if found is None:
             raise _invalid('freight.item', 'name the item freight bills as', message=(
                 'Name the other-charge or service item the freight bills as (freight.item), or set the company\'s '
-                'shipping item with `company update --shipping-item`.'))
+                'shipping item with `company update --shipping-item-id`.'))
         selector = found
     item = sales_defaults._row(s.company, 'item', selector)
     if item['type'] not in ('other_charge', 'service') or not item.get('sales_enabled', True):
