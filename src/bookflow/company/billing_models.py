@@ -1,7 +1,7 @@
 """Whole-line work billing intent; source economics are never caller overrides."""
 from typing import Annotated
 import re
-from pydantic import BeforeValidator, Field, ValidationError, field_validator, model_serializer, model_validator
+from pydantic import BeforeValidator, Field, PrivateAttr, ValidationError, field_validator, model_serializer, model_validator
 from bookflow.company.sales_models import StrictModel, Selector, Text, Fingerprint, SalesMoneyInput, InvoiceFields, ReceiptFields
 from bookflow.company.journal_models import _Date, _Number, _Version
 from bookflow.company.custom_fields import CustomFieldValuePatch, CustomFieldKindExpectations
@@ -143,6 +143,9 @@ class SalesOrderInvoiceInput(ConversionInput, InvoiceFields, PrepaymentChoice):
         'bills the units shipments shipped and no invoice billed yet, and when there are none, what can ship.'))
     shipments: list[Selector] | None = Field(default=None, min_length=1, max_length=50, description=(
         'Bill exactly these shipments\' units not yet invoiced (numbers or ids); the invoice moves no stock.'))
+    # `shipment invoice` (R181 increment 4): the shipment's freight to bill, (shipment id, item id, minor units),
+    # added as one more line. Set in code only; never part of the request or its hashes.
+    _shipment_freight: tuple | None = PrivateAttr(default=None)
 
     @field_validator('selections', 'line_ids')
     @classmethod

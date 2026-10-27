@@ -277,6 +277,25 @@ def resolve_commercial(s, inp, document_type, *, document_id, kind):
         profile = sales_orders.invoice_day_profile(s, rev, profile)
         retax = sales_orders.retax(s, profile)
     lines, sources = billed_lines(s, rev, selected, profile, retax)
+    freight = getattr(inp, '_shipment_freight', None) if kind == 'sales_order' else None
+    if freight:
+        # A shipment's freight to bill (R181 increment 4): one more line, billed from no order line.
+        from bookflow.company import sales_defaults
+        from bookflow.company.sales_models import SalesLineInput
+        from bookflow.core.money import Money
+        shipment_id, item_id, amount = freight
+        entry, extra = sales_defaults.resolve_line(s, SalesLineInput(
+            item=item_id, quantity='1', net_amount=Money(amount, rev['currency']).to_dict()['amount']),
+            profile, defer_tax=True, date=inp.date)
+        warnings += [w for w in extra if w not in warnings]
+        code = entry['profile'].tax_code
+        entry['adjustment_taxable'] = bool(profile.preferences.sales_tax_enabled and code is not None and code.taxable
+                                           and not (profile.customer_tax_code is not None
+                                                    and not profile.customer_tax_code.taxable))
+        entry['line_id'] = None
+        entry['shipment_freight'] = shipment_id
+        lines.append(entry)
+        sources.append(None)
     planned, extra = work._custom_plan(s, inp, document_type, document_id, carry=rev)
     warnings += extra
     number, sequence = effects.allocate(s, document_type, inp.number, document_id)
@@ -433,6 +452,8 @@ def persist(plan, ctx, s, *, command_name):
     inserts.append((c.work_billing_allocations, data.get('billing_allocations', []), 'work_billing_allocation', 'id'))
     if data.get('shipment_billings'):
         inserts.append((c.shipment_billings, data['shipment_billings'], 'shipment_billing', 'id'))
+    if data.get('shipment_freight_billings'):
+        inserts.append((c.shipment_freight_billings, data['shipment_freight_billings'], 'shipment_freight_billing', 'id'))
     if data.get('billing_conversion'):
         wh, wb = data['work_header'], data['work_before']
         touched.append(Touched('work_document', wh['id'], 'update', wb['version'], wh['version'], wh, wb, db='company'))

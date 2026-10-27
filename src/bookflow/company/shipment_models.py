@@ -40,7 +40,42 @@ class _Facts(_Strict):
     memo: str | None = Field(default=None, max_length=4000)
 
 
-class ShipmentPostInput(_Facts):
+class FreightInput(_Strict):
+    amount: str = Field(min_length=1, max_length=40, description='Freight to bill the customer, e.g. "12.50".')
+    item: Selector | None = Field(default=None, description=(
+        "Other-charge or service item it bills as; default the company's shipping item."))
+
+
+class PackageContentInput(_Strict):
+    line: Selector | None = Field(default=None, description="The shipment line: its position or line_identity.")
+    item: Selector | None = Field(default=None, description='An item exactly one line carries.')
+    quantity: Quantity | None = Field(default=None, description="Base units in the box; omitted, the serials' count or all.")
+    serial_numbers: _SL.LineSerials = Field(default=None, max_length=10000)
+
+
+class PackageInput(_Strict):
+    box: int | None = Field(default=None, ge=1, le=999, description='Box number; default the next one.')
+    package_type: str | None = Field(default=None, max_length=200)
+    weight: Quantity | None = Field(default=None, description='Measured weight, in the company weight unit.')
+    tare: Quantity | None = Field(default=None, description='Empty package weight, added to the computed weight.')
+    dimensions: str | None = Field(default=None, max_length=200)
+    tracking_number: str | None = Field(default=None, max_length=64)
+    contents: list[PackageContentInput] = Field(default_factory=list, max_length=200)
+
+
+class _Freighted(_Facts):
+    freight: FreightInput | None = Field(default=None, description=(
+        'Freight to bill: billed once, by the first invoice of the shipment. A shipping fact, switch or not.'))
+
+
+class ShipmentPostInput(_Freighted):
+    shipment: Selector | None = Field(default=None, description=(
+        'A draft shipment to post (packing layer): its lines, places, numbers and boxes ship as they are.'))
+    expected_version: int | None = Field(default=None, ge=1, description="The draft's version, if you want it checked.")
+    packages: list[PackageInput] | None = Field(default=None, min_length=1, max_length=200, description=(
+        'Boxes and their contents (packing layer, needs pick_and_pack_enabled).'))
+    invoice: bool = Field(default=False, description=(
+        'Also invoice the shipment, in the same transaction: dated the ship date, at the order\'s prices.'))
     sales_order: Selector | None = Field(default=None, description=(
         'The sales order shipped, by number or id; with pick_list, needed only when the list covers several.'))
     pick_list: Selector | None = Field(default=None, description=(
@@ -53,7 +88,7 @@ class ShipmentPostInput(_Facts):
         "What ships. Omitted: every order line's quantity still to ship, up to what is available to the order."))
 
 
-class ShipmentUpdateInput(_Facts):
+class ShipmentUpdateInput(_Freighted):
     shipment: Selector = Field(description='Shipment number or id.')
     expected_version: int = Field(ge=1)
     date: IsoDate | None = Field(default=None, description='A new ship date; refused later than an invoice billing it.')
@@ -74,7 +109,8 @@ class ShipmentShowInput(_Strict):
 class ShipmentQueryInput(_Strict):
     sales_order: Selector | None = Field(default=None, description='Only this order\'s shipments.')
     customer: Selector | None = Field(default=None, description='Only this customer\'s shipments.')
-    status: Literal['shipped', 'voided'] | None = None
+    status: Literal['shipped', 'voided', 'draft', 'cancelled'] | None = Field(default=None, description=(
+        'draft and cancelled list draft shipments (packing layer); omitted, shipments and open drafts.'))
     not_invoiced: bool = Field(default=False, description='Only shipments holding units not yet invoiced.')
     date_from: IsoDate | None = None
     date_to: IsoDate | None = None
@@ -144,6 +180,58 @@ class ShipmentHistoryOutput(BaseModel):
     created_via: str
 
 
+class PackageContentOutput(BaseModel):
+    line_identity: str
+    position: int | None
+    item_name: str
+    quantity: str
+    serial_numbers: list[str] | None = None
+    weight: str | None = Field(default=None, description='Computed: quantity times the item weight; null: no weight.')
+
+
+class PackageOutput(BaseModel):
+    box: int
+    package_type: str | None = None
+    dimensions: str | None = None
+    tracking_number: str | None = None
+    tare: str | None = None
+    measured_weight: str | None = None
+    computed_weight: str
+    weight: str = Field(description='What prints and totals: the measured weight when entered, else the computed one.')
+    unweighed: str = Field(default='0', description='Units in it whose item has no weight.')
+    contents: list[PackageContentOutput] = Field(default_factory=list)
+
+
+class UnboxedOutput(BaseModel):
+    line_identity: str
+    position: int
+    item_name: str
+    quantity: str
+    serial_numbers: list[str] | None = None
+
+
+class PackingOutput(BaseModel):
+    weight_unit: str
+    packages: list[PackageOutput] = Field(default_factory=list)
+    unboxed: list[UnboxedOutput] = Field(default_factory=list)
+    packed: bool = Field(description='Every unit of every line is in a box.')
+    total_weight: str
+    unweighed: str = Field(default='0', description='Units whose item has no weight, boxed or not.')
+
+
+class FreightOutput(BaseModel):
+    amount: JournalMoneyOutput
+    item_id: str
+    item_name: str | None = None
+    billed_by: str | None = Field(default=None, description='Invoice number that billed it; null: not yet billed.')
+
+
+class ShipmentInvoiceRef(BaseModel):
+    id: str
+    number: str | None = None
+    total: JournalMoneyOutput | None = None
+
+
 class ShipmentOutput(BaseModel):
     id: str | None
     number: str | None
@@ -169,6 +257,9 @@ class ShipmentOutput(BaseModel):
     returns: list[ShipmentReturnRef] = Field(default_factory=list, description='Shipment returns of its units, voided ones too.')
     order_to_ship: dict[str, str] = Field(default_factory=dict, description='Each order line\'s quantity still to ship after this.')
     history: list[ShipmentHistoryOutput] = Field(default_factory=list)
+    packing: PackingOutput | None = Field(default=None, description='Boxes, weights and unboxed units; null: none.')
+    freight: FreightOutput | None = None
+    invoice: ShipmentInvoiceRef | None = Field(default=None, description='The invoice `invoice: true` made.')
     warnings: list[str] = Field(default_factory=list)
     next_commands: list[str] = Field(default_factory=list)
     changed: bool = True
@@ -332,3 +423,41 @@ class ShipmentReturnListRow(BaseModel):
 class ShipmentReturnListOutput(BaseModel):
     rows: list[ShipmentReturnListRow]
     total: int
+
+
+# ---------------------------------------------------------------- drafts and packing (R181 increment 4)
+
+
+class ShipmentCreateInput(_Freighted):
+    sales_order: Selector | None = Field(default=None, description=(
+        'The order the draft will ship: what `shipment post` would propose, or `lines`; with pick_list, needed only '
+        'when the list covers several orders.'))
+    pick_list: Selector | None = Field(default=None, description="Draft what was picked on this list for the order.")
+    date: IsoDate | None = Field(default=None, description='Planned ship date; omitted, the day it ships.')
+    site: Selector | None = None
+    lines: list[ShipmentLineInput] | None = Field(default=None, min_length=1, max_length=200)
+    packages: list[PackageInput] | None = Field(default=None, min_length=1, max_length=200)
+
+
+class ShipmentPackInput(_Strict):
+    shipment: Selector = Field(description='Draft or shipped shipment, number or id.')
+    expected_version: int | None = Field(default=None, ge=1)
+    packages: list[PackageInput] | None = Field(default=None, max_length=200, description=(
+        'The whole packing, replacing it ([] unpacks everything). Or move units with unit/line and box.'))
+    unit: Selector | None = Field(default=None, description=(
+        'What moves: a serial number (that unit), a lot, or an item (name, id or barcode, as a scan reads it).'))
+    line: Selector | None = Field(default=None, description='Or the shipment line moved: position or line_identity.')
+    quantity: Quantity | None = Field(default=None, description='Base units moved; default 1, or the serial count.')
+    box: int | None = Field(default=None, ge=0, le=999, description=(
+        'Box N the units go into (made if new); 0 takes them out of their box. With no unit or line, the facts '
+        'below set box N.'))
+    package_type: str | None = Field(default=None, max_length=200)
+    weight: Quantity | None = Field(default=None, description='Measured weight of box N.')
+    tare: Quantity | None = None
+    dimensions: str | None = Field(default=None, max_length=200)
+    tracking_number: str | None = Field(default=None, max_length=64)
+
+
+class ShipmentCancelInput(_Strict):
+    shipment: Selector = Field(description='Draft shipment number or id.')
+    expected_version: int | None = Field(default=None, ge=1)

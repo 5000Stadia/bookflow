@@ -706,15 +706,35 @@ def _from_picks(s, candidates, picked, warnings):
 
 
 def _plan(s, ctx, *, header, rev, date, site_id, position, entries_in, sni_id, current=None, prior_lines=(),
-          picked=None):
-    """Every line this shipment ships, and the stock change it implies; nothing written."""
+          picked=None, draft=False, held=None, drafted=None):
+    """Every line this shipment ships, and the stock change it implies; nothing written. ``held``: what live drafts
+    of the order hold (R181 increment 4), planned around; ``drafted``: a draft's own lines, shipped as they are."""
     from bookflow.company import commitments, work
     from bookflow.company.serial_lots import Numbers
     from bookflow.company.sales_calculations import base_quantity
     profile = work.facts(rev).profile
     candidates = _order_lines(s, header, rev, exclude_shipment=current['id'] if current else None)
+    for row in candidates:
+        if held and held.get(row['root']):
+            row['to_ship'] = max(row['to_ship'] - _to_selected(held[row['root']], row['facts'].unit_factor_nanounits),
+                                 Fraction(0))
     chosen, explicit_priors, extra_warnings = [], [], []
-    if picked is not None:
+    drafted_identities = None
+    if drafted is not None:
+        by_root = {row['root']: row for row in candidates}
+        named = {}
+        for root, base, numbers, _ in drafted:
+            row = by_root.get(root)
+            if row is None:
+                raise _invalid('shipment', 'an order line this draft holds is no longer on the order')
+            named[root] = named.get(root, 0) + base
+            if named[root] > _to_base(row['to_ship'], row['facts'].unit_factor_nanounits):
+                raise _invalid('shipment', 'the order no longer has this much to ship', message=(
+                    f'{row["facts"].profile.item.label}: the draft ships {format_quantity_micro_units(named[root])}; '
+                    f'the order has {_plain(row["to_ship"])} to ship now. Cancel the draft and make it again.'))
+            chosen.append((row, base, numbers))
+        drafted_identities = [identity for _, _, _, identity in drafted]
+    elif picked is not None:
         chosen = _from_picks(s, candidates, picked, extra_warnings)
     elif entries_in is None and current is not None:
         # Restating date, place or count position only: the lines stay as they are.
@@ -787,6 +807,8 @@ def _plan(s, ctx, *, header, rev, date, site_id, position, entries_in, sni_id, c
             chosen.append((row, base, _numbers(entry)))
     lines = []
     matched = _match_priors(s, chosen, prior_lines, site_id) if not explicit_priors else explicit_priors
+    if drafted_identities is not None:
+        matched = [dict(line_identity=identity, movement_id=None) for identity in drafted_identities]
     for index, (row, base, numbers) in enumerate(chosen):
         # A shipment from a pick list may hold one order line on several lines (bins, lots): each restates its own.
         prior = matched[index]
@@ -827,7 +849,7 @@ def _plan(s, ctx, *, header, rev, date, site_id, position, entries_in, sni_id, c
         shipment.journal_lines.append(JournalLineInput(account=line.facts.profile.asset_account.id, side='credit', **common))
         shipment.line_of[line.key] = len(shipment.journal_lines)
         shipment.journal_lines.append(JournalLineInput(account=sni_id, side='debit', **common))
-    if not shipment.journal_lines:
+    if not shipment.journal_lines and not draft:
         raise _invalid('lines', 'the units shipped are worth nothing', message=(
             'Every unit on this shipment is worth nothing in the books, so there is no cost to hold in Shipped Not '
             'Invoiced. Enter the bill that bought the stock, or record what it is worth with `inventory adjust`, '
@@ -860,7 +882,9 @@ def _bind(shipment, fresh):
 def _number(s):
     seq = s.company.conn.execute(sa.select(c.sequences).where(c.sequences.c.name == SEQUENCE)).mappings().first()
     number, prefix = (seq['next_number'], seq['prefix']) if seq else (1001, '')
-    while s.company.conn.execute(sa.select(c.shipments.c.id).where(c.shipments.c.number == f'{prefix}{number}')).first():
+    while s.company.conn.execute(sa.select(c.shipments.c.id).where(c.shipments.c.number == f'{prefix}{number}')).first() \
+            or s.company.conn.execute(sa.select(c.shipment_drafts.c.id).where(
+                c.shipment_drafts.c.number == f'{prefix}{number}')).first():
         number += 1
     return f'{prefix}{number}', dict(name=SEQUENCE, next_number=number + 1, prefix=prefix)
 
@@ -994,6 +1018,136 @@ def _line_rows(s, shipment, revision_id, shipment_id, provenance):
     return rows
 
 
+def _draft_to_post(s, inp):
+    """The draft `shipment post --shipment` ships (R181 increment 4): open, at the version given, alone."""
+    from bookflow.company import shipment_packing as packing
+    packing.require_enabled(s)
+    draft = packing.find_draft(s, inp.shipment)
+    if draft is None:
+        if s.company.conn.execute(sa.select(c.shipments.c.id).where(sa.or_(
+                c.shipments.c.number == inp.shipment.strip(), c.shipments.c.id == inp.shipment.strip().upper()))).first():
+            raise _invalid('shipment', 'this shipment has shipped already', message=(
+                f'Shipment {inp.shipment} has shipped already; `shipment show {inp.shipment}` shows it.'),
+                reason='already_shipped')
+        raise BookflowError('E_RECORD_NOT_FOUND', details={'record_type': 'draft shipment', 'selector': inp.shipment})
+    if inp.expected_version is not None and inp.expected_version != draft['revision_number']:
+        raise BookflowError('E_VERSION_CONFLICT', details={'record_id': draft['id'],
+                                                          'expected_version': inp.expected_version,
+                                                          'current_version': draft['revision_number']})
+    if draft['status'] == 'shipped':
+        raise _invalid('shipment', 'this shipment has shipped already', message=(
+            f'Shipment {draft["number"]} has shipped already; `shipment show {draft["number"]}` shows it.'),
+            reason='already_shipped')
+    if draft['status'] != 'draft':
+        raise _invalid('shipment', f'draft {draft["number"]} is {draft["status"]}', message=(
+            f'Draft shipment {draft["number"]} is {draft["status"]}; it ships nothing.'), reason='draft_cancelled')
+    for name in ('lines', 'pick_list', 'packages', 'site'):
+        if getattr(inp, name, None) is not None:
+            raise _invalid(name, 'a draft ships its own lines, place and boxes; leave this out (or cancel the draft)')
+    if inp.sales_order is not None:
+        from bookflow.company import work
+        if work.resolve(s, inp.sales_order, 'sales_order')['id'] != draft['sales_order_id']:
+            raise _invalid('sales_order', f'draft {draft["number"]} ships another order')
+    return draft
+
+
+def _drafted_lines(s, draft):
+    """``[(root, base, Numbers, identity)]`` a draft ships."""
+    from bookflow.company import bins, shipment_packing as packing
+    from bookflow.company.serial_lots import Numbers
+    rows = packing.draft_lines(s, draft['id'])
+    names = bins.bin_names(s, [row['bin_id'] for row in rows if row['bin_id']])
+    out = []
+    for row in rows:
+        serials = tuple(json.loads(row['serial_numbers'])) if row['serial_numbers'] else None
+        numbers = Numbers(lot=row['lot'], serial_numbers=serials, bin=names.get(row['bin_id']) if row['bin_id'] else None)
+        out.append(((row['root_document_id'], row['root_line_id']), int(row['quantity_microunits']),
+                    numbers if (numbers.lot or serials or numbers.bin) else None, row['line_identity']))
+    return out
+
+
+def _match_draft(s, draft, shipment):
+    """A draft made from a pick list ships what was picked; refused if the picks changed since it was made."""
+    from bookflow.company import shipment_packing as packing
+    def key(root, base, numbers):
+        return (root, base, (numbers.lot or '').casefold() if numbers else '',
+                tuple(sorted(numbers.serial_numbers or ())) if numbers else ())
+    wanted = {}
+    for root, base, numbers, identity in _drafted_lines(s, draft):
+        wanted.setdefault(key(root, base, numbers), []).append(identity)
+    for line in shipment.lines:
+        found = wanted.get(key(line.root, line.base, line.numbers))
+        if not found:
+            raise _invalid('shipment', 'the picks changed since this draft was made', message=(
+                f'What was picked for this order changed since draft {draft["number"]} was made. Cancel it '
+                f'(`shipment cancel {draft["number"]}`) and make it again from the pick list.'), reason='draft_stale')
+        line.identity = found.pop(0)
+    if any(wanted.values()):
+        raise _invalid('shipment', 'the picks changed since this draft was made', reason='draft_stale')
+
+
+def _draft_revision(draft, status, ctx, provenance, **changes):
+    row = dict(id=new_id(), draft_id=draft['id'], revision_number=draft['revision_number'] + 1, status=status,
+               ship_date=draft['ship_date'], count_position=draft['count_position'],
+               ship_method_id=draft['ship_method_id'], carrier=draft['carrier'],
+               tracking_numbers=draft['tracking_numbers'], memo=draft['memo'],
+               freight_minor_units=draft['freight_minor_units'], freight_item_id=draft['freight_item_id'],
+               reason=(ctx.reason or '').strip() or None, **provenance)
+    row.update(changes)
+    return row
+
+
+def freight_item(s, selector):
+    """The item freight bills as: the one named, else the company's shipping item."""
+    from bookflow.company import sales_defaults
+    if selector is None:
+        found = s.company.conn.execute(sa.select(c.company_info.c.shipping_item_id)).scalar()
+        if found is None:
+            raise _invalid('freight.item', 'name the item freight bills as', message=(
+                'Name the other-charge or service item the freight bills as (freight.item), or set the company\'s '
+                'shipping item with `company update --shipping-item`.'))
+        selector = found
+    item = sales_defaults._row(s.company, 'item', selector)
+    if item['type'] not in ('other_charge', 'service') or not item.get('sales_enabled', True):
+        raise _invalid('freight.item', 'freight bills as an other-charge or service item that is sold')
+    return item
+
+
+def freight_billed(s, shipment_id):
+    """``(invoice number or id)`` of the live invoice line that billed this shipment's freight, or None."""
+    row = s.company.conn.execute(sa.text(
+        "SELECT t.number, t.id FROM shipment_freight_billings b JOIN transactions t ON t.id = b.transaction_id "
+        "WHERE b.shipment_id = :id AND t.status = 'posted' AND EXISTS (SELECT 1 FROM document_lines d "
+        "WHERE d.revision_id = t.current_revision_id AND d.line_id = b.line_id) LIMIT 1"), {'id': shipment_id}).first()
+    return (row[0] or row[1]) if row else None
+
+
+def _freight_facts(s, inp, rev, current, draft, operation):
+    """``freight_minor_units`` and ``freight_item_id`` the new revision carries; fixed once an invoice billed it."""
+    given = getattr(inp, 'freight', None)
+    if current is not None:
+        kept = dict(freight_minor_units=current['revision'].get('freight_minor_units'),
+                    freight_item_id=current['revision'].get('freight_item_id'))
+    elif draft is not None:
+        kept = dict(freight_minor_units=draft['freight_minor_units'], freight_item_id=draft['freight_item_id'])
+    else:
+        kept = dict(freight_minor_units=None, freight_item_id=None)
+    if given is None or operation == 'void':
+        return kept
+    from bookflow.company.sales_models import money
+    amount = money(given.amount, rev['currency'], 'freight.amount').minor_units
+    if amount < 0:
+        raise _invalid('freight.amount', 'must not be negative')
+    fresh = dict(freight_minor_units=amount or None, freight_item_id=freight_item(s, given.item)['id'] if amount else None)
+    if current is not None and fresh != kept:
+        billed = freight_billed(s, current['id'])
+        if billed:
+            raise BookflowError('E_WORK_DEPENDENCY', message=(
+                f'Invoice {billed} billed this shipment\'s freight, so it is fixed; correct the invoice instead.'),
+                details=dict(problem='freight already billed', invoices=[billed], reason='freight_invoiced'))
+    return fresh
+
+
 def _run(s, ctx, inp, operation, *, persist):
     command_name = 'shipment ' + operation
     account = find_account(s.company)
@@ -1002,21 +1156,32 @@ def _run(s, ctx, inp, operation, *, persist):
         account, touched = ensure_account(s, ctx)
     sni_id = account['id'] if account else _PLACEHOLDER
     current, prior_lines = None, []
-    picked = pick_current = None
-    if operation == 'post' and getattr(inp, 'pick_list', None) is not None:
+    picked = pick_current = draft = None
+    from bookflow.company import shipment_packing as packing
+    if operation == 'post' and getattr(inp, 'shipment', None) is not None:
+        # Posting a draft (R181 increment 4): its lines, places, numbers and boxes ship as they are.
+        draft = _draft_to_post(s, inp)
+        if draft['pick_list_id']:
+            from bookflow.company import pick_lists
+            pick_current, order_id, picked = pick_lists.shipping_plan(s, draft['pick_list_id'],
+                                                                     draft['sales_order_id'], None)
+    elif operation == 'post' and getattr(inp, 'packages', None) is not None:
+        packing.require_enabled(s)
+    if operation == 'post' and draft is None and getattr(inp, 'pick_list', None) is not None:
         # Shipping what was picked (R181 increment 3): the order and site come from the list.
         from bookflow.company import pick_lists
         if inp.lines is not None:
             raise _invalid('lines', 'ship from the pick list or name the lines, not both')
         pick_current, order_id, picked = pick_lists.shipping_plan(s, inp.pick_list, inp.sales_order, inp.site)
     if operation == 'post':
-        if picked is None and inp.sales_order is None:
+        if picked is None and draft is None and inp.sales_order is None:
             raise _invalid('sales_order', 'name the sales order to ship (or the pick_list it was picked on)')
-        header, rev = _order(s, order_id if picked is not None else inp.sales_order)
+        header, rev = _order(s, order_id if picked is not None else
+                             draft['sales_order_id'] if draft is not None else inp.sales_order)
         if header['status'] != 'open' or not header['active']:
             raise BookflowError('E_WORK_DEPENDENCY', details=dict(source_id=header['id'],
                 problem='a closed or inactive sales order ships nothing; reopen it first'))
-        date = inp.date or clock.today_iso()
+        date = inp.date or (draft['ship_date'] if draft else None) or clock.today_iso()
     else:
         current = resolve(s, inp.shipment)
         current_rev = current['revision']
@@ -1051,13 +1216,18 @@ def _run(s, ctx, inp, operation, *, persist):
                                    expected_version=_journal_version(s, current['transaction_id']))
         status = 'voided'
     else:
-        site_id = pick_current['site_id'] if pick_current else \
+        site_id = draft['site_id'] if draft else pick_current['site_id'] if pick_current else \
             _site(s, getattr(inp, 'site', None), _order_lines(s, header, rev) if current is None else [], current)
-        position = inp.count_position or (current['revision']['count_position'] if current else 'before')
+        position = inp.count_position or (current['revision']['count_position'] if current else
+                                          draft['count_position'] if draft else 'before')
         journals.open_dates(s, [date] + ([current['ship_date']] if current else []))
         shipment = _plan(s, ctx, header=header, rev=rev, date=date, site_id=site_id, position=position,
                          entries_in=inp.lines, sni_id=sni_id, current=current, prior_lines=prior_lines,
-                         picked=picked)
+                         picked=picked, held=packing.drafted(s, header['id'], exclude=draft['id'] if draft else None)
+                         if current is None else None,
+                         drafted=_drafted_lines(s, draft) if draft is not None and picked is None else None)
+        if draft is not None and picked is not None:
+            _match_draft(s, draft, shipment)
         if current is not None:
             _guard_billed(s, current, prior_lines, shipment, date if date != current['ship_date'] else None)
         if picked is None:
@@ -1082,13 +1252,31 @@ def _run(s, ctx, inp, operation, *, persist):
                                     else json.loads(current['revision']['tracking_numbers'])),
         memo=(getattr(inp, 'memo', None) if operation == 'post' or getattr(inp, 'memo', None) is not None
               else current['revision']['memo']))
+    if draft is not None:
+        # A draft's own facts stand unless the post restates them.
+        for name in ('ship_method_id', 'carrier', 'memo'):
+            if getattr(inp, name.removesuffix('_id'), None) is None:
+                facts[name] = draft[name]
+        if inp.tracking_numbers is None:
+            facts['tracking_numbers'] = draft['tracking_numbers']
+    facts.update(_freight_facts(s, inp, rev, current, draft, operation))
+    boxes, pack_lines = [], []
+    if operation != 'void':
+        pack_lines = packing.planned_lines(s, shipment.lines)
+        if draft is not None:
+            boxes = packing.carry(packing.load(s, draft['revision_id']), pack_lines)
+        elif current is not None:
+            boxes = packing.carry(packing.load(s, current['revision']['id']), pack_lines)
+        elif getattr(inp, 'packages', None) is not None:
+            boxes = packing.from_packages(s, inp.packages, pack_lines)
     if not persist:
         if account is not None or operation != 'post':
             fresh = journals.prepare(s, ctx, journal, operation if operation != 'post' else 'post', owner=inventory.OWNER)
             if operation != 'void':
                 _bind(shipment, fresh)
                 inventory_effects.check(s, shipment.change, fresh.data['pending']['posting_lines'])
-        return _output(s, shipment, current=current, status=status, facts=facts, preview=True), [], 'preview'
+        return _output(s, shipment, current=current, status=status, facts=facts, preview=True,
+                       packed=packing.output(s, boxes, pack_lines)), [], 'preview'
     fresh = journals.prepare(s, ctx, journal, 'post' if operation == 'post' else operation, owner=inventory.OWNER)
     if not fresh.data['changed']:
         raise BookflowError('E_INTERNAL', message='A shipment produced no accounting.')
@@ -1105,8 +1293,13 @@ def _run(s, ctx, inp, operation, *, persist):
     extra = []
     sequence = None
     if current is None:
-        number, sequence = _number(s)
-        shipment_id = new_id()
+        if draft is not None:
+            number, shipment_id = draft['number'], draft['id']
+            extra.append(('shipment_draft_revisions', 'shipment_draft_revision', 'id', [_draft_revision(
+                draft, 'shipped', ctx, provenance)]))
+        else:
+            number, sequence = _number(s)
+            shipment_id = new_id()
         extra.append(('inventory_documents', 'inventory_document', 'transaction_id',
                       [dict(transaction_id=tx['id'], type='journal_entry', kind=KIND, **provenance)]))
         extra.append(('shipments', 'shipment', 'id', [dict(
@@ -1136,6 +1329,9 @@ def _run(s, ctx, inp, operation, *, persist):
         line_rows = _line_rows(s, shipment, revision_row['id'], shipment_id, provenance)
     if line_rows:
         extra.append(('shipment_lines', 'shipment_line', 'id', line_rows))
+    if boxes:
+        extra.extend(packing.rows(boxes, shipment_id, revision_row['id'], provenance, identities={
+            f'#{row["position"]}': row['line_identity'] for row in line_rows}))
     applied = journals.persist_prepared(fresh, ctx, s, command_name=command_name, extra=tuple(extra), noun='shipment',
                                         number=number)
     touched += list(applied.touched)
@@ -1167,11 +1363,24 @@ def _restate_text(s, ctx, inp, current, prior_lines, header, rev, *, persist):
         tracking_numbers=json.dumps(list(inp.tracking_numbers) if inp.tracking_numbers is not None
                                     else json.loads(current_rev['tracking_numbers'])),
         memo=inp.memo if inp.memo is not None else current_rev['memo'])
+    facts.update(_freight_facts(s, inp, rev, current, None, 'update'))
     if not persist:
         shown = show_output(s, current['id'])
         return shown.model_copy(update=dict(status='will_ship', ship_method_id=facts['ship_method_id'],
                                             carrier=facts['carrier'], memo=facts['memo'],
+                                            freight=_freight_output(s, current['id'], facts, rev['currency']),
                                             tracking_numbers=json.loads(facts['tracking_numbers']))), [], 'preview'
+    from bookflow.company import shipment_packing as packing
+    touched, summary = write_revision(s, ctx, current, prior_lines, facts, 'shipment update',
+                                      packing.load(s, current_rev['id']))
+    return show_output(s, current['id']), touched, summary
+
+
+def write_revision(s, ctx, current, prior_lines, facts, command_name, boxes):
+    """A revision that reposts nothing (design §6, the correction table's first row): the lines carried across
+    unchanged, each still standing behind the issue it posted, with ``facts`` and the packing ``boxes``."""
+    from bookflow.company import shipment_packing as packing
+    current_rev = current['revision']
     at = clock.now_iso()
     event = new_id()
     provenance = dict(created_at=at, created_by=s.actor.id, created_via=ctx.interface.value, audit_event_id=event)
@@ -1184,19 +1393,34 @@ def _restate_text(s, ctx, inp, current, prior_lines, header, rev, *, persist):
                        db='company')]
     touched += [Touched('shipment_line', row['id'], 'create', None, 1, dict(row), None, db='company')
                 for row in line_rows]
-    summary = f'update shipment {current["number"]}'
-    audit.write_event_to(s.company, ctx, 'shipment update', summary, touched, actor_id=s.actor.id,
+    extra = packing.rows(boxes, current['id'], revision_row['id'], provenance)
+    for _, kind, _, rows in extra:
+        touched += [Touched(kind, row['id'], 'create', None, 1, dict(row), None, db='company') for row in rows]
+    summary = f'{command_name.split()[-1]} shipment {current["number"]}'
+    audit.write_event_to(s.company, ctx, command_name, summary, touched, actor_id=s.actor.id,
                          actor_kind=s.actor.kind, directive_code=getattr(s, 'directive_code', None), event_id=event)
     s.company.conn.execute(c.shipment_revisions.insert().values(**revision_row))
     if line_rows:
         s.company.conn.execute(c.shipment_lines.insert(), line_rows)
-    return show_output(s, current['id']), touched, summary
+    for table, _, _, rows in extra:
+        s.company.conn.execute(getattr(c, table).insert(), rows)
+    return touched, summary
+
+
+def _freight_output(s, shipment_id, facts, currency):
+    if not facts.get('freight_minor_units'):
+        return None
+    from bookflow.company.shipment_models import FreightOutput
+    name = s.company.conn.execute(sa.select(c.items.c.full_name).where(
+        c.items.c.id == facts['freight_item_id'])).scalar()
+    return FreightOutput(amount=_money(facts['freight_minor_units'], currency), item_id=facts['freight_item_id'],
+                         item_name=name, billed_by=freight_billed(s, shipment_id) if shipment_id else None)
 
 
 # ---------------------------------------------------------------- output
 
 
-def _output(s, shipment, *, current, status, facts, preview=False):
+def _output(s, shipment, *, current, status, facts, preview=False, packed=None):
     currency = shipment.revision['currency']
     order = shipment.order
     if current is not None and not preview:
@@ -1233,6 +1457,7 @@ def _output(s, shipment, *, current, status, facts, preview=False):
         tracking_numbers=json.loads(facts['tracking_numbers']), memo=facts['memo'],
         transaction_id=current['transaction_id'] if current else None, lines=lines,
         cost=_money(total, currency), shipped_not_invoiced=_money(total, currency), order_to_ship=after,
+        packing=packed, freight=_freight_output(s, current['id'] if current else None, facts, currency),
         warnings=list(dict.fromkeys(shipment.warnings)))
 
 
@@ -1310,8 +1535,18 @@ def show_output(s, shipment_id, warnings=()):
         carrier=rev['carrier'], tracking_numbers=json.loads(rev['tracking_numbers']), memo=rev['memo'],
         transaction_id=header['transaction_id'], lines=lines, cost=_money(total, currency),
         shipped_not_invoiced=_money(waiting_total, currency), invoices=invoices, returns=returns, order_to_ship=after,
-        history=history,
+        history=history, packing=_packing_output(s, rev), freight=_freight_output(s, header['id'], rev, currency),
         warnings=list(dict.fromkeys(warnings)), next_commands=next_commands)
+
+
+def _packing_output(s, rev):
+    from bookflow.company import shipment_packing as packing
+    boxes = packing.load(s, rev['id'])
+    if not boxes and rev['status'] != 'shipped':
+        return None
+    if not boxes and not packing.enabled(s):
+        return None
+    return packing.output(s, boxes, packing.shipment_lines(s, rev['id']), show_empty=True)
 
 
 def prepare(s, ctx, inp, operation):
@@ -1325,7 +1560,15 @@ def apply(plan, ctx, s):
 
 
 def show(s, inp):
-    return show_output(s, resolve(s, inp.shipment)['id'])
+    try:
+        found = resolve(s, inp.shipment)
+    except BookflowError as error:
+        # A draft (R181 increment 4) shows until it ships; the shipment keeps its number.
+        from bookflow.company import shipment_drafts
+        if error.code != 'E_RECORD_NOT_FOUND':
+            raise
+        return shipment_drafts.show(s, inp.shipment)
+    return show_output(s, found['id'])
 
 
 def query(s, inp):
@@ -1348,8 +1591,12 @@ def query(s, inp):
     if inp.date_to is not None:
         where.append('cur.ship_date <= :date_to')
         params['date_to'] = inp.date_to
-    if not has_shipments(s):
-        return ShipmentListOutput(rows=[], total=0)
+    if inp.status in ('draft', 'cancelled') or (inp.status is None and not inp.not_invoiced):
+        drafts = _draft_rows(s, inp, where, params)
+    else:
+        drafts = []
+    if inp.status in ('draft', 'cancelled') or not has_shipments(s):
+        return ShipmentListOutput(rows=drafts[:inp.limit], total=len(drafts))
     found = _rows(s, f"""SELECT h.*, cur.revision_number, cur.status, cur.ship_date, cur.site_id, cur.tracking_numbers,
             cur.id AS revision_id, w.number AS order_number, cu.full_name AS customer_name
         FROM shipments h JOIN ({_CURRENT}) cur ON cur.shipment_id = h.id
@@ -1374,7 +1621,29 @@ def query(s, inp):
             quantity=_plain(sum(int(line['quantity_microunits']) for line in lines) if row['status'] == 'shipped' else 0),
             cost=_money(cost, currency), shipped_not_invoiced=_money(waiting, currency),
             tracking_numbers=json.loads(row['tracking_numbers'])))
+    rows = drafts + rows
     return ShipmentListOutput(rows=rows[:inp.limit], total=len(rows))
+
+
+def _draft_rows(s, inp, where, params):
+    """Draft shipments (R181 increment 4) as list rows: open ones unless the status names cancelled."""
+    from bookflow.company import shipment_packing as packing
+    clauses = [w.replace('cur.status', 'h.status').replace('cur.ship_date', 'h.ship_date') for w in where]
+    params = dict(params, status=inp.status or 'draft')
+    if inp.status is None:
+        clauses.append('h.status = :status')
+    found = _rows(s, f"""SELECT h.*, w.number AS order_number, cu.full_name AS customer_name
+        FROM ({packing._CURRENT_DRAFT}) h JOIN work_documents w ON w.id = h.sales_order_id
+        LEFT JOIN customers cu ON cu.id = h.customer_id
+        WHERE {' AND '.join(clauses)} ORDER BY h.number DESC""", params)
+    zero = _money(0, _home(s))
+    sites = placements.site_names(s)
+    return [ShipmentListRow(id=row['id'], number=row['number'], version=row['revision_number'], status=row['status'],
+                            date=row['ship_date'] or '', sales_order_number=row['order_number'],
+                            customer_name=row['customer_name'], site_name=sites.get(row['site_id']),
+                            quantity=_plain(sum(int(line['quantity_microunits']) for line in packing.draft_lines(s, row['id']))),
+                            cost=zero, shipped_not_invoiced=zero,
+                            tracking_numbers=json.loads(row['tracking_numbers'])) for row in found]
 
 
 def account_balance(s, account_id, as_of):
