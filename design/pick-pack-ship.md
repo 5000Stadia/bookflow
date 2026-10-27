@@ -648,3 +648,4 @@ For the builder, defaults standing unless review finds otherwise:
 
 - K1 carrier integration: none. Carrier and tracking are recorded and printed as text only (Kabe, gate gba01e0).
 - K2 cost of shipped-not-invoiced goods: held in Shipped Not Invoiced until the invoice, so cost and income land in the same period (Kabe, gate gae9f98).
+- K3 picking and packing are optional layers on top of ship (2026-10-27). A company setting turns them on, off by default; with it off, ship works alone from the order and no pick or pack surface shows on the home screen, menus or forms. The setting is turned on from company settings or the home screen when a business needs it.
