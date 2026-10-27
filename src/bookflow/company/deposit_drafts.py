@@ -317,7 +317,7 @@ def final_foreign_keys(s,written=()):
     the write wrote (`written`), which keeps the refusal for a broken key already stored there.
     This replaced a check of the whole company database (R180 increment 3): what it no longer
     reports is a key broken before this write in a table this write did not write, which no
-    deposit write reads through this check and which `company check` still reports.
+    deposit write reads through this check.
     """
     raw=s.company.raw
     if raw.execute('PRAGMA defer_foreign_keys').fetchone()[0]:

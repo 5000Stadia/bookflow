@@ -106,9 +106,9 @@ def test_candidates_append_does_not_stale_and_actual_source_change_does(client,c
 
 def test_deferred_head_fault_rolls_back_inside_writer_preserves_sentinel(driver,run,monkeypatch):
     original=d.final_foreign_keys
-    def corrupt(s):
+    def corrupt(s,written=()):
         s.company.raw.execute("UPDATE deposit_drafts SET current_revision_id='00000000000000000000000000',version=version+1")
-        original(s)
+        original(s,written)
     with driver.session() as s:
         s.company.raw.execute('CREATE TABLE own_sentinel(value TEXT)')
         s.company.raw.execute("INSERT INTO own_sentinel VALUES ('survives')")
