@@ -2502,3 +2502,20 @@ MATRIX['landed-cost post'] = dict(_LANDED_WRITE)
 MATRIX['landed-cost void'] = dict(_LANDED_WRITE)
 MATRIX['landed-cost show'] = {'E_RECORD_NOT_FOUND': 'unknown allocation', 'E_VALIDATION': 'invalid input'}
 MATRIX['landed-cost query'] = {'E_RECORD_NOT_FOUND': 'unknown document', 'E_VALIDATION': 'invalid input'}
+
+# FIFO costing (R104 increment 7).
+_COSTING_WRITE = {
+    'E_VALIDATION': 'a date not after the last switch, the method already in force on that date, a switch whose date '
+                    'has come (withdraw), a correction that cannot stand',
+    'E_RECORD_NOT_FOUND': 'unknown switch (withdraw), an item a correction names',
+    'E_PERIOD_CLOSED': 'the switch date, or a correction date, on or before the closing date',
+    'E_PERMISSION': 'an agent: changing the costing method is a person\'s act',
+    'E_REASON_REQUIRED': 'a write without --reason',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+MATRIX['costing-method set'] = dict(_COSTING_WRITE)
+MATRIX['costing-method withdraw'] = dict(_COSTING_WRITE)
+MATRIX['costing-method show'] = {'E_VALIDATION': 'invalid input'}
+MATRIX['report inventory-layers'] = {'E_VALIDATION': 'invalid input', 'E_RECORD_NOT_FOUND': 'unknown item'}

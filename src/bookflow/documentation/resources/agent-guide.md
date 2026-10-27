@@ -1197,11 +1197,22 @@ allocation; nothing earlier moves, and a date in a closed period moves to the fi
 a charge with `amount`; `landed-cost void` takes an allocation back. A freight bill, or a receipt, an allocation
 names cannot be voided or reduced until that allocation is voided (E_WORK_DEPENDENCY says which).
 
+## Costing method: average or FIFO
+
+Stock is costed by weighted average unless a person switched the company to FIFO. `costing-method show` says
+which method is in force and lists every switch; `report inventory-layers` lists each item's cost layers on a
+date (under FIFO a sale takes the oldest layer first; under average each item is one row). Changing the method
+is a person's act, on the accountant's advice: `costing-method set` and `costing-method withdraw` refuse an
+agent (E_PERMISSION). When asked to switch, say so and leave it to your principal. Everything else -- sales,
+receipts, returns, counts, freight -- works the same under either method; replay costs it.
+
 ## Stock sent back to a vendor
 
 Enter it as one `vendor-credit post` with `items`: one row per thing sent back, each with
 `item`, `quantity` and either `unit_cost` (what the vendor credits for one) or `amount` (the whole
-line), plus the bill's optional `customer`, `billable` and class. Do not take the stock out with
+line), plus the bill's optional `customer`, `billable` and class. A row may name the receipt line it goes
+back against as `receipt_line` (the `line_id` from `bill show` or `item-receipt show`): under FIFO the units
+leave that receipt's cost layer first; under average it is only recorded. Do not take the stock out with
 `inventory adjust` into a clearing account and then credit the clearing account: that costs the
 units at the average, not at what the vendor credited, and leaves two documents where one credit
 note arrived. `expenses` rows (an account and an amount) stay for things that are not items,

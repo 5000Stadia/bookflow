@@ -805,6 +805,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     from bookflow.adapters.workbench import landed_cost_pages as LandedCostPages
     LandedCostPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                           role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
+    # R104 increment 7: the costing method, Settings > Costing method.
+    from bookflow.adapters.workbench import costing_method_pages as CostingMethodPages
+    CostingMethodPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                             role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R104 increment 2: physical counts, the Counts list and the count screen.
     from bookflow.adapters.workbench import inventory_count_pages as InventoryCountPages
     InventoryCountPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,

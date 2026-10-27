@@ -5,7 +5,11 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
+from pydantic import field_validator
+
+from bookflow.company import ledger_reports as ledger
 from bookflow.company.journal_models import _Date as IsoDate
+from bookflow.company.ledger_reports import MoneyOutput, StrictModel, iso_date
 
 Selector = Annotated[str, Field(min_length=1, max_length=1004), BeforeValidator(lambda v: v.strip() if isinstance(v, str) else v)]
 Method = Literal['average', 'fifo']
@@ -19,7 +23,8 @@ class CostingMethodSetInput(_Strict):
     method: Method = Field(description='average (weighted average, the default) or fifo (first in, first out).')
     effective_from: IsoDate = Field(description=(
         'First date the method costs, YYYY-MM-DD: after the closing date and after the last switch. Stock on hand '
-        'that day becomes one opening layer (or the layers merge back into the average); nothing is revalued.'))
+        'that day becomes one opening layer (or the layers merge back into the average); nothing is revalued.'),
+        json_schema_extra={'cli_flag': 'from'})
 
 
 
@@ -81,30 +86,36 @@ class CostingMethodWriteOutput(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
-class InventoryLayersInput(_Strict):
-    as_of: IsoDate | None = Field(default=None, description='Report date, YYYY-MM-DD; default today.')
-    item: Selector | None = Field(default=None, description='One item, by name, id or barcode.')
-    limit: int = Field(default=200, ge=1, le=1000, description='Items per page.')
-    offset: int = Field(default=0, ge=0, description='Items to skip (next_offset from the previous page).')
+class InventoryLayersInput(StrictModel):
+    as_of: str = Field(min_length=10, max_length=10, description='Report date, YYYY-MM-DD: the layers on hand at its end.')
+    item: str | None = Field(default=None, max_length=1000, description='Only this item, by name, id or barcode.')
+    basis: Literal['accrual'] = 'accrual'
+    limit: int = Field(default=50, ge=1, le=200)
+    cursor: str | None = Field(default=None, max_length=4096)
+
+    _as_of = field_validator('as_of')(iso_date)
+
+    @property
+    def date_to(self) -> str:
+        return self.as_of
 
 
-class LayerRow(BaseModel):
+class LayerRow(StrictModel):
     item_id: str
-    item: str
+    item_name: str
     source: str = Field(description='The document that brought the units in, "Opening (FIFO from <date>)", or "Average".')
     source_movement_id: str | None = None
     date: str | None = Field(default=None, description='Date the layer came in; the switch date for an opening layer.')
     quantity: str
-    value: str
-    value_minor_units: int
-    unit_cost: str = Field(description='Value over quantity, to four places.')
+    value: MoneyOutput
+    unit_cost: str = Field(description='Value over quantity, to four places (a two-decimal home currency assumed).')
 
 
-class InventoryLayersOutput(BaseModel):
-    as_of: str
-    method: Method = Field(description='The method in force on as_of.')
-    currency: str
-    rows: list[LayerRow] = Field(default_factory=list)
-    total_value: str
-    total_value_minor_units: int
-    next_offset: int | None = None
+class InventoryLayersTotals(StrictModel):
+    asset_value: MoneyOutput
+
+
+class InventoryLayersOutput(ledger.Page):
+    method: Method = Field(description='The costing method in force on as_of.')
+    rows: list[LayerRow]
+    totals: InventoryLayersTotals

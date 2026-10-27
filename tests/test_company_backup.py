@@ -186,8 +186,16 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0098 = importlib.import_module("bookflow.storage.company_migrations.versions.0098_landed_cost")
 
     co0097 = importlib.import_module("bookflow.storage.company_migrations.versions.0097_bins_cycle_counts")
+    co0100 = importlib.import_module("bookflow.storage.company_migrations.versions.0100_costing_methods")
 
     def older(conn):
+        # Newest first: co0100 (on co0098): its guards, co0079's dimensions guard put back, costing_methods.
+        for trigger in co0100.TRIGGERS:
+            conn.execute(f"DROP TRIGGER {trigger}")
+        conn.execute("DROP TRIGGER receipt_cost_correction_dimensions")
+        conn.execute(co0100.OLD_DIMENSIONS_GUARD)
+        for table in co0100.TABLES:
+            conn.execute(f"DROP TABLE {table}")
         # Newest first: co0098 (on co0097): its guards, co0093's true-up guard put back, its tables and item columns.
         for trigger in co0098.TRIGGERS:
             conn.execute(f"DROP TRIGGER {trigger}")
@@ -332,7 +340,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))
     restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older",
                                               "organization": "Older Books Organization"})
-    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0098"
+    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0100"
     folder = _folder(client, restored["company_id"])
     # The migration took its verified backup of the restored database first, as every migration does.
     assert list((folder / "backups").glob("*-from-co0062.db"))

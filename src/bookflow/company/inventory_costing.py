@@ -96,6 +96,21 @@ cancellation precedes every share and that pool is fixed before a share is taken
 was never short cancels nothing and the rule is exactly the old one. Either way the returns of
 one issue telescope to exactly what that issue cost.
 
+## FIFO, and the costing-method timeline (R104 increment 7)
+
+``replay`` takes the company's timeline of dated switches (``costing_methods.timeline``). Under FIFO the
+walk is the same walk over the same rows in the same order; only the state differs: a queue of **layers**,
+oldest first, each a pool of remaining units and value. What fills no shortfall of a bought receipt (with
+its price corrections and landed costs), a customer return or a found quantity becomes a new layer. An issue
+takes units oldest layer first, each giving round(W*u/U), or all of W when it empties the layer, so the
+zero-residual rule holds per layer. A value adjustment, and what a vendor return's credit differs from the
+worth of the units it took, are spread over the remaining layers by units, cumulative endpoint shares in
+layer order. A vendor return takes the layer of the receipt it names first, else the oldest. A shortfall is
+costed at the newest layer's unit cost, else the last seen, then the average's fallbacks. Where the walk
+reaches a switch date, before any movement dated on or after it, the stock on hand becomes one opening layer
+(switching back, the layers merge and carry on as the average): nothing is revalued, and open shortfalls
+carry over. Every other rule above -- returns, true-ups, landed costs, corrections -- is unchanged.
+
 ## Why a correction is not an input
 
 ``recost`` rows are what replay *produced* last time -- against an issue, and now against a

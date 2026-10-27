@@ -63,7 +63,7 @@ def _receipt_line(shop, bill_id):
 
 def _layers(shop, as_of='2017-12-31'):
     report = shop['run']('report inventory-layers', dict(as_of=as_of))
-    return [(row['quantity'], row['value_minor_units']) for row in report['rows'] if row['item'] == 'Widget']
+    return [(row['quantity'], row['value']['minor_units']) for row in report['rows'] if row['item_name'] == 'Widget']
 
 
 def test_the_hand_worked_fifo_example_matches_to_the_cent(shop):
@@ -167,3 +167,24 @@ def test_withdrawing_a_switch_whose_date_has_not_come(shop):
     assert [row['status'] for row in run('costing-method show', {})['switches']] == ['withdrawn']
     with pytest.raises(BookflowError):
         run('costing-method withdraw', dict(switch='2017-01-01'), reason='Nothing there')
+
+
+from tests.test_row3_host import hosted  # noqa: F401,E402 - fixture
+
+
+def test_an_agent_is_refused_costing_method_set_and_withdraw_and_a_person_is_not(hosted):
+    from tests.test_people_only import REASON, _agent
+    _, as_agent = _agent(hosted)
+    cid = hosted.company_id
+    switch = {'method': 'fifo', 'effective_from': '2099-01-01'}
+    r = hosted.call('costing-method.set', switch, company=cid, headers=as_agent)
+    assert r.status_code == 403, r.text
+    body = r.json()
+    assert body['code'] == 'E_PERMISSION' and body['details']['reason'] == 'people_only'
+    assert "Changing the costing method is a person's act" in body['message']
+    hosted.ok('costing-method.set', switch, company=cid, headers=REASON)
+    r = hosted.call('costing-method.withdraw', {'switch': '2099-01-01'}, company=cid, headers=as_agent)
+    assert r.status_code == 403 and r.json()['details']['reason'] == 'people_only', r.text
+    bearer = {k: v for k, v in as_agent.items() if k == 'Authorization'}
+    shown = hosted.ok('costing-method.show', {}, company=cid, headers=bearer)    # reads stay allowed
+    assert [row['status'] for row in shown['switches']] == ['standing']

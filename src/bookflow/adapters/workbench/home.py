@@ -566,6 +566,7 @@ SECTIONS: tuple[Section, ...] = (
             Action("Landed cost", READ, ("landed-cost charges",), "/inventory/landed-cost"),
             _report("Physical inventory worksheet", "physical-inventory-worksheet"),
             _report("Inventory valuation detail", "inventory-valuation-detail"),
+            _report("Inventory layers", "inventory-layers"),
             _report("Quantity on hand by site", "quantity-by-site"),
             _report("Open sales orders", "open-sales-orders"),
             _report("Sales by item", "sales-by-item"),
@@ -686,6 +687,7 @@ SECTIONS: tuple[Section, ...] = (
             ("Company setup", (
                 Action("Company information", READ, ("company show",), "/company/self"),
                 Action("Preferences", WRITE, ("company update",), "/company/self/update"),
+                Action("Costing method", READ, ("costing-method show",), "/inventory/costing-method"),
                 Action("Users and permissions", READ, (), "/users"),
                 Action("Apply a setup profile", WRITE, ("profile apply",), "/profile/apply"),
                 Action("Apply a chart of accounts", WRITE, ("chart apply",), "/chart/apply"),

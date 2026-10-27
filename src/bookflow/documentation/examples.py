@@ -1701,3 +1701,17 @@ EXAMPLES.update({
     'landed-cost show': Example('bookflow landed-cost show DEMO-LC-1' + _C + ' --json', {'allocation': 'DEMO-LC-1'}),
     'landed-cost query': Example('bookflow landed-cost query' + _C + ' --json', {}),
 })
+
+# FIFO costing (R104 increment 7).
+EXAMPLES.update({
+    'costing-method set': Example(
+        'bookflow costing-method set --method fifo --from 2027-01-01' + _C
+        + ' --reason "FIFO from the new year, on our accountant\'s advice" --dry-run --json',
+        {'method': 'fifo', 'effective_from': '2027-01-01'}),
+    'costing-method withdraw': Example('bookflow costing-method withdraw 2027-01-01' + _C
+                                       + ' --reason "Staying on average for now" --dry-run --json',
+                                       {'switch': '2027-01-01'}),
+    'costing-method show': Example('bookflow costing-method show' + _C + ' --json', {}),
+    'report inventory-layers': Example('bookflow report inventory-layers --as-of 2026-12-12' + _C + ' --json',
+                                       {'as_of': '2026-12-12'}),
+})

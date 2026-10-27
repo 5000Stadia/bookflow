@@ -10,7 +10,7 @@ import bookflow
 from bookflow import BookflowError
 from bookflow.core import registry
 from bookflow.hub import permission_human_admin_catalog as layer, people_only, permission_runtime as runtime
-from bookflow.hub import permission_landed_cost_catalog as tip_layer
+from bookflow.hub import permission_fifo_catalog as tip_layer
 from tests.conftest import hosted_call, make_agent
 from tests.test_row3_host import hosted  # noqa: F401 - fixture
 
@@ -48,13 +48,15 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # serial-lot-v1 adds none: numbering units and reading where a number is are bookkeeping.
     # bins-v1 adds none: bins, cycle classes and what is due to count are bookkeeping.
     # landed-cost-v1 adds none: spreading freight over stock is bookkeeping (ledger.post, as inventory adjust).
+    # fifo-v1 adds setting and withdrawing the costing method: how stock is costed is the company's policy.
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {
         'journal restore', 'invoice restore', 'customer merge', 'customer unmerge', 'vendor merge', 'vendor unmerge',
         'item convert',
         'account merge', 'account unmerge', 'item merge', 'item unmerge', 'clock link',
         'accountant add', 'accountant remove', 'accountant-copy cancel', 'accountant-copy import',
-        'check print-confirm', 'check print-cancel', 'check reprint'}
+        'check print-confirm', 'check print-cancel', 'check reprint',
+        'costing-method set', 'costing-method withdraw'}
 
     # Every write at the identity capabilities is people-only; the one exception lets an
     # agent revoke its own token. Reads are not listed.

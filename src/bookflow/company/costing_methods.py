@@ -14,7 +14,8 @@ import sqlalchemy as sa
 
 from bookflow.company import schema as c
 from bookflow.company.costing_method_models import (
-    CorrectionEntry, CostingMethodOutput, CostingMethodWriteOutput, InventoryLayersOutput, ItemEffect, LayerRow, SwitchRow,
+    CorrectionEntry, CostingMethodOutput, CostingMethodWriteOutput, InventoryLayersOutput, InventoryLayersTotals, ItemEffect,
+    LayerRow, SwitchRow,
 )
 from bookflow.company.inventory_costing import MICRO, StockRefusal, method_on, replay
 from bookflow.core import audit, clock
@@ -314,45 +315,48 @@ def _sources(s, movement_ids):
 
 
 def inventory_layers(s, ctx, inp) -> Plan:
-    from bookflow.company import inventory, items as item_service
-    as_of = inp.as_of or _today(s)
-    currency = _home(s)
+    """Each stocked item's layers at the end of ``as_of``: the item's movements dated by then, replayed under the
+    timeline with the switches dated by then applied. Under average each item is one row."""
+    from bookflow.company import inventory, items as item_service, ledger_reports as ledger
+    from bookflow.company.ledger_reports import money
     methods = timeline(s)
-    if inp.item:
-        item_ids = [item_service.resolve_item(s.company, inp.item)['id']]
-    else:
+    with ledger._snapshot(s.company):
+        ledger.register_ledger_functions(s.company)
+        state, offset = ledger._state(s, inp, 'inventory-layers', None, None, account_scoped=False)
+        currency = state.metadata.currency
         it = c.items
-        item_ids = [row.id for row in s.company.conn.execute(
-            sa.select(it.c.id).where(it.c.type.in_(item_service.TRACKED_TYPES)).order_by(it.c.full_name_key, it.c.id))]
-    page = item_ids[inp.offset:inp.offset + inp.limit]
-    found_rows, total = [], 0
-    for item_id in page:
-        history = inventory.movements(s, item_id=item_id, as_of=as_of)
-        if not history:
-            continue
-        state = replay(history, methods, until=as_of)
-        name = inventory.item_name(s, item_id)
-        labels = _sources(s, {layer.source for layer in state.layers if layer.source})
-        for layer in state.layers:
-            if layer.source is None:
-                label = 'Average' if state.method == 'average' else f'Opening (FIFO from {layer.effective_date})'
-            else:
-                label = labels.get(layer.source, layer.source)
-            unit = round_ratio_half_even(layer.value_minor_units * MICRO * 100, layer.quantity_microunits)
-            found_rows.append(LayerRow(
-                item_id=item_id, item=name, source=label, source_movement_id=layer.source, date=layer.effective_date,
-                quantity=format_quantity_micro_units(layer.quantity_microunits),
-                value=_text(layer.value_minor_units, currency), value_minor_units=layer.value_minor_units,
-                unit_cost=_unit(unit, currency)))
-            total += layer.value_minor_units
-    more = inp.offset + inp.limit < len(item_ids)
-    return Plan(InventoryLayersOutput(as_of=as_of, method=method_on(methods, as_of), currency=currency, rows=found_rows,
-                                      total_value=_text(total, currency), total_value_minor_units=total,
-                                      next_offset=inp.offset + inp.limit if more else None))
+        query = sa.select(it.c.id, it.c.full_name).where(it.c.type.in_(item_service.TRACKED_TYPES))
+        if inp.item:
+            query = query.where(it.c.id == item_service.resolve_item(s.company, inp.item)['id'])
+        items = [dict(row) for row in s.company.conn.execute(query.order_by(it.c.full_name_key, it.c.id)).mappings()]
+        rows, total = [], 0
+        for item in items:
+            history = inventory.movements(s, item_id=item['id'], as_of=inp.as_of)
+            if not history:
+                continue
+            replayed = replay(history, methods, until=inp.as_of)
+            labels = _sources(s, {layer.source for layer in replayed.layers if layer.source})
+            for layer in replayed.layers:
+                if layer.source is None:
+                    label = 'Average' if replayed.method == 'average' else f'Opening (FIFO from {layer.effective_date})'
+                else:
+                    label = labels.get(layer.source, layer.source)
+                unit = round_ratio_half_even(layer.value_minor_units * MICRO * 100, layer.quantity_microunits)
+                rows.append(LayerRow(
+                    item_id=item['id'], item_name=item['full_name'], source=label, source_movement_id=layer.source,
+                    date=layer.effective_date, quantity=format_quantity_micro_units(layer.quantity_microunits),
+                    value=money(layer.value_minor_units, currency), unit_cost=_unit(unit)))
+                total += layer.value_minor_units
+    page = rows[offset:offset + inp.limit + 1]
+    shown = page[:inp.limit]
+    return Plan(InventoryLayersOutput(
+        metadata=state.metadata, rows=shown, count=len(shown), method=method_on(methods, inp.as_of),
+        totals=InventoryLayersTotals(asset_value=money(total, currency)),
+        next_cursor=ledger._continuation(state, offset, len(shown), len(page) > inp.limit, s.company)))
 
 
-def _unit(hundredths, currency):
+def _unit(hundredths):
     """A unit cost in hundredths of a minor unit, to four places (a two-decimal home currency assumed)."""
     sign = '-' if hundredths < 0 else ''
     whole, part = divmod(abs(hundredths), 10000)
-    return f'{sign}{whole:,}.{part:04d} {currency}'
+    return f'{sign}{whole}.{part:04d}'

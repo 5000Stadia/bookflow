@@ -76,7 +76,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +15 bins and cycle counts (R104 increment 5): bin create/update/activate/deactivate/show/list;
     # cycle-class create/update/activate/deactivate/show/list; cycle-count classify and due; report items-by-bin.
     # +6 landed cost (R104 increment 6): landed-cost setup/charges/post/void/show/query.
-    assert len(rows) == 734
+    # +4 FIFO costing (R104 increment 7): costing-method set/withdraw/show, report inventory-layers.
+    assert len(rows) == 738
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
@@ -344,7 +345,9 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 3864 -> 3891 (R104 increment 6, landed cost), measured: the six new commands' optional inputs (charges and
     # targets entries, basis, date, memo, number, query filters), unit_weight and unit_volume on item update and
     # shipping_basis on item receipts -- their null branches. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==3891
+    # 3891 -> 3895 (R104 increment 7, FIFO costing), measured: inventory-layers' optional as_of and item, and
+    # receipt_line on vendor credit item rows -- their null branches. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==3895
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

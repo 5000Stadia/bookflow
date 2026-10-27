@@ -16,7 +16,7 @@ _SET = (
     'average): nothing is revalued and the switch posts nothing. Sales, returns and adjustments already dated on or '
     'after it are costed again by the new method, each corrected at its own date. The dry run shows, per item and in '
     'total, the change in stock value and cost of goods sold, and each correction entry. Example: `bookflow '
-    'costing-method set --method fifo --effective-from 2027-01-01 --reason "FIFO from the new year, on our '
+    'costing-method set --method fifo --from 2027-01-01 --reason "FIFO from the new year, on our '
     'accountant\'s advice"`.')
 
 
