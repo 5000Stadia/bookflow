@@ -347,6 +347,9 @@ def test_the_invoice_later_equals_the_invoice_at_once(tmp_path, monkeypatch, see
                                                  targets=[dict(document=mine['receipts'][0])], date=step[1]),
                         reason='Spread')
                 elif op == 'count':
+                    if step[1] in mine.setdefault('counted', set()):
+                        continue                           # one count of a place on a date
+                    mine['counted'].add(step[1])
                     count = run('inventory-count create', dict(site='Main', date=step[1]), reason='Count')
                     run('inventory-count enter', dict(count=count['number'], entries=[dict(
                         item='Widget', quantity=str(step[2]))]), reason='Counted')
