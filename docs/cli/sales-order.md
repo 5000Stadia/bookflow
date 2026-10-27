@@ -904,6 +904,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].order.open_amount.currency` | string | yes | no | — | — |
 | `revision.lines[].order.open_amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].order.state` | literal["open", "partly_invoiced", "invoiced", "closed"] | yes | no | — | open; partly_invoiced; invoiced (nothing open, nothing cancelled); closed (nothing open, some cancelled). |
+| `revision.lines[].order.shipped` | string \| null | no | yes | null | What shipments shipped of it, in the line's unit. |
+| `revision.lines[].order.shipped_not_invoiced` | string \| null | no | yes | null | Shipped and not yet billed by an invoice: bill it with `shipment invoice` or `sales-order invoice`. |
+| `revision.lines[].order.to_ship` | string \| null | no | yes | null | Ordered less invoiced, shipped not invoiced and cancelled: what is still to ship (the anchor's Backordered). |
 | `revision.lines[].stock` | object \| null | no | yes | null | Sales orders and work orders, current revision, stocked lines: on hand, committed elsewhere, on order and available. |
 | `revision.lines[].stock.on_hand` | string | yes | no | — | — |
 | `revision.lines[].stock.committed_elsewhere` | string | yes | no | — | What every other open sales order and work order commits. |
@@ -1804,6 +1807,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].order.open_amount.currency` | string | yes | no | — | — |
 | `revision.lines[].order.open_amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].order.state` | literal["open", "partly_invoiced", "invoiced", "closed"] | yes | no | — | open; partly_invoiced; invoiced (nothing open, nothing cancelled); closed (nothing open, some cancelled). |
+| `revision.lines[].order.shipped` | string \| null | no | yes | null | What shipments shipped of it, in the line's unit. |
+| `revision.lines[].order.shipped_not_invoiced` | string \| null | no | yes | null | Shipped and not yet billed by an invoice: bill it with `shipment invoice` or `sales-order invoice`. |
+| `revision.lines[].order.to_ship` | string \| null | no | yes | null | Ordered less invoiced, shipped not invoiced and cancelled: what is still to ship (the anchor's Backordered). |
 | `revision.lines[].stock` | object \| null | no | yes | null | Sales orders and work orders, current revision, stocked lines: on hand, committed elsewhere, on order and available. |
 | `revision.lines[].stock.on_hand` | string | yes | no | — | — |
 | `revision.lines[].stock.committed_elsewhere` | string | yes | no | — | What every other open sales order and work order commits. |
@@ -2345,7 +2351,8 @@ The same example as complete `bookflow_run` arguments:
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `expected_facts_fingerprint` | `--expected-facts-fingerprint` | string \| null | no | yes | null | — |
 | `sales_order` | `SALES_ORDER` | string | yes | no | — | minimum length 1; maximum length 1004 |
-| `all_open` | `--all-open` | boolean | no | no | false | Bill every open quantity whatever the stock. Without it (and without line_ids or selections) the invoice bills what can ship. |
+| `all_open` | `--all-open` | boolean | no | no | false | Bill every open quantity whatever the stock. Without it (and without line_ids or selections) the invoice bills the units shipments shipped and no invoice billed yet, and when there are none, what can ship. |
+| `shipments` | `--shipments` | array[string] \| null | no | yes | null | Bill exactly these shipments' units not yet invoiced (numbers or ids); the invoice moves no stock. |
 
 ### Command and context options
 
@@ -4776,6 +4783,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].order.open_amount.currency` | string | yes | no | — | — |
 | `revision.lines[].order.open_amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].order.state` | literal["open", "partly_invoiced", "invoiced", "closed"] | yes | no | — | open; partly_invoiced; invoiced (nothing open, nothing cancelled); closed (nothing open, some cancelled). |
+| `revision.lines[].order.shipped` | string \| null | no | yes | null | What shipments shipped of it, in the line's unit. |
+| `revision.lines[].order.shipped_not_invoiced` | string \| null | no | yes | null | Shipped and not yet billed by an invoice: bill it with `shipment invoice` or `sales-order invoice`. |
+| `revision.lines[].order.to_ship` | string \| null | no | yes | null | Ordered less invoiced, shipped not invoiced and cancelled: what is still to ship (the anchor's Backordered). |
 | `revision.lines[].stock` | object \| null | no | yes | null | Sales orders and work orders, current revision, stocked lines: on hand, committed elsewhere, on order and available. |
 | `revision.lines[].stock.on_hand` | string | yes | no | — | — |
 | `revision.lines[].stock.committed_elsewhere` | string | yes | no | — | What every other open sales order and work order commits. |
@@ -5659,6 +5669,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].order.open_amount.currency` | string | yes | no | — | — |
 | `revision.lines[].order.open_amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].order.state` | literal["open", "partly_invoiced", "invoiced", "closed"] | yes | no | — | open; partly_invoiced; invoiced (nothing open, nothing cancelled); closed (nothing open, some cancelled). |
+| `revision.lines[].order.shipped` | string \| null | no | yes | null | What shipments shipped of it, in the line's unit. |
+| `revision.lines[].order.shipped_not_invoiced` | string \| null | no | yes | null | Shipped and not yet billed by an invoice: bill it with `shipment invoice` or `sales-order invoice`. |
+| `revision.lines[].order.to_ship` | string \| null | no | yes | null | Ordered less invoiced, shipped not invoiced and cancelled: what is still to ship (the anchor's Backordered). |
 | `revision.lines[].stock` | object \| null | no | yes | null | Sales orders and work orders, current revision, stocked lines: on hand, committed elsewhere, on order and available. |
 | `revision.lines[].stock.on_hand` | string | yes | no | — | — |
 | `revision.lines[].stock.committed_elsewhere` | string | yes | no | — | What every other open sales order and work order commits. |
@@ -6497,6 +6510,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].order.open_amount.currency` | string | yes | no | — | — |
 | `revision.lines[].order.open_amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].order.state` | literal["open", "partly_invoiced", "invoiced", "closed"] | yes | no | — | open; partly_invoiced; invoiced (nothing open, nothing cancelled); closed (nothing open, some cancelled). |
+| `revision.lines[].order.shipped` | string \| null | no | yes | null | What shipments shipped of it, in the line's unit. |
+| `revision.lines[].order.shipped_not_invoiced` | string \| null | no | yes | null | Shipped and not yet billed by an invoice: bill it with `shipment invoice` or `sales-order invoice`. |
+| `revision.lines[].order.to_ship` | string \| null | no | yes | null | Ordered less invoiced, shipped not invoiced and cancelled: what is still to ship (the anchor's Backordered). |
 | `revision.lines[].stock` | object \| null | no | yes | null | Sales orders and work orders, current revision, stocked lines: on hand, committed elsewhere, on order and available. |
 | `revision.lines[].stock.on_hand` | string | yes | no | — | — |
 | `revision.lines[].stock.committed_elsewhere` | string | yes | no | — | What every other open sales order and work order commits. |

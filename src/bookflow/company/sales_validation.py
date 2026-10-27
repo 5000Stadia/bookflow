@@ -93,9 +93,14 @@ def _stock(s, data, indexed, require):
                 and facts.asset_account.id == row['asset_account_id']
                 and facts.cogs_account.id == row['offset_account_id'],
                 'a stock issue was written for a line that carries no stock')
+    # A line billing shipped units issues nothing: the shipment did (R181).
+    from bookflow.company import shipments
+    billed = {row['line_id'] for row in data.get('shipment_billings', ())} | set(
+        shipments.billed_line_ids(s, header['id']) if data['before'] else ())
+    from_shipments = {row['id'] for row in pending['document_lines'] if row['line_id'] in billed}
     for envelope_id, line in lines.items():
         facts = SalesLineProfile.model_validate_json(line['item_snapshot'])
-        if facts.item_type in inventory.TRACKED_TYPES:
+        if facts.item_type in inventory.TRACKED_TYPES and envelope_id not in from_shipments:
             require(any(row['document_line_id'] == envelope_id and row['kind'] == 'issue'
                         for row in movements), 'an entered line sold stock that no movement issued')
 

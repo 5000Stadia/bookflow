@@ -893,6 +893,11 @@ def _apply(cmd: Command, plan: Plan | None, ctx: Context, s: Session, key=(None,
             if co_tx:
                 from bookflow.company import landed_costs
                 landed_mark = landed_costs.watermark(s)
+            # Shipped goods' cost follows the invoices that bill them (R181): a derived balance, settled after.
+            ship_mark = None
+            if co_tx:
+                from bookflow.company import shipments
+                ship_mark = shipments.watermark(s)
             with performance.span("command.apply", command=cmd.name):
                 applied = cmd.apply(plan, ctx, s)
             if stock_mark is not None and not applied.finalized:
@@ -901,6 +906,8 @@ def _apply(cmd: Command, plan: Plan | None, ctx: Context, s: Session, key=(None,
                     applied.output, inventory_counts.settle_in_command(s, ctx, stock_mark))
             if landed_mark is not None and not applied.finalized:
                 landed_costs.check_charges(s, landed_mark)
+            if ship_mark is not None and not applied.finalized:
+                shipments.settle_in_command(s, ctx, ship_mark)
             # Everything this command posted becomes stored statement effects inside the
             # command's own transaction. The work list is filled by a trigger on
             # `posting_batches`, so a writer added tomorrow is covered without being listed

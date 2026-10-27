@@ -95,3 +95,4 @@ Database: `company`.
 | `overdue_notice_frequency` | VARCHAR(12) | no | — | — | — | — | Overdue notices: how often the scheduler generates them, weekly or monthly. |
 | `overdue_notice_minimum` | VARCHAR(24) | yes | — | — | — | — | Overdue notices: least overdue balance that earns a notice, home-currency decimal text; null for any amount. |
 | `overdue_notice_template` | VARCHAR(12) | no | — | — | — | — | Overdue notices: what each notice is, a statement or a short letter. |
+| `invoice_when_shipping` | VARCHAR(8) | no | — | — | — | — | After a shipment: ask (the default), always or never offer an invoice for it. |

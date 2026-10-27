@@ -1722,3 +1722,22 @@ EXAMPLES.update({
 EXAMPLES.update({
     'company verify': Example('bookflow company verify' + _C + ' --json', {}),
 })
+
+# Shipments (R181 increment 1).
+EXAMPLES.update({
+    'shipment post': Example('bookflow shipment post --sales-order 1001' + _C + ' --reason "Shipped Acme\'s order" --dry-run --json',
+                             {'sales_order': '1001'}),
+    'shipment update': Example('bookflow shipment update 1001 --expected-version 1 --tracking-numbers \'["1Z999"]\''
+                               + _C + ' --reason "Tracking from the carrier" --json',
+                               {'shipment': '1001', 'expected_version': 1, 'tracking_numbers': ['1Z999']}),
+    'shipment void': Example('bookflow shipment void 1001' + _C + ' --reason "Never left the dock" --dry-run --json',
+                             {'shipment': '1001'}),
+    'shipment show': Example('bookflow shipment show 1001' + _C + ' --json', {'shipment': '1001'}),
+    'shipment query': Example('bookflow shipment query --not-invoiced' + _C + ' --json', {'not_invoiced': True}),
+    'shipment history': Example('bookflow shipment history 1001' + _C + ' --json', {'shipment': '1001'}),
+    'shipment invoice': Example('bookflow shipment invoice 1001 --date 2026-12-12' + _C
+                                + ' --reason "Bill last week\'s shipment" --dry-run --json',
+                                {'shipment': '1001', 'date': '2026-12-12'}),
+    'report shipped-not-invoiced': Example('bookflow report shipped-not-invoiced --as-of 2026-12-12' + _C + ' --json',
+                                           {'as_of': '2026-12-12'}),
+})

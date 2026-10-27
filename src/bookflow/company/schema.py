@@ -1260,3 +1260,7 @@ sa.Index("ix_deposit_operations_transaction", deposit_operations.c.transaction_i
 # Costing method timeline (co0100, R104 increment 7): dated switches between average and FIFO.
 from bookflow.company import costing_method_schema as _costing_method_schema
 globals().update(_costing_method_schema.define_tables(metadata, _column, _table))
+# Shipments and the books (co0102, R181 increment 1): a stock document billed later.
+from bookflow.company import shipment_schema as _shipment_schema
+globals().update(_shipment_schema.define_tables(metadata, _column, _table))
+company_info.append_column(_shipment_schema.company_info_column(_column))

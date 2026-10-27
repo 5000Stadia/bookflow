@@ -30,7 +30,9 @@ TABLES = ('transaction_revisions', 'document_line_identities', 'document_lines',
 OWNED_SYSTEM_ROLES = {'inventory_asset': 'inventory', 'customer_prepayments': 'customer prepayment',
                       # Charged by the purchase documents' expense lines (which post as the inventory owner) and
                       # cleared only by `landed-cost post` (R104 increment 6).
-                      'landed_cost_clearing': 'inventory'}
+                      'landed_cost_clearing': 'inventory',
+                      # Written by shipments and the invoices that bill them (R181).
+                      'shipped_not_invoiced': 'inventory'}
 TYPES = ('transaction_revision', 'document_line_identity', 'document_line',
          'posting_batch', 'posting_line', 'posting_line_source')
 
@@ -196,6 +198,10 @@ def line_values(s, inp, currency, old=None, refresh=False, *, date=None, rate=No
             raise invalid('account', f'"{account["name"]}" holds freight and duty waiting to be spread over the stock '
                                      'it came with; charge it on a bill, check, card charge or vendor credit expense '
                                      'line, and clear it with `landed-cost post`')
+        if role == 'shipped_not_invoiced':
+            raise invalid('account', f'"{account["name"]}" holds the cost of goods shipped and not yet invoiced; '
+                                     'it moves only with `shipment post`, `shipment void` and the invoices that bill '
+                                     'shipments')
         if role == 'customer_prepayments':
             raise invalid('account', f'"{account["name"]}" is written by the customer prepayment ledger that '
                                      'owns it, which records what each receipt holds; take a deposit with '
@@ -282,10 +288,13 @@ def foreign_document(s, transaction_id, *, verb, owner=None):
     held = inventory.owning_document_kind(s, transaction_id)
     if held is not None:
         return BookflowError('E_VALIDATION', message=(
-            f'This entry is an inventory {held.replace("recost", "cost correction").replace("count", "count difference")} '
+            f'This entry is an inventory {held.replace("shipment_cost", "shipped goods cost").replace("recost", "cost correction").replace("count", "count difference")} '
             'and its stock movements are part of it. Use '
             + ('`assembly update`, `assembly void` or `assembly delete`' if held == 'assembly build'
-               else '`inventory-count void` on its count' if held == 'count' else '`inventory void`')
+               else '`inventory-count void` on its count' if held == 'count'
+               else '`shipment update` or `shipment void`' if held == 'shipment'
+               else 'the invoice or the shipment it follows (it is derived from them)' if held == 'shipment_cost'
+               else '`inventory void`')
             + ' so the quantities and the accounting move together.'), details={'fields': [
                 {'field': 'journal', 'problem': 'an inventory document is not edited as a journal entry'}],
                 'inventory_document': held, 'transaction_id': transaction_id})

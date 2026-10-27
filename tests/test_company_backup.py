@@ -190,8 +190,23 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0100 = importlib.import_module("bookflow.storage.company_migrations.versions.0100_costing_methods")
     co0101 = importlib.import_module("bookflow.storage.company_migrations.versions.0101_statement_watermarks")
 
+    co0102 = importlib.import_module("bookflow.storage.company_migrations.versions.0102_shipments")
+
     def older(conn):
-        # Newest first: co0101 (on co0100): statement_watermarks.
+        # Newest first: co0102 (on co0101): its guards and five tables, inventory_documents' kind CHECK put back
+        # (the table is empty here), and company_info.invoice_when_shipping.
+        for trigger in co0102.TRIGGERS:
+            conn.execute(f"DROP TRIGGER {trigger}")
+        for table in co0102.TABLES:
+            conn.execute(f"DROP TABLE {table}")
+        conn.execute("PRAGMA writable_schema=ON")
+        for old_text, new_text in co0102.REPLACEMENTS["inventory_documents"]:
+            assert conn.execute("UPDATE sqlite_schema SET sql = replace(sql, ?, ?) WHERE name = 'inventory_documents'",
+                                (new_text, old_text)).rowcount == 1
+        conn.execute("PRAGMA writable_schema=OFF")
+        for column in co0102.COMPANY_COLUMNS:
+            conn.execute(f"ALTER TABLE company_info DROP COLUMN {column}")
+        # Then co0101 (on co0100): statement_watermarks.
         for table in co0101.TABLES:
             conn.execute(f"DROP TABLE {table}")
         # Then co0100 (on co0099): its guards, co0079's dimensions guard put back, costing_methods.
@@ -349,7 +364,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))
     restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older",
                                               "organization": "Older Books Organization"})
-    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0101"
+    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0102"
     folder = _folder(client, restored["company_id"])
     # The migration took its verified backup of the restored database first, as every migration does.
     assert list((folder / "backups").glob("*-from-co0062.db"))

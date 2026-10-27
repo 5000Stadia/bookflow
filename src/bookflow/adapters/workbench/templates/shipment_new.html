@@ -1,0 +1,19 @@
+{% extends "base.html" %}{% block title %}Ship an order{% endblock %}{% block body %}<section id="shipment-page" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+<nav class="crumbs"><a href="/c/{{ company_id }}/shipments">Shipments</a> / Ship an order</nav>
+<h1>Ship an order</h1>
+<p class="workflow-note">The goods leave stock on the ship date; their cost waits in Shipped Not Invoiced until the invoice bills them. What you do not ship stays backordered on the order.</p>
+{% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}</div>{% endif %}
+<form method="post" action="/c/{{ company_id }}/shipments/new" hx-post="/c/{{ company_id }}/shipments/new" hx-target="#shipment-page" hx-select="#shipment-page" hx-swap="outerHTML" data-ship-form>
+<p><label>Sales order <input name="sales_order" value="{{ values.sales_order or '' }}" required></label> <button type="submit" name="action" value="load">Show lines</button></p>
+{% if order %}<p><strong>{{ order.number }}</strong> · {{ order.title }}</p>
+{% if lines %}<div class="table-wrap"><table class="list-table ship-lines"><thead><tr><th>Item</th><th>Ordered</th><th>Shipped</th><th>To ship</th><th>Ship now</th></tr></thead><tbody>
+{% for line in lines %}<tr><td data-label="Item">{{ line.item }}</td><td data-label="Ordered">{{ line.ordered }}</td><td data-label="Shipped">{{ line.shipped }}</td><td data-label="To ship">{{ line.to_ship }}</td><td data-label="Ship now"><input name="qty:{{ line.line_id }}" value="{{ line.quantity }}" inputmode="decimal" size="6" aria-label="Ship now: {{ line.item }}"></td></tr>{% endfor %}</tbody></table></div>
+<p><label>Ship date <input type="date" name="date" value="{{ values.date or '' }}"></label> <label>Carrier <input name="carrier" value="{{ values.carrier or '' }}" size="14"></label> <label>Tracking numbers <input name="tracking" value="{{ values.tracking or '' }}" size="24"></label></p>
+<p><label>Memo <input name="memo" value="{{ values.memo or '' }}" size="30"></label> <input name="ctx:reason" placeholder="Reason" aria-label="Reason" size="18"></p>
+{% if can_write %}<p><button type="submit" name="action" value="preview">Preview</button> <button type="submit" name="action" value="ship" class="primary-action">Ship</button></p>{% endif %}
+{% else %}<p>Nothing on this order is a stocked line to ship.</p>{% endif %}{% endif %}
+</form>
+{% if preview %}<div class="notice" data-ship-preview><p><strong>Preview:</strong> {{ preview.lines|length }} line{{ '' if preview.lines|length == 1 else 's' }}, cost {{ display_money(preview.cost) }} to Shipped Not Invoiced, shipped {{ preview.date|longday }} from {{ preview.site_name }}.</p>
+<ul>{% for line in preview.lines %}<li>{{ line.quantity }} {{ line.item_name }} · {{ display_money(line.cost) }}{% if line.bin %} · bin {{ line.bin }}{% endif %}</li>{% endfor %}</ul>
+{% for w in preview.warnings %}<p>{{ w }}</p>{% endfor %}</div>{% endif %}
+</section>{% endblock %}

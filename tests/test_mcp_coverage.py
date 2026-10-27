@@ -79,7 +79,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +4 FIFO costing (R104 increment 7): costing-method set/withdraw/show, report inventory-layers.
     # +1 company verify (R180 stage 2).
     # +1 setup (R182), a local lifecycle row.
-    assert len(rows) == 740
+    # +8 shipments (R181 increment 1): shipment post/update/void/show/query/history/invoice, report shipped-not-invoiced.
+    assert len(rows) == 748
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
@@ -353,7 +354,11 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 3896 -> 3905 (build/m4-fixes: nine reports page like every other), measured: cursor on mileage-by-job,
     # mileage-by-vehicle, customer-prepayments, accountant-changes, accountant-review, items-by-bin,
     # serial-lot-stock, serial-lot-history and lot-trace -- its null branch. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==3905
+    # 3905 -> 3947 (R181 increment 1, shipments), measured: the eight new commands' optional inputs (lines and their
+    # order_line, item, quantity, bin, lot and serial_numbers, date, site, count_position, ship_method, carrier,
+    # tracking_numbers, memo, query filters, invoice fields) and shipments on sales-order invoice -- their null
+    # branches. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==3947
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.
