@@ -117,6 +117,7 @@ Example JSON output:
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
 | `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_NOT_ALLOWED` | Binding outside loopback needs --allow-network. |
 | `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
 | `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
 | `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |

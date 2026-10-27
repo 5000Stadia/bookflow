@@ -1,6 +1,7 @@
 """Per-command error codes and what produces each (blueprint 5.4). Walked by test_error_matrix."""
 
 MATRIX = {
+    "setup": {"E_INIT_CONFLICT": "a different --owner than the data root's", "E_VALIDATION": "a company kept in another currency, or a .mcp.json that is not JSON", "E_PERMISSION": "a login that may not administer the root", "E_IO": "the background host stops while starting", "E_NETWORK_NOT_ALLOWED": "a bind address outside loopback"},
     "init": {"E_INIT_CONFLICT": "init again with a different --username", "E_CONFIG_INVALID": "malformed config.toml"},
     "upgrade": {"E_COMPANY_MISSING": "registered folder absent (reported per company)"},
     "organization new": {"E_NAME_TAKEN": "existing name", "E_PERMISSION": "non hub admin", "E_VALIDATION": "empty or slash name", "E_IDEMPOTENCY_MISMATCH": "same key, different input"},

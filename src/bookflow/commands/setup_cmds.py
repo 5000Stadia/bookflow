@@ -83,7 +83,7 @@ setup_cmd = command(
                  "link for the owner to set a password in the browser, and the host running in the background. Rerunning "
                  "it repairs what is missing and reports the rest; it never makes anything twice."),
     input_model=SetupInput, output_model=SetupOutput, writes={"hub", "config", "company"},
-    error_codes=["E_INIT_CONFLICT", "E_VALIDATION", "E_PERMISSION", "E_IO"], bootstrap=True, local_only=True,
+    error_codes=["E_INIT_CONFLICT", "E_VALIDATION", "E_PERMISSION", "E_IO", "E_NETWORK_NOT_ALLOWED"], bootstrap=True, local_only=True,
     authorization="the local operating-system login, which becomes or already is the installation's administrator",
 )(_plan_setup)
 

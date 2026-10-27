@@ -78,11 +78,12 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +6 landed cost (R104 increment 6): landed-cost setup/charges/post/void/show/query.
     # +4 FIFO costing (R104 increment 7): costing-method set/withdraw/show, report inventory-layers.
     # +1 company verify (R180 stage 2).
-    assert len(rows) == 739
+    # +1 setup (R182), a local lifecycle row.
+    assert len(rows) == 740
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
-    assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 8
+    assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 9
     # The claim worth asserting: every registered command either has an executed witness, or a
     # recorded, dated reason it does not. A row with NEITHER is a command that shipped unproven
     # and unexplained, which is exactly what `payment delete` was on 2026-09-15 -- registered,
