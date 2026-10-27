@@ -102,7 +102,7 @@ def _draft(snapshot, identity):
 
 
 def _commit(s, ctx, name, *, account_id, operation_id, event_id, kind, summary, document, targets,
-            rows, updates=(), touched=()):
+            rows, updates=(), touched=(), operation_command=None):
     """Write one operation and prove the account that now holds it."""
     at = clock.now_iso()
     actor = s.actor
@@ -111,7 +111,7 @@ def _commit(s, ctx, name, *, account_id, operation_id, event_id, kind, summary, 
                                     actor_kind=actor.kind if actor else None)
     made = persistence.created(ctx, actor.id if actor else None, audit_event_id, at)
     everything = persistence.merge(
-        persistence.receipt(operation_id, command=name, operation_key=document['operation_key'],
+        persistence.receipt(operation_id, command=operation_command or name, operation_key=document['operation_key'],
                             request=document['request'], effect=document['effect'],
                             targets=targets, made=made),
         {'events': [persistence.event(event_id, operation_id=operation_id,
@@ -580,6 +580,12 @@ reconcile_candidates = command(
     error_codes=['E_RECORD_NOT_FOUND', 'E_QUERY_STALE', *ERRORS[2:]])(_candidates)
 
 
+def _amounts(totals, currency):
+    """The preview's totals as money to read (R183), in the codebase's money shape."""
+    from bookflow.core.money import Money
+    return {k: Money(int(v), currency).to_dict() for k, v in totals.decimal_units.items()}
+
+
 def _preview(inp, ctx, s):
     account_id = _account_of(s, inp.draft)
     snapshot = _loaded(s, account_id)
@@ -595,7 +601,8 @@ def _preview(inp, ctx, s):
         kind=value.kind, version=value.version,
         next_step=(preparation.FIRST_RECONCILIATION if value.kind == 'opening'
                    else None if totals.difference == 0 else preparation.STOP_RULE),
-        totals=totals, expected_facts_fingerprint=preparation.fingerprint(snapshot, value),
+        totals=totals, amounts=_amounts(totals, snapshot.source.accounts[account_id]['currency']),
+        expected_facts_fingerprint=preparation.fingerprint(snapshot, value),
         dependency_guard=dependency_guard(value), balanced=totals.difference == 0,
         cleared_without_statement_line=None if value.kind == 'opening' else _gaps(s, snapshot, value)))
 
@@ -652,8 +659,10 @@ def _discard_apply(plan, ctx, s):
     previous = snapshot.by('drafts')[value.id]['current_revision_id']
     table = c.reconciliation_drafts
     summary = f'discarded reconciliation draft {value.id}'
+    # The aggregate's own receipt names the lifecycle action the storage was built with ('reconcile
+    # cancel'); the audit trail names the command that was run.
     _commit(s, ctx, 'reconcile discard', account_id=value.account_id, operation_id=ids['operation'],
-            event_id=ids['event'], kind='draft_change', summary=summary,
+            event_id=ids['event'], kind='draft_change', summary=summary, operation_command='reconcile cancel',
             document=dict(operation_key=inp.operation_key, request=inp.model_dump(mode='json'),
                           effect=dict(draft=value.id, version=value.version, state=value.state)),
             targets=_targets(value.account_id, drafts=[value.id]),

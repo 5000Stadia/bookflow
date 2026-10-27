@@ -287,6 +287,8 @@ VERIFY_COMMANDS = frozenset(('company verify',))
 AGENT_SETUP_COMMANDS = frozenset(('setup',))
 # R181 increment 1: shipments. Its witness stocks a part, orders six, ships four (previewed, retried), records
 # tracking, reads show, query, history and the Shipped Not Invoiced report, invoices it and is refused a void.
+# R183 setup-trial fixes: owner-link (local bootstrap), agent run (standalone), reconcile discard.
+SETUP_TRIAL_COMMANDS = frozenset(('owner-link', 'agent run', 'reconcile discard'))
 SHIPMENT_COMMANDS = frozenset(('shipment post', 'shipment update', 'shipment void', 'shipment show', 'shipment query',
     'shipment history', 'shipment invoice', 'report shipped-not-invoiced'))
 
@@ -297,7 +299,7 @@ BIN_COMMANDS = frozenset(('bin activate', 'bin create', 'bin deactivate', 'bin l
     'cycle-class activate', 'cycle-class create', 'cycle-class deactivate', 'cycle-class list', 'cycle-class show',
     'cycle-class update', 'cycle-count classify', 'cycle-count due', 'report items-by-bin'))
 
-FROZEN_COMMANDS = SHIPMENT_COMMANDS | AGENT_SETUP_COMMANDS | VERIFY_COMMANDS | FIFO_COMMANDS | LANDED_COST_COMMANDS | BIN_COMMANDS | SERIAL_LOT_COMMANDS | PERF_COMMANDS | SCHEDULING_COMMANDS | INVENTORY_COUNT_COMMANDS | BARCODE_COMMANDS | CHECK_PRINTING_COMMANDS | ACCOUNTANT_REVIEW_COMMANDS | TIMEKEEPING_COMMANDS | INVENTORY_SITE_COMMANDS | PARTIAL_PO_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
+FROZEN_COMMANDS = SETUP_TRIAL_COMMANDS | SHIPMENT_COMMANDS | AGENT_SETUP_COMMANDS | VERIFY_COMMANDS | FIFO_COMMANDS | LANDED_COST_COMMANDS | BIN_COMMANDS | SERIAL_LOT_COMMANDS | PERF_COMMANDS | SCHEDULING_COMMANDS | INVENTORY_COUNT_COMMANDS | BARCODE_COMMANDS | CHECK_PRINTING_COMMANDS | ACCOUNTANT_REVIEW_COMMANDS | TIMEKEEPING_COMMANDS | INVENTORY_SITE_COMMANDS | PARTIAL_PO_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
 account create
 account deactivate
 account list
@@ -750,6 +752,8 @@ LOCAL_VALID_WITNESSES = {
                     'tests/test_row3_host.py::test_a_forwarded_company_use_writes_the_callers_login_table'],
     'docs generate': ['tests/test_docs_command.py::test_docs_generate_cli_needs_no_initialized_data_root'],
     'setup': ['tests/test_agent_setup.py::test_install_setup_connect_and_post_an_invoice_as_the_agent_for_the_owner'],
+    'owner-link': ['tests/test_agent_setup.py::test_owner_link_and_agent_run_from_a_relative_root_rerun'],
+    'agent run': ['tests/test_agent_setup.py::test_owner_link_and_agent_run_from_a_relative_root_rerun'],
     'perf generate': ['tests/test_perf_tracking.py::test_generate_and_bench_a_tiny_company'],
     'perf bench': ['tests/test_perf_tracking.py::test_generate_and_bench_a_tiny_company'],
     'perf compare': ['tests/test_perf_tracking.py::test_compare_flags_a_planted_regression'],
@@ -868,6 +872,7 @@ def execution_map():
                    'tests/test_mcp_registry_payments.py::test_payment_financial_lifecycle_full_documents_and_exact_ledger' if cmd.name in PAYMENT_FINANCIAL else
                    'tests/test_mcp_registry_deposits.py::test_deposit_lifecycle_full_documents_and_exact_ledger' if cmd.name in DEPOSIT_COMMANDS else
                    'tests/test_reconciliation_commands.py::test_the_commands_certify_a_statement_that_ties_to_the_ledger' if cmd.name in RECONCILE_COMMANDS else
+                   'tests/test_reconcile_trial_fixes.py::test_discard_drops_an_open_draft_from_review_and_keeps_its_history' if cmd.name == 'reconcile discard' else
                    'tests/test_reconcile_import.py::test_the_same_import_through_python_cli_http_and_mcp' if cmd.name in RECONCILE_IMPORT_COMMANDS else  # all four
                    'tests/test_mcp_registry_identity.py::test_identity_lifecycle_full_documents_owned_password_and_rejected_state' if cmd.name in IDENTITY_COMMANDS else
                    'tests/test_mcp_registry_agent.py::test_agent_administration_full_documents_on_four_actual_surfaces' if cmd.name in AGENT_COMMANDS else

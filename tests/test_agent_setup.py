@@ -259,6 +259,78 @@ def test_install_setup_connect_and_post_an_invoice_as_the_agent_for_the_owner(in
                 time.sleep(0.1)
 
 
+# ---------------------------------------------------------------- R183: the agent acts at once; paths, links, the owner's list
+
+@pytest.mark.timeout(600)
+def test_owner_link_and_agent_run_from_a_relative_root_rerun(installed, tmp_path):
+    home = tmp_path / "home"
+    project = tmp_path / "project"
+    home.mkdir()
+    project.mkdir()
+    port = _free_port()
+    env = _clean_env(home)
+
+    def cli(*argv: str, ok: bool = True) -> dict:
+        done = subprocess.run([str(installed), *argv, "--json"], cwd=project, env=env, capture_output=True, text=True, timeout=300)
+        assert (done.returncode == 0) == ok, done.stderr[-3000:] + done.stdout[-2000:]
+        return json.loads(done.stdout)
+
+    setup = ("setup", "--company", COMPANY, "--owner", "dana", "--owner-name", "Dana Ruiz",
+             "--data-root", "../books", "--bind", f"127.0.0.1:{port}")
+    pid = None
+    try:
+        first = cli(*setup)
+        pid = first["host"]["pid"]
+        again = cli(*setup)  # a rerun with the same relative root: every path written stays absolute
+        root = (tmp_path / "books").resolve()
+        for out in (first, again):
+            assert Path(out["data_root"]).is_absolute() and Path(out["data_root"]).resolve() == root
+            assert Path(out["token_file"]).is_absolute() and Path(out["mcp_config"]).is_absolute()
+        args = json.loads((project / ".mcp.json").read_text())["mcpServers"]["bookflow"]["args"]
+        token_path = args[args.index("--token-file") + 1]
+        assert Path(token_path).is_absolute() and Path(token_path).resolve() == root / "agents" / "assistant.token"
+
+        # The owner's checklist: a password through the link, then daily backups, each with its command.
+        steps = {x["step"]: x for x in again["owner_checklist"]}
+        assert not steps["password"]["done"] and "owner-link" in steps["password"]["command"]
+        assert not steps["backups"]["done"] and "bookflow backup schedule" in steps["backups"]["command"]
+        assert "--data-root" in steps["backups"]["command"] and "owner-link" in json.dumps(again["next_steps"])
+
+        # Acting as the agent straight away, with no MCP client: attributed as an MCP call is.
+        shown = cli("agent", "run", "company show")
+        assert shown["company_id"] == first["company"]["company_id"]
+        assert {x["step"] for x in shown["owner_steps"]} == {"password", "backups"}
+        refused = cli("agent", "run", "customer create", "--input", '{"name": "Maple St HOA"}', ok=False)
+        assert refused["code"] == "E_REASON_REQUIRED"
+        previewed = cli("agent", "run", "customer create", "--input", '{"name": "Maple St HOA"}', "--reason", "New customer", "--dry-run")
+        assert previewed.get("dry_run") is True
+        made = cli("agent", "run", "customer create", "--input", '{"name": "Maple St HOA"}', "--reason", "New customer")
+        [event] = [e for e in cli("agent", "run", "audit list", "--input", '{"command": "customer create", "limit": 5}')["items"]
+                   if made["id"] in json.dumps(e)] or [None]
+        assert event is not None and event["actor_kind"] == "agent" and event["interface"] == "mcp"
+        assert event["on_behalf_of_name"] == "Dana Ruiz"
+
+        # A fresh owner link replaces the old one, opens once, and is refused once a password is set.
+        link = cli("owner-link", "--data-root", "../books", "--bind", f"127.0.0.1:{port}")
+        assert link["username"] == "dana" and link["host_running"] is True
+        assert _get(again["owner_link"]["url"]) == 410 and _get(link["url"]) == 200
+        status, body, _ = _post(link["url"], {"password": "garden-path-2026", "again": "garden-path-2026"})
+        assert status == 200 and body["username"] == "dana"
+        refused = cli("owner-link", "--data-root", "../books", "--bind", f"127.0.0.1:{port}", ok=False)
+        assert refused["code"] == "E_VALIDATION"
+        assert [x["step"] for x in cli("agent", "run", "company show")["owner_steps"]] == ["backups"]
+    finally:
+        if pid:
+            os.kill(pid, signal.SIGINT)
+            deadline = time.monotonic() + 30
+            while time.monotonic() < deadline:
+                try:
+                    os.kill(pid, 0)
+                except ProcessLookupError:
+                    break
+                time.sleep(0.1)
+
+
 # ---------------------------------------------------------------- a person's decisions survive a rerun (review F1-F4)
 
 def _setup(client, root, project, **extra):

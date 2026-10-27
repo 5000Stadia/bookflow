@@ -10,7 +10,7 @@ import bookflow
 from bookflow import BookflowError
 from bookflow.core import registry
 from bookflow.hub import permission_human_admin_catalog as layer, people_only, permission_runtime as runtime
-from bookflow.hub import permission_shipments_catalog as tip_layer
+from bookflow.hub import permission_setup_trial_catalog as tip_layer
 from tests.conftest import hosted_call, make_agent
 from tests.test_row3_host import hosted  # noqa: F401 - fixture
 
@@ -52,6 +52,7 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # verify-v1 adds none: `company verify` only reads.
     # agent-setup-v1 adds none: `setup` is a local bootstrap command no agent can reach.
     # shipments-v1 adds none: shipments are ledger writes.
+    # setup-trial-v1 adds none: `owner-link` is a local bootstrap command and `reconcile discard` is bookkeeping.
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {
         'journal restore', 'invoice restore', 'customer merge', 'customer unmerge', 'vendor merge', 'vendor unmerge',

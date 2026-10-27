@@ -1,6 +1,7 @@
 """Per-command error codes and what produces each (blueprint 5.4). Walked by test_error_matrix."""
 
 MATRIX = {
+    "owner-link": {"E_VALIDATION": "the owner already has a password", "E_NOT_INITIALIZED": "no books at the data root", "E_NETWORK_NOT_ALLOWED": "a bind address outside loopback"},
     "setup": {"E_INIT_CONFLICT": "a different --owner than the data root's", "E_VALIDATION": "a company kept in another currency, or a .mcp.json that is not JSON", "E_PERMISSION": "a login that may not administer the root", "E_IO": "the background host stops while starting", "E_NETWORK_NOT_ALLOWED": "a bind address outside loopback"},
     "init": {"E_INIT_CONFLICT": "init again with a different --username", "E_CONFIG_INVALID": "malformed config.toml"},
     "upgrade": {"E_COMPANY_MISSING": "registered folder absent (reported per company)"},
@@ -1686,7 +1687,7 @@ _RECONCILE_ERRORS = {
     "E_IDEMPOTENCY_MISMATCH": "same key, different input",
     "E_DIRECTIVE_NOT_FOUND": "unknown directive", "E_DIRECTIVE_INACTIVE": "inactive directive",
 }
-for _verb in ("opening start", "start", "mark", "finish"):
+for _verb in ("opening start", "start", "mark", "finish", "discard"):
     MATRIX["reconcile " + _verb] = dict(_RECONCILE_ERRORS)
 # `reconcile import` starts and marks through the same aggregate, and reads exact money from a file.
 MATRIX["reconcile import"] = {

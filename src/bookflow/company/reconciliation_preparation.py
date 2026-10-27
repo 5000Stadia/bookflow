@@ -66,7 +66,7 @@ FIRST_RECONCILIATION=('An opening is certified together with the first statement
 # or by ticking one that does not belong -- unless stopping is a designed, named way out. This is
 # that way out, said in the refusal, in the preview and in the help.
 STOP_RULE=('If it will not tie, stop: leave this draft open, add a note to it saying what you '
-    'checked (`note add reconciliation_draft <draft id> "..."`), and tell the company owner. Never '
+    'checked (`note add reconciliation_draft <draft id> --body "..."`), and tell the company owner. Never '
     'post, change or tick an entry just to make the difference zero; the owner\'s entries-to-review '
     'list shows entries that do. The open draft and its difference stay on the Overview until '
     'someone finishes it. Only a person, never an agent, may instead finish it with a labelled '

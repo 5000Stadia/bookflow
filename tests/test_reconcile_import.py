@@ -388,7 +388,7 @@ def test_a_check_matched_by_number_is_not_listed_as_cleared_without_a_line(clien
                                    expenses=[dict(account='Bank Fees', amount='77.00')]))
     csv = ('Date,Description,Amount,Check,Balance\n'
            '2026-09-08,CHECK 4481,-77.00,4481,-77.00\n')
-    started = run(client, 'reconcile import', dict(account='Checking', content=csv, start=True))
+    started = run(client, 'reconcile import', dict(account='Checking', content=csv, start=True, statement_date='2026-09-30'))
     line, = started['lines']
     assert line['status'] == 'matched' and line['reason'] == 'same amount and check number'
     assert started['cleared_without_line'] == []
@@ -404,8 +404,8 @@ def test_a_dry_run_import_says_its_draft_id_is_proposed(client):
                                    expenses=[dict(account='Bank Fees', amount='77.00')]))
     csv = ('Date,Description,Amount,Check,Balance\n'
            '2026-09-08,CHECK 4481,-77.00,4481,-77.00\n')
-    preview = run(client, 'reconcile import', dict(account='Checking', content=csv, start=True), dry_run=True)
+    preview = run(client, 'reconcile import', dict(account='Checking', content=csv, start=True, statement_date='2026-09-30'), dry_run=True)
     assert preview['draft_started']
     assert f"draft {preview['draft']['id']} is a proposed id" in preview['next_step']
-    real = run(client, 'reconcile import', dict(account='Checking', content=csv, start=True))
+    real = run(client, 'reconcile import', dict(account='Checking', content=csv, start=True, statement_date='2026-09-30'))
     assert 'proposed id' not in real['next_step']
