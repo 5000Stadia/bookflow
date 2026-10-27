@@ -1,6 +1,6 @@
 """The Scan field's look-up (R104 increment 3, design/advanced-inventory.md §7).
 
-`GET /c/{company}/barcode/lookup?code=...` answers what the Scan field typed. A scanner sends codes,
+`GET /c/{company}/barcode/_scan?code=...` answers what the Scan field typed. A scanner sends codes,
 so the order here is barcode (`barcode lookup`), then an item id or name (`item show`) -- unlike an
 `item` field on a document, which takes id, then name, then barcode. When a code and another item's
 name collide, the code wins and the message says both. It writes nothing, so it needs no form and no
@@ -62,7 +62,7 @@ def answer(call, company_id: str, code: str) -> dict:
 
 
 def mount(app, *, run):
-    @app.get('/c/{company_id}/barcode/lookup')
+    @app.get('/c/{company_id}/barcode/_scan')
     def barcode_lookup(request: Request, company_id: str):
         code = (request.query_params.get('code') or '').strip()
         if not code:

@@ -66,9 +66,30 @@ def test_every_hand_authored_fence_is_classified():
             ("illustrative", "bash"),
             ("executable", "python"),
             ("illustrative", "bash"),
-            # Then one JSON example per everyday request: `payment bounce` (R176), a bad debt at 0.00 (R177),
-            # a statement read by `reconcile import` (311b8f2), and the requests added since.
-        ] + [("illustrative", "json")] * 23,
+            ("illustrative", "json"),  # a returned customer check in one step, `payment bounce` (R176)
+            ("illustrative", "json"),  # a customer pays a deposit, `prepayment receive` (R124)
+            ("illustrative", "json"),  # a bad debt written off without cash, `payment receive` at 0.00 (R177)
+            ("illustrative", "json"),  # a short payment written off, underpayment "write_off" (R148)
+            ("illustrative", "json"),  # job A's credit used for job B (R148)
+            ("illustrative", "json"),  # this month's finance charges (R120)
+            ("illustrative", "json"),  # mileage on a job (R118)
+            ("illustrative", "json"),  # hours on a job (R106)
+            ("illustrative", "json"),  # who is where tomorrow (R106)
+            ("illustrative", "json"),  # printing a week's checks (check printing)
+            ("illustrative", "json"),  # a customer's special prices (R110)
+            ("illustrative", "json"),  # the accountant's copy (R121)
+            ("illustrative", "json"),  # budget against actual (R109)
+            ("illustrative", "json"),  # depreciation (R119)
+            ("illustrative", "json"),  # a loan payment (R119)
+            ("illustrative", "json"),  # a statement kept as an attachment, read by `reconcile import` (311b8f2)
+            ("illustrative", "json"),  # assembly builds (R103)
+            ("illustrative", "json"),  # an inventory transfer between sites (R104)
+            ("illustrative", "json"),  # reminders, what needs doing today (R111)
+            ("illustrative", "json"),  # a physical count (R104)
+            ("illustrative", "json"),  # a bin count and the week's cycle counts (R104 bins)
+            ("illustrative", "json"),  # who got a serial number (R104 serial/lot)
+            ("illustrative", "json"),  # landed cost spread over a receipt (landed cost)
+        ],
         "agent-install.md": [("illustrative", "sh"), ("illustrative", "sh"), ("illustrative", "json")],
         # Seed/serve, documentation generation, and financial statement examples.
         "reference-year.md": [("illustrative", "sh")] * 3,

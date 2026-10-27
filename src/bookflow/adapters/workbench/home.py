@@ -955,7 +955,7 @@ def overview(company_id: str, today: str, ask: Ask) -> dict[str, Any]:
         attention["bills_href"] = report("unpaid-bills", as_of=today)
 
     # Tracked items with units that carry no serial number or lot yet (R104 increment 4).
-    numbers = ask("report serial-lot-stock", {"as_of": today, "limit": 500})
+    numbers = ask("report serial-lot-stock", {"as_of": today, "limit": 200})
     if numbers is not None:
         loose = [dict(row, href=f"{base}/item/{row['item_id']}#item-numbers") for row in numbers["rows"]
                  if row["number"] is None and not row["quantity"].startswith("-")]

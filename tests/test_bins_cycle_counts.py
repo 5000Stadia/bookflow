@@ -429,6 +429,7 @@ def test_co0097_on_a_populated_company_changes_no_existing_row_and_matches_the_m
         conn.execute('PRAGMA foreign_keys=OFF')
         for trigger in m.TRIGGERS:
             conn.execute(f'DROP TRIGGER {trigger}')
+        conn.execute(f'DROP INDEX {m.INDEX_NAME}')
         conn.execute('ALTER TABLE items DROP COLUMN cycle_class_id')
         conn.execute('DROP TABLE cycle_classes')
         conn.execute("UPDATE alembic_version SET version_num='co0095'")

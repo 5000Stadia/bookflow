@@ -192,19 +192,13 @@ class PaymentReceiveInput(StrictModel):
         'and the error lists the discount accounts in the chart (nothing is created). '
         'Required for a write-off (amount 0.00), where it must be an expense account such as Bad Debt.'))
     underpayment: Literal['leave_open', 'write_off'] = Field(default='leave_open', description=(
-        'What happens when the cash is less than the invoices it pays, as the anchor asks in Receive Payments. '
-        '"leave_open" (the default): each invoice keeps what it still owes, and the result\'s '
-        '`summary.underpayment` says how much and how to write it off later. "write_off" ("Write off the extra '
-        'amount"): every invoice this receipt applies cash to is settled in full, the part the customer did not pay '
-        '(after any early-payment discount listed) going to `write_off_account` (required; an expense account such '
-        'as Bad Debt, or a discount account) with `write_off_class` if given. An early-payment discount on the same '
-        'invoice still goes to `discount_account`. Example: Acme paid 480.00 of a 500.00 invoice: amount "480.00", '
-        'applications {"mode": "inline", "items": [{"invoice": "1043", "expected_version": 1, "amount": "480.00"}]}, '
-        'underpayment "write_off", write_off_account "Bad Debt". Unapplying the invoice later takes the write-off '
-        'back with it.'))
+        'What happens when the cash is less than the invoices it pays (the anchor\'s Receive Payments choice). '
+        '"leave_open" (default): each invoice keeps what it still owes; `summary.underpayment` says how to write it '
+        'off later. "write_off": every invoice given cash is paid in full, the short part (after any listed '
+        'discount) going to `write_off_account` with `write_off_class`. Example: 480.00 applied to a 500.00 invoice '
+        'with underpayment "write_off", write_off_account "Bad Debt".'))
     write_off_account: Selector | None = Field(default=None, description=(
-        'Account the underpayment is written off to, for underpayment "write_off": an expense account such as Bad '
-        'Debt, or a discount account (the anchor\'s Write Off Amount asks for the account and a class).'))
+        'Account an underpayment "write_off" goes to: an expense account such as Bad Debt, or a discount account.'))
     write_off_class: Selector | None = Field(default=None, description='Class on the underpayment write-off posting.')
     discount_class: Selector | None = Field(default=None, description='Class on the early-payment discount (or 0.00 write-off) posting.')
     payment_method: Selector | None = None

@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_valid
 from bookflow.company.billing_models import BillingReadInput, CanonicalId, ConversionInput, InvoiceFields, ReceiptFields
 from bookflow.company.check_models import CheckParty
 from bookflow.company.journal_models import _Date, _Number, _Version
-from bookflow.company.ledger_reports import MoneyOutput
+from bookflow.company.ledger_reports import MoneyOutput, ReportMetadata
 from bookflow.company.sales_models import Fingerprint, SalesMoneyInput, Selector, Text
 
 
@@ -284,6 +284,8 @@ class MileageReportInput(_Strict):
     date_from: _Date | None = Field(None, description='First trip end date; omitted, the start of the calendar year of date_to.')
     date_to: _Date | None = Field(None, description="Last trip end date; omitted, today in the company's timezone.")
     detail: bool = Field(False, description='One row per trip instead of one per group.')
+    limit: int = Field(default=50, ge=1, le=200)
+    cursor: str | None = Field(default=None, max_length=4096)
 
 
 class MileageByVehicleInput(MileageReportInput):
@@ -320,6 +322,9 @@ class MileageGroupRow(_Strict):
 
 
 class MileageReportOutput(_Strict):
+    metadata: ReportMetadata
+    count: int = Field(ge=0, le=200, description='Groups on this page; the totals are the whole report.')
+    next_cursor: str | None
     report: str
     date_from: str
     date_to: str

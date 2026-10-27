@@ -31,7 +31,7 @@ def define_tables(metadata, C, T, common):
 
 def cycle_class_column(C):
     return C('cycle_class_id', sa.String(26), 'Cycle-count class of the item; null when it is never due for a cycle count.',
-             sa.ForeignKey('cycle_classes.id'), nullable=True)
+             sa.ForeignKey('cycle_classes.id', ondelete='RESTRICT'), nullable=True)  # as every list reference on items
 
 
 GUARDS = (

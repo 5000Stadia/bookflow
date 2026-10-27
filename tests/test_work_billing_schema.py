@@ -7,6 +7,7 @@ import sqlite3
 import pytest
 import sqlalchemy as sa
 
+from tests.later_columns import added_after
 from bookflow import BookflowError
 from bookflow.company import schema as c
 from bookflow.core.ids import new_id
@@ -168,7 +169,11 @@ def old_company(client, local=True):
         ddl = next(s for s in OLD.DDL if s.startswith('CREATE TABLE sales_line_profiles'))
         if local:
             ddl = ddl.replace('document_line_id VARCHAR', "local_note TEXT NOT NULL DEFAULT 'kept' CHECK(length(local_note)>0),\n local_double BIGINT GENERATED ALWAYS AS (net_minor_units*2) STORED,\n local_virtual TEXT GENERATED ALWAYS AS (local_note || '!') VIRTUAL,\n document_line_id VARCHAR", 1)
-        cols = [r[1] for r in raw.execute('PRAGMA table_info(sales_line_profiles)') if r[1] != 'pricing_basis']
+        # co0011 added pricing_basis; later revisions' ALTER TABLE columns (co0091's fraction) are
+        # not in co0010's table either, and hold only NULL in this whole-cent fixture.
+        later = added_after('co0010').get('sales_line_profiles', set())
+        cols = [r[1] for r in raw.execute('PRAGMA table_info(sales_line_profiles)')
+                if r[1] != 'pricing_basis' and r[1] not in later]
         names = ','.join(cols)
         rows = raw.execute(f'SELECT {names} FROM sales_line_profiles').fetchall()
         raw.execute('DROP TABLE sales_line_profiles')

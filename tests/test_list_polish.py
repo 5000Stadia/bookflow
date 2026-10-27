@@ -216,7 +216,10 @@ def test_no_registered_command_is_offered_as_a_page_title():
     offenders = []
     for cmd in registry.all_commands(include_standalone=True):
         title = Naming.heading(cmd.noun, cmd.verb, registry.noun_meta(cmd.noun))
-        if title == cmd.name or '_' in title or '-' in title:
+        # A hyphen is a leak only where it spells the command (`sales-receipt`, `ar-aging`); an
+        # ordinary hyphenated word such as R111's "to-do" (noun `todo`) is a page title in words.
+        spelled = {part.lower() for part in re.findall(r'[\w]+(?:-[\w]+)+', title)} & {cmd.noun, cmd.verb}
+        if title == cmd.name or '_' in title or spelled:
             offenders.append((cmd.name, title))
     assert offenders == []
 

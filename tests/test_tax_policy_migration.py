@@ -72,7 +72,7 @@ def test_preserve_all_columns_rowids_local_ddl_and_legacy_policy(co14_root, tmp_
         assert raw.execute('PRAGMA integrity_check').fetchone()==('ok',)
 
 
-def test_legacy_paid_noop_keys_and_historical_rendering(co14_root,tmp_path):
+def test_legacy_paid_noop_keys_and_historical_rendering(co14_root,tmp_path,monkeypatch):
     source,results=co14_root
     root=tmp_path/'root';shutil.copytree(source,root)
     client=bookflow.connect(data_root=str(root));company='Demo Plumbing Co'
@@ -86,9 +86,16 @@ def test_legacy_paid_noop_keys_and_historical_rendering(co14_root,tmp_path):
     assert output['revision']['profile']==invoice['revision']['profile']
     assert output['revision']['tax_calculation_details']['origin']['kind']=='legacy_implicit'
     client.run('company update',dict(sales_tax_calculation='invoice_combined_half_up'),company=company)
-    replay=client.run('invoice post',dict(customer=invoice['customer_id'],date='2026-06-01',
-        lines=[dict(item=line['item_id'],net_amount='1.00',tax_code='Non') for line in invoice['revision']['lines']]),
-        company=company,idempotency_key='legacy-tax-post')
+    # An idempotency key lives 30 days from its save. The fixture's books carry the old release's
+    # own dates, so the replay is asked a day after the key was saved, not on today's calendar.
+    from datetime import timedelta
+    from bookflow.core import clock
+    saved=clock.parse_iso(invoice['revision']['created_at'])+timedelta(days=1)
+    with monkeypatch.context() as patch:
+        patch.setattr(clock,'now',lambda: saved)
+        replay=client.run('invoice post',dict(customer=invoice['customer_id'],date='2026-06-01',
+            lines=[dict(item=line['item_id'],net_amount='1.00',tax_code='Non') for line in invoice['revision']['lines']]),
+            company=company,idempotency_key='legacy-tax-post')
     assert replay['idempotent_replay'] and replay['revision']==invoice['revision']
 
     noop=client.run('invoice update',dict(invoice=identity,expected_version=2,operation_key='legacy-tax-noop',settlement_versions=[dict(payment=results['payment']['id'],expected_version=1)]),reason='Preserve legacy policy',company=company)

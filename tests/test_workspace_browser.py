@@ -41,6 +41,8 @@ def test_mobile_workspace_keyboard_and_single_current_route(register_browser):
     _menu(b, True)
     _key(b, 'Tab')
     assert b.evaluate('document.activeElement.matches("#workspace-navigation [data-home-link]")')
+    _key(b, 'Tab')  # R138 put Find transactions next to Overview
+    assert b.evaluate('document.activeElement.matches("#workspace-navigation a[href$=\'/find\']")')
     _key(b, 'Tab')
     assert b.evaluate('document.activeElement.matches("#workspace-navigation [data-section=customers]")')
     _key(b, 'Enter')

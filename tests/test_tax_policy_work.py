@@ -68,7 +68,12 @@ def test_work_capture_reorder_and_derived_independent_scope(client,tax_sale):
     with pytest.raises(BookflowError):
         run(client,'work-order','update',work_order=source['id'],expected_version=changed['version'],sales_tax_calculation='line_combined_half_up')
     assert snapshot(client)==before
-    assert run(client,'work-order','show',work_order=source['id'],revision_number=1)['revision']==initial
+    # A line's order, stock and coverage figures are live and shown on the current revision only
+    # (R101); revision 1 was captured while it was current, so compare it without them.
+    def saved(revision):
+        return {**revision, 'lines': [{k: v for k, v in line.items() if k not in ('order', 'stock', 'coverage')}
+                                      for line in revision['lines']]}
+    assert saved(run(client,'work-order','show',work_order=source['id'],revision_number=1)['revision'])==saved(initial)
 
 
 @pytest.mark.parametrize('fault',['cells','orphan'])

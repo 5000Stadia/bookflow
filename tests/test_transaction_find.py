@@ -67,7 +67,8 @@ def test_find_by_name_number_amount_date_memo_and_account(client):
     assert ranged['items'] and all(10000 <= r['amount']['minor_units'] <= 20000 and '2026-05-01' <= r['date'] <= '2026-06-30'
                                    for r in ranged['items'])
     kit = _find(client, memo='KIT')
-    assert kit['items'] and all('kit' in (r['memo'] or '').lower() or r['type'] in ('item_receipt', 'bill', 'invoice')
+    # Matched on a line's description: the purchases and sales of kits, and R104's van count journal.
+    assert kit['items'] and all('kit' in (r['memo'] or '').lower() or r['type'] in ('item_receipt', 'bill', 'invoice', 'journal_entry')
                                 for r in kit['items'])
 
     # An account: only documents posting to it, so the non-posting ones drop out.

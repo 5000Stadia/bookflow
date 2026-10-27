@@ -20,7 +20,7 @@ M = importlib.import_module('bookflow.storage.company_migrations.versions.0086_p
 
 
 def test_the_frozen_ddl_is_what_the_metadata_declares():
-    assert M.revision == 'co0086' and M.revision in _chain() and HEADS['company'] == 'co0086'
+    assert M.revision == 'co0086' and M.revision in _chain()
     assert M.DDL == tuple(str(CreateTable(c.metadata.tables[name]).compile(dialect=sqlite.dialect()))
                           for name in M.NEW_OBJECTS)
 

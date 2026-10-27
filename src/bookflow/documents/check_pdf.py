@@ -302,7 +302,8 @@ def to_pdf(checks, style: str, *, alignment: Alignment = Alignment(), checks_on_
     """Draw the cheques of one print run, in order, onto letter sheets of the given style."""
     layout = arrange(list(checks), style, checks_on_first_page)
     buffer = BytesIO()
-    c = pdfcanvas.Canvas(buffer, pagesize=LETTER, pageCompression=1 if compress else 0)
+    c = pdfcanvas.Canvas(buffer, pagesize=LETTER, pageCompression=1 if compress else 0,
+                          invariant=1)  # the same run prints the same bytes: no clock or random id inside
     c.setTitle(title)
     c.setAuthor('Bookflow')
     page = 0

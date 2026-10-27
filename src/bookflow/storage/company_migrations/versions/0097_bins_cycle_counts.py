@@ -15,7 +15,10 @@ down_revision = 'co0095'
 branch_labels = depends_on = None
 
 DDL = "\nCREATE TABLE cycle_classes (\n\tid VARCHAR(26) NOT NULL, \n\tversion INTEGER NOT NULL, \n\tcreated_at VARCHAR(32) NOT NULL, \n\tcreated_by VARCHAR(26) NOT NULL, \n\tcreated_via VARCHAR(16) NOT NULL, \n\tupdated_at VARCHAR(32) NOT NULL, \n\tupdated_by VARCHAR(26) NOT NULL, \n\tupdated_via VARCHAR(16) NOT NULL, \n\tname VARCHAR(200) NOT NULL, \n\tname_key VARCHAR(400) NOT NULL, \n\tinterval_days INTEGER NOT NULL, \n\tdescription VARCHAR(1000), \n\tactive BOOLEAN NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_cycle_class_name_key UNIQUE (name_key), \n\tCONSTRAINT ck_cycle_class_name_nonblank CHECK (length(trim(name)) > 0), \n\tCONSTRAINT ck_cycle_class_interval CHECK (typeof(interval_days) = 'integer' AND interval_days BETWEEN 1 AND 3660), \n\tCONSTRAINT ck_cycle_class_active CHECK (active IN (0,1))\n)\n\n"
-COLUMN = 'ALTER TABLE items ADD COLUMN cycle_class_id VARCHAR(26) REFERENCES cycle_classes (id)'
+COLUMN = 'ALTER TABLE items ADD COLUMN cycle_class_id VARCHAR(26) REFERENCES cycle_classes (id) ON DELETE RESTRICT'
+# Every list reference on items is indexed, so a class's items are found without a scan.
+INDEX = 'CREATE INDEX ix_items_cycle_class_id ON items (cycle_class_id)'
+INDEX_NAME = 'ix_items_cycle_class_id'
 GUARDS = (
     "CREATE TRIGGER inventory_placements_bin_site BEFORE INSERT ON inventory_placements WHEN NEW.bin_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM inventory_bins b WHERE b.id = NEW.bin_id AND b.site_id = NEW.site_id) BEGIN SELECT RAISE(ABORT, 'a placement names a bin of another site'); END",
     "CREATE TRIGGER inventory_bins_parent BEFORE INSERT ON inventory_bins WHEN (NEW.parent_id IS NULL AND NEW.depth != 1) OR (NEW.parent_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM inventory_bins p WHERE p.id = NEW.parent_id AND p.site_id = NEW.site_id AND p.depth = NEW.depth - 1)) BEGIN SELECT RAISE(ABORT, 'a bin sits in a bin of its own site, one level up'); END",
@@ -32,13 +35,14 @@ TRIGGERS = tuple(statement.split()[2] for statement in GUARDS)
 def upgrade():
     connection = op.get_bind()
     names = {row[0].casefold() for row in connection.exec_driver_sql('SELECT name FROM sqlite_schema')}
-    reserved = {'cycle_classes', *(name.casefold() for name in TRIGGERS)}
+    reserved = {'cycle_classes', INDEX_NAME, *(name.casefold() for name in TRIGGERS)}
     if names & reserved:
         raise RuntimeError('co0097 reserved object exists')
     if 'cycle_class_id' in {row[1] for row in connection.exec_driver_sql('PRAGMA table_xinfo(items)')}:
         raise RuntimeError('co0097 column already present: items.cycle_class_id')
     connection.exec_driver_sql(DDL)
     connection.exec_driver_sql(COLUMN)
+    connection.exec_driver_sql(INDEX)
     for statement in GUARDS:
         connection.exec_driver_sql(statement)
     if connection.exec_driver_sql('PRAGMA foreign_key_check').fetchone() is not None:

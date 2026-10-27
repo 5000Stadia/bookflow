@@ -202,10 +202,10 @@ def create(folder: Path, *, company_id: str, display_name: str, created_by: dict
 def _blank_copy_keys(snapshot: Path) -> None:
     """No backup carries an accountant's copy key (R121): whoever held one could sign change files for the
     copy that is out. Books restored from it cannot verify that copy's file; the owner cancels and makes a new one."""
-    with closing(sqlite3.connect(sqlite_uri(snapshot, "rw"), uri=True)) as db:
+    # A private snapshot file: committed by the connection's context, not a bare commit.
+    with closing(sqlite3.connect(sqlite_uri(snapshot, "rw"), uri=True)) as db, db:
         if db.execute("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='accountant_copies'").fetchone():
             db.execute("UPDATE accountant_copies SET mac_key=? WHERE side='owner'", ("0" * 64,))
-            db.commit()
 
 
 def read_manifest(archive: Path) -> dict[str, Any]:

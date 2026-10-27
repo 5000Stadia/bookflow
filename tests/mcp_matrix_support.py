@@ -34,7 +34,9 @@ class Matrix:
         self.documents = {surface: [] for surface in ('python', 'cli', 'http', 'mcp')}
         for surface in self.documents:
             root = directory / surface
-            shutil.copytree(baseline, root)
+            # R180's timings writer appends from a background thread, so its -wal can vanish
+            # mid-copy; it is telemetry, not part of the books each surface starts from.
+            shutil.copytree(baseline, root, ignore=lambda folder, names: ['telemetry'] if Path(folder) == Path(baseline) else [])
             self.roots[surface] = root
             if surface in ('http', 'mcp'):
                 handle = start_serving(root, client_version(), bind='127.0.0.1:8765', secure_cookies=False)

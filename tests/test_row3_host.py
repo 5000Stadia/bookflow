@@ -873,6 +873,11 @@ def test_every_routed_read_returns_the_same_document_over_http_as_in_the_library
         except bookflow.BookflowError as refused:
             assert name in documented, (name, refused.to_dict())
             local = refused.to_dict()
+        if name == "perf report":
+            # R180's call timings are live: every call, these reads included, adds to them, and
+            # the host records while the library may not. The same document shape is what holds.
+            assert set(local) == set(over_http[name]), name
+            continue
         assert normalize(local) == normalize(over_http[name]), name
         if name.startswith("payment recovery "):
             assert local == over_http[name], name
@@ -1524,6 +1529,9 @@ DEDICATED_PAGES = {
     # The anchor's Assess Finance Charges window (R120): customers are its per-row `sel:` boxes and the
     # fingerprint rides with the preview, so a bare page carries the date and the print choice.
     "finance-charge assess": ("/finance-charge/assess", ("date", "action")),
+    # R111's Reminders page: its filter form carries the date, the bills window and Only mine; `limit` is
+    # the page's own (25 a section).
+    "reminders": ("/reminders", ("as_of", "bills_days_ahead", "mine")),
 }
 
 

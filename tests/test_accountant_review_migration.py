@@ -21,7 +21,7 @@ TABLES = M.NEW_OBJECTS[:-1]
 
 
 def test_the_frozen_ddl_is_what_the_metadata_declares():
-    assert M.revision == 'co0088' and M.revision in _chain() and HEADS['company'] == 'co0088'
+    assert M.revision == 'co0088' and M.revision in _chain()
     assert M.DDL == tuple(str(CreateTable(c.metadata.tables[name]).compile(dialect=sqlite.dialect())) for name in TABLES)
     assert M.INDEXES == tuple(str(CreateIndex(i).compile(dialect=sqlite.dialect()))
                               for name in TABLES for i in sorted(c.metadata.tables[name].indexes, key=lambda i: i.name))

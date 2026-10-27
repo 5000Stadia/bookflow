@@ -479,7 +479,8 @@ def items_by_bin(s, inp) -> ItemsByBinOutput:
                                    quantity_on_hand=_q(quantity)))
     rows.sort(key=lambda r: (r.site_name.casefold(), r.bin == NO_BIN, r.bin.casefold(), r.item_name.casefold(),
                              r.lot or '', r.serial_number or ''))
-    return ItemsByBinOutput(as_of=as_of, rows=rows, site_totals=totals)
+    from bookflow.company import ledger_reports as ledger
+    return ItemsByBinOutput(**ledger.page_of(s, inp, 'items-by-bin', rows, date_to=as_of), as_of=as_of, site_totals=totals)
 
 
 # ---------------------------------------------------------------- sites gaining and losing bins

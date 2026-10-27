@@ -1369,8 +1369,10 @@ def report(s, inp):
             '`report general-ledger` on that account and void it, then take the money with `prepayment receive`.'),
             details={'general_ledger_minor_units': balance, 'held_minor_units': total,
                      'difference_minor_units': balance - total, 'as_of': as_of})
+    from bookflow.company import ledger_reports as ledger
+    page = ledger.page_of(s, inp, 'customer-prepayments', out_rows, date_to=as_of)
     return CustomerPrepaymentsReportOutput(
-        as_of=as_of, account_id=account['id'] if account else None, account=account['full_name'] if account else None,
-        rows=out_rows, customers=[PrepaymentReportCustomer(customer_id=cid, customer=name, held=_money(running[cid], currency))
+        **page, as_of=as_of, account_id=account['id'] if account else None, account=account['full_name'] if account else None,
+        customers=[PrepaymentReportCustomer(customer_id=cid, customer=name, held=_money(running[cid], currency))
                                   for cid, name in sorted(customers.items(), key=lambda kv: kv[1])],
         total_held=_money(total, currency), account_balance=_money(balance, currency))

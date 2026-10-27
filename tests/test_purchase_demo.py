@@ -7,8 +7,9 @@ import bookflow
 from tests.test_reference_year import demo_runner
 
 
+# R104's sites sit inside this block: the free sample leaves from the van a kit was moved onto.
 CAPTURES = ('purchase_demo_item', 'purchase_demo_check', 'purchase_demo_card',
-            'purchase_demo_free_sale', 'purchase_demo_order', 'purchase_demo_receipt',
+            'warehouse_site', 'van_site', 'van_transfer', 'purchase_demo_free_sale', 'purchase_demo_order', 'purchase_demo_receipt',
             'purchase_demo_bill', 'purchase_demo_order_remaining', 'purchase_demo_receipt_remaining')
 FINANCIAL = ('transactions', 'transaction_revisions', 'posting_batches', 'posting_lines',
              'posting_line_sources')
@@ -156,7 +157,7 @@ def test_added_purchase_seed_examples_preserve_existing_rows_and_match_exact_sto
         block = commands[start:start + len(CAPTURES)]
         assert tuple(e.get('capture') for e in block) == CAPTURES
         assert [e['command'] for e in block] == ['item create', 'check post', 'card-charge post',
-            'sales-receipt post', 'purchase-order post', 'item-receipt post', 'bill post',
+            'inventory-site update', 'inventory-site create', 'inventory-transfer post', 'sales-receipt post', 'purchase-order post', 'item-receipt post', 'bill post',
             'purchase-order show', 'item-receipt show']
         # Reuse actual original capture producers, in original order. Include populated
         # expense-only purchases and a whole-order bill as preservation sentinels.

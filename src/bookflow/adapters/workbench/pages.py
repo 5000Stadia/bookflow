@@ -1790,7 +1790,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         if company_id and command_noun == 'item' and (out.get('tracking') or 'none') != 'none':
             # A tracked item's lots or serial numbers, and its unassigned units, by site (R104 increment 4).
             try:
-                stock = run(request, 'report serial-lot-stock', {'item': out['id'], 'limit': 500}, company_id)
+                # Every page of the item's numbers (the report pages at 200 rows).
+                stock = run(request, 'report serial-lot-stock', {'item': out['id'], 'limit': 200}, company_id)
+                while stock.get('next_cursor'):
+                    more = run(request, 'report serial-lot-stock', {'item': out['id'], 'limit': 200, 'cursor': stock['next_cursor']}, company_id)
+                    stock = {**more, 'rows': stock['rows'] + more['rows']}
                 item_numbers = {'tracking': out['tracking'], 'rows': stock['rows'], 'as_of': stock['as_of'],
                                 'unassigned': [row for row in stock['rows'] if row['number'] is None],
                                 'can_assign': _role_allows(registry.get('inventory assign'), role_view, hub_admin=cred.hub_admin)}

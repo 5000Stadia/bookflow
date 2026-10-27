@@ -15,6 +15,7 @@ migration having no ``REPLACEMENTS`` dictionary.
 import importlib
 import sqlite3
 
+from tests.later_columns import create_table_as_of
 from sqlalchemy.dialects.sqlite import dialect
 from sqlalchemy.schema import CreateIndex, CreateTable
 
@@ -34,8 +35,8 @@ PREVIOUS = M.down_revision
 def test_frozen_ddl_is_the_current_metadata_and_the_guards_are_the_schema_module():
     indexes = sorted([index for name in M.NEW_TABLES for index in c.metadata.tables[name].indexes],
                      key=lambda index: index.name)
-    compiled = tuple(str(CreateTable(c.metadata.tables[name]).compile(dialect=dialect())).strip()
-                     for name in M.NEW_TABLES)
+    # Today's metadata less the columns later revisions added (co0089, co0091, ...).
+    compiled = tuple(create_table_as_of(c.metadata.tables[name], M.revision) for name in M.NEW_TABLES)
     compiled += tuple(str(CreateIndex(index).compile(dialect=dialect())).strip() for index in indexes)
     assert M.DDL == compiled
     # Frozen text can only equal today's metadata for the objects no later revision rewrote.

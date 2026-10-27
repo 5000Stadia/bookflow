@@ -16,6 +16,7 @@ import importlib
 import sqlite3
 
 import pytest
+from tests.later_columns import undo_later_rewrites
 from sqlalchemy.dialects.sqlite import dialect
 from sqlalchemy.schema import CreateTable
 
@@ -75,6 +76,8 @@ def test_the_substitution_lands_on_the_shape_the_application_declares():
     """
     old, new = M.REPLACEMENTS['check_instruments']
     compiled = str(CreateTable(c.metadata.tables['check_instruments']).compile(dialect=dialect())).strip()
+    # Later revisions (co0096 widened the type list) rewrote this clause again; undo theirs.
+    compiled = undo_later_rewrites('check_instruments', compiled, M.revision)
     assert old not in compiled and new in compiled
 
 
@@ -90,7 +93,7 @@ def test_a_fresh_database_reaches_the_head_and_admits_both_documents(tmp_path):
         assert migrate_to_head(db, 'company', None) == (None, HEADS['company'])
         stored = db.raw.execute(
             "SELECT sql FROM sqlite_schema WHERE type='table' AND name='check_instruments'").fetchone()[0]
-        assert "CHECK (type IN ('journal_entry', 'bill_payment'))" in stored
+        assert "CHECK (type IN ('journal_entry', 'bill_payment'))" in undo_later_rewrites('check_instruments', stored, M.revision)
         assert db.raw.execute('SELECT count(*) FROM check_instruments').fetchone() == (0,)
         assert db.raw.execute('PRAGMA main.foreign_key_check').fetchall() == []
         assert db.raw.execute('PRAGMA main.integrity_check').fetchall() == [('ok',)]
