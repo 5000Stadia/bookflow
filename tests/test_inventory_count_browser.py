@@ -40,6 +40,12 @@ def test_a_count_entered_and_posted_from_the_count_screen(register_browser, widt
     b.viewport(width, 900)
     b.navigate(f'{base}/inventory/counts')
     b.wait_for('!!document.querySelector("[data-count-start]")')
+    # A refused start shows its own reason through htmx (answered 200 to htmx, as the pick screen does), never the
+    # generic "could not be confirmed" box.
+    _submit(b, '[data-count-start]', {'site': 'Van 1', 'date': '2026-12-20', 'items': 'No Such Valve',
+                                      'ctx:reason': 'Van count'}, '[data-count-create]')
+    text = _notice(b)
+    assert 'E_' in text and 'could not be confirmed' not in text, text
     _submit(b, '[data-count-start]', {'site': 'Van 1', 'date': '2026-12-20', 'items': 'Brass Shutoff Valve',
                                       'ctx:reason': 'Van count'}, '[data-count-create]')
     text = _notice(b)

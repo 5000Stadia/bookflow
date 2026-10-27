@@ -605,6 +605,42 @@ def _numbers(entry):
     return serial_lots.from_line(entry)
 
 
+def _place_key(entry):
+    """``(bin, lot)`` an input line names, folded for comparison."""
+    bin_, lot = getattr(entry, 'bin', None), getattr(entry, 'lot', None)
+    return (str(bin_).strip().casefold() or None if bin_ is not None else None,
+            str(lot).strip().casefold() or None if lot is not None else None)
+
+
+def _match_priors(s, chosen, prior_lines, site_id):
+    """The prior line each chosen line restates: of the same order line, the one in the same bin and lot first, then
+    the first one left, so a split shipment corrected line by line keeps each line's identity."""
+    if not prior_lines:
+        return [None] * len(chosen)
+    from bookflow.company import bins, serial_lots
+    movements = [row['movement_id'] for row in prior_lines if row.get('movement_id')]
+    lots = serial_lots.line_numbers(s, movements) if movements else {}
+    names = bins.bin_names(s, [row['bin_id'] for row in prior_lines if row.get('bin_id')])
+    left = list(prior_lines)
+
+    def place(row):
+        kept = lots.get(row.get('movement_id'))
+        bin_name = names.get(row['bin_id']) if row.get('bin_id') else None
+        return (bin_name.casefold() if bin_name else None, kept.lot.casefold() if kept and kept.lot else None)
+
+    out = []
+    for row, _, numbers in chosen:
+        mine = [p for p in left if (p['root_document_id'], p['root_line_id']) == row['root']]
+        wanted = (numbers.bin.casefold() if numbers and numbers.bin else None,
+                  numbers.lot.casefold() if numbers and numbers.lot else None)
+        found = next((p for p in mine if all(w is None or w == h for w, h in zip(wanted, place(p)))
+                      and wanted != (None, None)), mine[0] if mine else None)
+        if found is not None:
+            left.remove(found)
+        out.append(found)
+    return out
+
+
 def _pick_line(candidates, entry, index, s):
     if entry.order_line is not None:
         found = [row for row in candidates if row['line']['line_id'] == entry.order_line.upper()
@@ -677,9 +713,6 @@ def _plan(s, ctx, *, header, rev, date, site_id, position, entries_in, sni_id, c
     from bookflow.company.sales_calculations import base_quantity
     profile = work.facts(rev).profile
     candidates = _order_lines(s, header, rev, exclude_shipment=current['id'] if current else None)
-    prior_by_root = {}
-    for row in prior_lines:
-        prior_by_root.setdefault((row['root_document_id'], row['root_line_id']), row)
     chosen, explicit_priors, extra_warnings = [], [], []
     if picked is not None:
         chosen = _from_picks(s, candidates, picked, extra_warnings)
@@ -717,12 +750,16 @@ def _plan(s, ctx, *, header, rev, date, site_id, position, entries_in, sni_id, c
                     to_ship=_plain(row['to_ship']), available=format_quantity_micro_units(
                         max(0, available.get(row['facts'].item_id, 0)))) for row in stocked]))
     else:
-        seen = set()
+        seen, named = set(), {}
         for index, entry in enumerate(entries_in):
             row = _pick_line(candidates, entry, index, s)
-            if row['root'] in seen:
-                raise _invalid(f'lines.{index}', 'name each order line once')
-            seen.add(row['root'])
+            # One order line may ship on several lines (a split over bins or lots, as a pick list ships it), each
+            # told apart by its bin or lot.
+            place = _place_key(entry)
+            if (row['root'], place) in seen or (place == (None, None) and row['root'] in named) or \
+                    (row['root'], (None, None)) in seen:
+                raise _invalid(f'lines.{index}', 'name each order line once, or tell its lines apart by bin or lot')
+            seen.add((row['root'], place))
             if row['line'].get('site_id') not in (None, site_id):
                 raise _invalid(f'lines.{index}', 'this order line ships from another site; ship it on its own shipment',
                                site=placements.site_names(s).get(row['line']['site_id']))
@@ -734,23 +771,25 @@ def _plan(s, ctx, *, header, rev, date, site_id, position, entries_in, sni_id, c
                     raise _invalid(f'lines.{index}.quantity', 'use a positive decimal quantity') from None
                 if selected <= 0:
                     raise _invalid(f'lines.{index}.quantity', 'must be positive')
-                if selected > row['to_ship']:
+                if named.get(row['root'], 0) + selected > row['to_ship']:
                     raise _invalid(f'lines.{index}.quantity', f'more than the {_plain(row["to_ship"])} this line has to ship',
                                    message=(f'{row["facts"].profile.item.label}: {entry.quantity} is more than the '
-                                            f'{_plain(row["to_ship"])} the order still has to ship.'))
+                                            f'{_plain(row["to_ship"] - named.get(row["root"], 0))} the order still '
+                                            'has to ship.'))
+                named[row['root']] = named.get(row['root'], 0) + selected
                 base = base_quantity(selected, factor)
             else:
-                if row['to_ship'] <= 0:
+                if row['to_ship'] - named.get(row['root'], 0) <= 0:
                     raise _invalid(f'lines.{index}', 'this order line has nothing left to ship')
-                base = _to_base(row['to_ship'], factor)
+                base = _to_base(row['to_ship'] - named.get(row['root'], 0), factor)
+                named[row['root']] = row['to_ship']
+            named.setdefault(row['root'], 0)
             chosen.append((row, base, _numbers(entry)))
     lines = []
-    used = set()
+    matched = _match_priors(s, chosen, prior_lines, site_id) if not explicit_priors else explicit_priors
     for index, (row, base, numbers) in enumerate(chosen):
         # A shipment from a pick list may hold one order line on several lines (bins, lots): each restates its own.
-        prior = explicit_priors[index] if explicit_priors else (
-            prior_by_root.get(row['root']) if row['root'] not in used else None)
-        used.add(row['root'])
+        prior = matched[index]
         if numbers is None and prior is not None and prior.get('movement_id'):
             # A line that restates nothing about its place or numbers keeps the ones its units left with.
             from bookflow.company import serial_lots
@@ -858,10 +897,8 @@ def _guard_billed(s, current, prior_lines, shipment=None, date=None):
             f'Invoice {", ".join(invoices)} bills this shipment; void or correct the invoice first.'),
             details=dict(problem='an invoice bills this shipment; void or correct it first', invoices=invoices,
                          reason='shipment_invoiced'))
-    kept = {}
-    for line in shipment.lines:
-        kept[line.root] = kept.get(line.root, 0) + line.base
-    identities = {line.identity for line in shipment.lines}
+    kept = {line.identity: line.base for line in shipment.lines if line.identity}
+    identities = set(kept)
     for row in prior_lines:
         rows = billed.get(row['line_identity'])
         if not rows:
@@ -872,7 +909,7 @@ def _guard_billed(s, current, prior_lines, shipment=None, date=None):
                 'this correction would drop; correct it line for line, or void or correct the invoice first.'),
                 details=dict(problem='a billed line would be dropped', invoices=invoices, reason='shipment_invoiced'))
         total = sum(int(r['quantity_microunits']) for r in rows)
-        if kept.get((row['root_document_id'], row['root_line_id']), 0) < total:
+        if kept.get(row['line_identity'], 0) < total:
             raise BookflowError('E_WORK_DEPENDENCY', message=(
                 f'Invoice {", ".join(sorted({r["invoice_number"] or r["transaction_id"] for r in rows}))} billed '
                 f'{format_quantity_micro_units(total)} of this line; the shipment cannot hold fewer.'),
@@ -882,6 +919,24 @@ def _guard_billed(s, current, prior_lines, shipment=None, date=None):
             raise _invalid('date', f'invoice {rows[0]["invoice_number"]} billing this shipment is dated {earliest}',
                            message=(f'An invoice dated {earliest} bills this shipment, so it cannot ship later than '
                                     'that. Correct the invoice first.'))
+
+
+def _guard_picked(s, header, shipment, prior_lines):
+    """Units of an order a live pick list holds ship from the list (`shipment post --pick-list`), not past it: a
+    shipment from the order alone (or a correction shipping more of such a line) would issue them a second time."""
+    from bookflow.company import pick_lists
+    held = pick_lists.holding(s, order_id=header['id'])
+    if not held:
+        return
+    before, after = {}, {}
+    for row in prior_lines:
+        root = (row['root_document_id'], row['root_line_id'])
+        before[root] = before.get(root, 0) + int(row['quantity_microunits'])
+    for line in shipment.lines:
+        after[line.root] = after.get(line.root, 0) + line.base
+    found = {root: held[root] for root in held if after.get(root, 0) > before.get(root, 0)}
+    if found:
+        pick_lists.refuse_held(found, 'shipping it from the order would issue those units a second time')
 
 
 def standing_returns(s, movement_ids):
@@ -1005,6 +1060,8 @@ def _run(s, ctx, inp, operation, *, persist):
                          picked=picked)
         if current is not None:
             _guard_billed(s, current, prior_lines, shipment, date if date != current['ship_date'] else None)
+        if picked is None:
+            _guard_picked(s, header, shipment, prior_lines)
         inventory_effects.open_dates(s, shipment.change)
         memo = inp.memo if inp.memo is not None else (current['revision']['memo'] if current else None)
         journal = (JournalPostInput(date=date, memo=memo or f'Shipment for sales order {header["number"]}',

@@ -79,10 +79,20 @@ def require_enabled(s):
 
 
 def check_turning_off(s):
-    """Turning picking off is refused while a list is open, naming it."""
+    """Turning picking off is refused while a list is open, or any list (a done one too) still has staged units no
+    shipment took, naming it: `pick-list cancel` puts them back, and it needs picking on."""
     if not s.company.conn.execute(sa.text("SELECT 1 FROM sqlite_schema WHERE name = 'pick_lists'")).first():
         return
-    open_lists = [row['number'] for row in _current_rows(s) if row['status'] == 'open']
+    rows = _current_rows(s)
+    staged = [row['number'] for row in rows if row['status'] == 'done' and staged_left(s, row)]
+    if staged:
+        names = ', '.join(staged[:10])
+        raise BookflowError('E_WORK_DEPENDENCY', message=(
+            f'Pick list {names} still has staged units no shipment took. Cancel it (`pick-list cancel {staged[0]}`) '
+            'to move them back to their bins before turning picking off.'),
+            details=dict(problem='a pick list has staged units not shipped', pick_lists=staged,
+                         reason='pick_list_staged'))
+    open_lists = [row['number'] for row in rows if row['status'] == 'open']
     if open_lists:
         names = ', '.join(open_lists[:10])
         raise BookflowError('E_WORK_DEPENDENCY', message=(
@@ -212,16 +222,18 @@ def line_states(s, lists, *, extra_entries=()):
     return states
 
 
-def holds(s, *, exclude_list=None, roots=None):
-    """``{root: base microunits}`` live lists hold for order lines ("on open picks")."""
+def _held(s, *, exclude_list=None, roots=None, site_id=None):
+    """``{(list row, root): (base microunits, item id, order id)}`` live lists hold per order line."""
     if not s.company.conn.execute(sa.text("SELECT 1 FROM pick_lists LIMIT 1")).first():
         return {}
-    lists = [row for row in _current_rows(s) if row['status'] != 'cancelled' and row['id'] != exclude_list]
+    where, params = (' AND h.site_id = :site', dict(site=site_id)) if site_id else ('', None)
+    lists = [row for row in _current_rows(s, where, params)
+             if row['status'] != 'cancelled' and row['id'] != exclude_list]
     if not lists:
         return {}
     shipped = {(link['pick_list_id'], link['sales_order_id']) for link in live_links(s, [row['id'] for row in lists])}
-    status = {row['id']: row['status'] for row in lists}
-    planned, picked = {}, {}
+    by_id = {row['id']: row for row in lists}
+    planned, picked, facts = {}, {}, {}
     for state in line_states(s, lists).values():
         line = state.line
         if (line['pick_list_id'], line['sales_order_id']) in shipped:
@@ -229,14 +241,64 @@ def holds(s, *, exclude_list=None, roots=None):
         key = (line['pick_list_id'], (line['root_document_id'], line['root_line_id']))
         if roots is not None and key[1] not in roots:
             continue
+        facts[key] = (line['item_id'], line['sales_order_id'])
         if not line['short']:
             planned[key] = planned.get(key, 0) + int(line['quantity_microunits'])
         picked[key] = picked.get(key, 0) + state.picked
     out = {}
-    for key in set(planned) | set(picked):
-        held = (max(planned.get(key, 0), picked.get(key, 0)) if status[key[0]] == 'open' else picked.get(key, 0))
-        out[key[1]] = out.get(key[1], 0) + held
-    return {root: q for root, q in out.items() if q}
+    for key in facts:
+        held = (max(planned.get(key, 0), picked.get(key, 0)) if by_id[key[0]]['status'] == 'open'
+                else picked.get(key, 0))
+        if held:
+            out[(by_id[key[0]]['number'], key[1])] = (held,) + facts[key]
+    return out
+
+
+def holds(s, *, exclude_list=None, roots=None):
+    """``{root: base microunits}`` live lists hold for order lines ("on open picks")."""
+    out = {}
+    for (_, root), (held, _, _) in _held(s, exclude_list=exclude_list, roots=roots).items():
+        out[root] = out.get(root, 0) + held
+    return out
+
+
+def _held_by_others(s, site_id, order_ids):
+    """``{item_id: base}`` live lists at the site hold for orders not among these."""
+    out = {}
+    for (_, _), (held, item_id, order_id) in _held(s, site_id=site_id).items():
+        if order_id not in order_ids:
+            out[item_id] = out.get(item_id, 0) + held
+    return out
+
+
+def holding(s, *, order_id=None, roots=None):
+    """``{root: (base, [list numbers])}`` live lists hold of these order lines (or of this order), while picking is
+    on: an order a list holds ships from the list, not past it."""
+    if not s.company.conn.execute(sa.text("SELECT 1 FROM sqlite_schema WHERE name = 'pick_lists'")).first() \
+            or not enabled(s):
+        return {}
+    if order_id is not None:
+        t = c.pick_list_lines
+        roots = {(row[0], row[1]) for row in s.company.conn.execute(sa.select(
+            t.c.root_document_id, t.c.root_line_id).where(t.c.sales_order_id == order_id))}
+        if not roots:
+            return {}
+    out = {}
+    for (number, root), (held, _, _) in _held(s, roots=roots).items():
+        quantity, numbers = out.get(root, (0, []))
+        out[root] = (quantity + held, sorted(set(numbers) | {number}))
+    return out
+
+
+def refuse_held(found, doing, remedy=None):
+    """E_WORK_DEPENDENCY naming the lists that hold an order's units (``found`` from ``holding``)."""
+    numbers = sorted({number for _, names in found.values() for number in names}, key=_natural)
+    first = numbers[0]
+    raise BookflowError('E_WORK_DEPENDENCY', message=(
+        f'Pick list {", ".join(numbers)} holds units of this order, so {doing}. '
+        + (remedy or f'Ship from the list (`shipment post --pick-list {first}`) or cancel it '
+                     f'(`pick-list cancel {first}`) first.')),
+        details=dict(problem='a pick list holds units of this order', pick_lists=numbers, reason='picked_on_list'))
 
 
 def holders(s, root, *, exclude_list=None):
@@ -361,15 +423,19 @@ def _reserved_by_bin(s, site_id, item_id, staged):
 
 
 def _committed_elsewhere(s, site_id, items, order_ids, default):
+    """What documents not on the list commit at the site (only when the preference deducts orders), and never less
+    than what other live lists there hold, whatever the preference: two lists never take the same units."""
     from bookflow.company import commitments
-    if not commitments.deducts_documents(s):
-        return {}
     out = {}
-    for line in commitments.open_lines(s, items=list(items)):
-        if line.document_id in order_ids:
-            continue
-        if line.site_id == site_id or (line.site_id is None and default):
-            out[line.item_id] = out.get(line.item_id, 0) + line.open_base
+    if commitments.deducts_documents(s):
+        for line in commitments.open_lines(s, items=list(items)):
+            if line.document_id in order_ids:
+                continue
+            if line.site_id == site_id or (line.site_id is None and default):
+                out[line.item_id] = out.get(line.item_id, 0) + line.open_base
+    for item_id, held in _held_by_others(s, site_id, order_ids).items():
+        if item_id in items:
+            out[item_id] = max(out.get(item_id, 0), held)
     return out
 
 
@@ -694,8 +760,8 @@ def _enter(s, ctx, current, inp, *, persist):
         elif kind == 'serial' and quantity % UNIT:
             raise _invalid(prefix + 'quantity', f'{item["full_name"]} is tracked by serial number, so it is picked in '
                                                 'whole units')
-        elif kind == 'lot' and line['lot_id'] and entry.mode == 'add':
-            lot_id = line['lot_id']   # the picker took the lot the list suggested
+        elif kind == 'lot' and line['lot_id']:
+            lot_id = line['lot_id']   # the picker took the lot the list suggested ("All" sends set, too)
         ordinal += 1
         row = dict(id=new_id(), pick_list_id=current['id'], line_id=line['id'], ordinal=ordinal, mode=entry.mode,
                    quantity_microunits=quantity, bin_id=bin_id, lot_id=lot_id, serial_number_id=serial_id,
@@ -832,23 +898,17 @@ def _end(s, ctx, inp, operation, *, persist):
     made, warnings = [], []
     states = line_states(s, [current])
     if operation == 'cancel':
-        shipped = {link['sales_order_id'] for link in live_links(s, [current['id']])}
         latest = max((row['entry_date'] for row in _entries(s, [current['id']])), default=current['pick_date'])
         date = max(getattr(inp, 'date', None) or _today(s), latest)
         position = _position(s, current['site_id'], date)
         sequence = inventory.next_sequence(s)
-        for state in states.values():
-            if state.line['sales_order_id'] in shipped:
-                continue
-            for chunk in state.chunks:
-                if not chunk.staging_bin_id or chunk.bin_id == chunk.staging_bin_id:
-                    continue
-                for bin_, signed in ((chunk.staging_bin_id, -chunk.quantity), (chunk.bin_id, chunk.quantity)):
-                    made.append(dict(id=new_id(), item_id=state.line['item_id'], site_id=current['site_id'],
-                                     bin_id=bin_, lot_id=chunk.lot_id, serial_number_id=chunk.serial_id,
-                                     quantity_microunits=signed, effective_date=date, count_position=position,
-                                     sequence=sequence, source='pick', movement_id=None, transfer_revision_id=None,
-                                     source_line_id=revision['id'], reverses_placement_id=None, **provenance))
+        for line, chunk in staged_left(s, current, states):
+            for bin_, signed in ((chunk.staging_bin_id, -chunk.quantity), (chunk.bin_id, chunk.quantity)):
+                made.append(dict(id=new_id(), item_id=line['item_id'], site_id=current['site_id'],
+                                 bin_id=bin_, lot_id=chunk.lot_id, serial_number_id=chunk.serial_id,
+                                 quantity_microunits=signed, effective_date=date, count_position=position,
+                                 sequence=sequence, source='pick', movement_id=None, transfer_revision_id=None,
+                                 source_line_id=revision['id'], reverses_placement_id=None, **provenance))
         if made:
             warnings.append(f'Staged units not shipped go back to the bins they were picked from on {date}.')
     else:
@@ -871,6 +931,45 @@ def _end(s, ctx, inp, operation, *, persist):
     s.company.conn.execute(c.pick_list_revisions.insert().values(**revision))
     out = show_output(s, resolve(s, current['id']))
     return out.model_copy(update={'warnings': warnings}), touched
+
+
+def staged_left(s, current, states=None):
+    """``[(line, Chunk)]`` units the list moved to staging that no live shipment from it took: every staged chunk of
+    an order not shipped from the list, and of a shipped order what its shipment did not issue from staging (picked
+    beyond what the order had to ship). Cancelling the list moves these back to the bins they came from."""
+    if states is None:
+        states = line_states(s, [current])
+    links = live_links(s, [current['id']])
+    shipped = {link['sales_order_id'] for link in links}
+    taken = {}
+    if links:
+        params = {}
+        marks = []
+        for index, link in enumerate(links):
+            params[f's{index}'] = link['shipment_id']
+            marks.append(f':s{index}')
+        for row in s.company.conn.execute(sa.text(
+                "SELECT h.sales_order_id, p.item_id, p.bin_id, p.lot_id, p.serial_number_id, "
+                "sum(p.quantity_microunits) AS q FROM inventory_placements p "
+                "JOIN inventory_movements m ON m.id = p.movement_id JOIN shipments h ON h.transaction_id = "
+                f"m.transaction_id WHERE h.id IN ({', '.join(marks)}) GROUP BY 1, 2, 3, 4, 5"), params).mappings():
+            key = (row['sales_order_id'], row['item_id'], row['bin_id'], row['lot_id'], row['serial_number_id'])
+            taken[key] = taken.get(key, 0) - int(row['q'])
+    out = []
+    for state in sorted(states.values(), key=lambda st: st.line['position']):
+        line = state.line
+        for chunk in state.chunks:
+            if not chunk.staging_bin_id or chunk.bin_id == chunk.staging_bin_id:
+                continue
+            quantity = chunk.quantity
+            if line['sales_order_id'] in shipped:
+                key = (line['sales_order_id'], line['item_id'], chunk.staging_bin_id, chunk.lot_id, chunk.serial_id)
+                used = max(0, min(quantity, taken.get(key, 0)))
+                taken[key] = taken.get(key, 0) - used
+                quantity -= used
+            if quantity > 0:
+                out.append((line, Chunk(chunk.bin_id, chunk.lot_id, chunk.serial_id, quantity, chunk.staging_bin_id)))
+    return out
 
 
 def plan_end(operation):

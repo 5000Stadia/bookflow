@@ -116,7 +116,8 @@ def mount(app, *, render, run, credential, page_error, role_allows):
         except BookflowError as e:
             if e.code in ('E_UNAUTHENTICATED', 'E_WORKBENCH_HEADER'):
                 return page_error(request, e)
-            return list_page(request, company_id, values=dict(form), error=e.to_dict(), status_code=400)
+            return list_page(request, company_id, values=dict(form), error=e.to_dict(),
+                             status_code=200 if request.headers.get('HX-Request') else 400)
         return count_page(request, company_id, out['number'],
                           result=f"Count {out['number']} of {out['site_name']} started: {len(out['lines'])} lines to count.")
 
@@ -172,7 +173,7 @@ def mount(app, *, render, run, credential, page_error, role_allows):
             if e.code in ('E_UNAUTHENTICATED', 'E_WORKBENCH_HEADER'):
                 return page_error(request, e)
             return count_page(request, company_id, number, values=dict(form), error=e.to_dict(), preview=preview,
-                              status_code=400)
+                              status_code=200 if request.headers.get('HX-Request') else 400)
         kept = {'bin': form.get('bin', '')} if action == 'enter' else {}
         return count_page(request, company_id, number, result=result, preview=preview,
                           values={'adjustment_account': form.get('adjustment_account', ''),

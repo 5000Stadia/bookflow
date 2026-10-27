@@ -2150,6 +2150,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             from bookflow.company.work_preferences import disabled_error
             return page_error(request, disabled_error('estimates', [change for change in authorized_company['preference_changes']
                 if change['field'] == 'estimates_enabled']), company_id=company_id)
+        if request.method == 'GET' and authorized_company and cmd.name.startswith('pick-list ') and \
+                not authorized_company['info'].get('pick_and_pack_enabled'):
+            # Picking is off (K3): no pick form renders, as no pick menu or button shows.
+            from bookflow.company.pick_lists import disabled_error as picking_off
+            return page_error(request, picking_off(), company_id=company_id)
         billing = None
         if noun in Billing.NOUNS and record_id and (verb == 'billing' or Billing.is_conversion(noun, verb)):
             try:

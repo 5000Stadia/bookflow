@@ -691,7 +691,10 @@ For the builder, defaults standing unless review finds otherwise:
   yet, so the switch follows the nearest company-setting pattern (`estimates_enabled`). While it is off every
   `pick-list` command and `shipment post --pick-list` refuse with E_FEATURE_DISABLED (`setting`, `enable_command`), no
   pick surface shows (the Items menu, the order page's buttons, the noun grid), and `shipment post` is unchanged.
-  Turning it off is refused (E_WORK_DEPENDENCY) while a list is open, naming it.
+  Turning it off is refused (E_WORK_DEPENDENCY) while a list is open (`pick_list_open`), or while any list, a `done`
+  one too, still has staged units no shipment took (`pick_list_staged`), naming it: `pick-list cancel` puts them back,
+  and it needs picking on. With picking off, `/c/<id>/pick-list/create` (and `/new/create`) answer the
+  E_FEATURE_DISABLED page instead of a form, as estimates do.
 - **Migration co0104** (on co0103) adds `pick_lists` (immutable header: number `P-1`, `P-2`... from the `pick_list`
   sequence, site, date, picker, memo), `pick_list_revisions` (append-only: `open`, then `done` or `cancelled`),
   `pick_list_lines` (order line by billing root and line_id, item, base quantity, bin, suggested lot, `short`),
@@ -703,7 +706,9 @@ For the builder, defaults standing unless review finds otherwise:
   standard with `customer-work` read, reads `item` member.
 - **Suggestions.** Orders compete in order date, then number (natural). The site gives the list's orders its on hand
   at the list date, less what documents not on the list commit there (unassigned commitments count at the default
-  site; only when the preference deducts orders), less what the orders already hold on live lists. Places: the default
+  site; only when the preference deducts orders) and never less than what other live lists at the site hold for
+  other orders, whatever the preference (two lists never take the same units), less what the orders already hold on
+  live lists. Places: the default
   bin, then other bins by natural full name, no bin last; lots earliest-expiring unexpired first, then unexpired with
   no expiry, unassigned, expired; the staging bin is never a source. Bins are reduced by what other live lists still
   reserve there (unpicked planned units, and unstaged picked ones). Pick order: bin, item, order date, order number.
@@ -711,20 +716,35 @@ For the builder, defaults standing unless review finds otherwise:
 - **Holding.** A live list holds, per order line and per order not shipped from it, max(planned, picked) while open
   and what was picked once done; a shipment from the list consumes the order's picks, and voiding it gives them back.
 - **Entries** replay per line into chunks (bin, lot, serial, quantity): add appends, set grows by the difference or
-  takes back newest first; a serial entry picks or (set 0) puts back that unit. An entry naming no lot takes the line's
-  suggested lot. A serial picked on another live list is refused; one the books hold in another bin warns and is picked
+  takes back newest first; a serial entry picks or (set 0) puts back that unit. An entry naming no lot, `add` or `set`
+  ("All" on the pick screen) alike, takes the line's suggested lot, so staging and the shipment keep the lot. A serial picked on another live list is refused; one the books hold in another bin warns and is picked
   from where the books hold it; at another site or never on file it warns without staging and is refused with one.
 - **Staging.** With `inventory-site update --staging-bin`, each entry moves the chunks it added from their bin to
   staging and the ones it took back from staging to their bin, dated the entry date, `after` when a count of the site
   is recorded that day. `pick-list cancel` moves the staged units of orders not shipped back to their bins under the
-  cancelling revision, dated `date` (default today, never before the last entry). Without staging, `inventory-count
+  cancelling revision, dated `date` (default today, never before the last entry), and of orders that shipped from
+  the list whatever their shipment did not issue from staging (picked beyond what the order had to ship), so a `done`
+  list with staged leftovers is cancelled to put them back. Without staging, `inventory-count
   create` and the post preview list "3 Widget picked for sales order 1001, list P-4, not shipped (bin A1)".
 - **Shipping from a list.** `shipment post --pick-list` (sales_order needed only when several orders are waiting)
   ships one shipment line per order line, bin (staging when staged) and lot picked, so a line split over bins ships
   from each; each order line takes at most what it has to ship and the preview names the excess to put back. A
   shipment may therefore hold one order line on several lines: corrections keep each line's own identity, and an update
-  dropping a billed line is refused. When every order on an open list has shipped from it, it becomes `done`.
-- **Browser.** Items > Pick lists (`/inventory/pick-lists`: the lists and Make a pick list), the pick screen
+  dropping a billed line is refused. `shipment update --lines` may name one order line on several lines, each told
+  apart by its bin or lot (a line naming neither still names its order line once), and each restates the prior line
+  in the same bin and lot, keeping its identity; the billed guard compares line by line, so a correction keeping
+  each billed line at or above what was billed is accepted and one merging them is refused. When every order on an
+  open list has shipped from it, it becomes `done`.
+- **The order around a list.** While picking is on and a live list holds units of an order (open: max(planned,
+  picked); done: picked; nothing once the order shipped from it), E_WORK_DEPENDENCY `picked_on_list`, naming the
+  list and saying to ship from it (`shipment post --pick-list`) or cancel it first, refuses: `sales-order invoice`
+  issuing stock for a held line (billing shipped units stays allowed), `shipment post` from the order alone (or a
+  `shipment update` shipping more) of a held line, `sales-order update` removing a held line, changing its item or
+  taking ordered less cancelled, invoiced and shipped below what the list holds, closing the order, and
+  `sales-order void`. With picking off nothing is refused (no list can be open then, and a done list's unstaged
+  picks sit on the shelf).
+- **Browser.** Refusals on the count screen (start, enter, post) answer htmx with 200, as the pick screen does, so
+  the reason shows instead of the generic "could not be confirmed" box. Items > Pick lists (`/inventory/pick-lists`: the lists and Make a pick list), the pick screen
   (`/inventory/pick-lists/<number>`: the Scan field pinned on top in scan.js's fourth mode, `pick`, the current bin and
   lot, a quantity keypad, lines by bin with short lines marked, All per line, Ship what was picked per order, Close list,
   Cancel list), the printed list (`/print`, grouped by bin with each order's quantity); the order page gains Create pick
