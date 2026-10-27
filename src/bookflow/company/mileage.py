@@ -31,7 +31,7 @@ from typing import Any
 
 import sqlalchemy as sa
 
-from bookflow.company import schema as c
+from bookflow.company import ledger_reports as ledger, schema as c
 from bookflow.company.ledger_reports import I64_MAX, money
 from bookflow.company.lists import normalize_display_name
 from bookflow.company.mileage_models import (
@@ -880,8 +880,9 @@ def mileage_by_vehicle(s, inp) -> MileageReportOutput:
     rows = [MileageGroupRow(key=key, name=names['vehicles'].get(key, ''), trips=g['trips'], miles=miles_text(g['miles']),
                             amount=money(g['amount'], currency), unrated_miles=miles_text(g['unrated']), detail=g['detail'])
             for key, g in sorted(groups.items(), key=lambda kv: (names['vehicles'].get(kv[0], '').casefold(), kv[0]))]
-    return MileageReportOutput(report='mileage-by-vehicle-' + ('detail' if inp.detail else 'summary'), date_from=date_from,
-                               date_to=date_to, currency=currency, rows=rows,
+    page = ledger.page_of(s, inp, 'mileage-by-vehicle', rows, date_from=date_from, date_to=date_to)
+    return MileageReportOutput(**page, report='mileage-by-vehicle-' + ('detail' if inp.detail else 'summary'), date_from=date_from,
+                               date_to=date_to, currency=currency,
                                total_miles=miles_text(sum(t['miles_microunits'] for t in trips)),
                                total_amount=money(sum(g['amount'] for g in groups.values()), currency))
 
@@ -911,7 +912,8 @@ def mileage_by_job(s, inp) -> MileageReportOutput:
     rows = [MileageGroupRow(key=key, name=names['customers'].get(key, ''), trips=g['trips'], miles=miles_text(g['miles']),
                             billable_miles=miles_text(g['billable']), amount=money(g['amount'], currency), detail=g['detail'])
             for key, g in sorted(groups.items(), key=lambda kv: (names['customers'].get(kv[0], '').casefold(), kv[0]))]
-    return MileageReportOutput(report='mileage-by-job-' + ('detail' if inp.detail else 'summary'), date_from=date_from,
-                               date_to=date_to, currency=currency, rows=rows,
+    page = ledger.page_of(s, inp, 'mileage-by-job', rows, date_from=date_from, date_to=date_to)
+    return MileageReportOutput(**page, report='mileage-by-job-' + ('detail' if inp.detail else 'summary'), date_from=date_from,
+                               date_to=date_to, currency=currency,
                                total_miles=miles_text(sum(t['miles_microunits'] for t in trips)),
                                total_amount=money(sum(g['amount'] for g in groups.values()), currency))

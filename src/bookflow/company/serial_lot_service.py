@@ -411,8 +411,8 @@ def stock_report(s, ctx, inp) -> Plan:
                             expired=bool(expiry and expiry < as_of)))
     out.sort(key=lambda r: (r.item_name.casefold(), r.number is None, r.expiry_date or '9999',
                             serial_lots.number_key(r.number or ''), r.site_name.casefold()))
-    out = out[:inp.limit]
-    return Plan(StockReportOutput(as_of=as_of, rows=out, count=len(out)))
+    from bookflow.company import ledger_reports as ledger
+    return Plan(StockReportOutput(**ledger.page_of(s, inp, 'serial-lot-stock', out, date_to=as_of), as_of=as_of))
 
 
 def _find_any(s, number, item, kind):
@@ -481,8 +481,11 @@ def history_report(s, ctx, inp) -> Plan:
     from bookflow.company.serial_lot_models import HistoryOutput
     kind, number = _find_any(s, inp.number, inp.item, inp.kind)
     rows, balance, _, _ = _history(s, kind, number)
-    return Plan(HistoryOutput(item_id=number['item_id'], item_name=inventory.item_name(s, number['item_id']), kind=kind,
-                              number=number['number'], rows=rows, on_hand=_q(balance)))
+    from bookflow.company import ledger_reports as ledger
+    from bookflow.core import clock
+    page = ledger.page_of(s, inp, 'serial-lot-history', rows, date_to=clock.today_iso())
+    return Plan(HistoryOutput(**page, item_id=number['item_id'], item_name=inventory.item_name(s, number['item_id']), kind=kind,
+                              number=number['number'], on_hand=_q(balance)))
 
 
 def trace_report(s, ctx, inp) -> Plan:
@@ -533,6 +536,9 @@ def trace_report(s, ctx, inp) -> Plan:
                         for doc in more.values():
                             if doc['name_type'] == 'customer' and doc['name'] and doc['name'] not in customers:
                                 customers.append(doc['name'])
-    return Plan(TraceOutput(item_id=number['item_id'], item_name=inventory.item_name(s, number['item_id']), kind=kind,
-                            number=number['number'], rows=rows, on_hand=_q(balance), customers=customers,
+    from bookflow.company import ledger_reports as ledger
+    from bookflow.core import clock
+    page = ledger.page_of(s, inp, 'lot-trace', rows, date_to=clock.today_iso())
+    return Plan(TraceOutput(**page, item_id=number['item_id'], item_name=inventory.item_name(s, number['item_id']), kind=kind,
+                            number=number['number'], on_hand=_q(balance), customers=customers,
                             vendors=vendors, went_into=went_into, made_from=made_from))

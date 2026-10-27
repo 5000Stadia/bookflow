@@ -103,13 +103,16 @@ def test_every_report_names_its_own_columns(verb):
 
 
 def _sample_filters(cmd):
+    from bookflow.adapters.workbench.date_metadata import is_date
     """One plausible value for every filter this report declares, from its own types."""
     sample = {}
     for name, field in cmd.input_model.model_fields.items():
         annotation = str(field.annotation)
         if name in ("cursor", "limit"):
             continue
-        if name.startswith("date") or name == "as_of":
+        # A date by its name or by its type (serial-lot-stock's expiring_by), as the form decides.
+        if name.startswith("date") or name == "as_of" or is_date(field.annotation, field=field,
+                                                                 model=cmd.input_model, name=name):
             sample[name] = "2026-12-31"
         elif "bool" in annotation:
             sample[name] = True

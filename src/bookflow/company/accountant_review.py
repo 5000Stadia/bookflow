@@ -1088,15 +1088,18 @@ _CHANGE_COMMANDS = ('journal post', 'journal update', 'journal void', 'accountan
 
 def changes_report(s, inp) -> m.AccountantChangesOutput:
     from bookflow.company.info import principal_names
+    from bookflow.company import ledger_reports as ledger
+    from bookflow.core import clock
     ids = _accountant_ids(s)
     if not ids:
-        return m.AccountantChangesOutput(count=0, rows=[], journal_entries=0, reclassifications=0, notes=0, review_marks=0)
+        return m.AccountantChangesOutput(**ledger.page_of(s, inp, 'accountant-changes', [], date_to=clock.today_iso()),
+                                         total_count=0, journal_entries=0, reclassifications=0, notes=0, review_marks=0)
     params = dict(ids=json.dumps(sorted(ids)), cmds=json.dumps(list(_CHANGE_COMMANDS)))
     where = """FROM audit_events e WHERE (e.actor_id IN (SELECT value FROM json_each(:ids))
                OR e.on_behalf_of IN (SELECT value FROM json_each(:ids))) AND e.command IN (SELECT value FROM json_each(:cmds))"""
     count = _one(s, f'SELECT COUNT(*) AS n {where}', **params)['n']
-    events = _all(s, f'SELECT e.id, e.at, e.command, e.summary, e.actor_id, e.actor_kind, e.on_behalf_of, e.reason, e.source_ref {where} ORDER BY e.seq DESC LIMIT :lim',
-                  lim=inp.limit, **params)
+    events = _all(s, f'SELECT e.id, e.at, e.command, e.summary, e.actor_id, e.actor_kind, e.on_behalf_of, e.reason, e.source_ref {where} ORDER BY e.seq DESC',
+                  **params)
     entries = {}
     for x in _all(s, """SELECT event_id, record_type, record_id FROM audit_entries WHERE event_id IN (SELECT value FROM json_each(:ev))
                         AND record_type IN ('transaction', 'note', 'transaction_review', 'accountant_review_mark', 'accountant_adjustment')""",
@@ -1126,7 +1129,8 @@ def changes_report(s, inp) -> m.AccountantChangesOutput:
           OR e.on_behalf_of IN (SELECT value FROM json_each(:ids)))) AS notes,
         (SELECT COUNT(*) FROM audit_entries ae JOIN audit_events e ON e.id=ae.event_id WHERE ae.record_type='transaction_review'
           AND (e.actor_id IN (SELECT value FROM json_each(:ids)) OR e.on_behalf_of IN (SELECT value FROM json_each(:ids)))) AS marks""", ids=params['ids'])
-    return m.AccountantChangesOutput(count=count, rows=rows, journal_entries=kinds['journals'], reclassifications=kinds['reclass'],
+    page = ledger.page_of(s, inp, 'accountant-changes', rows, date_to=clock.today_iso())
+    return m.AccountantChangesOutput(**page, total_count=count, journal_entries=kinds['journals'], reclassifications=kinds['reclass'],
                                      notes=kinds['notes'], review_marks=kinds['marks'])
 
 
@@ -1180,6 +1184,8 @@ def checklist(s, inp) -> m.ReviewChecklistOutput:
         m.ChecklistItem(key='reviewed_through', title='Reviewed through', done=bool(mark and mark.through >= inp.as_of),
                         detail=f'The accountant reviewed through {mark.through}.' if mark else 'The accountant has not marked a review yet.'),
     ]
-    return m.ReviewChecklistOutput(as_of=inp.as_of, items=items, entries_to_review=entries, entries_to_review_count=n,
+    from bookflow.company import ledger_reports as ledger
+    page = ledger.page_of(s, inp, 'accountant-review', items, date_to=inp.as_of)
+    return m.ReviewChecklistOutput(**page, as_of=inp.as_of, entries_to_review=entries, entries_to_review_count=n,
                                    uncategorized=uncategorized, unreconciled=unreconciled, open_items=open_items,
                                    reviewed_through=mark, accountant_changes=changes)

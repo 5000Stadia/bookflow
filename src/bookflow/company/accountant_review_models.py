@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from bookflow.company.ledger_reports import MoneyOutput, iso_date
+from bookflow.company.ledger_reports import MoneyOutput, ReportMetadata, iso_date
 from bookflow.core.models import WriteOutput
 
 _DATE = dict(min_length=10, max_length=10)
@@ -193,6 +193,8 @@ class CopyImportOutput(WriteOutput, ChangesFileOutput):
 
 class ReviewChecklistInput(_In):
     as_of: str = Field(**_DATE, description='End of the period under review, YYYY-MM-DD.')
+    limit: int = Field(default=50, ge=1, le=200)
+    cursor: str | None = Field(default=None, max_length=4096)
     _as_of = field_validator('as_of')(iso_date)
 
 
@@ -227,8 +229,11 @@ class ChecklistItem(BaseModel):
 
 
 class ReviewChecklistOutput(BaseModel):
+    metadata: ReportMetadata
+    count: int = Field(ge=0, le=200, description='Checklist rows on this page.')
+    next_cursor: str | None
     as_of: str
-    items: list[ChecklistItem]
+    rows: list[ChecklistItem] = Field(description='The checklist, one row per thing to look at.')
     entries_to_review: list[ChecklistEntry] = Field(description='Up to 50 entries on the entries-to-review list, newest first.')
     entries_to_review_count: int
     uncategorized: list[ChecklistBalance]
@@ -239,7 +244,8 @@ class ReviewChecklistOutput(BaseModel):
 
 
 class AccountantChangesInput(_In):
-    limit: int = Field(100, ge=1, le=500, description='Most changes to list, newest first.')
+    limit: int = Field(50, ge=1, le=200, description='Changes on one page, newest first.')
+    cursor: str | None = Field(default=None, max_length=4096)
 
 
 class AccountantChangeRow(BaseModel):
@@ -257,7 +263,10 @@ class AccountantChangeRow(BaseModel):
 
 
 class AccountantChangesOutput(BaseModel):
-    count: int = Field(description='Every change found; rows list up to limit.')
+    metadata: ReportMetadata
+    count: int = Field(ge=0, le=200, description='Changes on this page.')
+    next_cursor: str | None
+    total_count: int = Field(description='Every change found; the pages list them newest first.')
     rows: list[AccountantChangeRow]
     journal_entries: int
     reclassifications: int

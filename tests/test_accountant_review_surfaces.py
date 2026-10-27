@@ -79,6 +79,6 @@ def test_the_same_accountant_review_through_python_cli_http_and_mcp(root, tmp_pa
         assert len(taken['imported']) == 4 and taken['status'] == 'returned', surface
         assert checklist['reviewed_through']['through'] == THROUGH and report['reclassifications'] == 1, surface
         assert again['status'] == 'out' and cancelled['status'] == 'cancelled', surface
-        shapes.add(repr(([c['kind'] for c in seen['changes']], [i['key'] for i in checklist['items']],
+        shapes.add(repr(([c['kind'] for c in seen['changes']], [i['key'] for i in checklist['rows']],
                          report['journal_entries'], report['review_marks'])))
     assert len(shapes) == 1

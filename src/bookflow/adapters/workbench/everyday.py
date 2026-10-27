@@ -18,6 +18,10 @@ COMMANDS = {
     "report deposit-detail", "report transaction-list-by-date", "report vendor-1099-summary",
     "report reconciliation-discrepancy", "report entries-to-review", "report prior-balances",
     "report open-sales-orders", "report inventory-layers",
+    "report inventory-valuation-detail", "report physical-inventory-worksheet", "report quantity-by-site",
+    "report mileage-by-vehicle", "report mileage-by-job", "report customer-prepayments",
+    "report accountant-changes", "report accountant-review",
+    "report items-by-bin", "report serial-lot-stock", "report serial-lot-history", "report lot-trace",
 }
 
 # One column: (heading, row field, how the cell is written). `label` is the row's first
@@ -78,9 +82,48 @@ LAYOUTS = {
 }
 LAYOUTS["inventory-layers"] = (("Item", "item_name", "label"), ("Came in on", "source", T), ("Date", "date", D),
                                ("Quantity", "quantity", "num"), ("Value", "value", M), ("Unit cost", "unit_cost", "num"))
+# R104's inventory reports: each row an item's movement, an item to count, or an item at a site.
+LAYOUTS["inventory-valuation-detail"] = (("Item", "item_name", "label"), ("Date", "date", D),
+                                         ("Transaction", "number", "document"), ("Quantity change", "quantity_change", "num"),
+                                         ("Value change", "value_change", M), ("On hand", "quantity_on_hand", "num"),
+                                         ("Average cost", "average_cost", M), ("Asset value", "asset_value", M))
+LAYOUTS["physical-inventory-worksheet"] = (("Item", "item_name", "label"), ("Description", "description", T),
+                                           ("Site", "site_name", T), ("On hand", "quantity_on_hand", "num"),
+                                           ("Physical count", "physical_count", T))
+LAYOUTS["quantity-by-site"] = (("Item", "item_name", "label"), ("Site", "site_name", T),
+                               ("On hand", "quantity_on_hand", "num"), ("Committed", "quantity_committed", "num"),
+                               ("For assemblies", "quantity_for_assemblies", "num"),
+                               ("Available", "quantity_available", "num"), ("On order", "quantity_on_order", "num"),
+                               ("Asset value", "asset_value", M))
+# Bins and serial/lot numbers (R104).
+LAYOUTS["items-by-bin"] = (("Site", "site_name", "label"), ("Bin", "bin", T), ("Item", "item_name", T), ("Lot", "lot", T),
+                           ("Serial number", "serial_number", T), ("On hand", "quantity_on_hand", "num"))
+LAYOUTS["serial-lot-stock"] = (("Item", "item_name", "label"), ("Number", "number", T), ("Site", "site_name", T),
+                               ("Quantity", "quantity", "num"), ("Expires", "expiry_date", D), ("Expired", "expired_label", T))
+LAYOUTS["serial-lot-history"] = (("Date", "date", "label"), ("Document", "document", T), ("Name", "name", T),
+                                 ("Site", "site_name", T), ("In", "quantity_in", "num"), ("Out", "quantity_out", "num"),
+                                 ("Balance", "balance", "num"))
+LAYOUTS["lot-trace"] = LAYOUTS["serial-lot-history"]
+# Mileage (R118), customer prepayments (R124) and the accountant's review (R121).
+LAYOUTS["mileage-by-vehicle"] = (("Vehicle", "name", "label"), ("Trips", "trips", "num"), ("Miles", "miles", "num"),
+                                 ("Amount", "amount", M), ("Miles with no rate", "unrated_miles", "num"))
+LAYOUTS["mileage-by-job"] = (("Customer:job", "name", "label"), ("Trips", "trips", "num"), ("Miles", "miles", "num"),
+                             ("Billable miles", "billable_miles", "num"), ("Billable amount", "amount", M))
+LAYOUTS["customer-prepayments"] = (("Customer", "customer", "label"), ("Date", "date", D), ("Kind", "kind_label", T),
+                                   ("Number", "number", T), ("Applied to", "applied_to", T), ("Amount", "amount", M),
+                                   ("Held", "held", M))
+LAYOUTS["accountant-changes"] = (("When", "at", "label"), ("Change", "summary", T), ("Accountant", "accountant_name", T),
+                                 ("By agent", "agent_name", T), ("Reason", "reason", T), ("From a copy", "from_copy_label", T))
+LAYOUTS["accountant-review"] = (("To look at", "title", "label"), ("State", "done_label", T), ("Detail", "detail", T))
 # The whole-report figures above the table, in reading order, with their headings.
 TOTALS = {
     "inventory-layers": (("asset_value", "Inventory value"),),
+    "inventory-valuation-detail": (("asset_value", "Inventory value"),),
+    "physical-inventory-worksheet": (),
+    "mileage-by-vehicle": (), "mileage-by-job": (), "customer-prepayments": (),
+    "accountant-changes": (), "accountant-review": (),
+    "items-by-bin": (), "serial-lot-stock": (), "serial-lot-history": (), "lot-trace": (),
+    "quantity-by-site": (("asset_value", "Inventory value"),),
     "customer-balance-summary": (("balance", "Total balance"),),
     "vendor-balance-summary": (("balance", "Total balance"),),
     "customer-balance-detail": (("balance", "Total balance"),),
@@ -106,6 +149,22 @@ TOTALS = {
 }
 # What each report says under its table, in a bookkeeper's words.
 NOTES = {
+    "items-by-bin": "Each item in each bin of a site, with its lot or serial number; units in no bin are listed under no bin.",
+    "serial-lot-stock": "Each tracked item's lots and serial numbers on hand, by site, with each lot's expiry date.",
+    "serial-lot-history": "Every movement of one serial or lot number, oldest first, with the balance after each.",
+    "lot-trace": "One lot's or serial number's movements, oldest first; the customers, vendors and builds it reached are in the full result.",
+    "mileage-by-vehicle": "Miles each vehicle drove in the period, at the mileage rate in force on each trip's end date.",
+    "mileage-by-job": "Miles driven for each customer or job, the billable miles, and their amount at the mileage item's price.",
+    "customer-prepayments": ("Every prepayment receipt and each draw against it, with what is still held for the customer; "
+                             "the total held equals the Customer Prepayments account."),
+    "accountant-changes": "Every change an external accountant made in these books or sent back from a copy, newest first.",
+    "accountant-review": "What to look at before closing the period under review; each row says whether anything is left.",
+    "inventory-valuation-detail": ("Each item's opening position, then every movement in the period with the quantity "
+                                   "and value it changed, and the running quantity, average cost and value."),
+    "physical-inventory-worksheet": ("Count each item where it is kept and write the count in the last column; "
+                                     "enter it with an inventory count."),
+    "quantity-by-site": ("Each item at each site: on hand, what open orders commit, what is available, what is on "
+                         "order, and the site's share of the item's value."),
     "inventory-layers": ("Each item's cost layers, oldest first. Under FIFO a sale takes the oldest layer first; "
                          "under average cost each item is one row."),
     "customer-balance-summary": "Each customer's or job's balance is its Total on the A/R aging summary for the same date, so the total is Accounts Receivable on the balance sheet. Select a customer to see every transaction behind its balance.",
@@ -147,7 +206,12 @@ def _link(company_id, verb, row, result):
         return f"/c/{company_id}/sales-order/{row['sales_order_id']}"
     if verb in ("purchases-by-vendor", "vendor-1099-summary"):
         return f"/c/{company_id}/vendor/{row['vendor_id']}" if row.get("vendor_id") else None
-    if verb in ("purchases-by-item", "inventory-layers"):
+    if verb == "customer-prepayments":
+        return f"/c/{company_id}/customer/{row['customer_id']}"
+    if verb in ("items-by-bin", "serial-lot-stock") and row.get("item_id"):
+        return f"/c/{company_id}/item/{row['item_id']}"
+    if verb in ("purchases-by-item", "inventory-layers", "inventory-valuation-detail",
+                "physical-inventory-worksheet", "quantity-by-site"):
         return f"/c/{company_id}/item/{row['item_id']}" if row.get("item_id") else None
     if verb == "deposit-detail" and row["kind"] == "deposit":
         return f"/c/{company_id}/deposit/{row['deposit_transaction_id']}"
@@ -161,6 +225,15 @@ def view(result, inputs, company_id, verb):
                  "document_url": document_link(company_id, row, result["metadata"]["audit_watermark"])
                  if row.get("transaction_id") else None,
                  "is_total": row.get("kind") in ("total", "deposit")}
+        if verb == "customer-prepayments":
+            shown["kind_label"] = "Receipt" if row["kind"] == "receipt" else "Draw"
+            shown["is_total"] = False
+        if verb == "serial-lot-stock":
+            shown["expired_label"] = "Expired" if row["expired"] else ""
+        if verb == "accountant-changes":
+            shown["from_copy_label"] = "Yes" if row["from_copy"] else "No"
+        if verb == "accountant-review":
+            shown["done_label"] = "Done" if row["done"] else "To look at"
         if "percent_of_total_millionths" in row:
             shown["display_percent"] = percent(row["percent_of_total_millionths"])
         if verb == "open-purchase-orders":

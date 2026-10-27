@@ -57,7 +57,7 @@
 <section class="workspace-card" aria-label="Review checklist" data-review-checklist>
 <h2>Review checklist through {{ checklist.as_of }}</h2>
 <form method="get" action="/c/{{ company_id }}/accountant"><label>Through <input type="date" name="as_of" value="{{ as_of }}"></label> <button type="submit">Show</button></form>
-<ul class="checklist" style="list-style:none;padding-left:0">{% for item in checklist['items'] %}<li data-check="{{ item.key }}">{{ '✓' if item.done else '○' }} <strong>{{ item.title }}</strong>: {{ item.detail }}</li>{% endfor %}</ul>
+<ul class="checklist" style="list-style:none;padding-left:0">{% for item in checklist['rows'] %}<li data-check="{{ item.key }}">{{ '✓' if item.done else '○' }} <strong>{{ item.title }}</strong>: {{ item.detail }}</li>{% endfor %}</ul>
 {% if checklist.entries_to_review %}<p><a href="/c/{{ company_id }}/report/entries-to-review?as_of={{ checklist.as_of }}">Open the entries to review</a></p>{% endif %}
 <p class="muted">Changes an accountant made: {{ checklist.accountant_changes }} (<code>report accountant-changes</code>).</p>
 {% if accountants %}<p>External accountants: {% for a in accountants %}{{ a.display_name or a.username }} (through {{ a.through }}){% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
