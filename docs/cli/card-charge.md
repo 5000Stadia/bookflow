@@ -324,6 +324,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].document.items[].profile.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `items[].document.items[].profile.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].document.items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `items[].document.items[].profile.receipt_line_id` | string \| null | no | yes | null | — |
 | `items[].document.items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `items[].document.items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].document.items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
@@ -695,6 +696,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `document.items[].profile.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `document.items[].profile.receipt_line_id` | string \| null | no | yes | null | — |
 | `document.items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
@@ -1021,6 +1023,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].document.items[].profile.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `items[].document.items[].profile.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].document.items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `items[].document.items[].profile.receipt_line_id` | string \| null | no | yes | null | — |
 | `items[].document.items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `items[].document.items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].document.items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
@@ -1340,6 +1343,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `document.items[].profile.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `document.items[].profile.receipt_line_id` | string \| null | no | yes | null | — |
 | `document.items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
@@ -1796,6 +1800,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `document.items[].profile.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `document.items[].profile.receipt_line_id` | string \| null | no | yes | null | — |
 | `document.items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
@@ -2235,6 +2240,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.items[].profile.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `document.items[].profile.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `document.items[].profile.receipt_line_id` | string \| null | no | yes | null | — |
 | `document.items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `document.items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |

@@ -195,6 +195,7 @@ class Shortfall:
     shortfall_microunits: int
     provisional_minor_units: int
     basis: str                      # 'average', 'purchase_cost' or 'none'
+    fifo: bool = False              # under FIFO 'average' is the newest layer's unit cost, or the last seen
 
 
 @dataclass(frozen=True)
@@ -576,7 +577,7 @@ def _walk(rows, retired, posted, landed, strict, methods=(), until=None) -> _Wal
                 entry = dict(issue=row, units=short, provisional=provisional, filled=0, cancelled=0)
                 open_shortfalls.append(entry)
                 shortfall_of[row['id']] = entry
-                shortfalls.append(Shortfall(row, quantity, short, provisional, basis))
+                shortfalls.append(Shortfall(row, quantity, short, provisional, basis, fifo))
         if quantity > 0:
             rate = (layers[-1]['value'], layers[-1]['units']) if fifo and layers else (value, quantity)
         if not strict:
@@ -719,7 +720,7 @@ def shortfall_warning(item_name: str, shortfall: Shortfall) -> str:
     """The line a person or an agent reads when a sale takes an item below zero."""
     from bookflow.core.exact import format_quantity_micro_units
     quantity = format_quantity_micro_units(shortfall.quantity_after_microunits)
-    how = {'average': 'at the average cost',
+    how = {'average': "at the newest layer's unit cost" if shortfall.fifo else 'at the average cost',
            'purchase_cost': 'at the purchase cost on the item record, because it has never had stock',
            'none': 'at zero, because the item has no average cost and no purchase cost'}[shortfall.basis]
     return (f'Takes {item_name} to {quantity} on {shortfall.movement["effective_date"]}; its cost '

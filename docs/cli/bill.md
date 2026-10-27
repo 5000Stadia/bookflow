@@ -1192,6 +1192,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_line_id` | string \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |
@@ -2026,6 +2027,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_line_id` | string \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |
@@ -2698,6 +2700,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_line_id` | string \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |
@@ -3344,6 +3347,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_line_id` | string \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |

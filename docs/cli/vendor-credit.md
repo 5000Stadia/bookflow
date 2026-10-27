@@ -351,6 +351,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_line_id` | string \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |
@@ -879,6 +880,7 @@ The same example as complete `bookflow_run` arguments:
 | `items[].lot` | inside `--items` JSON array | string \| null | no | yes | null | Lot number of a lot-tracked item: the lot an incoming line receives into (made when new), or the lot an outgoing line takes from. Omitted on an outgoing line, the units leave unassigned and the result names the earliest-expiring lot in stock there. |
 | `items[].lot_expiry` | inside `--items` JSON array | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
 | `items[].serial_numbers` | inside `--items` JSON array | array[string] \| null | no | yes | null | Serial numbers of a serial-tracked item, one per unit, up to the line's quantity; units left unnumbered are unassigned (number them later with `inventory assign`). Never make one up. An outgoing number leaves from where the books hold it; a number never on file is accepted with a warning and shows -1 until its receipt. Omitted on a correction, the line keeps the numbers it had. |
+| `items[].receipt_line` | inside `--items` JSON array | string \| null | no | yes | null | The receipt line these units go back against (R104 increment 7): the line_id of the bill, check, card charge or item receipt line that brought them in, as its `show` lists it. Under FIFO the return takes that receipt's layer first; under average it is recorded and changes nothing. A correction that leaves it out keeps the one the row had; null takes it off. |
 | `number` | `--number` | string \| null | no | yes | null | — |
 | `ap_account` | `--ap-account` | string \| null | no | yes | null | — |
 | `supplier_reference` | `--supplier-reference` | string \| null | no | yes | null | — |
@@ -1193,6 +1195,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_line_id` | string \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |
@@ -2144,6 +2147,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_line_id` | string \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |
@@ -2740,6 +2744,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_line_id` | string \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |
@@ -3061,6 +3066,7 @@ The same example as complete `bookflow_run` arguments:
 | `items[].lot` | inside `--items` JSON array | string \| null | no | yes | null | Lot number of a lot-tracked item: the lot an incoming line receives into (made when new), or the lot an outgoing line takes from. Omitted on an outgoing line, the units leave unassigned and the result names the earliest-expiring lot in stock there. |
 | `items[].lot_expiry` | inside `--items` JSON array | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
 | `items[].serial_numbers` | inside `--items` JSON array | array[string] \| null | no | yes | null | Serial numbers of a serial-tracked item, one per unit, up to the line's quantity; units left unnumbered are unassigned (number them later with `inventory assign`). Never make one up. An outgoing number leaves from where the books hold it; a number never on file is accepted with a warning and shows -1 until its receipt. Omitted on a correction, the line keeps the numbers it had. |
+| `items[].receipt_line` | inside `--items` JSON array | string \| null | no | yes | null | The receipt line these units go back against (R104 increment 7): the line_id of the bill, check, card charge or item receipt line that brought them in, as its `show` lists it. Under FIFO the return takes that receipt's layer first; under average it is recorded and changes nothing. A correction that leaves it out keeps the one the row had; null takes it off. |
 | `number` | `--number` | string \| null | no | yes | null | — |
 | `supplier_reference` | `--supplier-reference` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
@@ -3376,6 +3382,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_line_id` | string \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |
@@ -3988,6 +3995,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_line_id` | string \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.unit_cost_fraction` | integer \| null | no | yes | null | — |

@@ -977,6 +977,60 @@ jobs at night; the van ends as counted.
 - **Permissions** (layer `landed-cost-v1`): post, void and setup `ledger.post` standard; charges, show, query
   `ledger.read` member. Nothing is people-only.
 
+## As built: increment 7
+
+- **Migration co0100** (on co0098) adds `costing_methods` (method, `effective_from`, status `standing` or
+  `withdrawn`, reason and provenance; a standing date is unique). Guards: never deleted; a row moves standing ->
+  withdrawn once and nothing else about it changes. Neither reads another row. No existing row changes; the demo
+  and every company today have no row, so average from the beginning.
+- **co0100 also widens co0079's receipt-correction dimensions guard**, which required a correction of a customer
+  return to carry the return's own date: a return's forward true-up (increment 6) is dated at its landed cost, so
+  a freight allocation reaching a sale that was partly returned before it was refused by the guard. A correction
+  naming its filler (co0098's true-up guard dates it there) may now carry the filler's date.
+- **The timeline reaches every replay.** `costing_methods.timeline(s)` is passed to `inventory_costing.replay` at
+  every call with a session (sales, credits, adjustments, counts, builds, landed cost, validators), so FIFO decides
+  every value replay decides. A switch being previewed stands in for the stored timeline while its corrections are
+  worked out.
+- **`costing-method set --method fifo --from 2027-01-01`** (the input field is `effective_from`; the CLI flag is
+  `--from`). Refused: on or before the closing date (E_PERIOD_CLOSED); on or before the last standing switch; the
+  method already in force on that date. It records the switch and posts, each at its own date, the corrections
+  owed to movements already dated on or after it (only items with a movement on or after the date are replayed).
+  The dry run gives per item and in total the change in stock value and in cost of goods sold (corrections whose
+  offset is not an inventory-asset account: a build's component corrections move to its assembly instead), and
+  each correction entry. `withdraw` takes a standing switch by id or date while its date is after today, with the
+  corrections that takes. Both are a person's act (people-only, R168's mechanism, also refused in the service for
+  a caller with no actor).
+- **The opening layer.** On the switch date, before any movement dated that day, the stock on hand becomes one
+  layer dated at the switch; a purchase dated on or after the switch, however late it is entered, is a layer after
+  it. Switching back merges the layers; open shortfalls carry over both ways.
+- **Vendor credits name a receipt line** with `receipt_line` on an item row: the `line_id` of the bill, check, card
+  charge or item receipt line, a standing bought receipt of the same item dated on or before the credit. It is
+  captured on the row's facts (`receipt_line_id`, absent when not named, so nothing else fingerprints differently)
+  and kept by a correction that leaves it out; `null` takes it off. The `vendor_return` movement carries the
+  receipt in `returns_movement_id` (co0093's reserved use); a receipt restated since by an edit of its document is
+  followed by its document line identity. Under FIFO the return takes that receipt's layer first and any units
+  beyond it from the oldest layers; with no name, the oldest layers. The credit's difference from those units'
+  worth stays in stock, spread over what is left by units (question 1's default); emptying the stock still has to
+  credit exactly its worth. Under average the link is recorded and changes nothing.
+- **A write-down under FIFO** is spread over the layers by units, so a layer much cheaper than the rest can be
+  left worth less than nothing while the item's total stays positive; issuing it then credits cost of goods sold.
+  The total is what replay refuses on, as under average.
+- **Shortfalls under FIFO** are costed at the newest layer's unit cost (else the last seen, then the average's
+  fallbacks); `Shortfall.basis` still says `average` for that, and the warning says "at the newest layer's unit
+  cost".
+- **`report inventory-layers`** (as_of, item; paged like the stock reports) replays each item's movements dated by
+  as_of with the switches dated by then: under FIFO each layer's source document and date ("Opening (FIFO from
+  ...)" for a switch's opening layer), quantity, value and unit cost to four places; under average one "Average"
+  row. It does not refuse on the asset tie: its total is replay's value on that date, which equals the books
+  except on a date between a correction and the later-dated cause it answers.
+- **Browser.** Settings > Company setup > Costing method: the method today, every switch (Withdraw on scheduled
+  ones) and a switch form whose Preview is the dry run (per item, totals, entries). Inventory > Inventory layers
+  opens the report at today.
+- **Permissions** (layer `fifo-v1`): `costing-method set` and `withdraw` `company` admin and people-only; `show`
+  `ledger.read` member; `report inventory-layers` `reports` member.
+- **Demo:** stays on average; no oracle moves. The seeded checker's fixture company (`tests/test_fifo_seeded.py`)
+  switches both ways at random dates.
+
 ## 10. Open questions
 
 Each default stands if nobody decides.

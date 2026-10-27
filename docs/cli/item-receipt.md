@@ -180,6 +180,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].items[].profile.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `items[].items[].profile.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `items[].items[].profile.receipt_line_id` | string \| null | no | yes | null | — |
 | `items[].items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `items[].items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
@@ -452,6 +453,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].profile.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `items[].profile.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `items[].profile.receipt_line_id` | string \| null | no | yes | null | — |
 | `items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
@@ -765,6 +767,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].items[].profile.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `items[].items[].profile.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `items[].items[].profile.receipt_line_id` | string \| null | no | yes | null | — |
 | `items[].items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `items[].items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
@@ -1003,6 +1006,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].profile.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `items[].profile.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `items[].profile.receipt_line_id` | string \| null | no | yes | null | — |
 | `items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
@@ -1337,6 +1341,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].profile.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `items[].profile.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `items[].profile.receipt_line_id` | string \| null | no | yes | null | — |
 | `items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
@@ -1658,6 +1663,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].profile.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `items[].profile.standard_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `items[].profile.receipt_line_id` | string \| null | no | yes | null | — |
 | `items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.unit_cost_fraction` | integer \| null | no | yes | null | — |
