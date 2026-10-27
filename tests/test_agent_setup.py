@@ -262,7 +262,8 @@ def test_install_setup_connect_and_post_an_invoice_as_the_agent_for_the_owner(in
 # ---------------------------------------------------------------- a person's decisions survive a rerun (review F1-F4)
 
 def _setup(client, root, project, **extra):
-    data = {"company": COMPANY, "owner_name": "Dana Ruiz", "serve": False,
+    # A free port, so a Bookflow host already running on this machine (the default 8765) never answers for this one.
+    data = {"company": COMPANY, "owner_name": "Dana Ruiz", "serve": False, "bind": f"127.0.0.1:{_free_port()}",
             "mcp_config": str(project / ".mcp.json"), **extra}
     return client.run("setup", data)
 
