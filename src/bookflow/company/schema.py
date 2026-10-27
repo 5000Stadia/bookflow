@@ -1272,3 +1272,8 @@ from bookflow.company import pick_list_schema as _pick_list_schema
 globals().update(_pick_list_schema.define_tables(metadata, _column, _table))
 company_info.append_column(_pick_list_schema.company_info_column(_column))
 inventory_sites.append_column(_pick_list_schema.staging_column(_column))
+# Document delivery (co0105, R112 increment 1): templates, messages, frozen files and their history.
+from bookflow.company import delivery_schema as _delivery_schema
+globals().update(_delivery_schema.define_tables(metadata, _column, _table, _common))
+for _delivery_column in _delivery_schema.company_info_columns(_column):
+    company_info.append_column(_delivery_column)
