@@ -23,6 +23,19 @@ def test_free_bill_and_free_sale_have_physical_effects_without_money(books, sale
         assert db.execute('SELECT count(*) FROM posting_lines').fetchone()==(0,)
         assert db.execute('SELECT count(*) FROM ap_obligation_keys').fetchone()==(0,)
 
+def _placed(db, original, bad):
+    """R104: a movement is refused unless its placements, written first, sum to its quantity; copy the
+    original movement's placement so the trigger under test is the one that answers."""
+    cursor = db.execute("SELECT * FROM inventory_placements WHERE movement_id=? LIMIT 1", (original['id'],))
+    row = dict(zip([column[0] for column in cursor.description], cursor.fetchone()))
+    from bookflow.core.ids import new_id
+    row.update(id=new_id(), movement_id=bad['id'], quantity_microunits=bad['quantity_microunits'],
+               sequence=bad['sequence'], effective_date=bad['effective_date'], item_id=bad['item_id'],
+               reverses_placement_id=None)
+    db.execute('INSERT INTO inventory_placements (' + ','.join(row) + ') VALUES (' + ','.join('?' for _ in row) + ')',
+               tuple(row.values()))
+
+
 @pytest.mark.parametrize('noun', ['check', 'card-charge'])
 def test_free_direct_purchase_corrections_and_numbering(books, noun):
     from tests.test_bill_item_lines import _inventory_asset
@@ -70,9 +83,11 @@ def test_free_direct_purchase_corrections_and_numbering(books, noun):
         original=dict(zip([column[0] for column in cursor.description],cursor.fetchone()))
         from bookflow.core.ids import new_id
         bad=dict(original,id=new_id(),sequence=100000,kind='reversal',reverses_movement_id=original['id'],quantity_microunits=-499999)
+        _placed(db,original,bad)
         with pytest.raises(sqlite3.IntegrityError,match='inventory reversal is not exact'):
             db.execute('INSERT INTO inventory_movements ('+','.join(bad)+') VALUES ('+','.join('?' for _ in bad)+')',tuple(bad.values()))
         bad=dict(original,id=new_id(),sequence=100001,document_line_id=new_id())
+        _placed(db,original,bad)
         with pytest.raises(sqlite3.IntegrityError,match='inventory movement does not match its owner or value'):
             db.execute('INSERT INTO inventory_movements ('+','.join(bad)+') VALUES ('+','.join('?' for _ in bad)+')',tuple(bad.values()))
 
@@ -257,6 +272,7 @@ def test_zero_value_movement_refuses_a_real_posting_line_link(books):
         assert bad['id'] != movement['id']
         db.execute('SAVEPOINT zero_value_link_attempt')
         try:
+            _placed(db, movement, bad)
             with pytest.raises(sqlite3.IntegrityError,
                                match=r'^CHECK constraint failed: ck_inventory_movement_value_link$'):
                 db.execute('INSERT INTO inventory_movements (' + ','.join(bad) + ') VALUES (' +

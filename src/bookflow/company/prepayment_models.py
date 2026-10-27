@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from bookflow.company.ledger_reports import ReportMetadata
+
 _DATE = r'^\d{4}-\d{2}-\d{2}$'
 _SELECTOR = dict(min_length=1, max_length=1000)
 _DOCUMENT = ('The customer-work document the money is held on: its id, or its kind and number such as '
@@ -86,6 +88,8 @@ class CustomerPrepaymentsReportInput(_Strict):
     as_of: str | None = Field(default=None, pattern=_DATE, description='Report date. Defaults to today.')
     customer: str | None = Field(default=None, description='Only this customer or job.', **_SELECTOR)
     include_drawn: bool = Field(default=False, description='Also list receipts fully drawn by the date.')
+    limit: int = Field(default=50, ge=1, le=200)
+    cursor: str | None = Field(default=None, max_length=4096)
 
 
 class DocumentRef(_Strict):
@@ -187,6 +191,9 @@ class PrepaymentReportCustomer(_Strict):
 
 
 class CustomerPrepaymentsReportOutput(_Strict):
+    metadata: ReportMetadata
+    count: int = Field(ge=0, le=200, description='Rows on this page; customers and totals are the whole report.')
+    next_cursor: str | None
     as_of: str
     account_id: str | None
     account: str | None

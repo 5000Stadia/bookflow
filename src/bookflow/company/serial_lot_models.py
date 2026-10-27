@@ -8,6 +8,7 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 Number = Annotated[str, Field(min_length=1, max_length=128), BeforeValidator(lambda v: v.strip() if isinstance(v, str) else v)]
 # A real calendar date, as every date field takes it (2017-02-30 is refused).
 from bookflow.company.journal_models import _Date as IsoDate  # noqa: E402
+from bookflow.company.ledger_reports import ReportMetadata  # noqa: E402
 Selector = Annotated[str, Field(min_length=1, max_length=1004), BeforeValidator(lambda v: v.strip() if isinstance(v, str) else v)]
 
 
@@ -28,20 +29,15 @@ LineSerials = Annotated[list[Number] | None, BeforeValidator(_drop_blanks)]
 LineBin = Annotated[Selector | None, BeforeValidator(_blank_is_none)]
 
 NUMBER_FIELDS = ('lot', 'lot_expiry', 'serial_numbers', 'bin')
-BIN_HELP = ("Bin at the line's site the units go to or leave from (R104 increment 5), by id, full name such as "
-            "A:3 or label code; the site must track bins. \"(no bin)\" names the units outside every bin. Omitted: the "
-            "bin the line's stock stood in (a correction), its sale's bin (a return), else the item's default bin at "
-            "the site, else no bin -- and an outgoing line takes its units from the default bin when it holds them, "
-            "else from no bin, else from the bins holding them, never driving a bin below zero while the units are "
-            "elsewhere at the site.")
-LOT_HELP = ("Lot number of a lot-tracked item: the lot an incoming line receives into (made when new), or the lot an "
-            "outgoing line takes from. Omitted on an outgoing line, the units leave unassigned and the result names "
-            "the earliest-expiring lot in stock there.")
+BIN_HELP = ("Bin at the line's site, by id, full name (A:3) or label code; the site must track bins. \"(no bin)\" "
+            "names units outside every bin. Omitted: the bin the stock stood in (a correction), the sale's (a return), "
+            "else the item's default bin; an outgoing line never drives a bin below zero while units are elsewhere.")
+LOT_HELP = ("Lot of a lot-tracked item: the lot an incoming line receives into (made when new) or an outgoing line "
+            "takes from. Omitted on an outgoing line, the units leave unassigned.")
 EXPIRY_HELP = "Expiry date of a new lot (ISO); change an existing lot's with `lot update`."
-SERIAL_HELP = ("Serial numbers of a serial-tracked item, one per unit, up to the line's quantity; units left unnumbered "
-               "are unassigned (number them later with `inventory assign`). Never make one up. An outgoing number leaves "
-               "from where the books hold it; a number never on file is accepted with a warning and shows -1 until its "
-               "receipt. Omitted on a correction, the line keeps the numbers it had.")
+SERIAL_HELP = ("Serial numbers of a serial-tracked item, one per unit, up to the quantity; units left unnumbered are "
+               "unassigned (`inventory assign` later). Never invent one: an unknown number is taken with a warning. "
+               "Omitted on a correction, the line keeps its numbers.")
 
 
 def number_fields():
@@ -175,7 +171,8 @@ class StockReportInput(_Strict):
     expiring_by: IsoDate | None = Field(None, description='Only lots expiring on or before this date.')
     as_of: IsoDate | None = Field(None, description='Date the quantities are read as of; omitted, today.')
     include_unassigned: bool = Field(True, description='Show each place\'s unassigned units too.')
-    limit: int = Field(500, ge=1, le=5000)
+    limit: int = Field(default=50, ge=1, le=200)
+    cursor: str | None = Field(default=None, max_length=4096)
 
 
 class StockRow(_Strict):
@@ -192,15 +189,19 @@ class StockRow(_Strict):
 
 
 class StockReportOutput(_Strict):
+    metadata: ReportMetadata
+    count: int = Field(ge=0, le=200, description='Rows on this page.')
+    next_cursor: str | None
     as_of: str
     rows: list[StockRow]
-    count: int
 
 
 class HistoryInput(_Strict):
     item: Selector | None = Field(None, description='Item the number belongs to; needed only when two items share it.')
     number: Selector = Field(description='The serial or lot number.')
     kind: Literal['serial', 'lot'] | None = Field(None, description='serial or lot; omitted, whichever the number is.')
+    limit: int = Field(default=50, ge=1, le=200)
+    cursor: str | None = Field(default=None, max_length=4096)
 
 
 class HistoryRow(_Strict):
@@ -217,6 +218,9 @@ class HistoryRow(_Strict):
 
 
 class HistoryOutput(_Strict):
+    metadata: ReportMetadata
+    count: int = Field(ge=0, le=200, description='Rows on this page.')
+    next_cursor: str | None
     item_id: str
     item_name: str
     kind: str

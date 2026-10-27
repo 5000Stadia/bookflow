@@ -231,6 +231,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
         # Then co0097 (on co0095): its guards, items.cycle_class_id and cycle_classes.
         for trigger in co0097.TRIGGERS:
             conn.execute(f"DROP TRIGGER {trigger}")
+        conn.execute(f'DROP INDEX {co0097.INDEX_NAME}')
         conn.execute("ALTER TABLE items DROP COLUMN cycle_class_id")
         conn.execute("DROP TABLE cycle_classes")
         # Then co0095 (on co0096), then co0096 (on co0085), co0085 (on co0093), co0093, co0094, co0092 and co0091.

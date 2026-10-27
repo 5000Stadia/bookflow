@@ -32,13 +32,15 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `limit` | `--limit` | integer | no | no | 100 | Most changes to list, newest first.; minimum 1; maximum 500 |
+| `limit` | `--limit` | integer | no | no | 50 | Changes on one page, newest first.; minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
 
 ### Command and context options
 
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -60,7 +62,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
-| `count` | integer | yes | no | — | Every change found; rows list up to limit. |
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Changes on this page. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `total_count` | integer | yes | no | — | Every change found; the pages list them newest first. |
 | `rows` | array[object] | yes | no | — | — |
 | `rows[].at` | string | yes | no | — | — |
 | `rows[].command` | string | yes | no | — | — |
@@ -84,10 +99,25 @@ Example JSON output:
 {
   "count": 0,
   "journal_entries": 1,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
   "notes": 1,
   "reclassifications": 1,
   "review_marks": 1,
-  "rows": []
+  "rows": [],
+  "total_count": 1
 }
 ```
 
@@ -150,12 +180,15 @@ The same example as complete `bookflow_run` arguments:
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `as_of` | `--as-of` | string | yes | no | — | End of the period under review, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
 
 ### Command and context options
 
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -177,12 +210,25 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Checklist rows on this page. |
+| `next_cursor` | string \| null | yes | yes | — | — |
 | `as_of` | string | yes | no | — | — |
-| `items` | array[object] | yes | no | — | — |
-| `items[].key` | literal["entries_to_review", "uncategorized", "unreconciled", "open_items", "reviewed_through"] | yes | no | — | — |
-| `items[].title` | string | yes | no | — | — |
-| `items[].done` | boolean | yes | no | — | True when nothing is left to look at. |
-| `items[].detail` | string | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | The checklist, one row per thing to look at. |
+| `rows[].key` | literal["entries_to_review", "uncategorized", "unreconciled", "open_items", "reviewed_through"] | yes | no | — | — |
+| `rows[].title` | string | yes | no | — | — |
+| `rows[].done` | boolean | yes | no | — | True when nothing is left to look at. |
+| `rows[].detail` | string | yes | no | — | — |
 | `entries_to_review` | array[object] | yes | no | — | Up to 50 entries on the entries-to-review list, newest first. |
 | `entries_to_review[].transaction_id` | string | yes | no | — | — |
 | `entries_to_review[].type` | string | yes | no | — | — |
@@ -230,11 +276,26 @@ Example JSON output:
 {
   "accountant_changes": 1,
   "as_of": "value",
+  "count": 0,
   "entries_to_review": [],
   "entries_to_review_count": 1,
-  "items": [],
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
   "open_items": [],
   "reviewed_through": null,
+  "rows": [],
   "uncategorized": [],
   "unreconciled": []
 }
@@ -2354,12 +2415,15 @@ The same example as complete `bookflow_run` arguments:
 | `as_of` | `--as-of` | string \| null | no | yes | null | Report date. Defaults to today. |
 | `customer` | `--customer` | string \| null | no | yes | null | Only this customer or job. |
 | `include_drawn` | `--include-drawn` | boolean | no | no | false | Also list receipts fully drawn by the date. |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
 
 ### Command and context options
 
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -2381,6 +2445,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page; customers and totals are the whole report. |
+| `next_cursor` | string \| null | yes | yes | — | — |
 | `as_of` | string | yes | no | — | — |
 | `account_id` | string \| null | yes | yes | — | — |
 | `account` | string \| null | yes | yes | — | — |
@@ -2434,7 +2511,22 @@ Example JSON output:
   },
   "account_id": null,
   "as_of": "value",
+  "count": 0,
   "customers": [],
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
   "rows": [],
   "total_held": {
     "amount": "value",
@@ -4014,12 +4106,15 @@ The same example as complete `bookflow_run` arguments:
 | `item` | `--item` | string \| null | no | yes | null | Only this item. |
 | `as_of` | `--as-of` | string \| null | no | yes | null | Stock as of this date; omitted, today. |
 | `include_zero` | `--include-zero` | boolean | no | no | false | Also list places that hold nothing. |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
 
 ### Command and context options
 
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -4041,6 +4136,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page. |
+| `next_cursor` | string \| null | yes | yes | — | — |
 | `as_of` | string | yes | no | — | — |
 | `rows` | array[object] | yes | no | — | — |
 | `rows[].site_id` | string | yes | no | — | — |
@@ -4059,6 +4167,21 @@ Example JSON output:
 ```json
 {
   "as_of": "value",
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
   "rows": [],
   "site_totals": []
 }
@@ -4126,12 +4249,15 @@ The same example as complete `bookflow_run` arguments:
 | `item` | `--item` | string \| null | no | yes | null | Item the number belongs to; needed only when two items share it. |
 | `number` | `--number` | string | yes | no | — | The serial or lot number.; minimum length 1; maximum length 1004 |
 | `kind` | `--kind` | literal["serial", "lot"] \| null | no | yes | null | serial or lot; omitted, whichever the number is. |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
 
 ### Command and context options
 
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -4153,6 +4279,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page. |
+| `next_cursor` | string \| null | yes | yes | — | — |
 | `item_id` | string | yes | no | — | — |
 | `item_name` | string | yes | no | — | — |
 | `kind` | string | yes | no | — | — |
@@ -4186,11 +4325,26 @@ Example JSON output:
 
 ```json
 {
+  "count": 0,
   "customers": [],
   "item_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "item_name": "value",
   "kind": "human",
   "made_from": [],
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
   "number": "value",
   "on_hand": "value",
   "rows": [],
@@ -4261,6 +4415,8 @@ The same example as complete `bookflow_run` arguments:
 | `date_from` | `--date-from` | string \| null | no | yes | null | First trip end date; omitted, the start of the calendar year of date_to. |
 | `date_to` | `--date-to` | string \| null | no | yes | null | Last trip end date; omitted, today in the company's timezone. |
 | `detail` | `--detail` | boolean | no | no | false | One row per trip instead of one per group. |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
 | `customer` | `--customer` | string \| null | no | yes | null | One customer or job; a job is its own customer. |
 
 ### Command and context options
@@ -4268,6 +4424,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -4289,6 +4446,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Groups on this page; the totals are the whole report. |
+| `next_cursor` | string \| null | yes | yes | — | — |
 | `report` | string | yes | no | — | — |
 | `date_from` | string | yes | no | — | — |
 | `date_to` | string | yes | no | — | — |
@@ -4329,9 +4499,24 @@ Example JSON output:
 
 ```json
 {
+  "count": 0,
   "currency": "USD",
   "date_from": "value",
   "date_to": "value",
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
   "report": "value",
   "rows": [],
   "total_amount": {
@@ -4405,6 +4590,8 @@ The same example as complete `bookflow_run` arguments:
 | `date_from` | `--date-from` | string \| null | no | yes | null | First trip end date; omitted, the start of the calendar year of date_to. |
 | `date_to` | `--date-to` | string \| null | no | yes | null | Last trip end date; omitted, today in the company's timezone. |
 | `detail` | `--detail` | boolean | no | no | false | One row per trip instead of one per group. |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
 | `vehicle` | `--vehicle` | string \| null | no | yes | null | — |
 
 ### Command and context options
@@ -4412,6 +4599,7 @@ The same example as complete `bookflow_run` arguments:
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -4433,6 +4621,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Groups on this page; the totals are the whole report. |
+| `next_cursor` | string \| null | yes | yes | — | — |
 | `report` | string | yes | no | — | — |
 | `date_from` | string | yes | no | — | — |
 | `date_to` | string | yes | no | — | — |
@@ -4473,9 +4674,24 @@ Example JSON output:
 
 ```json
 {
+  "count": 0,
   "currency": "USD",
   "date_from": "value",
   "date_to": "value",
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
   "report": "value",
   "rows": [],
   "total_amount": {
@@ -7776,12 +7992,15 @@ The same example as complete `bookflow_run` arguments:
 | `item` | `--item` | string \| null | no | yes | null | Item the number belongs to; needed only when two items share it. |
 | `number` | `--number` | string | yes | no | — | The serial or lot number.; minimum length 1; maximum length 1004 |
 | `kind` | `--kind` | literal["serial", "lot"] \| null | no | yes | null | serial or lot; omitted, whichever the number is. |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
 
 ### Command and context options
 
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -7803,6 +8022,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page. |
+| `next_cursor` | string \| null | yes | yes | — | — |
 | `item_id` | string | yes | no | — | — |
 | `item_name` | string | yes | no | — | — |
 | `kind` | string | yes | no | — | — |
@@ -7824,9 +8056,24 @@ Example JSON output:
 
 ```json
 {
+  "count": 0,
   "item_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "item_name": "value",
   "kind": "human",
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
   "number": "value",
   "on_hand": "value",
   "rows": []
@@ -7897,13 +8144,15 @@ The same example as complete `bookflow_run` arguments:
 | `expiring_by` | `--expiring-by` | string \| null | no | yes | null | Only lots expiring on or before this date. |
 | `as_of` | `--as-of` | string \| null | no | yes | null | Date the quantities are read as of; omitted, today. |
 | `include_unassigned` | `--include-unassigned` | boolean | no | no | true | Show each place's unassigned units too. |
-| `limit` | `--limit` | integer | no | no | 500 | minimum 1; maximum 5000 |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
 
 ### Command and context options
 
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -7925,6 +8174,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page. |
+| `next_cursor` | string \| null | yes | yes | — | — |
 | `as_of` | string | yes | no | — | — |
 | `rows` | array[object] | yes | no | — | — |
 | `rows[].item_id` | string | yes | no | — | — |
@@ -7937,7 +8199,6 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].quantity` | string | yes | no | — | — |
 | `rows[].expiry_date` | string \| null | no | yes | null | — |
 | `rows[].expired` | boolean | no | no | false | — |
-| `count` | integer | yes | no | — | — |
 
 Example JSON output:
 
@@ -7945,6 +8206,20 @@ Example JSON output:
 {
   "as_of": "value",
   "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
   "rows": []
 }
 ```

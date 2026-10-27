@@ -350,11 +350,14 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 3891 -> 3895 (R104 increment 7, FIFO costing), measured: inventory-layers' optional as_of and item, and
     # receipt_line on vendor credit item rows -- their null branches. No new variant kind.
     # 3895 -> 3896 (R180 stage 2, company verify), measured: its optional account -- its null branch.
-    # 3896 -> 3938 (R181 increment 1, shipments), measured: the eight new commands' optional inputs (lines and their
+    # 3896 -> 3905 (build/m4-fixes: nine reports page like every other), measured: cursor on mileage-by-job,
+    # mileage-by-vehicle, customer-prepayments, accountant-changes, accountant-review, items-by-bin,
+    # serial-lot-stock, serial-lot-history and lot-trace -- its null branch. No new variant kind.
+    # 3905 -> 3947 (R181 increment 1, shipments), measured: the eight new commands' optional inputs (lines and their
     # order_line, item, quantity, bin, lot and serial_numbers, date, site, count_position, ship_method, carrier,
     # tracking_numbers, memo, query filters, invoice fields) and shipments on sales-order invoice -- their null
     # branches. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==3938
+    assert sum(len(group["paths"]) for group in mapped)==3947
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

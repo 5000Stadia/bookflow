@@ -61,11 +61,27 @@
     // A refused deletion is re-consented to, never carried over on a stale tick.
     if(mode==='delete') $('confirm').checked=false;
     const area=$('error').querySelector('[data-comparisons]'); area.replaceChildren();
+    // The refusal reads as one line; its comparisons and field problems sit under Details, open on a
+    // desk and folded on a phone, so the action that fixes it stays on the screen (390x844).
+    const more=$('error').querySelector('[data-error-details]');
+    if(!more.dataset.watched) {more.dataset.watched='1';
+      new MutationObserver(()=>{more.hidden=!area.hasChildNodes();}).observe(area,{childList:true});}
+    // A conflict's comparisons are what the reader decides on, so they stay open even on a phone.
+    const reviewing=['E_VERSION_CONFLICT','E_PREVIEW_STALE','E_QUERY_STALE','E_RECOVERY_PENDING','E_SELECTION_CONSUMED'].includes(err.code)
+      || !!(err.details?.changes || err.details?.settlement_changes || err.details?.review);
+    more.hidden=true; more.open=reviewing || !window.matchMedia('(max-width: 700px)').matches;
     for (const row of err.details?.changes || err.details?.settlement_changes || []) {
       area.append(el('p', `${row.actor_id || 'Unknown actor'} at ${row.at || 'unknown time'}: ${(row.fields || []).concat(row.settlement_fields || []).join(', ') || 'Fields unknown'}. Latest writer: ${row.latest_writer_id || 'unknown'}.`));
     }
     if (err.details?.fields) for (const field of err.details.fields) area.append(el('p', `${field.field}: ${field.problem}`));
     $('retry').hidden=!submitted; $('retry').disabled=!submitted; $('review').hidden=!!submitted; $('review').disabled=false;
+    // On a phone, the refusal and the actions right after it (Preview, Save) share the screen: the reader
+    // fixes it there. Done here because the workspace is rebuilt after load, past any page-level observer.
+    if(window.matchMedia('(max-width: 700px)').matches) requestAnimationFrame(()=>{
+      const box=$('error'), actions=box.nextElementSibling; if(box.hidden||!actions) return;
+      const top=box.getBoundingClientRect().top, bottom=actions.getBoundingClientRect().bottom;
+      window.scrollTo({top:Math.max(0,scrollY+Math.min(bottom-innerHeight+16, top-8)), behavior:'instant'});
+    });
     if (!submitted && (['E_VERSION_CONFLICT','E_PREVIEW_STALE','E_QUERY_STALE','E_RECOVERY_PENDING'].includes(err.code) || err.details?.review?.command==='payment settlement changes')) {
       $('review').disabled=true;
       try {

@@ -99,7 +99,7 @@ def test_the_external_accountant_writes_only_adjustments_dated_in_their_period(r
 
     checklist = read(client, 'report accountant-review', as_of=THROUGH)
     assert checklist['reviewed_through']['through'] == THROUGH
-    assert next(i for i in checklist['items'] if i['key'] == 'reviewed_through')['done']
+    assert next(i for i in checklist['rows'] if i['key'] == 'reviewed_through')['done']
     assert any(a['name'] == 'AR Bank' for a in checklist['unreconciled'])
     report = read(client, 'report accountant-changes')
     assert report['journal_entries'] == 2 and report['reclassifications'] == 1 and report['notes'] == 1

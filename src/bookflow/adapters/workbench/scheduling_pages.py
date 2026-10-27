@@ -33,9 +33,13 @@ def mount(app, *, render, run, credential, page_error):
             raw = {'mine': request.query_params.get('mine') == '1'}
             if request.query_params.get('as_of'):
                 raw['as_of'] = request.query_params['as_of']
+            if (request.query_params.get('bills_days_ahead') or '').strip():
+                days = request.query_params['bills_days_ahead'].strip()
+                raw['bills_days_ahead'] = int(days) if days.isdigit() else days  # anything else is refused by the command
             listed = run(request, 'reminders', raw, company_id)
             return render('reminders.html', request, company_id=company_id, company_label=company_label(request, company_id),
-                          r=listed, mine=raw['mine'], notice=request.query_params.get('done'))
+                          r=listed, mine=raw['mine'], bills_days_ahead=raw.get('bills_days_ahead', 10),
+                          notice=request.query_params.get('done'))
         except BookflowError as e:
             return page_error(request, e)
 

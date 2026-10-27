@@ -106,6 +106,11 @@ def test_lookup_reports_on_hand_by_site_and_line_fields(client):
 
 
 def test_generate_numbers_items_without_a_code_and_never_changes_one(client):
+    # The landed-cost demo (R104 increment 6) added Copper Pipe with no code; give it its maker's code so
+    # the demo is fully labelled again and the generated numbers below start where they did.
+    pipe = _run(client, 'item show', {'item': 'Copper Pipe'})
+    _run(client, 'item update', {'item': pipe['id'], 'expected_version': pipe['version'], 'barcode': '4006381333948'},
+         reason='Maker code')
     assert _run(client, 'barcode generate', {}, dry_run=True)['assigned'] == []   # every demo part has a code
     _part(client, 'Brass Elbow')
     _part(client, 'Brass Tee')

@@ -128,10 +128,10 @@ def test_foreign_fact_current_journal_rejected_before_mutation(client, register_
 def test_writer_rejects_offset_that_now_resolves_to_selected(client, register_accounts, monkeypatch):
     from bookflow.company import accounts
     original = accounts.resolve_account
-    def resolve(db, selector):
+    def resolve(db, selector, **options):  # by_number, and R117's follow_merge
         if db.write_transaction and selector == register_accounts[1]:
-            return original(db, register_accounts[0])
-        return original(db, selector)
+            return original(db, register_accounts[0], **options)
+        return original(db, selector, **options)
     before = state(client)
     monkeypatch.setattr(accounts, 'resolve_account', resolve)
     with pytest.raises(BookflowError) as err:

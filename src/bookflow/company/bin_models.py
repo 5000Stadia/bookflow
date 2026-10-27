@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_serializer
 from bookflow.company.journal_models import _Date, _Version
 from bookflow.company.journal_outputs import JournalMoneyOutput
 from bookflow.company.sales_models import Selector
+from bookflow.company.ledger_reports import ReportMetadata
 
 
 class _Strict(BaseModel):
@@ -103,6 +104,8 @@ class ItemsByBinInput(_Strict):
     item: Selector | None = Field(None, description='Only this item.')
     as_of: _Date | None = Field(None, description='Stock as of this date; omitted, today.')
     include_zero: bool = Field(False, description='Also list places that hold nothing.')
+    limit: int = Field(default=50, ge=1, le=200)
+    cursor: str | None = Field(default=None, max_length=4096)
 
 
 class ItemsByBinRow(_Strict):
@@ -118,6 +121,9 @@ class ItemsByBinRow(_Strict):
 
 
 class ItemsByBinOutput(_Strict):
+    metadata: ReportMetadata
+    count: int = Field(ge=0, le=200, description='Rows on this page.')
+    next_cursor: str | None
     as_of: str
     rows: list[ItemsByBinRow]
     site_totals: list[dict] = Field(default_factory=list, description='Each site and item: its bins (with no bin) add up to what the site holds.')

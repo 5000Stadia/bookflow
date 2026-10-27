@@ -120,7 +120,10 @@ def parse_text(value: str, currency: str, field: str, *, signed: bool = False) -
     whole = match[1]
     negative = whole.startswith("-")
     digits = whole.lstrip("-").lstrip("0") or "0"
-    if len(digits) > len(str(INT64_MAX // 10**total)):
+    # A cheap bound before the exact one below. A price is stored as minor units plus a
+    # fraction, never as one scaled integer, so the bound is the minor units' (R150 had
+    # bounded the scaled units, a thousand times lower than any price before it).
+    if len(digits) > len(str(INT64_MAX // 10**(total - EXTRA_PLACES))):
         raise BookflowError("E_VALUE_RANGE", details={"field": field})
     units = int(digits) * 10**total + int(fraction_text.ljust(total, "0") or 0)
     units = -units if negative else units

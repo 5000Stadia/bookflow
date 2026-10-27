@@ -629,6 +629,33 @@ def _state(s, inp, report, principal_id, account_id, *, account_scoped=True, fil
     return ReportCursor(company=company, account_id=account_id, filter_ids=filter_ids, query=query, permissions=permissions, watermark=watermark, offset=1, metadata=metadata), 0
 
 
+class _Period:
+    """A report input read at an explicit period, for a report whose own dates are optional or an as-of."""
+
+    def __init__(self, inp, date_from, date_to):
+        self._inp, self.cursor, self.date_from, self.date_to = inp, inp.cursor, date_from, date_to
+
+    def model_dump(self, exclude=None):
+        return {**self._inp.model_dump(mode="json", exclude=exclude), "date_from": self.date_from, "date_to": self.date_to}
+
+
+def page_of(s, inp, report, rows, *, date_to, date_from=None, principal_id=None):
+    """One page of a report's already-ordered rows, with its metadata and signed continuation.
+
+    The contract every exportable report keeps (`limit`, `cursor`, `metadata`, `rows`, `count`,
+    `next_cursor`): the cursor names this report, its inputs and the books it was read from, so a
+    later page of changed books restarts instead of mixing two readings. Call it inside the same
+    snapshot the rows were read in.
+    """
+    with _snapshot(s.company):
+        register_ledger_functions(s.company)
+        state, offset = _state(s, _Period(inp, date_from, date_to), report, principal_id, None, account_scoped=False)
+    page = rows[offset:offset + inp.limit + 1]
+    shown = page[:inp.limit]
+    return dict(metadata=state.metadata, rows=shown, count=len(shown),
+                next_cursor=_continuation(state, offset, len(shown), len(page) > inp.limit, s.company))
+
+
 def _continuation(state, offset, count, more, db):
     if not more:
         return None

@@ -63,8 +63,8 @@ def plan_company_verify(inp: VerifyInput, ctx, s) -> Plan:
     from bookflow.company import reconciliation_watermark as watermark
     from bookflow.company import schema as c
     from bookflow.company.accounts import resolve_account
-    from bookflow.hub import access
-    access.require_resource(s, 'ledger.read', 'member')
+    # Admitted at ledger.read, member, by its own descriptor (verify-v1) before this runs; a second check
+    # here would be a resource call site no catalog layer declares.
     db = s.company
     account_id = resolve_account(db, inp.account)['id'] if inp.account else None
     names = dict(db.conn.execute(sa.select(c.accounts.c.id, c.accounts.c.full_name)).all())

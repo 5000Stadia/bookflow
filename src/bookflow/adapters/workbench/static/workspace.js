@@ -18,7 +18,13 @@
       requestAnimationFrame(() => {
         if (!box.isConnected || box.hidden) return;
         box.focus({preventScroll:true});
-        box.scrollIntoView({block:'center'});
+        // The refusal and the actions after it (Preview, Save) together: the reader fixes it there.
+        const actions = box.nextElementSibling;
+        if (!actions) { box.scrollIntoView({block:'center'}); return; }
+        // Scroll so the actions' bottom sits just inside the screen, never past the refusal's top.
+        const top = box.getBoundingClientRect().top, bottom = actions.getBoundingClientRect().bottom;
+        const by = Math.min(bottom - innerHeight + 16, top - 8);
+        window.scrollTo({top: Math.max(0, scrollY + by), behavior: 'instant'});
       });
     };
     new MutationObserver(reveal).observe(box, {attributes:true, attributeFilter:['hidden']});
