@@ -1838,7 +1838,7 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].item` | inside `--lines` JSON array | string \| null | no | yes | null | An item exactly one line of the shipment carries. |
 | `lines[].quantity` | inside `--lines` JSON array | string \| null | no | yes | null | How many came back, in the item's base unit (as the shipment shows it); omitted, all of the line still out and not invoiced. |
 | `lines[].bin` | inside `--lines` JSON array | string \| null | no | yes | null | Bin the units go back to; default the bin the shipment took them from. |
-| `lines[].lot` | inside `--lines` JSON array | string \| null | no | yes | null | Lot of a lot-tracked item: the lot an incoming line receives into (made when new) or an outgoing line takes from. Omitted on an outgoing line, the units leave unassigned. |
+| `lines[].lot` | inside `--lines` JSON array | string \| null | no | yes | null | Lot an incoming line receives into (made when new) or an outgoing line takes from; omitted, outgoing units leave unassigned. |
 | `lines[].serial_numbers` | inside `--lines` JSON array | array[string] \| null | no | yes | null | Serial numbers that came back; each must be one the shipment took. |
 | `reopen` | `--reopen` | boolean | no | no | true | True (the default): the units are to ship again on the order. False: they are cancelled on the order. |
 | `count_position` | `--count-position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of the site on the return date. |

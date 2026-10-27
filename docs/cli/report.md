@@ -8286,12 +8286,14 @@ The same example as complete `bookflow_run` arguments:
 | `as_of` | `--as-of` | string \| null | no | yes | null | Waiting on this date; default today. |
 | `customer` | `--customer` | string \| null | no | yes | null | — |
 | `limit` | `--limit` | integer | no | no | 200 | minimum 1; maximum 1000 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | Continue from a previous page's next_cursor. |
 
 ### Command and context options
 
 | Option | Meaning |
 |---|---|
 | `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
 | `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
@@ -8313,6 +8315,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page. |
+| `next_cursor` | string \| null | no | yes | null | — |
 | `as_of` | string | yes | no | — | — |
 | `account_id` | string \| null | yes | yes | — | — |
 | `account_name` | string \| null | yes | yes | — | — |
@@ -8351,6 +8366,21 @@ Example JSON output:
   "account_id": null,
   "account_name": null,
   "as_of": "value",
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
   "rows": [],
   "total": {
     "amount": "value",
