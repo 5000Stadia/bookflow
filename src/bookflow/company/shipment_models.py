@@ -40,12 +40,6 @@ class _Facts(_Strict):
     memo: str | None = Field(default=None, max_length=4000)
 
 
-class FreightInput(_Strict):
-    amount: str = Field(min_length=1, max_length=40, description='Freight to bill the customer, e.g. "12.50".')
-    item: Selector | None = Field(default=None, description=(
-        "Other-charge or service item it bills as; default the company's shipping item."))
-
-
 class PackageContentInput(_Strict):
     line: Selector | None = Field(default=None, description="The shipment line: its position or line_identity.")
     item: Selector | None = Field(default=None, description='An item exactly one line carries.')
@@ -64,8 +58,10 @@ class PackageInput(_Strict):
 
 
 class _Freighted(_Facts):
-    freight: FreightInput | None = Field(default=None, description=(
-        'Freight to bill: billed once, by the first invoice of the shipment. A shipping fact, switch or not.'))
+    freight_amount: str | None = Field(default=None, min_length=1, max_length=40, description=(
+        'Freight to bill, e.g. "12.50": billed once, by the shipment\'s first invoice; "0" clears it.'))
+    freight_item: Selector | None = Field(default=None, description=(
+        "Other-charge or service item the freight bills as; default the company's shipping item."))
 
 
 class ShipmentPostInput(_Freighted):

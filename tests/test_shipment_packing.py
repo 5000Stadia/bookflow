@@ -81,7 +81,7 @@ def test_off_by_default_packing_refuses_and_shipping_facts_still_work(dock):
     error = _error(lambda: _ship(dock, packages=[dict(contents=[dict(line='1')])]))
     assert error.code == 'E_FEATURE_DISABLED'
     # Tracking, freight to bill and invoice on ship are shipping facts: there with the switch off.
-    shipped = _ship(dock, tracking_numbers=['1Z999'], freight=dict(amount='12.50', item=dock['shipping']),
+    shipped = _ship(dock, tracking_numbers=['1Z999'], freight_amount='12.50', freight_item=dock['shipping'],
                     invoice=True)
     assert shipped['status'] == 'shipped' and shipped['tracking_numbers'] == ['1Z999']
     assert shipped['packing'] is None and shipped['freight']['amount']['amount'] == '12.50'
@@ -171,7 +171,7 @@ def test_box_weights_come_from_their_contents_or_the_measured_weight(dock):
 def test_corrections_carry_the_packing_and_freight_once_billed_is_fixed(dock):
     run = dock['run']
     _on(run)
-    shipped = _ship(dock, freight=dict(amount='9.00', item=dock['shipping']),
+    shipped = _ship(dock, freight_amount='9.00', freight_item=dock['shipping'],
                     packages=[dict(contents=[dict(line='2', quantity='3')]), dict(contents=[dict(line='3')])])
     # A text change and a repost both keep the boxes; a quantity cut clamps what the box holds.
     text = run('shipment update', dict(shipment=shipped['number'], expected_version=shipped['version'],
@@ -184,8 +184,7 @@ def test_corrections_carry_the_packing_and_freight_once_billed_is_fixed(dock):
     assert boxes[1]['contents'][0]['quantity'] == '1' and boxes[2]['contents'] == []
     invoice = run('shipment invoice', dict(shipment=shipped['number'], date='2017-03-27'), reason='Bill')
     assert [line['item_id'] for line in invoice['revision']['lines']].count(dock['shipping']) == 1
-    error = _error(lambda: run('shipment update', dict(shipment=shipped['number'], expected_version=cut['version'], freight=dict(
-        amount='20.00', item=dock['shipping'])), reason='More freight'))
+    error = _error(lambda: run('shipment update', dict(shipment=shipped['number'], expected_version=cut['version'], freight_amount='20.00', freight_item=dock['shipping']), reason='More freight'))
     assert error.code == 'E_WORK_DEPENDENCY' and 'freight' in error.message
     # Voiding the invoice frees the freight again; a second invoice bills it once more, not twice.
     run('invoice void', dict(invoice=invoice['id']), reason='Wrong')
@@ -197,7 +196,7 @@ def test_corrections_carry_the_packing_and_freight_once_billed_is_fixed(dock):
 def test_drafts_hold_their_units_and_cancel_and_the_switch_waits_for_them(dock):
     run = dock['run']
     _on(run)
-    draft = run('shipment create', dict(sales_order=dock['order'], freight=dict(amount='5', item=dock['shipping'])),
+    draft = run('shipment create', dict(sales_order=dock['order'], freight_amount='5', freight_item=dock['shipping']),
                 reason='Everything')
     assert {l['item_name']: l['quantity'] for l in draft['lines']} == {'Water Heater': '2', 'Widget': '5', 'Sealant': '2'}
     error = _error(lambda: run('shipment post', dict(sales_order=dock['order']), reason='Around it'))

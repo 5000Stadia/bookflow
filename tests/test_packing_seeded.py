@@ -222,7 +222,7 @@ def _scenario(shop, seed):
                         continue
                     body['lines'] = lines
                 if rnd.random() < .4:
-                    body['freight'] = dict(amount=rnd.choice(['5.00', '12.50']))
+                    body['freight_amount'] = rnd.choice(['5.00', '12.50'])
                 run('shipment create', body, reason='Draft')
             elif op in ('pack', 'repack', 'move', 'unpack', 'weigh'):
                 choices = live('draft') + (live('shipped') if rnd.random() < .5 else [])
@@ -268,7 +268,7 @@ def _scenario(shop, seed):
                 if op == 'ship_invoice':
                     body['invoice'] = True
                     if rnd.random() < .5:
-                        body['freight'] = dict(amount='9.00')
+                        body['freight_amount'] = '9.00'
                 else:
                     body['packages'] = [dict(contents=[dict(line='1')])]
                 run('shipment post', body, reason='Truck', idempotency_key=f'{seed}-{step}')

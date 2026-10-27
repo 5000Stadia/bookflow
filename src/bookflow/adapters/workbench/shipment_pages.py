@@ -64,7 +64,7 @@ def mount(app, *, render, run, credential, page_error, role_allows):
         if values.get('memo'):
             raw['memo'] = values['memo']
         if values.get('freight'):
-            raw['freight'] = {'amount': values['freight']}
+            raw['freight_amount'] = values['freight']
         chosen = [dict(order_line=key[4:], quantity=value.strip()) for key, value in lines_from.items()
                   if key.startswith('qty:') and value.strip() not in ('', '0')]
         if chosen:

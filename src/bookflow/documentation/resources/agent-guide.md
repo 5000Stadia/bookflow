@@ -1305,7 +1305,7 @@ the order, its `lines` or a `pick_list`) that moves nothing; `shipment pack <n>`
 and posts nothing: `--unit WH-1001 --box 2` puts that unit (a serial number, lot or item code) in box 2, box 0 takes
 it out, or `packages` gives the whole packing; a box weighs its contents (item `unit_weight`) plus tare, or its
 measured `weight`. `shipment post --shipment <draft>` ships it with its boxes. Whatever the setting: tracking numbers,
-`freight` (amount and item, billed once by the shipment's first invoice), `shipment post --invoice` (the shipment and
+`freight_amount` (and `freight_item`, billed once by the shipment's first invoice), `shipment post --invoice` (the shipment and
 its invoice in one transaction) and the printed `packing-slip` (no prices).
 
 <!-- bookflow-example: illustrative -->

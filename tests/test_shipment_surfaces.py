@@ -19,7 +19,9 @@ COMMANDS = frozenset(('shipment post', 'shipment update', 'shipment void', 'ship
                       # R181 increment 3: picking turned on, a list for an order of two, a retried pick, read back,
                       # shipped from the list; a second list closed and a third cancelled.
                       'pick-list create', 'pick-list enter', 'pick-list show', 'pick-list query', 'pick-list close',
-                      'pick-list cancel'))
+                      'pick-list cancel',
+                      # R181 increment 4: a draft made, packed (retried), shipped with its invoice; another cancelled.
+                      'shipment create', 'shipment pack', 'shipment cancel'))
 
 
 @pytest.mark.timeout(900)

@@ -26,7 +26,7 @@ _POST = (
     'provisionally until the receipt arrives. Carrier and tracking numbers are recorded as text. The dry run shows '
     'each line\'s cost and what stays to ship. The result gives the next command, `shipment invoice <number>`. '
     '`pick_list` ships what was picked on it instead; `shipment` posts a draft. `invoice: true` also invoices it in '
-    'the same transaction. `freight` (amount, item) is billed once, by its first invoice. Example: {"sales_order": '
+    'the same transaction. `freight_amount` (and `freight_item`) is billed once, by its first invoice. Example: {"sales_order": '
     '"1001"}.'
 )
 _UPDATE = (

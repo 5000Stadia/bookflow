@@ -1103,13 +1103,13 @@ def freight_item(s, selector):
     if selector is None:
         found = s.company.conn.execute(sa.select(c.company_info.c.shipping_item_id)).scalar()
         if found is None:
-            raise _invalid('freight.item', 'name the item freight bills as', message=(
-                'Name the other-charge or service item the freight bills as (freight.item), or set the company\'s '
+            raise _invalid('freight_item', 'name the item freight bills as', message=(
+                'Name the other-charge or service item the freight bills as (freight_item), or set the company\'s '
                 'shipping item with `company update --shipping-item-id`.'))
         selector = found
     item = sales_defaults._row(s.company, 'item', selector)
     if item['type'] not in ('other_charge', 'service') or not item.get('sales_enabled', True):
-        raise _invalid('freight.item', 'freight bills as an other-charge or service item that is sold')
+        raise _invalid('freight_item', 'freight bills as an other-charge or service item that is sold')
     return item
 
 
@@ -1124,7 +1124,7 @@ def freight_billed(s, shipment_id):
 
 def _freight_facts(s, inp, rev, current, draft, operation):
     """``freight_minor_units`` and ``freight_item_id`` the new revision carries; fixed once an invoice billed it."""
-    given = getattr(inp, 'freight', None)
+    given = getattr(inp, 'freight_amount', None)
     if current is not None:
         kept = dict(freight_minor_units=current['revision'].get('freight_minor_units'),
                     freight_item_id=current['revision'].get('freight_item_id'))
@@ -1135,10 +1135,11 @@ def _freight_facts(s, inp, rev, current, draft, operation):
     if given is None or operation == 'void':
         return kept
     from bookflow.company.sales_models import money
-    amount = money(given.amount, rev['currency'], 'freight.amount').minor_units
+    amount = money(given, rev['currency'], 'freight_amount').minor_units
     if amount < 0:
-        raise _invalid('freight.amount', 'must not be negative')
-    fresh = dict(freight_minor_units=amount or None, freight_item_id=freight_item(s, given.item)['id'] if amount else None)
+        raise _invalid('freight_amount', 'must not be negative')
+    fresh = dict(freight_minor_units=amount or None,
+                 freight_item_id=freight_item(s, inp.freight_item)['id'] if amount else None)
     if current is not None and fresh != kept:
         billed = freight_billed(s, current['id'])
         if billed:

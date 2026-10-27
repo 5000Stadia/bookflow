@@ -753,6 +753,57 @@ For the builder, defaults standing unless review finds otherwise:
   the browser test turns it on on a copy), `sales-order show`'s on open picks, `barcode lookup`'s fulfillment, and a
   printing kind `pick-list` in the print registry (the print page is a browser page).
 
+## As built: increment 4
+
+- **What is packing and what is shipping (K3).** The packing layer, under `company_info.pick_and_pack_enabled` (now
+  "Use pick lists and packing"): draft shipments (`shipment create`, `shipment cancel`, `shipment post --shipment`),
+  boxes (`shipment pack`, `shipment post --packages`) and the pack screen. While the switch is off they refuse with
+  E_FEATURE_DISABLED naming `company update --pick-and-pack-enabled true`, no Pack link or Make a draft button shows,
+  and `shipment post` is unchanged. Turning the switch off is refused while a draft is open (`draft_shipment_open`).
+  Shipping facts every shipper has, switch or not: tracking numbers (as before), **freight to bill**, the weight unit,
+  **`shipment post --invoice`** with the `invoice_when_shipping` preference, and the **packing slip** (a shipment with
+  no boxes prints every line unboxed). A shipment with no boxes shows no packing while the switch is off.
+- **Migration co0105** (on co0104) adds `shipment_drafts` (immutable header: number from the `shipment` sequence,
+  order, customer, site, pick list), `shipment_draft_revisions` (append-only: `draft`, then `cancelled` or `shipped`;
+  facts and freight), `shipment_draft_lines` (immutable: order line root, item, base quantity, bin named, lot and
+  serial numbers as text), `shipment_packages` and `shipment_package_contents` (per revision of a draft or a shipment:
+  box number, package type, tare, measured weight, dimensions, tracking number; contents by shipment line identity
+  with serial numbers) and `shipment_freight_billings`; columns `shipment_revisions.freight_minor_units` and
+  `freight_item_id`, `company_info.weight_unit` (`lb`) and `shipping_item_id`. Every new row immutable; no guard
+  counts rows. Permission layer `packing-v1` on `picking-v1`: `shipment create`, `pack`, `cancel` are `item` standard
+  with `customer-work` read.
+- **Drafts.** A draft is planned as `shipment post` would plan it (nothing posted, a unit worth nothing allowed) and
+  holds its units: every later `shipment post` or `shipment create` of the order plans around live drafts. Posting
+  the draft re-checks what the order has to ship; the shipment takes the draft's id, number and line identities, and
+  its boxes. A draft made from a pick list ships through the list (it links the list as `--pick-list` does); if the
+  picks changed since, the post is refused (`draft_stale`): cancel and draft again. A draft's lines never change.
+- **Boxes.** Every shipment or draft revision carries its packing forward: a text-only update keeps the boxes, a
+  repost clamps them to the new lines (lines gone drop, quantities and serial numbers clamp), a void drops them.
+  `shipment pack` writes a revision and reposts nothing (the entry's version, batches, movements and placements are
+  untouched). A move takes unboxed units first, then from other boxes, last box first; box 0 takes units out, the
+  newest boxed first. A numbered unit scanned moves exactly that unit. Weights: contents x item `unit_weight` plus
+  tare, else the measured weight; the shipment total adds unboxed lines and counts units with no weight.
+- **Freight to bill** (`freight_amount`, and `freight_item` default `company_info.shipping_item_id`, an other-charge or service
+  item) is billed by the shipment's first invoice (`shipment invoice`, or `--invoice`) as one more line, billed from no
+  order line; `shipment_freight_billings` records it, live while that invoice line stands. Once billed it is fixed
+  (E_WORK_DEPENDENCY `freight_invoiced`); voiding the invoice frees it for the next one.
+- **`shipment post --invoice`** posts the shipment, then `shipment invoice` dated the ship date, in the one command
+  transaction: a refused invoice takes the shipment back with it; a retry under the same idempotency key replays both,
+  and the invoice's conversion key derives from the shipment, so it is never made twice. The browser's ship form offers
+  "Create the invoice now" (checked when the preference is `always`, absent when `never`).
+- **Packing slip.** Printing kind `packing-slip` (`documents/packing_slip.py`): company, sold-to and ship-to, order,
+  P.O., ship date, ship via, tracking numbers, boxes and weight; per box a heading (number, type, weight, tracking)
+  and its contents (item, description, ordered, shipped, backordered, serial numbers and lot), units not boxed last;
+  no prices. `per_box` prints one page per box (`PrintedDocument.parts`). Lot expiry is not printed.
+- **Browser.** The pack screen (`/shipments/<n>/pack`): a sticky Scan field with a Box field (Enter submits, as a
+  scanner sends it; box 0 unboxes), lines with their boxes and an All-in-box button, boxes as cards with weight,
+  tracking and type, Print packing slip (`/shipments/<n>/packing-slip`, `?per_box=1`), Ship for a draft. The ship
+  form gains Freight to bill, Create the invoice now and Make a draft to pack; the shipment page shows freight,
+  boxes, Pack and Print packing slip. Refusals on the pack screen answer htmx with 200.
+- **Not in this increment:** pick-list suggestions do not yet subtract open drafts (posting re-checks, so nothing
+  ships twice); an order-made invoice issuing stock a draft holds is not refused (the draft's post then is);
+  `barcode lookup`'s fulfillment; the anchor's packing-slip template preference (R113).
+
 ## Decided (2026-10-26)
 
 - K1 carrier integration: none. Carrier and tracking are recorded and printed as text only (Kabe, gate gba01e0).

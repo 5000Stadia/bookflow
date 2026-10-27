@@ -97,3 +97,5 @@ Database: `company`.
 | `overdue_notice_template` | VARCHAR(12) | no | — | — | — | — | Overdue notices: what each notice is, a statement or a short letter. |
 | `invoice_when_shipping` | VARCHAR(8) | no | — | — | — | — | After a shipment: ask (the default), always or never offer an invoice for it. |
 | `pick_and_pack_enabled` | BOOLEAN | no | — | — | — | — | Pick and pack: pick lists (and, later, packing) as optional layers on shipping; off by default. |
+| `weight_unit` | VARCHAR(16) | no | — | — | — | — | The company's one weight unit, a label never converted (lb, kg, oz). |
+| `shipping_item_id` | VARCHAR(26) | yes | — | — | — | items.id | Item freight to bill is billed as by default; null: name it. |
