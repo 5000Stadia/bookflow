@@ -233,6 +233,17 @@ def _accepted_fields(model: Any) -> list[str]:
     return [field.alias or name for name, field in model.model_fields.items()]
 
 
+def _value_of(model: Any, key: str) -> str | None:
+    """The field whose fixed choices include ``key`` (a journal line's ``debit`` is a value of ``side``)."""
+    model = _model_root(_unwrap(model))
+    if not _is_model(model):
+        return None
+    for name, field in model.model_fields.items():
+        if key in typing.get_args(_unwrap(field.annotation)) and typing.get_origin(_unwrap(field.annotation)) is typing.Literal:
+            return field.alias or name
+    return None
+
+
 def _plain(message: str) -> str:
     for prefix in ("Value error, ", "Assertion failed, "):
         if message.startswith(prefix):
@@ -278,6 +289,9 @@ def fields(error: ValidationError, model: type[BaseModel] | None) -> list[dict[s
         if kind == "extra_forbidden":
             accepted = _accepted_fields(where.parent) if where.parent is not None else []
             entry["problem"] = "not a field here" + ("; accepted fields: " + ", ".join(accepted) if accepted else "")
+            owner = _value_of(where.parent, str(where.path[-1])) if where.parent is not None and where.path else None
+            if owner:
+                entry["problem"] += f" ({where.path[-1]!r} is a value of {owner}: give {owner}: {str(where.path[-1])!r})"
             if accepted:
                 entry["accepted_fields"] = accepted
         elif kind in ("missing", "string_pattern_mismatch", "string_type", "int_type", "bool_type",

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 from pathlib import Path
 import sys
 from typing import Any, Literal
@@ -36,6 +37,16 @@ class SetupInput(BaseModel):
     currency: str = Field("USD", min_length=3, max_length=3, pattern="^[A-Z]{3}$", description="Home currency, ISO 4217 upper case")
     chart: Literal["general", "service", "product", "contractor", "retail", "nonprofit"] = Field(
         "general", description="Packaged chart of accounts to start from")
+    opening_balance: str | None = Field(
+        None, max_length=300, pattern=r"^[^=]+=-?[0-9][0-9,]*(\.[0-9]+)?$",
+        description=('A bank account\'s opening balance, ACCOUNT=AMOUNT (e.g. "Checking=5000.00"): posted once as a journal entry, the '
+                     'bank account against Opening Balance Equity, on --opening-date. A rerun never posts it again; it reports '
+                     'the opening balance the account already has'))
+    opening_date: str | None = Field(
+        None, pattern=r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+        description="Date of the opening balance, YYYY-MM-DD; defaults to the first day of the current fiscal year, where the books start")
+    entity_type: Literal["sole_proprietor", "partnership", "llc", "s_corp", "c_corp", "nonprofit", "other"] | None = Field(
+        None, description="The business's legal form, as `company update --entity-type` takes it; set while the company has none (or other), kept as it is otherwise")
     owner: str | None = Field(None, max_length=64, description="The owner's username; defaults to this computer's login")
     owner_name: str | None = Field(None, max_length=200, description="The owner's name as people see it")
     agent: str = Field("assistant", min_length=1, max_length=64, description="Username for the AI agent's own identity")
@@ -46,16 +57,6 @@ class SetupInput(BaseModel):
     serve: bool = Field(True, description="Start the host in the background if it is not answering, and wait until it does")
     link_minutes: int = Field(120, ge=1, le=1440, description="Minutes the owner's one-time password link stays valid")
     new_token: bool = Field(False, description="Issue the agent a new token even though its last one was revoked; a person's decision")
-    entity_type: Literal["sole_proprietor", "partnership", "llc", "s_corp", "c_corp", "nonprofit", "other"] | None = Field(
-        None, description="The business's legal form, as `company update --entity-type` takes it; set while the company has none (or other), kept as it is otherwise")
-    opening_balance: str | None = Field(
-        None, max_length=300, pattern=r"^[^=]+=-?[0-9][0-9,]*(\.[0-9]+)?$",
-        description=('A bank account\'s opening balance, ACCOUNT=AMOUNT (e.g. "Checking=5000.00"): posted once as a journal entry, the '
-                     'bank account against Opening Balance Equity, on --opening-date. A rerun never posts it again; it reports '
-                     'the opening balance the account already has'))
-    opening_date: str | None = Field(
-        None, pattern=r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
-        description="Date of the opening balance, YYYY-MM-DD; defaults to the first day of the current fiscal year, where the books start")
 
 
 class SetupStep(BaseModel):
@@ -100,10 +101,10 @@ def _plan_setup(*_args):  # never called; bootstrap has its own path
 
 setup_cmd = command(
     "setup", scope="hub",
-    description=("Set up Bookflow for an AI agent in one step: the data root and its owner, a company with a chart of accounts, "
+    description=("Set up Bookflow for an AI agent in one step. Pass --opening-balance ACCOUNT=AMOUNT (e.g. Checking=5000.00) "
+                 "when the owner states a bank balance, and setup posts the opening entry. It makes the data root and its owner, a company with a chart of accounts, "
                  "the agent's own identity working for the owner, its MCP client configuration and token file, a one-time "
-                 "link for the owner to set a password in the browser, and the host running in the background. Rerunning "
-                 "it repairs what is missing and reports the rest; it never makes anything twice."),
+                 "link for the owner to set a password in the browser, and the host running in the background. Rerunning it repairs what is missing and reports the rest; it never makes anything twice."),
     input_model=SetupInput, output_model=SetupOutput, writes={"hub", "config", "company"},
     error_codes=["E_INIT_CONFLICT", "E_VALIDATION", "E_PERMISSION", "E_IO", "E_NETWORK_NOT_ALLOWED"], bootstrap=True, local_only=True,
     # `init`'s own capability: setup is init plus existing commands, so it adds no capability (agent-setup-v1).
@@ -279,7 +280,6 @@ def _opening_balance(run, inp: SetupInput, company_id: str, shown: dict[str, Any
     A journal entry on the date the books start: the bank account against Opening Balance Equity. It is
     the move-in (its source reference starts ``cutover:``), so the owner's review does not list it.
     """
-    from datetime import date
     from decimal import Decimal, InvalidOperation
     name, _, raw_amount = inp.opening_balance.rpartition("=")
     name = name.strip()
@@ -314,12 +314,7 @@ def _opening_balance(run, inp: SetupInput, company_id: str, shown: dict[str, Any
              + ("" if Decimal(row["amount"]["amount"]) == abs(amount) else
                 f" (correct it with `bookflow journal update {row['transaction_id']}`)"))
         return result
-    if inp.opening_date:
-        day = inp.opening_date
-    else:
-        today = date.today()
-        month = int((shown.get("info") or {}).get("fiscal_year_start_month") or 1)
-        day = date(today.year if today.month >= month else today.year - 1, month, 1).isoformat()
+    day = _opening_day(inp, shown)
     value = f"{abs(amount):.2f}"
     side, other = ("debit", "credit") if amount > 0 else ("credit", "debit")
     posted = run("journal post", {"date": day, "memo": f"Opening balance, {bank['full_name']}", "lines": [
@@ -330,6 +325,32 @@ def _opening_balance(run, inp: SetupInput, company_id: str, shown: dict[str, Any
                                        f"on {day}, against {equity['full_name']}")
     return {"account": bank["full_name"], "account_id": bank["id"], "amount": f"{amount:.2f}",
             "currency": shown.get("home_currency", inp.currency), "date": day, "transaction_id": posted["id"], "status": "created"}
+
+
+def _opening_day(inp: SetupInput, shown: dict[str, Any]) -> str:
+    """--opening-date, or the first day of the current fiscal year, where the books start."""
+    from datetime import date
+    if inp.opening_date:
+        return inp.opening_date
+    today = date.today()
+    month = int((shown.get("info") or {}).get("fiscal_year_start_month") or 1)
+    return date(today.year if today.month >= month else today.year - 1, month, 1).isoformat()
+
+
+def _opening_hint(run, inp: SetupInput, company_id: str, shown: dict[str, Any], config_path: Any) -> str | None:
+    """Without --opening-balance: the exact `agent run` that records one later, while no bank account has one."""
+    accounts = run("account list", company=company_id)["items"]
+    bank = next((a for a in accounts if a["type"] == "bank" and a.get("active", True)), None)
+    equity = next((a for a in accounts if a.get("system_role") == "opening_balance_equity"), None)
+    if bank is None or equity is None or any(
+            row["status"] != "void" for row in run("transaction find", {"account": equity["id"], "limit": 1}, company=company_id)["items"]):
+        return None
+    entry = {"date": _opening_day(inp, shown), "memo": f"Opening balance, {bank['full_name']}", "lines": [
+        {"account": bank["full_name"], "side": "debit", "amount": "AMOUNT"},
+        {"account": equity["full_name"], "side": "credit", "amount": "AMOUNT"}]}
+    return (f"When the owner gives a bank balance, record it as the opening balance (AMOUNT like 5000.00; the date the books "
+            f"start): bookflow agent run \"journal post\" --mcp-config {shlex.quote(str(config_path))} --input '{json.dumps(entry)}' "
+            f"--reason \"Opening balance the owner gave\" --json")
 
 
 def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
@@ -571,8 +592,11 @@ def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
     warnings.extend(f"stopped: {r}" for r in stopped)
     if host["status"] == "not_started":
         next_steps.append(f"Start the host: bookflow serve --background --bind {inp.bind}")
-    next_steps.append(f"Load the MCP server `{SERVER_NAME}` from {config_path} (restart or reload your MCP client).")
+    next_steps.append(f"Load the MCP server `{SERVER_NAME}` from {config_path} (it takes effect from your next session; until then run each call with `bookflow agent run`).")
     next_steps.append('Check the connection: call bookflow_run with {"command": "company show", "input": {}}.')
+    hint = None if opening else _opening_hint(run, inp, company_id, shown, config_path)
+    if hint:
+        next_steps.append(hint)
     if owner_link:
         next_steps.append(f"Give the owner this link to set their password (it works once, until {_readable(owner_link['expires_at'])}): "
                           f"{owner_link['url']} . If it expires or is lost, `bookflow owner-link` makes a fresh one; there is no need to rerun setup.")
