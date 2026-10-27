@@ -1084,6 +1084,17 @@ EXAMPLES['reconcile mark'] = Example(
     '--company "Demo Plumbing Co" --reason "Clear everything the statement shows" --dry-run --json',
     _markall_input)
 
+# R183: dropping a draft nobody will finish.
+EXAMPLES['reconcile discard'] = Example(
+    f'bookflow reconcile discard {ID} --expected-version 3 --operation-key example-discard-1 '
+    '--company "Demo Plumbing Co" --reason "Statement restarted after a corrected entry" --json',
+    dict(draft=ID, expected_version=3, operation_key='example-discard-1'))
+# R183: the owner's fresh password link, and the agent acting before its MCP client reloads.
+EXAMPLES['owner-link'] = Example('bookflow owner-link --json', {})
+EXAMPLES['agent run'] = Example(
+    'bookflow agent run "customer create" --input \'{"name": "Maple St HOA"}\' --reason "New customer" --json',
+    {"command": "customer create", "input": {"name": "Maple St HOA"}, "because": "New customer"})
+
 # The statement file travels as its text: the shell reads it, the command never opens a path.
 EXAMPLES['reconcile import'] = Example(
     'bookflow reconcile import --account Checking --content "$(cat checking-2026-09.ofx)" --start'

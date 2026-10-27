@@ -273,7 +273,10 @@ def test_owner_link_and_agent_run_from_a_relative_root_rerun(installed, tmp_path
     def cli(*argv: str, ok: bool = True) -> dict:
         done = subprocess.run([str(installed), *argv, "--json"], cwd=project, env=env, capture_output=True, text=True, timeout=300)
         assert (done.returncode == 0) == ok, done.stderr[-3000:] + done.stdout[-2000:]
-        return json.loads(done.stdout)
+        if ok:
+            return json.loads(done.stdout)
+        # A refusal is one JSON error object, on stderr beside the readable line.
+        return next(json.loads(line) for line in (done.stdout + "\n" + done.stderr).splitlines() if line.startswith("{"))
 
     setup = ("setup", "--company", COMPANY, "--owner", "dana", "--owner-name", "Dana Ruiz",
              "--data-root", "../books", "--bind", f"127.0.0.1:{port}")
@@ -305,9 +308,9 @@ def test_owner_link_and_agent_run_from_a_relative_root_rerun(installed, tmp_path
         previewed = cli("agent", "run", "customer create", "--input", '{"name": "Maple St HOA"}', "--reason", "New customer", "--dry-run")
         assert previewed.get("dry_run") is True
         made = cli("agent", "run", "customer create", "--input", '{"name": "Maple St HOA"}', "--reason", "New customer")
-        [event] = [e for e in cli("agent", "run", "audit list", "--input", '{"command": "customer create", "limit": 5}')["items"]
-                   if made["id"] in json.dumps(e)] or [None]
-        assert event is not None and event["actor_kind"] == "agent" and event["interface"] == "mcp"
+        assert made["id"]
+        [event] = cli("agent", "run", "audit list", "--input", '{"command": "customer create", "limit": 5}')["items"]
+        assert event["actor_kind"] == "agent" and event["interface"] == "mcp"
         assert event["on_behalf_of_name"] == "Dana Ruiz"
 
         # A fresh owner link replaces the old one, opens once, and is refused once a password is set.

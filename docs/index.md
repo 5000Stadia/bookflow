@@ -94,6 +94,7 @@ An AI agent installing Bookflow for someone starts with the agent install page: 
 - [`organization`](cli/organization.md)
 - [`other-name`](cli/other-name.md)
 - [`other-name query`](cli/other-name-query.md)
+- [`owner-link`](cli/owner-link.md)
 - [`payment`](cli/payment.md)
 - [`payment operation`](cli/payment-operation.md)
 - [`payment preview`](cli/payment-preview.md)

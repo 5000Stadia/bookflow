@@ -992,6 +992,68 @@ Example JSON output:
 | `E_USER_NOT_FOUND` | No such user. |
 | `E_VALIDATION` | Invalid input. |
 
+## `agent run`
+
+Run one Bookflow command as the AI agent `bookflow setup` made, without an MCP client: it reads the MCP configuration setup wrote (host, token file, company) and makes the same `bookflow_run` call a connected client makes, so the books record it exactly as an MCP call: the agent, working for the owner. For an agent whose MCP client has not reloaded .mcp.json yet. Writes need --reason.
+
+| Contract | Value |
+|---|---|
+| Scope | hub |
+| Kind | read |
+| Required role | none |
+| Capability | none |
+| Feature | — |
+| HTTP | Local only; no HTTP route. |
+| External binary body | none |
+
+### CLI
+
+`bookflow agent run "customer create" --input '{"name": "Maple St HOA"}' --reason "New customer" --json`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `command` | `COMMAND` | string | yes | no | — | The Bookflow command to run as the agent, e.g. `company show` or `invoice post`; minimum length 1; maximum length 200 |
+| `input` | `--input` | object[string, any] | no | no | {} | The command's input as one JSON object, exactly as `bookflow_run` takes it |
+| `company` | `--company` | string \| null | no | yes | null | Company id or name; defaults to the company the MCP configuration names (BOOKFLOW_COMPANY) |
+| `because` | `--reason` | string \| null | no | yes | null | Short audit reason; every write needs one |
+| `preview` | `--dry-run` | boolean | no | no | false | Preview the write and save nothing (a dry run) |
+| `mcp_config` | `--mcp-config` | string | no | no | ".mcp.json" | The MCP client configuration `bookflow setup` wrote; its `bookflow` server names the host, the token file and the company; minimum length 1 |
+| `url` | `--url` | string \| null | no | yes | null | Host origin; overrides the configuration's --url |
+| `token_file` | `--token-file` | string \| null | no | yes | null | Owner-only token file; overrides the configuration's --token-file |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+
+### HTTP
+
+This command has no HTTP route.
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+
+Example JSON output:
+
+```json
+{}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
 ## `agent show`
 
 Show an agent's authority: epoch, suspension and its reason, whether a fresh context is required, and the humans it acts for.

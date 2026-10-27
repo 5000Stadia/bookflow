@@ -71,6 +71,11 @@ This command has no HTTP route.
 | `url` | string | yes | no | — | Where the host answers; GET <url>health returns 200 once it is ready |
 | `host` | object[string, any] | yes | no | — | status (running, started, not_started), pid and log |
 | `owner_link` | object[string, any] \| null | yes | yes | — | url and expires_at of the owner's one-time password link; null when they have a password |
+| `owner_checklist` | array[object] | yes | no | — | What only the owner does, still to do: set their password, turn on daily backups; each with the exact command |
+| `owner_checklist[].step` | literal["password", "backups"] | yes | no | — | — |
+| `owner_checklist[].done` | boolean | yes | no | — | — |
+| `owner_checklist[].detail` | string | yes | no | — | — |
+| `owner_checklist[].command` | string \| null | no | yes | null | The exact command the owner runs; null when nothing is left to run |
 | `steps` | array[object] | yes | no | — | — |
 | `steps[].step` | string | yes | no | — | — |
 | `steps[].status` | literal["created", "exists", "updated", "skipped", "stopped"] | yes | no | — | — |
@@ -94,6 +99,7 @@ Example JSON output:
   "media_type": "text/plain",
   "next_steps": [],
   "owner": {},
+  "owner_checklist": [],
   "owner_link": null,
   "steps": [],
   "token_file": "value",
