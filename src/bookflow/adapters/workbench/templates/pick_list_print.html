@@ -1,0 +1,10 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Pick list {{ pick.number }}</title>
+<style>body{font-family:system-ui,sans-serif;margin:1rem;color:#111;background:#fff}h1{font-size:1.3rem}h2{font-size:1.05rem;margin:1rem 0 .3rem}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #ccc;padding:.3rem;text-align:left;vertical-align:top}td.num,th.num{text-align:right}td.box{width:3rem}@media print{a{display:none}}</style></head><body>
+<h1>Pick list {{ pick.number }}</h1>
+<p>{{ pick.site_name }} · {{ pick.date }}{% if pick.picker %} · Picker: {{ pick.picker }}{% endif %} · Orders: {% for o in pick.orders %}{{ o.sales_order }}{% if o.customer %} ({{ o.customer }}){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</p>
+{% for heading, rows in groups %}<h2>{{ heading }}</h2>
+<table><thead><tr><th>Item</th><th>Lot or serial numbers</th><th>Order</th><th class="num">Quantity</th><th>Picked</th></tr></thead><tbody>
+{% for l in rows %}<tr><td>{{ l.item_name }}{% if l.short %} (short){% endif %}</td><td>{% if l.lot %}Lot {{ l.lot }}{% if l.lot_expiry %}, expires {{ l.lot_expiry }}{% endif %}{% elif l.serial_hints %}{{ l.serial_hints|join(', ') }}{% endif %}</td><td>{{ l.sales_order }}</td><td class="num">{{ l.quantity }}</td><td class="box"></td></tr>{% endfor %}
+</tbody></table>{% endfor %}
+<p><a href="javascript:window.print()">Print</a></p>
+</body></html>

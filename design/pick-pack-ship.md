@@ -684,6 +684,55 @@ For the builder, defaults standing unless review finds otherwise:
 - **Browser.** The shipment page gains a Returned column, its returns with Void return, and a Return form (line,
   quantity, date, to ship again).
 
+## As built: increment 3
+
+- **The switch (K3).** `company_info.pick_and_pack_enabled`, off by default, set with `company update` (admin) and
+  shown in Company settings under *Shipping and fulfillment* ("Use pick lists"). `hub.features` has no command or API
+  yet, so the switch follows the nearest company-setting pattern (`estimates_enabled`). While it is off every
+  `pick-list` command and `shipment post --pick-list` refuse with E_FEATURE_DISABLED (`setting`, `enable_command`), no
+  pick surface shows (the Items menu, the order page's buttons, the noun grid), and `shipment post` is unchanged.
+  Turning it off is refused (E_WORK_DEPENDENCY) while a list is open, naming it.
+- **Migration co0104** (on co0103) adds `pick_lists` (immutable header: number `P-1`, `P-2`... from the `pick_list`
+  sequence, site, date, picker, memo), `pick_list_revisions` (append-only: `open`, then `done` or `cancelled`),
+  `pick_list_lines` (order line by billing root and line_id, item, base quantity, bin, suggested lot, `short`),
+  `pick_entries` (append-only: line, add or set, quantity, bin, lot, serial number, scanned code, entry date, and the
+  staging bin it moved units to) and `pick_list_shipments` (a shipment posted from a list for one of its orders, live
+  while the shipment is not voided); `inventory_placements.source` admits `pick` (a rebuild as co0103 does);
+  `inventory_sites.staging_bin_id`. Every new row is immutable; the two balance guards read only the placements written
+  under the new entry's or revision's own id. Permission layer `picking-v1` on `shipments-returns-v1`: writes `item`
+  standard with `customer-work` read, reads `item` member.
+- **Suggestions.** Orders compete in order date, then number (natural). The site gives the list's orders its on hand
+  at the list date, less what documents not on the list commit there (unassigned commitments count at the default
+  site; only when the preference deducts orders), less what the orders already hold on live lists. Places: the default
+  bin, then other bins by natural full name, no bin last; lots earliest-expiring unexpired first, then unexpired with
+  no expiry, unassigned, expired; the staging bin is never a source. Bins are reduced by what other live lists still
+  reserve there (unpicked planned units, and unstaged picked ones). Pick order: bin, item, order date, order number.
+  Base units only (the order line's unit is not carried).
+- **Holding.** A live list holds, per order line and per order not shipped from it, max(planned, picked) while open
+  and what was picked once done; a shipment from the list consumes the order's picks, and voiding it gives them back.
+- **Entries** replay per line into chunks (bin, lot, serial, quantity): add appends, set grows by the difference or
+  takes back newest first; a serial entry picks or (set 0) puts back that unit. An entry naming no lot takes the line's
+  suggested lot. A serial picked on another live list is refused; one the books hold in another bin warns and is picked
+  from where the books hold it; at another site or never on file it warns without staging and is refused with one.
+- **Staging.** With `inventory-site update --staging-bin`, each entry moves the chunks it added from their bin to
+  staging and the ones it took back from staging to their bin, dated the entry date, `after` when a count of the site
+  is recorded that day. `pick-list cancel` moves the staged units of orders not shipped back to their bins under the
+  cancelling revision, dated `date` (default today, never before the last entry). Without staging, `inventory-count
+  create` and the post preview list "3 Widget picked for sales order 1001, list P-4, not shipped (bin A1)".
+- **Shipping from a list.** `shipment post --pick-list` (sales_order needed only when several orders are waiting)
+  ships one shipment line per order line, bin (staging when staged) and lot picked, so a line split over bins ships
+  from each; each order line takes at most what it has to ship and the preview names the excess to put back. A
+  shipment may therefore hold one order line on several lines: corrections keep each line's own identity, and an update
+  dropping a billed line is refused. When every order on an open list has shipped from it, it becomes `done`.
+- **Browser.** Items > Pick lists (`/inventory/pick-lists`: the lists and Make a pick list), the pick screen
+  (`/inventory/pick-lists/<number>`: the Scan field pinned on top in scan.js's fourth mode, `pick`, the current bin and
+  lot, a quantity keypad, lines by bin with short lines marked, All per line, Ship what was picked per order, Close list,
+  Cancel list), the printed list (`/print`, grouped by bin with each order's quantity); the order page gains Create pick
+  list and Pick lists while picking is on.
+- **Not in this increment:** the demo wave over A1-A3 (the demo company keeps picking off, as every new company does;
+  the browser test turns it on on a copy), `sales-order show`'s on open picks, `barcode lookup`'s fulfillment, and a
+  printing kind `pick-list` in the print registry (the print page is a browser page).
+
 ## Decided (2026-10-26)
 
 - K1 carrier integration: none. Carrier and tracking are recorded and printed as text only (Kabe, gate gba01e0).

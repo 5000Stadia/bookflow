@@ -15,7 +15,11 @@ SURFACES = ('python', 'cli', 'http', 'mcp')
 COMMANDS = frozenset(('shipment post', 'shipment update', 'shipment void', 'shipment show', 'shipment query',
                       'shipment history', 'shipment invoice', 'report shipped-not-invoiced',
                       # R181 increment 2: one of the four comes back (retried), is read back, and the return voided.
-                      'shipment return', 'shipment-return show', 'shipment-return query', 'shipment-return void'))
+                      'shipment return', 'shipment-return show', 'shipment-return query', 'shipment-return void',
+                      # R181 increment 3: picking turned on, a list for an order of two, a retried pick, read back,
+                      # shipped from the list; a second list closed and a third cancelled.
+                      'pick-list create', 'pick-list enter', 'pick-list show', 'pick-list query', 'pick-list close',
+                      'pick-list cancel'))
 
 
 @pytest.mark.timeout(900)
@@ -62,7 +66,27 @@ def test_the_same_shipment_through_python_cli_http_and_mcp(root, tmp_path):
                 invoice = await call(surface, 'shipment invoice', {'shipment': first['number'], 'date': DEMO_AS_OF})
                 refused = await call(surface, 'shipment void', {'shipment': first['number']}, rejected=True)
                 after = await call(surface, 'report shipped-not-invoiced', {'as_of': DEMO_AS_OF})
-                results[surface] = dict(preview=preview, first=first, again=again, tracked=tracked, shown=shown,
+                await call(surface, 'company update', {'pick_and_pack_enabled': True})
+                picked_order = await call(surface, 'sales-order create', {'customer': customer, 'date': DEMO_AS_OF,
+                                                                          'lines': [{'item': item['id'], 'quantity': '2',
+                                                                                     'unit_price': '20.00'}]})
+                pick = await call(surface, 'pick-list create', {'orders': [picked_order['number']], 'date': DEMO_AS_OF})
+                pick_input = {'pick_list': pick['number'], 'date': DEMO_AS_OF,
+                              'entries': [{'item': item['id'], 'quantity': '2'}]}
+                picked = await call(surface, 'pick-list enter', pick_input, idempotency_key='pick-a')
+                picked_again = await call(surface, 'pick-list enter', pick_input, idempotency_key='pick-a')
+                pick_shown = await call(surface, 'pick-list show', {'pick_list': pick['number']})
+                pick_listed = await call(surface, 'pick-list query', {'status': 'open'})
+                from_list = await call(surface, 'shipment post', {'pick_list': pick['number'], 'date': DEMO_AS_OF})
+                spare = await call(surface, 'sales-order create', {'customer': customer, 'date': DEMO_AS_OF,
+                                                                   'lines': [{'item': item['id'], 'quantity': '1',
+                                                                              'unit_price': '20.00'}]})
+                second = await call(surface, 'pick-list create', {'orders': [spare['number']], 'date': DEMO_AS_OF})
+                closed = await call(surface, 'pick-list close', {'pick_list': second['number']})
+                cancelled = await call(surface, 'pick-list cancel', {'pick_list': second['number']})
+                results[surface] = dict(pick=pick, picked=picked, picked_again=picked_again, pick_shown=pick_shown,
+                                        pick_listed=pick_listed, from_list=from_list, closed=closed, cancelled=cancelled,
+                                        preview=preview, first=first, again=again, tracked=tracked, shown=shown,
                                         listed=listed, history=history, waiting=waiting, invoice=invoice,
                                         refused=refused, after=after, back=back, back_again=back_again,
                                         back_shown=back_shown, back_listed=back_listed, back_void=back_void)
@@ -87,4 +111,10 @@ def test_the_same_shipment_through_python_cli_http_and_mcp(root, tmp_path):
         assert r['back_void']['status'] == 'voided' and r['back_void']['version'] == 2, surface
         shapes.add((r['first']['number'], r['first']['cost']['minor_units'], r['waiting']['total']['minor_units'],
                     r['after']['total']['minor_units'], r['invoice']['total']['minor_units']))
-    assert len(shapes) == 1
+        assert r['picked']['lines'][0]['picked'] == '2' and r['picked_again']['lines'][0]['picked'] == '2', surface
+        assert r['pick_shown']['lines'][0]['picked'] == '2' and r['pick']['number'] in [
+            row['number'] for row in r['pick_listed']['rows']], surface
+        assert [line['quantity'] for line in r['from_list']['lines']] == ['2'], surface
+        assert r['closed']['status'] == 'done' and r['cancelled']['status'] == 'cancelled', surface
+        shapes.add(('pick', r['pick']['number'], r['from_list']['cost']['minor_units']))
+    assert len(shapes) == 2

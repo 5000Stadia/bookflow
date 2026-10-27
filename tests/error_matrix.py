@@ -2537,7 +2537,7 @@ _SHIPMENT_WRITE = {
     'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
     'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
 }
-MATRIX['shipment post'] = dict(_SHIPMENT_WRITE)
+MATRIX['shipment post'] = dict(_SHIPMENT_WRITE, E_FEATURE_DISABLED='--pick-list while picking is off')
 MATRIX['shipment update'] = dict(_SHIPMENT_WRITE)
 MATRIX['shipment void'] = dict(_SHIPMENT_WRITE, E_REASON_REQUIRED='a void without --reason')
 # Shipment returns (R181 increment 2).
@@ -2561,6 +2561,24 @@ MATRIX['shipment-return query'] = {'E_RECORD_NOT_FOUND': 'unknown shipment or cu
 MATRIX['shipment show'] = {'E_RECORD_NOT_FOUND': 'unknown shipment'}
 MATRIX['shipment history'] = {'E_RECORD_NOT_FOUND': 'unknown shipment'}
 MATRIX['shipment query'] = {'E_RECORD_NOT_FOUND': 'unknown order or customer', 'E_VALIDATION': 'invalid input'}
+# Pick lists (R181 increment 3): an optional layer, off until the company turns it on.
+_PICK_WRITE = {
+    'E_VALIDATION': 'nothing to pick, an order not open, an item not on the list, a serial number held elsewhere or picked on another list, a list not open',
+    'E_RECORD_NOT_FOUND': 'unknown pick list, order, item, bin or site',
+    'E_INACTIVE_REFERENCE': 'an inactive site or item',
+    'E_FEATURE_DISABLED': 'picking is off for the company (company update --pick-and-pack-enabled true)',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+MATRIX['pick-list create'] = dict(_PICK_WRITE)
+MATRIX['pick-list enter'] = dict(_PICK_WRITE)
+MATRIX['pick-list close'] = dict(_PICK_WRITE, E_VERSION_CONFLICT='a stale expected_version')
+MATRIX['pick-list cancel'] = dict(_PICK_WRITE, E_VERSION_CONFLICT='a stale expected_version',
+                                  E_REASON_REQUIRED='a cancel without --reason')
+MATRIX['pick-list show'] = {'E_RECORD_NOT_FOUND': 'unknown pick list', 'E_FEATURE_DISABLED': 'picking is off'}
+MATRIX['pick-list query'] = {'E_RECORD_NOT_FOUND': 'unknown site or order', 'E_VALIDATION': 'invalid input',
+                             'E_FEATURE_DISABLED': 'picking is off'}
 MATRIX['report shipped-not-invoiced'] = {'E_RECORD_NOT_FOUND': 'unknown customer', 'E_VALIDATION': 'invalid input'}
 MATRIX['shipment invoice'] = {
     'E_VALIDATION': 'an invoice dated before the ship date, nothing left to invoice',

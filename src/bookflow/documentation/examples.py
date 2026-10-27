@@ -1753,6 +1753,21 @@ EXAMPLES.update({
                                            {'as_of': '2026-12-12'}),
 })
 
+# Pick lists (R181 increment 3).
+EXAMPLES.update({
+    'pick-list create': Example('bookflow pick-list create --site Warehouse --ready' + _C
+                                + ' --reason "Morning wave" --dry-run --json', {'site': 'Warehouse', 'ready': True}),
+    'pick-list enter': Example('bookflow pick-list enter P-1 --entries \'[{"code": "4006381334020", "bin": "A2"}]\''
+                               + _C + ' --reason "Scanned" --json',
+                               {'pick_list': 'P-1', 'entries': [{'code': '4006381334020', 'bin': 'A2'}]}),
+    'pick-list close': Example('bookflow pick-list close P-1' + _C + ' --reason "Done picking" --json',
+                               {'pick_list': 'P-1'}),
+    'pick-list cancel': Example('bookflow pick-list cancel P-1' + _C + ' --reason "Order changed" --json',
+                                {'pick_list': 'P-1'}),
+    'pick-list show': Example('bookflow pick-list show P-1' + _C + ' --json', {'pick_list': 'P-1'}),
+    'pick-list query': Example('bookflow pick-list query --status open' + _C + ' --json', {'status': 'open'}),
+})
+
 # Shipment returns (R181 increment 2).
 EXAMPLES.update({
     'shipment return': Example('bookflow shipment return 1001 --lines \'[{"shipment_line": "1", "quantity": "1"}]\''

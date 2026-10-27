@@ -1,0 +1,26 @@
+{% extends "base.html" %}{% block title %}Pick lists{% endblock %}{% block body %}<link rel="stylesheet" href="{{ static_urls['picks.css'] }}"><section id="pick-lists">
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/items">Items</a> / Pick lists</nav>
+<h1>Pick lists</h1>
+<p class="actions"><a href="/c/{{ company_id }}/inventory/pick-lists?status=open">Open</a> <a href="/c/{{ company_id }}/inventory/pick-lists">All</a> <a href="/c/{{ company_id }}/shipments">Shipments</a></p>
+{% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
+{% if can_write %}
+<form method="post" action="/c/{{ company_id }}/inventory/pick-lists" hx-post="/c/{{ company_id }}/inventory/pick-lists" hx-target="body" hx-swap="outerHTML">
+<section class="workspace-card" aria-label="Make a pick list" data-pick-start>
+<h2>Make a pick list</h2>
+<p>Lists what each order still has to ship and the site can give it, bin by bin in pick order. Nothing moves until the shipment.</p>
+<label>Site <select name="site">{% for s in sites %}<option value="{{ s.name }}" {% if values.get('site', '') == s.name or (not values.get('site') and s.is_default) %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></label>
+<label>Sales orders (comma separated) <input name="orders" value="{{ values.get('orders', '') }}" placeholder="1001, 1002" data-pick-orders></label>
+<div><label class="check"><input type="checkbox" name="ready" {% if values.get('ready') %}checked{% endif %}> Every order that can ship now</label></div>
+<div><label class="check"><input type="checkbox" name="complete_only" {% if values.get('complete_only') %}checked{% endif %}> Only orders that can ship whole</label></div>
+<label>Picker <input name="picker" value="{{ values.get('picker', '') }}" autocomplete="off"></label>
+<label>Date <input type="date" name="date" value="{{ values.get('date', today) }}"></label>
+<label>Reason (shown in the audit trail) <input name="ctx:reason" value="{{ values.get('ctx:reason', '') }}" placeholder="Morning wave"></label>
+<div class="actions"><button type="submit" data-pick-create>Make pick list</button></div>
+</section>
+</form>
+{% endif %}
+{% if listing.rows %}<div class="table-wrap"><table class="list-table pick-lists"><thead><tr><th>Date</th><th>Num</th><th>Site</th><th>Orders</th><th>Picker</th><th class="num">Lines</th><th class="num">Picked</th><th>Status</th></tr></thead><tbody>
+{% for row in listing.rows %}<tr data-pick-list="{{ row.number }}"><td data-label="Date">{{ row.date }}</td><td data-label="Num"><a href="/c/{{ company_id }}/inventory/pick-lists/{{ row.number|urlencode }}">{{ row.number }}</a></td><td data-label="Site">{{ row.site_name }}</td><td data-label="Orders">{{ row.orders|join(', ') }}</td><td data-label="Picker">{{ row.picker or '' }}</td><td class="num" data-label="Lines">{{ row.lines }}</td><td class="num" data-label="Picked">{{ row.picked_lines }}</td><td data-label="Status">{{ row.status }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}<p data-pick-none>No pick lists{% if filters.get('status') %} {{ filters.status }}{% endif %}.</p>{% endif %}
+</section>{% endblock %}

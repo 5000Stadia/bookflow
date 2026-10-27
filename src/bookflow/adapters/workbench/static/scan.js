@@ -103,7 +103,31 @@
     });
   }
 
-  const MODES = {lines: intoLines, rows: intoRows, count: intoCount};
+  // ---- "pick": the pick screen (R181 increment 3). The code itself is entered: the list finds the next unfilled
+  // line for the item in the current bin, picks a scanned serial number's unit, and says when the item is not on it.
+  function intoPick(field, answer, want) {
+    const form = field.closest('form');
+    const code = form.querySelector('[name="code"]');
+    const q = form.querySelector('[name="quantity"]');
+    const mode = form.querySelector('[name="mode"][value="set"]');
+    if (!code || !q) return false;
+    code.value = want.code;
+    q.value = want.quantity;
+    if (mode) mode.checked = want.set;
+    const swapped = new Promise(resolve => {
+      const done = () => { document.removeEventListener('htmx:afterSettle', done); clearTimeout(timer); resolve(); };
+      const timer = setTimeout(done, 15000);
+      document.addEventListener('htmx:afterSettle', done);
+    });
+    form.requestSubmit(form.querySelector('[type="submit"]') || undefined);
+    return swapped.then(() => {
+      document.querySelector('[data-scan][data-scan-mode="pick"] [data-scan-input]')?.focus();
+      // The list refused it (an item not on it, a number held elsewhere): the page says why; nothing was added.
+      return document.querySelector('[data-pick] [role=alert]') ? null : want.quantity;
+    });
+  }
+
+  const MODES = {lines: intoLines, rows: intoRows, count: intoCount, pick: intoPick};
 
   // The current bin: the form's Bin field (the count screen), else every empty bin field the next lines use.
   function setBin(field, answer) {
@@ -167,11 +191,22 @@
       say(field, 'Current bin: ' + escape(answer.bin) + ' at ' + escape(answer.site) + '.', 'ok');
       return;
     }
+    if (field.dataset.scanMode === 'pick' && answer.lot && !answer.serial_numbers) {
+      // A lot label on the pick screen sets the lot for the next scans.
+      const lot = (field.closest('form') || document).querySelector('[data-scan-lot]');
+      if (lot) { lot.value = answer.lot; fire(lot); }
+      say(field, 'Lot ' + escape(answer.lot) + ' of ' + escape(answer.item_name) + ' for the next scans.', 'ok');
+      return;
+    }
     let placed = MODES[field.dataset.scanMode || 'lines'](field, answer, want);
     if (placed && typeof placed.then === 'function') {
       placed = await placed;
       if (!field.isConnected) {
-        field = document.querySelector('[data-scan][data-scan-mode="count"]') || field;
+        field = document.querySelector(`[data-scan][data-scan-mode="${field.dataset.scanMode || 'count'}"]`) || field;
+        if (placed === null) {
+          say(field, 'Nothing was added: ' + escape(document.querySelector('[role=alert]')?.innerText.split('\n')[0] || 'refused.'), 'error');
+          return;
+        }
         if (answer.message || answer.item_name) say(field, escape(answer.message || answer.item_name) + ' Quantity ' + escape(placed) + '.', 'ok');
         return;
       }

@@ -81,6 +81,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `is_default` | boolean | yes | no | — | — |
 | `tracks_bins` | boolean | yes | no | — | — |
 | `active` | boolean | yes | no | — | — |
+| `staging_bin` | string \| null | no | yes | null | Bin picked units move to until they ship; null when none. |
 | `item_count` | integer | no | no | 0 | Items with a nonzero quantity at this site today. |
 | `stock` | array[object] | no | no | [] | On show: each item held at the site. |
 | `stock[].item_id` | string | yes | no | — | — |
@@ -101,6 +102,7 @@ Example JSON output:
   "is_default": false,
   "item_count": 0,
   "name": "value",
+  "staging_bin": null,
   "stock": [],
   "tracks_bins": false,
   "transfers": [],
@@ -224,6 +226,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `is_default` | boolean | yes | no | — | — |
 | `tracks_bins` | boolean | yes | no | — | — |
 | `active` | boolean | yes | no | — | — |
+| `staging_bin` | string \| null | no | yes | null | Bin picked units move to until they ship; null when none. |
 | `item_count` | integer | no | no | 0 | Items with a nonzero quantity at this site today. |
 | `stock` | array[object] | no | no | [] | On show: each item held at the site. |
 | `stock[].item_id` | string | yes | no | — | — |
@@ -244,6 +247,7 @@ Example JSON output:
   "is_default": false,
   "item_count": 0,
   "name": "value",
+  "staging_bin": null,
   "stock": [],
   "tracks_bins": false,
   "transfers": [],
@@ -362,6 +366,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `is_default` | boolean | yes | no | — | — |
 | `tracks_bins` | boolean | yes | no | — | — |
 | `active` | boolean | yes | no | — | — |
+| `staging_bin` | string \| null | no | yes | null | Bin picked units move to until they ship; null when none. |
 | `item_count` | integer | no | no | 0 | Items with a nonzero quantity at this site today. |
 | `stock` | array[object] | no | no | [] | On show: each item held at the site. |
 | `stock[].item_id` | string | yes | no | — | — |
@@ -382,6 +387,7 @@ Example JSON output:
   "is_default": false,
   "item_count": 0,
   "name": "value",
+  "staging_bin": null,
   "stock": [],
   "tracks_bins": false,
   "transfers": [],
@@ -491,6 +497,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `sites[].is_default` | boolean | yes | no | — | — |
 | `sites[].tracks_bins` | boolean | yes | no | — | — |
 | `sites[].active` | boolean | yes | no | — | — |
+| `sites[].staging_bin` | string \| null | no | yes | null | Bin picked units move to until they ship; null when none. |
 | `sites[].item_count` | integer | no | no | 0 | Items with a nonzero quantity at this site today. |
 | `sites[].stock` | array[object] | no | no | [] | On show: each item held at the site. |
 | `sites[].stock[].item_id` | string | yes | no | — | — |
@@ -601,6 +608,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `is_default` | boolean | yes | no | — | — |
 | `tracks_bins` | boolean | yes | no | — | — |
 | `active` | boolean | yes | no | — | — |
+| `staging_bin` | string \| null | no | yes | null | Bin picked units move to until they ship; null when none. |
 | `item_count` | integer | no | no | 0 | Items with a nonzero quantity at this site today. |
 | `stock` | array[object] | no | no | [] | On show: each item held at the site. |
 | `stock[].item_id` | string | yes | no | — | — |
@@ -619,6 +627,7 @@ Example JSON output:
   "is_default": false,
   "item_count": 0,
   "name": "value",
+  "staging_bin": null,
   "stock": [],
   "tracks_bins": false,
   "transfers": [],
@@ -694,6 +703,7 @@ The same example as complete `bookflow_run` arguments:
 | `address` | `--address` | string \| null | no | yes | null | — |
 | `is_default` | `--is-default` | literal[true] \| null | no | yes | null | true makes this the default site (the previous default stops being it). |
 | `tracks_bins` | `--tracks-bins` | boolean \| null | no | yes | null | true locates stock here to bins; false is refused while any bin holds stock. |
+| `staging_bin` | `--staging-bin` | string \| null | no | yes | null | Pick lists: the bin picked units move to until they ship; null or "(no bin)" stops staging. |
 
 ### Command and context options
 
@@ -739,6 +749,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `is_default` | boolean | yes | no | — | — |
 | `tracks_bins` | boolean | yes | no | — | — |
 | `active` | boolean | yes | no | — | — |
+| `staging_bin` | string \| null | no | yes | null | Bin picked units move to until they ship; null when none. |
 | `item_count` | integer | no | no | 0 | Items with a nonzero quantity at this site today. |
 | `stock` | array[object] | no | no | [] | On show: each item held at the site. |
 | `stock[].item_id` | string | yes | no | — | — |
@@ -759,6 +770,7 @@ Example JSON output:
   "is_default": false,
   "item_count": 0,
   "name": "value",
+  "staging_bin": null,
   "stock": [],
   "tracks_bins": false,
   "transfers": [],

@@ -1286,6 +1286,20 @@ While a return stands the shipment's stock is not restated or voided; to take un
 {"command": "shipment return", "reason": "Acme sent one back before we billed it", "input": {"shipment": "1004", "lines": [{"shipment_line": "1", "quantity": "1"}]}}
 ```
 
+**Picking first (optional).** Pick lists are a layer on shipping that a company turns on (`company update
+--pick-and-pack-enabled true`, an admin's setting); while it is off every `pick-list` command answers
+E_FEATURE_DISABLED and you ship straight from the order. On, `pick-list create` takes `orders` (one list can cover
+several) or `ready: true`, and lists each order line's units by bin in pick order, the earliest-expiring lot
+suggested; what the site cannot give is a short line. `pick-list enter` records what was picked (a `line`, an `item`
+or a scanned `code`, with `bin`, `lot`, `serial_number` and `quantity`); `shipment post --pick-list <list>` ships what
+was picked for one order (name `sales_order` when the list covers several) from the bins and lots picked, and what was
+not picked stays to ship. `pick-list close` ends picking; `pick-list cancel` releases the list.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "pick-list create", "reason": "Pick everything that can go out today", "input": {"site": "Warehouse", "ready": true}}
+```
+
 ## Stock sent back to a vendor
 
 Enter it as one `vendor-credit post` with `items`: one row per thing sent back, each with

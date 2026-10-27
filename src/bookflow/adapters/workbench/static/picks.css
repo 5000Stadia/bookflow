@@ -1,0 +1,25 @@
+/* The pick screen (R181 increment 3): made for a phone, like the count screen. */
+#pick-list .pick-entry { position: sticky; top: 0; z-index: 5; background: var(--surface, #fff);
+  border-bottom: 1px solid var(--border, #d0d5dd); padding: .5rem 0; display: flex; flex-wrap: wrap; gap: .5rem; align-items: end; }
+#pick-list .pick-entry label { display: flex; flex-direction: column; font-size: .85rem; min-width: 0; }
+#pick-list .pick-entry .scan-field { flex: 1 1 100%; min-width: 0; }
+#pick-list .pick-entry .scan-field input { width: 100%; font-size: 1.1rem; padding: .5rem; box-sizing: border-box; }
+#pick-list .pick-entry .bin input, #pick-list .pick-entry .lot input { width: 7rem; font-size: 1rem; padding: .45rem; }
+#pick-list .pick-entry .qty input { width: 5rem; font-size: 1.1rem; padding: .5rem; text-align: right; }
+#pick-list .pick-entry button { font-size: 1.05rem; padding: .55rem 1rem; }
+#pick-list .pick-lines td.num, #pick-list .pick-lines th.num { text-align: right; }
+#pick-list .pick-lines tr.done td { color: var(--muted, #667085); }
+#pick-list .pick-lines tr.short td:first-child { color: #b42318; }
+#pick-list .pick-lines .flag { font-weight: 600; color: #b42318; }
+#pick-list .pick-lines tr.over td.num { color: #b54708; font-weight: 600; }
+#pick-list form.inline { display: inline; }
+#pick-list .pick-foot { margin-top: 1rem; }
+#pick-list, #pick-lists { overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  #pick-list .pick-entry { gap: .35rem; }
+  #pick-list .pick-entry .mode { flex-direction: row; gap: .25rem; align-items: center; }
+  #pick-list .pick-entry .bin input, #pick-list .pick-entry .lot input { width: 5.5rem; }
+}
+#pick-list form.inline { display: inline-flex; flex-wrap: wrap; gap: .5rem; align-items: center; vertical-align: middle; }
+#pick-list form.inline input[type=date] { width: auto; max-width: 11rem; }
+#pick-list .pick-foot input { max-width: 24rem; }
