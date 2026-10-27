@@ -467,6 +467,7 @@ SECTIONS: tuple[Section, ...] = (
             _list("Refunds", "customer-refund query", "/customer-refund"),
             _list("Statement charges", "statement-charge query", "/statement-charge"),
             _list("Overdue notices", "notice list", "/notice"),
+            _list("Outbox", "delivery query", "/delivery"),
             _list("Proposals", "proposal query", "/proposal"),
             _list("Work orders", "work-order query", "/work-order"),
             _list("Time entries", "time-activity query", "/time-activity"),

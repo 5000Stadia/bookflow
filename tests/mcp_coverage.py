@@ -296,6 +296,11 @@ SHIPMENT_COMMANDS = frozenset(('shipment post', 'shipment update', 'shipment voi
     # R181 increment 3: picking on, a list made, a pick retried, read back, shipped from; another closed, cancelled.
     'pick-list create', 'pick-list enter', 'pick-list show', 'pick-list query', 'pick-list close', 'pick-list cancel'))
 
+DELIVERY_COMMANDS = frozenset(('delivery draft', 'delivery update', 'delivery send', 'delivery cancel', 'delivery mark-sent',
+    'delivery export', 'delivery show', 'delivery query', 'delivery history', 'delivery-template create',
+    'delivery-template update', 'delivery-template deactivate', 'delivery-template show', 'delivery-template query',
+    'delivery-template fields', 'delivery-template preview'))
+
 LANDED_COST_COMMANDS = frozenset(('landed-cost setup', 'landed-cost charges', 'landed-cost post', 'landed-cost void',
     'landed-cost show', 'landed-cost query'))
 
@@ -303,7 +308,7 @@ BIN_COMMANDS = frozenset(('bin activate', 'bin create', 'bin deactivate', 'bin l
     'cycle-class activate', 'cycle-class create', 'cycle-class deactivate', 'cycle-class list', 'cycle-class show',
     'cycle-class update', 'cycle-count classify', 'cycle-count due', 'report items-by-bin'))
 
-FROZEN_COMMANDS = SETUP_TRIAL_COMMANDS | SHIPMENT_COMMANDS | AGENT_SETUP_COMMANDS | VERIFY_COMMANDS | FIFO_COMMANDS | LANDED_COST_COMMANDS | BIN_COMMANDS | SERIAL_LOT_COMMANDS | PERF_COMMANDS | SCHEDULING_COMMANDS | INVENTORY_COUNT_COMMANDS | BARCODE_COMMANDS | CHECK_PRINTING_COMMANDS | ACCOUNTANT_REVIEW_COMMANDS | TIMEKEEPING_COMMANDS | INVENTORY_SITE_COMMANDS | PARTIAL_PO_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
+FROZEN_COMMANDS = DELIVERY_COMMANDS | SETUP_TRIAL_COMMANDS | SHIPMENT_COMMANDS | AGENT_SETUP_COMMANDS | VERIFY_COMMANDS | FIFO_COMMANDS | LANDED_COST_COMMANDS | BIN_COMMANDS | SERIAL_LOT_COMMANDS | PERF_COMMANDS | SCHEDULING_COMMANDS | INVENTORY_COUNT_COMMANDS | BARCODE_COMMANDS | CHECK_PRINTING_COMMANDS | ACCOUNTANT_REVIEW_COMMANDS | TIMEKEEPING_COMMANDS | INVENTORY_SITE_COMMANDS | PARTIAL_PO_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
 account create
 account deactivate
 account list
@@ -862,6 +867,7 @@ def execution_map():
     from tests.test_inventory_count_surfaces import COMMANDS as INVENTORY_COUNT_SURFACE_COMMANDS
     from tests.test_scheduling_surfaces import COMMANDS as SCHEDULING_SURFACE_COMMANDS
     from tests.test_perf_surfaces import COMMANDS as PERF_SURFACE_COMMANDS
+    from tests.test_delivery_surfaces import COMMANDS as DELIVERY_SURFACE_COMMANDS
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
     assert {c.name for c in commands} == FROZEN_COMMANDS, 'New or removed command needs a deliberate coverage disposition'
@@ -964,6 +970,7 @@ def execution_map():
                    'tests/test_inventory_count_surfaces.py::test_the_same_count_through_python_cli_http_and_mcp' if cmd.name in INVENTORY_COUNT_SURFACE_COMMANDS else  # all four
                    'tests/test_scheduling_surfaces.py::test_the_same_to_dos_notices_and_reminders_through_python_cli_http_and_mcp' if cmd.name in SCHEDULING_SURFACE_COMMANDS else  # all four
                    'tests/test_perf_surfaces.py::test_the_same_timings_report_through_python_cli_http_and_mcp' if cmd.name in PERF_SURFACE_COMMANDS else  # all four
+                   'tests/test_delivery_surfaces.py::test_the_same_delivery_through_python_cli_http_and_mcp' if cmd.name in DELIVERY_SURFACE_COMMANDS else  # all four
                    'tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute' if cmd.name in LOCAL_COMMANDS else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else
                 'local_lifecycle' if cmd.local_only else 'binary_' + cmd.transfer.direction if cmd.transfer else

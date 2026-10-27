@@ -34,6 +34,8 @@ ACT_SUBJECTS = {
     'accountant-copy cancel': "Cancelling an accountant's copy", 'accountant-copy import': "Importing an accountant's changes",
     # fifo-v1: how stock is costed is the company's policy, changed on the accountant's advice.
     'costing-method set': 'Changing the costing method', 'costing-method withdraw': 'Withdrawing a costing method switch',
+    # delivery-v1: what happened in the owner's own mail program is known to the owner.
+    'delivery mark-sent': 'Recording that an email was sent by hand',
 }
 
 

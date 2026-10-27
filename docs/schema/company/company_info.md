@@ -97,3 +97,6 @@ Database: `company`.
 | `overdue_notice_template` | VARCHAR(12) | no | — | — | — | — | Overdue notices: what each notice is, a statement or a short letter. |
 | `invoice_when_shipping` | VARCHAR(8) | no | — | — | — | — | After a shipment: ask (the default), always or never offer an invoice for it. |
 | `pick_and_pack_enabled` | BOOLEAN | no | — | — | — | — | Pick and pack: pick lists (and, later, packing) as optional layers on shipping; off by default. |
+| `delivery_reply_to` | VARCHAR(254) | yes | — | — | — | — | Email: Reply-To on every message; null for none. |
+| `delivery_copy_to` | VARCHAR(254) | yes | — | — | — | — | Email: Bcc on every message (a copy to the company); null for none. |
+| `delivery_auto_flag_from` | VARCHAR(10) | yes | — | — | — | — | Email: documents dated on or after this day are flagged to email when the customer prefers email (document delivery's queue); null is off. |

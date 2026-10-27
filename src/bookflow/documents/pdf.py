@@ -249,6 +249,9 @@ def to_pdf(document: PrintedDocument) -> bytes:
         title=document.name or document.title,
         author=document.issuer.name or "", subject=document.title,
         creator="Bookflow", lang="en",
+        # The same document gives the same bytes: no creation clock and no random file id, so a
+        # copy frozen for a customer's email can be checked against a fresh render by its hash.
+        invariant=1,
     )
     stamped = type("_Stamped", (_Numbered,), {"footer": document.footer})
     template.build(story(document), canvasmaker=stamped)
