@@ -25,7 +25,7 @@ _POST = (
     'optionally `bin`, `lot` and `serial_numbers`; shipping past what is on hand is allowed with a warning, costed '
     'provisionally until the receipt arrives. Carrier and tracking numbers are recorded as text. The dry run shows '
     'each line\'s cost and what stays to ship. The result gives the next command, `shipment invoice <number>`. '
-    'Example: {"sales_order": "1001"}.'
+    '`pick_list` ships what was picked on it instead. Example: {"sales_order": "1001"}.'
 )
 _UPDATE = (
     'Correct a shipment: its date, count position, lines (replacing them), ship method, carrier, tracking numbers or '
@@ -70,7 +70,7 @@ def _planner(operation):
 plan_shipment_post = command(
     'shipment post', scope='company', description=_POST, input_model=ShipmentPostInput, output_model=ShipmentOutput,
     writes={'company'}, required_role='standard', capability='ledger.post', accepts_idempotency_key=True,
-    error_codes=_WRITE_ERRORS[:-1])(_planner('post'))
+    error_codes=_WRITE_ERRORS[:-1] + ['E_FEATURE_DISABLED'])(_planner('post'))
 plan_shipment_update = command(
     'shipment update', scope='company', description=_UPDATE, input_model=ShipmentUpdateInput,
     output_model=ShipmentOutput, writes={'company'}, required_role='standard', capability='ledger.post',

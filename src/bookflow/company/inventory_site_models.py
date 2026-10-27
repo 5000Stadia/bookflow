@@ -35,11 +35,12 @@ class SiteUpdateInput(_Strict):
     address: str | None = Field(None, max_length=2000)
     is_default: Literal[True] | None = Field(None, description='true makes this the default site (the previous default stops being it).')
     tracks_bins: bool | None = Field(None, description='true locates stock here to bins; false is refused while any bin holds stock.')
+    staging_bin: str | None = Field(None, max_length=1004, description='Pick lists: the bin picked units move to until they ship; null or "(no bin)" stops staging.')
 
     @model_serializer(mode='wrap')
     def only_supplied(self, handler):
         values = handler(self)
-        for key in ('description', 'address'):
+        for key in ('description', 'address', 'staging_bin'):
             if key not in self.model_fields_set:
                 values.pop(key, None)
         return values
@@ -74,6 +75,7 @@ class SiteOutput(_Strict):
     is_default: bool
     tracks_bins: bool
     active: bool
+    staging_bin: str | None = Field(None, description='Bin picked units move to until they ship; null when none.')
     item_count: int = Field(0, description='Items with a nonzero quantity at this site today.')
     stock: list[SiteStockRow] = Field(default_factory=list, description='On show: each item held at the site.')
     transfers: list[dict] = Field(default_factory=list, description='On show: the latest transfers in or out of the site.')

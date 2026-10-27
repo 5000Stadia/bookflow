@@ -91,6 +91,7 @@ ACCEPTED = {
     'shipments-v1': (743, '9fa6ebf4efaf4a043bf04870d0b7f5dbf30e97f655bf889b631247c43be9c284'),
     'setup-trial-v1': (745, '4e16e82de135a51dd6da3e05b717f128851ddb97e9001b35b3946db7379830de'),
     'shipments-returns-v1': (749, 'f2c9af3e35a8f1708cf051173e262624f264d266576a028990579e07d4323883'),
+    'picking-v1': (755, '34c39c80a09a3d5ef8b10808cb187830a236f340946a45cbc9e2b9ca817e71af'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -209,6 +210,8 @@ CHAIN_ADDITIONS = {
                      'shipment query', 'shipment show', 'shipment update', 'shipment void'},
     'setup-trial-v1': {'owner-link', 'reconcile discard'},
     'shipments-returns-v1': {'shipment return', 'shipment-return query', 'shipment-return show', 'shipment-return void'},
+    'picking-v1': {'pick-list cancel', 'pick-list close', 'pick-list create', 'pick-list enter', 'pick-list query',
+                   'pick-list show'},
 }
 
 _ANCESTOR_EDIT = """

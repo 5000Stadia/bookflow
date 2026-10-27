@@ -634,16 +634,56 @@ def _site(s, inp_site, candidates, current=None):
     return placements.default_site_id(s)
 
 
-def _plan(s, ctx, *, header, rev, date, site_id, position, entries_in, sni_id, current=None, prior_lines=()):
+def _from_picks(s, candidates, picked, warnings):
+    """``chosen`` from a pick list's parts (R181 increment 3): one shipment line per order line, bin and lot the
+    picks came from, taking at most what each order line has to ship; the excess is named to put back."""
+    from bookflow.company import bins, serial_lots
+    from bookflow.company.serial_lots import Numbers
+    by_root = {row['root']: row for row in candidates}
+    left, chosen = {}, []
+    names = bins.bin_names(s, [part['bin_id'] for part in picked if part['bin_id']])
+    numbers = serial_lots.number_names(s, lot_ids=[part['lot_id'] for part in picked if part['lot_id']],
+                                       serial_ids=[i for part in picked for i in part['serials']])
+    for part in picked:
+        row = by_root.get(part['root'])
+        if row is None:
+            continue
+        if part['root'] not in left:
+            left[part['root']] = _to_base(row['to_ship'], row['facts'].unit_factor_nanounits) if row['to_ship'] > 0 else 0
+        base = min(part['base'], left[part['root']])
+        excess = part['base'] - base
+        place = names.get(part['bin_id']) if part['bin_id'] else None
+        if excess:
+            warnings.append(f'{format_quantity_micro_units(excess)} {row["facts"].profile.item.label} picked beyond '
+                            f'what the order has to ship; put them back from {("bin " + place) if place else "the shelf"}.')
+        if base <= 0:
+            continue
+        left[part['root']] -= base
+        serials = [numbers[i]['number'] for i in part['serials']][:base // serial_lots.UNIT] if part['serials'] else []
+        chosen.append((row, base, Numbers(lot=numbers[part['lot_id']]['number'] if part['lot_id'] else None,
+                                          serial_numbers=tuple(serials) or None, bin=place or bins.NO_BIN)))
+    if not chosen:
+        raise BookflowError('E_VALIDATION', message=(
+            'Nothing picked for this order is left to ship: it has shipped or been billed since it was picked.'),
+            details=dict(reason='nothing_to_ship'))
+    return chosen
+
+
+def _plan(s, ctx, *, header, rev, date, site_id, position, entries_in, sni_id, current=None, prior_lines=(),
+          picked=None):
     """Every line this shipment ships, and the stock change it implies; nothing written."""
     from bookflow.company import commitments, work
     from bookflow.company.serial_lots import Numbers
     from bookflow.company.sales_calculations import base_quantity
     profile = work.facts(rev).profile
     candidates = _order_lines(s, header, rev, exclude_shipment=current['id'] if current else None)
-    prior_by_root = {(row['root_document_id'], row['root_line_id']): row for row in prior_lines}
-    chosen = []
-    if entries_in is None and current is not None:
+    prior_by_root = {}
+    for row in prior_lines:
+        prior_by_root.setdefault((row['root_document_id'], row['root_line_id']), row)
+    chosen, explicit_priors, extra_warnings = [], [], []
+    if picked is not None:
+        chosen = _from_picks(s, candidates, picked, extra_warnings)
+    elif entries_in is None and current is not None:
         # Restating date, place or count position only: the lines stay as they are.
         by_root = {row['root']: row for row in candidates}
         for row in prior_lines:
@@ -651,6 +691,7 @@ def _plan(s, ctx, *, header, rev, date, site_id, position, entries_in, sni_id, c
             if found is None:
                 raise _invalid('lines', 'an order line this shipment holds is no longer on the order')
             chosen.append((found, int(row['quantity_microunits']), None))
+            explicit_priors.append(row)
     elif entries_in is None:
         stocked = [row for row in candidates if row['to_ship'] > 0
                    and (row['line'].get('site_id') in (None, site_id))]
@@ -704,8 +745,12 @@ def _plan(s, ctx, *, header, rev, date, site_id, position, entries_in, sni_id, c
                 base = _to_base(row['to_ship'], factor)
             chosen.append((row, base, _numbers(entry)))
     lines = []
+    used = set()
     for index, (row, base, numbers) in enumerate(chosen):
-        prior = prior_by_root.get(row['root'])
+        # A shipment from a pick list may hold one order line on several lines (bins, lots): each restates its own.
+        prior = explicit_priors[index] if explicit_priors else (
+            prior_by_root.get(row['root']) if row['root'] not in used else None)
+        used.add(row['root'])
         if numbers is None and prior is not None and prior.get('movement_id'):
             # A line that restates nothing about its place or numbers keeps the ones its units left with.
             from bookflow.company import serial_lots
@@ -748,7 +793,7 @@ def _plan(s, ctx, *, header, rev, date, site_id, position, entries_in, sni_id, c
             'Every unit on this shipment is worth nothing in the books, so there is no cost to hold in Shipped Not '
             'Invoiced. Enter the bill that bought the stock, or record what it is worth with `inventory adjust`, '
             'then ship.'), reason='shipment_without_value')
-    shipment.warnings = list(change.warnings)
+    shipment.warnings = list(change.warnings) + extra_warnings
     return shipment
 
 
@@ -813,11 +858,19 @@ def _guard_billed(s, current, prior_lines, shipment=None, date=None):
             f'Invoice {", ".join(invoices)} bills this shipment; void or correct the invoice first.'),
             details=dict(problem='an invoice bills this shipment; void or correct it first', invoices=invoices,
                          reason='shipment_invoiced'))
-    kept = {(line.root): line.base for line in shipment.lines}
+    kept = {}
+    for line in shipment.lines:
+        kept[line.root] = kept.get(line.root, 0) + line.base
+    identities = {line.identity for line in shipment.lines}
     for row in prior_lines:
         rows = billed.get(row['line_identity'])
         if not rows:
             continue
+        if row['line_identity'] not in identities:
+            raise BookflowError('E_WORK_DEPENDENCY', message=(
+                f'Invoice {", ".join(sorted({r["invoice_number"] or r["transaction_id"] for r in rows}))} billed a line '
+                'this correction would drop; correct it line for line, or void or correct the invoice first.'),
+                details=dict(problem='a billed line would be dropped', invoices=invoices, reason='shipment_invoiced'))
         total = sum(int(r['quantity_microunits']) for r in rows)
         if kept.get((row['root_document_id'], row['root_line_id']), 0) < total:
             raise BookflowError('E_WORK_DEPENDENCY', message=(
@@ -894,8 +947,17 @@ def _run(s, ctx, inp, operation, *, persist):
         account, touched = ensure_account(s, ctx)
     sni_id = account['id'] if account else _PLACEHOLDER
     current, prior_lines = None, []
+    picked = pick_current = None
+    if operation == 'post' and getattr(inp, 'pick_list', None) is not None:
+        # Shipping what was picked (R181 increment 3): the order and site come from the list.
+        from bookflow.company import pick_lists
+        if inp.lines is not None:
+            raise _invalid('lines', 'ship from the pick list or name the lines, not both')
+        pick_current, order_id, picked = pick_lists.shipping_plan(s, inp.pick_list, inp.sales_order, inp.site)
     if operation == 'post':
-        header, rev = _order(s, inp.sales_order)
+        if picked is None and inp.sales_order is None:
+            raise _invalid('sales_order', 'name the sales order to ship (or the pick_list it was picked on)')
+        header, rev = _order(s, order_id if picked is not None else inp.sales_order)
         if header['status'] != 'open' or not header['active']:
             raise BookflowError('E_WORK_DEPENDENCY', details=dict(source_id=header['id'],
                 problem='a closed or inactive sales order ships nothing; reopen it first'))
@@ -934,11 +996,13 @@ def _run(s, ctx, inp, operation, *, persist):
                                    expected_version=_journal_version(s, current['transaction_id']))
         status = 'voided'
     else:
-        site_id = _site(s, getattr(inp, 'site', None), _order_lines(s, header, rev) if current is None else [], current)
+        site_id = pick_current['site_id'] if pick_current else \
+            _site(s, getattr(inp, 'site', None), _order_lines(s, header, rev) if current is None else [], current)
         position = inp.count_position or (current['revision']['count_position'] if current else 'before')
         journals.open_dates(s, [date] + ([current['ship_date']] if current else []))
         shipment = _plan(s, ctx, header=header, rev=rev, date=date, site_id=site_id, position=position,
-                         entries_in=inp.lines, sni_id=sni_id, current=current, prior_lines=prior_lines)
+                         entries_in=inp.lines, sni_id=sni_id, current=current, prior_lines=prior_lines,
+                         picked=picked)
         if current is not None:
             _guard_billed(s, current, prior_lines, shipment, date if date != current['ship_date'] else None)
         inventory_effects.open_dates(s, shipment.change)
@@ -991,6 +1055,9 @@ def _run(s, ctx, inp, operation, *, persist):
         extra.append(('shipments', 'shipment', 'id', [dict(
             id=shipment_id, number=number, sales_order_id=header['id'], customer_id=shipment.customer_id,
             transaction_id=tx['id'], **provenance)]))
+        if pick_current is not None:
+            from bookflow.company import pick_lists
+            extra.extend(pick_lists.link_rows(s, pick_current, shipment_id, header['id'], provenance))
         revision_number = 1
     else:
         shipment_id, number = current['id'], current['number']

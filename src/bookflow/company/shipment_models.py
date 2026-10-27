@@ -41,7 +41,10 @@ class _Facts(_Strict):
 
 
 class ShipmentPostInput(_Facts):
-    sales_order: Selector = Field(description='The sales order shipped, by number or id.')
+    sales_order: Selector | None = Field(default=None, description=(
+        'The sales order shipped, by number or id; with pick_list, needed only when the list covers several.'))
+    pick_list: Selector | None = Field(default=None, description=(
+        'Ship what was picked on this pick list for the order (bins, lots and serial numbers as picked).'))
     date: IsoDate | None = Field(default=None, description='The ship date: the date the stock left; default today.')
     site: Selector | None = Field(default=None, description=(
         'Inventory site the shipment leaves; default the order lines\' site, else the default site. One shipment '
