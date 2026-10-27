@@ -47,7 +47,12 @@ def view(result, inputs, company_id):
         if row["kind"] == "opening" and row["customer_id"]:
             print_url = statement_url(company_id, row["customer_id"],
                                       period["date_from"], period["date_to"])
-        rows.append({**row, "customer_url": customer_url, "print_url": print_url,
+        email_url = None
+        if print_url:
+            from bookflow.adapters.workbench.delivery_pages import compose_url
+            email_url = compose_url(company_id, "statement", customer=row["customer_id"],
+                                    date_from=period["date_from"], date_to=period["date_to"])
+        rows.append({**row, "customer_url": customer_url, "print_url": print_url, "email_url": email_url,
                      "document_url": document_link(company_id, row, watermark)})
     next_fields = {f"f:{key}": (str(value).lower() if isinstance(value, bool) else str(value))
                    for key, value in inputs.items() if key != "cursor" and value is not None}

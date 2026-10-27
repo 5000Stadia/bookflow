@@ -1,0 +1,28 @@
+{% extends "base.html" %}{% block title %}Email {{ kind_label|lower }}{% endblock %}{% block body %}<style>
+#delivery-compose label{display:block;margin:8px 0}#delivery-compose input[type=text],#delivery-compose input[type=email],#delivery-compose textarea,#delivery-compose select{width:100%;max-width:640px;box-sizing:border-box}
+#delivery-compose label>input,#delivery-compose label>textarea,#delivery-compose label>select{display:block;margin-top:4px}#delivery-compose textarea{min-height:12em;font:inherit}.delivery-note{border-left:3px solid #b58a00;padding:6px 10px;background:#fffbea;max-width:640px}
+.delivery-buttons{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.delivery-file{overflow-wrap:anywhere}</style>
+<section id="delivery-compose">
+<nav class="crumbs"><a href="/c/{{ company_id }}/delivery">Outbox</a> / Email {{ preview.source_label }}</nav>
+<h1>Email {{ preview.source_label }}</h1>
+<p class="delivery-note" data-no-connection>{{ note }}</p>
+{% if result %}<p class="notice" role="status">{{ result }}</p>{% endif %}
+{% if error %}<div role="alert" class="error" data-delivery-error><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}{% if (error.details or {}).get('next') %}<br>{{ error.details.next }}{% endif %}</div>{% endif %}
+{% if existing %}<p class="warn" data-existing>Message <a href="/c/{{ company_id }}/delivery/{{ existing.number }}">{{ existing.number }}</a> for this document is {{ existing.status_label|lower }}. {% if existing.status in ('draft', 'held') %}Saving here edits it.{% elif existing.status == 'sent' %}Saving here sends it again as a new message.{% endif %}</p>{% endif %}
+{% for w in preview.warnings %}<p class="warn" data-empty-field>{{ w }}</p>{% endfor %}
+{% if can_write %}
+<form method="post" action="/c/{{ company_id }}/delivery/compose" data-email-panel>
+{% for k, v in identity.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+{% if existing and existing.status == 'sent' %}<input type="hidden" name="again" value="on">{% endif %}
+<label>Template <select name="template" hx-get="/c/{{ company_id }}/delivery/compose" hx-include="[name=kind],[name=document],[name=customer],[name=date_from],[name=date_to]" hx-target="body" hx-swap="outerHTML" data-template-picker>{% for t in templates %}<option value="{{ t.id }}" {% if t.id == preview.template_id %}selected{% endif %}>{{ t.name }}{% if t.is_default %} (default){% endif %}</option>{% endfor %}</select></label>
+<label>To <input type="text" name="to" value="{{ values.get('to', recipients.to) }}" placeholder="name@example.com" data-to></label>
+<label>Cc <input type="text" name="cc" value="{{ values.get('cc', recipients.cc) }}"></label>
+<label>Subject <input type="text" name="subject" value="{{ values.get('subject', preview.subject) }}" data-subject></label>
+<label>Message <textarea name="body" data-body>{{ values.get('body', preview.body) }}</textarea></label>
+<p class="delivery-file">Attached: <a href="{{ print_url }}" target="_blank" rel="noopener" data-preview-pdf>{{ preview.source_label }} (PDF)</a></p>
+<label>Reason (shown in the audit trail) <input type="text" name="ctx:reason" value="{{ values.get('ctx:reason', '') }}" placeholder="Email to customer"></label>
+{% set post = '/c/' ~ company_id ~ '/delivery/compose' %}
+<div class="delivery-buttons"><button type="submit" name="action" value="save" hx-post="{{ post }}" hx-target="body" hx-swap="outerHTML" data-save>Save draft</button><button type="submit" name="action" value="send" class="primary-action" hx-post="{{ post }}" hx-target="body" hx-swap="outerHTML" data-send>Send</button><button type="submit" name="action" value="export" data-export title="Downloads a .eml file to open in your mail program">Export .eml</button></div>
+</form>
+{% else %}<p>Your role cannot draft email. Ask someone with the standard role.</p>{% endif %}
+</section>{% endblock %}

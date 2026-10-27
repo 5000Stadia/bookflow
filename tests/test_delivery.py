@@ -214,3 +214,41 @@ def test_the_notice_hands_off_to_its_message(mail, hosted):  # noqa: F811
     second = run('delivery draft', {'kind': 'invoice', 'document': 'DOC-100'})
     assert _refused(hosted, 'delivery cancel', {'message': second['number']}, headers={
         k: v for k, v in hosted.bearer.items()})['code'] in ('E_REASON_REQUIRED', 'E_VALIDATION')
+
+
+def test_the_email_panel_outbox_and_history_in_the_browser(mail, hosted):  # noqa: F811
+    from tests.test_document_print import browser
+    from tests.test_row3_host import WB
+    web, cid = browser(hosted), hosted.company_id
+    invoice_page = web.get(f"/c/{cid}/invoice/{mail['invoice']['id']}", headers=WB)
+    assert invoice_page.status_code == 200 and 'data-email-document' in invoice_page.text
+    panel = web.get(f"/c/{cid}/delivery/compose?kind=invoice&document={mail['invoice']['id']}", headers=WB)
+    assert panel.status_code == 200, panel.text[:2000]
+    assert 'No sending connection is set up' in panel.text and 'accounts@harbourmills.example' in panel.text
+    form = {'kind': 'invoice', 'document': mail['invoice']['id'], 'to': 'accounts@harbourmills.example',
+            'cc': '', 'subject': 'Your invoice DOC-100', 'body': 'Hello,\r\nattached.', 'action': 'save'}
+    saved = web.post(f'/c/{cid}/delivery/compose', data=form, headers={**WB, 'HX-Request': 'true'})
+    assert saved.status_code == 200 and 'saved as a draft' in saved.text, saved.text[:2000]
+    [row] = mail['run']('delivery query', {})['rows']
+    assert row['subject'] == 'Your invoice DOC-100' and row['to'] == ['accounts@harbourmills.example']
+    bad = web.post(f'/c/{cid}/delivery/compose', data=dict(form, to='not-an-address'),
+                   headers={**WB, 'HX-Request': 'true'})
+    assert bad.status_code == 200 and 'not an email address' in bad.text
+    outbox = web.get(f'/c/{cid}/delivery?status=draft', headers=WB)
+    assert outbox.status_code == 200 and row['number'] in outbox.text and 'Nothing leaves this machine' in outbox.text
+    eml = web.post(f'/c/{cid}/delivery', data={'message': row['number'], 'action': 'export'}, headers=WB)
+    assert eml.status_code == 200 and eml.headers['content-type'].startswith('message/rfc822')
+    assert email.message_from_bytes(eml.content)['X-Unsent'] == '1'
+    pdf = web.get(f"/c/{cid}/delivery/{row['number']}/file/1", headers=WB)
+    shown = mail['run']('delivery show', {'message': row['number']})
+    assert hashlib.sha256(pdf.content).hexdigest() == shown['documents'][0]['sha256']
+    sent = web.post(f"/c/{cid}/delivery/{row['number']}", data={'action': 'mark-sent', 'method': 'webmail'},
+                    headers={**WB, 'HX-Request': 'true'})
+    assert sent.status_code == 200 and 'Sent by hand' in sent.text
+    for event in ('drafted', 'exported', 'marked_sent'):
+        assert f'data-event="{event}"' in sent.text, event
+    settings = web.get(f'/c/{cid}/delivery-settings', headers=WB)
+    assert settings.status_code == 200 and 'Nothing leaves this machine' in settings.text
+    assert 'data-template="Invoice"' in settings.text
+    for path in ('/report/statement', '/notice'):
+        assert web.get(f'/c/{cid}{path}', headers=WB).status_code == 200

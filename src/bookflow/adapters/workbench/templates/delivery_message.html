@@ -1,0 +1,37 @@
+{% extends "base.html" %}{% block title %}Message {{ message.number }}{% endblock %}{% block body %}<style>
+#delivery-message label{display:block;margin:8px 0}#delivery-message input[type=text],#delivery-message textarea{width:100%;max-width:640px;box-sizing:border-box}
+#delivery-message label>input,#delivery-message label>textarea{display:block;margin-top:4px}#delivery-message textarea{min-height:10em;font:inherit}.message-body{white-space:pre-wrap;overflow-wrap:anywhere;max-width:640px;border:1px solid #ddd;padding:8px}
+.delivery-note{border-left:3px solid #b58a00;padding:6px 10px;background:#fffbea;max-width:640px}.delivery-buttons{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+dl.message-facts{display:grid;grid-template-columns:max-content 1fr;gap:4px 12px}dl.message-facts dd{margin:0;overflow-wrap:anywhere}</style>
+<section id="delivery-message">
+<nav class="crumbs"><a href="/c/{{ company_id }}/delivery">Outbox</a> / {{ message.number }}</nav>
+<h1>Message {{ message.number }} <span data-status>{{ message.status_label }}</span></h1>
+{% if message.status not in ('sent', 'cancelled') %}<p class="delivery-note" data-no-connection>{{ connection }}</p>{% endif %}
+{% if result %}<p class="notice" role="status" data-message-result>{{ result }}</p>{% endif %}
+{% if error %}<div role="alert" class="error" data-delivery-error><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
+{% if message.stale %}<p class="warn" data-stale>{{ 'The document was voided' if message.stale_reason == 'document_voided' else 'The document changed' }} after this message was drafted. Cancel it and email the document again.</p>{% endif %}
+{% if message.hold_reason %}<p class="warn">Held: {{ message.hold_reason|replace('_', ' ') }}.</p>{% endif %}
+<dl class="message-facts"><dt>Customer</dt><dd><a href="/c/{{ company_id }}/customer/{{ message.customer_id }}">{{ message.customer_name }}</a></dd>
+<dt>To</dt><dd data-to>{{ message.to|join(', ') or '—' }}</dd>{% if message.cc %}<dt>Cc</dt><dd>{{ message.cc|join(', ') }}</dd>{% endif %}{% if message.bcc %}<dt>Bcc</dt><dd>{{ message.bcc|join(', ') }}</dd>{% endif %}{% if message.reply_to %}<dt>Reply-To</dt><dd>{{ message.reply_to }}</dd>{% endif %}
+<dt>Subject</dt><dd data-subject>{{ message.subject }}</dd>
+<dt>Attached</dt><dd>{% for d in message.documents %}<a href="{{ d.pdf_path }}" target="_blank" rel="noopener" data-frozen-pdf>{{ d.file_name }}</a> <span class="muted">({{ (d.size_bytes / 1024)|round(1) }} KB, as drafted)</span>{% endfor %}</dd>
+{% if message.resend_of %}<dt>Sends again</dt><dd><a href="/c/{{ company_id }}/delivery/{{ message.resend_of }}">{{ message.resend_of }}</a></dd>{% endif %}
+{% if message.sent_at %}<dt>Sent</dt><dd>{{ message.sent_at[:16]|replace('T', ' ') }}{% if message.sent_method %} ({{ message.sent_method|replace('-', ' ') }}){% endif %}</dd>{% endif %}
+{% if message.cancelled_reason %}<dt>Cancelled</dt><dd>{{ message.cancelled_reason }}</dd>{% endif %}</dl>
+{% set post = '/c/' ~ company_id ~ '/delivery/' ~ message.number %}
+{% if can_write and message.status in ('draft', 'held') %}
+<form method="post" action="{{ post }}" hx-post="{{ post }}" hx-target="body" hx-swap="outerHTML" data-message-edit><input type="hidden" name="action" value="update">
+<label>To <input type="text" name="to" value="{{ values.get('to', message.to|join(', ')) }}"></label><label>Cc <input type="text" name="cc" value="{{ values.get('cc', message.cc|join(', ')) }}"></label>
+<label>Subject <input type="text" name="subject" value="{{ values.get('subject', message.subject) }}"></label><label>Message <textarea name="body">{{ values.get('body', message.body) }}</textarea></label>
+<div class="delivery-buttons"><button type="submit" data-message-save>Save changes</button></div></form>
+{% else %}<div class="message-body" data-body>{{ message.body }}</div>{% endif %}
+{% if message.status not in ('sent', 'cancelled') %}
+<form method="post" action="{{ post }}" data-message-actions><input type="hidden" name="message" value="{{ message.number }}">
+<div class="delivery-buttons">{% if can_write and message.status == 'draft' %}<button type="submit" name="action" value="send" class="primary-action" hx-post="{{ post }}" hx-target="body" hx-swap="outerHTML" data-message-send>Send</button>{% endif %}<button type="submit" name="action" value="export" data-message-export>Export .eml</button>
+<label>Sent by <select name="method"><option value="mail-program">Mail program</option><option value="webmail">Webmail</option><option value="other">Other</option></select></label><button type="submit" name="action" value="mark-sent" hx-post="{{ post }}" hx-target="body" hx-swap="outerHTML" data-message-mark>Mark sent</button>
+{% if can_write %}<label>Reason <input name="ctx:reason" size="14" placeholder="Why cancel"></label><button type="submit" name="action" value="cancel" hx-post="{{ post }}" hx-target="body" hx-swap="outerHTML" data-message-cancel>Cancel</button>{% endif %}</div></form>{% endif %}
+<h2>History</h2>
+<div class="table-wrap"><table class="list-table" data-history><thead><tr><th>When</th><th>What</th><th>Who</th><th>Through</th><th>Details</th></tr></thead><tbody>
+{% for e in history.events %}<tr data-event="{{ e.event }}"><td data-label="When">{{ e.at[:16]|replace('T', ' ') }}</td><td data-label="What">{{ e.event|replace('_', ' ')|capitalize }}</td><td data-label="Who">{{ e.actor_name or e.actor_id }}{% if e.actor_kind != 'human' %} ({{ e.actor_kind }}){% endif %}</td><td data-label="Through">{{ e.via }}</td><td data-label="Details">{% if e.details.get('changed') %}Changed {{ e.details.changed|join(', ') }}{% elif e.details.get('method') %}{{ e.details.method|replace('-', ' ') }}{% elif e.details.get('reason') %}{{ e.details.reason|replace('_', ' ') }}{% elif e.details.get('file') %}{{ e.details.file }}{% elif e.details.get('template_name') %}Template {{ e.details.template_name }}{% elif e.details.get('go_by') %}With your go{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>
+</section>{% endblock %}

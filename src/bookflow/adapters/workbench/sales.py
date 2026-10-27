@@ -144,8 +144,12 @@ def detail_context(record, company_id, *, preview=False):
         for field in ('gross', 'applied', 'due'):
             settlement[field] = Money(settlement[field + '_minor_units'], settlement['currency']).to_dict()
     from bookflow.core import registry
+    email_url = None
+    if print_url and noun in ('invoice', 'sales-receipt') and record['status'] != 'voided':
+        from bookflow.adapters.workbench.delivery_pages import compose_url
+        email_url = compose_url(company_id, noun, document=record['id'])
     return dict(record=record, revision=revision, profile=revision['profile'], preview=preview,
-                print_url=print_url, credit_url=credit_url,
+                print_url=print_url, credit_url=credit_url, email_url=email_url,
                 tax_labels=POLICY_LABELS, tax_explanations=POLICY_EXPLANATIONS,
                 settlement=settlement,
                 # A settlement page exists for what money can be applied to, and the page it
