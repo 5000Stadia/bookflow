@@ -5,7 +5,9 @@ they came from, and changing many records at once afterwards. Scope (Kabe, 2026-
 import for any list or transaction type with a preview, per-line refusals, mappings saved per source and re-runs
 that never duplicate; (2) guided opening balances without the anchor's own exports, typed or pasted from a
 spreadsheet, with a tie-out to the balances the owner gives; (3) spreadsheet-style grid editing of many records,
-previewed and audited like any change. It builds on `cutover` ([docs/cutover.md](../docs/cutover.md)), `reconcile
+previewed and audited like any change; and, added the same day ("Maintaining this reversability for all large batch
+imports or modifications is quite helpful"), (4) every import run and every grid edit **reversible as one unit** through
+the shared batch mechanism of §8a, the one [bank feeds](bank-feeds.md) (R108) uses for statement imports. It builds on `cutover` ([docs/cutover.md](../docs/cutover.md)), `reconcile
 import`'s CSV mapping, the registry's pydantic inputs, `versioning.py`'s merged updates and `batch_invoicing.py`'s
 row-by-row outcomes.
 
@@ -61,11 +63,11 @@ document says so, and the rule given is Bookflow's.
 - **No delete in a grid or an import.** The anchor deletes lines [M 123]; Bookflow's deletes need explicit grants
   and no import or bulk-edit act reaches them (§8).
 - **Grid saves are diffs.** Before and after for each change, merged with others' edits to other fields, refused on
-  the same field, revertible (§7).
+  the same field, reversible as one unit (§8a).
 
 **Outside this item:** IIF transactions and any IIF reader beyond `cutover`'s lists (K3); reading `.xlsx` directly
 (K2; paste or save as CSV); payroll history; attachments; scheduled or watched-folder imports; bank statements
-(`reconcile import`); undoing an import by deleting (§8).
+(`reconcile import`, bank feeds); `cutover` stays as it is (a later adopter of the mechanism, §8a).
 
 **Prior art** (from knowledge, not re-checked against current releases; research `r26fa44`). *Odoo* `base_import`
 matches columns by header, offers a rolled-back **Test**, remembers the column choice by header name, updates by an
@@ -311,10 +313,20 @@ values, never formulas.
 - **Audit.** Each record's update is its own audit event (actor, via, on behalf of, reason, source reference
   `bulk-edit:<run>`). `bulk_edit_runs` and `bulk_edit_rows` (field, before, after, versions, outcome) answer "what
   did that edit change" in one query. No lock is held over a person's thinking; the diff carries versions.
-- **`bulk-edit revert <run>`** previews the inverse against the versions the edit left, applies only fields still
-  holding the edit's value and reports the rest as `changed_since`. It is an edit, so edit authority suffices.
+- **`bulk-edit reverse <run>`** (changed 2026-10-27; was `revert`, which restored only fields still holding the edit's
+  value) restores each record's prior values as one unit through the batch mechanism (§8a). It is refused, naming each
+  record, if a record was edited again since (its version is no longer the one the edit left). An opt-in
+  `--skip-changed` reverses the rest and leaves those records, and the run is then `reversed_partly` and lists them.
+  It is an edit, so edit authority suffices.
 
 ## 8. Agents and permissions
+
+> **Changed 2026-10-27.** The earlier default here was "Revert of an import is a plan only": `import revert-plan` printed
+> the deactivate or void commands for someone to run, and `bulk-edit revert` restored only untouched fields. Kabe widened
+> it ("Maintaining this reversability for all large batch imports or modifications is quite helpful. Consider customer
+> batch changes that have unexpected results or are incorrectly described from the user originally"). Now every import
+> run and grid edit is a **batch** that `import reverse` / `bulk-edit reverse` undo as one unit, newest first, for as
+> long as nothing later depends on it (§8a). `revert-plan` is replaced by `reverse --dry-run`. Question 3 changed with it.
 
 New capabilities `import` and `bulk-edit` (reads at `member`, writes at `standard`), checked beside each row's own
 command capability; an agent's authority is still the intersection with its bound human's. A permission layer per
@@ -323,8 +335,8 @@ increment is chained on the tip (`import-v1`, `import-mapping-v1`, `import-docs-
 
 | Acts | Who |
 |---|---|
-| `import kinds`, `template`, `show`, `query`, `rows`, `errors`; `import-mapping show`, `query`, `history`, `match`; `bulk-edit columns`, `show`, `query`; `opening-draft show`, `query` | member |
-| `import preview`, `decide`, `run`, `cancel`; `import-mapping save`, `deactivate`; `bulk-edit preview`, `apply`, `revert`; `opening-draft` writes, `plan`, `apply`, `tie-out` | standard, `import` or `bulk-edit` plus each row's command authority (an agent may do all of it, within the limits below) |
+| `import kinds`, `template`, `show`, `query`, `rows`, `errors`; `import-mapping show`, `query`, `history`, `match`; `batch show`, `query`; `bulk-edit columns`, `show`, `query`; `opening-draft show`, `query` | member |
+| `import preview`, `decide`, `run`, `cancel`; `import-mapping save`, `deactivate`; `bulk-edit preview`, `apply`, `reverse`; `import reverse`; `opening-draft` writes, `plan`, `apply`, `tie-out` | standard, `import` or `bulk-edit` plus each row's command authority (an agent may do all of it, within the limits below) |
 | `import approve`, `bulk-edit approve`; `accept_differences`; `create_missing` for a party when a look-alike exists | **people-only** (E_PERMISSION `people_only`, as `check print-confirm`) |
 
 - **An agent can do the job:** read a messy file, propose a mapping, preview, answer the decisions it can (map to an
@@ -333,15 +345,82 @@ increment is chained on the tip (`import-v1`, `import-mapping-v1`, `import-docs-
 - **The go is a person's above a threshold.** An agent run that would create more than 200 documents, or a bulk-edit
   changing more than 100 records, stops in `waiting` ("waiting for your go") until a person taps `approve`. Company
   settings (admin) hold the thresholds (K1).
-- **Nothing here deletes.** No kind, field or step can delete, void, merge, restore or unmerge, and none can
-  deactivate through a mapping; a test enumerates the commands every path reaches. `import revert-plan <run>`
-  returns, for each record a run made, the exact deactivate or void command to be run through the ordinary commands
-  by someone with those authorities (question 3).
+- **Nothing here deletes by itself.** No kind, field or step can delete, void, merge, restore or unmerge, and none can
+  deactivate through a mapping; a test enumerates the commands every path reaches. The one exception is reversal
+  (§8a), which runs the ordinary inverse commands (a family's `delete`, else `void`; a list record's `deactivate`)
+  under the caller's own grants, so a caller without the delete grant for a created family is refused naming it.
 - **Isolation.** A principal who cannot read a list cannot preview against it (what exists but is invisible reads as
   unknown); sources, mappings, runs and files are per company.
 - **Discovery.** The command finder answers "import", "csv", "spreadsheet", "migrate", "opening balance", "paste",
   "reprice", "mass update" and "bulk edit"; `import kinds` then `import template <kind>` then `import preview` is
   the first path, and the preview names the next command.
+
+### 8a. Reversible batches (the shared mechanism)
+
+A **batch** is any multi-record import or modification: an import run, a grid edit, a bank statement import
+([bank feeds](bank-feeds.md)), and later the operations of the last paragraph. It is recorded when it writes and can be
+**reversed as one unit**: newest first within its scope, for as long as nothing later depends on it. The mechanism is
+small and the same for every kind.
+
+**Ledger** (increment 0; `batches` and `batch_effects`, append-only except `state`):
+
+| Table | Holds |
+|---|---|
+| `batches` | id, `kind` (`import`, `bulk-edit`, `bank-import`, `bank-sort`...), `scope` (what "newest first" is measured in), `ordering` (`strict` or `record`), label, `state` (`live`, `reversing`, `blocked`, `reversed`, `reversed_partly`), counts, who, how, for whom, why, the run it came from, `reversed_by`, `reversed_at`, `reversal_reason`, reversal audit event |
+| `batch_effects` | batch, seq, `record_type`, `record_id`, `action` (`created`, `updated`, `linked`, `rule_learned`...), `version_after` (the record's version the batch left), `before` (JSON of prior values for `updated`), audit event of the write |
+
+A kind registers in code a small adapter: its **scope**, its **ordering**, how to **read an effect's current state**, and
+its **inverse** per action. The write path (`import run`, `bulk-edit apply`, `bank-feed import`) records an effect in the
+same savepoint as the command's write and audit event, so an effect never exists without its record or the reverse.
+`import_rows` and `bulk_edit_rows` keep the row outcomes and the preview's before-and-after as before; the ledger holds
+what reversal needs. Cost is one row per touched record, with `before` only for updates (a 300-item reprice: 300 small
+rows).
+
+**Ordering.** `strict` (bank imports; scope the account): refused while a later live batch exists in the scope. `record`
+(imports, grid edits, bulk sorts): there is no ordering between batches; dependence is judged per record, by the rules
+below, so two edits to different customers reverse independently.
+
+**What blocks a reversal.** Computed by a **plan** (`reverse --dry-run`), never by a parallel dependency engine:
+
+- the ordering rule above;
+- **edited again:** a record's current version differs from `version_after` (the record was changed since; this is how a
+  grid edit's "edited again since" is found, per record, naming it);
+- **a created record is in use:** the plan dry-runs the inverse command and reports its own refusal by name (a
+  customer with invoices, an invoice with payments applied, an entry reconciled or deposited, a closed period). The
+  mechanism adds no knowledge of those rules;
+- **no authority:** the caller lacks the grant the inverse command needs.
+
+The refusal is `E_BATCH_BLOCKED` with `details.blockers` (up to 50 and the total): the record, the code, who changed it
+and when where known, and the command that clears it. A blocked reversal changes nothing.
+
+**What a reversal does.** For `updated` effects it sends the previewed `before` values as an ordinary update with the
+version the batch left, so a concurrent edit is refused by the same version check. For `created` effects it runs the
+family's inverse: `delete` with preserved history (R151) where the family has one, else `void` for a document, else
+`deactivate` for a list record (the name is released for a later import: a reversed batch releases its `import_keys`
+rows, so the corrected file imports again as new). Links (matches, learned rules) are retired. The batch, its effects
+and the audit events stay, marked `reversed` with who, how, for whom and why. Atomic up to a measured slice (default 200
+records; increment 0 measures); a larger batch runs in slices in state `reversing` that the same command resumes, with
+the plan checked whole first and the scope frozen meanwhile. A reversal is itself recorded as a batch (`reversal`), so
+what was undone can be read, and a reversed batch is never reopened: to redo, run the corrected import.
+
+**Commands.** `batch show`, `batch query` (all batches, with `reversible` and the first blocker) are shared;
+`import reverse`, `bulk-edit reverse` and `bank-feed reverse` are thin, domain-named doors with their own help over one
+function. All take `--dry-run`, `reason`, and a plan fingerprint is re-derived inside the write.
+
+**Retention.** Effects are small and kept for ever; no purge. Measured for bank feeds in bank-feeds.md §6 (about 820
+bytes per line against about 49 KB average per transaction); for a grid edit it is a row of a few hundred bytes per
+record.
+
+**Existing batch operations that could adopt it later.** Not part of R107 or R108; a separate roadmap item. Each already
+writes many records in one call, so each would add only an adapter. *Natural fits:* `batch-invoice post` (one invoice per
+customer; inverse `invoice delete`), `memorized process` and `memorized-group enter` (the entries a run posted),
+`finance-charge assess` (statement charges; inverse `statement-charge void`), `check print-run` (the print batch before it
+is confirmed), `inventory-count post` (adjustments; has `inventory-count void` already), `barcode generate` and `notice
+generate` (labels and notices created in bulk), `cutover apply` (a whole opening; the clearing-account tie-out makes it
+the hardest), and R112's `delivery batch` (cancel the drafts). *Already reversible by their own pair, to be listed in
+`batch query` but not re-implemented:* `customer`, `vendor`, `item` and `account merge` (with `unmerge`), `deposit post`
+(`deposit void`), `inventory-transfer`, `shipment` and returns. Each adopter gets a scope, an ordering and an inverse; none
+changes its command's behaviour.
 
 ## 9. Surfaces
 
@@ -352,6 +431,7 @@ co0105); each keeps every existing row, index and trigger.
 
 | Increment | Tables |
 |---|---|
+| 0 Batch ledger | `batches`, `batch_effects` (§8a) |
 | 1 Lists and runs | `import_runs` (kind, mode, atomic, state, source, mapping, attachment, file SHA-256, counters, cursor, reason, version, times), `import_rows` (run, row, group, key hash, status, record type and id, code, message, line, column), `import_keys` (source, key hash unique, record, run) |
 | 2 Mappings | `import_sources`, `import_mappings` (append-only), `import_decisions` (run, reference kind, value, action, target) |
 | 4 Documents | `company_info.import_agent_limit`, `bulk_agent_limit` |
@@ -367,9 +447,10 @@ compacted after 30 days (the file stays an attachment). Uploaded files are compa
 |---|---|
 | `import kinds`, `template` | what can be imported; header and example per kind |
 | `import preview`, `decide`, `run`, `cancel`, `approve` | §2, §5, §8 |
-| `import show`, `query`, `rows`, `errors`, `revert-plan` | §5 |
+| `import show`, `query`, `rows`, `errors` | §5 |
+| `import reverse`, `bulk-edit reverse`, `batch show`, `query` | §8a (`reverse` replaces `revert-plan` and `revert`) |
 | `import-mapping save`, `show`, `query`, `history`, `match`, `deactivate` | §4 |
-| `bulk-edit columns`, `preview`, `apply`, `approve`, `revert`, `show`, `query` | §7 |
+| `bulk-edit columns`, `preview`, `apply`, `approve`, `reverse`, `show`, `query` | §7 |
 | `opening-draft create`, `update`, `show`, `query`, `discard`, `plan`, `apply`, `tie-out` | §6 |
 | `cutover` | gains the `entered_*` kinds and `basis` on checks |
 
@@ -424,13 +505,19 @@ tested in the increment that names it; the closing trial runs the whole.
    `derived` checks are named as such, the clearing account is 0.00, and a deliberately wrong total refuses.
 7. **Bulk edit is accounted for.** Repricing 300 items by 5 percent previews 300 before-and-after pairs and saves
    300 audit events; another user's edit to a different field of item 17 merges, to the same field refuses only item
-   17; revert restores the rest.
+   17; `bulk-edit reverse` restores all 300 prices, or is refused naming item 17 when it was edited again, and
+   `--skip-changed` restores the other 299.
 8. **Scale and honesty.** A 10,000-row customer file previews and runs with progress; a process killed mid-run
    resumes with no duplicates; throughput is within 1.25 times a script looping the same single command in-process
    over the same rows; memory at 10,000 rows is within 10 percent of that at 1,000 (both measured and recorded).
 9. **Nothing deleted, nothing around the door.** No path deletes, voids, merges or writes the hub; every write is a
    registry command; exported error files run no formula.
 10. **A phone does it.** A pasted list is imported, and 20 items repriced, on a 390 px screen.
+11. **A batch comes back as one.** A 200-row customer import with terms mapped wrongly, and a repricing of 300 items, are
+    each reversed in one step: the lists and prices equal the snapshot taken before the batch (created records gone
+    from lists, in preserved history), and the corrected file then imports as new rows. A created customer with an
+    invoice, or an item edited since, is refused with that record named and the command that clears it, and nothing is
+    changed. The reversal needs the caller's own delete and update grants.
 
 **Measure** (for the roadmap): closing-trial prompts done correctly on the first attempt, out of these, read from
 the trial record.
@@ -442,7 +529,8 @@ the trial record.
 | "Load these 40 open invoices from the spreadsheet" | `import preview --kind invoice` keyed by number; unknown customers named, not made |
 | "Starting from nothing: bank has 12,430.55, I owe 3,100 on bills, here are the invoices and stock" | `opening-draft create`, entered kinds, `plan`, `tie-out` (given and derived), `apply` |
 | "Raise every price in the Fixtures category by 5 percent" | `bulk-edit preview` then `apply`; the diff reported back |
-| "That import was wrong" | `import show`, `revert-plan`; no delete |
+| "That import was wrong" | `import show`, `import reverse --dry-run`, then `import reverse`; blockers reported |
+| "Undo that price change" | `bulk-edit reverse --dry-run`, then `reverse`; records edited since are named |
 
 ## 11. Build increments
 
@@ -450,13 +538,18 @@ Ordered by what a business needs first: lists in, the mapping that makes next mo
 documents, scale, editing, then the opening. A company that never imports reads exactly as before. Sizes are builder
 time: S 30-60 min, M 1.5-2.5 h, L 4-6 h.
 
+0. **Batch ledger (M).** Migration 0; `batches`, `batch_effects`, the adapter registry, `batch show`, `batch query`,
+   the generic plan and reverse, slices and the `reversing` state, `E_BATCH_BLOCKED`; the slice size measured. Built by
+   whichever of R107 and R108 starts first. *Done when* a test adapter's batch reverses whole, is refused with its
+   blocker named, and resumes after a kill between slices. *Tests:* ordering `strict` and `record`, edited-again,
+   inverse refusals reported by name, atomicity, no effect without its write.
 1. **Reader, list kinds, preview and run (L).** Migration 1; `tabular.py` and its agreement test; the kind
    declaration and `NOT_IMPORTABLE` test; kinds `account`, `customer`, `vendor`, `item`, the simple lists; guessed
    mapping; keys and ledger; `preview`, `run` (slices, resume, atomic, refusal stop), `show`, `query`, `rows`,
    `errors`; the baseline measurements (§5). *Done when* a 200-row customer file with 5 bad rows previews with the 5
    listed, runs 195, reruns with 0 created, and the 5 fixed rows then import alone; a killed slice resumes with no
    duplicates; the single-command comparison and baseline numbers are in the as-built notes; criteria 2, 4 (CLI) and
-   5 hold. *Tests:* §3 fixtures (BOM, cp1252, UTF-16, semicolons, TSV, quoted newlines, parentheses, trailing minus,
+   5 hold, and `import reverse` removes the 195 created and releases their keys (criterion 11, lists). *Tests:* §3 fixtures (BOM, cp1252, UTF-16, semicolons, TSV, quoted newlines, parentheses, trailing minus,
    decimal commas, ambiguous dates, leading zeros); the criterion 2 property; permission parity; the completeness
    test.
 2. **Saved mappings and decisions (M).** Migration 2; `import-mapping` commands; fingerprint, exact and probable
@@ -472,15 +565,16 @@ time: S 30-60 min, M 1.5-2.5 h, L 4-6 h.
    the agent threshold. *Done when* 40 invoices of 3 lines import keyed by number, a wrong-customer document is
    refused whole, a rerun creates none, payments land on the right invoices, and an agent run over the threshold
    waits for a person. *Tests:* each kind against its typed command (criterion 5); closed period; duplicate numbers;
-   a look-alike customer refused for an agent.
+   a look-alike customer refused for an agent; reversing a document import (deleted with preserved history, refused
+   once a payment is applied).
 5. **Scale (M).** Row cap, slice and refusal defaults from the baseline; 10,000-row runs for a list and for
    invoices; memory bound; backup advice. *Done when* criterion 8 holds with numbers recorded. *Tests:* throughput
    against the looped command, kill and resume at three points, memory at 1,000 and 10,000 rows, a file one row over
    the cap.
 6. **Bulk edit (L).** Migration 6; `bulk-edit` commands; column set per kind; operations; diff; version handling;
-   revert; the grid page and phone cards; `approve`. *Done when* criterion 7 holds in the browser and over MCP and
-   20 items are repriced from a phone. *Tests:* rounding (half-up on the currency's places), merge and conflict
-   rows, a refused row in the middle, revert after a later edit, the grid at 300 and 2,000 rows (time recorded).
+   `bulk-edit reverse` with its refusals and `--skip-changed`; the grid page and phone cards; `approve`. *Done when* criterion 7 holds in the browser and over MCP and
+   20 items are repriced from a phone; criterion 11 holds for the repricing. *Tests:* rounding (half-up on the currency's places), merge and conflict
+   rows, a refused row in the middle, reverse after a later edit, the grid at 300 and 2,000 rows (time recorded).
 7. **Guided opening balances (L).** Migration 7; the `entered_*` kinds and readers; `basis` on tie-out;
    `opening-draft`; the guided page; `accept_differences`. *Done when* criterion 6 holds and the same data moved in
    through `cutover` from anchor-style exports yields the same books. *Tests:* each exception of docs/cutover.md
@@ -492,7 +586,7 @@ time: S 30-60 min, M 1.5-2.5 h, L 4-6 h.
 **Closing trial.** A fresh agent with only Bookflow's help and MCP, given §10's prompts with a messy customer file,
 an invoice file, a pasted bank balance and stock list and an item category, does each correctly on its first
 attempt. Checked afterwards as the person: records and counts, the saved mapping used again on a second file, the
-tie-out's given and derived lines, the bulk edit's audit trail and its revert. One more run starts on a phone.
+tie-out's given and derived lines, the bulk edit's audit trail and its reversal, and a wrongly mapped import undone in one step. One more run starts on a phone.
 
 ## 12. Open questions
 
@@ -513,8 +607,10 @@ For the builder, defaults standing unless review finds otherwise:
 1. **Ambiguous date order.** *Default:* ask in the preview, never guess; the browser preselects month-first, as
    `reconcile import`'s auto mode reads US dates.
 2. **Row cap per run.** *Default:* 20,000 until increment 5 measures; larger files are split.
-3. **Reverting an import.** *Default:* `revert-plan` only; an executing `revert` would be one more audited act with
-   the authorities of the deactivate and void commands.
+3. **Reverting an import.** *Changed 2026-10-27.* *Default:* every import run and grid edit is reversible as one unit
+   through the shared batch mechanism (§8a), with the caller's own grants; the old default (`revert-plan` only) is
+   dropped. Reversal is refused while a created record is in use or an edited record changed again; `--skip-changed` is
+   opt-in for grid edits only.
 4. **Negative document totals.** *Default:* an invoice or bill file with a negative total refuses, pointing to the
    credit memo or vendor credit kind.
 5. **Renaming in the grid.** *Default:* allowed for names and account numbers; a rename onto an existing name is
