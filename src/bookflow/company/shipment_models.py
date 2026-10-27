@@ -93,7 +93,7 @@ class ShipmentInvoiceInput(_Strict):
 class ShippedNotInvoicedInput(_Strict):
     as_of: IsoDate | None = Field(default=None, description='Waiting on this date; default today.')
     customer: Selector | None = None
-    limit: int = Field(default=200, ge=1, le=1000)
+    limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=4096, description='Continue from a previous page\'s next_cursor.')
 
 
@@ -206,7 +206,7 @@ class ShippedNotInvoicedRow(BaseModel):
 
 class ShippedNotInvoicedOutput(BaseModel):
     metadata: ReportMetadata
-    count: int = Field(ge=0, le=1000, description='Rows on this page.')
+    count: int = Field(ge=0, le=200, description='Rows on this page.')
     next_cursor: str | None = None
     as_of: str
     account_id: str | None

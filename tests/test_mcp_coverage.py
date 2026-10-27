@@ -363,8 +363,8 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 3947 -> 3965 (R181 increment 2, shipment returns), measured: shipment return's optional inputs (expected_version,
     # date, lines and their shipment_line, item, quantity, bin, lot and serial_numbers, count_position, memo),
     # shipment-return void's expected_version, the query filters, and company update's invoice_when_shipping -- their
-    # null branches. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==3965
+    # null branches. No new variant kind. 3965 -> 3966: report shipped-not-invoiced pages, its cursor's null branch.
+    assert sum(len(group["paths"]) for group in mapped)==3966
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

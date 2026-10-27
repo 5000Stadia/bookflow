@@ -8285,7 +8285,7 @@ The same example as complete `bookflow_run` arguments:
 |---|---|---|---|---|---|---|
 | `as_of` | `--as-of` | string \| null | no | yes | null | Waiting on this date; default today. |
 | `customer` | `--customer` | string \| null | no | yes | null | — |
-| `limit` | `--limit` | integer | no | no | 200 | minimum 1; maximum 1000 |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | Continue from a previous page's next_cursor. |
 
 ### Command and context options
