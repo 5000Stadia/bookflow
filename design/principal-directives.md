@@ -1,206 +1,167 @@
-# Principal directives
+# One permission model (R187)
 
-This contract covers roadmap item R187: an agent acts *for* a principal and only within the principal's directives. It
-settles the language, what an agent's write must carry, how an automation is established, and what only the principal
-decides. [Bank feeds](bank-feeds.md) (R108), [document delivery](document-delivery.md) (R112) and
-[bulk import](bulk-import.md) (R107) are written to it.
+> **Replaces the earlier draft of the same day (2026-10-27).** That draft built a second authority system beside
+> permissions: per-agent reason/directive/blocked policies, directive confirmation, one-off directives, a shared
+> `automation_basis` table with fingerprints, and principal taps. Kabe judged it more architecture than the problem
+> needs and chose one model instead. The three designs that cited the draft ([bank feeds](bank-feeds.md) R108,
+> [document delivery](document-delivery.md) R112, [bulk import](bulk-import.md) R107) are re-aligned in the same change.
 
-**Direction (Kabe, 2026-10-27):** "Absolutely agree that the agents should have the power, but not make those judgment
-calls automatically. In the distant future, there may be an entity that is not the human that is the orchestrated
-entity, engaging with the agent that is using book flow, which is respected as the end user who is technically not
-human, so it might be worth considering our framing with our language. However, let us frame the initiating user as
-the principal entity who gates the most fundamental sensitive or broad decisions, in regards to what work flows are
-entered or accepted into book flow. And similarly even a singular invoice should not be posted if the directive of the
-principal entity is not for an agent to post said invoice. If a rule is established to automatically invoice every
-customer under a criteria XY&Z then the rule extracted out of that type of language should be all that is necessary to
-establish the book flow automation as such this would expand to the topic that we are having right now."
+**Direction (Kabe, 2026-10-27):** "I like this direction that you are framing, however in deploying it, we need to
+consider the most elegant shape for the roles of agent user, human user that uses the UI and whatever this principal
+entity is and how it interfaces. Ultimately, an elegant approach from my perspective is establishing a permission level
+that is independent of the interface used such that theoretically a human could use the command line interface or the UI
+and vice versa, with an agent in essence multiple methods to establish the same work with certain permissions and
+permission levels about what work can be done. I think that this is a little more elegant than building too much extra
+architecture about nested mandates and some slight guidance on set up would help establish mindfulness in the deploying
+principal entity about how mandates should be governed from their initial framing. At the end of the day, the
+responsibility pretty much lies on their shoulders."
 
-**Reading.** Agents keep their power; what changes is whose words authorise it. (1) The initiating user is the
-*principal*, a role and not a kind of person. (2) A write is the principal's instruction carried out, so it can be
-traced to words. (3) Work that repeats on its own is established by the principal's words and by nothing else. (4) The
-principal's words are *all* that establishes an automation: no separate technical review, but Bookflow shows the rule it
-read from them, so a misreading is seen at the one tap.
+**Reading.** One question decides every act: *does this actor hold the capability?* Humans and agents are asked the same
+way, whether they arrive by browser, CLI, HTTP or MCP. The **principal** is whoever deploys Bookflow and grants levels; they
+choose each actor's level and answer for it. Bookflow does not rank their reasons or re-ask them. It records who did what, by
+which interface, on whose behalf and why, and every batch can be reversed.
 
-## 1. Language
+## 1. The model
 
-A **principal** is the entity an agent works for. Today that is the signed-in user an agent is assigned to
-(`agent assign --principal`, already so named); later it may be a non-human orchestrating entity. Bookflow's only test is
-`is_principal(actor)`: an actor in its own right, not an agent acting for someone. Today that means a signed-in user.
-The test lives in one place (`hub/people_only.py`, `_is_person`) so a non-human principal is a change to it and nothing else.
+- **Roles and capabilities are the only gate.** Roles (`readonly`, `standard`, `admin`, `owner`), membership grants and
+  denies, and the layered catalogs (`hub/permission_*_catalog.py`, `permission_runtime.py`, [permission.md](../docs/cli/permission.md))
+  decide what work an actor can do. An agent's effective authority stays the intersection of its own and its assigned
+  principal's ([permission-resolution](permission-resolution.md)), so no agent exceeds the human it acts for.
+- **The check is adapter-independent.** It runs in the write gate after admission, for every adapter. Nothing asks what kind of
+  actor is calling except the defaults below. A human with a token on the CLI or MCP, and an agent, pass the same test.
+  Whether an agent may use the browser is a login question (Q3), not a permission one.
+- **Defaults differ by actor kind; the mechanism does not.** Humans keep exactly the rights they have today. Agents get none of
+  the capabilities in §2 and §4 until the principal grants them (`membership grant --grants`).
+- **No self-escalation.** Holding `membership.grant`, `user.manage` or `agent.manage` lets an actor give only what it holds, to a
+  role no higher than its own, and never to change its own membership. Existing `admin:members:<role>` keys remain as this ceiling.
+- **Language.** "Principal" replaces "person" where the authority over an agent is meant ("ask your principal"). Identifiers, catalog
+  keys and `E_PERMISSION` stay; refusals carry `capability` and `reason: capability_not_granted`, with `principal_only: true`
+  and `people_only` kept on the few acts in §3.
 
-| Today | Becomes |
-|---|---|
-| "people-only", "a person's go", "ask a person" | **principal-only**, **the principal's go**, "ask your principal" |
-| `human` in agent text ("Human the agent will act on behalf of") | "the principal the agent acts for" |
-| A person's standing instruction | a **directive** given by the principal |
+## 2. People-only commands become capabilities
 
-- **A rename of words now; of identifiers never.** Designs written from today say principal. At R187 increment 1 the
-  words users and agents read change (refusal messages, MCP and CLI help, the agent guide, `docs/`), and the refusal's
-  details carry **both** `principal_only: true` and the existing `people_only`. The catalog keys `admin:people-only:*`,
-  the `human_only` flag, `src/bookflow/hub/people_only.py`, `tests/test_people_only.py` and the layer hashes pinned on
-  them **stay**: renaming them re-pins every permission layer for no user-visible gain. Error code stays `E_PERMISSION`.
-- **Additive only.** Every new input is optional, every new error code is new, no command or field is renamed. A client
-  written before R187 behaves as before until a principal sets a policy (§2) or an automation is established (§3).
-- **Person versus principal.** "Person" stays where a human is meant (a customer's contact, a user's login). "Principal"
-  is used wherever the thing is the authority over an agent.
+Today the catalog's human-only list holds 37 commands and `admin:company:closing-date` (`hub/people_only.py`,
+`permission_human_admin_catalog.py` and later layers), plus 10 `admin:` rule keys behind users, agents and memberships.
+Sorted: **(a) 33 become grantable, (b) 5 stay.** Each (a) capability is held by the same human roles as today, so no human
+gains or loses anything, and by no agent until granted.
 
-## 2. Instructions, directives and what a write carries
-
-**One-off instruction versus standing directive.** "Bill Maple Street $1,200" is an instruction for one act. "Every month,
-invoice the retainer customers" stands until withdrawn. Both are recorded as a **directive** (blueprint 5.8), differing in
-`uses_allowed`: 1 for a one-off (spent by the first write that cites it; unspent ones lapse after 7 days), empty for a standing one.
-
-**Today** an agent's write carries a `reason` or a `directive` (`E_REASON_REQUIRED` otherwise). That stays the default
-and means a company that never sets a policy sees no change. Two additions:
-
-- **A reason quotes the instruction.** Agent guide rule, not a code check: a reason names who asked and what ("Jordan:
-  bill Maple St $1,200", 140 characters), and `--source-ref` carries the message or ticket id when the client has one.
-  The check cannot judge a quotation; the audit trail can show it.
-- **A principal can require a directive for kinds of work.** `agent policy set AGENT --require-directive invoice,payment,
-  deposit` (principal-only; `agent policy show`; an `AGENT` of `*` sets the company default). Per kind the level is
-  `reason` (default), `directive`, or `blocked` (the agent may not write that kind at all). A **kind** is a capability
-  family the registry already names (`transaction.invoice`, `transaction.payment`, `import`, `bulk-edit`, `delivery`,
-  `bank-feed`); the builder takes the list from the registry, not from this page.
-
-**Directive fields added** (migration; existing rows keep meaning):
-
-| Field | Meaning |
-|---|---|
-| `given_by` | the principal whose words these are |
-| `recorded_by` | who typed it, the principal or an agent |
-| `covers` | the kinds it authorises, set when recorded and shown at confirmation; empty = a reason only, never enough for a gated kind |
-| `uses_allowed`, `uses` | one-off or standing, and how often it was spent |
-| `confirmed_by`, `confirmed_at` | the principal's confirmation; null until given |
-
-**Who may record, and what makes it trustworthy (recommended).** *An agent may record a directive from the principal's
-words (`directive add --given-by jordan --covers invoice`, `given_by` defaulting to its only principal), but it is
-unconfirmed until the principal confirms it once (`directive confirm SI-7`, principal-only).* A principal recording their
-own directive is confirmed by that act. Rejected: principal-only recording (an agent could not capture "from now on..."
-the moment it is said, and the principal would retype what they already told it) and trusting the agent's claim (Bookflow
-cannot hear the conversation, so an unconfirmed claim would authorise anything). An unconfirmed directive can still be
-cited as a *reason* exactly as today; it is not enough for a gated kind, for crossing a size threshold, or for an
-automation. Directive text never changes after recording (a change is a new directive and the old one is deactivated),
-so what the principal confirmed is what is cited. Existing directives: a user's are confirmed; an agent's (their
-`given_by` is the agent) are unconfirmed notes and stay valid reasons.
-
-**Refusals** (new codes, additive):
-
-| Code | When | Says |
+| Capability (working name; the registry fixes the key) | Commands | Humans hold it at |
 |---|---|---|
-| `E_DIRECTIVE_REQUIRED` | an agent write of a kind the policy gates cites none, or one that does not list the kind in `covers`, or a spent one-off | the kind, the policy and who set it; "record the instruction with `directive add --text ... --covers <kind>` and ask your principal to confirm it, or ask your principal" |
-| `E_DIRECTIVE_UNCONFIRMED` | the cited directive has no confirmation | its code, who recorded it, and the confirm command |
-| `E_DIRECTIVE_INACTIVE` (exists) | deactivated | unchanged |
+| `party.merge` | customer merge, unmerge; vendor merge, unmerge | standard |
+| `list.merge` | account merge, unmerge; item merge, unmerge | standard |
+| `restore.document` | journal restore; invoice restore | standard |
+| `item.convert` | item convert | standard |
+| `check.print-confirm` | check print-confirm, print-cancel, reprint | standard |
+| `clock.link` | clock link | standard |
+| `accountant.manage` | accountant add, remove; accountant-copy cancel, import | admin |
+| `costing.method` | costing-method set, withdraw | admin |
+| `company.closing-date` | `company update` changing `closing_date` | admin |
+| `backup.schedule` | backup schedule | hub admin |
+| `demo.reset` | demo reset (its `force` guard for real books stays) | hub admin |
+| `user.manage` | user add, activate, deactivate | hub admin |
+| `membership.grant` | membership grant, revoke (ceiling in §1) | per `admin:members:*` |
+| `agent.manage` | agent create, activate, deactivate, unassign | hub admin |
 
-The check sits beside `E_REASON_REQUIRED` in the write gate, after permission admission, so it applies to every adapter
-(CLI, HTTP, MCP, workbench for an agent). A dry run reports the refusal without writing.
+**(b) Stays tied to a human credential or to the root of trust: 5 commands.** Each is here because no capability could
+make it safe, not because it is sensitive.
 
-## 3. Automations established by directive
+1. `user set-password`: sets the secret a human signs in with. An actor who sets it can become that human.
+2. `token issue`: mints a bearer secret that acts as a user or agent; minting is acting as someone.
+3. `agent assign`: carries `--confirm-permitted-use`, the human's own statement that the agent may act for them with their
+   rights. That attestation is where the principal's responsibility is accepted; an agent cannot make it for them.
+4. `agent authorize`: the same attestation, repeated after any suspension.
+5. `permission activate`: names an installation's first administrators, which must exist before any level can be granted.
 
-An **automation** is any rule that makes writes with nobody asking at the time: R108 bank auto-add, R112 recurring
-sends in `send` mode, and "automatically invoice every customer meeting X, Y and Z" (a criteria-based invoice schedule,
-a later kind built on this contract). R111's memorized entries are the first of the family and keep their own model (Q4).
+Outside the list and unchanged: the local bootstrap commands (`setup`, `init`, `owner-link`, `serve`, `company use`) are bound
+to the operating-system login and no agent can reach them. `token revoke` stays open to an actor's own tokens.
 
-**The rules.**
+## 3. Establishing an automation is a capability
 
-1. An automation's record **cites the directive whose words establish it** (`--directive SI-9`, required to go live).
-2. **An agent may draft it and propose it** (state `proposed`), reading the rule from the principal's words.
-3. **It goes live only by a principal's act:** `automation establish KIND ID` (principal-only), or the principal's
-   confirmation of the cited directive while the automation is attached to it. The one tap shows the directive's words
-   beside the rule as Bookflow renders it (conditions, action, who it touches, how often), never as the agent worded it.
-   An agent can attach a proposal to a directive that is already confirmed, but only the principal's tap makes it live;
-   this closes an agent citing an unrelated confirmed directive. The directive must be active, confirmed, and list the
-   automation's kind in `covers`.
-4. **It stays live only while all of these hold,** checked at each firing and never stored as a flag:
-   the directive is active; its confirming principal still holds authority (R111's lesson, `principal_authority_loss`);
-   and the automation's **fingerprint** (a hash of the operative fields: conditions, action, scope, template, mode,
-   frequency) equals the fingerprint the principal saw. An edit by anyone drops it to `paused` (reason `changed`) until the
-   principal taps again. A pause is shown, never silent, and the first firing after it raises one to-do for the principal.
-5. **Deactivating the directive pauses every automation citing it** (`directive deactivate` lists them first in its
-   preview). A deactivated directive cannot be re-activated; the principal records or confirms a new one and the
-   automation is pointed at it (`automation attach`) and established again.
-6. **An automation's writes cite the directive** (system or importing actor, reason "On rule: <name>", `directive_id`
-   set), so `audit list` answers "which words allowed this" for every entry. A system write from an automation with no
-   live basis is refused, never downgraded to a reason.
-7. **Reversal is the net, not the gate.** Every effect of an automation lands in a batch ([bulk-import](bulk-import.md)
-   §8a), so a misread rule is one reversal; this is why the tap shows words and does not ask for a second review.
+An **automation** is a rule that writes with nobody asking at the time. Whoever holds the capability for its kind may make it live:
 
-**The shared mechanism** (`automation_basis`, one table, like the batch ledger; whichever of R108 and R112 starts first
-builds it): `kind`, `record_id`, `directive_id`, `drafted_by`, `established_by`, `established_at`,
-`established_fingerprint`. `automation.status(kind, id)` returns `live` or `paused` with the reason and is the only way a
-host loop or importer decides to act; commands `automation list`, `show` (member), `attach` (standard: an agent may point
-a proposal at a directive), `establish` and `pause` (principal-only; an agent may *pause*, never resume: stopping is safe).
-A domain's own verbs that used to turn automation on (`bank-rule enable-auto-add`, `delivery-schedule authorize`) are
-not built; the domain row carries only the *request* (`auto_add`, `mode send`).
-
-**Not covered by an automation:** a learned bank rule never requests auto-add; a rule that only proposes a payee, account or
-class is a suggestion and needs nothing. A rule that *ignores* lines waiting for a decision acts on the books' inbox and
-is an automation (it needs the tap).
-
-## 4. What stays principal-only
-
-Principal-only means no agent can do it by any directive; a directive can authorise *work*, never *authority*.
-
-- **Who may do what:** roles and permissions, `agent assign`, `authorize`, `agent policy`, principals, the closing date,
-  directive confirmation, `automation establish`, turning an automation back on. (Existing: the catalog's human-admin set.)
-- **What leaves the machine, and what happened outside it:** every `delivery-connection` and `bank-feed-connection` write
-  and check, `delivery approve`, `delivery mark-sent`, `check print-confirm`, `check reprint`, `confirm_account`, the first
-  backfill of a live feed.
-- **What cannot be undone or reshapes the books:** merges and unmerges, restores, `item convert`, `costing-method set`,
-  designating the accountant, importing an accountant's copy.
-- **Broad runs past the principal's size:** `import approve`, `bulk-edit approve` (bulk-import §8): an agent over a
-  threshold needs the principal's go for the run, *or* a confirmed directive that covers the kind and is cited (the
-  directive is the standing go). Thresholds are company settings, principal-set.
-
-Everything else is an agent's to do within its policy. Adding to this list is the principal's call (roadmap rule), not an
-agent's.
-
-## 5. What exists, what R187 builds
-
-| Exists | Where |
+| Capability | Makes live |
 |---|---|
-| `directive add/list/show/deactivate`, `--directive` on writes, reason-or-directive rule | blueprint 5.8, `company/directives.py`, `docs/cli/directive.md` |
-| `agent assign --principal`, `principal_authority_loss`, authority epochs | `docs/cli/agent.md`, `scheduling_schema.py` |
-| principal-only acts (E_PERMISSION `people_only`) | `hub/people_only.py`, `tests/test_people_only.py` |
-| unattended memorized entries bound to their setter's authority | R111, `company/scheduling*.py` |
+| `automate.bank-rule` | a bank rule's `auto_add`, or an `ignore` rule (R108) |
+| `automate.delivery` | a `send`-mode delivery schedule (R112) |
+| `automate.invoice` | a recurring or criteria-based invoice schedule ("invoice every customer meeting X, Y and Z"; later) |
 
-Increments (S 30-60 min, M 1.5-2.5 h). 0 to 3 land before R108 increment 4, R112 increments 3 and 4 and R107 increment 4.
+- **Anyone with the ordinary right to write the rule can draft it** (state `draft`, nothing runs). Making it `live` needs `automate.<kind>`.
+- **A live automation runs under its establisher's authority.** `established_by` and `established_at` sit on the domain row. At each
+  firing, Bookflow checks the automation is `live`, its establisher is active, and the establisher still holds the capability.
+  Otherwise it is `paused` with the reason and one to-do is raised. This is R111's rule for memorized entries, applied once.
+- **An operative edit by someone without the capability returns it to `draft`.** An edit by a holder keeps it live and makes the
+  editor the establisher. Pausing is open to any editor of the rule; stopping is safe.
+- **Its writes carry the rule and the establisher.** System writes read "On rule: <name>" with `established_by`, so `audit list`
+  shows the chain: the actor who acted, the rule, who established it, and who they act for. Every effect lands in a batch
+  ([bulk-import](bulk-import.md) §8a), so one reversal undoes a misread rule.
+- **Built:** `automation list` and `automation show` (member), `automation pause` (editor of the rule). Each domain's own
+  command does the establishing (`bank-rule update --live`, `delivery-schedule update --mode send`), checked against the capability.
+  No shared table, fingerprints or taps.
 
-0. **Wording (S).** Designs and this contract (done); then the guide, help and refusal text; both detail keys. *Done when*
-   an agent refused a principal-only act gets `principal_only` and `people_only` and the words "ask your principal";
-   `tests/test_people_only.py` passes unchanged; `docs check` finds 0.
-1. **Directive provenance and confirmation (M).** Migration; `--given-by`, `--covers`, `--once`; `directive confirm`;
-   `E_DIRECTIVE_UNCONFIRMED`. *Done when* an agent records a directive for Jordan, it shows "awaiting Jordan", Jordan's
-   confirm makes it confirmed, and a directive recorded before the migration still cites as a reason.
-2. **Agent policy (M).** `agent policy`, the gate and `E_DIRECTIVE_REQUIRED`, one-off spending. *Done when* with invoices set to
-   `directive` an agent's invoice post is refused, succeeds citing a confirmed one-off covering `transaction.invoice`,
-   and a second post on the same directive is refused; with no policy nothing changes.
-3. **Automation basis (M).** The table, `automation.status`, the commands, pause by deactivation, fingerprint, authority
-   loss. *Done when* a fake automation goes live only by a principal's tap, deactivating its directive pauses it and its
-   next firing writes nothing, an edit by an agent pauses it, and the audit shows the directive on its writes.
-4. **Consumers.** R108 (auto-add), R112 (send schedules, agent release) and R107 (thresholds) build on 0 to 3 as their
-   designs say; they add no authority mechanism of their own. *Done when* each design's criterion for it passes.
-5. **Close (S).** Agent guide chapter ("what you may do without being told twice"), README, `docs/`, and a fresh agent told
-   "auto-add Shell fuel to Fuel" drafts and proposes, posts nothing, and posts after the principal's tap; the principal
-   deactivates the directive and the next import adds nothing.
+## 4. Capabilities the consumers add
 
-## 6. Open questions
+Named here so the three designs cite one list. Humans hold each at the role shown; agents hold none by default.
 
-Each default stands if nobody decides. K1 and K2 are Kabe's.
+| Capability | Gives | Humans at |
+|---|---|---|
+| `delivery.send` | release a message to leave the machine, and approve another actor's release (R112) | standard |
+| `delivery.mark-sent` | record that a document was sent outside Bookflow | standard |
+| `delivery.connect` | write or check a delivery connection | admin |
+| `bank-feed.connect` | write or check a bank-feed connection, enable a fetch, pass `confirm_account`, the first live backfill | admin |
+| `import.approve` | approve an import or grid edit that waits for approval, `accept_differences`, `create_missing` past a look-alike (R107) | standard |
 
-- **K1. Settled (Navigator, 2026-10-27, from Kabe's "the rule extracted out of that type of language should be all
-  that is necessary").** The principal's words establish the automation in one step: when the principal confirms a
-  directive, the confirmation shows the rule or rules the agent extracted from those words beside them, and that one
-  confirmation makes them live. No second tap. A rule drafted later under an already-confirmed directive, or one that
-  differs from what the confirmation showed, needs the principal's tap, so an agent can never switch a rule on by citing
-  an unrelated or older directive.
-- **K2. The default policy for a new agent.** *Default:* `reason` for every kind (today), with `bookflow setup` offering an
-  "Ask first" preset: `directive` for invoice, payment, deposit, bill, import and delivery. Flip the default only if
-  Kabe wants new companies strict.
-- 1. **One-off life.** *Default:* single use, lapsing after 7 days unspent.
-- 2. **Confirmation strength.** *Default:* a signed-in principal's tap; no re-authentication.
-- 3. **A non-human principal.** *Default:* not built; `is_principal` is the only seam. The workbench stays for people.
-- 4. **R111's memorized entries.** *Default:* not retrofitted; they remain bound to their setter's authority and cite no
-  directive. A later item may move them onto `automation_basis`.
-- 5. **Renaming identifiers** (`people_only.py`, catalog keys). *Default:* never; words only (§1).
-- 6. **Meaning checks.** *Default:* none. Bookflow checks active, confirmed, covers and fingerprint; it does not judge whether
-  words fit a write. The tap and reversal are the answer.
+## 5. Directives and reasons: the record, not a gate
+
+A directive and a reason say *why* work was done. They never decide *whether* it may be done; capabilities do.
+
+- **Unchanged:** `directive add/list/show/deactivate`, `--directive` and `--reason` on writes, and `E_REASON_REQUIRED` for agent
+  and system writes. A reason should name who asked and what ("Jordan: bill Maple St $1,200"); `--source-ref` carries the message or ticket id.
+  No migration.
+- **Dropped:** per-agent `reason`/`directive`/`blocked` policies and `agent policy`, `E_DIRECTIVE_REQUIRED`, `E_DIRECTIVE_UNCONFIRMED`,
+  `uses_allowed` and one-off spending, `covers`, `given_by`, `automation_basis`, `automation establish`, fingerprints, taps, and nested mandates.
+- **`directive confirmed_by` does not survive.** It existed only to gate; it was never built. A directive an agent records is its
+  own account of the instruction, as a reason is. A principal who wants a rule on paper has a directive; one who wants a limit has a capability.
+
+## 6. Setup guidance
+
+Light and in words, so the principal frames an agent's mandate before it works. `bookflow setup` (R182) gains one step after the
+agent is created; the agent guide gains the matching chapter ("Your level and how to ask for more"). Neither blocks anything.
+
+- **Which level:** three presets, each saying what it cannot do. *Bookkeeper* (default): standard role, no automations, no
+  sending, no merges or restores, no approving large imports. *Read-only*: reports and drafts. *Trusted*: Bookkeeper plus
+  `delivery.send`, `import.approve` and the `automate.*` you pick. A preset is a list of grants the principal can edit.
+- **What the agent may automate:** one line per `automate.*` capability, naming what runs unattended (adds bank lines, sends
+  email, raises invoices) and that it runs as the establisher.
+- **Every batch is reversible,** by one command; the guidance names it.
+- **The trail shows the chain:** `audit list` gives actor, interface, principal and reason. "You are answerable for what you grant."
+- **An agent refused for a missing capability** says which one, and "ask your principal to grant it if this is yours to do."
+
+## 7. Increments
+
+S 30-60 min, M 1.5-2.5 h. 1 lands before R108 increment 4, R112 increments 3 and 4 and R107 increment 4; 2 before the consumers' automation steps.
+
+1. **Capabilities from the people-only list (M).** A new catalog layer clears `human_only` on the 33 entries and registers the §2
+   capabilities at today's human thresholds; the ceiling rule; refusal text and details; `tests/test_people_only.py` rewritten. *Done when*
+   the b-list is exactly the five commands; for each (a) entry an agent is refused with the capability named, succeeds once granted
+   (and only if its principal also holds it), and a human at the old role is unchanged; a grant above the granter's own is refused;
+   every human's effective permissions are identical before and after the layer, and no agent is suspended or token revoked by it.
+2. **Automation (M).** `automate.*` capabilities, the `live` check at firing, establisher fields, draft-on-foreign-edit, `automation
+   list/show/pause`, audit rendering. *Done when* a fake automation drafted by an agent runs nothing, goes live when a holder
+   makes it so and writes citing the rule and establisher, pauses with a to-do when the establisher loses the capability or is
+   deactivated, and returns to draft when a non-holder edits it.
+3. **Consumers.** R108, R112 and R107 build to §3 and §4 as their designs say and add no authority mechanism. *Done when* each design's
+   criterion for it passes.
+4. **Guidance and close (S).** The setup step, agent guide chapter, README, `docs/`. *Done when* `docs check` finds 0, and a fresh agent told
+   "auto-add Shell fuel to Fuel" under Bookkeeper drafts the rule and is told which capability to ask for; after the grant it goes live and the next import adds the line.
+
+## 8. Open questions
+
+Each default stands if nobody decides. Q1 is Kabe's.
+
+- **Q1. Is agent default "none of the former people-only acts" right?** *Default:* yes; Bookkeeper preset in §6. The principal grants more.
+- **Q2. One `automate` capability or one per kind?** *Default:* per kind (§3), so a principal can allow bank rules and not sending.
+- **Q3. An agent in the browser.** *Default:* not built; the check is the same when it is.
+- **Q4. R111 memorized entries.** *Default:* not retrofitted; they already run under their setter's authority.
+- **Q5. Who may reverse a batch.** *Default:* a holder of the capability that made the writes, or any admin; [bulk-import](bulk-import.md) §8a settles it.
+- **Q6. A non-human principal.** *Default:* not built. `_is_person` remains the one seam for the five (b) commands.
+- **Q7. Renaming identifiers** (`people_only.py`, catalog keys). *Default:* never; words only.

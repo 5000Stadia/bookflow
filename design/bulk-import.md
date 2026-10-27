@@ -11,11 +11,11 @@ the shared batch mechanism of §8a, the one [bank feeds](bank-feeds.md) (R108) u
 import`'s CSV mapping, the registry's pydantic inputs, `versioning.py`'s merged updates and `batch_invoicing.py`'s
 row-by-row outcomes.
 
-> **Changed 2026-10-27 (R187).** Built to [principal directives](principal-directives.md): the person is the
-> **principal**, and the agent limits of §8 and K1 are recast as sizes beyond which an agent needs the principal's
-> directive or go. A confirmed directive covering the kind lifts a size limit; it never lifts a look-alike, an opening
-> that does not tie, or anything else principal-only. An agent whose policy requires a directive for `import` needs
-> one at any size.
+> **Changed 2026-10-27 (R187, reshaped the same day).** Builds to [one permission model](principal-directives.md). Replaces the
+> earlier note that lifted agent size limits with a confirmed directive. The limits of §8 and K1 now attach to a capability,
+> **`import.approve`**: an actor who holds it runs any size, approves waiting runs and accepts differences; an actor who does not,
+> human or agent, stops in `waiting` above the thresholds. Humans hold it at standard as today; agents only when their principal
+> grants it. No directive lifts a limit, and there is no agent policy or confirmation.
 
 **What exists.** `cutover plan/apply/tie-out` moves a company in from the anchor's exports (IIF lists, trial
 balance, open invoices, unpaid bills, stock, reconciliations, undeposited receipts, 1099 totals). It reads them into
@@ -342,20 +342,18 @@ increment is chained on the tip (`import-v1`, `import-mapping-v1`, `import-docs-
 | Acts | Who |
 |---|---|
 | `import kinds`, `template`, `show`, `query`, `rows`, `errors`; `import-mapping show`, `query`, `history`, `match`; `batch show`, `query`; `bulk-edit columns`, `show`, `query`; `opening-draft show`, `query` | member |
-| `import preview`, `decide`, `run`, `cancel`; `import-mapping save`, `deactivate`; `bulk-edit preview`, `apply`, `reverse`; `import reverse`; `opening-draft` writes, `plan`, `apply`, `tie-out` | standard, `import` or `bulk-edit` plus each row's command authority (an agent may do all of it, within the limits below) |
-| `import approve`, `bulk-edit approve`; `accept_differences`; `create_missing` for a party when a look-alike exists | **principal-only** (E_PERMISSION `principal_only`, as `check print-confirm`) |
+| `import preview`, `decide`, `run`, `cancel`; `import-mapping save`, `deactivate`; `bulk-edit preview`, `apply`, `reverse`; `import reverse`; `opening-draft` writes, `plan`, `apply`, `tie-out` | standard, `import` or `bulk-edit` plus each row's command authority (an agent may do all of it, within the limits below, without `import.approve`) |
+| `import approve`, `bulk-edit approve`; `accept_differences`; `create_missing` for a party when a look-alike exists; any run above the thresholds | standard plus capability **`import.approve`** (humans hold it; an agent when granted) |
 
-- **An agent can do the job:** read a messy file, propose a mapping, preview, answer the decisions it can (map to an
-  existing name, skip), save the mapping and run. It cannot override a look-alike or post an opening that does not
-  tie.
-- **Beyond a size, an agent needs the principal's directive or go.** An agent run that would create more than 200
-  documents, or a bulk-edit changing more than 100 records, stops in `waiting`
-  ("waiting for your go") unless it cites a **confirmed directive that covers `import` (or `bulk-edit`)**
-  ([principal directives](principal-directives.md) §2), such as "load this month's customer file whatever its size";
-  otherwise the principal's `approve` is the go. The directive lifts the size limit only for that kind; a look-alike
-  customer and an opening that does not tie (`accept_differences`) stay the principal's, whatever is cited. The run records the directive
-  and its size, so the batch (§8a) shows what the words allowed. Company settings (the principal's) hold the thresholds
-  (K1). An agent whose policy requires a directive for `import` needs one at any size.
+- **An actor without `import.approve` can do the job:** read a messy file, propose a mapping, preview, answer the decisions it can
+  (map to an existing name, skip), save the mapping and run. It cannot override a look-alike or post an opening that does
+  not tie.
+- **Beyond a size, a run needs `import.approve`.** A run by an actor without it that would create more than 200
+  documents, or a bulk-edit changing more than 100 records, stops in `waiting` ("waiting for approval") until a holder
+  runs `approve`; a holder's own run goes straight through. The capability, not an instruction, lifts the limit; a look-alike
+  customer and an opening that does not tie (`accept_differences`) also need it. The batch (§8a) records who approved and the
+  size. Company settings (admin) hold the thresholds (K1); setting them very high is the way to drop the limit, since every
+  batch reverses.
 - **Nothing here deletes by itself.** No kind, field or step can delete, void, merge, restore or unmerge, and none can
   deactivate through a mapping; a test enumerates the commands every path reaches. The one exception is reversal
   (§8a), which runs the ordinary inverse commands (a family's `delete`, else `void`; a list record's `deactivate`)
@@ -575,7 +573,7 @@ time: S 30-60 min, M 1.5-2.5 h, L 4-6 h.
    `create_missing`; `payment` and `bill-payment` application by number; the `--key-by-content` guard; `approve` and
    the agent threshold. *Done when* 40 invoices of 3 lines import keyed by number, a wrong-customer document is
    refused whole, a rerun creates none, payments land on the right invoices, and an agent run over the threshold
-   waits for the principal unless it cites a confirmed directive covering `import`. *Tests:* each kind against its typed command (criterion 5); closed period; duplicate numbers;
+   waits for a holder of `import.approve` unless the actor holds it. *Tests:* each kind against its typed command (criterion 5); closed period; duplicate numbers;
    a look-alike customer refused for an agent; reversing a document import (deleted with preserved history, refused
    once a payment is applied).
 5. **Scale (M).** Row cap, slice and refusal defaults from the baseline; 10,000-row runs for a list and for
@@ -603,12 +601,12 @@ tie-out's given and derived lines, the bulk edit's audit trail and its reversal,
 
 Each default stands if nobody decides. K1 to K3 are Kabe's.
 
-- **K1. Agent limits. Recast by Kabe's R187 direction (2026-10-27).** The limits are sizes *beyond which an agent needs
-  the principal's directive or go*, not a person's go alone. *Default:* an agent run creating more than 200 documents, a
-  bulk-edit changing more than 100 records need a confirmed directive covering the kind, or the principal's `approve`;
-  an opening that does not tie is the principal's alone; lists of any size and mappings never wait. Settable by the principal. (A scheduled
-  or watched-folder import would be an automation and need [principal directives](principal-directives.md) §3; it is
-  outside this item.)
+- **K1. Size limits. Recast by Kabe's R187 direction (2026-10-27).** The limits are sizes beyond which an actor needs
+  `import.approve`, not an agent rule. *Default:* an actor without it creating more than 200 documents, or a bulk-edit changing
+  more than 100 records, waits for a holder; an opening that does not tie needs it whatever the size; lists of any size and
+  mappings never wait. Humans hold the capability at standard, so only agents feel the limit unless the principal withholds it.
+  Settable by admin; reversal is the net. (A scheduled or watched-folder import would be an automation needing a new
+  `automate.<kind>` capability under [principal directives](principal-directives.md) §3; it is outside this item.)
 - **K2. Reading `.xlsx` directly.** The anchor reads Excel files [M 127]; Bookflow has no spreadsheet library.
   *Default:* no; paste (Excel copies tab text) or save as CSV. A later item could add a read-only reader of values
   on the first sheet (no formulas, macros or links), at the cost of a dependency and a parser of untrusted files.
