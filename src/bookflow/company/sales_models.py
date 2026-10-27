@@ -146,11 +146,9 @@ class SalesLineInput(StrictModel):
     price_level: Selector | None = None
     price_basis_amount: str | SalesPriceInput | None = None
     percent: str | None = Field(default=None, description=(
-        "Percentage for a discount or percentage other-charge line, 0 through 100, applied to the line "
-        "directly above it (or to the subtotal directly above it). Omit to use the item's own percentage; "
-        "give net_amount instead for a fixed amount. A taxable discount reduces taxable sales by its whole "
-        "amount, taken from the taxable lines it applies to, down to zero and no further; the rest comes "
-        "off non-taxable sales, so a sale never shows negative tax."))
+        "Percentage, 0 through 100, for a discount or percentage charge line, applied to the line or subtotal "
+        "directly above it. Omitted: the item's own; give net_amount for a fixed amount. A taxable discount reduces "
+        "taxable sales only down to zero; the rest comes off non-taxable sales."))
     refresh_defaults: bool = False
     use_defaults: list[SalesLineDefault] = Field(default_factory=list, max_length=7)
     site: Selector | None = Field(default=None, description=(
@@ -292,12 +290,11 @@ class SettlementPaymentVersion(StrictModel):
 class InvoiceUpdateInput(SalesUpdateInput, InvoiceFields):
     invoice: Selector
     release_to_order: Literal['reopen', 'cancel'] = Field(default='reopen', description=(
-        'For lines made from a sales order or work order that this correction takes back: reopen (the default) '
-        'leaves that quantity open on the order again, committed and billable; cancel cancels it on the order in '
-        'the same transaction. The preview and result name the order lines either way.'))
+        'Lines made from a sales or work order that this correction takes back: reopen (the default) leaves the '
+        'quantity open on the order; cancel cancels it there. The result names the order lines.'))
     operation_key: Annotated[str, Field(pattern=r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$')] | None = Field(default=None, description='Required when the invoice has active payment applications. Choose one unique key for this correction and reuse it for preview, save and retries. When supplied, also give a reason of 1–140 characters.')
-    settlement_versions: list[SettlementPaymentVersion] = Field(default_factory=list, description='For a changed invoice with active payment applications, supply every funding payment and its current expected_version, or supply settlement_guard instead. Read invoice settlement to review current settlement evidence; do not provide both alternatives.')
-    settlement_guard: str | None = Field(default=None, max_length=2048, description='For a changed invoice with active payment applications, pass the guard returned by invoice settlement (or the settlement_dependencies error), or supply settlement_versions instead. After a stale rejection, review current settlement and preview again; do not provide both alternatives.')
+    settlement_versions: list[SettlementPaymentVersion] = Field(default_factory=list, description='For a changed invoice with applied payments: every funding payment and its current expected_version (see invoice settlement), or settlement_guard instead; do not provide both alternatives.')
+    settlement_guard: str | None = Field(default=None, max_length=2048, description='For a changed invoice with applied payments: the guard invoice settlement (or the settlement_dependencies error) returned, or settlement_versions instead; after a stale rejection, preview again.')
 
     @model_validator(mode='after')
     def settlement_input(self):

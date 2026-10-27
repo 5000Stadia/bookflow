@@ -168,7 +168,8 @@ def test_the_home_window_runs_only_read_commands_while_rendering(hosted, monkeyp
     assert set(ran) == {"company show", "report cash-flows", "report ar-aging", "report open-invoices",
                         "report ap-aging", "report unpaid-bills", "report profit-and-loss",
                         "report entries-to-review", "account uncategorized", "audit list",
-                        "todo list", "reminders"}, ran  # R111: the day's to-dos and reminders
+                        "todo list", "reminders",  # R111: the day's to-dos and reminders
+                        "report serial-lot-stock"}, ran  # R104 serial/lot
     assert not any(registry.get(name).is_write for name in ran), ran
 
 

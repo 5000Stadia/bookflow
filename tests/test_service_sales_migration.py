@@ -22,6 +22,13 @@ MODULE = 'bookflow.storage.company_migrations.versions.0009_service_sales'
 NEW = ('sales_profiles', 'sales_line_profiles', 'sales_tax_components')
 CHANGED = ('transactions', 'document_lines', 'posting_line_sources')
 CREATED = dict(created_at='2026-03-11T12:13:14Z', created_by='U1', created_via='python')
+def _as_of_co0008(table):
+    copy = table.to_metadata(sa.MetaData())
+    for column in added_after('co0008').get(table.name, ()):
+        copy._columns.remove(copy.c[column])
+    return copy
+
+
 COMMON = dict(CREATED, version=1, updated_at=CREATED['created_at'], updated_by='U1', updated_via='python')
 SNAPSHOT = '{ "name": "Original café", "zero": 0, "false": false, "empty": "" }'
 
@@ -45,7 +52,9 @@ def _populate(db):
         full_name='Customer', full_name_key='customer', depth=1, path='customer'))
     db.conn.execute(schema.vendors.insert().values(**COMMON, id='agency', name='Agency', name_key='agency', is_tax_agency=True))
     for id_, type_ in [('service', 'service'), ('tax-item', 'sales_tax_item')]:
-        db.conn.execute(schema.items.insert().values(**COMMON, id=id_, name=id_, name_key=id_,
+        # Through co0008's own columns: today's metadata also carries later revisions' columns and their
+        # defaults (co0095's tracking), which this file does not have yet.
+        db.conn.execute(_as_of_co0008(schema.items).insert().values(**COMMON, id=id_, name=id_, name_key=id_,
             full_name=id_, full_name_key=id_, depth=1, path=id_, type=type_))
     _insert(conn, 'audit_events', dict(id='event', at=CREATED['created_at'], command='journal post', actor_id='U1',
         actor_kind='human', interface='python', client_name='migration fixture', client_version='1', client_host='local',

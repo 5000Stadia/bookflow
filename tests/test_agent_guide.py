@@ -86,6 +86,9 @@ def test_every_hand_authored_fence_is_classified():
             ("illustrative", "json"),  # an inventory transfer between sites (R104)
             ("illustrative", "json"),  # reminders, what needs doing today (R111)
             ("illustrative", "json"),  # a physical count (R104)
+            ("illustrative", "json"),  # a bin count and the week's cycle counts (R104 bins)
+            ("illustrative", "json"),  # who got a serial number (R104 serial/lot)
+            ("illustrative", "json"),  # landed cost spread over a receipt (landed cost)
         ],
         # Seed/serve, documentation generation, and financial statement examples.
         "reference-year.md": [("illustrative", "sh")] * 3,
