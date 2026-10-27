@@ -1158,3 +1158,21 @@ def guard_invoice_lines(s, billed, pending):
                 details={'fields': [{'field': f'lines.{envelope["position"] - 1}.quantity',
                                      'problem': 'a line billing shipped units keeps its quantity'}],
                          'reason': 'shipment_billing_quantity'})
+
+
+def refuse_shipped_return(s, transaction_id, document_line_id):
+    """A credit memo returning goods an invoice billed from a shipment: refused until shipment returns arrive
+    (design/pick-pack-ship.md §6, increment 2), naming the shipment."""
+    identity = s.company.conn.execute(sa.select(c.document_lines.c.line_id).where(
+        c.document_lines.c.id == document_line_id)).scalar()
+    if identity is None or identity not in billed_line_ids(s, transaction_id):
+        return
+    numbers = sorted({row[0] for row in s.company.conn.execute(sa.select(c.shipments.c.number).join(
+        c.shipment_billings, c.shipment_billings.c.shipment_id == c.shipments.c.id).where(
+        c.shipment_billings.c.transaction_id == transaction_id, c.shipment_billings.c.line_id == identity))})
+    raise BookflowError('E_VALIDATION', message=(
+        f'This invoice line billed goods shipment {", ".join(numbers)} shipped; returning them to stock on a credit '
+        'memo is not available yet. Credit the amount without returning stock, or void or correct the invoice '
+        '(its goods go back to shipped and not invoiced) and void or correct the shipment.'),
+        details={'fields': [{'field': 'lines', 'problem': 'the invoice line billed shipped goods'}],
+                 'shipments': numbers, 'reason': 'shipped_goods_return'})

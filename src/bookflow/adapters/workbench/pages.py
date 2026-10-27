@@ -779,6 +779,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     from bookflow.adapters.workbench import assembly_builds as AssemblyBuilds
     AssemblyBuilds.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                          role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
+    # R181: ship an order, the shipment page and the shipments list, not generic forms.
+    from bookflow.adapters.workbench import shipment_pages as ShipmentPages
+    ShipmentPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                        role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     from bookflow.adapters.workbench import finance_charges as FinanceCharges
     FinanceCharges.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                          role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))

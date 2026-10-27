@@ -309,6 +309,9 @@ def _stock_entries(s, lines, *, date):
         if source is None:      # refused by `_refuse_stocked` before any of this is reached
             raise BookflowError('E_INTERNAL', message='A standalone credit line carries stock.')
         issue = inventory_effects.live_issue(s, source['transaction_id'], source['document_line_id'])
+        if issue is None:
+            from bookflow.company import shipments
+            shipments.refuse_shipped_return(s, source['transaction_id'], source['document_line_id'])
         if issue is None or -int(issue['quantity_microunits']) != int(source['base_quantity_microunits']):
             raise BookflowError('E_INTERNAL', message=(
                 'The invoice line being returned issued no stock, or issued a quantity its '

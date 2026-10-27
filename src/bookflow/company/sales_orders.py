@@ -86,7 +86,8 @@ def line_quantities(s, header, rev, lines, identities, currency):
         out[line['line_id']] = OrderLineQuantities(ordered=_quantity(f.quantity_microunits),
             invoiced=_quantity(invoiced), cancelled=_quantity(cancelled), open=_quantity(open_quantity),
             open_amount=Money(open_net, currency).to_dict(), state=state)
-        if shipped:
+        from bookflow.company.items import TRACKED_TYPES
+        if shipped and f.profile.item_type in TRACKED_TYPES:
             done, waiting = shipped.get(root, (0, 0))
             factor = f.unit_factor_nanounits
             waiting_selected = Fraction(waiting * 1_000_000_000, factor)
