@@ -1529,6 +1529,9 @@ DEDICATED_PAGES = {
     # The anchor's Assess Finance Charges window (R120): customers are its per-row `sel:` boxes and the
     # fingerprint rides with the preview, so a bare page carries the date and the print choice.
     "finance-charge assess": ("/finance-charge/assess", ("date", "action")),
+    # R111's Reminders page: its filter form carries the date, the bills window and Only mine; `limit` is
+    # the page's own (25 a section).
+    "reminders": ("/reminders", ("as_of", "bills_days_ahead", "mine")),
 }
 
 

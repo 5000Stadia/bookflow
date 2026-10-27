@@ -1244,6 +1244,7 @@ sa.Index("ix_inventory_placements_lot", inventory_placements.c.lot_id)
 from bookflow.company import bin_cycle_schema as _bin_cycle_schema
 globals().update(_bin_cycle_schema.define_tables(metadata, _column, _table, _common))
 items.append_column(_bin_cycle_schema.cycle_class_column(_column))
+sa.Index("ix_items_cycle_class_id", items.c.cycle_class_id)
 # Landed cost (co0098, R104 increment 6): allocations, their lines, and items' unit weight and volume.
 from bookflow.company import landed_cost_schema as _landed_cost_schema
 for _weight_column in _landed_cost_schema.weight_columns(_column):
