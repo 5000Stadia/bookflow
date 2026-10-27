@@ -14,6 +14,13 @@ sender. Until a person sets up a sending connection, **nothing leaves the machin
 the outbox, ready to send, and the owner can export one as a `.eml` file or send it from their own
 mail program and mark it sent.
 
+> **Changed 2026-10-27 (R187).** Built to [principal directives](principal-directives.md). The person is the
+> **principal**; "a person's go" is **the principal's go**. A message's go is either the principal's `approve` (or their own
+> *Send*) or a **confirmed directive that covers `delivery`**, cited at release and rechecked when the dispatcher claims
+> the message, so an agent never decides what leaves. The connection's `agent_go` flag is **not built**: the standing
+> instruction is a directive, which can be deactivated. A `send` schedule is an **automation** (established by the
+> principal's tap, citing a directive); `delivery-schedule authorize` is replaced by `automation establish`. D3 changed.
+
 **What exists.** `documents.render(read, company_id, kind, identity)` returns the PDF bytes, file name
 and title of an invoice, sales receipt, estimate or customer statement. Customers carry `email`,
 `cc_email` and `preferred_delivery_method` (`none`, `email` or `mail`; a job inherits its parent's).
@@ -54,7 +61,8 @@ mechanics behind them; where they are silent this document says so, and the rule
   Bookflow keeps every message with its states, who did each step and what the transport said.
 - **Sending never blocks work.** *Send Now* locks the program [M 321]; dispatch runs in the host (§4).
 - **Any template at draft time.** The anchor offers several only with web mail [M 671].
-- **A person's go.** Agents draft and release; a person approves what leaves (§7).
+- **The principal's go.** Agents draft and release; what leaves has the principal's `approve` or a confirmed directive
+  behind it (§7).
 - **Recurring sends do not catch up** past a short window (§6): a statement three months late is not worth
   sending. **No open or click tracking** (§4).
 
@@ -90,7 +98,7 @@ facts a person can inspect; a message never changes the books.
 | State | Meaning |
 |---|---|
 | `draft` | Composed from a template; editable; nothing is waiting on it |
-| `ready` | Released to the outbox. It waits for a person's go if it lacks one (§7), then for a sending connection and its next attempt time. With no connection it waits indefinitely, and that is correct |
+| `ready` | Released to the outbox. It waits for the principal's go if it lacks one (§7), then for a sending connection and its next attempt time. With no connection it waits indefinitely, and that is correct |
 | `sending` | A transport attempt is in flight under a lease |
 | `sent` | Accepted by a transport (`sent_via` `connection`) or recorded by a person as sent from their own mail program (`manual`). Final |
 | `held` | Needs a person: the document changed or was voided, no recipient, a template error, or an attempt whose outcome is unknown. Holds a `hold_reason` |
@@ -101,8 +109,8 @@ facts a person can inspect; a message never changes the books.
 |---|---|---|
 | `delivery draft` | → `draft` | `drafted`: actor, interface, template, each source's kind, id and revision, warnings (empty merge fields) |
 | `delivery update` | `draft`, `held` | `edited`: the fields changed; version bump (stale writers get E_VERSION_CONFLICT) |
-| `delivery send` | `draft` → `ready` | `released`: who, when; `go_by` and `go_at` when the actor is a person |
-| `delivery approve` | `ready` | `approved`: `go_by`, `go_at`. People-only |
+| `delivery send` | `draft` → `ready` | `released`: who, when; `go_by` and `go_at` when the actor is the principal; `go_directive_id` when an agent cites a confirmed directive covering `delivery` |
+| `delivery approve` | `ready` | `approved`: `go_by`, `go_at`. Principal-only |
 | dispatcher claims | `ready` → `sending` | `claimed`: attempt number, connection, lease expiry |
 | transport accepts | `sending` → `sent` | `accepted`: provider reference, connection, actual From, `sent_at` |
 | transport says try later | `sending` → `ready` | `attempt_failed`: code, text, `next_attempt_at` from the backoff |
@@ -200,15 +208,16 @@ permanent, unknown, replay of an `attempt_key`, attachments intact byte for byte
 
 **Connections** (`delivery_connections`, set up by a person only): a name, a `kind`, non-secret
 `settings` (JSON the kind validates: server command pinned to a version, From address), a `secret_ref`,
-`enabled`, `agent_go` and an optional `daily_limit`. The row never holds a secret: `secret_ref` names an
+`enabled` and an optional `daily_limit`. The row never holds a secret: `secret_ref` names an
 entry in the operating system's keyring (or an environment variable the host reads), never the secret.
 A company file copied or restored on another machine arrives with every connection disabled and
 `enabled_host` cleared, so a restored backup full of `ready` messages cannot send a second copy of
 anything. `delivery-connection enable` on a machine binds it there.
 
 **Dispatch** is the host's, never a command's, and never holds the writer during a network call: one
-write claims up to a small chunk of messages (`ready`, a go present or `agent_go` on the connection,
-`next_attempt_at` due, under the daily limit), the transport is called outside the writer, and one
+write claims up to a small chunk of messages (`ready`, a go present, `next_attempt_at` due, under the daily limit; a
+`go_directive_id` counts only while that directive is still active and confirmed, otherwise the message goes back to
+waiting for the principal), the transport is called outside the writer, and one
 write records each outcome. The tick that finds no enabled connection does one `EXISTS` and returns;
 it costs nothing in a company that never sends. `delivery run` does one dispatch pass on demand
 (`--dry-run` lists what it would claim) and is how tests and an owner see it work.
@@ -287,12 +296,16 @@ month [E 71]; every day, invoices still to be emailed; weekly, ready overdue not
   and only if it is no more than `catch_up_days` old (default 7); older slots are recorded `skipped`
   and shown in the outbox, never run. (Memorized entries owe every missed slot because they are the
   books; a missed email is not.)
-- **`send` mode needs a person's standing go.** A schedule has `go_by`, empty at creation. Only
-  `delivery-schedule authorize` (people-only) sets it, and any change to its selection, template,
-  combine, mode or frequency by someone other than `go_by` clears it, because the content changed
-  under the authority (R111's lesson). A run in `send` mode with `go_by` set creates messages that
-  carry that go; without it, the messages are `ready` and wait for approval, and the run raises one
-  to-do for a company administrator, not one per message. A `draft` schedule needs no authorization.
+- **`send` mode is an automation** ([principal directives](principal-directives.md) §3). A schedule in `send` mode
+  carries `directive_id`, a confirmed directive whose words establish it ("email every customer their statement on the
+  last day of the month") and covering `delivery`. An agent may create and edit the schedule, but it runs in `send`
+  mode only once the principal has established it: `automation establish delivery-schedule <id>`, one tap showing the
+  directive's words beside the schedule as Bookflow renders it (selection, template, combine, frequency, who would get
+  mail now). Any change to its selection, template, combine, mode or frequency changes its fingerprint and pauses it
+  until the principal taps again, because the content changed under the authority (R111's lesson); deactivating the
+  directive pauses it too. A run of an established schedule creates messages carrying `go_directive_id`; a paused or
+  unestablished `send` schedule still runs as `draft` would, leaving the messages `ready` and waiting for approval, and
+  raises one to-do for the principal, not one per message. A `draft` schedule needs no establishment.
 - **Recorded as R111 records.** The messages' audit actor is the schedule's last editor, interface
   `system`, client `scheduler`, reason "On schedule: <name> for <slot>".
 - With no connection, a `send` schedule still runs: it fills the outbox with messages `ready`, which is
@@ -300,7 +313,8 @@ month [E 71]; every day, invoices still to be emailed; weekly, ready overdue not
 
 ## 7. Agents and permissions
 
-A new capability `delivery` (reads at `member`, writes at `standard`, like other lists). Drafting also
+A new capability `delivery` (reads at `member`, writes at `standard`, like other lists). An agent whose policy requires a
+directive for `delivery` needs a confirmed one to draft, release or batch at all. Drafting also
 needs the authority that prints the document: `ledger.read` for invoices, receipts, statements and
 notices, `customer-work` read for estimates. A permission layer per increment is chained on the tip
 (`delivery-v1`, `delivery-queue-v1`, `delivery-batch-v1`, `delivery-schedule-v1`); none changes an
@@ -308,22 +322,24 @@ existing capability or role default.
 
 | Acts | Who |
 |---|---|
-| `delivery-template` writes; `delivery draft`, `update`, `send`, `retry`, `cancel`, `batch`, `flag`, `unflag`; `delivery-schedule` writes except `authorize` | standard, `delivery` (an agent may do all of it) |
+| `delivery-template` writes; `delivery draft`, `update`, `send`, `retry`, `cancel`, `batch`, `flag`, `unflag`; `delivery-schedule` writes (a `send` schedule runs live only once established) | standard, `delivery` (an agent may do all of it) |
 | `delivery show`, `query`, `history`, `queue`, `export`, `run --dry-run`; `delivery-template show`, `query`, `fields`, `preview`; `delivery-schedule show`, `query` | member |
-| `delivery approve`; `delivery mark-sent`; `delivery-schedule authorize`; every `delivery-connection` write and `check` | **people-only** |
+| `delivery approve`; `delivery mark-sent`; `automation establish` for a schedule; every `delivery-connection` write and `check` | **principal-only** |
 | `company update` delivery preferences (from-name, reply-to, copy-to, auto-flag date) | admin, as other company preferences |
 
 The line is "what leaves the machine, and what happened outside it":
 
 - **Drafting and releasing are an agent's.** The agent can compose every email of the month and put them
   in the outbox.
-- **The go is a person's.** A message leaves only if a person released it or approved it, or the person
-  who set up the connection chose `agent_go` for it (a standing instruction on the connection, with a
-  `daily_limit`). Without that, an agent's release leaves messages `ready`, shown "Waiting for your
-  go", and `delivery approve` (one id, a batch, or "all waiting") is the person's tap.
-- **`mark-sent` and `delivery-connection` are people-only,** on the model of `check print-confirm`: what
+- **The go is the principal's.** A message leaves only if the principal released it or approved it, or an agent released
+  it citing a **confirmed directive that covers `delivery`** (a standing instruction such as "send each invoice to its
+  customer when I tell you the job is done", or a one-off "email Acme invoice 1007"), still active when the dispatcher
+  claims it. Without that, an agent's release leaves messages `ready`, shown "Waiting for your go", and `delivery
+  approve` (one id, a batch, or "all waiting") is the principal's tap. The daily limit on a connection still caps what
+  leaves.
+- **`mark-sent` and `delivery-connection` are principal-only,** on the model of `check print-confirm`: what
   happened in the owner's mail program is known to the owner, and where mail goes and under whose keys
-  is the owner's decision. An agent asking for one gets E_PERMISSION `people_only` and tells its
+  is the owner's decision. An agent asking for one gets E_PERMISSION (`principal_only`) and tells its
   principal.
 - **Isolation.** A principal who cannot read a customer's documents cannot draft, list or see their
   messages, and a message never discloses another company's data. The outbox and `delivery query`
@@ -347,10 +363,10 @@ oracle move stated. Tables follow the common columns (id, version, created and u
 
 | Increment | Tables and columns |
 |---|---|
-| 1 Messages | `delivery_templates` (kind, name, `name_key`, subject, body, `is_default` with one active default per kind, active); `delivery_messages` (number from the `delivery` sequence starting 1001; kind; customer; `status`; `hold_reason`; From name and address, reply-to, To, Cc, Bcc as JSON arrays; subject; body; fixed `message_id`; `template_id`; `dedupe_key`, unique among non-cancelled; `resend_of`; `released_by`, `released_at`, `go_by`, `go_at`; `attempts`, `next_attempt_at`, `lease_until`; `sent_at`, `sent_via`, `sent_method`, `connection_id`, `provider_ref`; `failure_code`, `failure_text`; `cancelled_reason`); `delivery_message_documents` (message, position, role `document` or `attached-file`, source kind, source id, source revision, `statement_from`, `statement_to`, file name, media type, size, SHA-256, attachment id); `delivery_events` (append-only: guards refuse update and delete); `company_info` gains `delivery_reply_to`, `delivery_copy_to`, `delivery_auto_flag_from`; a hub migration registers the `delivery` capability, as hub0007 and hub0008 did for notes and attachments |
-| 2 Queue and seam | `delivery_connections` (name, `name_key`, `kind` as free text with no CHECK, `settings` JSON, `secret_ref`, `enabled`, `enabled_host`, `agent_go`, `daily_limit`, last check result); the restore and copy path clears `enabled` |
+| 1 Messages | `delivery_templates` (kind, name, `name_key`, subject, body, `is_default` with one active default per kind, active); `delivery_messages` (number from the `delivery` sequence starting 1001; kind; customer; `status`; `hold_reason`; From name and address, reply-to, To, Cc, Bcc as JSON arrays; subject; body; fixed `message_id`; `template_id`; `dedupe_key`, unique among non-cancelled; `resend_of`; `released_by`, `released_at`, `go_by`, `go_at`, `go_directive_id`; `attempts`, `next_attempt_at`, `lease_until`; `sent_at`, `sent_via`, `sent_method`, `connection_id`, `provider_ref`; `failure_code`, `failure_text`; `cancelled_reason`); `delivery_message_documents` (message, position, role `document` or `attached-file`, source kind, source id, source revision, `statement_from`, `statement_to`, file name, media type, size, SHA-256, attachment id); `delivery_events` (append-only: guards refuse update and delete); `company_info` gains `delivery_reply_to`, `delivery_copy_to`, `delivery_auto_flag_from`; a hub migration registers the `delivery` capability, as hub0007 and hub0008 did for notes and attachments |
+| 2 Queue and seam | `delivery_connections` (name, `name_key`, `kind` as free text with no CHECK, `settings` JSON, `secret_ref`, `enabled`, `enabled_host`, `daily_limit`, last check result); the restore and copy path clears `enabled` |
 | 3 Batches | `delivery_flags` (source kind and id, `wanted` true for *Email later*, false for an explicit opt-out; one row per source); `delivery_batches` (selection JSON, counts, state, schedule run); `delivery_messages.batch_id` |
-| 4 Schedules | `delivery_schedules` (the fields of §6, `go_by`, `go_principal`, `go_epoch` as R111's group authority records them); `delivery_schedule_runs` (unique `(schedule_id, slot_date)`, state, counts, skipped reason) |
+| 4 Schedules | `delivery_schedules` (the fields of §6 and `directive_id`; its establishment lives in the shared `automation_basis` table of R187, not in columns here); `delivery_schedule_runs` (unique `(schedule_id, slot_date)`, state, counts, skipped reason) |
 
 Every state change writes its event in the same transaction as the row. No guard counts rows. The
 message and event tables are never deleted from.
@@ -363,7 +379,7 @@ message and event tables are never deleted from.
 | `delivery draft` | One message for a document (`kind` + identity), `--template`, `--to --cc --subject --body`, `--combine`, `--with-attached-files`, `--again` |
 | `delivery update`, `cancel`, `retry [--refresh]` | §2 |
 | `delivery send` | Release drafts (one, several, or a batch) to `ready` |
-| `delivery approve` | Give a person's go to `ready` messages (ids, a batch, or `--all-waiting`) |
+| `delivery approve` | Give the principal's go to `ready` messages (ids, a batch, or `--all-waiting`) |
 | `delivery mark-sent` | Record a hand-sent message: `--method`, `--sent-at` |
 | `delivery export` | `.eml`, or a zip of several |
 | `delivery show`, `query`, `history` | A message; the outbox with filters (status, kind, customer, batch, date, `delivery`); its events |
@@ -371,13 +387,13 @@ message and event tables are never deleted from.
 | `delivery batch` | §5 |
 | `delivery run` | One dispatch pass; with no connection it reports "0 claimed, no sending connection" |
 | `delivery-connection add`, `update`, `enable`, `disable`, `remove`, `check`, `show`, `query` | §4; `add` with no registered kind is refused naming the kinds available |
-| `delivery-schedule create`, `update`, `authorize`, `pause`, `resume`, `run`, `show`, `query` | §6 |
+| `delivery-schedule create`, `update`, `pause`, `resume`, `run`, `show`, `query` (turning `send` mode on is `automation establish`) | §6 |
 | `company update` | gains the three delivery preferences |
 
 All are registry commands, so the CLI, HTTP, MCP (`bookflow_run`) and the browser reach them
 identically, each with a dry run, idempotency on writes and a worked example in its help. Refusals use
 existing codes: E_VALIDATION (bad address, unknown field, nothing to release), E_WORK_DEPENDENCY with
-`details.status` (a state that does not allow the act), E_VERSION_CONFLICT, E_PERMISSION `people_only`.
+`details.status` (a state that does not allow the act), E_VERSION_CONFLICT, E_PERMISSION (`principal_only`, with `people_only` kept).
 
 ### Browser
 
@@ -394,14 +410,14 @@ existing codes: E_VALIDATION (bad address, unknown field, nothing to release), E
 - **Batch:** *Email statements…* (statement report) and *Email unsent invoices…* (invoice list) open a
   preview with a checkbox per customer, the skipped with reasons, and a progress bar while drafting.
 - **Company settings > Email and sending:** from-name, reply-to, copy-to, auto-flag date; Templates;
-  Schedules (with Authorize); Connections (a person): "None. Nothing leaves this machine." The customer
+  Schedules (a `send` schedule shows *Turn on*, the principal's tap, beside the directive's words); Connections (the principal): "None. Nothing leaves this machine." The customer
   page shows the preferred method and latest messages.
 - Every screen works at 1440 and 390 pixels; forms are htmx and tested by a real Chrome submit. The
   outbox count is offered to R184's home flow.
 
 ## 9. Privacy
 
-Nothing leaves the machine without both a connection a person set up and a person's go. This build
+Nothing leaves the machine without both a connection the principal set up and the principal's go (their approval or a confirmed directive). This build
 registers no transport; the only outward act is a `.eml` file a person downloads. A test makes every
 socket and subprocess call fail and runs a batch, a schedule run, an approval and a dispatch tick with no
 connection. Secrets live only in the keyring or environment; no backup, copy or `delivery show` holds one.
@@ -420,8 +436,9 @@ the chunk size); the idle scheduler tick with no schedule and no connection (one
    and customer, and the attached bytes equal `documents.render`'s (same SHA-256 and file name).
 3. **Nothing sends twice.** A repeated draft, batch, schedule slot or tick, and a crash between claim and
    record, leave one message and at most one send with the fake transport; an unknown outcome ends `held`.
-4. **A person's go holds.** An agent-released message is not sent until a person approves it or the
-   connection's `agent_go` is on; an agent cannot approve, mark sent or touch a connection.
+4. **The principal's go holds.** An agent-released message is not sent until the principal approves it or it cites a
+   confirmed directive covering `delivery` that is still active when it is claimed; deactivating that directive returns
+   the queued messages to waiting; an agent cannot approve, mark sent, touch a connection or turn a schedule's `send` on.
 5. **Honest tracking.** A hand-sent message reads "Sent by hand", never delivered; delivered or bounced
    appear only after a transport event; nothing claims "opened".
 6. **A restored copy is inert.** A restored or copied company has every connection disabled until a person
@@ -447,14 +464,14 @@ Sizes are the builder's own times: S 30–60 min, M 1½–2½ h, L 4–6 h.
    person drafts, edits, exports and marks sent an invoice, receipt, estimate, statement and notice, the
    attached bytes equal `render`'s, and the outbox shows each message's history. *Tests:* templates
    (unknown field refused, the conditional, empty field warning); a draft per kind against `render`;
-   dedupe and `--again`; stale and voided sources; `.eml` parsed with the standard library; people-only
+   dedupe and `--again`; stale and voided sources; `.eml` parsed with the standard library; principal-only
    `mark-sent`; the notice hand-off; a real Chrome submit of the panel; draft times recorded.
 2. **The queue and the seam (M).** `delivery_connections`, the protocol and registry, the dispatcher and
    `delivery run`, claim and record outside the writer, retries, unknown outcome, `approve` and the go
    rule, events from a transport, copy and restore disabling connections, the conformance suite with the
    fake. *Done when* criteria 3 to 7 pass with the fake transport and an empty registry in production.
    *Tests:* the whole state table row by row; backoff; lease expiry and a crash between claim and record;
-   `agent_go` and `daily_limit`; the socket and subprocess blocker over a full pass; a restore test;
+   the directive go (cited, deactivated before the claim, unconfirmed) and `daily_limit`; the socket and subprocess blocker over a full pass; a restore test;
    the idle-tick measurement.
 3. **Flags, the customer's method and batches (M).** `delivery_flags`, auto-flag date, `queue`, `flag`,
    `unflag`, `batch` in chunks with dry run, `--combine`, notices as a source, the batch preview and
@@ -463,11 +480,11 @@ Sizes are the builder's own times: S 30–60 min, M 1½–2½ h, L 4–6 h.
    against hand-worked sets; preference inheritance for a job; auto-flag date; chunk and resume; batch
    and chunk times recorded.
 4. **Recurring schedules (M).** `delivery_schedules` and runs, the scheduler block, slot claims, the
-   catch-up rule, `authorize` and its clearing, the to-do for approval, the Schedules page. *Done when*
-   a monthly statement schedule and a daily queued-invoice schedule run unattended on a test clock,
-   once per slot, and an agent-edited schedule loses its go. *Tests:* a month-end start across February;
-   restart mid-run; a missed slot inside and outside the window; authority cleared on edit by another
-   principal; the scheduler's idle tick unchanged for a company with no schedules.
+   catch-up rule, establishment through `automation.status` (R187 increments 0 to 3 land first), the to-do for
+   approval, the Schedules page. *Done when* a monthly statement schedule and a daily queued-invoice schedule run
+   unattended on a test clock, once per slot, a `send` schedule an agent drafted sends nothing until the principal's
+   tap, and an agent-edited schedule pauses. *Tests:* a month-end start across February;
+   restart mid-run; a missed slot inside and outside the window; pause on an edit by anyone, on the directive's deactivation and on the principal losing authority; the scheduler's idle tick unchanged for a company with no schedules.
 5. **Close (S).** Agent guide and `docs/` sections, README, `printed-documents.md`, the demo seed, the
    schema and command census, and the closing trial of criterion 8. *Done when* criteria 8 and 10 pass.
 
@@ -479,8 +496,9 @@ Each default stands if nobody decides. D1 to D3 are the person's to decide; the 
   only; the schema does not block an HTML part later.
 - **D2. The first real sender:** which kind (a mail MCP server, SMTP with an app password, another) and who
   sets it up. *Default:* none in this item; a later item adds one kind against the conformance suite.
-- **D3. Who may approve and mark sent.** *Default:* as §7, both people-only, with `agent_go` the person's
-  way to let an agent's releases leave. Relax `mark-sent` for agents if hand-sent records prove tedious.
+- **D3. Who may approve and mark sent. Reshaped by Kabe's R187 direction (2026-10-27).** *Default:* as §7, both
+  principal-only; the principal lets an agent's releases leave with a confirmed directive covering `delivery`, not a
+  connection flag (`agent_go` is dropped). Relax `mark-sent` for agents if hand-sent records prove tedious.
 - 1. **Reminders before the due date** [E 70] and reminder series. *Default:* not built; overdue notices
   plus a `notice` schedule cover after-due reminders.
 - 2. **Per-recipient status.** *Default:* one status per message.

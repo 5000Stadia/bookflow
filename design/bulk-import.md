@@ -11,6 +11,12 @@ the shared batch mechanism of §8a, the one [bank feeds](bank-feeds.md) (R108) u
 import`'s CSV mapping, the registry's pydantic inputs, `versioning.py`'s merged updates and `batch_invoicing.py`'s
 row-by-row outcomes.
 
+> **Changed 2026-10-27 (R187).** Built to [principal directives](principal-directives.md): the person is the
+> **principal**, and the agent limits of §8 and K1 are recast as sizes beyond which an agent needs the principal's
+> directive or go. A confirmed directive covering the kind lifts a size limit; it never lifts a look-alike, an opening
+> that does not tie, or anything else principal-only. An agent whose policy requires a directive for `import` needs
+> one at any size.
+
 **What exists.** `cutover plan/apply/tie-out` moves a company in from the anchor's exports (IIF lists, trial
 balance, open invoices, unpaid bills, stock, reconciliations, undeposited receipts, 1099 totals). It reads them into
 `cutover_sources.Sources` (`TrialBalanceRow`, `OpenDocument`, `StockRow`), plans steps with an outside id each, runs
@@ -337,14 +343,19 @@ increment is chained on the tip (`import-v1`, `import-mapping-v1`, `import-docs-
 |---|---|
 | `import kinds`, `template`, `show`, `query`, `rows`, `errors`; `import-mapping show`, `query`, `history`, `match`; `batch show`, `query`; `bulk-edit columns`, `show`, `query`; `opening-draft show`, `query` | member |
 | `import preview`, `decide`, `run`, `cancel`; `import-mapping save`, `deactivate`; `bulk-edit preview`, `apply`, `reverse`; `import reverse`; `opening-draft` writes, `plan`, `apply`, `tie-out` | standard, `import` or `bulk-edit` plus each row's command authority (an agent may do all of it, within the limits below) |
-| `import approve`, `bulk-edit approve`; `accept_differences`; `create_missing` for a party when a look-alike exists | **people-only** (E_PERMISSION `people_only`, as `check print-confirm`) |
+| `import approve`, `bulk-edit approve`; `accept_differences`; `create_missing` for a party when a look-alike exists | **principal-only** (E_PERMISSION `principal_only`, as `check print-confirm`) |
 
 - **An agent can do the job:** read a messy file, propose a mapping, preview, answer the decisions it can (map to an
   existing name, skip), save the mapping and run. It cannot override a look-alike or post an opening that does not
   tie.
-- **The go is a person's above a threshold.** An agent run that would create more than 200 documents, or a bulk-edit
-  changing more than 100 records, stops in `waiting` ("waiting for your go") until a person taps `approve`. Company
-  settings (admin) hold the thresholds (K1).
+- **Beyond a size, an agent needs the principal's directive or go.** An agent run that would create more than 200
+  documents, or a bulk-edit changing more than 100 records, stops in `waiting`
+  ("waiting for your go") unless it cites a **confirmed directive that covers `import` (or `bulk-edit`)**
+  ([principal directives](principal-directives.md) §2), such as "load this month's customer file whatever its size";
+  otherwise the principal's `approve` is the go. The directive lifts the size limit only for that kind; a look-alike
+  customer and an opening that does not tie (`accept_differences`) stay the principal's, whatever is cited. The run records the directive
+  and its size, so the batch (§8a) shows what the words allowed. Company settings (the principal's) hold the thresholds
+  (K1). An agent whose policy requires a directive for `import` needs one at any size.
 - **Nothing here deletes by itself.** No kind, field or step can delete, void, merge, restore or unmerge, and none can
   deactivate through a mapping; a test enumerates the commands every path reaches. The one exception is reversal
   (§8a), which runs the ordinary inverse commands (a family's `delete`, else `void`; a list record's `deactivate`)
@@ -564,7 +575,7 @@ time: S 30-60 min, M 1.5-2.5 h, L 4-6 h.
    `create_missing`; `payment` and `bill-payment` application by number; the `--key-by-content` guard; `approve` and
    the agent threshold. *Done when* 40 invoices of 3 lines import keyed by number, a wrong-customer document is
    refused whole, a rerun creates none, payments land on the right invoices, and an agent run over the threshold
-   waits for a person. *Tests:* each kind against its typed command (criterion 5); closed period; duplicate numbers;
+   waits for the principal unless it cites a confirmed directive covering `import`. *Tests:* each kind against its typed command (criterion 5); closed period; duplicate numbers;
    a look-alike customer refused for an agent; reversing a document import (deleted with preserved history, refused
    once a payment is applied).
 5. **Scale (M).** Row cap, slice and refusal defaults from the baseline; 10,000-row runs for a list and for
@@ -592,9 +603,12 @@ tie-out's given and derived lines, the bulk edit's audit trail and its reversal,
 
 Each default stands if nobody decides. K1 to K3 are Kabe's.
 
-- **K1. Agent limits.** How much an agent may do before a person's go. *Default:* an agent run creating more than
-  200 documents, a bulk-edit changing more than 100 records, and any opening that does not tie wait for a person;
-  lists of any size and mappings never wait. Admin-settable.
+- **K1. Agent limits. Recast by Kabe's R187 direction (2026-10-27).** The limits are sizes *beyond which an agent needs
+  the principal's directive or go*, not a person's go alone. *Default:* an agent run creating more than 200 documents, a
+  bulk-edit changing more than 100 records need a confirmed directive covering the kind, or the principal's `approve`;
+  an opening that does not tie is the principal's alone; lists of any size and mappings never wait. Settable by the principal. (A scheduled
+  or watched-folder import would be an automation and need [principal directives](principal-directives.md) §3; it is
+  outside this item.)
 - **K2. Reading `.xlsx` directly.** The anchor reads Excel files [M 127]; Bookflow has no spreadsheet library.
   *Default:* no; paste (Excel copies tab text) or save as CSV. A later item could add a read-only reader of values
   on the first sheet (no formulas, macros or links), at the cost of a dependency and a parser of untrusted files.
