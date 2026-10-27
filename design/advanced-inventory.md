@@ -934,9 +934,11 @@ jobs at night; the van ends as counted.
   account has to exist before a freight bill can be charged to it, so "first use" is the person's setup, not the post.
   It is owned by the inventory ledger (`journals.OWNED_SYSTEM_ROLES`), so bill, check, card charge and vendor credit
   expense lines (which post as that owner) may charge it and the journal editor may not.
-- **A charge line** is the stable line identity of the entered line its clearing postings are attributed to
-  (`posting_line_sources`); its amount on a date is the sum of those postings, so a correction or void moves it as it
-  moves the account. Its id is what `landed-cost charges` lists as `charge`.
+- **A charge is a document's Landed Cost Clearing lines taken together**, named by the document's id (what
+  `landed-cost charges` lists as `charge`): an edit that gives a line a new identity, reorders it or adds another
+  line leaves the charge the same charge. Its amount on a date is the sum of its clearing postings dated by then
+  (read through `posting_line_sources`). Only an edit that takes it below what live allocations took of it is
+  refused; raising it, adding other lines or moving its date passes.
 - **Replay** walks a `landed` movement at its receipt's position and recognises it at its own date by walking once
   more per live landed movement of the item, in (date, position, sequence) order, each pass adding the next: every
   replay-decided value (an issue, a return, a found quantity, and a shortfall true-up recognised at its filler's date)
@@ -953,10 +955,17 @@ jobs at night; the van ends as counted.
   send a share to an expense or cost-of-goods `account`. A post mixing charges and freight credits is refused.
 - **`value`** reads the receipt movement's value plus its receipt-targeted price corrections, less its receipt's own
   shipping share. Weight and volume measures are base microunits times the per-unit figure in microunits.
-- **Guards** run where the change happens: a target receipt retired by any document change is refused in
-  `inventory_effects.plan`; a charge line voided or reduced below its live allocations is refused after every company
-  write (a posting-line watermark in dispatch, cheap when the company has no clearing account). Voiding an
-  allocation that a later freight credit needs is refused.
+- **Guards** run where the change happens. A target receipt is refused a void, or any change to its stock -- its
+  line, item, quantity, cost, date, count position, accounts, class, or places (site, bin, lot, serial numbers) -- in
+  `inventory_effects.plan` (`landed_costs.check_targets`). An edit that touches no stock (a memo, a supplier
+  reference) passes (Kabe's decision, 2026-10-26): the document reposts, and the restated receipt carries the landed
+  cost on through `landed_cost_carries` (co0098), which every movement read follows, so replay and every allocation
+  read see the cost on the receipt standing now. A charge voided or reduced below its live allocations is refused
+  after every company write (a posting-line watermark in dispatch, cheap when the company has no clearing account).
+  Voiding an allocation that a later freight credit needs is refused.
+- **Voiding a build** whose components owe forward true-ups retires its assembly receipt with the landed partners
+  on it: each is backed out by an opposite partner in the same change, so landed costs on a retired receipt net to
+  nothing; replay refuses only landed costs that do not.
 - **Item receipts** gain `shipping_basis` (quantity, the default and unchanged; value; weight; volume), and every
   change of a receipt retires its old shipping allocation and records the new one.
 - **Browser.** Inventory > Landed cost lists unallocated charges with an allocation form (Preview shows each target's

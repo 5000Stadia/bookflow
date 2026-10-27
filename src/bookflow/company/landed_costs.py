@@ -127,10 +127,11 @@ def _landed_journals():
 
 
 def charge_entries(s, clearing_id, transaction_ids=None):
-    """Every clearing posting of a charge document, by charge line: ``{line_id: [(date, signed, batch row)]}``.
+    """Every clearing posting of a charge document, by document: ``{transaction id: [(date, signed, row)]}``.
 
-    A charge line is the stable line identity of the entered line the posting is attributed to; its amount on a
-    date is the sum of its postings dated by then, so a correction or a void moves it as it moves the account.
+    A charge is the document's Landed Cost Clearing lines taken together, named by the document's id: an edit
+    gives a line a new identity, reorders it or adds another, and the charge is still the same charge. Its amount
+    on a date is the sum of its postings dated by then, so a correction or a void moves it as it moves the account.
     """
     pl, pb, src, dl = c.posting_lines, c.posting_batches, c.posting_line_sources, c.document_lines
     query = (sa.select(pl.c.transaction_id, dl.c.line_id, pb.c.effective_date, pb.c.id.label('batch_id'), pb.c.kind,
@@ -143,7 +144,7 @@ def charge_entries(s, clearing_id, transaction_ids=None):
     out: dict[str, list] = {}
     for row in s.company.conn.execute(query).mappings():
         signed = int(row['amount_minor_units']) * (1 if int(row['debit_minor_units']) else -1)
-        out.setdefault(row['line_id'], []).append((row['effective_date'], signed, dict(row)))
+        out.setdefault(row['transaction_id'], []).append((row['effective_date'], signed, dict(row)))
     return out
 
 
@@ -157,15 +158,39 @@ def live_lines(s, *, charge_ids=None, target_ids=None, allocation_ids=None):
         t.c.reverses_line_id.is_(None), ~sa.exists(sa.select(x.c.id).where(x.c.reverses_line_id == t.c.id)))
     if charge_ids is not None:
         query = query.where(t.c.charge_line_id.in_(list(charge_ids)))
-    if target_ids is not None:
-        query = query.where(t.c.target_movement_id.in_(list(target_ids)))
     if allocation_ids is not None:
         query = query.where(t.c.allocation_id.in_(list(allocation_ids)))
-    return [dict(row) for row in s.company.conn.execute(query).mappings()]
+    rows = [dict(row) for row in s.company.conn.execute(query).mappings()]
+    # Where each share stands now: a receipt reposted with its stock unchanged carries its landed cost on.
+    moved = successors(s, {row['target_movement_id'] for row in rows if row['target_movement_id']})
+    for row in rows:
+        row['current_target'] = moved.get(row['target_movement_id'], row['target_movement_id'])
+    if target_ids is not None:
+        wanted = set(target_ids)
+        rows = [row for row in rows if row['current_target'] in wanted]
+    return rows
+
+
+def successors(s, ids):
+    """``{movement id: the receipt movement that carries it now}`` for receipts reposted with stock unchanged."""
+    ids = {i for i in ids if i}
+    if not ids or not sa.inspect(s.company.conn).has_table('landed_cost_carries'):
+        return {}
+    t = c.landed_cost_carries
+    out, frontier = {}, dict.fromkeys(ids)
+    current = {i: i for i in ids}
+    while frontier:
+        found = dict(s.company.conn.execute(sa.select(t.c.from_movement_id, t.c.to_movement_id).where(
+            t.c.from_movement_id.in_(list({current[i] for i in frontier})))).all())
+        frontier = {i: None for i in frontier if current[i] in found}
+        for i in frontier:
+            current[i] = found[current[i]]
+            out[i] = current[i]
+    return out
 
 
 def charges(s, clearing_id, *, as_of=None, transaction_ids=None):
-    """Each charge line: its document, date, amount, what live allocations took of it and what is left."""
+    """Each charge (a document's clearing lines): its date, amount, what live allocations took of it and what is left."""
     entries = charge_entries(s, clearing_id, transaction_ids)
     allocated: dict[str, int] = {}
     for line in live_lines(s, charge_ids=list(entries)):
@@ -175,17 +200,18 @@ def charges(s, clearing_id, *, as_of=None, transaction_ids=None):
     reversed_batches = set(s.company.conn.execute(sa.select(c.posting_batches.c.reverses_batch_id).where(
         c.posting_batches.c.reverses_batch_id.in_(list(batches)))).scalars()) if batches else set()
     out = {}
-    for line_id, rows in entries.items():
+    for charge, rows in entries.items():
         dated = [row for row in rows if as_of is None or row[0] <= as_of]
         if not dated:
             continue
         standing = [row for row in dated if row[2]['kind'] != 'reversal' and row[2]['batch_id'] not in reversed_batches]
         first = (standing or dated)[-1][2]
         amount = sum(row[1] for row in dated)
-        out[line_id] = dict(charge=line_id, transaction_id=first['transaction_id'],
-                            date=max(row[0] for row in (standing or dated)), amount=amount,
-                            allocated=allocated.get(line_id, 0), unallocated=amount - allocated.get(line_id, 0),
-                            description=first['description'], vendor_id=first['name_id'])
+        descriptions = list(dict.fromkeys(row[2]['description'] for row in (standing or dated) if row[2]['description']))
+        out[charge] = dict(charge=charge, transaction_id=charge,
+                           date=max(row[0] for row in (standing or dated)), amount=amount,
+                           allocated=allocated.get(charge, 0), unallocated=amount - allocated.get(charge, 0),
+                           description='; '.join(descriptions) or None, vendor_id=first['name_id'])
     return out
 
 
@@ -462,21 +488,20 @@ def _resolve_charges(s, inp, clearing_id, currency):
         if given.charge is not None:
             key = given.charge.upper()
             if key not in table:
-                raise _invalid(field + '.charge', 'not a Landed Cost Clearing line; `landed-cost charges` lists them')
+                raise _invalid(field + '.charge', 'not a charge on Landed Cost Clearing; `landed-cost charges` lists them')
             found = [table[key]]
         else:
-            transaction_id = _transaction_by_selector(s, given.document, field + '.document', lambda tid: any(
-                row['transaction_id'] == tid for row in table.values()))
-            found = [row for row in table.values() if row['transaction_id'] == transaction_id and row['unallocated']]
-            if given.amount is not None and len(found) != 1:
-                raise _invalid(field + '.amount', 'that document has more than one charge line; name the charge')
+            transaction_id = _transaction_by_selector(s, given.document, field + '.document', lambda tid: tid in table)
+            found = [table[transaction_id]]
+        labels = _documents(s, {row['transaction_id'] for row in found})
         for row in found:
             if row['charge'] in seen:
                 raise _invalid(field, 'a charge is named twice')
             seen.add(row['charge'])
             left = row['unallocated']
             if not left:
-                raise _invalid(field, 'nothing of that charge is left to allocate', charge=row['charge'])
+                raise _invalid(field, f'nothing left to allocate on {_label(labels[row["transaction_id"]])}',
+                               charge=row['charge'])
             amount = left
             if given.amount is not None:
                 magnitude = parse_domestic_amount(given.amount, currency, field + '.amount').minor_units
@@ -511,7 +536,7 @@ def _number(s, explicit):
 def _landed_totals(s, receipt_ids):
     totals: dict[str, int] = {}
     for line in live_lines(s, target_ids=receipt_ids):
-        totals[line['target_movement_id']] = totals.get(line['target_movement_id'], 0) + int(line['amount_minor_units'])
+        totals[line['current_target']] = totals.get(line['current_target'], 0) + int(line['amount_minor_units'])
     return totals
 
 
@@ -684,7 +709,7 @@ def _summary(s, change, *, status=None):
     for target in alloc['targets']:
         amount = sum(line['amount_minor_units'] for line in alloc['lines']
                      if (line['target_movement_id'] and target['kind'] == 'receipt'
-                         and line['target_movement_id'] == target['movement']['id'])
+                         and line.get('current_target', line['target_movement_id']) == target['movement']['id'])
                      or (line['target_account_id'] and target['kind'] == 'account'
                          and line['target_account_id'] == target['account']['id']))
         issued = -sum(int(v['value_minor_units']) for v in by_landed.get(target.get('landed_id'), ())
@@ -702,12 +727,13 @@ def _summary(s, change, *, status=None):
     charge_labels = {row['charge']: _label(documents[row['transaction_id']]) for row in alloc['chosen']}
     out_lines = []
     for line in alloc['lines']:
-        target = next((t for t in alloc['targets'] if (t['kind'] == 'receipt' and t['movement']['id'] == line['target_movement_id'])
+        target = next((t for t in alloc['targets'] if (t['kind'] == 'receipt'
+                                                         and t['movement']['id'] == line.get('current_target', line['target_movement_id']))
                        or (t['kind'] == 'account' and t['account']['id'] == line['target_account_id'])), None)
         out_lines.append(AllocationLineOutput(
             position=line['position'], charge=line['charge_line_id'], charge_document=charge_labels.get(line['charge_line_id']),
             target_document=_label(documents[target['transaction_id']]) if target and target['kind'] == 'receipt' else None,
-            target_movement_id=line['target_movement_id'], item_id=line['item_id'],
+            target_movement_id=line.get('current_target', line['target_movement_id']), item_id=line['item_id'],
             target_transaction_id=target['transaction_id'] if target and target['kind'] == 'receipt' else None,
             target_quantity=format_quantity_micro_units(int(target['movement']['quantity_microunits']))
             if target and target['kind'] == 'receipt' else None,
@@ -775,17 +801,20 @@ def _stored(s, header):
         t.c.position, t.c.reverses_line_id.is_not(None))).mappings()]
     reversed_ids = {r['reverses_line_id'] for r in rows if r['reverses_line_id']}
     originals = [dict(r, reversed=r['id'] in reversed_ids) for r in rows if r['reverses_line_id'] is None]
-    receipt_ids = {r['target_movement_id'] for r in originals if r['target_movement_id']}
+    moved = successors(s, {r['target_movement_id'] for r in originals})
+    for r in originals:
+        r['current_target'] = moved.get(r['target_movement_id'], r['target_movement_id'])
+    receipt_ids = {r['current_target'] for r in originals if r['current_target']}
     movements = {} if not receipt_ids else {r['id']: dict(r) for r in s.company.conn.execute(
         sa.select(c.inventory_movements).where(c.inventory_movements.c.id.in_(list(receipt_ids)))).mappings()}
     targets, seen = [], set()
     for r in originals:
-        key = r['target_movement_id'] or r['target_account_id']
+        key = r['current_target'] or r['target_account_id']
         if key in seen:
             continue
         seen.add(key)
-        if r['target_movement_id']:
-            row = movements[r['target_movement_id']]
+        if r['current_target']:
+            row = movements[r['current_target']]
             targets.append(dict(kind='receipt', movement=row, transaction_id=row['transaction_id'],
                                 item=item_service.resolve_item(s.company, row['item_id']), landed_id=r['landed_movement_id']))
         else:
@@ -881,7 +910,7 @@ def _void_change(s, ctx, inp):
     totals = _landed_totals(s, receipt_ids)
     for line in alloc['lines']:
         if line['target_movement_id']:
-            totals[line['target_movement_id']] -= int(line['amount_minor_units'])
+            totals[line['current_target']] -= int(line['amount_minor_units'])
     for target in alloc['targets']:
         if target['kind'] == 'receipt' and totals.get(target['movement']['id'], 0) < 0:
             raise BookflowError('E_WORK_DEPENDENCY', message=(
@@ -969,19 +998,54 @@ def apply_void(plan, ctx, s):
 # ---------------------------------------------------------------- guards
 
 
-def check_targets(s, reversing):
-    """Refuse retiring a receipt a live allocation lands on (a void or a change of its document)."""
+def check_targets(s, reversing, change=None, *, places_known=True):
+    """The receipts a live allocation lands on that this change retires: each must come back with its stock
+    unchanged -- the same entered line, item, quantity, cost, date, position, accounts and places (site, bin,
+    lot, serial numbers) -- and then carries its landed cost on (a memo or supplier reference edit reposts a
+    bill); any other change of one is refused, as is a void. Returns ``[(retired id, new id)]`` to record.
+
+    With ``places_known`` false (before the change's placements are worked out, so replay can read each landed
+    cost on its restatement) it compares everything but the places; the places are compared once known."""
     ids = [row['id'] for row in reversing if row['kind'] == 'receipt' and row.get('returns_movement_id') is None]
     if not ids or not sa.inspect(s.company.conn).has_table('landed_cost_allocation_lines'):
-        return
+        return []
     named = [line for line in live_lines(s, target_ids=ids) if line['kind'] == 'allocation']
-    if named:
-        numbers = sorted({line['number'] for line in named})
+    if not named:
+        return []
+    from bookflow.company import placements
+    by_id = {row['id']: row for row in reversing}
+    targets = sorted({line['current_target'] for line in named})
+    old_lines = dict(s.company.conn.execute(sa.select(c.document_lines.c.id, c.document_lines.c.line_id).where(
+        c.document_lines.c.id.in_([by_id[i]['document_line_id'] for i in targets]))).all())
+    old_places = placements.movement_placements(s, targets)
+    new_places: dict[str, list] = {}
+    for row in (getattr(change, 'placements', None) or ()):
+        new_places.setdefault(row['movement_id'], []).append(row)
+
+    def places(rows):
+        return sorted((p['site_id'], p.get('bin_id'), p.get('lot_id'), p.get('serial_number_id'),
+                       int(p['quantity_microunits'])) for p in rows if not p.get('reverses_placement_id'))
+    carried, refused = [], []
+    for old_id in targets:
+        old = by_id[old_id]
+        identity = old_lines.get(old['document_line_id'])
+        new = next((m.values for m in (getattr(change, 'movements', None) or ())
+                    if m.values['kind'] == 'receipt' and m.values.get('returns_movement_id') is None
+                    and identity and getattr(change, 'identities', {}).get(m.values['id']) == identity), None)
+        same = new is not None and all(new.get(key) == old.get(key) for key in (
+            'item_id', 'quantity_microunits', 'value_minor_units', 'effective_date', 'asset_account_id',
+            'offset_account_id', 'class_id', 'currency')) and (new.get('count_position') or 'before') == (
+            old.get('count_position') or 'before') and (not places_known or places(new_places.get(new['id'], ()))
+                                                        == places(old_places.get(old_id, ())))
+        (carried if same else refused).append((old_id, new['id'] if new else None))
+    if refused:
+        numbers = sorted({line['number'] for line in named if line['current_target'] in {o for o, _ in refused}})
         raise BookflowError('E_WORK_DEPENDENCY', message=(
-            f'Landed cost {", ".join(numbers)} {"is" if len(numbers) == 1 else "are"} allocated to this receipt, so it '
-            'cannot be voided or changed. Void '
-            f'the allocation first (`landed-cost void {numbers[0]}`), then allocate the freight again afterwards.'),
-            details={'allocations': numbers, 'reason': 'landed_cost_target'})
+            f'Landed cost {", ".join(numbers)} {"is" if len(numbers) == 1 else "are"} allocated to this receipt, so its '
+            'stock (lines, quantities, costs, site or bin, date) cannot be changed and it cannot be voided; a memo or '
+            f'reference may change. Void the allocation first (`landed-cost void {numbers[0]}`), then allocate the '
+            'freight again afterwards.'), details={'allocations': numbers, 'reason': 'landed_cost_target'})
+    return carried
 
 
 def watermark(s):

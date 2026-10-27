@@ -18,10 +18,10 @@ class _Strict(BaseModel):
 
 class ChargeInput(_Strict):
     charge: Selector | None = Field(default=None, description=(
-        'A charge line, by the `charge` id `landed-cost charges` lists. Give this or document.'))
+        'A charge, by the `charge` id `landed-cost charges` lists (the document\'s id). Give this or document.'))
     document: Selector | None = Field(default=None, description=(
-        'The bill, check, card charge or vendor credit holding the charge, by id or number: every unallocated '
-        'Landed Cost Clearing line on it.'))
+        'The bill, check, card charge or vendor credit holding the charge, by id or number: its Landed Cost '
+        'Clearing lines together are one charge.'))
     amount: str | None = Field(default=None, description=(
         'How much of the charge to allocate now, at most what is unallocated; omitted, all of it. A freight '
         'credit (a vendor credit line) is negative; give its amount as a positive number or leave it out.'))
@@ -92,7 +92,7 @@ class LandedCostSetupInput(_Strict):
 
 
 class ChargeOutput(BaseModel):
-    charge: str = Field(description='The charge line\'s id: pass it as `charges[].charge`.')
+    charge: str = Field(description='The charge\'s id (its document\'s): pass it as `charges[].charge`.')
     transaction_id: str
     document_type: str
     document_number: str | None

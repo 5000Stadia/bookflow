@@ -97,7 +97,16 @@ def movements(s, *, item_id=None, transaction_id=None, as_of=None):
         query = query.where(t.c.transaction_id == transaction_id)
     if as_of is not None:
         query = query.where(t.c.effective_date <= as_of)
-    return [dict(row) for row in s.company.conn.execute(query).mappings()]
+    rows = [dict(row) for row in s.company.conn.execute(query).mappings()]
+    landed = [row for row in rows if row['kind'] == 'landed']
+    if landed:
+        # A receipt restated unchanged by an edit of its document carries its landed cost on (R104 increment 6):
+        # replay reads each landed cost on the receipt that stands for it now.
+        from bookflow.company.landed_costs import successors
+        moved = successors(s, {row['landed_on_movement_id'] for row in landed})
+        for row in landed:
+            row['landed_on_movement_id'] = moved.get(row['landed_on_movement_id'], row['landed_on_movement_id'])
+    return rows
 
 
 def fallback_cost(s, item_id, currency):

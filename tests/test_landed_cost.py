@@ -333,11 +333,12 @@ def test_seeded_freight_paperwork_keeps_every_tie(shop, seed):
                                       description='Kit', price='90.00', purchase_description='Kit', cost='0.00',
                                       cogs_account_id=books['cogs'], income_account_id=books['income'],
                                       members=[dict(component_item_id=shop['widget'], quantity='2')])['id']
-    receipts, charges, allocations = [], [], []
+    receipts, charges, allocations, builds = [], [], [], []
     done, refused = {}, {}
     for step in range(STEPS):
         op = rnd.choice(['buy', 'buy', 'buy', 'sell', 'sell', 'freight', 'freight', 'credit', 'allocate', 'allocate',
-                         'allocate', 'allocate', 'void_allocation', 'void_freight', 'void_receipt', 'build', 'sell_kit'])
+                         'allocate', 'allocate', 'void_allocation', 'void_freight', 'void_receipt', 'build', 'build',
+                         'sell_kit', 'void_build', 'edit_freight', 'edit_receipt'])
         date = rnd.choice(DATES)
         try:
             if op == 'buy':
@@ -348,7 +349,28 @@ def test_seeded_freight_paperwork_keeps_every_tie(shop, seed):
             elif op == 'sell_kit':
                 _sell(shop, date, 1, item='Widget Kit')
             elif op == 'build':
-                run('assembly build', dict(item=kit, quantity='1', date=date), reason='Kit')
+                builds.append(run('assembly build', dict(item=kit, quantity='1', date=date), reason='Kit')['build_id'])
+            elif op == 'void_build' and builds:
+                build = builds.pop(rnd.randrange(len(builds)))
+                voided = run('assembly void', dict(build=build), reason='Built in error')
+                assert voided['status'] == 'voided', voided
+            elif op == 'edit_freight' and charges:
+                # An edit that keeps or raises the clearing amount never touches what was allocated.
+                document = rnd.choice(charges)
+                bill = run('bill show', dict(bill=document))
+                lines = [line for line in bill['revision']['expenses'] if line['account_id'] == shop['clearing']]
+                if lines:
+                    amount = sum(int(line['amount']['minor_units']) for line in lines) + rnd.choice([0, 100])
+                    expenses = [dict(account=books['cogs'], amount='1.00')] if rnd.random() < .5 else []
+                    expenses.insert(rnd.randint(0, len(expenses)), dict(
+                        account=shop['clearing'], amount=f'{amount // 100}.{amount % 100:02d}'))
+                    run('bill update', dict(bill=document, expected_version=bill['version'], expenses=expenses,
+                                            memo='Freight, checked'), reason='Edit freight')
+            elif op == 'edit_receipt' and receipts:
+                document = rnd.choice(receipts)
+                bill = run('bill show', dict(bill=document))
+                run('bill update', dict(bill=document, expected_version=bill['version'], memo=f'Checked {step}'),
+                    reason='Memo only')
             elif op == 'freight':
                 charges.append(_freight(shop, date, rnd.choice(['10.00', '33.33', '90.01'])))
             elif op == 'credit':
@@ -392,6 +414,10 @@ def test_seeded_freight_paperwork_keeps_every_tie(shop, seed):
                 charges.append(document)
             if op == 'void_receipt':
                 receipts.append(document)
+            # A memo edit of an allocated receipt, a void of a build and a freight edit that keeps the amount are
+            # valid paperwork: never refused.
+            assert op not in ('void_build', 'edit_receipt') and not (op == 'edit_freight' and error.code ==
+                                                                      'E_WORK_DEPENDENCY'), (seed, step, op, error)
             if _os.environ.get('BF_LANDED_DEBUG'):
                 print(op, error.message)
             # Refusals a person can act on are fine (an allocation naming the document, a closed or short build, a
@@ -411,7 +437,8 @@ def test_co0098_on_a_populated_company_changes_no_existing_row_and_records_recei
     from bookflow.company import schema as c
     from tests.test_negative_stock_migration import _at
     m = importlib.import_module('bookflow.storage.company_migrations.versions.0098_landed_cost')
-    tables = [c.metadata.tables[name] for name in ('landed_cost_allocations', 'landed_cost_allocation_lines')]
+    tables = [c.metadata.tables[name] for name in ('landed_cost_allocations', 'landed_cost_allocation_lines',
+                                                    'landed_cost_carries')]
     assert m.DDL == tuple(str(CreateTable(t).compile(dialect=dialect())) for t in tables)
     assert m.INDEXES == tuple(str(CreateIndex(i).compile(dialect=dialect()))
                               for t in tables for i in sorted(t.indexes, key=lambda i: i.name))
@@ -459,3 +486,59 @@ def test_co0098_on_a_populated_company_changes_no_existing_row_and_records_recei
         assert conn.execute("SELECT count(*), min(kind), min(basis) FROM landed_cost_allocations").fetchone() == (
             1, 'receipt_shipping', 'quantity')
         assert conn.execute('PRAGMA foreign_key_check').fetchall() == []
+
+
+def test_voiding_a_build_dated_before_an_allocation_takes_its_landed_partner_with_it(shop):
+    """A build consumed widgets before their freight was spread: its component owes a forward true-up whose landed
+    partner sits on the build's assembly receipt. Voiding the build retires both, and the true-ups derive again."""
+    books, run = shop['books'], shop['run']
+    kit = books['client'].item.create(company=books['company'], name='Kit', type='inventory_assembly', description='Kit',
+                                      price='90.00', purchase_description='Kit', cost='0.00',
+                                      cogs_account_id=books['cogs'], income_account_id=books['income'],
+                                      members=[dict(component_item_id=shop['widget'], quantity='2')])['id']
+    receipt = _buy(shop, '2017-03-01', 10)
+    freight = _freight(shop, '2017-03-02', '50.00')
+    built = run('assembly build', dict(item=kit, quantity='1', date='2017-03-02'), reason='Kit')
+    _sell(shop, '2017-03-03', 1, item='Kit')
+    result = _post(shop, [dict(document=freight)], [dict(document=receipt)], date='2017-03-05')
+    # The two widgets built (10.00 of the freight) and, through the kit's landed partner, the kit sold.
+    assert sorted(t['delta']['minor_units'] for t in result['allocation']['true_ups']) == [-1000, -1000]
+    _ties(shop)
+    voided = run('assembly void', dict(build=built['build_id']), reason='Built in error')
+    assert voided['status'] == 'voided'
+    assert _value(shop) == 10000 + 5000                  # every widget is back, with all of the freight
+    _ties(shop)
+    later = run('assembly build', dict(item=kit, quantity='1', date='2017-03-06'), reason='Kit again')
+    assert later['status'] == 'built'
+    _ties(shop)
+
+
+def test_edits_that_keep_the_stock_or_the_charge_pass_and_reductions_are_refused(shop):
+    run, cogs = shop['run'], shop['books']['cogs']
+    receipt = _buy(shop, '2017-03-01', 10)
+    part, whole = _freight(shop, '2017-03-02', '90.00'), _freight(shop, '2017-03-02', '90.00')
+    _post(shop, [dict(document=part, amount='50.00')], [dict(document=receipt)], date='2017-03-03')
+    _post(shop, [dict(document=whole)], [dict(document=receipt)], date='2017-03-03')
+    version = lambda d: run('bill show', dict(bill=d))['version']
+    run('bill update', dict(bill=part, expected_version=version(part), expenses=[
+        dict(account=shop['clearing'], amount='100.00')]), reason='Raised')
+    run('bill update', dict(bill=whole, expected_version=version(whole), expenses=[
+        dict(account=cogs, amount='5.00'), dict(account=shop['clearing'], amount='90.00')]), reason='Another line, reordered')
+    run('bill update', dict(bill=whole, expected_version=version(whole), memo='m', date='2017-03-02'), reason='Memo')
+    with pytest.raises(BookflowError) as reduced:
+        run('bill update', dict(bill=part, expected_version=version(part), expenses=[
+            dict(account=shop['clearing'], amount='40.00')]), reason='Below what was allocated')
+    assert reduced.value.code == 'E_WORK_DEPENDENCY'
+    assert [r['unallocated']['minor_units'] for r in run('landed-cost charges', {})['rows']] == [5000]
+    with pytest.raises(BookflowError) as nothing:
+        _post(shop, [dict(document=whole, amount='1.00')], [dict(document=receipt)])
+    assert 'nothing left to allocate on bill' in nothing.value.message
+    # The allocated receipt takes a memo and a supplier reference; its stock does not change.
+    run('bill update', dict(bill=receipt, expected_version=version(receipt), memo='Checked'), reason='Memo')
+    run('bill update', dict(bill=receipt, expected_version=version(receipt), supplier_reference='INV-9'), reason='Ref')
+    assert _value(shop) == 10000 + 5000 + 9000
+    for change in (dict(date='2017-03-02'), dict(items=[dict(item=shop['widget'], quantity='9', unit_cost='10.00')])):
+        with pytest.raises(BookflowError) as stock:
+            run('bill update', dict(bill=receipt, expected_version=version(receipt), **change), reason='Stock')
+        assert stock.value.code == 'E_WORK_DEPENDENCY' and 'memo or reference may change' in stock.value.message
+    _ties(shop)

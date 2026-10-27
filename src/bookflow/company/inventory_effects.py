@@ -224,6 +224,8 @@ class Change:
     placements: list = field(default_factory=list)     # where its own movements' units are (R104)
     sites: dict = field(default_factory=dict)          # movement id -> site, for its own movements
     numbers: dict = field(default_factory=dict)        # movement id -> what its line says of lot and serial numbers
+    identities: dict = field(default_factory=dict)     # movement id -> its entered line's stable identity (R104 inc 6)
+    carries: list = field(default_factory=list)        # (retired receipt, its restatement) carrying a landed cost
 
     @property
     def moves_stock(self):
@@ -280,10 +282,6 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
     negative-stock check sees the net effect rather than a transient the caller never asked
     for.
     """
-    if reversing:
-        # A receipt a landed-cost allocation lands on is not voided or changed under it (R104 increment 6).
-        from bookflow.company import landed_costs
-        landed_costs.check_targets(s, reversing)
     sequence = inventory.next_sequence(s) if sequence is None else sequence
     working: dict[str, list] = {}
     stored: dict[str, list] = {}
@@ -437,6 +435,8 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
             spec=entry.numbers, item_name=entry.item_name, returns=entry.returns_movement_id, field=field,
             prior=prior_numbers.get(entry.line_identity) if entry.line_identity else None, bin_id=bin_id,
             bin_auto=auto)
+        if entry.line_identity:
+            change.identities[identity] = entry.line_identity
         history.append(values)
         change.movements.append(Movement(values, key=entry.key))
         change.costs[entry.key] = values['value_minor_units']
@@ -463,6 +463,15 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
             lines, [Movement(values, line_index=1)]))
         sequence += 1
 
+    if reversing:
+        # A receipt restated unchanged carries its landed cost on, so replay reads it there (R104 increment 6);
+        # whether its places are unchanged too is checked once they are worked out, below.
+        from bookflow.company import landed_costs
+        for old, new in landed_costs.check_targets(s, reversing, change, places_known=False):
+            for history in working.values():
+                for index, row in enumerate(history):
+                    if row['kind'] == 'landed' and row.get('landed_on_movement_id') == old:
+                        history[index] = dict(row, landed_on_movement_id=new)
     owed = []
     own = {movement.values['id'] for movement in change.movements}
     names = {entry.item_id: entry.item_name for entry in entries}
@@ -534,6 +543,11 @@ def plan(s, *, entries, reversing=(), date=None, currency, field='lines', sequen
                                                  change.numbers, numbering)
     change.warnings.extend(placements.warnings(s, change.placements, names))
     change.warnings.extend(w for w in numbering.warnings if w not in change.warnings)
+    if reversing:
+        # A receipt a landed-cost allocation lands on is not voided, and its stock is not changed under it; one
+        # restated unchanged (a memo edit) carries its landed cost on (R104 increment 6).
+        from bookflow.company import landed_costs
+        change.carries = landed_costs.check_targets(s, reversing, change)
     return change
 
 
@@ -683,11 +697,17 @@ def write_movements(s, ctx, change, *, command_name, summary, created_at):
                 for row in clean]
     touched += [Touched('inventory_movement', row['id'], 'create', None, 1, row, db='company')
                 for row in rows]
+    carries = [dict(id=new_id(), from_movement_id=old, to_movement_id=new, created_at=created_at,
+                    created_by=s.actor.id, created_via=ctx.interface.value, audit_event_id=event)
+               for old, new in getattr(change, 'carries', ())]
+    touched += [Touched('landed_cost_carry', row['id'], 'create', None, 1, row, db='company') for row in carries]
     audit.write_event_to(s.company, ctx, command_name, summary, touched, actor_id=s.actor.id,
                          actor_kind=s.actor.kind,
                          directive_code=getattr(s, 'directive_code', None), event_id=event)
     placements.insert(s, placed)
     s.company.conn.execute(c.inventory_movements.insert(), rows)
+    if carries:
+        s.company.conn.execute(c.landed_cost_carries.insert(), carries)
     return touched
 
 

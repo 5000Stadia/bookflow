@@ -76,8 +76,8 @@ def define_tables(metadata, C, T):
         C('position', sa.Integer, 'One-based position within the allocation; a reversal repeats its original\'s.', nullable=False),
         ident('charge_transaction_id', 'Document holding the charge line; null for a receipt\'s own shipping.',
               'transactions.id', nullable=True),
-        ident('charge_line_id', 'Stable line identity of the charge line; null for a receipt\'s own shipping.',
-              nullable=True),
+        ident('charge_line_id', 'The charge: the id of the document whose Landed Cost Clearing lines it is (they are one charge '
+                                'whatever an edit does to its lines); null for a receipt\'s own shipping.', nullable=True),
         ident('target_movement_id', 'Receipt movement the share lands on; null when allocated to an account.',
               'inventory_movements.id', nullable=True),
         ident('target_account_id', 'Expense or cost-of-goods account a share not capitalised goes to; null for a receipt.',
@@ -106,7 +106,18 @@ def define_tables(metadata, C, T):
         sa.Index('ix_landed_cost_lines_charge', 'charge_transaction_id', 'charge_line_id'),
         sa.Index('ix_landed_cost_lines_target', 'target_movement_id'),
         description='Immutable shares of landed-cost charges by target receipt; a void writes reversing lines.')
-    return {'landed_cost_allocations': allocations, 'landed_cost_allocation_lines': lines}
+    carries = T('landed_cost_carries',
+        ident('id', 'Stable ULID of this immutable carry.', primary_key=True),
+        ident('from_movement_id', 'Receipt movement a document change retired with its stock unchanged.',
+              'inventory_movements.id'),
+        ident('to_movement_id', 'The receipt movement that restated it and carries its landed cost on.',
+              'inventory_movements.id'),
+        *provenance('carry'),
+        sa.UniqueConstraint('from_movement_id', name='uq_landed_cost_carry_from'),
+        description='A receipt a landed cost lands on, restated unchanged by an edit of its document (a memo, a '
+                    'reference): its landed cost carries on to the restatement.')
+    return {'landed_cost_allocations': allocations, 'landed_cost_allocation_lines': lines,
+            'landed_cost_carries': carries}
 
 
 def weight_columns(C):
@@ -151,6 +162,17 @@ GUARDS = (
     "JOIN landed_cost_allocations a ON a.id = NEW.allocation_id WHERE r.id = NEW.target_movement_id "
     "AND r.kind = 'receipt' AND r.returns_movement_id IS NULL AND r.item_id = NEW.item_id AND r.effective_date <= a.date) "
     "BEGIN SELECT RAISE(ABORT, 'a landed cost share lands on a bought receipt of its item, dated on or before it'); END",
+    "CREATE TRIGGER landed_cost_carries_immutable_update BEFORE UPDATE ON landed_cost_carries "
+    "BEGIN SELECT RAISE(ABORT, 'immutable landed cost carries'); END",
+    "CREATE TRIGGER landed_cost_carries_immutable_delete BEFORE DELETE ON landed_cost_carries "
+    "BEGIN SELECT RAISE(ABORT, 'immutable landed cost carries'); END",
+    # A carry joins two bought receipts of one item on one date, the first retired, the second standing.
+    "CREATE TRIGGER landed_cost_carries_same BEFORE INSERT ON landed_cost_carries WHEN NOT EXISTS (SELECT 1 FROM "
+    "inventory_movements o JOIN inventory_movements n ON n.id = NEW.to_movement_id WHERE o.id = NEW.from_movement_id "
+    "AND o.kind = 'receipt' AND n.kind = 'receipt' AND o.item_id = n.item_id AND o.effective_date = n.effective_date "
+    "AND o.quantity_microunits = n.quantity_microunits AND o.value_minor_units = n.value_minor_units "
+    "AND EXISTS (SELECT 1 FROM inventory_movements x WHERE x.reverses_movement_id = o.id)) "
+    "BEGIN SELECT RAISE(ABORT, 'a landed cost carries only from a retired receipt to its unchanged restatement'); END",
     # A landed movement names a bought receipt of its own item, dated on or before it.
     "CREATE TRIGGER inventory_movements_landed_on BEFORE INSERT ON inventory_movements WHEN NEW.kind = 'landed' "
     "AND NOT EXISTS (SELECT 1 FROM inventory_movements r WHERE r.id = NEW.landed_on_movement_id "

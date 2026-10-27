@@ -481,8 +481,15 @@ def _walk(rows, retired, posted, landed, strict) -> _Walk:
                                problem='stock below zero must carry exactly its unsettled provisional cost')
 
     if strict:
-        orphan = next((row for row in rows if row['kind'] == 'landed' and row['id'] not in retired
-                       and row.get('landed_on_movement_id') not in walked), None)
+        # A landed cost on a receipt that no longer stands is carried by nothing. That is right only when such
+        # costs net to nothing on it: a build voided with its assembly receipt takes the landed partners of its
+        # component true-ups with it, each backed out by its own opposite (R104 increment 6).
+        stranded: dict[str, int] = {}
+        for row in rows:
+            if row['kind'] == 'landed' and row['id'] not in retired and row.get('landed_on_movement_id') not in walked:
+                stranded[row['landed_on_movement_id']] = stranded.get(row['landed_on_movement_id'], 0) + int(row['value_minor_units'])
+        orphan = next((row for row in rows if row['kind'] == 'landed' and stranded.get(row.get('landed_on_movement_id'))
+                       and row['id'] not in retired), None)
         if orphan is not None:
             raise StockRefusal('landed_orphan', orphan, problem=(
                 'a landed cost is allocated to a receipt that no longer stands; void the landed-cost '
@@ -514,7 +521,9 @@ def replay(rows: Iterable[Mapping]) -> Replay:
     retired = _retired(rows)
     posted, posted_true_ups = _posted(rows, retired)
     by_id = {row['id']: row for row in rows}
-    landed_rows = [row for row in rows if row['kind'] == 'landed' and row['id'] not in retired]
+    # Landed costs on a retired receipt add to nothing (they net to nothing there, or the strict pass refuses).
+    landed_rows = [row for row in rows if row['kind'] == 'landed' and row['id'] not in retired
+                   and row.get('landed_on_movement_id') not in retired]
     final = _walk(rows, retired, posted, _landed_values(landed_rows), True)
     quantity, value, shortfalls, found, stale = final.quantity, final.value, final.shortfalls, final.found, final.stale
     if not landed_rows:
