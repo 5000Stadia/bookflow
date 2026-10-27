@@ -10,7 +10,7 @@ import bookflow
 from bookflow import BookflowError
 from bookflow.core import registry
 from bookflow.hub import permission_human_admin_catalog as layer, people_only, permission_runtime as runtime
-from bookflow.hub import permission_picking_catalog as tip_layer
+from bookflow.hub import permission_import_catalog as tip_layer
 from tests.conftest import hosted_call, make_agent
 from tests.test_row3_host import hosted  # noqa: F401 - fixture
 
@@ -55,6 +55,7 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # setup-trial-v1 adds none: `owner-link` is a local bootstrap command and `reconcile discard` is bookkeeping.
     # shipments-returns-v1 adds none: shipment returns are ledger writes.
     # picking-v1 adds none: pick lists are stock records that post nothing.
+    # import-v1 adds none: an import runs each row's own command, under that command's own capability.
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {
         'journal restore', 'invoice restore', 'customer merge', 'customer unmerge', 'vendor merge', 'vendor unmerge',

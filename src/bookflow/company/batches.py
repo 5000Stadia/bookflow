@@ -1,0 +1,587 @@
+"""Reversible batches: the shared ledger and its reversal (R107 increment 0, design/bulk-import.md §8a).
+
+A **batch** is a multi-record import or modification (an import run, later a grid edit or a bank statement import). Its
+write path records one **effect** per record it touched in the same transaction as the record's own write and audit
+event (``dispatch._apply`` calls ``s.batch_recorder`` just before the commit), so an effect never exists without its
+write or the reverse.
+
+A batch is **reversed as one unit** through the ordinary inverse commands, under the caller's own grants:
+
+- an ``updated`` effect sends its prior values back as an ordinary update carrying the version the batch left;
+- a ``created`` list record is renamed out of the way (``<name> (reversed <batch>)``, freeing its name for the corrected
+  file) and deactivated, so it leaves the lists and stays in history. Lists have no delete; when documents become
+  importable their family's ``delete`` or ``void`` is their inverse.
+
+**What blocks a reversal** is computed by a plan (``--dry-run``) and never by a parallel dependency engine: the batch's
+ordering (``strict``: a later live batch in its scope); a record **edited again** since (its version is not the one the
+batch left); a created record **in use** (any row the database's own foreign keys say refers to it, other than its own
+detail rows and records the same batch made); and the inverse command's own refusal, permission included, from a dry run.
+A blocked reversal changes nothing (``E_BATCH_BLOCKED`` names up to 50 blockers and the total).
+
+The plan is checked whole first; then each record's inverse steps run, each its own command, recorded as an effect of a
+``reversal`` batch, up to ``limit`` records per call. A batch that is not finished stays ``reversing`` and the same
+command resumes it from the recorded steps, so a reversal killed between slices repeats nothing.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+from dataclasses import dataclass, field
+from functools import lru_cache
+from datetime import datetime, timezone
+from typing import Any, Callable
+
+import sqlalchemy as sa
+
+from bookflow import BookflowError
+from bookflow.company import schema as c
+from bookflow.core.ids import new_id
+
+OWNER = 'batch.apply'
+DEFAULT_SLICE = 200
+MAX_BLOCKERS = 50
+
+
+def now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec='milliseconds')
+
+
+# ------------------------------------------------------------------ adapters
+
+@dataclass(frozen=True)
+class Adapter:
+    """How one batch kind reverses: its ordering and, per effect, the inverse commands (generic list records here)."""
+    kind: str
+    ordering: str = 'record'
+    on_reversed: Callable[[Any, dict, str], None] | None = None  # (s, effect, reversal batch id), in the last step's tx
+    on_finished: Callable[[Any, dict], None] | None = None  # (s, batch), in the transaction that marks it reversed
+    label: str = ''
+
+
+ADAPTERS: dict[str, Adapter] = {}
+
+
+def register(adapter: Adapter) -> Adapter:
+    ADAPTERS[adapter.kind] = adapter
+    return adapter
+
+
+def adapter_for(kind: str) -> Adapter:
+    try:
+        return ADAPTERS[kind]
+    except KeyError:
+        raise BookflowError('E_VALIDATION', message=f'A {kind} batch cannot be reversed here.',
+                            details={'field': 'batch', 'kind': kind}) from None
+
+
+@dataclass(frozen=True)
+class ListRecord:
+    noun: str
+    table: sa.Table
+    name_field: str  # the input field holding the record's own (leaf) name
+    selector_field: str
+    number_field: str | None = None  # a second unique field a reversed record releases (an account's number)
+
+
+@lru_cache(maxsize=None)
+def list_record(record_type: str) -> ListRecord | None:
+    from bookflow.company import lists
+    for definition in lists.all_list_definitions():
+        if definition.record_type == record_type:
+            table = c.metadata.tables[definition.table]
+            return ListRecord(definition.noun, table, 'name', definition.display_field,
+                              'number' if definition.noun == 'account' else None)
+    return None
+
+
+def _record(record_type: str) -> ListRecord:
+    found = list_record(record_type)
+    if found is None:
+        raise BookflowError('E_VALIDATION', message=f'No inverse is known for {record_type} records.',
+                            details={'record_type': record_type})
+    return found
+
+
+# ------------------------------------------------------------------ the write path
+
+def open_batch(s, ctx, *, kind: str, label: str, scope: str, ordering: str | None = None,
+               source_type: str | None = None, source_id: str | None = None, reversal_of: str | None = None,
+               reason: str | None = None) -> str:
+    """Write a live batch row in its own transaction and return its id."""
+    ordering = ordering or (adapter_for(kind).ordering if reversal_of is None else 'record')
+    batch_id = new_id()
+    actor = s.actor
+    with s.commits.operation(OWNER, s.company):
+        s.company.raw.execute('BEGIN IMMEDIATE')
+        try:
+            s.company.conn.execute(sa.insert(c.batches).values(
+                id=batch_id, kind=kind, scope=scope[:200], ordering=ordering, label=label[:200], state='live',
+                source_type=source_type, source_id=source_id, reversal_of=reversal_of, actor_id=actor.id,
+                actor_kind=actor.kind, via=str(getattr(ctx.interface, 'value', ctx.interface))[:16],
+                on_behalf_of=_on_behalf(s, ctx), reason=reason if reason is not None else ctx.reason,
+                created_at=now()))
+            s.commits.commit(s.company, OWNER)
+        except BaseException:
+            if s.company.write_transaction:
+                s.company.raw.rollback()
+            raise
+    return batch_id
+
+
+def _on_behalf(s, ctx) -> str | None:
+    value = getattr(ctx, 'on_behalf_of', None) or getattr(s.actor, 'owner_user_id', None)
+    return value if isinstance(value, str) and len(value) == 26 else None
+
+
+def last_event_id(s) -> str | None:
+    """The newest company audit event: inside a command's transaction, the one that command just wrote."""
+    return s.company.conn.execute(sa.text('SELECT id FROM audit_events ORDER BY seq DESC LIMIT 1')).scalar()
+
+
+def record_effect(s, batch_id: str, *, record_type: str, record_id: str, action: str, version_after: int | None,
+                  before: dict | None = None, event_id: str | None = None) -> int:
+    """Append one effect inside the caller's open transaction; returns its seq."""
+    seq = (s.company.conn.execute(sa.select(sa.func.max(c.batch_effects.c.seq))
+                                  .where(c.batch_effects.c.batch_id == batch_id)).scalar() or 0) + 1
+    s.company.conn.execute(sa.insert(c.batch_effects).values(
+        batch_id=batch_id, seq=seq, record_type=record_type, record_id=record_id, action=action,
+        version_after=version_after, before=None if before is None else json.dumps(before, sort_keys=True),
+        event_id=event_id, created_at=now()))
+    return seq
+
+
+def touched_effects(applied, record_types: set[str]) -> list[tuple[str, str, str, int | None]]:
+    """(record_type, record_id, action, version_after) for the records a command created or updated."""
+    out = []
+    for t in applied.touched:
+        if t.db != 'company' or t.record_type not in record_types:
+            continue
+        if t.action == 'create':
+            out.append((t.record_type, t.record_id, 'created', t.version_after))
+        elif t.action in ('update', 'activate', 'deactivate'):
+            out.append((t.record_type, t.record_id, 'updated', t.version_after))
+    return out
+
+
+def run_nested(s, ctx, name: str, payload: dict, *, source_ref: str, dry_run: bool = False,
+               recorder: Callable | None = None) -> dict:
+    """Run one registry command inside this session, as `cutover` nests its steps: the caller's own authority,
+    validation and audit, with ``source_ref`` naming where the write came from."""
+    from bookflow.core import registry
+    from bookflow.core.dispatch import run_in_session, validate_input
+    command = registry.get(name)
+    nested = ctx.model_copy(update={'idempotency_key': None, 'source_ref': source_ref[:512]})
+    saved = (s.company_touched, s.hub_touched, list(s.warnings), s.dry_run, getattr(s, 'batch_recorder', None))
+    s.batch_recorder = recorder
+    try:
+        return run_in_session(command, validate_input(command, payload), nested, s, dry_run=dry_run)
+    finally:
+        s.company_touched, s.hub_touched, s.warnings, s.dry_run, s.batch_recorder = saved
+        if s.company is not None and s.company.write_transaction:
+            s.company.raw.rollback()
+
+
+# ------------------------------------------------------------------ reading
+
+def _batch(s, batch_id: str) -> dict:
+    row = s.company.conn.execute(sa.select(c.batches).where(c.batches.c.id == batch_id)).mappings().first()
+    if row is None:
+        raise BookflowError('E_RECORD_NOT_FOUND', details={'record_type': 'batch', 'selector': batch_id})
+    return dict(row)
+
+
+def effects(s, batch_id: str) -> list[dict]:
+    rows = s.company.conn.execute(sa.select(c.batch_effects).where(c.batch_effects.c.batch_id == batch_id)
+                                  .order_by(c.batch_effects.c.seq)).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def counts(s, batch_id: str) -> dict[str, int]:
+    rows = s.company.conn.execute(sa.select(c.batch_effects.c.action, sa.func.count())
+                                  .where(c.batch_effects.c.batch_id == batch_id)
+                                  .group_by(c.batch_effects.c.action)).all()
+    return {action: int(n) for action, n in rows}
+
+
+def describe(s, batch: dict, *, with_plan: bool = False, ctx=None) -> dict:
+    out = {k: batch[k] for k in ('id', 'kind', 'scope', 'ordering', 'label', 'state', 'source_type', 'source_id',
+                                 'reversal_of', 'actor_id', 'actor_kind', 'via', 'on_behalf_of', 'reason',
+                                 'created_at', 'reversed_by', 'reversed_at', 'reversal_reason', 'reversal_event_id')}
+    out['counts'] = counts(s, batch['id'])
+    if with_plan:
+        if batch['state'] in ('live', 'reversing') and batch['reversal_of'] is None and batch['kind'] in ADAPTERS:
+            found = plan(s, ctx, batch['id'], probe=False)
+            out['reversible'] = not found['blockers']
+            out['first_blocker'] = found['blockers'][0] if found['blockers'] else None
+        else:
+            out['reversible'], out['first_blocker'] = False, None
+    return out
+
+
+def show(s, ctx, batch_id: str) -> dict:
+    batch = _batch(s, batch_id)
+    out = describe(s, batch, with_plan=True, ctx=ctx)
+    out['effects'] = [_effect_out(e) for e in effects(s, batch_id)[:200]]
+    return out
+
+
+def _effect_out(e: dict) -> dict:
+    return {'seq': e['seq'], 'record_type': e['record_type'], 'record_id': e['record_id'], 'action': e['action'],
+            'version_after': e['version_after'], 'before': json.loads(e['before']) if e['before'] else None,
+            'event_id': e['event_id']}
+
+
+def query(s, ctx, *, kind=None, state=None, scope=None, limit=50, cursor=None) -> dict:
+    q = sa.select(c.batches).order_by(c.batches.c.created_at.desc(), c.batches.c.id.desc())
+    if kind:
+        q = q.where(c.batches.c.kind == kind)
+    if state:
+        q = q.where(c.batches.c.state == state)
+    if scope:
+        q = q.where(c.batches.c.scope == scope)
+    if cursor:
+        q = q.where(c.batches.c.id < cursor)
+    rows = [dict(r) for r in s.company.conn.execute(q.limit(limit + 1)).mappings().all()]
+    more = len(rows) > limit
+    rows = rows[:limit]
+    return {'items': [describe(s, r, with_plan=True, ctx=ctx) for r in rows],
+            'next_cursor': rows[-1]['id'] if more and rows else None}
+
+
+# ------------------------------------------------------------------ planning a reversal
+
+def _done_steps(s, batch: dict) -> dict[tuple[str, str], list[dict]]:
+    """Inverse steps already run for each record, from the reversal batch's own effects."""
+    if not batch['reversed_by']:
+        return {}
+    done: dict[tuple[str, str], list[dict]] = {}
+    for e in effects(s, batch['reversed_by']):
+        done.setdefault((e['record_type'], e['record_id']), []).append(e)
+    return done
+
+
+def _current(s, record_type: str, ids: list[str]) -> dict[str, dict]:
+    rec = _record(record_type)
+    t = rec.table
+    cols = [t.c.id, t.c.version, t.c.updated_by, t.c.updated_at, t.c.active, t.c[rec.name_field]]
+    out = {}
+    for start in range(0, len(ids), 500):
+        chunk = ids[start:start + 500]
+        for row in s.company.conn.execute(sa.select(*cols).where(t.c.id.in_(chunk))).mappings():
+            out[row['id']] = dict(row)
+    return out
+
+
+_FK_CACHE: dict[str, list[tuple[str, str]]] = {}
+
+
+def _referrers(s, table: str) -> list[tuple[str, str]]:
+    """(table, column) pairs whose foreign key points at ``table``, less the record's own detail rows."""
+    if table not in _FK_CACHE:
+        singular = table[:-3] + 'y' if table.endswith('ies') else table.rstrip('s')
+        found = []
+        names = [r[0] for r in s.company.raw.execute(
+            "SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'").fetchall()]
+        for name in names:
+            for fk in s.company.raw.execute(f"PRAGMA foreign_key_list('{name}')").fetchall():
+                if fk[2] != table:
+                    continue
+                own = name.startswith(singular + '_') and fk[3] in (singular + '_id', 'owner_' + singular + '_id')
+                if not own:
+                    found.append((name, fk[3]))
+        _FK_CACHE[table] = sorted(set(found))
+    return _FK_CACHE[table]
+
+
+def _in_use(s, record_type: str, ids: list[str], made_here: set[str]) -> dict[str, dict]:
+    """For each created record, what refers to it elsewhere, by the database's own foreign keys: per table, the
+    first referring row."""
+    rec = _record(record_type)
+    found: dict[str, dict] = {}
+    if not ids:
+        return found
+    payload = json.dumps(ids)
+    for table, column in _referrers(s, rec.table.name):
+        meta = c.metadata.tables.get(table)
+        key = 'id' if meta is not None and 'id' in meta.c else 'rowid'
+        document = 'transaction_id' if meta is not None and 'transaction_id' in meta.c else 'NULL'
+        sql = (f'SELECT "{column}", {key}, {document} FROM "{table}" '
+               f'WHERE "{column}" IN (SELECT value FROM json_each(?))')
+        for target, referrer, transaction in s.company.raw.execute(sql, (payload,)).fetchall():
+            if table == rec.table.name and referrer in made_here:
+                continue
+            uses = found.setdefault(target, {'tables': [], 'rows': [], 'documents': []})
+            if transaction and len(uses['documents']) < 3:
+                kind, number = s.company.raw.execute('SELECT type, number FROM transactions WHERE id = ?',
+                                                     (transaction,)).fetchone() or ('transaction', None)
+                text = f"{kind.replace('_', ' ')} {number or transaction}"
+                if text not in uses['documents']:
+                    uses['documents'].append(text)
+            if table not in uses['tables']:
+                uses['tables'].append(table)
+                uses['rows'].append({'table': table, 'column': column, 'id': referrer, 'transaction_id': transaction})
+    return found
+
+
+def _steps_for(effect: dict, rec: ListRecord, batch: dict, version: int) -> list[tuple[str, dict]]:
+    """The inverse commands for one effect, in order, given the record's version when the first one runs."""
+    if effect['action'] == 'updated':
+        before = json.loads(effect['before'] or '{}')
+        return [(f'{rec.noun} update', {rec.noun: effect['record_id'], 'expected_version': version, **before})]
+    if effect['action'] == 'created':
+        return [('rename', {}), (f'{rec.noun} deactivate', {rec.noun: effect['record_id']})]
+    raise BookflowError('E_VALIDATION', message=f"No inverse for a {effect['action']} effect.",
+                        details={'action': effect['action']})
+
+
+def released_name(name: str, batch_id: str) -> str:
+    suffix = f' (reversed {batch_id[-6:].lower()})'
+    return (name or '')[:200 - len(suffix)].rstrip() + suffix
+
+
+def _blocker(effect: dict, rec: ListRecord | None, code: str, message: str, *, clears: str | None = None,
+             **extra) -> dict:
+    out = {'seq': effect.get('seq'), 'record_type': effect.get('record_type'), 'record_id': effect.get('record_id'),
+           'code': code, 'message': message, 'clears': clears}
+    out.update(extra)
+    return out
+
+
+def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
+    """What reversing this batch would do and what blocks it. ``probe`` dry-runs every inverse command too."""
+    batch = _batch(s, batch_id)
+    adapter = adapter_for(batch['kind'])
+    blockers: list[dict] = []
+    if batch['reversal_of'] is not None:
+        raise BookflowError('E_VALIDATION', message='A reversal is not itself reversed; run the corrected import.',
+                            details={'field': 'batch', 'batch': batch_id})
+    if batch['state'] in ('reversed', 'reversed_partly'):
+        raise BookflowError('E_VALIDATION', message=f'Batch {batch_id} is already {batch["state"]}.',
+                            details={'field': 'batch', 'state': batch['state']})
+    if adapter.ordering == 'strict':
+        later = s.company.conn.execute(sa.text(
+            "SELECT id, label, created_at FROM batches WHERE scope = :scope AND reversal_of IS NULL "
+            "AND state IN ('live', 'reversing') AND rowid > (SELECT rowid FROM batches WHERE id = :id) "
+            "ORDER BY rowid DESC"), {'scope': batch['scope'], 'id': batch_id}).mappings().all()
+        for row in later:
+            blockers.append({'seq': None, 'record_type': 'batch', 'record_id': row['id'], 'code': 'later_batch',
+                             'message': f"A later batch in {batch['scope']} is still live: {row['label']}.",
+                             'clears': f"reverse batch {row['id']} first", 'at': row['created_at']})
+    all_effects = effects(s, batch_id)
+    done = _done_steps(s, batch)
+    made = {(e['record_type'], e['record_id']) for e in all_effects if e['action'] == 'created'}
+    pending = []
+    for e in reversed(all_effects):
+        steps_done = done.get((e['record_type'], e['record_id']), [])
+        rec = _record(e['record_type'])
+        total = 1 if e['action'] == 'updated' else 2
+        if len(steps_done) >= total:
+            continue
+        pending.append((e, rec, steps_done))
+    by_type: dict[str, list[str]] = {}
+    for e, _, _ in pending:
+        by_type.setdefault(e['record_type'], []).append(e['record_id'])
+    current = {t: _current(s, t, ids) for t, ids in by_type.items()}
+    in_use = {t: _in_use(s, t, [e['record_id'] for e, _, steps in pending if e['record_type'] == t
+                                and e['action'] == 'created'], {i for rt, i in made if rt == t})
+              for t in by_type}
+    steps_out = []
+    for e, rec, steps_done in pending:
+        row = current[e['record_type']].get(e['record_id'])
+        expected = steps_done[-1]['version_after'] if steps_done else e['version_after']
+        if row is None:
+            blockers.append(_blocker(e, rec, 'E_RECORD_NOT_FOUND', f"{rec.noun} {e['record_id']} no longer exists."))
+            continue
+        label = f"{rec.noun} {row[rec.name_field]}"
+        if expected is not None and row['version'] != expected:
+            blockers.append(_blocker(e, rec, 'edited_again',
+                                     f"{label} was changed since the batch (version {row['version']}, the batch left "
+                                     f"{expected}), by {row['updated_by']} at {row['updated_at']}.",
+                                     clears=f"`{rec.noun} history {e['record_id']}` shows the change; undo it or keep "
+                                            "the batch", changed_by=row['updated_by'], changed_at=row['updated_at']))
+            continue
+        use = in_use[e['record_type']].get(e['record_id']) if e['action'] == 'created' else None
+        if use is not None:
+            blockers.append(_blocker(e, rec, 'in_use',
+                                     f"{label} is in use: " + (', '.join(use['documents']) if use['documents'] else
+                                                               'rows of ' + ', '.join(use['tables'])) + ' refer to it.',
+                                     clears=f"void, delete or move what uses {label} first", used_by=use['rows']))
+            continue
+        steps = _steps_for(e, rec, batch, row['version'])[len(steps_done):]
+        steps_out.append({'seq': e['seq'], 'record_type': e['record_type'], 'record_id': e['record_id'],
+                          'name': row[rec.name_field], 'action': e['action'], 'version': row['version'],
+                          'steps': [name if name != 'rename' else f'{rec.noun} update' for name, _ in steps]})
+        if probe:
+            refusal = _probe(s, ctx, batch, e, rec, row, steps, made)
+            if refusal is not None:
+                blockers.append(refusal)
+    fingerprint = hashlib.sha256(json.dumps(
+        [(x['seq'], x['record_id'], x['version'], x['steps']) for x in steps_out]).encode()).hexdigest()
+    return {'batch': batch, 'steps': steps_out, 'blockers': blockers, 'fingerprint': fingerprint}
+
+
+def _payload(rec: ListRecord, batch: dict, row: dict, name: str, payload: dict, version: int) -> dict:
+    if name == 'rename':
+        out = {rec.noun: row['id'], 'expected_version': version,
+               rec.name_field: released_name(row[rec.name_field], batch['id'])}
+        if rec.number_field:
+            out[rec.number_field] = None
+        return out
+    if name.endswith(' deactivate'):
+        return dict(payload, expected_version=version)
+    return payload
+
+
+def _probe(s, ctx, batch, e, rec, row, steps, made) -> dict | None:
+    """Dry-run the inverse commands still to run: their own refusals, permission included, name the blocker. A
+    deactivate refused only for children this same batch made (and reverses first) is not a blocker."""
+    for name, payload in steps:
+        command = f'{rec.noun} update' if name == 'rename' else name
+        body = _payload(rec, batch, row, name, payload, row['version'])
+        if name.endswith(' deactivate'):
+            body.pop('expected_version', None)
+        try:
+            run_nested(s, ctx, command, body, source_ref=f"reverse:{batch['id']}", dry_run=True)
+        except BookflowError as error:
+            if error.code == 'E_ACTIVE_DEPENDENTS' and _only_batch_children(s, rec, row, e, made):
+                continue
+            return _blocker(e, rec, error.code, f"{rec.noun} {row[rec.name_field]}: {error.message}",
+                            clears=_clears_for(error, rec), details=error.details)
+    return None
+
+
+def _only_batch_children(s, rec, row, e, made) -> bool:
+    if 'path' not in rec.table.c:
+        return False
+    children = s.company.conn.execute(sa.select(rec.table.c.id).where(
+        rec.table.c.path.like('%' + row['id'] + '/%'), rec.table.c.active.is_(True),
+        rec.table.c.id != row['id'])).scalars().all()
+    return bool(children) and all((e['record_type'], child) in made for child in children)
+
+
+def _clears_for(error: BookflowError, rec: ListRecord) -> str:
+    if error.code == 'E_PERMISSION':
+        return 'ask your principal or an admin for the grant the details name'
+    if error.code == 'E_ACTIVE_DEPENDENTS':
+        return f'deactivate or move what sits under this {rec.noun} first'
+    return f'see the details; `{rec.noun} show` reads the record'
+
+
+def refuse(found: dict) -> BookflowError:
+    blockers = found['blockers']
+    first = blockers[0]
+    return BookflowError('E_BATCH_BLOCKED', message=(
+        f"The batch cannot be reversed: {len(blockers)} blocker{'s' if len(blockers) != 1 else ''}, first {first['message']}"
+        " Nothing was changed."),
+        details={'batch': found['batch']['id'], 'blockers': blockers[:MAX_BLOCKERS], 'total': len(blockers)})
+
+
+# ------------------------------------------------------------------ reversing
+
+def reverse(s, ctx, batch_id: str, *, reason: str | None, dry_run: bool = False, limit: int = DEFAULT_SLICE,
+            fingerprint: str | None = None, interrupt: Callable[[int], None] | None = None) -> dict:
+    """Reverse a batch (or its next slice). ``interrupt`` is a test hook called after each record."""
+    found = plan(s, ctx, batch_id, probe=True)
+    batch = found['batch']
+    if found['blockers']:
+        raise refuse(found)
+    if fingerprint is not None and fingerprint != found['fingerprint']:
+        raise BookflowError('E_VERSION_CONFLICT', message='The batch changed since that dry run; run it again.',
+                            details={'field': 'fingerprint', 'current': found['fingerprint']})
+    if dry_run:
+        return _result(s, found, state=batch['state'], reversed_now=0, dry_run=True)
+    adapter = adapter_for(batch['kind'])
+    reversal_id = batch['reversed_by']
+    if reversal_id is None:
+        reversal_id = open_batch(s, ctx, kind='reversal', label=f"Reversal of {batch['label']}"[:200],
+                                 scope=batch['scope'], reversal_of=batch_id, reason=reason)
+        _set_state(s, batch_id, state='reversing', reversed_by=reversal_id, reversed_at=now(),
+                   reversal_reason=reason)
+        batch = _batch(s, batch_id)
+    by_seq = {e['seq']: e for e in effects(s, batch_id)}
+    made = {(e['record_type'], e['record_id']) for e in by_seq.values() if e['action'] == 'created'}
+    reversed_now = 0
+    done_map = _done_steps(s, batch)
+    for step in found['steps'][:max(1, limit)]:
+        e = by_seq[step['seq']]
+        rec = _record(e['record_type'])
+        done = done_map.setdefault((e['record_type'], e['record_id']), [])
+        version = done[-1]['version_after'] if done else e['version_after']
+        all_steps = _steps_for(e, rec, batch, version)
+        for index in range(len(done), len(all_steps)):
+            name, payload = all_steps[index]
+            row = _current(s, e['record_type'], [e['record_id']])[e['record_id']]
+            last = index == len(all_steps) - 1
+            command = f'{rec.noun} update' if name == 'rename' else name
+            output = run_nested(s, ctx, command, _payload(rec, batch, row, name, payload, row['version']),
+                                source_ref=f'reverse:{batch_id}',
+                                recorder=_reversal_recorder(reversal_id, e, index, adapter if last else None))
+            done.append({'version_after': output.get('version') if isinstance(output, dict) else None})
+        reversed_now += 1
+        if interrupt is not None:
+            interrupt(reversed_now)
+    remaining = plan(s, ctx, batch_id, probe=False)
+    if remaining['steps']:
+        return _result(s, remaining, state='reversing', reversed_now=reversed_now)
+    event_id = _finish(s, ctx, batch_id, reversal_id, batch)
+    final = _batch(s, batch_id)
+    return {'batch': describe(s, final), 'state': 'reversed', 'reversed_now': reversed_now, 'remaining': 0,
+            'blockers': [], 'steps': [], 'fingerprint': None, 'reversal_batch': reversal_id, 'event_id': event_id,
+            'dry_run': False}
+
+
+def _result(s, found: dict, *, state: str, reversed_now: int, dry_run: bool = False) -> dict:
+    batch = _batch(s, found['batch']['id'])
+    return {'batch': describe(s, batch), 'state': state, 'reversed_now': reversed_now,
+            'remaining': len(found['steps']), 'blockers': found['blockers'][:MAX_BLOCKERS],
+            'steps': found['steps'][:MAX_BLOCKERS], 'fingerprint': found['fingerprint'],
+            'reversal_batch': batch['reversed_by'], 'event_id': None, 'dry_run': dry_run}
+
+
+def _reversal_recorder(reversal_id: str, effect: dict, index: int, adapter: Adapter | None):
+    def record(s, cmd, applied, output):
+        version = output.get('version') if isinstance(output, dict) else None
+        record_effect(s, reversal_id, record_type=effect['record_type'], record_id=effect['record_id'],
+                      action='reversed', version_after=version,
+                      before={'of_seq': effect['seq'], 'step': index, 'command': cmd.name},
+                      event_id=last_event_id(s))
+        if adapter is not None and adapter.on_reversed is not None:
+            adapter.on_reversed(s, effect, reversal_id)
+    return record
+
+
+def _set_state(s, batch_id: str, **values) -> None:
+    with s.commits.operation(OWNER, s.company):
+        s.company.raw.execute('BEGIN IMMEDIATE')
+        try:
+            s.company.conn.execute(sa.update(c.batches).where(c.batches.c.id == batch_id).values(**values))
+            s.commits.commit(s.company, OWNER)
+        except BaseException:
+            if s.company.write_transaction:
+                s.company.raw.rollback()
+            raise
+
+
+def _finish(s, ctx, batch_id: str, reversal_id: str, batch: dict) -> str:
+    from bookflow.core.audit import write_event_to
+    from bookflow.core.registry import Touched
+    n = counts(s, batch_id)
+    summary = f"reversed batch {batch['label']}: {sum(n.values())} record{'s' if sum(n.values()) != 1 else ''}"
+    with s.commits.operation(OWNER, s.company):
+        s.company.raw.execute('BEGIN IMMEDIATE')
+        try:
+            event_id = write_event_to(s.company, ctx, 'batch reverse', summary,
+                                      [Touched('batch', batch_id, 'update', None, None, {'state': 'reversed'},
+                                               {'state': batch['state']}, db='company')],
+                                      actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code)
+            s.company.conn.execute(sa.update(c.batches).where(c.batches.c.id == batch_id).values(
+                state='reversed', reversal_event_id=event_id))
+            finished = adapter_for(batch['kind']).on_finished
+            if finished is not None:
+                finished(s, batch)
+            s.commits.commit(s.company, OWNER)
+        except BaseException:
+            if s.company.write_transaction:
+                s.company.raw.rollback()
+            raise
+    return event_id

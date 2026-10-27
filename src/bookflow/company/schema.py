@@ -1272,3 +1272,6 @@ from bookflow.company import pick_list_schema as _pick_list_schema
 globals().update(_pick_list_schema.define_tables(metadata, _column, _table))
 company_info.append_column(_pick_list_schema.company_info_column(_column))
 inventory_sites.append_column(_pick_list_schema.staging_column(_column))
+# Reversible batches and list imports (co0105, R107 increments 0 and 1).
+from bookflow.company import import_schema as _import_schema
+globals().update(_import_schema.define_tables(metadata, _column, _table))
