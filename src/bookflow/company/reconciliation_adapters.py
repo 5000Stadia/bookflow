@@ -435,7 +435,7 @@ UNCOVERED_PRODUCERS = tuple(name for name in TRANSACTION_TYPES if name not in RE
 def enumerate_graph(g):
     history, current = [], []
     for header in sorted(g.rows['transactions'], key=lambda r: r['id']):
-        if g.scope is not None and header['id'] not in g.scope:
+        if getattr(g, 'scope', None) is not None and header['id'] not in g.scope:
             continue
         adapter = REGISTRY.get(header['type'])
         if adapter is None:

@@ -1494,7 +1494,7 @@ Example JSON output:
 
 ## `company verify`
 
-Prove the whole of the company's statement reconciliation storage: for every bank and card account (or the one named), each stored statement effect is derived again from the ledger and compared, and every finished reconciliation, claim and receipt is checked against the rows it stored. Reconciliation commands re-prove only what changed since the account was last proved; this finds an older record changed outside Bookflow. Backups and restores run it too. Reads only. Example: `bookflow company verify`.
+Prove the whole of the company's statement reconciliation storage: for every bank and card account (or the one named), each stored statement effect is derived again from the ledger and compared, and every finished reconciliation, claim and receipt is checked against the rows it stored. Reconciliation commands re-prove only what changed since the account was last proved; this finds an older record changed outside Bookflow. Backups and restores run it too. Without an account it also runs SQLite's integrity and reference checks over the whole file. Reads only. Example: `bookflow company verify`.
 
 | Contract | Value |
 |---|---|
@@ -1550,7 +1550,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
-| `ok` | boolean | yes | no | — | True when no account failed |
+| `ok` | boolean | yes | no | — | True when no account failed and the database checks passed |
 | `accounts` | array[object] | yes | no | — | — |
 | `accounts[].account_id` | string | yes | no | — | — |
 | `accounts[].name` | string | yes | no | — | The account's full name |
@@ -1560,6 +1560,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `accounts[].effect_versions` | integer | yes | no | — | Stored statement effect versions compared |
 | `accounts[].certificates` | integer | yes | no | — | Finished reconciliations (certificates) checked |
 | `accounts[].watermark` | string \| null | no | yes | null | The account's verified watermark: holds, missing, stale (other code) or broken (the file changed under it); a watermark only lets reconciliation commands re-prove less, never more |
+| `database` | object \| null | no | yes | null | The whole file's SQLite integrity and reference checks; only when no account is named |
+| `database.integrity` | string | yes | no | — | SQLite's integrity check: ok, or the first problem it reports |
+| `database.broken_references` | integer | yes | no | — | Rows whose declared reference names no row (SQLite foreign key check) |
 | `proves` | string | yes | no | — | What this proof covers, and what a reconciliation command proves on its own |
 
 Example JSON output:
@@ -1567,6 +1570,7 @@ Example JSON output:
 ```json
 {
   "accounts": [],
+  "database": null,
   "ok": false,
   "proves": "value"
 }

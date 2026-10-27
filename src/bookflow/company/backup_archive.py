@@ -178,7 +178,7 @@ def create(folder: Path, *, company_id: str, display_name: str, created_by: dict
             for entry in files[1:]:
                 zf.write(store / entry["name"].split("/", 1)[1], entry["name"], compress_type=zipfile.ZIP_STORED)
         sync_file(partial)
-        verify(partial)
+        verify(partial, prove=False)  # the copy it holds was proved above
         if read_only:
             os.chmod(partial, 0o444)
         partial.replace(target)
@@ -266,12 +266,13 @@ def _manifest(zf: zipfile.ZipFile) -> dict[str, Any]:
     return manifest
 
 
-def verify(archive: Path, dest: Path | None = None) -> dict[str, Any]:
+def verify(archive: Path, dest: Path | None = None, *, prove: bool = True) -> dict[str, Any]:
     """Refuse anything but an intact archive; with ``dest``, write its verified members there.
 
     Every member is read in full and compared with the manifest (sha256 and size; zip's own
     CRC is checked on the way). The database is then opened: integrity check, foreign keys,
-    the one company row and the schema revision must all agree with the manifest.
+    the one company row and the schema revision must all agree with the manifest; at this
+    Bookflow's schema, its statement reconciliation storage is proved whole (`prove_statements`).
     """
     with _open(archive) as zf:
         manifest = _manifest(zf)
@@ -285,7 +286,7 @@ def verify(archive: Path, dest: Path | None = None) -> dict[str, Any]:
             db = (dest if dest is not None else scratch) / DATABASE
             check_database(db, company_id=manifest["company_id"], revision=manifest["schema_revision"])
             from bookflow.storage.migrate import HEADS
-            if manifest["schema_revision"] == HEADS["company"]:
+            if prove and manifest["schema_revision"] == HEADS["company"]:
                 # An older schema is proved after it is migrated (`company restore`).
                 prove_statements(db)
         finally:

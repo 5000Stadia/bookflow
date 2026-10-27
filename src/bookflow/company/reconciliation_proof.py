@@ -69,7 +69,7 @@ def prove(g, history, current, account_id, cutoff):
     total = sum(v.signed_debit for v in current if v.active and v.account_id==account_id and v.effective_date<=cutoff)
     gl = sum(r['debit_minor_units']-r['credit_minor_units'] for r in legs.values()
         if r['account_id']==account_id and batches[r['batch_id']]['effective_date']<=cutoff)
-    if g.verified is not None:
+    if getattr(g, 'verified', None) is not None:
         # A scoped graph (`reconciliation_watermark`): the documents outside its scope still count
         # toward the account's dated totals, through what the verified watermark stands for.
         total += sum(signed for _, account, active, date, signed in g.verified.current

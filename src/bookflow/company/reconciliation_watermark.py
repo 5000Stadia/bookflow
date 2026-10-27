@@ -7,7 +7,7 @@ years of books that is several seconds, and nearly all of it re-proves history t
 changed. This module records, per account, the point a proof reached (`statement_watermarks`), and
 tells a later load what it must prove again. design/performance.md ("Stage 2") is the account of it.
 
-**What a watermark records.** The code version (a hash of the derivation and validation sources),
+**What a watermark records.** The code version (a hash of every Bookflow source file),
 the census (for each append-only table, its highest row number and row count), a fingerprint per
 proved document of the rows that can change under it (its header, its bank-effect pointers, its
 stored effect heads), the accounts the proof reached, the ledger setup the derivation reads (each
@@ -52,9 +52,14 @@ _code = None
 
 
 def code_sources() -> list[Path]:
-    """Every source whose bytes the derivation and the validation depend on."""
-    return [*sorted(_HERE.glob('reconciliation_*.py')),
-            *(_HERE / name for name in ('schema.py', 'ledger_schema.py', 'statement_watermark_schema.py'))]
+    """Every source whose bytes the derivation and the validation may depend on: the whole package.
+
+    The derivation reaches well past the reconciliation modules (a deposit's stored effect is proved
+    by the deposit models and validator, which import the sales, payment and custom-field models,
+    and so on), and an import graph drawn by hand is the list that goes stale. So any change to any
+    Bookflow source is a change of code version, and costs each account one full proof.
+    """
+    return sorted(_HERE.parent.rglob('*.py'))
 
 
 def code_version() -> str:
@@ -67,8 +72,9 @@ def code_version() -> str:
         def part(label, data: bytes):
             digest.update(label.encode() + b'\0' + str(len(data)).encode() + b'\0' + data)
         part('format', FORMAT.encode())
+        base = _HERE.parent
         for path in code_sources():
-            part('source:' + path.name, path.read_bytes())
+            part('source:' + path.relative_to(base).as_posix(), path.read_bytes())
         part('bookflow', _bookflow_version().encode())
         part('python', ('%s|%s' % (sys.version, sys.implementation.cache_tag)).encode())
         _code = digest.hexdigest()

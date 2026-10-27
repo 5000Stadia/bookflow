@@ -467,6 +467,13 @@ def test_a_change_to_the_ledger_setup_or_schema_breaks_the_watermark(ledger):
         raw.execute('DROP INDEX r180_witness')
     with session(client) as s:
         assert watermark.state(s.company, bank, *loading.gather(s.company, bank)[:2])[0] == 'holds'
+    # An account added, another renamed: nothing proved reads either, so the watermark holds.
+    client.account.create(name='Second bank', type='bank', company=COMPANY)
+    run(client, 'account update', dict(account=ledger['supplies'], name='Plumbing parts',
+                                       expected_version=run(client, 'account show', dict(account=ledger['supplies']))['version']))
+    with session(client) as s:
+        reason, scope = watermark.state(s.company, bank, *loading.gather(s.company, bank)[:2])
+        assert reason == 'holds' and scope.documents == frozenset()
     # A header changed in place, with nothing appended: that one document is derived again.
     with sqlite3.connect(path) as raw:
         doc = raw.execute("SELECT transaction_id FROM reconciliation_effect_versions WHERE account_id=? LIMIT 1", (bank,)).fetchone()[0]

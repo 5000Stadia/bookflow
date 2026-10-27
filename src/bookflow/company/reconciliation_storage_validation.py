@@ -565,7 +565,7 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None, m
         values=[v for v in current if v.account_id==owner['account_id'] and (not opening or v.active and v.effective_date<=pop['cutoff'])]
         identity={ (keys[v['key_id']]['producer'],keys[v['key_id']]['transaction_id'],keys[v['key_id']]['role'],component(keys[v['key_id']]),v['source_version']):v['id'] for v in versions.values() }
         expected=[identity.get((v.ref.producer,v.ref.transaction_id,v.ref.role,v.ref.component_id,v.version_id)) for v in values]
-        if graph.verified is not None:
+        if getattr(graph, 'verified', None) is not None:
             # A scoped graph: the documents outside its scope are current as the watermark proved.
             expected.extend(i for i,account,active,date,_ in graph.verified.current
                             if account==owner['account_id'] and (not opening or active and date<=pop['cutoff']))

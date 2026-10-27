@@ -38,9 +38,16 @@ class VerifiedAccount(BaseModel):
                                                      'lets reconciliation commands re-prove less, never more')
 
 
+class DatabaseCheck(BaseModel):
+    integrity: str = Field(description="SQLite's integrity check: ok, or the first problem it reports")
+    broken_references: int = Field(description='Rows whose declared reference names no row (SQLite foreign key check)')
+
+
 class VerifyOutput(BaseModel):
-    ok: bool = Field(description='True when no account failed')
+    ok: bool = Field(description='True when no account failed and the database checks passed')
     accounts: list[VerifiedAccount]
+    database: DatabaseCheck | None = Field(None, description='The whole file\'s SQLite integrity and reference checks; '
+                                                             'only when no account is named')
     proves: str = Field(description='What this proof covers, and what a reconciliation command proves on its own')
 
 
@@ -62,7 +69,13 @@ def plan_company_verify(inp: VerifyInput, ctx, s) -> Plan:
     account_id = resolve_account(db, inp.account)['id'] if inp.account else None
     names = dict(db.conn.execute(sa.select(c.accounts.c.id, c.accounts.c.full_name)).all())
     out = [VerifiedAccount(name=names.get(found['account_id'], ''), **found) for found in watermark.verify(db, account_id)]
-    return Plan(VerifyOutput(ok=all(v.outcome != 'failed' for v in out), accounts=out, proves=PROVES))
+    database = None
+    if account_id is None:
+        found = db.raw.execute('PRAGMA integrity_check').fetchone()[0]
+        database = DatabaseCheck(integrity=found, broken_references=len(db.raw.execute('PRAGMA foreign_key_check').fetchall()))
+    ok = all(v.outcome != 'failed' for v in out) and (database is None or
+                                                    (database.integrity == 'ok' and not database.broken_references))
+    return Plan(VerifyOutput(ok=ok, accounts=out, database=database, proves=PROVES))
 
 
 company_verify = command(
@@ -71,7 +84,8 @@ company_verify = command(
                  '(or the one named), each stored statement effect is derived again from the ledger and compared, and '
                  'every finished reconciliation, claim and receipt is checked against the rows it stored. '
                  'Reconciliation commands re-prove only what changed since the account was last proved; this finds an '
-                 'older record changed outside Bookflow. Backups and restores run it too. Reads only. Example: '
+                 'older record changed outside Bookflow. Backups and restores run it too. Without an account it also '
+                 'runs SQLite\'s integrity and reference checks over the whole file. Reads only. Example: '
                  '`bookflow company verify`.'),
     input_model=VerifyInput, output_model=VerifyOutput, required_role='member', capability='ledger.read',
     error_codes=['E_RECORD_NOT_FOUND', 'E_VALIDATION'])(plan_company_verify)
