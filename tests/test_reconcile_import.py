@@ -56,7 +56,8 @@ def by_status(document):
 def test_each_format_imports_and_reports_every_line(client, name, fmt, duplicates):
     document = run(client, 'reconcile import', dict(account='Checking', content=sample(name)))
     assert document['format'] == fmt
-    assert (document['statement_date'], document['ending_balance']) == ('2026-09-30', 623695)
+    # An OFX file states its statement date; a CSV does not, and its last line is not one (R183).
+    assert (document['statement_date'], document['ending_balance']) == ('2026-09-30' if fmt != 'csv' else None, 623695)
     counts = document['counts']
     assert {k: counts[k] for k in EXPECTED} == EXPECTED
     assert counts['duplicate'] == duplicates and counts['lines'] == 10 + duplicates
@@ -182,7 +183,7 @@ def test_refusals_are_named(client):
     from bookflow import BookflowError
     with pytest.raises(BookflowError) as raised:
         run(client, 'reconcile import', dict(account='Checking', content=sample('checking-2026-09.csv'),
-                                             start=True))
+                                             start=True, statement_date='2026-09-30'))
     # No opening yet: the refusal says the first step, as `reconcile start` does.
     assert 'reconcile opening start' in str(raised.value.to_dict())
     with pytest.raises(BookflowError) as raised:
@@ -229,7 +230,7 @@ def test_the_same_import_through_python_cli_http_and_mcp(root, tmp_path):
             results = {}
             for surface in SURFACES:
                 results[surface] = await matrix.call(surface, 'reconcile import', dict(
-                    account='Checking', content=content, start=True))
+                    account='Checking', content=content, start=True, statement_date='2026-09-30'))
             # A file named in transport.input_file is refused with the way to give it, not a bare usage error.
             refused = await matrix.mcp.call_tool('bookflow_run', dict(
                 command='reconcile import', input=dict(account='Checking'), company=matrix.company,

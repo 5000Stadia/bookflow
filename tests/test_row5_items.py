@@ -58,8 +58,9 @@ def test_missing_service_fields_are_reported_together_then_corrected(client):
     refs = _refs(client)
     before = client.run("item list", {}, company=COMPANY)
     error = _assert_error(client, "item create", {"name": "One correction", "type": "service"}, "E_VALIDATION")
-    assert {f["field"] for f in error.details["fields"]} == {
-        "description", "income_account_id", "price", "sales_tax_code_id"}
+    # R183: a service's price defaults to 0.00 and its description to its name; the demo has sales tax on,
+    # so its sales-tax code is still asked for.
+    assert {f["field"] for f in error.details["fields"]} == {"income_account_id", "sales_tax_code_id"}
     assert client.run("item list", {}, company=COMPANY) == before
     created = _service(client, refs, name="One correction", price="0")
     assert created["price"]["minor_units"] == 0
