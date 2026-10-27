@@ -1,6 +1,7 @@
 # Installed MCP guide
 
-Install `bookflow-core[mcp]` in the launcher and host environments. A host missing
+`bookflow setup` writes this configuration for you ([agent install](agent-install.md)); the rest of
+this page explains it. The default install includes MCP support (`bookflow-core[mcp]` still works). A host missing
 the incremental parser rejects compatibility preflight with installation guidance
 before business submission.
 The optional SDK is pinned to 2.1.1 and the incremental parser to 3.5.1 in the initial
@@ -17,7 +18,8 @@ bookkeeping host nor acquires the company's root lock.
 
 Configure the MCP client's stdio command as `bookflow`, with arguments
 `mcp --url HOST_ORIGIN --client-name plumbing-agent --input-dir INPUT_DIRECTORY --output-dir OUTPUT_DIRECTORY`.
-Inject `BOOKFLOW_TOKEN` in its private process environment; do not paste a token
+Inject `BOOKFLOW_TOKEN` in its private process environment, or name an owner-only
+token file (mode 0600) with `--token-file`, as `bookflow setup` does; do not paste a token
 into an invocation or diagnostic log. Both directories must already exist and be
 owned by the launching OS user, without group/world write permission. Configure
 only the business inbox/outbox intended for this agent. File operations reject

@@ -10,7 +10,7 @@ from tests.test_mcp_registry_credentials import hub_snapshot
 from tests.test_mcp_registry_work import company_snapshot
 from tests import provenance
 
-COMMANDS = frozenset({'init', 'company use', 'docs generate', 'mcp', 'serve', 'perf generate', 'perf bench', 'perf compare'})
+COMMANDS = frozenset({'init', 'company use', 'docs generate', 'mcp', 'serve', 'perf generate', 'perf bench', 'perf compare', 'setup'})
 
 
 def test_installed_local_boundaries_are_explicit_and_do_not_execute(hosted, live, tmp_path, monkeypatch):

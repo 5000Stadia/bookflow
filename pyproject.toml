@@ -19,6 +19,10 @@ dependencies = [
     "argon2-cffi>=23.1",
     "python-multipart>=0.0.9",
     "reportlab>=4.2",
+    # The MCP launcher is part of the default install (R182): an agent's path needs it.
+    "mcp==2.1.1",
+    "httpx2>=2.5.0",
+    "ijson==3.5.1",
 ]
 
 [project.scripts]
@@ -26,6 +30,7 @@ bookflow = "bookflow.bootstrap:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-timeout>=2.3", "httpx>=0.27", "pypdf>=5"]
+# Kept so `bookflow-core[mcp]` still resolves; the default install already includes these.
 mcp = ["mcp==2.1.1", "httpx2>=2.5.0", "ijson==3.5.1"]
 
 [build-system]

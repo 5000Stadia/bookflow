@@ -2,8 +2,9 @@
 
 # Bookflow documentation
 
-Start with the agent guide for a complete authenticated HTTP write. Read concepts for the shared behavior behind every command surface, then use the generated references for exact inputs and outputs.
+An AI agent installing Bookflow for someone starts with the agent install page: one install command, one `bookflow setup`, then MCP. Start with the agent guide for a complete authenticated HTTP write. Read concepts for the shared behavior behind every command surface, then use the generated references for exact inputs and outputs.
 
+- [Agent install](agent-install.md) — install, `bookflow setup`, connect over MCP, and what to tell the owner.
 - [Agent guide](agent-guide.md) — install or select the command, start an isolated host, and complete a versioned audited write.
 - [Installed MCP guide](mcp-guide.md) — three-tool discovery, shared business work, receipt files and recovery through the installed launcher.
 - [Reference year](reference-year.md) — opt-in demo reset, source journals and independent report arithmetic.
@@ -130,6 +131,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`schedule`](cli/schedule.md)
 - [`serial-number`](cli/serial-number.md)
 - [`serve`](cli/serve.md)
+- [`setup`](cli/setup.md)
 - [`ship-method`](cli/ship-method.md)
 - [`ship-method query`](cli/ship-method-query.md)
 - [`shipment`](cli/shipment.md)

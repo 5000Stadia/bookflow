@@ -10,6 +10,7 @@ class McpInput(BaseModel):
 
     url: str | None = Field(None, description="Existing Bookflow host origin; otherwise BOOKFLOW_URL")
     token_env: str = Field("BOOKFLOW_TOKEN", min_length=1, description="Environment variable containing the bearer; never the bearer itself")
+    token_file: str | None = Field(None, description="Owner-only file (mode 0600) holding the bearer, as `bookflow setup` writes it; used instead of the token_env variable when both are present")
     label: str = Field("bookflow-agent", min_length=1, max_length=120, description="Informational client label recorded with MCP activity", json_schema_extra={"cli_flag": "client-name"})
     selection_root: str | None = Field(None, description="Read-only calling-machine configuration root for company fallback")
     input_dir: list[str] = Field(default_factory=list, description="Allowed calling-machine business input directory; repeatable", json_schema_extra={"cli_repeatable": True})

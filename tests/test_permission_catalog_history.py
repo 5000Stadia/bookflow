@@ -87,7 +87,8 @@ ACCEPTED = {
     'landed-cost-v1': (729, '1031c961c6bd10b761157ec1c255240324aaa2237f06f96f168bf26b7c4f5350'),
     'fifo-v1': (733, '724f7e0e052f9255d45480af689cf2861870cac19a18c71783918af73b04bc88'),
     'verify-v1': (734, '1a850789e63fe9d8b8d995b67098d1eebe026405bea56e31a79d06ce7a487c96'),
-    'shipments-v1': (742, 'd22ef11fc6888bc8bedacbd98533a961ba49bb9883bf6bc05c4fc554376d9cd9'),
+    'agent-setup-v1': (735, '5102370f0ee860388d7452f9d004c51789a95c0ed5a93cefa19a38650e475162'),
+    'shipments-v1': (743, '9fa6ebf4efaf4a043bf04870d0b7f5dbf30e97f655bf889b631247c43be9c284'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -201,6 +202,7 @@ CHAIN_ADDITIONS = {
                        'landed-cost show', 'landed-cost void'},
     'fifo-v1': {'costing-method set', 'costing-method show', 'costing-method withdraw', 'report inventory-layers'},
     'verify-v1': {'company verify'},
+    'agent-setup-v1': {'setup'},
     'shipments-v1': {'report shipped-not-invoiced', 'shipment history', 'shipment invoice', 'shipment post',
                      'shipment query', 'shipment show', 'shipment update', 'shipment void'},
 }

@@ -1047,5 +1047,8 @@ def _run_bootstrap(cmd: Command, inp: BaseModel, ctx: Context, s: Session) -> di
     if cmd.name == "serve":
         from bookflow.commands.host_cmds import run_serve
         return run_serve(cmd, inp, ctx, s)
+    if cmd.name == "setup":
+        from bookflow.commands.setup_cmds import run_setup
+        return run_setup(cmd, inp, ctx, s)
     from bookflow.commands.hub_cmds import run_init
     return run_init(cmd, inp, ctx, s)

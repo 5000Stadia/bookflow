@@ -161,7 +161,8 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.LANDED_COST_POLICY_VERSION: '1031c961c6bd10b761157ec1c255240324aaa2237f06f96f168bf26b7c4f5350',
     c.FIFO_POLICY_VERSION: '724f7e0e052f9255d45480af689cf2861870cac19a18c71783918af73b04bc88',
     c.VERIFY_POLICY_VERSION: '1a850789e63fe9d8b8d995b67098d1eebe026405bea56e31a79d06ce7a487c96',
-    c.SHIPMENTS_POLICY_VERSION: 'd22ef11fc6888bc8bedacbd98533a961ba49bb9883bf6bc05c4fc554376d9cd9',
+    c.AGENT_SETUP_POLICY_VERSION: '5102370f0ee860388d7452f9d004c51789a95c0ed5a93cefa19a38650e475162',
+    c.SHIPMENTS_POLICY_VERSION: '9fa6ebf4efaf4a043bf04870d0b7f5dbf30e97f655bf889b631247c43be9c284',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -298,6 +299,7 @@ def _full_known():
     from . import permission_landed_cost_catalog
     from . import permission_fifo_catalog
     from . import permission_verify_catalog
+    from . import permission_agent_setup_catalog
     from . import permission_shipments_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
@@ -361,6 +363,7 @@ def _full_known():
         c.LANDED_COST_POLICY_VERSION: permission_landed_cost_catalog,
         c.FIFO_POLICY_VERSION: permission_fifo_catalog,
         c.VERIFY_POLICY_VERSION: permission_verify_catalog,
+        c.AGENT_SETUP_POLICY_VERSION: permission_agent_setup_catalog,
         c.SHIPMENTS_POLICY_VERSION: permission_shipments_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is

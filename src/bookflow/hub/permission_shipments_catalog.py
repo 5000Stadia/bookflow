@@ -10,10 +10,10 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_verify_catalog as previous, permission_catalog as c
+from . import permission_agent_setup_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = '1efdd2b1f397a12c708e3d284c3a0612392fa1ee'
+SOURCE_COMMIT = 'f4e63cefe376a569aba1dd9b1708aff684e109dd'
 _OWNER = 'bookflow.commands.shipment_cmds.{}|src/bookflow/commands/shipment_cmds.py'
 _WORK = (c.Requirement(capability='customer-work', threshold='standard'),)
 _AUTH = 'ledger.post and customer-work standard role'

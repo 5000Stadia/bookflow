@@ -90,6 +90,7 @@ def test_every_hand_authored_fence_is_classified():
             ("illustrative", "json"),  # who got a serial number (R104 serial/lot)
             ("illustrative", "json"),  # landed cost spread over a receipt (landed cost)
         ],
+        "agent-install.md": [("illustrative", "sh"), ("illustrative", "sh"), ("illustrative", "json")],
         # Seed/serve, documentation generation, and financial statement examples.
         "reference-year.md": [("illustrative", "sh")] * 3,
     }
