@@ -800,6 +800,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     from bookflow.adapters.workbench import shipment_pack_pages as ShipmentPackPages
     ShipmentPackPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                             role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
+    # R181 increment 5: the fulfillment worksheet and its batch actions, for every shipper.
+    from bookflow.adapters.workbench import fulfillment_pages as FulfillmentPages
+    FulfillmentPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                           role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R181 increment 3: pick lists and the pick screen, shown only while the company has picking on.
     from bookflow.adapters.workbench import pick_list_pages as PickListPages
     PickListPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,

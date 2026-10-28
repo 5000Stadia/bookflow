@@ -296,7 +296,9 @@ SHIPMENT_COMMANDS = frozenset(('shipment post', 'shipment update', 'shipment voi
     # R181 increment 3: picking on, a list made, a pick retried, read back, shipped from; another closed, cancelled.
     'pick-list create', 'pick-list enter', 'pick-list show', 'pick-list query', 'pick-list close', 'pick-list cancel',
     # R181 increment 4: a draft made, packed (retried), shipped; another cancelled.
-    'shipment create', 'shipment pack', 'shipment cancel'))
+    'shipment create', 'shipment pack', 'shipment cancel',
+    # R181 increment 5: the worksheet and the shipments report read after the draft ships.
+    'report order-fulfillment', 'report shipments'))
 
 DELIVERY_COMMANDS = frozenset(('delivery draft', 'delivery update', 'delivery send', 'delivery cancel', 'delivery mark-sent',
     'delivery export', 'delivery show', 'delivery query', 'delivery history', 'delivery-template create',

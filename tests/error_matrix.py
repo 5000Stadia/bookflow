@@ -2615,6 +2615,10 @@ MATRIX['import template'] = {'E_VALIDATION': 'unknown kind'}
 for _name in ('import show', 'import query', 'import rows', 'import errors', 'batch show', 'batch query'):
     MATRIX[_name] = {'E_VALIDATION': 'invalid input', 'E_RECORD_NOT_FOUND': 'unknown run or batch'}
 MATRIX['report shipped-not-invoiced'] = {'E_RECORD_NOT_FOUND': 'unknown customer', 'E_VALIDATION': 'invalid input'}
+MATRIX['report order-fulfillment'] = {'E_RECORD_NOT_FOUND': 'unknown site or customer',
+                                     'E_VALIDATION': 'an unknown status', 'E_QUERY_STALE': 'books changed between pages'}
+MATRIX['report shipments'] = {'E_RECORD_NOT_FOUND': 'unknown customer, site or ship method',
+                              'E_VALIDATION': 'date_from after date_to', 'E_QUERY_STALE': 'books changed between pages'}
 MATRIX['shipment invoice'] = {
     'E_VALIDATION': 'an invoice dated before the ship date, nothing left to invoice',
     'E_RECORD_NOT_FOUND': 'unknown shipment or account',

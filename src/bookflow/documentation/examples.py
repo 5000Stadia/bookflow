@@ -1753,6 +1753,14 @@ EXAMPLES.update({
                                            {'as_of': '2026-12-12'}),
 })
 
+# The fulfillment worksheet (R181 increment 5).
+EXAMPLES.update({
+    'report order-fulfillment': Example('bookflow report order-fulfillment --status to_pick,picking' + _C + ' --json',
+                                        {'status': 'to_pick,picking'}),
+    'report shipments': Example('bookflow report shipments --date-from 2026-12-01 --date-to 2026-12-12' + _C + ' --json',
+                                {'date_from': '2026-12-01', 'date_to': '2026-12-12'}),
+})
+
 # Draft shipments and packing (R181 increment 4).
 EXAMPLES.update({
     'shipment create': Example('bookflow shipment create --sales-order 1001' + _C

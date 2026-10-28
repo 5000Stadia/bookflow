@@ -40,3 +40,18 @@
 #pack-screen .pack-facts label { display: flex; flex-direction: column; font-size: .85rem; min-width: 0; }
 #pack-screen .pack-facts input { max-width: 100%; box-sizing: border-box; }
 #pack-screen .pick-foot, #pack-screen .pack-foot { margin-top: 1rem; }
+/* The fulfillment worksheet (R181 increment 5). */
+#fulfillment { overflow-wrap: anywhere; }
+#fulfillment .fulfillment-tabs { display: flex; flex-wrap: wrap; gap: .25rem .75rem; margin: .5rem 0 1rem; }
+#fulfillment .fulfillment-tabs a[aria-current=page] { font-weight: 700; text-decoration: none; border-bottom: 2px solid currentColor; }
+#fulfillment .fulfillment-filters { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: end; margin-bottom: .75rem; }
+#fulfillment .fulfillment-filters label, #fulfillment .fulfillment-actions label { display: flex; flex-direction: column; font-size: .85rem; min-width: 0; }
+#fulfillment .fulfillment-filters label.check { flex-direction: row; gap: .35rem; align-items: center; }
+#fulfillment .fulfillment-filters input, #fulfillment .fulfillment-filters select, #fulfillment .fulfillment-actions input { max-width: 100%; box-sizing: border-box; }
+#fulfillment .fulfillment-orders td.num, #fulfillment .fulfillment-orders th.num { text-align: right; }
+#fulfillment .fulfillment-orders label.check { display: inline-flex; gap: .4rem; align-items: center; }
+#fulfillment .fulfillment-lines { margin: .25rem 0; padding-left: 1rem; }
+#fulfillment .late, #fulfillment li.refused { color: #b42318; }
+#fulfillment .complete { color: #027a48; font-weight: 600; }
+#fulfillment .fulfillment-actions .actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .5rem; }
+@media (max-width: 600px) { #fulfillment .fulfillment-orders td[data-label=Lines] { grid-column: 1 / -1; } }

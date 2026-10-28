@@ -79,6 +79,8 @@ AUDITED_REPORTS = frozenset({
     "open-purchase-orders", "purchases-by-vendor", "purchases-by-item", "deposit-detail",
     "transaction-list-by-date", "vendor-1099-summary", "reconciliation-discrepancy",
     "entries-to-review", "prior-balances",
+    # R181: the fulfillment worksheet's rows move on orders, drafts, boxes and pick lists, which post nothing.
+    "order-fulfillment", "shipments",
 })
 
 # Which list a reference-valued report filter names, by the input field that names it. A

@@ -5496,6 +5496,238 @@ Example JSON output:
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
 
+## `report order-fulfillment`
+
+The fulfillment worksheet: every open sales order with stock to ship or shipped and not invoiced -- its fulfillment status (to_pick, picking, picked, packed, partly_shipped, shipped) beside its billing progress, to ship, can ship now, picked, packed, shipped not invoiced, shippable amount, promised ship date and days late, per line and per site. Can ship now is exactly what `shipment post --sales-order <n>` would ship now (at `site`, or the site it picks); an order a pick list holds ships from the list and says so. Filters: site, customer, status (comma-separated), complete_only, can_ship, shipped_not_invoiced, newly_shippable (a date: can ship more now than with that day's stock); sort date, shippable_amount or customer. Example: {"status": "to_pick,picking"}.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.order-fulfillment` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report order-fulfillment --status to_pick,picking --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report order-fulfillment", "input": {"status": "to_pick,picking"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `as_of` | `--as-of` | string | no | no | today (the company's date) | The day lateness counts to, YYYY-MM-DD; default today. Orders and stock are read as they stand now, as `shipment post` reads them.; minimum length 10; maximum length 10 |
+| `site` | `--site` | string \| null | no | yes | null | Figures at this site (what `shipment post --site` would ship from it); only orders with something to ship there, or shipped from there and not invoiced. Default: each order at the site `shipment post` picks. |
+| `customer` | `--customer` | string \| null | no | yes | null | Only this customer or job. |
+| `status` | `--status` | string \| null | no | yes | null | Only these fulfillment statuses, comma-separated: to_pick, picking, picked, packed, partly_shipped, shipped. Example: "to_pick,picking". |
+| `complete_only` | `--complete-only` | boolean | no | no | false | Only orders that can ship complete now. |
+| `can_ship` | `--can-ship` | boolean | no | no | false | Only orders with something that can ship now. |
+| `shipped_not_invoiced` | `--shipped-not-invoiced` | boolean | no | no | false | Only orders holding shipped units not yet invoiced. |
+| `newly_shippable` | `--newly-shippable` | string \| null | no | yes | null | Only orders that can ship more now than with the stock on hand at the end of this date, YYYY-MM-DD: receipts since made them shippable. |
+| `sort` | `--sort` | literal["date", "shippable_amount", "customer"] | no | no | "date" | date (order date, the default), shippable_amount (largest first) or customer. |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.order-fulfillment`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `as_of` | string | yes | no | — | — |
+| `sort` | string | yes | no | — | — |
+| `pick_and_pack` | boolean | yes | no | — | Whether picking and packing are on: the to-pick, picking and packed statuses only come from them. |
+| `totals` | object | yes | no | — | — |
+| `totals.orders` | integer | yes | no | — | — |
+| `totals.to_ship_amount` | object | yes | no | — | — |
+| `totals.to_ship_amount.amount` | string | yes | no | — | — |
+| `totals.to_ship_amount.currency` | string | yes | no | — | — |
+| `totals.to_ship_amount.minor_units` | integer | yes | no | — | — |
+| `totals.shippable_amount` | object | yes | no | — | — |
+| `totals.shippable_amount.amount` | string | yes | no | — | — |
+| `totals.shippable_amount.currency` | string | yes | no | — | — |
+| `totals.shippable_amount.minor_units` | integer | yes | no | — | — |
+| `totals.shipped_not_invoiced_amount` | object | yes | no | — | — |
+| `totals.shipped_not_invoiced_amount.amount` | string | yes | no | — | — |
+| `totals.shipped_not_invoiced_amount.currency` | string | yes | no | — | — |
+| `totals.shipped_not_invoiced_amount.minor_units` | integer | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].sales_order_id` | string | yes | no | — | — |
+| `rows[].sales_order_number` | string | yes | no | — | — |
+| `rows[].sales_order_version` | integer | yes | no | — | The order's version when read: pass it as `expected_version` to `sales-order invoice` so a stale reading bills nothing. |
+| `rows[].date` | string | yes | no | — | — |
+| `rows[].customer_id` | string | yes | no | — | — |
+| `rows[].customer_name` | string | yes | no | — | — |
+| `rows[].promised_ship_date` | string \| null | no | yes | null | The order's ship date. |
+| `rows[].days_late` | integer \| null | no | yes | null | Days past the promised ship date with something still to ship. |
+| `rows[].fulfillment_status` | literal["to_pick", "picking", "picked", "packed", "partly_shipped", "shipped"] | yes | no | — | — |
+| `rows[].invoice_progress` | string | yes | no | — | The order's billing progress, as `sales-order show` reads it. |
+| `rows[].site_id` | string \| null | yes | yes | — | — |
+| `rows[].site_name` | string \| null | no | yes | null | The site these figures ship from. |
+| `rows[].can_ship_complete` | boolean | yes | no | — | — |
+| `rows[].to_ship_amount` | object | yes | no | — | — |
+| `rows[].to_ship_amount.amount` | string | yes | no | — | — |
+| `rows[].to_ship_amount.currency` | string | yes | no | — | — |
+| `rows[].to_ship_amount.minor_units` | integer | yes | no | — | — |
+| `rows[].shippable_amount` | object | yes | no | — | — |
+| `rows[].shippable_amount.amount` | string | yes | no | — | — |
+| `rows[].shippable_amount.currency` | string | yes | no | — | — |
+| `rows[].shippable_amount.minor_units` | integer | yes | no | — | — |
+| `rows[].shipped_not_invoiced_amount` | object | yes | no | — | At the order prices. |
+| `rows[].shipped_not_invoiced_amount.amount` | string | yes | no | — | — |
+| `rows[].shipped_not_invoiced_amount.currency` | string | yes | no | — | — |
+| `rows[].shipped_not_invoiced_amount.minor_units` | integer | yes | no | — | — |
+| `rows[].pick_lists` | array[string] | no | no | [] | Live pick lists holding it (picking on). |
+| `rows[].drafts` | array[string] | no | no | [] | Its draft shipments (packing on). |
+| `rows[].packed_drafts` | array[string] | no | no | [] | Its drafts with every unit in a box: ship each with `shipment post --shipment`. |
+| `rows[].by_site` | array[object] | no | no | [] | — |
+| `rows[].by_site[].site_id` | string | yes | no | — | — |
+| `rows[].by_site[].site_name` | string | yes | no | — | — |
+| `rows[].by_site[].lines` | integer | yes | no | — | Lines with something that can ship from this site now. |
+| `rows[].by_site[].shippable_amount` | object | yes | no | — | — |
+| `rows[].by_site[].shippable_amount.amount` | string | yes | no | — | — |
+| `rows[].by_site[].shippable_amount.currency` | string | yes | no | — | — |
+| `rows[].by_site[].shippable_amount.minor_units` | integer | yes | no | — | — |
+| `rows[].by_site[].complete` | boolean | yes | no | — | Everything left to ship can ship from this site now. |
+| `rows[].lines` | array[object] | yes | no | — | — |
+| `rows[].lines[].order_line_id` | string | yes | no | — | — |
+| `rows[].lines[].position` | integer | yes | no | — | — |
+| `rows[].lines[].item_id` | string | yes | no | — | — |
+| `rows[].lines[].item_name` | string | yes | no | — | — |
+| `rows[].lines[].site_name` | string \| null | no | yes | null | The site the order line names; null ships from any. |
+| `rows[].lines[].ordered` | string | yes | no | — | In the item's base unit, as every figure here. |
+| `rows[].lines[].shipped` | string | yes | no | — | On posted shipments, less shipment returns. |
+| `rows[].lines[].shipped_not_invoiced` | string | yes | no | — | — |
+| `rows[].lines[].to_ship` | string | yes | no | — | — |
+| `rows[].lines[].can_ship_now` | string | yes | no | — | What `shipment post --sales-order` ships of it now, at the row's site. |
+| `rows[].lines[].on_picks` | string | no | no | "0" | Held on live pick lists (picking on). |
+| `rows[].lines[].picked` | string | no | no | "0" | Picked on live pick lists and not shipped (picking on). |
+| `rows[].lines[].drafted` | string | no | no | "0" | Held on draft shipments (packing on). |
+| `rows[].lines[].packed` | string | no | no | "0" | Of the drafted units, in boxes. |
+| `rows[].lines[].shippable_amount` | object | yes | no | — | can_ship_now at the order price. |
+| `rows[].lines[].shippable_amount.amount` | string | yes | no | — | — |
+| `rows[].lines[].shippable_amount.currency` | string | yes | no | — | — |
+| `rows[].lines[].shippable_amount.minor_units` | integer | yes | no | — | — |
+| `rows[].note` | string \| null | no | yes | null | Why nothing ships from the order alone, and what to do instead. |
+
+Example JSON output:
+
+```json
+{
+  "as_of": "value",
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "pick_and_pack": false,
+  "rows": [],
+  "sort": "value",
+  "totals": {
+    "orders": 1,
+    "shippable_amount": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "shipped_not_invoiced_amount": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "to_ship_amount": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    }
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
 ## `report physical-inventory-worksheet`
 
 The Physical Inventory Worksheet, as of as_of: every active inventory item with its description, what the books hold (at one site when site is named) and a blank physical_count column to count into. `inventory-count create` makes the same sheet as a count document whose entries are kept. Rows are paged.
@@ -8245,6 +8477,176 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
+## `report shipments`
+
+Posted shipments by ship date (date_to default today): order, customer, site, ship method, carrier, tracking numbers, boxes and weights, freight to bill. Filters: date_from, date_to, customer, site, ship_method.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.shipments` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report shipments --date-from 2026-12-01 --date-to 2026-12-12 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report shipments", "input": {"date_from": "2026-12-01", "date_to": "2026-12-12"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `date_from` | `--date-from` | string \| null | no | yes | null | Earliest ship date, YYYY-MM-DD. |
+| `date_to` | `--date-to` | string | no | no | today (the company's date) | Last ship date, YYYY-MM-DD; default today.; minimum length 10; maximum length 10 |
+| `customer` | `--customer` | string \| null | no | yes | null | Only this customer or job. |
+| `site` | `--site` | string \| null | no | yes | null | Only shipments from this site. |
+| `ship_method` | `--ship-method` | string \| null | no | yes | null | Only this Ship Via entry. |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--csv` | Print the whole report as CSV (every row, all pages) instead of this page as a table; the same file `report export` and the workbench download produce. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.shipments`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual", "cash"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `date_from` | string \| null | yes | yes | — | — |
+| `date_to` | string | yes | no | — | — |
+| `weight_unit` | string | yes | no | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.shipments` | integer | yes | no | — | — |
+| `totals.boxes` | integer | yes | no | — | — |
+| `totals.weight` | string | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].shipment_id` | string | yes | no | — | — |
+| `rows[].shipment_number` | string | yes | no | — | — |
+| `rows[].ship_date` | string | yes | no | — | — |
+| `rows[].sales_order_number` | string | yes | no | — | — |
+| `rows[].customer_name` | string \| null | yes | yes | — | — |
+| `rows[].site_name` | string \| null | yes | yes | — | — |
+| `rows[].ship_method` | string \| null | yes | yes | — | — |
+| `rows[].carrier` | string \| null | yes | yes | — | — |
+| `rows[].tracking_numbers` | array[string] | yes | no | — | The shipment's and its boxes' tracking numbers. |
+| `rows[].quantity` | string | yes | no | — | Units shipped, in the items' base units. |
+| `rows[].boxes` | integer | yes | no | — | — |
+| `rows[].packages` | array[object] | yes | no | — | — |
+| `rows[].packages[].box` | integer | yes | no | — | — |
+| `rows[].packages[].package_type` | string \| null | no | yes | null | — |
+| `rows[].packages[].weight` | string | yes | no | — | — |
+| `rows[].packages[].tracking_number` | string \| null | no | yes | null | — |
+| `rows[].weight` | string | yes | no | — | Boxes and unboxed lines, in the company weight unit. |
+| `rows[].unweighed` | string | yes | no | — | Units whose item has no weight. |
+| `rows[].freight` | object \| null | no | yes | null | — |
+| `rows[].freight.amount` | string | yes | no | — | — |
+| `rows[].freight.currency` | string | yes | no | — | — |
+| `rows[].freight.minor_units` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "count": 0,
+  "date_from": null,
+  "date_to": "value",
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "totals": {
+    "boxes": 1,
+    "shipments": 1,
+    "weight": "value"
+  },
+  "weight_unit": "value"
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
 | `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
