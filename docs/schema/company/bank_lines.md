@@ -29,3 +29,8 @@ Database: `company`.
 | `match_reason` | VARCHAR(500) | yes | — | — | — | — | Why it matched, or what it was suggested against. |
 | `possible_duplicate_of` | VARCHAR(26) | yes | — | — | — | bank_lines.id | A live line of the account this one probably repeats with cleaned-up text; null when none. |
 | `warnings` | TEXT | no | — | — | — | — | Warnings on the line (fitid_reused, possible_duplicate), as a JSON array. |
+| `created` | INTEGER | no | — | — | — | — | 1 when the linked entry was made from this line (bank-line add, or a transfer it posted); 0 for a match. |
+| `payee_display` | TEXT | yes | — | — | — | — | The payee the entry was entered under; null until one was. |
+| `proposal` | TEXT | yes | — | — | — | — | What the matcher suggested at import, with its reason, as a JSON object; null when nothing. |
+| `ignore_reason` | VARCHAR(16) | yes | — | — | — | — | Why the line was set aside: already_entered, not_ours, duplicate, other; null unless ignored. |
+| `entry_date` | VARCHAR(10) | yes | — | — | — | — | The entry's date on this account when the line was linked to it (YYYY-MM-DD), so a later change shows as entry_gone; null while none. |

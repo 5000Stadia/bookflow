@@ -126,10 +126,154 @@ KINDS: dict[str, Kind] = {k.name: k for k in (
     Kind('other-name', 'other-name', synonyms={**_PARTY, 'other name': 'name'}, summary='Other names.'),
 )}
 
-# Document kinds of design/bulk-import.md §2, built in increment 4.
-PLANNED = frozenset(('invoice post', 'bill post', 'credit-memo post', 'vendor-credit post', 'sales-receipt post',
-                     'journal post', 'payment receive', 'bill pay', 'check post', 'card-charge post', 'estimate create',
-                     'purchase-order post', 'sales-order create', 'inventory adjust'))
+
+
+# ------------------------------------------------------------------ document kinds (increment 4)
+
+@dataclass(frozen=True)
+class DocKind:
+    """A document a file's rows become: rows sharing the group key (an invoice's number) are its lines, in file
+    order; its header fields come from the first row that fills them, and a later row that disagrees refuses the
+    whole document (``header_conflict``). Documents are made, never matched or changed: create mode only."""
+    name: str
+    command: str
+    family: str  # the record type its batch effects and keys name (transactions.type, or work_documents.kind)
+    noun: str  # its show command's noun (`bill payment show`)
+    selector: str  # the input field its show and inverse commands select it by
+    inverse: str  # what reversal runs: the family's delete (history preserved), else its void
+    lines: tuple[str, ...] = ('lines',)
+    key_default: tuple[str, ...] = ('number',)
+    key_core: tuple[str, ...] = ('number',)  # a key needs these mapped; otherwise rows are keyed by content
+    synonyms: dict[str, str] = field(default_factory=dict)
+    summary: str = ''
+    table: str = 'transactions'
+    type_column: str | None = 'type'  # None: the table holds this kind alone (purchase_orders)
+    money: tuple[str, ...] = ()
+    dates: tuple[str, ...] = ()
+    decimals: tuple[str, ...] = ()
+    document = True
+
+    @property
+    def create(self) -> str:
+        return self.command
+
+    @property
+    def update(self) -> str:
+        return self.command  # documents are never updated by an import: create mode only
+
+    @property
+    def definition(self):
+        from types import SimpleNamespace
+        return SimpleNamespace(record_type=self.family, references=(), hierarchy=None, noun=self.name)
+
+    @property
+    def hierarchical(self) -> bool:
+        return False
+
+
+def is_document(k) -> bool:
+    return getattr(k, 'document', False)
+
+
+_SALE = {'invoice': 'number', 'invoice no': 'number', 'invoice number': 'number', 'invoice #': 'number',
+         'num': 'number', 'no': 'number', 'number': 'number', 'ref no': 'number', 'customer': 'customer',
+         'customer name': 'customer', 'client': 'customer', 'customer job': 'customer', 'customer/job': 'customer',
+         'name': 'customer', 'date': 'date', 'invoice date': 'date', 'txn date': 'date', 'due date': 'due_date',
+         'terms': 'terms', 'memo': 'memo', 'po no': 'customer_purchase_order', 'po number': 'customer_purchase_order',
+         'item': 'lines[].item', 'product': 'lines[].item', 'product/service': 'lines[].item', 'sku': 'lines[].item',
+         'description': 'lines[].description', 'qty': 'lines[].quantity', 'quantity': 'lines[].quantity',
+         'rate': 'lines[].unit_price', 'price': 'lines[].unit_price', 'unit price': 'lines[].unit_price',
+         'amount': 'lines[].net_amount', 'line amount': 'lines[].net_amount', 'class': 'class_id',
+         'rep': 'sales_rep', 'sales rep': 'sales_rep', 'ship via': 'ship_method', 'ar account': 'ar_account',
+         'tax code': 'lines[].tax_code'}
+_PURCHASE = {'vendor': 'vendor', 'vendor name': 'vendor', 'supplier': 'vendor', 'name': 'vendor', 'date': 'date',
+             'bill date': 'date', 'due date': 'due_date', 'terms': 'terms', 'memo': 'memo', 'ref no': 'supplier_reference',
+             'reference': 'supplier_reference', 'vendor invoice': 'supplier_reference', 'bill no': 'number',
+             'num': 'number', 'number': 'number', 'account': 'expenses[].account', 'expense account': 'expenses[].account',
+             'amount': 'expenses[].amount', 'line memo': 'expenses[].memo', 'item': 'items[].item',
+             'qty': 'items[].quantity', 'quantity': 'items[].quantity', 'cost': 'items[].unit_cost',
+             'unit cost': 'items[].unit_cost', 'ap account': 'ap_account', 'class': 'class_id'}
+_SPEND = {'account': 'account', 'bank account': 'account', 'card': 'account', 'payee': 'pay_to.name_id',
+          'pay to': 'pay_to.name_id', 'date': 'date', 'amount': 'amount', 'total': 'amount', 'memo': 'memo',
+          'check no': 'number', 'num': 'number', 'number': 'number', 'expense account': 'expenses[].account',
+          'line amount': 'expenses[].amount', 'line memo': 'expenses[].memo', 'item': 'items[].item',
+          'qty': 'items[].quantity', 'cost': 'items[].unit_cost'}
+_ORDER = {**{k: v for k, v in _SALE.items() if k != 'invoice'}, 'estimate': 'number', 'order': 'number',
+          'order no': 'number', 'title': 'title', 'expires': 'expires_on'}
+
+DOC_KINDS: dict[str, DocKind] = {k.name: k for k in (
+    DocKind('invoice', 'invoice post', 'invoice', 'invoice', 'invoice', 'invoice delete', synonyms=_SALE,
+            summary='Invoices: rows sharing a number are one invoice, its lines in file order.'),
+    DocKind('credit-memo', 'credit-memo post', 'credit_memo', 'credit-memo', 'credit_memo', 'credit-memo delete',
+            synonyms={**_SALE, 'credit no': 'number'}, summary='Credit memos, grouped by number.'),
+    DocKind('sales-receipt', 'sales-receipt post', 'sales_receipt', 'sales-receipt', 'sales_receipt',
+            'sales-receipt delete', synonyms={**_SALE, 'deposit to': 'deposit_to', 'payment method': 'payment_method'},
+            summary='Sales receipts, grouped by number.'),
+    DocKind('estimate', 'estimate create', 'estimate', 'estimate', 'estimate', 'estimate void', synonyms=_ORDER,
+            table='work_documents', type_column='kind', summary='Estimates, grouped by number.'),
+    DocKind('sales-order', 'sales-order create', 'sales_order', 'sales-order', 'sales_order', 'sales-order void',
+            synonyms=_ORDER, table='work_documents', type_column='kind', summary='Sales orders, grouped by number.'),
+    DocKind('bill', 'bill post', 'bill', 'bill', 'bill', 'bill delete', lines=('expenses', 'items'),
+            key_default=('vendor', 'supplier_reference'), key_core=('vendor', 'supplier_reference'),
+            synonyms=_PURCHASE, summary="Bills, grouped by vendor and the vendor's reference; a row's account and "
+                                        'amount make an expense line, its item an item line.'),
+    DocKind('vendor-credit', 'vendor-credit post', 'vendor_credit', 'vendor-credit', 'credit', 'vendor-credit void',
+            lines=('expenses', 'items'), key_default=('vendor', 'supplier_reference'),
+            key_core=('vendor', 'supplier_reference'), synonyms=_PURCHASE,
+            summary="Vendor credits, grouped by vendor and the vendor's reference."),
+    DocKind('purchase-order', 'purchase-order post', 'purchase_order', 'purchase-order', 'purchase_order',
+            'purchase-order void', synonyms={**_PURCHASE, 'po no': 'number', 'item': 'lines[].item',
+                                             'qty': 'lines[].quantity', 'quantity': 'lines[].quantity',
+                                             'cost': 'lines[].rate', 'rate': 'lines[].rate'},
+            table='purchase_orders', type_column=None, summary='Purchase orders, grouped by number.'),
+    DocKind('journal', 'journal post', 'journal_entry', 'journal', 'journal', 'journal delete',
+            synonyms={'entry no': 'number', 'num': 'number', 'number': 'number', 'date': 'date', 'memo': 'memo',
+                      'account': 'lines[].account', 'debit/credit': 'lines[].side', 'side': 'lines[].side',
+                      'amount': 'lines[].amount', 'line memo': 'lines[].description',
+                      'description': 'lines[].description', 'class': 'lines[].class_id',
+                      'debit': 'lines[].debit', 'credit': 'lines[].credit'},
+            summary='Journal entries, grouped by number; each row a debit or credit line.'),
+    DocKind('check', 'check post', 'check', 'check', 'check', 'check delete', lines=('expenses', 'items'),
+            key_default=('account', 'number'), key_core=('account', 'number'), synonyms=_SPEND,
+            summary='Checks, grouped by bank account and check number.'),
+    DocKind('card-charge', 'card-charge post', 'card_charge', 'card-charge', 'card_charge', 'card-charge delete',
+            lines=('expenses', 'items'), key_default=(), key_core=(), synonyms=_SPEND,
+            summary='Card charges; a file has no number for them, so each row is one charge keyed by its content.'),
+    DocKind('payment', 'payment receive', 'payment', 'payment', 'payment', 'payment delete', lines=('applications',),
+            key_default=('customer', 'date', 'amount', 'reference', 'number'), key_core=('customer', 'date', 'amount'),
+            synonyms={'customer': 'customer', 'customer name': 'customer', 'client': 'customer', 'name': 'customer',
+                      'date': 'date', 'payment date': 'date', 'amount': 'amount', 'payment amount': 'amount',
+                      'total': 'amount', 'reference': 'reference', 'ref no': 'reference', 'check no': 'reference',
+                      'method': 'payment_method', 'payment method': 'payment_method', 'deposit to': 'deposit_to',
+                      'memo': 'memo', 'invoice': 'applications[].invoice', 'invoice no': 'applications[].invoice',
+                      'invoice number': 'applications[].invoice', 'applied': 'applications[].amount',
+                      'amount applied': 'applications[].amount'},
+            summary='Customer payments, applied to invoices by number; rows sharing a reference (or payment number) '
+                    'are one payment, as are later rows leaving customer, date and amount blank.'),
+    DocKind('bill-payment', 'bill pay', 'bill_payment', 'bill payment', 'payment', 'bill payment void',
+            lines=('bills',), key_default=('date', 'funding_account', 'check_number', 'reference', 'number'),
+            key_core=('date', 'funding_account'),
+            synonyms={'date': 'date', 'account': 'funding_account', 'bank account': 'funding_account',
+                      'paid from': 'funding_account', 'method': 'method', 'check no': 'check_number',
+                      'reference': 'reference', 'memo': 'memo', 'bill': 'bills[].bill', 'bill no': 'bills[].bill',
+                      'amount': 'bills[].amount', 'discount': 'bills[].discount'},
+            summary='Bill payments, applied to bills by number.'),
+    DocKind('inventory-adjustment', 'inventory adjust', 'inventory_adjustment', 'inventory', 'adjustment',
+            'inventory void', synonyms={'date': 'date', 'number': 'number', 'ref no': 'number',
+                                        'adjustment account': 'adjustment_account', 'account': 'adjustment_account',
+                                        'item': 'lines[].item', 'qty change': 'lines[].quantity_change',
+                                        'quantity': 'lines[].new_quantity', 'new qty': 'lines[].new_quantity',
+                                        'value change': 'lines[].value_change', 'memo': 'memo'},
+            summary='Inventory adjustments, grouped by number; each row an item line.'),
+)}
+LIST_KINDS = KINDS
+KINDS = {**LIST_KINDS, **DOC_KINDS}
+
+# Document kinds of design/bulk-import.md §2 not built (none since increment 4).
+PLANNED: frozenset[str] = frozenset()
+# What the importer gives a document command itself, never a column: a payment's operation key (unique per run and
+# row, so a reversed import imports again) and each application's version (read as the row runs).
+SUPPLIED = frozenset(('operation_key',))
 
 REASONS = {
     'delete': 'deletes records; no import or bulk edit reaches a delete',
@@ -209,6 +353,8 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
     'not-a-record': frozenset((
         'import preview', 'import run', 'import cancel', 'import reverse', 'import decide', 'import-mapping save',
         'import-mapping deactivate', 'bank-feed import', 'bank-feed reverse', 'bank-feed move',
+        'bank-line match', 'bank-line unmatch', 'bank-line ignore', 'bank-line add', 'bank-line transfer',
+        'bank-line undo',
         'account activate', 'accountant reclassify', 'accountant-copy changes', 'accountant-copy import',
         'assembly build', 'assembly update', 'attachment link', 'barcode generate', 'batch-invoice retry',
         'bill payment apply', 'bill update', 'billing-group rename', 'bin activate', 'bin update', 'budget fill',
@@ -293,6 +439,8 @@ def fields(kind_name: str) -> dict[str, FieldSpec]:
     """Every scalar input path of the kind's create command, typed for the reader."""
     from bookflow.core import registry
     k = kind(kind_name)
+    if is_document(k):
+        return _doc_fields(k)
     model = registry.get(k.create).input_model
     schema = model.model_json_schema()
     required = set(schema.get('required', ()))
@@ -351,7 +499,101 @@ def required(kind_name: str, mode: str = 'create') -> tuple[str, ...]:
     if mode == 'update':
         return ()
     model = registry.get(k.create).input_model
-    return tuple(name for name, info in model.model_fields.items() if info.is_required())
+    return tuple(name for name, info in model.model_fields.items() if info.is_required() and name not in SUPPLIED)
+
+
+# A document's fields, by their leaf: money, quantities, dates, and the lists a reference names (the command takes
+# the text and resolves it itself; the check looks it up first). `invoice` and `bill` are documents found by number.
+DOC_MONEY = frozenset(('amount', 'net_amount', 'unit_price', 'unit_cost', 'discount', 'price_basis_amount',
+                       'value_change', 'new_value', 'estimated_unit_cost', 'debit', 'credit'))
+DOC_DECIMALS = frozenset(('quantity', 'quantity_change', 'new_quantity', 'percent', 'rate', 'markup_percent',
+                          'completed_quantity', 'cancelled_quantity'))
+DOC_DATES = frozenset(('date', 'due_date', 'ship_date', 'expires_on', 'expected_date', 'lot_expiry'))
+DOC_REFERENCES = {'customer': 'customer', 'vendor': 'vendor', 'terms': 'term', 'ar_account': 'account',
+                  'ap_account': 'account', 'deposit_to': 'account', 'account': 'account', 'funding_account': 'account',
+                  'adjustment_account': 'account', 'discount_account': 'account', 'write_off_account': 'account',
+                  'class_id': 'class', 'sales_rep': 'sales-rep', 'ship_method': 'ship-method',
+                  'payment_method': 'payment-method', 'price_level': 'price-level', 'customer_message': 'customer-message',
+                  'item': 'item', 'invoice': 'invoice', 'bill': 'bill', 'tax_code': 'sales-tax-code',
+                  'customer_tax_code': 'sales-tax-code'}
+# Inputs a file never gives: replays, fingerprints, defaults switches, a line's id or serials.
+DOC_SKIPPED = frozenset(('operation_key', 'expected_facts_fingerprint', 'custom_field_kinds',
+                         'expected_custom_field_kinds', 'use_defaults', 'refresh_defaults', 'count_position',
+                         'line_id', 'serial_numbers', 'expected_version', 'shipping_address_id', 'discounts',
+                         'order_lines', 'receipts', 'purchase_order'))
+# A payment's applications are a choice of shapes; a file gives the inline one, by invoice number.
+_APPLICATION = {'invoice': ('reference', True), 'amount': ('money', False)}
+
+
+def _doc_fields(k: DocKind) -> dict[str, FieldSpec]:
+    from bookflow.core import registry
+    model = registry.get(k.command).input_model
+    schema = model.model_json_schema()
+    out: dict[str, FieldSpec] = {}
+
+    def typed(path: str, leaf: str, branch: dict, node: dict, required: bool) -> FieldSpec:
+        if leaf in DOC_MONEY or (leaf == 'rate' and '[].' in path):  # a line's rate is its unit price
+            kind_ = 'money'
+        elif leaf in DOC_DECIMALS:
+            kind_ = 'decimal'
+        elif leaf in DOC_DATES:
+            kind_ = 'date'
+        elif leaf in DOC_REFERENCES and not path.startswith(('pay_to.', 'billing_address.', 'shipping_address.')):
+            kind_ = 'reference'
+        elif 'enum' in branch:
+            kind_ = 'enum'
+        elif branch.get('type') in ('boolean', 'integer', 'string'):
+            kind_ = branch['type']
+        else:
+            kind_ = 'any'
+        return FieldSpec(path, kind_, required, tuple(branch.get('enum', ())),
+                         DOC_REFERENCES.get(leaf) if kind_ == 'reference' else None,
+                         (node.get('description') or '')[:200], branch.get('maxLength'), branch.get('minLength'),
+                         branch.get('pattern'), branch.get('minimum'), branch.get('maximum'))
+
+    def add(prefix: str, props: dict, required: set, depth: int = 0):
+        for name, node in props.items():
+            if name in DOC_SKIPPED or name == 'custom_fields':
+                continue
+            path = prefix + name
+            branches = _branches(schema, node)
+            if name in k.lines and not prefix:
+                if (k.name, name) == ('payment', 'applications'):
+                    for leaf, (kind_, req) in _APPLICATION.items():
+                        out[f'{name}[].{leaf}'] = FieldSpec(f'{name}[].{leaf}', kind_, req, (),
+                                                            DOC_REFERENCES.get(leaf) if kind_ == 'reference' else None)
+                    continue
+                array = next((b for b in branches if b.get('type') == 'array'), None)
+                inner = _resolve_ref(schema, array['items']) if array else {}
+                add(f'{name}[].', inner.get('properties', {}), set(inner.get('required', ())), depth + 1)
+                continue
+            branch = next((b for b in branches if b.get('type') == 'string'), branches[0] if branches else {})
+            if branch.get('type') == 'array':
+                continue
+            if branch.get('type') == 'object' and 'properties' in branch:
+                if depth < 2:
+                    add(path + '.', branch['properties'], set(branch.get('required', ())) if name in required
+                        else set(), depth + 1)
+                continue
+            if branch.get('type') == 'object':
+                continue
+            out[path] = typed(path, name, branch, node, name in required)
+
+    add('', schema['properties'], set(schema.get('required', ())))
+    for path in DOC_EXTRA.get(k.name, ()):
+        out[path] = FieldSpec(path, 'money', False, (), None, JOURNAL_SIDES[path])
+    return out
+
+
+# A journal file with a Debit and a Credit column: each row's filled one becomes the line's side and amount.
+JOURNAL_SIDES = {'lines[].debit': 'The line amount when it is a debit (a Debit column); becomes side and amount.',
+                 'lines[].credit': 'The line amount when it is a credit (a Credit column); becomes side and amount.'}
+DOC_EXTRA = {'journal': tuple(JOURNAL_SIDES)}
+
+
+def line_array(path: str) -> str | None:
+    """The line array a document field belongs to (`lines` for `lines[].item`), or None for a header field."""
+    return path.split('[]', 1)[0] if '[].' in path else None
 
 
 def path_ok(kind_name: str, path: str) -> bool:

@@ -288,5 +288,8 @@ def test_every_company_write_is_a_kind_planned_or_not_importable():
     assert writes - kinds - import_kinds.PLANNED - listed == set(), 'a new company write needs a kind or a reason'
     assert (kinds | import_kinds.PLANNED | listed) - writes == set(), 'a listed command no longer exists'
     # No kind reaches a delete, void, merge or restore.
-    for k in import_kinds.KINDS.values():
+    for k in import_kinds.LIST_KINDS.values():
         assert k.create.split()[-1] == 'create' and k.update.split()[-1] == 'update'
+    # A document kind posts or creates its document, and is never updated by an import.
+    for k in import_kinds.DOC_KINDS.values():
+        assert k.create.split()[-1] in ('post', 'create', 'receive', 'pay', 'adjust') and k.update == k.create

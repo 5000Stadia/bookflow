@@ -333,7 +333,7 @@ def plan_decide(s, ctx, inp) -> dict:
                             'it runs. Preview the file again.', details={'field': 'run', 'state': run['state']})
     kind = kinds.kind(run['kind'])
     pending = imports.pending_references(s, run)
-    books = imports.Books(s, kind, run['source'])
+    books = imports.books_for(s, kind, run['source'])
     out: list[dict] = []
     seen: set[tuple] = set()
 
@@ -393,6 +393,11 @@ def plan_decide(s, ctx, inp) -> dict:
                     f"An import never creates {ref['target']}s (an {ref['target']} is set up with its own command); "
                     f"map {ref['value']!r} to an existing one or skip its rows."),
                     details={'field': 'create', 'target': ref['target'], **where})
+            if ref['target'] in ('customer', 'vendor') and not books.readable(ref['target']):
+                raise BookflowError('E_PERMISSION', message=(
+                    f"Creating {ref['target']} {ref['value']!r} needs reading the {ref['target']} list first, to rule "
+                    f"out a look-alike; someone who can read it creates it, or map {ref['value']!r}."),
+                    details={'field': 'create', 'capability': f"{ref['target']} show", **where})
             alike = books.look_alikes(ref['target'], ref['value'])
             if ref['target'] in ('customer', 'vendor') and alike:
                 raise BookflowError('E_VALIDATION', message=(

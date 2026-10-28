@@ -49,7 +49,7 @@ def made_id(books, run_id):
 def test_every_kind_imports_reverses_imports_again_and_an_update_reverses_exactly(books):
     """High 1 (the selector field), Medium 5 (exact prior state) and Low 10 (templates preview clean)."""
     books.run('employee create', {'name': 'Pat Lee'})  # the sales-rep template's employee
-    for kind in import_kinds.KINDS:
+    for kind in import_kinds.LIST_KINDS:  # documents: tests/test_import_documents.py
         template = books.run('import template', {'kind': kind})
         content = template['content']
         first, _ = imported(books, kind, content, source=f'{kind} file')

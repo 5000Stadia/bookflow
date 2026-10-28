@@ -2,7 +2,9 @@
 
 Each surface gets an identical demo copy. It previews the sample OFX statement into Checking, imports it, refuses the
 same file again and an OFX file for another account number, then reads the import back through show and query and
-the inbox through bank-line query. Every surface must end with the same counts, keys and refusals.
+the inbox through bank-line query; moves it and undoes that (increment 2); imports it again and sorts it: a match and
+its unmatch, a --lines ignore undone, an add that asks, then a check added and a transfer sent (increment 3). Every
+surface must end with the same counts, keys and refusals.
 """
 import anyio
 import pytest
@@ -12,7 +14,9 @@ from tests.test_bank_feeds import ofx, sample
 
 SURFACES = ('python', 'cli', 'http', 'mcp')
 COMMANDS = frozenset(('bank-feed import', 'bank-feed show', 'bank-feed query', 'bank-line query',
-                      'bank-feed move', 'bank-feed reverse'))
+                      'bank-feed move', 'bank-feed reverse',
+                      'bank-line match', 'bank-line unmatch', 'bank-line ignore', 'bank-line add', 'bank-line transfer',
+                      'bank-line undo'))
 
 
 @pytest.mark.timeout(900)
@@ -44,9 +48,27 @@ def test_the_same_bank_import_through_python_cli_http_and_mcp(root, tmp_path):
                 undo = {'import_id': moved['target']['import_id']}
                 undo_plan = await call(surface, 'bank-feed reverse', undo, dry_run=True)
                 undone = await call(surface, 'bank-feed reverse', {**undo, 'fingerprint': undo_plan['fingerprint']})
+                # Increment 3: imported again and sorted -- matched and back, a --lines ignore undone, the fee
+                # added as a check, the late deposit sent to another account as a transfer.
+                await call(surface, 'bank-feed import', {'account': 'Checking', 'content': content})
+                waiting = (await call(surface, 'bank-line query', {'account': 'Checking', 'state': 'waiting'}))['lines']
+                deposit = next(v['id'] for v in waiting if v['amount'] == 20000)
+                fee = next(v['id'] for v in waiting if v['amount'] == -1200)
+                matched = await call(surface, 'bank-line match', {'line': deposit})
+                unmatched = await call(surface, 'bank-line unmatch', {'line': deposit})
+                ignored = await call(surface, 'bank-line ignore', {'lines': [fee], 'ignore_reason': 'other'})
+                sort_plan = await call(surface, 'bank-line undo', {'batch': ignored['batch_id']}, dry_run=True)
+                sort_undone = await call(surface, 'bank-line undo', {'batch': ignored['batch_id']})
+                asked = await call(surface, 'bank-line add', {'line': fee, 'account': 'Bank Fees'}, rejected=True)
+                add = {'line': fee, 'payee': 'Central Supply', 'account': 'Bank Fees'}
+                add_plan = await call(surface, 'bank-line add', add, dry_run=True)
+                added = await call(surface, 'bank-line add', add)
+                sent = await call(surface, 'bank-line transfer', {'line': deposit, 'to': 'Payment Example Bank'})
                 results[surface] = dict(preview=preview, done=done, again=again, mismatch=mismatch, shown=shown,
                                         listed=listed, inbox=inbox, move_plan=move_plan, moved=moved,
-                                        undo_plan=undo_plan, undone=undone)
+                                        undo_plan=undo_plan, undone=undone, matched=matched, unmatched=unmatched,
+                                        ignored=ignored, sort_plan=sort_plan, sort_undone=sort_undone, asked=asked,
+                                        add_plan=add_plan, added=added, sent=sent)
             return results
         finally:
             await matrix.close()
@@ -65,6 +87,13 @@ def test_the_same_bank_import_through_python_cli_http_and_mcp(root, tmp_path):
         assert r['moved']['target']['counts']['new'] == 10, surface
         assert (r['undo_plan']['lines'], r['undone']['state']) == (10, 'reversed'), surface
         moves.add((tuple(sorted(r['moved']['target']['counts'].items())), r['undone']['summary']))
+        assert (r['matched']['lines'][0]['state'], r['unmatched']['lines'][0]['state']) == ('matched', 'waiting')
+        assert r['ignored']['lines'][0]['state'] == 'ignored' and r['sort_plan']['lines'] == 1, surface
+        assert r['sort_undone']['state'] == 'reversed' and 'E_VALIDATION' in str(r['asked']), surface
+        assert r['add_plan']['entries'][0]['command'] == 'check post' and r['add_plan']['entries'][0]['entry_id'] is None
+        assert (r['added']['lines'][0]['state'], r['added']['entries'][0]['command']) == ('added', 'check post')
+        assert (r['sent']['lines'][0]['state'], r['sent']['entries'][0]['command']) == ('transfer', 'transfer post')
+        moves.add((r['added']['summary'][:20], r['sent']['entries'][0]['input']['amount']))
         shapes.add((tuple(sorted(r['done']['counts'].items())), tuple(v['line_key'] for v in r['done']['lines']),
                     tuple((v['date'], v['amount'], v['state']) for v in r['inbox']['lines'])))
-    assert len(shapes) == 1 and len(moves) == 1
+    assert len(shapes) == 1 and len(moves) == 2

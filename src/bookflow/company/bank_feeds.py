@@ -795,8 +795,10 @@ def write(s, ctx, prepared: dict, *, moved_from: str | None = None) -> tuple[m.I
                 number=line.number[:64], kind=(line.kind or '')[:32], state=r['state'], live=1, version=1,
                 entry_id=_entry_id(entry) if entry is not None else None,
                 movement=entry.ref[0].model_dump_json() if entry is not None else None,
+                entry_date=entry.date if entry is not None else None,
                 link_how='auto' if entry is not None else None, match_reason=(r['reason'] or None) and r['reason'][:500],
-                possible_duplicate_of=r.get('duplicate_of'), warnings=json.dumps(r['warnings'])))
+                possible_duplicate_of=r.get('duplicate_of'), warnings=json.dumps(r['warnings']),
+                proposal=_proposal(r)))
             event_rows.append(dict(
                 id=new_id(), line_id=line_id, kind='imported', import_id=import_id, batch_id=batch_id,
                 details=json.dumps({'state': r['state'], 'reason': r['reason'], 'warnings': r['warnings'],
@@ -851,6 +853,15 @@ def write(s, ctx, prepared: dict, *, moved_from: str | None = None) -> tuple[m.I
     return output(prepared, import_id=import_id, batch_id=batch_id, line_ids=line_ids), True
 
 
+def _proposal(r: dict) -> str | None:
+    """A waiting line keeps what the matcher suggested at import, with its reason (increment 3's proposals)."""
+    if r['state'] != 'waiting':
+        return None
+    result = r.get('result')
+    options = r.get('suggest') or (result.suggestions if result is not None and result.status == 'suggested' else [])
+    return _sort.proposal_for(r.get('reason') or '', [_entry_id(v) for v in options])
+
+
 # ------------------------------------------------------------------ reading the inbox
 
 def _import_row(s, row: dict) -> dict:
@@ -871,7 +882,14 @@ def _line_out(row: dict, places: int) -> dict:
                 number=row['number'], kind=row['kind'], state=row['state'], live=bool(row['live']),
                 entry_id=row['entry_id'], link_how=row['link_how'], reason=row['match_reason'],
                 possible_duplicate_of=row['possible_duplicate_of'], warnings=tuple(json.loads(row['warnings'])),
-                version=row['version'])
+                version=row['version'], created=bool(row.get('created')), payee_display=row.get('payee_display'),
+                ignore_reason=row.get('ignore_reason'))
+
+
+def _decorated(s, rows: list[dict], places_for) -> tuple:
+    """The lines as the inbox shows them, each with its transfer pair and, while waiting, its proposals."""
+    extra = _sort.decorate(s, rows)
+    return tuple(m.InboxLine(**_line_out(v, places_for(v['account_id'])), **extra.get(v['id'], {})) for v in rows)
 
 
 def _offset(cursor: str | None) -> int:
@@ -902,7 +920,7 @@ def show(s, import_id: str, *, state=None, limit=100, cursor=None) -> dict:
     start = _offset(cursor)
     found = s.company.conn.execute(q.order_by(c.bank_lines.c.ordinal).offset(start).limit(limit + 1)).mappings().all()
     return dict(bank_import=_import_row(s, dict(row)), part_way=_reversal.progress(s, dict(row)), by_state=by_state,
-                lines=tuple(_line_out(dict(v), places) for v in found[:limit]),
+                lines=_decorated(s, [dict(v) for v in found[:limit]], lambda _: places),
                 next_cursor=str(start + limit) if len(found) > limit else None)
 
 
@@ -947,17 +965,29 @@ def line_query(s, inp) -> dict:
         sa.select(t.c.state, sa.func.count()).where(*filters).group_by(t.c.state)).all()}
     if inp.state:
         filters.append(t.c.state == inp.state)
+    if inp.entry_gone is not None:
+        # Whether a line's entry is gone or changed is read, not stored: test every linked line the other filters
+        # leave, then page over those (or over the rest).
+        linked = [dict(v) for v in s.company.conn.execute(sa.select(
+            t.c.id, t.c.account_id, t.c.amount, t.c.state, t.c.live, t.c.entry_id, t.c.entry_date).where(
+            *filters, t.c.entry_id.is_not(None))).mappings()]
+        gone = sorted(_sort.entry_trouble(s, linked))
+        if inp.entry_gone:
+            filters.append(t.c.id.in_(gone))
+        elif gone:
+            filters.append(t.c.id.not_in(gone))
     start = _offset(inp.cursor)
     found = s.company.conn.execute(sa.select(t).where(*filters).order_by(t.c.date, t.c.import_id, t.c.ordinal)
                                    .offset(start).limit(inp.limit + 1)).mappings().all()
     places = {}
-    lines = []
-    for v in found[:inp.limit]:
-        if v['account_id'] not in places:
-            places[v['account_id']] = _currency_places(s, v['account_id'])
-        lines.append(_line_out(dict(v), places[v['account_id']]))
-    return dict(lines=tuple(lines), counts=counts, next_cursor=str(start + inp.limit) if len(found) > inp.limit
+
+    def places_for(account_id):
+        if account_id not in places:
+            places[account_id] = _currency_places(s, account_id)
+        return places[account_id]
+    return dict(lines=_decorated(s, [dict(v) for v in found[:inp.limit]], places_for), counts=counts, next_cursor=str(start + inp.limit) if len(found) > inp.limit
                 else None)
 
 
 from bookflow.company import bank_reversal as _reversal  # noqa: E402,F401  (registers the bank-import adapter)
+from bookflow.company import bank_sort as _sort  # noqa: E402,F401  (registers the bank-sort adapter)

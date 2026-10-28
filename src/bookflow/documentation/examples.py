@@ -1941,6 +1941,9 @@ EXAMPLES.update({
 
 # The bank inbox (R108 increment 1).
 _BANK_IMPORT = '01J9ZK4QF8T7E2V5N3B6C1D0BF'
+_BANK_LINE = '01J9ZK4QF8T7E2V5N3B6C1D0BG'
+_BANK_ENTRY = '01J9ZK4QF8T7E2V5N3B6C1D0BH'
+_BANK_SORT = '01J9ZK4QF8T7E2V5N3B6C1D0BJ'
 EXAMPLES.update({
     'bank-feed import': Example('bookflow bank-feed import --account Checking --attachment 01J9ZK4QF8T7E2V5N3B6C1D0AT'
                                 ' --company "Demo Plumbing Co" --reason "September checking statement" --dry-run --json',
@@ -1957,4 +1960,22 @@ EXAMPLES.update({
     'bank-feed move': Example('bookflow bank-feed move ' + _BANK_IMPORT + ' --to Savings --company "Demo Plumbing Co"'
                               ' --reason "Savings statement imported to Checking" --dry-run --json',
                               {'import_id': _BANK_IMPORT, 'to': 'Savings'}),
+    # R108 increment 3: sorting the inbox, one line or several as one batch.
+    'bank-line match': Example('bookflow bank-line match --line ' + _BANK_LINE + ' --entry ' + _BANK_ENTRY
+                               + ' --company "Demo Plumbing Co" --reason "Bank line is this check" --dry-run --json',
+                               {'line': _BANK_LINE, 'entry': _BANK_ENTRY}),
+    'bank-line add': Example('bookflow bank-line add --line ' + _BANK_LINE + ' --payee "Central Supply" --account'
+                             ' "Office Supplies" --company "Demo Plumbing Co" --reason "Enter the supplies purchase"'
+                             ' --dry-run --json',
+                             {'line': _BANK_LINE, 'payee': 'Central Supply', 'account': 'Office Supplies'}),
+    'bank-line unmatch': Example('bookflow bank-line unmatch --line ' + _BANK_LINE + ' --company "Demo Plumbing Co"'
+                                 ' --reason "Wrong entry" --dry-run --json', {'line': _BANK_LINE}),
+    'bank-line ignore': Example('bookflow bank-line ignore --line ' + _BANK_LINE + ' --ignore-reason duplicate'
+                                ' --company "Demo Plumbing Co" --reason "Same charge twice" --dry-run --json',
+                                {'line': _BANK_LINE, 'ignore_reason': 'duplicate'}),
+    'bank-line transfer': Example('bookflow bank-line transfer --line ' + _BANK_LINE + ' --to Savings'
+                                  ' --company "Demo Plumbing Co" --reason "Moved to savings" --dry-run --json',
+                                  {'line': _BANK_LINE, 'to': 'Savings'}),
+    'bank-line undo': Example('bookflow bank-line undo ' + _BANK_SORT + ' --company "Demo Plumbing Co"'
+                              ' --reason "Wrong account on the batch" --dry-run --json', {'batch': _BANK_SORT}),
 })

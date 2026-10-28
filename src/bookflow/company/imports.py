@@ -40,6 +40,7 @@ REFUSED_SHOWN = 20
 SAMPLE = 5
 WRITES = ('created', 'updated')
 UNIT_PRICES = frozenset(('price', 'cost'))
+DOC_UNIT_PRICES = frozenset(('unit_price', 'unit_cost', 'price_basis_amount', 'rate', 'estimated_unit_cost'))
 INT64_MAX = 2 ** 63 - 1
 PLACEHOLDER_ID = '0' * 26  # what a reference becomes when a row is checked against its command's input model
 # Text fields that are identifiers, numbers or codes rather than words: a stray character refuses, never dropped.
@@ -159,6 +160,10 @@ def build_mapping(kind: kinds.Kind, table: tabular.Table, inp, saved: dict | Non
             if path not in mapped:
                 raise BookflowError('E_VALIDATION', message=f'Key {path!r} is not a mapped column.',
                                     details={'field': 'key', 'path': path})
+    elif kinds.is_document(kind):
+        # A document's group key: its kind's key fields that are mapped, when the ones it cannot go without are.
+        key = [p for p in kind.key_default if p in mapped] if kind.key_default and set(kind.key_core) <= mapped \
+            else []
     elif kind.name == 'account' and 'number' in mapped:
         key = ['number']
     elif 'name' in mapped:
@@ -231,12 +236,17 @@ def _read_number(read, cell: str, mapping: Mapping, *places):
         return read(cell, *places, decimal=decimal, thousands=thousands)
 
 
+def _unit_price(path: str) -> bool:
+    """An item's price or cost, or a document line's unit price or cost: sub-cent unit prices, as typed."""
+    return path in UNIT_PRICES or ('[].' in path and path.rsplit('.', 1)[-1] in DOC_UNIT_PRICES)
+
+
 def coerce(spec: kinds.FieldSpec | None, cell: str, mapping: Mapping, places: int, year: int) -> Any:
     """A cell as its field's declared type. References stay text here; they resolve when the row is checked."""
     if spec is None or spec.type in ('string', 'reference', 'any'):
         return cell
     if spec.type == 'money':
-        if spec.path in UNIT_PRICES:
+        if _unit_price(spec.path):
             from bookflow.core.unit_price import EXTRA_PLACES
             places += EXTRA_PLACES  # an item's price and cost carry sub-cent unit prices, as `item create` takes them
         amount = _read_number(tabular.parse_money, cell, mapping, places)
@@ -245,7 +255,7 @@ def coerce(spec: kinds.FieldSpec | None, cell: str, mapping: Mapping, places: in
         if abs(amount) > INT64_MAX:
             raise tabular.CellError('E_VALUE_RANGE', f'{cell!r} is beyond the largest amount the books hold')
         text = tabular.money_text(amount, places)
-        return text.rstrip('0').rstrip('.') if spec.path in UNIT_PRICES else text
+        return text.rstrip('0').rstrip('.') if _unit_price(spec.path) else text
     if spec.type == 'decimal':
         return _read_number(tabular.parse_decimal, cell, mapping)
     if spec.type == 'date':
@@ -282,6 +292,8 @@ class RowPlan:
     problems: list[dict] = field(default_factory=list)  # every cell the check found wrong, in column order
     dropped: list[dict] = field(default_factory=list)  # characters a text field could not hold, dropped
     originals: dict[str, str] = field(default_factory=dict)  # path -> the file's text, where a value map changed it
+    spans: list = field(default_factory=list)  # a document's file rows: [row number, line] each
+    line_rows: dict = field(default_factory=dict)  # a document's line array -> the file row of each line
 
 
 def key_hash(source: str, kind: str, values: list[Any]) -> str:
@@ -355,40 +367,7 @@ def plan_rows(kind: kinds.Kind, table: tabular.Table, mapping: Mapping, source: 
             plan.problems.append({'column': None, 'code': 'row_width', 'value': '', 'message': plan.message})
             continue
         payload: dict = {}
-        for i, path in mapping.columns.items():
-            raw = cells[i] if i < len(cells) else ''
-            header = table.headers[i]
-            spec = specs.get(path)
-            text_field = free_text(spec, path, mapping.key)
-            if text_field and raw:
-                multiline = spec.multiline if spec else False
-                cleaned, dropped = tabular.clean_text(raw, multiline)
-                for position, ch in dropped:
-                    entry = {'row': row_no, 'line': line, 'column': header, 'position': position,
-                             'character': f'U+{ord(ch):04X}', 'name': tabular.char_name(ch)}
-                    if ch in tabular.KEPT_CONTROLS and not (ch == '\n' and raw[position - 2:position - 1] == '\r'):
-                        entry['replaced_with'] = 'SPACE'  # a single-line field: the break becomes one space
-                    plan.dropped.append(entry)
-                cell = cleaned.strip()
-            else:
-                cell = raw.strip()
-            maps = mapping.value_maps.get(path)
-            if cell and maps:
-                mapped = maps.get(norm_key(cell), cell)
-                if mapped != cell:
-                    plan.originals[path] = cell  # a decision remembered keys on the file's own text
-                cell = mapped
-            if not cell:
-                continue  # a blank cell is omitted, never sent empty
-            try:
-                if not text_field:
-                    _junk_controls(cell)
-                value = coerce(spec, cell, mapping, places, year)
-                if spec is not None:
-                    _fits(spec, value)
-            except tabular.CellError as error:
-                plan.problems.append({'column': header, 'code': error.code, 'value': raw, 'message': error.message})
-                continue
+        for path, value in read_cells(kind, table, mapping, specs, plan, row_no, line, cells, places, year).items():
             _set_path(payload, path, value)
         for path, value in mapping.constants.items():
             if _get_path(payload, path) is None:
@@ -419,6 +398,50 @@ def plan_rows(kind: kinds.Kind, table: tabular.Table, mapping: Mapping, source: 
             seen.setdefault(plan.key_hash, row_no)
         _settle(plan)
     return out
+
+
+def read_cells(kind, table: tabular.Table, mapping: Mapping, specs: dict, plan: RowPlan, row_no: int, line: int,
+               cells: list[str], places: int, year: int) -> dict[str, Any]:
+    """One row's mapped cells as their fields' values, by path: text drops what it cannot hold (each recorded in
+    ``plan.dropped``), anything else not exactly its type is a problem in ``plan.problems``; blanks are left out."""
+    values: dict[str, Any] = {}
+    for i, path in mapping.columns.items():
+        raw = cells[i] if i < len(cells) else ''
+        header = table.headers[i]
+        spec = specs.get(path)
+        text_field = free_text(spec, path, mapping.key)
+        if text_field and raw:
+            multiline = spec.multiline if spec else False
+            cleaned, dropped = tabular.clean_text(raw, multiline)
+            for position, ch in dropped:
+                entry = {'row': row_no, 'line': line, 'column': header, 'position': position,
+                         'character': f'U+{ord(ch):04X}', 'name': tabular.char_name(ch)}
+                if ch in tabular.KEPT_CONTROLS and not (ch == '\n' and raw[position - 2:position - 1] == '\r'):
+                    entry['replaced_with'] = 'SPACE'  # a single-line field: the break becomes one space
+                plan.dropped.append(entry)
+            cell = cleaned.strip()
+        else:
+            cell = raw.strip()
+        maps = mapping.value_maps.get(path)
+        if cell and maps:
+            mapped = maps.get(norm_key(cell), cell)
+            if mapped != cell:
+                plan.originals[path] = cell  # a decision remembered keys on the file's own text
+            cell = mapped
+        if not cell:
+            continue  # a blank cell is omitted, never sent empty
+        try:
+            if not text_field:
+                _junk_controls(cell)
+            value = coerce(spec, cell, mapping, places, year)
+            if spec is not None:
+                _fits(spec, value)
+        except tabular.CellError as error:
+            plan.problems.append({'column': header, 'code': error.code, 'value': raw, 'message': error.message,
+                                  'row': row_no})
+            continue
+        values[path] = value
+    return values
 
 
 def _settle(plan: RowPlan) -> None:
@@ -461,6 +484,16 @@ def check_constants(kind: kinds.Kind, mapping: Mapping, places: int, year: int) 
 
 
 # ------------------------------------------------------------------ the books as the rows meet them
+
+def documents():
+    from bookflow.company import import_documents
+    return import_documents
+
+
+def books_for(s, kind, source: str):
+    """The lookups a file of this kind needs: a list's own records and references, or a document file's."""
+    return documents().DocBooks(s, kind, source) if kinds.is_document(kind) else Books(s, kind, source)
+
 
 class Books:
     """Lookups one call makes many times: the kind's own records by key, references by name, the key ledger."""
@@ -539,10 +572,9 @@ class Books:
         return list(dict.fromkeys(self.look_alikes(noun, value) + close))[:3]
 
     def look_alikes(self, noun: str, value: str) -> list[str]:
-        from bookflow.company.cutover import alike_names
         if not self.readable(noun):
             return []
-        return [n for n in self.ref_index(noun)['names'] if isinstance(n, str) and alike_names(value, n)][:3]
+        return [n for n in self.ref_index(noun)['names'] if isinstance(n, str) and alike(value, n)][:3]
 
     def add_reference(self, noun: str, name: str, record_id: str) -> None:
         index = self.ref_index(noun)
@@ -828,6 +860,9 @@ def classify(s, ctx, run: dict, kind: kinds.Kind, books: Books, plan: RowPlan, p
              creator=None) -> tuple[str, dict | None, dict | None]:
     """Set the row's status; returns (action, resolved input, the record as shown before an update) where action is
     create, update or none."""
+    if kinds.is_document(kind):
+        return documents().classify(s, ctx, run, kind, books, plan, columns, dry_run=dry_run, decided=decided,
+                                    creator=creator)
     if plan.status == 'refused' and (plan.payload is None or plan.code in READER_CODES):
         return 'none', None, None
     payload = plan.payload or {}
@@ -891,7 +926,8 @@ def _not_all(run: dict, plan: RowPlan, outcome: str) -> None:
 def _dry_run(s, ctx, run, kind, plan: RowPlan, action: str, body: dict, columns: dict[str, str]) -> None:
     name = kind.create if action == 'create' else kind.update
     try:
-        batches.run_nested(s, ctx, name, body, source_ref=f"import:{run['id']}:{plan.row_no}", dry_run=True)
+        batches.run_nested(s, ctx, name, body, source_ref=f"import:{run['id']}:{plan.row_no}", dry_run=True,
+                           recovery=False)
     except BookflowError as error:
         plan.status, plan.code, plan.message = 'refused', error.code, _message(error)
         plan.column = _column_of(error, columns)
@@ -939,7 +975,7 @@ def mapping_problems(kind: kinds.Kind, mapping: Mapping, mode: str) -> list[dict
     mapped = set(mapping.columns.values()) | set(mapping.constants)
     out = []
     for name in kinds.required(kind.name, mode):
-        if not any(p == name or p.startswith(name + '.') for p in mapped):
+        if not any(p == name or p.startswith((name + '.', name + '[].')) for p in mapped):
             out.append({'column': None, 'code': 'unmapped_required', 'value': '', 'rows': [],
                         'message': f'No column maps to {name}, which `{kind.create}` requires; map one (`columns`) '
                                    'or give it as a constant.'})
@@ -962,7 +998,7 @@ def check_report(kind: kinds.Kind, table: tabular.Table, mapping: Mapping, rows:
             dropped.extend(plan.dropped[:CHECK_SHOWN - len(dropped)])
         for problem in plan.problems:
             total += 1
-            bad_rows.add(plan.row_no)
+            bad_rows.add(problem.get('row', plan.row_no))
             column = problem['column'] or problem.get('key_column')
             row_level = problem['code'] in _ROW_LEVEL or problem.get('required')
             key = (column, problem['code'], '' if row_level else problem['value'],
@@ -974,7 +1010,9 @@ def check_report(kind: kinds.Kind, table: tabular.Table, mapping: Mapping, rows:
                 group = groups[key] = {'column': column, 'code': problem['code'],
                                        'value': None if row_level else problem['value'], 'message': message,
                                        'rows': []}
-            group['rows'].append(plan.row_no)
+            row = problem.get('row', plan.row_no)
+            if row not in group['rows']:
+                group['rows'].append(row)
     listed = mapping_problems(kind, mapping, mode) + list(constants) + sorted(
         groups.values(), key=lambda g: (order.get(g['column'], len(order)), g['rows'][0]))
     # References: one lookup per list, held in memory (Books); a value the books lack asks, once per value.
@@ -986,8 +1024,11 @@ def check_report(kind: kinds.Kind, table: tabular.Table, mapping: Mapping, rows:
         if not payload:
             continue
         wrong = {p['column'] for p in plan.problems}
-        for u in resolve_payload(books, kind, payload, _Others(pending, norm_key(books.selector(payload) or '')),
-                                 columns)[1]:
+        found = (documents().resolve_payload(books, kind, payload, columns, line_rows=plan.line_rows)
+                 if kinds.is_document(kind) else
+                 resolve_payload(books, kind, payload, _Others(pending, norm_key(books.selector(payload) or '')),
+                                 columns))
+        for u in found[1]:
             if u['column'] is not None and u['column'] in wrong:
                 continue  # that cell is already a problem (its own parent, say)
             entry = unknown.get((u['field'], norm_key(u['value'])))
@@ -998,7 +1039,9 @@ def check_report(kind: kinds.Kind, table: tabular.Table, mapping: Mapping, rows:
                     'look_alikes': books.look_alikes(u['target'], u['value']), 'create': creatable(u['target'])}
                 if plan.originals.get(u['field']):
                     entry['file_value'] = plan.originals[u['field']]  # before a value map changed it
-            entry['rows'].append(plan.row_no)
+            row = u.get('row') or (plan.spans[0][0] if plan.spans else plan.row_no)
+            if row not in entry['rows']:
+                entry['rows'].append(row)
     summary = []
     for g in listed[:CHECK_SHOWN]:
         rows_text = (', '.join(str(r) for r in g['rows'][:20]) + (f' and {len(g["rows"]) - 20} more'
@@ -1013,7 +1056,10 @@ def check_report(kind: kinds.Kind, table: tabular.Table, mapping: Mapping, rows:
         {'decision': 'reference', 'message': unknown_message(u, u['suggestions']) + ' Map, create or skip it.',
          'field': u['field'], 'column': u['column'], 'value': u['value'], 'rows': u['rows'][:50]}
         for u in list(unknown.values())[:CHECK_SHOWN]]
-    return {'ok': not listed and not to_decide, 'clean': not listed, 'rows': len(rows),
+    file_rows = sum(len(p.spans) for p in rows) if kinds.is_document(kind) else len(rows)
+    extra = {'documents': len(rows), 'documents_with_problems': sum(1 for p in rows if p.problems)} \
+        if kinds.is_document(kind) else {}
+    return {'ok': not listed and not to_decide, 'clean': not listed, 'rows': file_rows, **extra,
             'rows_with_problems': len(bad_rows), 'to_decide': to_decide,
             'problems_total': total + sum(1 for g in listed if not g['rows']), 'problems': listed[:CHECK_SHOWN],
             'summary': summary, 'dropped': dropped, 'dropped_total': dropped_total,
@@ -1068,6 +1114,11 @@ def _prepare(s, ctx, inp) -> dict:
     kind = kinds.kind(inp.kind)
     # A check or preview shows which records exist and how they differ: the kind's own read permission, first.
     batches.require_read(s, f'{kind.noun} show')
+    if kinds.is_document(kind) and inp.mode != 'create':
+        raise BookflowError('E_VALIDATION', message=(
+            f'{article(kind.name).capitalize()} {kind.name.replace("-", " ")} import creates documents only; change '
+            f'one with `{kind.noun} update`.'),
+            details={'field': 'mode', 'value': inp.mode})
     table, attachment_name = read_table(s, inp)
     saved, matched, decision = import_mappings.for_file(s, kind, table, inp)
     mapping = build_mapping(kind, table, inp, saved)
@@ -1076,9 +1127,14 @@ def _prepare(s, ctx, inp) -> dict:
     source = inp.source or (saved['source'] if saved else None) or f'{kind.name} import'
     places, year = _places(s), _company_year(s)
     constants = check_constants(kind, mapping, places, year)
-    rows = plan_rows(kind, table, mapping, source, places, year, inp.mode)
-    books = Books(s, kind, source)
-    check_rows(s, kind, table, mapping, rows, books, inp.mode)
+    if kinds.is_document(kind):
+        rows = documents().plan_documents(kind, table, mapping, source, places, year)
+        books = books_for(s, kind, source)
+        documents().check_documents(s, kind, table, mapping, rows, books)
+    else:
+        rows = plan_rows(kind, table, mapping, source, places, year, inp.mode)
+        books = Books(s, kind, source)
+        check_rows(s, kind, table, mapping, rows, books, inp.mode)
     report = check_report(kind, table, mapping, rows, books, inp.mode, constants)
     notes = []
     if table.encoding_guessed:
@@ -1087,6 +1143,10 @@ def _prepare(s, ctx, inp) -> dict:
         notes.append(f'sheet: {table.sheet!r} (values as last saved; formulas are not evaluated)')
     if mapping.keyed_by_content:
         notes.append('keyed by content: a re-run is safe only for unchanged rows')
+        if kinds.is_document(kind) and not getattr(inp, 'key_by_content', False):
+            notes.append(f'no key column is mapped ({", ".join(kind.key_default) or "this kind has none"}), so each row '
+                         'is a document keyed by its content; a run needs key_by_content, since an edited amount '
+                         'would import a second copy')
     if report['dropped_total']:
         notes.append(f"{report['dropped_total']} character(s) no text field holds were dropped (`dropped` lists each)")
     for d in mapping.decisions:
@@ -1169,13 +1229,14 @@ def prepare_preview(s, ctx, inp) -> dict:
             _dry_run(s, ctx, run, kind, plan, action, body, columns)
     references = []
     for u in p['check']['unknown_references']:
-        rows_ = [plan.row_no for plan in rows if plan.status == 'waiting' and any(
+        rows_ = [plan.spans[0][0] if plan.spans else plan.row_no for plan in rows if plan.status == 'waiting' and any(
             x['field'] == u['field'] and norm_key(x['value']) == norm_key(u['value'])
             for x in getattr(plan, 'unknown', ()))]
         if rows_:
             references.append({**u, 'rows': rows_[:50], 'row_count': len(rows_)})
+    create = _create_missing(books, references, p['notes']) if getattr(inp, 'create_missing', False) else []
     return {'kind': kind, 'table': table, 'mapping': mapping, 'rows': rows, 'run_id': run['id'], 'source': source,
-            'attachment': inp.attachment, 'file_name': inp.file_name or p['attachment_name'], 'notes': p['notes'],
+            'create': create, 'attachment': inp.attachment, 'file_name': inp.file_name or p['attachment_name'], 'notes': p['notes'],
             'input': inp, 'columns': columns, 'references': references, 'matched': p['matched'],
             'dropped': p['check']['dropped'], 'dropped_total': p['check']['dropped_total']}
 
@@ -1187,12 +1248,13 @@ def apply_preview(s, ctx, prepared: dict) -> dict:
     from bookflow.company import import_mappings
     s.company.conn.execute(sa.insert(c.import_runs).values(
         id=prepared['run_id'], kind=prepared['kind'].name, mode=inp.mode, atomic=not inp.partial,
-        state='waiting' if prepared['references'] else 'previewed',
+        state='waiting' if len(prepared['references']) > len(prepared['create']) else 'previewed',
         source=prepared['source'], mapping=json.dumps({
             **mapping.as_dict(table.headers), 'headers': table.headers, 'notes': prepared['notes'],
             'decisions': mapping.decisions, 'references': prepared['references'], 'matched': prepared['matched'],
             'fingerprint': import_mappings.fingerprint(table.headers), 'sheet': table.sheet, 'allow': list(inp.allow),
-            'dropped': prepared['dropped'], 'dropped_total': prepared['dropped_total']}, sort_keys=True),
+            'dropped': prepared['dropped'], 'dropped_total': prepared['dropped_total'],
+            'key_by_content': bool(getattr(inp, 'key_by_content', False))}, sort_keys=True),
         attachment_id=prepared['attachment'], file_name=prepared['file_name'], file_sha256=table.sha256,
         encoding=table.encoding, delimiter=table.delimiter, row_count=len(prepared['rows']),
         stop_after_refusals=inp.stop_after_refusals, batch_id=None, reason=ctx.reason, version=1, created_at=at,
@@ -1200,7 +1262,86 @@ def apply_preview(s, ctx, prepared: dict) -> dict:
     values = [_row_values(prepared['run_id'], plan, 'preview', at, keep=True) for plan in prepared['rows']]
     for start in range(0, len(values), 500):
         s.company.conn.execute(sa.insert(c.import_rows), values[start:start + 500])
+    for ref in prepared['create']:
+        s.company.conn.execute(sa.insert(c.import_decisions).values(
+            id=new_id(), run_id=prepared['run_id'], field=ref['field'], value=ref['value'],
+            value_key=norm_key(ref['value']), action='create', target=ref['value'], input=None, remembered=False,
+            created_at=at, created_by=s.actor.id))
     return show(s, ctx, prepared['run_id'], prepared=prepared)
+
+
+def _create_missing(books, references: list[dict], notes: list[str]) -> list[dict]:
+    """`create_missing` (§2): the unknown references an import may make from their name alone, decided `create` at
+    the preview and made by their own command when their first row runs. A customer or vendor that looks like an
+    existing one, or like another new name in the same file, is never made, whoever runs the import: it stays to
+    decide (map it, or create it with its own command). A caller who may not read that list cannot rule a look-alike
+    out, so nothing is made for them either. An item or account is never made; a list needing more than a name
+    (terms) stays to decide too."""
+    out = []
+    parties = [r for r in references if r['target'] in ('customer', 'vendor')]
+    for ref in references:
+        target = ref['target']
+        if target in ('customer', 'vendor'):
+            if not books.readable(target):
+                notes.append(f"{ref['value']!r} was not created: you may not read the {target} list, so a look-alike "
+                             'of it cannot be ruled out; someone who can creates it, or map it.')
+                continue
+            known = books.look_alikes(target, ref['value'])
+            twins = [r['value'] for r in parties if r is not ref and r['target'] == target
+                     and alike(ref['value'], r['value'])][:3]
+            if known or twins:
+                said = ', '.join(map(repr, known)) if known else ', '.join(map(repr, twins)) + ' in this file'
+                notes.append(f"{ref['value']!r} was not created: it looks like {said}; map it to one of them, or "
+                             'skip its rows.')
+                continue
+        if creatable(target) == 'from the name':
+            out.append(ref)
+    return out
+
+
+def article(noun: str) -> str:
+    return 'an' if noun[:1].lower() in 'aeiou' else 'a'
+
+
+def _stem(word: str) -> str:
+    """A word with its plural ending off (`supplies` and `supply` are one word to a look-alike test)."""
+    if len(word) > 4 and word.endswith('ies'):
+        return word[:-3] + 'y'
+    if len(word) > 3 and word.endswith('s') and not word.endswith('ss'):
+        return word[:-1]
+    return word
+
+
+def _distance(a: str, b: str) -> int:
+    previous = list(range(len(b) + 1))
+    for i, x in enumerate(a, 1):
+        current = [i]
+        for j, y in enumerate(b, 1):
+            current.append(min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (x != y)))
+        previous = current
+    return previous[-1]
+
+
+def alike(first: str, second: str) -> bool:
+    """Two names that probably mean one party, so an import never makes the second (§2): `cutover`'s test (the
+    same words, an abbreviation, a company suffix), the same words in another order (`Smith, Bob`, `Bob Smith`),
+    or a small misspelling: with plural endings off and the words sorted, at most 1 letter added, dropped or changed
+    in a name of 4 to 7 letters, at most 2 from 8 letters on (`Acme Supply`, `Acme Suplies`). Numbers must match
+    exactly (`Route 59 Auto` is not `Route 69 Auto`). Offered or held only, never mapped on this judgement."""
+    from bookflow.company.cutover import _name_tokens, alike_names
+    if alike_names(first, second):
+        return True
+    a, b = sorted(_stem(w) for w in _name_tokens(first)), sorted(_stem(w) for w in _name_tokens(second))
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    if [w for w in a if any(ch.isdigit() for ch in w)] != [w for w in b if any(ch.isdigit() for ch in w)]:
+        return False
+    x, y = ''.join(a), ''.join(b)
+    shortest = min(len(x), len(y))
+    limit = 2 if shortest >= 8 else 1 if shortest >= 4 else 0
+    return 0 < _distance(x, y) <= limit
 
 
 def _row_values(run_id: str, plan: RowPlan, phase: str, at: str, *, keep: bool = False) -> dict:
@@ -1208,7 +1349,8 @@ def _row_values(run_id: str, plan: RowPlan, phase: str, at: str, *, keep: bool =
             'status': plan.status, 'code': plan.code, 'message': plan.message, 'column_name': plan.column,
             'record_type': plan.record_type, 'record_id': plan.record_id,
             'payload': json.dumps(plan.payload, sort_keys=True) if keep and plan.payload is not None else None,
-            'cells': json.dumps(plan.cells) if keep else None, 'created_at': at}
+            'cells': json.dumps(plan.cells) if keep else None, 'created_at': at,
+            'spans': json.dumps(plan.spans) if keep and plan.spans else None}
 
 
 # ------------------------------------------------------------------ run
@@ -1317,8 +1459,16 @@ def run_slice(s, ctx, inp, *, interrupt=None) -> dict:
             raise BookflowError('E_VALIDATION', message=(f"Run {run['id']}'s batch is {state}; a reversed run is never "
                                                          'continued. Preview the corrected file again.'),
                                 details={'field': 'run', 'batch_state': state})
+    if kinds.is_document(kind) and mapping.get('keyed_by_content') and not (
+            mapping.get('key_by_content') or getattr(inp, 'key_by_content', False)):
+        raise BookflowError('E_VALIDATION', message=(
+            f"No key column is mapped, so each row is {article(kind.name)} {kind.name.replace('-', ' ')} keyed by its "
+            "content: a re-run "
+            'after an amount is edited would import a second copy. Map the key columns ('
+            + (', '.join(kind.key_default) or 'this kind has none') + ') and preview again, or run with key_by_content '
+            'to accept it.'), details={'field': 'key_by_content', 'run': run['id']})
     columns = {p: h for h, p in mapping['columns'].items()}
-    books = Books(s, kind, run['source'])
+    books = books_for(s, kind, run['source'])
     choices = decided(s, run['id'])
     if run['batch_id'] is None and run['atomic']:
         _recheck(s, run, kind, books, columns, choices)
@@ -1346,6 +1496,7 @@ def run_slice(s, ctx, inp, *, interrupt=None) -> dict:
         finished.add(stored['row_no'])
         plan = RowPlan(stored['row_no'], stored['line'], json.loads(stored['cells'] or '[]'),
                        json.loads(stored['payload']) if stored['payload'] else None, stored['key_hash'])
+        plan.spans = json.loads(stored['spans']) if stored.get('spans') else []
         if stored['status'] == 'refused' and (stored['payload'] is None or stored['code'] in READER_CODES):
             plan.status, plan.code, plan.message, plan.column = 'refused', stored['code'], stored['message'], \
                 stored['column_name']
@@ -1378,15 +1529,17 @@ def run_slice(s, ctx, inp, *, interrupt=None) -> dict:
                 try:
                     output = batches.run_nested(s, ctx, command, body,
                                                 source_ref=f"import:{run['id']}:{plan.row_no}",
-                                                recorder=_row_recorder(run, kind, plan, before))
+                                                recorder=_row_recorder(run, kind, plan, before),
+                                                recovery=not kinds.is_document(kind))
                 except BookflowError as error:
                     plan.status, plan.code, plan.message = 'refused', error.code, _message(error)
                     plan.column = _column_of(error, columns)
                     plan.record_type = plan.record_id = None
                 else:
                     if action != 'update':
-                        books.made(plan.payload or {}, output.get('id'))
-                        books.ledger[plan.key_hash] = (kind.definition.record_type, output.get('id'))
+                        made_id = output.get('id') or plan.record_id
+                        books.made(plan.payload or {}, made_id)
+                        books.ledger[plan.key_hash] = (kind.definition.record_type, made_id)
         if plan.status not in WRITES:
             buffered.append(_row_values(run['id'], plan, 'run', batches.now()))
         if plan.status == 'refused' and run['atomic']:
@@ -1437,7 +1590,8 @@ def _recheck(s, run: dict, kind: kinds.Kind, books: Books, columns: dict[str, st
     pending = {norm_key(books.selector(p)) for _, p in payloads if books.selector(p)}
     unknown: dict[tuple, dict] = {}
     for row_no, payload in payloads:
-        _, found, _, _ = resolve_payload(books, kind, payload, pending, columns, choices)
+        _, found, _, _ = (documents().resolve_payload(books, kind, payload, columns, choices)
+                          if kinds.is_document(kind) else resolve_payload(books, kind, payload, pending, columns, choices))
         for u in found:
             if u['decision'] is not None and u['decision']['action'] == 'create':
                 continue  # made when its first row runs
@@ -1507,6 +1661,22 @@ def _row_recorder(run: dict, kind: kinds.Kind, plan: RowPlan, before: dict | Non
 
     def record(s, cmd, applied, output):
         event_id = batches.last_event_id(s)
+        if kinds.is_document(kind):
+            # A document made: its id, or each payment a bill payment wrote (one per vendor and account).
+            made = [(output['id'], output.get('version'))] if output.get('id') else [
+                (p['id'], p.get('version')) for p in output.get('payments') or [] if p.get('id')]
+            for rid, version in made:
+                batches.record_effect(s, run['batch_id'], record_type=record_type, record_id=rid, action='created',
+                                      version_after=version, before=None, event_id=event_id)
+            main = made[0][0] if made else None
+            if main:
+                s.company.conn.execute(sa.insert(c.import_keys).values(
+                    id=new_id(), source=run['source'], key_hash=plan.key_hash, record_type=record_type,
+                    record_id=main, run_id=run['id'], batch_id=run['batch_id'], created_at=batches.now()))
+            plan.record_type, plan.record_id = record_type, main
+            s.company.conn.execute(sa.insert(c.import_rows).values(_row_values(run['id'], plan, 'run',
+                                                                               batches.now())))
+            return
         found = batches.touched_effects(applied, {record_type})
         if not found and isinstance(output, dict) and output.get('id'):
             found = [(record_type, output['id'], 'created' if cmd.name == kind.create else 'updated',
@@ -1528,13 +1698,20 @@ def _row_recorder(run: dict, kind: kinds.Kind, plan: RowPlan, before: dict | Non
     return record
 
 
+def _undo_ctx(ctx, run: dict):
+    """The context an all-or-nothing undo runs its nested deletes under: the run's own stored reason (given at the
+    preview or the run that began it), so a run called without one still undoes everything it made."""
+    reason = run.get('reason') or ctx.reason or f"Import run {run['id']} undone"
+    return ctx.model_copy(update={'reason': reason})
+
+
 def _roll_back(s, ctx, run: dict, plan: RowPlan) -> dict:
     """An atomic run met a refusal: undo what it made through its batch, and end it."""
     made = batches.counts(s, run['batch_id'])
     try:
         if made:
-            batches.reverse(s, ctx, run['batch_id'], reason=f'Atomic import stopped at row {plan.row_no}: {plan.code}',
-                            limit=10 ** 9)
+            batches.reverse(s, _undo_ctx(ctx, run), run['batch_id'],
+                            reason=f'Atomic import stopped at row {plan.row_no}: {plan.code}', limit=10 ** 9)
     except BookflowError as error:
         # The undo was refused: the plan is checked whole first, so it changed nothing (or, refused part way, what
         # it undid is recorded and `import reverse` goes on). The run ends `failed` and is never continued.
@@ -1562,7 +1739,8 @@ def cancel(s, ctx, run_id: str) -> dict:
     if run['atomic'] and made:
         # All or nothing: a cancelled run lands nothing, so what its slices made (and any reference a decision
         # created) is undone through its batch first. A refused undo leaves the run as it was.
-        batches.reverse(s, ctx, run['batch_id'], reason=ctx.reason or f'Import run {run_id} cancelled', limit=10 ** 9)
+        batches.reverse(s, _undo_ctx(ctx, run), run['batch_id'], reason=ctx.reason or f'Import run {run_id} cancelled',
+                        limit=10 ** 9)
         run = _run_row(s, run_id)
     _update_run(s, run, state='cancelled')
     out = show(s, ctx, run_id)
@@ -1683,8 +1861,9 @@ def outlook(s, run: dict, kind: kinds.Kind, mapping: dict, counts: dict, choices
                 c.import_rows.c.run_id == run['id'], c.import_rows.c.phase == 'preview',
                 c.import_rows.c.status == 'waiting')):
             body = json.loads(payload) if payload else {}
-            keys = [(p, norm_key(body[p])) for p, _ in _ref_paths(kind, body)
-                    if isinstance(body.get(p), str) and (p, norm_key(body[p])) in unknown]
+            refs = ([(p, v) for p, _, v, _, _ in documents().ref_items(kind, body)] if kinds.is_document(kind) else
+                    [(p, body[p]) for p, _ in _ref_paths(kind, body) if isinstance(body.get(p), str)])
+            keys = [(p, norm_key(v)) for p, v in refs if (p, norm_key(v)) in unknown]
             answers = [choices.get(k) for k in keys]
             if any(a is not None and a['action'] == 'skip' for a in answers):
                 out['left_out'] += 1
@@ -1747,16 +1926,17 @@ def errors(s, ctx, run_id: str) -> dict:
         c.import_rows.c.run_id == run_id, c.import_rows.c.phase == phase,
         sa.or_(c.import_rows.c.status == 'refused', c.import_rows.c.code == 'skipped_by_decision'))
         .order_by(c.import_rows.c.row_no)).all()
-    cells = {r[0]: json.loads(r[1] or '[]') for r in s.company.conn.execute(sa.select(
-        c.import_rows.c.row_no, c.import_rows.c.cells).where(
+    cells = {r[0]: (json.loads(r[1] or '[]'), json.loads(r[2]) if r[2] else None) for r in s.company.conn.execute(
+        sa.select(c.import_rows.c.row_no, c.import_rows.c.cells, c.import_rows.c.spans).where(
         c.import_rows.c.run_id == run_id, c.import_rows.c.phase == 'preview',
         c.import_rows.c.row_no.in_([r[0] for r in refused])))} if refused else {}
     headers = list(mapping.get('headers') or [])
     body = []
     for row_no, code, message, line in refused:
-        own = list(cells.get(row_no, []))
-        own = own[:len(headers)] + [''] * (len(headers) - len(own))
-        body.append(own + [code or '', message or '', str(line)])
+        # a document's every row, each with its own line, so the corrected file imports the whole document again
+        for own, own_line in documents().error_rows(*cells.get(row_no, ([], None))):
+            own = list(own)[:len(headers)] + [''] * (len(headers) - len(own))
+            body.append(own + [code or '', message or '', str(own_line or line)])
     stem = (run['file_name'] or run['kind']).rsplit('.', 1)[0]
     return {'run': run_id, 'file_name': f'{stem} - refused rows.csv', 'rows': len(body),
             'content': tabular.write_csv(headers + ['code', 'message', 'line'], body)}
@@ -1766,7 +1946,8 @@ def kinds_list() -> dict:
     out = []
     for k in kinds.KINDS.values():
         specs = kinds.fields(k.name)
-        required = [p for p, s in specs.items() if s.required]
+        required = (list(kinds.required(k.name)) if kinds.is_document(k) else
+                    [p for p, s in specs.items() if s.required])
         out.append({'kind': k.name, 'command': k.create, 'update_command': k.update, 'summary': k.summary,
                     'required': required, 'key': list(k.key_default),
                     'references': {p: s.target for p, s in specs.items() if s.type == 'reference'},
@@ -1798,13 +1979,35 @@ _TEMPLATE_PATHS = {
     'account': ['number', 'name', 'type', 'description'],
     'term': ['name', 'kind', 'due_days'],
     'price-level': ['name', 'kind', 'percent'],
+    'invoice': ['number', 'customer', 'date', 'lines[].item', 'lines[].description', 'lines[].quantity',
+                'lines[].unit_price'],
+    'bill': ['vendor', 'supplier_reference', 'date', 'expenses[].account', 'expenses[].amount', 'expenses[].memo'],
+    'payment': ['customer', 'date', 'amount', 'reference', 'payment_method', 'deposit_to', 'applications[].invoice',
+                'applications[].amount'],
+    'bill-payment': ['date', 'funding_account', 'method', 'check_number', 'bills[].bill', 'bills[].amount'],
+    'journal': ['number', 'date', 'lines[].account', 'lines[].side', 'lines[].amount', 'lines[].description'],
 }
+_EXAMPLE_ROWS.update({
+    'invoice': {'number': 'INV-1001', 'customer': 'Acme Plumbing', 'lines[].item': 'Service call',
+                'lines[].description': 'Service call', 'lines[].quantity': '1', 'lines[].unit_price': '125.00'},
+    'bill': {'vendor': 'Northside Supply', 'supplier_reference': 'NS-4471', 'expenses[].account': 'Utilities',
+             'expenses[].amount': '84.20', 'expenses[].memo': 'March'},
+    'payment': {'customer': 'Acme Plumbing', 'amount': '125.00', 'reference': '1042', 'payment_method': 'Check',
+                'deposit_to': 'Undeposited Funds', 'applications[].invoice': 'INV-1001',
+                'applications[].amount': '125.00'},
+    'bill-payment': {'funding_account': 'Checking', 'method': 'check', 'check_number': '2201',
+                     'bills[].bill': 'B-1001', 'bills[].amount': '84.20'},
+    'journal': {'number': 'JE-1', 'lines[].account': 'Checking', 'lines[].side': 'debit', 'lines[].amount': '10.00',
+                'lines[].description': 'Correction'},
+})
 
 
 def template(kind_name: str) -> dict:
     k = kinds.kind(kind_name)
     specs = kinds.fields(kind_name)
     common = _TEMPLATE_PATHS.get(k.name)
+    if common is None and kinds.is_document(k):
+        common = list(dict.fromkeys([*k.key_default, *(p for p, f in specs.items() if f.required)]))
     paths = common or [p for p, s in specs.items() if s.required or p in ('name',)]
     paths = [p for p in dict.fromkeys(([] if common else [p for p, s in specs.items() if s.required]) + paths)
              if p in specs]

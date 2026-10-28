@@ -737,3 +737,113 @@ line for line and match for match, with the same account records.
 **Not built here:** the browser undo and move dialog (increment 7), entries created from lines (increment 3: the
 `created` effects this reverses are recorded by `bank-line add`; here the tests record them directly), rule retirement
 (increment 4 registers in `RETIRE`), the `statement_copy` column (increment 6).
+
+## As built: increment 3
+
+- **Migration co0114** (on co0113, R107's document imports) adds five columns to `bank_lines`, moving no row: `created` (0; 1 when the line's
+  entry was made from it), `payee_display`, `proposal` (the matcher's suggestion at import with its reason, a JSON
+  object), `ignore_reason` (`already_entered`, `not_ours`, `duplicate`, `other`) and `entry_date` (the linked entry's
+  date on the line's account when linked, so a later change shows as `entry_gone`). `entry_id`, `movement`,
+  `link_how` and `match_reason` came with co0112. Decided: `pair_line_id` is not stored but read (a live line of
+  another account linked to the same entry), so a reversal never leaves a pointer to a hidden line; `rule_id` waits for
+  increment 4, whose table it names. The line's guards are unchanged.
+- **Six commands** (`company/bank_sort.py`, layer `bank-line-v1` on `import-documents-v1`, 834 commands, descriptor
+  `bd11005c`; each standard under `bank-feed` with `ledger.read` member; all `not-a-record` for imports):
+  `bank-line match`, `unmatch`, `ignore`, `add`, `transfer` and `undo`. Decided: `unmatch` is the one way back to
+  waiting -- from a match or transfer link (the entry stays), an ignore (`unignored` event), or an added line whose
+  entry was since deleted, voided or changed (`released`); an added line whose entry stands is refused naming its
+  `--lines` batch's undo (when it came from one), the family's own delete (then unmatch) and the import's reversal --
+  never an unmatch that would refuse. Every refusal of a line not waiting names that same way back for its state.
+  `transfer` takes one line and its pair (no `--lines`). All six take an idempotency key, as `bank-feed import` and
+  `check post` do: a retry with the key returns the first result (the key is kept once the act's nested writes have
+  committed; a retry before that is refused by the line's state, so nothing is ever done twice).
+  `bank-line show`/`history` are not separate commands: `bank-line query` shows proposals, pair, `created`,
+  `payee_display` and `ignore_reason`, and `bank_line_events` holds the history.
+- **Recorded for reversal.** Every act records, on the line's own import batch, the line's change (`bank_line`
+  `updated`, its link columns before; the ledger's `batch_effects` CHECK already allowed `updated`, so nothing there
+  widened), each entry it made (`transaction` `created`, with the version it left) and each it linked (`linked`). So
+  `bank-feed reverse` deletes what lines were added as through increment 2's adapter (its entry loop is now
+  `bank_reversal.entry_plan`, shared), and hides the lines, which undoes every match and ignore. A `--lines` act
+  (`match`, `unmatch`, `ignore`, `add`) is also its own batch, kind `bank-sort` (ordering `record`, scope
+  `bank-inbox`), with the same effects; `bank-line undo <batch>` (dry run, fingerprint, slices as a reversal) deletes
+  the entries it made and returns its lines to how they stood. Each line's effect keeps what the act left (state,
+  entry, created, ignore reason); the undo compares the line with that, not with its version, so undos unwind in any
+  order newest first, and a line already back as it stood before the batch (by any path) needs nothing. Blockers:
+  `later_sort` (a later bank-sort batch over the line is not undone: `bank-line undo <it>` first), `line_changed`
+  (sorted otherwise since; its hint is the line's own way back to waiting, then the batch's state when that was not
+  waiting), `import_under_way`, `entry_linked` (a line the undo does not return is matched to an entry it made), and,
+  for each line the undo would link back to an entry (an unmatch or re-match batch), `entry_gone` (that entry voided,
+  deleted or changed in amount or date; not clearable while gone, cleared by changing it back when changed) and
+  `entry_matched` (another live line holds it now: never doubled; `bank-line unmatch` that line), and the family
+  delete's own refusals. Refused, the undo changes nothing. While an undo is part way (`reversing`, or `blocked`
+  part way) its lines are frozen: match, unmatch, ignore, add and transfer refuse with "undo in progress; finish it
+  with `bank-line undo <batch>`", and an import whose lines it holds blocks with `sort_under_way`. A line whose import
+  was reversed is skipped by an undo (it went with its import). The undo says what does not come back as it was:
+  lines it frees from a match wait with their proposals read afresh, and so do the account's waiting lines of the
+  same amount nearby (an import made meanwhile skipped the entry while it was taken).
+- **Add is the entry typed in.** The account's own command, run as the caller through `batches.run_nested` with
+  `source_ref` `bank-line:<line>`: money out of a bank account `check post` (the line's number when it is a plain
+  number on a CHECK or untyped line, else `no_number`), money in `deposit post` (one additional row per account,
+  operation key `bank-line-add:<line>:<version>`), a card's charge `card-charge post`, its credit `card-credit post`.
+  Date and amount are the line's exactly; payee (`payee`, `payee_type` default vendor: flat fields, so the MCP schema
+  gains no new variant kind), `account` or `splits` (positive, adding up to the line exactly, else refused with the
+  difference), `class_id`, `memo` (default the bank's text). No payee or no account refuses `E_VALIDATION` with
+  `details.ask` and "Ask the person ... never guesses"; a payee that does not exist is not created (decided: creating
+  an other name waits for the rules increment's dialog). The line is updated, its event written and the effects
+  recorded in the posting command's own transaction (its recorder), so an entry never exists without its line or the
+  reverse. A closed period, an inactive account or a used check number refuses with that command's own code and the
+  line waits. A `--lines` add dry-runs every line first and opens its batch in the first posting's own transaction:
+  whole or not at all, never an empty batch (a failure part way, by a race, names what was entered and the undo).
+- **Match.** With `entry`: the entry must move the line's account by exactly the line's amount (reconciliation sign)
+  and be free (not linked to another live line), else refused naming why. Without: the shared matcher over the line's
+  window, less linked entries; a sure match or a single suggestion is taken, several are refused listing them
+  (`details.candidates`), none refuses pointing to `add`. A match to an entry a certified statement cleared is
+  `settled`. Matching never changes the entry.
+- **Transfers.** A pair is two waiting lines of two accounts of one currency, opposite amounts in the bank's sign,
+  within `TRANSFER_DAYS` (5). Proposed only when sure both ways (this line has one fit and that fit has only this
+  line); otherwise listed. Accepting links both to an existing transfer of the two accounts, that amount and near
+  date, not matched by another line of the first account (several: refused, listed), or posts one with `transfer
+  post` dated the day the money left; the acted line is `created`, its pair linked. With `to` and no pair, posted
+  now; the other account's line, when imported, auto-matches it (criterion 7 in either order). `entry` names an
+  existing entry moving the money between the two accounts. Reversing the import that made a transfer while the other
+  account's line is linked to it is refused `entry_linked`, naming that import.
+  **Completed late:** a line with no waiting fit looks `LATE_TRANSFER_DAYS` (30) either side for a `transfer` already
+  posted between its account and one other, moving its account by exactly its amount and not matched by another line
+  of the account (usually one sent one-sided from the other account's line): one is completed (both lines linked to
+  it, nothing posted), several are listed for `entry`. `transfer --to` that finds such a transfer is refused naming
+  it (`--entry <it>` completes it; `new` posts another anyway): a second transfer is never posted silently.
+- **`entry_gone`** (design §2): a matched, settled, transfer or added line whose entry was voided, deleted, or changed
+  in amount or date on the line's account (against `entry_date`) shows `entry_gone` with the reason in `bank-line
+  query` and `bank-feed show`; it is not done. `bank-line query` with `entry_gone` true lists them (false leaves them
+  out); `bank-line unmatch` returns any of them to waiting. Read, not stored, in a few queries for a page of lines.
+- **Proposals with reasons** on waiting lines (`bank-line query`, `bank-feed show`): `match` (the matcher's suggestion
+  kept at import, its entries still standing and free, `unique` when one) and `transfer` (read live, `unique` when sure
+  both ways), each with `next`, the command that accepts it. Transfer fits for a whole page are read in one query
+  (`bank-line query --limit 1000` over 5,000 waiting lines with 2,500 opposite ones: 0.15 s, was 5.7 s). Rules' proposals are increment 4's.
+- **Not built here:** rules and learning (increment 4: no auto-add, no history proposals, no `rule_id`), the company
+  preference `--bank-auto-match` (auto-match stays per import), add more details (5), the browser pages (7), creating
+  a payee from a line.
+
+**Tests.** `tests/test_bank_line_sort.py`: each add kind (a check with splits and a class, a deposit, a card charge, a
+card credit, a one-sided transfer) has the same postings and document lines as the same entry typed in by its own
+command, and its audit names `bank-line:<line>`; a closed period refuses `E_PERIOD_CLOSED` as `check post` does;
+missing payee or account asks; ties are listed; a `--lines` batch is all or nothing and undone whole, refused when a
+line was sorted again; transfers in both import orders and one-sided end as one entry; reversal deletes what lines
+were added as. `tests/test_bank_line_sort_guards.py` (the review's probes, each failing before its fix): an undo
+refused (`entry_matched`, `entry_gone` for a voided, deleted or changed entry, a re-match batch's old entry deleted)
+changes nothing, and links back once cleared; a `--lines` add of 101 undone in slices freezes its lines (match,
+unmatch, ignore, add, transfer and the import's reversal refused) and finishes past a line put back by a missed path;
+`entry_gone` shown, filtered and released for each cause; a one-sided transfer completed 10 days late as one entry,
+`--to` refused naming it, two fits listed; stacked undos unwind newest first; an idempotent retry returns the first
+result; refusal hints match the state; a `--lines` add failing first leaves no batch. `tests/test_bank_feed_surfaces.py`
+runs the six through Python, CLI, HTTP and MCP.
+
+**Property** (`tests/test_bank_line_sort_property.py`, seeds 108 and 2026, 40 rounds over Checking by CSV and Payment
+Example Bank by OFX with transfers between them, entries for some lines and some nine days off): seed 108 -- 12
+imports, 1 match, 7 adds, 3 ignores, 3 transfers, 2 unmatches, 1 `--lines` batch, 11 imports reversed, 1 batch undone,
+5 of 29 acts kept, 8 live lines; seed 2026 -- 10 imports, 1 match, 3 adds, 5 ignores, 1 transfer, 2 unmatches, 4
+batches, 7 reversed, 3 undone, 6 of 26 kept, 21 live lines. After every reversal round the inbox's bank balance (its
+linked lines) equals the books' (those entries' movements on the account, summed as exact integers); at the end every
+import reversed returns the books to the entries alone, and replaying only the acts whose batches were never reversed
+gives the same inbox line for line (state, created, ignore reason, entry) and the same books (live entries and every
+account's balance).

@@ -13,6 +13,7 @@
   counts and position are read from ``import_rows``.
 - ``import_rows``: immutable. A row's outcome per phase: ``preview`` (with the mapped input and the file's own cells, so
   what runs is what was previewed) and ``run``.
+  A document (co0113, increment 4) is one row holding its file rows in ``spans``.
 - ``import_keys``: the key ledger. A record an import made, by source and key hash, unique among unreleased keys; a
   reversal releases them (``released_by``), so the corrected file imports again as new.
 
@@ -137,8 +138,11 @@ def define_tables(metadata, C, T):
         C('record_id', sa.String(26), 'That record; null when none.', nullable=True),
         C('payload', sa.Text, 'JSON of the mapped command input, references as the file wrote them (preview only).',
           nullable=True),
-        C('cells', sa.Text, "JSON of the row's own cells (preview only), for the error file.", nullable=True),
+        C('cells', sa.Text, "JSON of the row's own cells (preview only), for the error file; a document's, a list "
+                            'of its rows\' cells.', nullable=True),
         C('created_at', sa.String(32), 'UTC time the outcome was recorded.', nullable=False),
+        C('spans', sa.Text, "JSON of a document's file rows, each [row number, line] (preview only, co0113); null for "
+                            'a list row.', nullable=True),
         sa.CheckConstraint(f'phase IN ({quoted(PHASES)})', name='ck_import_row_phase'),
         description='Per-row outcomes of an import run, per phase. Immutable.')
 

@@ -203,9 +203,10 @@ asks for those specifics and never fills them in by guessing. The agent guide sa
 
 ## As built: increment 1 (2026-10-28)
 
-- **Layer `capabilities-v1`** on `bank-feed-reverse-v1` (`hub/permission_capabilities_catalog.py`, 828 commands, descriptor
-  `a9c33c7a`; re-chained after main brought `bank-feed-reverse-v1`, whose two new commands, `bank-feed reverse` and
-  `move`, are standard writes under `bank-feed` and were never people-only, so none was converted). It registers 18 capabilities: §2's 14 and the four R112 acts that were people-only (`delivery.send`,
+- **Layer `capabilities-v1`** on `bank-line-v1` (`hub/permission_capabilities_catalog.py`, 834 commands, descriptor
+  `f639c12b`; re-chained after main brought `bank-feed-reverse-v1`, `import-documents-v1` and `bank-line-v1`, whose
+  new commands, `bank-feed reverse` and `move` and `bank-line match`, `unmatch`, `ignore`, `add`, `transfer` and
+  `undo`, were never people-only, so none was converted). It registers 18 capabilities: §2's 14 and the four R112 acts that were people-only (`delivery.send`,
   `delivery.mark-sent`, `delivery.connect`, `automate.delivery`), each with role defaults at the threshold that ran the
   command before (hub capabilities at `hub_admin`). It clears `human_only` on every admin action except the five
   `admin:people-only:` keys of §2 b, so `people_only_commands()` is exactly those five. No existing command, default,
@@ -225,14 +226,18 @@ asks for those specifics and never fills them in by guessing. The agent guide sa
   own. Every membership change it makes is checked for widening: a capability it adds, a deny it removes, and every
   deny on a membership it revokes (revoking lifts them). Each widened capability needs the agent's own explicit grant
   and a principal who could give it: an active hub administrator for an installation-wide one, and never one the
-  principal is denied at that scope.
+  agent or the principal is denied at that scope. An organization-scope edit (a grant, role change, deny lift or
+  revoke) reaches every company in the organization, so a deny of that capability on the agent's or the principal's
+  live membership at any of those companies refuses it too (`identity_admin._carve_outs`).
   Activation, authorization and catalog replacement stay human at that layer too. A person who is not an installation
   administrator cannot give a hub capability. An agent's `user add` sets no password and never `hub_admin` (setting a
   password stays a person's act), and an agent's `agent create` is owned by its principal.
 - **Demo reset** stays grantable (`demo.reset`). It refuses, for every actor and whatever `force` says, while the demo
   organization holds a company the demo did not create (`real_company_in_demo_organization`); `force` still covers
   real books in other organizations, which a reset never touches. No refusal message names a path: for a
-  non-administrator, `dispatch.redact_error` now strips paths from the message as well as the details.
+  non-administrator, `dispatch.redact_error` now strips paths from the message as well as the details: any absolute
+  path, and a details value under a `path` key only when it is shaped like a filesystem path (absolute, `~/`, a drive,
+  or holding a separator), so an import's field path (`billing_address.town`) reads as written.
 - **A person's deny of a capabilities-v1 act** is accepted, and `membership grant` says plainly that it binds only the
   agents acting for that person, who still holds it at their role.
 - **Refusals.** An (a) act: `capability`, `reason: capability_not_granted` (or `principal_lacks_capability`,
@@ -241,7 +246,7 @@ asks for those specifics and never fills them in by guessing. The agent guide sa
 - **R112 wording (the note above):** `delivery mark-sent` now names `delivery.mark-sent`; `delivery-schedule live`,
   `create`, `update` and `delivery approve` help name the capability instead of "a person".
 - **Proved:** the policy engine, `bank-feed-v1` against `capabilities-v1` (measured before the re-chain;
-  `test_people_only` now proves the same against `bank-feed-reverse-v1`), gives 252,627 identical command x role x
+  `test_people_only` now proves the same against `bank-line-v1`), gives 252,627 identical command x role x
   deny admissions for people (787 company commands; 4 roles plus installation administrators; 64 deny combinations
   over each command's own capabilities) and suspends none of the agents; a root activated at `bank-feed-v1` upgrades
   with no agent suspended, no token revoked, and the same answers for the agent and the person; over HTTP every one of
@@ -250,6 +255,8 @@ asks for those specifics and never fills them in by guessing. The agent guide sa
 - **Review fixes (2026-10-28):** every chain in notes/reviews/r187-inc1-review.md is a regression test over HTTP
   (`tests/test_capability_ceilings.py`): revoking to lift a deny, a hub capability the principal could not give, a hub
   administrator's membership, the other principal's membership, demo reset beside real books, and a person's deny.
+  Round 2 (notes/reviews/r187-inc1-verify.md) adds an organization-wide grant stepping over the giver's company
+  carve-out, and import messages garbled by redaction.
 - **Left for later increments:** an agent holding `delivery.send` or `automate.delivery` passes the gate, but
   delivery's own go (`delivery_dispatch.go_lost`) still counts only a person's, so its approval gives no go and a
   schedule it tries to make live is refused for want of one: nothing leaves on an agent's say until the consumer step

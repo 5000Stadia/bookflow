@@ -134,7 +134,7 @@ def test_blank_cells_and_absent_columns_leave_fields_empty(books):
 @pytest.mark.parametrize('kind', sorted(import_kinds.KINDS))
 def test_the_import_requires_exactly_what_the_command_requires(kind):
     model = registry.get(import_kinds.kind(kind).create).input_model
-    command = {name for name, info in model.model_fields.items() if info.is_required()}
+    command = {name for name, info in model.model_fields.items() if info.is_required()} - import_kinds.SUPPLIED
     assert set(import_kinds.required(kind)) == command
     listed = {k['kind']: k for k in __import__('bookflow.company.imports', fromlist=['x']).kinds_list()['kinds']}
     assert set(listed[kind]['required']) == command

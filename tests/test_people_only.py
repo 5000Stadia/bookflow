@@ -20,7 +20,7 @@ from bookflow import BookflowError
 from bookflow.core import registry
 from bookflow.hub import capabilities, people_only, permission_catalog as c, permission_policy as p
 from bookflow.hub import permission_runtime as runtime
-from bookflow.hub import permission_bank_feed_reverse_catalog as before_layer, permission_capabilities_catalog as layer
+from bookflow.hub import permission_bank_line_catalog as before_layer, permission_capabilities_catalog as layer
 from tests.conftest import hosted_call, make_agent, make_legacy
 from tests.test_row3_host import hosted  # noqa: F401 - fixture
 
