@@ -66,6 +66,7 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # delivery-schedule-v1 adds `delivery-schedule live`: a send schedule made live sends unattended under its
     # establisher; R187 converts it to automate.delivery.
     # bank-feed-v1 adds none: an import posts nothing; going past an account mismatch asks bank-feed.connect instead.
+    # bank-feed-reverse-v1 adds none: a reversal deletes created entries through each family's own delete grant.
     # import-documents-v1 adds none: each document runs its own command under its own capability.
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {

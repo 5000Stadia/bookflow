@@ -225,8 +225,8 @@ def test_the_demo_company_batches_its_queue_and_reruns_nothing(client):
                                 **({'email': address} if address else {})})
     run('company update', {'delivery_auto_flag_from': '2026-01-01'})
     queue = run('delivery queue', {})
-    assert {r['customer_name'] for r in queue['rows'] if not r['problem']} == {'Lakeside Dental',
-                                                                                'Riverside Apartments'}
+    # Riverside's one invoice since the flag date is the demo's own DEMO-PIPE-INV-1, already sent by hand.
+    assert {r['customer_name'] for r in queue['rows'] if not r['problem']} == {'Lakeside Dental'}
     preview = run('delivery batch', {'queued': True}, dry_run=True)
     assert preview['planned'] == len([r for r in queue['rows'] if not r['problem']])
     assert {s['reason'] for s in preview['skipped']} == {'no_address'}
@@ -234,7 +234,7 @@ def test_the_demo_company_batches_its_queue_and_reruns_nothing(client):
     assert len(done['messages']) == preview['planned']
     assert run('delivery batch', {'queued': True}, reason='Again')['messages'] == []
     unsent = run('delivery batch', {'kind': 'invoice', 'unsent': True}, dry_run=True)
-    assert {s['reason'] for s in unsent['skipped']} <= {'in_outbox', 'prefers_mail', 'no_address'}
+    assert {s['reason'] for s in unsent['skipped']} <= {'in_outbox', 'sent', 'prefers_mail', 'no_address'}
     assert 'prefers_mail' in {s['reason'] for s in unsent['skipped']}
 
 

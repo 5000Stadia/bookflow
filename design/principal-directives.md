@@ -194,3 +194,9 @@ never a repeated "are you sure".
 And ambiguity always gets a question, on any task: "When the guys are done send the invoice and take the payment over
 email!" leaves out which job, which customer, the amount, when "done" is and how the payment is taken, so the agent
 asks for those specifics and never fills them in by guessing. The agent guide says so plainly, with this example.
+
+## For R187's build: wording found in R112's closing trial (2026-10-28)
+
+- `delivery mark-sent`'s refusal names the capability `customer` (people_only) instead of `delivery.mark-sent`.
+- `delivery-schedule live`'s help says "a person". Both hide that a principal can grant these; R187 increment 0 fixes
+  the wording when it converts people-only acts to capabilities.

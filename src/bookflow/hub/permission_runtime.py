@@ -176,6 +176,7 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.DELIVERY_SCHEDULE_POLICY_VERSION: '66aed81b62dd65713f27e55f39cea8ba2aa393d8584b08013a4a0298ec50dd59',
     c.BANK_FEED_POLICY_VERSION: '37f3a79e1ad520b97153c7863f0d3111c821e75bd944b0193c727ff94b3e9a29',
     c.IMPORT_DOCUMENTS_POLICY_VERSION: 'ac0f7050558522352b755c62b22b38127d3c466f09c42cc2e526b3ad7e51ae35',
+    c.BANK_FEED_REVERSE_POLICY_VERSION: 'df70eed353fe2243e74c722b39a0e7a9b12f98a2e3bd1a9c03bfc382325328c6',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -327,6 +328,7 @@ def _full_known():
     from . import permission_delivery_schedule_catalog
     from . import permission_bank_feed_catalog
     from . import permission_import_documents_catalog
+    from . import permission_bank_feed_reverse_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
         c.SETUP_POLICY_VERSION: permission_setup_catalog,
@@ -404,6 +406,7 @@ def _full_known():
         c.DELIVERY_SCHEDULE_POLICY_VERSION: permission_delivery_schedule_catalog,
         c.BANK_FEED_POLICY_VERSION: permission_bank_feed_catalog,
         c.IMPORT_DOCUMENTS_POLICY_VERSION: permission_import_documents_catalog,
+        c.BANK_FEED_REVERSE_POLICY_VERSION: permission_bank_feed_reverse_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is
     # a handful of string comparisons, once per process, and no descriptor is hashed for

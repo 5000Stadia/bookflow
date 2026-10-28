@@ -172,7 +172,10 @@ def prepare(s, ctx, inp):
         revision_id=tombstone.current_revision_id, number=tombstone.number,
         from_status=tombstone.deleted_from_status,
         cancellation_batch_id=tombstone.delete_posting_batch_id or tombstone.retained_void_batch_id)
-    return Plan(output, dict(input=inp, prepared=prepared, old=old,
+    # Prepared inside the command's own write transaction (`plan_in_write`): the apply uses it as it stands rather
+    # than preparing it a second time; nothing can have changed in between.
+    in_write = bool(getattr(s, 'plan_in_write', False) and s.company.write_transaction)
+    return Plan(output, dict(input=inp, prepared=prepared, old=old, planned_in_write=in_write,
                              authority_transactions=prepared.facts.participants))
 
 
@@ -193,7 +196,7 @@ def persist_tombstone(s, row):
 
 
 def apply(plan, ctx, s):
-    fresh = prepare(s, ctx, plan.data['input'])
+    fresh = plan if plan.data.get('planned_in_write') else prepare(s, ctx, plan.data['input'])
     if fresh.data.get('recovered'):
         return Applied(fresh.preview, [], 'Journal entry deletion already completed')
     d = fresh.data

@@ -7,8 +7,9 @@ from tests.test_deposit_command import COMPANY, books, receipts_in_undeposited_f
 def test_only_the_reconciliation_and_deposit_writes_opt_in():
     registry.load_all()
     opted = sorted(cmd.name for cmd in registry.all_commands(include_standalone=True) if getattr(cmd, 'plan_in_write', False))
-    assert opted == ['deposit post', 'deposit update', 'deposit void', 'reconcile finish', 'reconcile mark',
-                     'reconcile opening start', 'reconcile start']
+    assert opted == ['bank-feed import', 'deposit post', 'deposit update', 'deposit void', 'journal delete',
+                     'reconcile discard', 'reconcile finish', 'reconcile mark', 'reconcile opening start',
+                     'reconcile start']
     assert all(registry.get(name).writes == {'company'} for name in opted)
 
 

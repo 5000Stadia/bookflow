@@ -16,6 +16,7 @@ import pytest
 from bookflow.documents import render
 from tests.test_document_print import books, commands  # noqa: F401 - fixture
 from tests.test_row3_host import hosted  # noqa: F401 - fixture
+from tests.test_delivery_close import own
 
 PERIOD = {'date_from': '2026-06-01', 'date_to': '2026-06-30'}
 
@@ -229,7 +230,7 @@ def test_the_email_panel_outbox_and_history_in_the_browser(mail, hosted):  # noq
             'cc': '', 'subject': 'Your invoice DOC-100', 'body': 'Hello,\r\nattached.', 'action': 'save'}
     saved = web.post(f'/c/{cid}/delivery/compose', data=form, headers={**WB, 'HX-Request': 'true'})
     assert saved.status_code == 200 and 'saved as a draft' in saved.text, saved.text[:2000]
-    [row] = mail['run']('delivery query', {})['rows']
+    [row] = own(mail['run']('delivery query', {})['rows'])
     assert row['subject'] == 'Your invoice DOC-100' and row['to'] == ['accounts@harbourmills.example']
     bad = web.post(f'/c/{cid}/delivery/compose', data=dict(form, to='not-an-address'),
                    headers={**WB, 'HX-Request': 'true'})

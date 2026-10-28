@@ -96,7 +96,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +8 R107 increment 2 and Kabe's rules: import check/decide, import-mapping save/show/history/query/match/deactivate.
     # +8 recurring schedules (R112 increment 4): delivery-schedule create/update/live/pause/resume/run/show/query.
     # +4 the bank inbox (R108 increment 1): bank-feed import/show/query, bank-line query.
-    assert len(rows) == 832
+    # +2 reverse and move (R108 increment 2): bank-feed reverse, bank-feed move.
+    assert len(rows) == 834
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
@@ -406,7 +407,9 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # query's account, state, import_id, date_from, date_to, text, amount and cursor (8). No new variant kind.
     # 4253 -> 4256 (R107 inc 3 review, measured): import decide 4 -> 7, the null branches of `answers` and of each
     # answer's target and input. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==4256
+    # 4256 -> 4258 (R108 inc 2, measured): the fingerprint of bank-feed reverse and of bank-feed move -- their null
+    # branches. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==4258
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

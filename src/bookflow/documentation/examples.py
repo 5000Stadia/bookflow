@@ -1951,4 +1951,10 @@ EXAMPLES.update({
                                {'account': 'Checking'}),
     'bank-line query': Example('bookflow bank-line query --account Checking --state waiting --company "Demo Plumbing Co"'
                                ' --json', {'account': 'Checking', 'state': 'waiting'}),
+    # R108 increment 2: an import into the wrong account, undone or moved in one step.
+    'bank-feed reverse': Example('bookflow bank-feed reverse ' + _BANK_IMPORT + ' --company "Demo Plumbing Co"'
+                                 ' --reason "Wrong account" --dry-run --json', {'import_id': _BANK_IMPORT}),
+    'bank-feed move': Example('bookflow bank-feed move ' + _BANK_IMPORT + ' --to Savings --company "Demo Plumbing Co"'
+                              ' --reason "Savings statement imported to Checking" --dry-run --json',
+                              {'import_id': _BANK_IMPORT, 'to': 'Savings'}),
 })
