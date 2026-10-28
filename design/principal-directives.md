@@ -176,3 +176,9 @@ mark-sent, permission and capability changes, broad bulk edits); `help` and the 
 says: before running a confirm-first command, say in plain words what it will do and get the principal's yes in the
 conversation, unless the principal's directive already names that act; use `--dry-run` to show exactly what would
 change. Bookflow does not enforce the conversation; permissions and reversible batches remain the hard guarantees.
+
+Kabe, same day: no "are you sure?" on every little thing. "Wonderful, post that invoice to John and send it to him" is
+itself the confirmation: the principal named the act, so the agent posts and sends with no question. The agent asks
+only when it would do a damaging act the principal did not plainly name: it is inferring the act ("tidy up the
+customer list" read as deleting 40 customers), the act reaches wider than what was said, or the request is ambiguous
+about which records. The confirm-first mark tells the agent which acts need that care; it is never a prompt by itself.
