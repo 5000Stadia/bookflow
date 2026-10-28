@@ -20,11 +20,18 @@ from __future__ import annotations
 import importlib
 import os
 import re
+import threading
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterator, Literal, Protocol, runtime_checkable
 
-SECRET_REF = re.compile(r'^(env:[A-Za-z_][A-Za-z0-9_]{0,127}|keyring:[A-Za-z0-9_.@-]{1,100}/[A-Za-z0-9_.@-]{1,100})$')
+SECRET_REF = re.compile(r'^(env:[A-Za-z_][A-Za-z0-9_]{0,127}|keyring:[A-Za-z0-9_.@-]{1,100}/[A-Za-z0-9_.@-]{1,100})\Z')
+
+# Every call into a transport is bounded: a transport that hangs answers ``unknown`` (send) or nothing (the rest),
+# and its thread is left to finish on its own. Module attributes, so a test can shorten them.
+SEND_TIMEOUT = 120.0   # seconds for one ``send``; well inside the 10-minute lease
+CALL_TIMEOUT = 30.0    # seconds for ``open``, ``check`` and ``events``
+TEXT_LIMIT = 500       # characters of a transport's own words kept on a message, an event or a connection
 
 
 @dataclass(frozen=True)
@@ -181,14 +188,64 @@ class Outcome:
     connection_id: str
     result: TransportResult
     events: list[TransportEvent] = field(default_factory=list)
+    skipped: bool = False   # never handed to the transport: its claim lapsed, or the host was stopping
 
 
-def call_send(transport: Transport, message: OutgoingMessage, attempt_key: str) -> TransportResult:
-    """``send``, with anything it raises turned into an unknown outcome: the bytes may have left."""
+class TransportTimeout(Exception):
+    """A transport call did not answer within its bound."""
+
+
+def bounded(fn: Callable[..., Any], timeout: float, *args: Any) -> Any:
+    """``fn(*args)`` on its own daemon thread, waited for at most ``timeout`` seconds. A call still running then raises
+    ``TransportTimeout`` here and is abandoned (it holds no database handle and no lock)."""
+    box: dict[str, Any] = {}
+
+    def run():
+        try:
+            box['result'] = fn(*args)
+        except BaseException as error:  # noqa: BLE001 - handed back to the caller
+            box['error'] = error
+
+    worker = threading.Thread(target=run, name='bookflow-transport-call', daemon=True)
+    worker.start()
+    worker.join(timeout)
+    if worker.is_alive():
+        raise TransportTimeout(f'no answer within {timeout:g} seconds')
+    if 'error' in box:
+        raise box['error']
+    return box.get('result')
+
+
+_ADDRESS = re.compile(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}')
+_SECRET_PAIR = re.compile(r'(?i)\b(pass(?:word)?|pwd|secret|token|api[_-]?key|access[_-]?key|auth(?:orization)?)'
+                          r'(\s*[:=]\s*)(?:(?:bearer|basic)\s+)?("[^"]*"|\'[^\']*\'|\S+)')
+_BEARER = re.compile(r'(?i)\b(bearer|basic)\s+[A-Za-z0-9_\-+/=.~]{8,}')
+_LONG_TOKEN = re.compile(r'\b(?=[A-Za-z0-9_\-+/=.]*\d)(?=[A-Za-z0-9_\-+/=.]*[A-Za-z])[A-Za-z0-9_\-+/=.]{24,}')
+
+
+def clean_text(text: Any, limit: int | None = None) -> str:
+    """A transport's own words as Bookflow keeps them: addresses, ``password=...``-style pairs and long token-like
+    strings redacted, then capped at ``TEXT_LIMIT`` characters. Whatever a transport echoes never lands whole in the
+    company file, its backups or a member's view."""
+    text = '' if text is None else str(text)
+    text = _SECRET_PAIR.sub(lambda m: f'{m.group(1)}{m.group(2)}[redacted]', text)
+    text = _BEARER.sub(lambda m: f'{m.group(1)} [redacted]', text)
+    text = _ADDRESS.sub('[address]', text)
+    text = _LONG_TOKEN.sub('[redacted]', text)
+    limit = TEXT_LIMIT if limit is None else limit
+    return text if len(text) <= limit else text[:limit - 1] + '\u2026'
+
+
+def call_send(transport: Transport, message: OutgoingMessage, attempt_key: str,
+              timeout: float | None = None) -> TransportResult:
+    """``send``, bounded by ``SEND_TIMEOUT``, with anything it raises (or a call that does not answer in time) turned
+    into an unknown outcome: the bytes may have left."""
     try:
-        result = transport.send(message, attempt_key)
+        result = bounded(transport.send, SEND_TIMEOUT if timeout is None else timeout, message, attempt_key)
+    except TransportTimeout as error:
+        return TransportResult.unknown(f'the transport gave {error}; the message may have left')
     except Exception as error:  # noqa: BLE001 - a sender's failure is an outcome, never the dispatcher's crash
-        return TransportResult.unknown(f'{type(error).__name__}: {error}'[:2000])
+        return TransportResult.unknown(clean_text(f'{type(error).__name__}: {error}'))
     if not isinstance(result, TransportResult):
         return TransportResult.unknown('the transport returned no result')
     return result

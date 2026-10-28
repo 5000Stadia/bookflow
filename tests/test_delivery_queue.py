@@ -157,8 +157,8 @@ def test_a_crash_between_claim_and_record_is_held_when_the_lease_runs_out(desk, 
     number = desk['ready']()
     real = delivery_dispatch.send
 
-    def crash(claims, polls):
-        real(claims, polls)  # the bytes left
+    def crash(claims, polls, **hooks):
+        real(claims, polls, **hooks)  # the bytes left
         raise RuntimeError('host killed before the record')
 
     monkeypatch.setattr(delivery_dispatch, 'send', crash)
@@ -403,3 +403,339 @@ def test_the_idle_tick_costs_nothing_measurable(hosted):
     print(f'idle tick median with the delivery hook {with_hook * 1000:.2f} ms, without {without * 1000:.2f} ms; '
           f'the hook statement {per_statement * 1e6:.1f} us')
     assert per_statement < 0.001
+
+
+# ---------------------------------------------------------------- review fixes (r112-inc2-review.md)
+
+def _hang(monkeypatch):
+    """A fake transport whose ``send`` hangs until the test lets it go; returns (entered, release)."""
+    import threading
+    from tests.delivery_fake_transport import FakeTransport
+    entered, release = threading.Event(), threading.Event()
+    real = FakeTransport.send
+
+    def hung(self, message, attempt_key):
+        entered.set()
+        release.wait(60)
+        return real(self, message, attempt_key)
+
+    monkeypatch.setattr(FakeTransport, 'send', hung)
+    return entered, release
+
+
+def test_a_send_that_hangs_is_bounded_and_held_for_a_person(desk, monkeypatch):
+    run, backend = desk['run'], desk['backend']
+    connect(run)
+    number = desk['ready']()
+    monkeypatch.setattr(transport, 'SEND_TIMEOUT', 0.5)
+    entered, release = _hang(monkeypatch)
+    started = time.monotonic()
+    out = run('delivery run', {}, **REASON)
+    assert time.monotonic() - started < 30 and entered.is_set()
+    assert out['held'] == 1 and out['sent'] == 0
+    held = run('delivery show', {'message': number})
+    assert held['hold_reason'] == 'outcome_unknown' and held['go_by'] is None
+    assert 'no answer within' in run('delivery history', {'message': number})['events'][-1]['details']['text']
+    release.set()
+
+
+def test_each_claim_is_read_again_before_its_send_and_a_lapsed_one_is_skipped(desk, monkeypatch):
+    from tests.delivery_fake_transport import FakeTransport
+    run, backend, clock = desk['run'], desk['backend'], desk['clock']
+    connect(run)
+    first, second = desk['ready'](), desk['ready']()
+    real = FakeTransport.send
+
+    def slow(self, message, attempt_key):
+        if message.number == first:
+            clock.advance(9)  # a slow first send: the chunk's lease has less left than one bounded send
+        return real(self, message, attempt_key)
+
+    monkeypatch.setattr(FakeTransport, 'send', slow)
+    out = run('delivery run', {}, **REASON)
+    assert out['sent'] == 1 and backend.deliveries_of(first) == 1 and backend.deliveries_of(second) == 0
+    waiting = run('delivery show', {'message': second})
+    assert waiting['status'] == 'ready' and waiting['go_by'] and waiting['next_attempt_at'] is None
+    assert run('delivery run', {}, **REASON)['sent'] == 1 and backend.deliveries_of(second) == 1
+
+
+def test_a_late_acceptance_resolves_to_sent_and_retry_refuses_after_one(desk, monkeypatch):
+    from bookflow.company import delivery_dispatch
+    run, backend, clock = desk['run'], desk['backend'], desk['clock']
+    connect(run)
+    real = delivery_dispatch.send
+    lost = []
+
+    def crash(claims, polls, **hooks):
+        lost.extend(real(claims, polls, **hooks)[0])  # the bytes left; the answer never reached the record
+        raise RuntimeError('host killed before the record')
+
+    def late(claims, polls, **hooks):
+        outcomes, reports = real(claims, polls, **hooks)
+        return lost + outcomes, reports  # the lost answer arrives with this pass
+
+    # 1. Accepted, the answer lost, the lease runs out: held. The answer arrives late: sent, and nothing sends it again.
+    number = desk['ready']()
+    monkeypatch.setattr(delivery_dispatch, 'send', crash)
+    with pytest.raises(Exception):
+        run('delivery run', {}, **REASON)
+    clock.advance(11)
+    monkeypatch.setattr(delivery_dispatch, 'send', real)
+    run('delivery run', {}, **REASON)
+    assert run('delivery show', {'message': number})['hold_reason'] == 'outcome_unknown'
+    monkeypatch.setattr(delivery_dispatch, 'send', late)
+    run('delivery run', {}, **REASON)
+    lost.clear()
+    sent = run('delivery show', {'message': number})
+    assert sent['status'] == 'sent' and sent['provider_ref'] and backend.deliveries_of(number) == 1
+
+    # 2. Retried before the late answer, claimed again and unknown: held, and the acceptance on record refuses a retry.
+    other = desk['ready']()
+    monkeypatch.setattr(delivery_dispatch, 'send', crash)
+    with pytest.raises(Exception):
+        run('delivery run', {}, **REASON)
+    clock.advance(11)
+    monkeypatch.setattr(delivery_dispatch, 'send', real)
+    run('delivery run', {}, **REASON)
+    run('delivery retry', {'message': other}, **REASON)
+    backend.plan('unknown')
+    monkeypatch.setattr(delivery_dispatch, 'send', late)
+    run('delivery run', {}, **REASON)
+    held = run('delivery show', {'message': other})
+    assert held['status'] == 'held' and held['hold_reason'] == 'outcome_unknown'
+    with pytest.raises(BookflowError) as refused:
+        run('delivery retry', {'message': other}, **REASON)
+    assert refused.value.code == 'E_WORK_DEPENDENCY' and refused.value.details['next'] == f'delivery mark-sent {other}'
+
+
+def test_a_connection_from_another_installation_or_an_attached_file_is_disabled(desk):
+    from bookflow.core.config import os_login
+    run, client = desk['run'], desk['client']
+    connect(run)
+    number = desk['ready']()
+    root = __import__('pathlib').Path(os.environ['BOOKFLOW_DATA_ROOT'])
+    install = root / 'install-id'
+    first = install.read_text()
+    # The same host name and data folder under another installation (a machine replaced, the folder copied over).
+    install.write_text('0' * 32 + '\n')
+    out = run('delivery run', {}, **REASON)
+    assert out['claimed'] == 0 and [m['act'] for m in out['messages']] == ['connection disabled']
+    shown = run('delivery-connection show', {'connection': 'Office'})
+    assert not shown['enabled'] and not shown['usable'] and desk['backend'].delivered == []
+    install.write_text(first)
+    connect_again = run('delivery-connection enable', {'connection': 'Office'}, **REASON)
+    assert connect_again['usable']
+    # Detached and attached by hand: it arrives disabled.
+    detached = client.run('company detach', {'company': desk['company']}, reason='Hand copy witness')
+    client.run('company attach', {'path': detached['path'], 'administrator': os_login()}, reason='Hand copy witness')
+    shown = run('delivery-connection show', {'connection': 'Office'})
+    assert not shown['enabled'] and not shown['usable']
+    assert run('delivery run', {}, **REASON)['claimed'] == 0
+    assert run('delivery show', {'message': number})['status'] == 'ready'
+
+
+def test_tracking_goes_on_after_delivered_and_a_later_bounce_raises_the_to_do(desk):
+    run, backend = desk['run'], desk['backend']
+    connect(run)
+    number = desk['ready']()
+    run('delivery run', {}, **REASON)
+    ref = run('delivery show', {'message': number})['provider_ref']
+    backend.report(ref, 'delivered')
+    assert run('delivery run', {}, **REASON)['tracking_events'] == 1
+    backend.report(ref, 'bounced', 'mailbox gone; contact postmaster@far.example')
+    assert run('delivery run', {}, **REASON)['tracking_events'] == 1
+    assert run('delivery show', {'message': number})['delivery'] == 'bounced'
+    todos = [t for t in run('todo list', {})['items'] if number in t['title']]
+    assert len(todos) == 1 and 'postmaster@' not in todos[0]['notes'] and '[address]' in todos[0]['notes']
+
+
+def test_a_dry_run_check_asks_nothing_and_transport_text_is_redacted(desk):
+    run, backend = desk['run'], desk['backend']
+    connect(run)
+    preview = desk['client'].run('delivery-connection check', {'connection': 'Office'}, company=desk['company'],
+                                 dry_run=True, **REASON)
+    assert backend.checks == 0 and preview['last_check_at'] is None
+    assert run('delivery-connection check', {'connection': 'Office'}, **REASON)['last_check_ok'] and backend.checks == 1
+    assert transport.SECRET_REF.match('env:FAKE_MAIL_TOKEN') and not transport.SECRET_REF.match('env:FAKE_MAIL_TOKEN\n')
+    said = transport.clean_text('550 no such mailbox pay@adams.example; password=hunter2 '
+                                'Authorization: Bearer abcdefgh12345678 key sk_live_0123456789abcdefghijkl ' + 'x' * 900)
+    for secret in ('pay@adams', 'hunter2', 'abcdefgh12345678', 'sk_live'):
+        assert secret not in said
+    assert said.startswith('550 no such mailbox [address]') and len(said) == transport.TEXT_LIMIT
+
+
+@pytest.mark.timeout(900)
+def test_a_go_ends_with_the_content_it_saw_and_counts_only_through_a_standing_membership(hosted_queue):
+    """High 1 and Medium 6, through the host: a person releases, the document changes, the claim holds it, an agent
+    refreshes and releases, and nothing sends. A go's giver denied ``customer`` on their membership, or an
+    installation administrator with no membership, gives no go either. Medium 2: a `delivery run` through the host
+    leaves the commit barrier open while the transport talks."""
+    from tests.delivery_fake_transport import FakeTransport
+    from tests.test_people_only import REASON as PERSON, _agent
+    hosted, backend = hosted_queue
+    cid, host = hosted.company_id, hosted.handle.host
+    books = _hosted_mail(hosted)
+    person = {**hosted.bearer, **PERSON}
+    _, as_agent = _agent(hosted)
+    hosted.ok('delivery-connection.add', {'name': 'Office', 'kind': 'fake', 'settings': SETTINGS}, company=cid,
+              headers=person)
+    hosted.ok('delivery-connection.enable', {'connection': 'Office'}, company=cid, headers=person)
+
+    # High 1: the go does not survive the hold, the refresh or the agent's release.
+    draft = hosted.ok('delivery.draft', {'kind': 'invoice', 'document': 'DOC-100'}, company=cid, headers=person)
+    number = draft['number']
+    assert hosted.ok('delivery.send', {'messages': [number]}, company=cid, headers=person)['messages'][0]['go_by']
+    invoice = books['run']('invoice show', {'invoice': 'DOC-100'})
+    change = {'invoice': invoice['id'], 'memo': 'Changed after the go', 'operation_key': 'go-1',
+              'expected_version': invoice['version']}
+    guard = hosted.call('invoice.update', change, company=cid, headers=person).json()['details']['settlement_guard']
+    hosted.ok('invoice.update', dict(change, settlement_guard=guard), company=cid, headers=person)
+    out = hosted.ok('delivery.run', {}, company=cid, headers=person)
+    assert out['held'] == 1 and out['claimed'] == 0
+    held = hosted.ok('delivery.show', {'message': number}, company=cid)
+    assert held['hold_reason'] == 'document_changed' and held['go_by'] is None
+    history = hosted.ok('delivery.history', {'message': number}, company=cid)['events']
+    assert history[-1]['event'] == 'held' and history[-1]['details']['go_withdrawn']
+    refreshed = hosted.ok('delivery.update', {'message': number, 'refresh': True}, company=cid, headers=as_agent)
+    assert refreshed['status'] == 'draft' and refreshed['go_by'] is None
+    released = hosted.ok('delivery.send', {'messages': [number]}, company=cid, headers=as_agent)['messages'][0]
+    assert released['status'] == 'ready' and released['go_by'] is None and released['waiting_for_go']
+    assert hosted.ok('delivery.run', {}, company=cid, headers=person)['claimed'] == 0
+    assert host.schedule_now()[cid].get('delivery', {}).get('claimed', 0) == 0
+    assert backend.deliveries_of(number) == 0
+
+    # Medium 2: approved, it is sent by `delivery run` through the host with the commit barrier open.
+    seen = []
+    real = FakeTransport.send
+
+    def watch(self, message, attempt_key):
+        admission = host.publication_admission
+        try:
+            admission.begin_validation()
+            seen.append(admission._barrier is None)
+        except Exception as error:  # noqa: BLE001 - what a reader would meet
+            seen.append(type(error).__name__)
+        return real(self, message, attempt_key)
+
+    FakeTransport.send = watch
+    try:
+        hosted.ok('delivery.approve', {'messages': [number]}, company=cid, headers=person)
+        assert hosted.ok('delivery.run', {}, company=cid, headers=person)['sent'] == 1
+    finally:
+        FakeTransport.send = real
+    assert seen == [True] and backend.deliveries_of(number) == 1
+
+    # Medium 6: a clerk's go ends when the clerk's membership denies customer.
+    def hub_sql(sql, *args):
+        hub = host.submit(host._ensure_hub_on_writer, _maintenance=True)
+        return host.submit(lambda: hub.raw.execute(sql, args).rowcount, _maintenance=True)
+
+    for name in ('clerk', 'boss'):
+        hosted.ok('user.add', {'username': name, 'company': cid, 'role': 'standard', 'password': f'pw-{name}-12345'},
+                  headers=PERSON)
+    tokens = {name: hosted.ok('token.issue', {'user': name, 'label': name}, headers=PERSON)['secret']
+              for name in ('clerk', 'boss')}
+    gone = []
+    for name in ('clerk', 'boss'):
+        made = hosted.ok('delivery.draft', {'kind': 'sales-receipt', 'document': 'DOC-200', 'again': name == 'boss'},
+                         company=cid, headers={'Authorization': 'Bearer ' + tokens[name], **PERSON})
+        hosted.ok('delivery.send', {'messages': [made['number']]}, company=cid,
+                  headers={'Authorization': 'Bearer ' + tokens[name], **PERSON})
+        gone.append(made['number'])
+    assert hub_sql("UPDATE memberships SET denies = '[\"customer\"]' WHERE user_id = "
+                   "(SELECT id FROM users WHERE username = 'clerk')") == 1
+    # The boss becomes an installation administrator whose company membership is revoked.
+    assert hub_sql("UPDATE users SET hub_admin = 1 WHERE username = 'boss'") == 1
+    assert hub_sql("UPDATE memberships SET revoked_at = '2026-10-27T00:00:00.000Z' WHERE user_id = "
+                   "(SELECT id FROM users WHERE username = 'boss')") == 1
+    out = hosted.ok('delivery.run', {}, company=cid, headers=person)
+    assert out['go_withdrawn'] == 2 and out['claimed'] == 0
+    for gone_number in gone:
+        assert backend.deliveries_of(gone_number) == 0
+        assert hosted.ok('delivery.show', {'message': gone_number}, company=cid)['waiting_for_go']
+
+
+@pytest.mark.timeout(900)
+def test_the_host_sends_off_its_timer_thread_bounded_and_holds_a_send_in_flight_at_shutdown(hosted_queue,
+                                                                                           monkeypatch):
+    """Medium 3 and 4 and the tick's lows, through the host: a claim held while an earlier send was slow is never sent
+    and the late acceptance of the earlier one resolves it to sent; the backoff counts from the answer; a poll-only
+    tick takes no commit barrier; a hung transport stalls no checkpoint and shutdown holds it for a person."""
+    from tests.delivery_fake_transport import FakeTransport
+    from tests.test_people_only import REASON as PERSON
+    hosted, backend = hosted_queue
+    cid, host = hosted.company_id, hosted.handle.host
+    _hosted_mail(hosted)
+    person = {**hosted.bearer, **PERSON}
+    clock = Clock(monkeypatch)
+    hosted.ok('delivery-connection.add', {'name': 'Office', 'kind': 'fake', 'settings': SETTINGS}, company=cid,
+              headers=person)
+    hosted.ok('delivery-connection.enable', {'connection': 'Office'}, company=cid, headers=person)
+
+    def ready(kind, document):
+        made = hosted.ok('delivery.draft', {'kind': kind, 'document': document}, company=cid, headers=person)
+        hosted.ok('delivery.send', {'messages': [made['number']]}, company=cid, headers=person)
+        return made['number']
+
+    # Medium 3: the first send is slow; meanwhile a pass expires the chunk. The second is never sent.
+    n1, n2 = ready('invoice', 'DOC-100'), ready('sales-receipt', 'DOC-200')
+    real = FakeTransport.send
+    log = {}
+
+    def slow(self, message, attempt_key):
+        if not log:
+            log['first'] = message.number
+            clock.advance(11)
+            log['expired'] = hosted.ok('delivery.run', {}, company=cid, headers=person)['expired']
+        return real(self, message, attempt_key)
+
+    monkeypatch.setattr(FakeTransport, 'send', slow)
+    host.schedule_now()
+    monkeypatch.setattr(FakeTransport, 'send', real)
+    assert log == {'first': n1, 'expired': 2}
+    assert backend.deliveries_of(n1) == 1 and backend.deliveries_of(n2) == 0
+    assert hosted.ok('delivery.show', {'message': n1}, company=cid)['status'] == 'sent'
+    assert hosted.ok('delivery.show', {'message': n2}, company=cid)['hold_reason'] == 'outcome_unknown'
+
+    # Low: a tick with only tracking to ask (n1 accepted, n2 held, the poll due) takes no commit barrier.
+    clock.advance(16)
+    epoch = host.publication_admission._epoch
+    assert host.schedule_now()[cid]['delivery']['claimed'] == 0
+    assert host.publication_admission._epoch is epoch
+
+    # Low: a temporary failure's backoff counts from the answer, not the claim.
+    hosted.ok('delivery.retry', {'message': n2}, company=cid, headers=person)
+    backend.plan('temporary')
+
+    def slower(self, message, attempt_key):
+        time.sleep(1.5)
+        return real(self, message, attempt_key)
+
+    monkeypatch.setattr(FakeTransport, 'send', slower)
+    claimed_at = clock.at
+    host.schedule_now()
+    monkeypatch.setattr(FakeTransport, 'send', real)
+    waiting = hosted.ok('delivery.show', {'message': n2}, company=cid)
+    due = datetime.fromisoformat(waiting['next_attempt_at'].replace('Z', '+00:00'))
+    assert due - claimed_at >= timedelta(minutes=5, seconds=1)
+
+    # Medium 4: a hung transport runs on the delivery thread; the timer's work goes on; shutdown holds it.
+    clock.advance(10)
+    entered, release = _hang(monkeypatch)
+    try:
+        host.schedule_now(wait=False)
+        assert entered.wait(30)
+        started = time.monotonic()
+        host.checkpoint_now()
+        host.sweep_now()
+        assert time.monotonic() - started < 10
+        host.delivery_stop_seconds = 0.5
+        started = time.monotonic()
+        host._stop_delivery()
+        assert time.monotonic() - started < 10
+    finally:
+        release.set()
+    held = hosted.ok('delivery.show', {'message': n2}, company=cid)
+    assert held['status'] == 'held' and held['hold_reason'] == 'outcome_unknown'
+    assert 'host stopped' in hosted.ok('delivery.history', {'message': n2}, company=cid)['events'][-1]['details']['text']
+

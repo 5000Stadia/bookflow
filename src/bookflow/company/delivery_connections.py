@@ -4,10 +4,12 @@ A connection says where mail goes and under whose keys: a ``kind`` this build re
 ``add`` refuses every kind and names the available ones: none), non-secret ``settings`` the kind validates, and a
 ``secret_ref`` naming the keyring entry or environment variable that holds the secret. The row never holds a secret.
 
-A connection is **added disabled**; ``enable`` binds it to this machine and this company file (``enabled_host``, a
-fingerprint of the host name, the data folder and the company id). The dispatcher sends only through a connection
-enabled *here*, and ``company restore`` clears every connection, so a copied or restored company full of ready
-messages cannot send a second copy of anything until a person enables a connection on that machine.
+A connection is **added disabled**; ``enable`` binds it to this installation and this company file (``enabled_host``, a
+fingerprint of a random install id kept in the data folder outside every company file, the host name, the data folder
+and the company id). The dispatcher sends only through a connection enabled *here*; one enabled anywhere else is
+disabled at the next pass. ``company restore`` and ``company attach`` clear every connection, so a copied, restored
+or hand-attached company full of ready messages cannot send a second copy of anything until a person enables a
+connection on that machine.
 
 Every write and ``check`` is a person's act (people-only, admin). R187 converts this to the capability
 ``delivery.connect``.
@@ -16,6 +18,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import re
+import secrets
 import socket
 from datetime import timedelta
 
@@ -39,9 +44,33 @@ def _invalid(field_name, problem, **extra):
                          details={'fields': [{'field': field_name, 'problem': problem}], **extra})
 
 
+INSTALL_ID_FILE = 'install-id'
+_INSTALL_ID = re.compile(r'[0-9a-f]{32}\Z')
+
+
+def install_id(data_root) -> str:
+    """This installation's random id: created once in the data folder (never inside a company file, so a copied
+    company never carries it), and read back ever after."""
+    path = data_root / INSTALL_ID_FILE
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        pass
+    else:
+        with os.fdopen(fd, 'w') as out:
+            out.write(secrets.token_hex(16) + '\n')
+            out.flush()
+            os.fsync(out.fileno())
+    value = path.read_text().strip()
+    if not _INSTALL_ID.match(value):
+        raise BookflowError('E_INTERNAL', message=f'{path} does not hold an install id; remove it to make a new one '
+                                                  '(every sending connection then needs enabling again)')
+    return value
+
+
 def binding(s) -> str:
-    """This machine, data folder and company file: a connection enabled elsewhere does not send here."""
-    raw = '\0'.join((socket.gethostname(), str(s.data_root.resolve()), s.company_row['id']))
+    """This installation, machine, data folder and company file: a connection enabled elsewhere does not send here."""
+    raw = '\0'.join((install_id(s.data_root), socket.gethostname(), str(s.data_root.resolve()), s.company_row['id']))
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
@@ -59,6 +88,17 @@ def usable(s) -> list[dict]:
         return []
     here = binding(s)
     return [dict(r) for r in rows if r['enabled_host'] == here and transport.get(r['kind']) is not None]
+
+
+def foreign(s) -> list[dict]:
+    """Connections enabled somewhere other than here (a copy, a hand-attached file, another installation): the next
+    pass disables them, so they wait for a person to enable them on this machine."""
+    t = c.delivery_connections
+    rows = s.company.conn.execute(sa.select(t).where(t.c.enabled.is_(True))).mappings().all()
+    if not rows:
+        return []
+    here = binding(s)
+    return [dict(r) for r in rows if r['enabled_host'] != here]
 
 
 def label(s) -> str:
@@ -215,22 +255,30 @@ def prepare_remove(s, ctx, inp) -> Plan:
 
 
 def prepare_check(s, ctx, inp) -> Plan:
-    """Ask the transport whether it can connect with its secret. The answer is recorded on the connection."""
+    """Ask the transport whether it can connect with its secret, when applied (a dry run asks nothing). The answer is
+    recorded on the connection."""
     before = _row(s, inp.connection)
+    _kind(before['kind'])
+    return Plan(project(s, before, ['A dry run asks the transport nothing; run it to check.']),
+                dict(before=before, check=True))
+
+
+def _ask(before) -> tuple[bool, str]:
     entry = _kind(before['kind'])
     try:
-        result = entry.open(info(before)).check(info(before))
-        ok, text = bool(result.ok), str(result.text or '')
-    except Exception as error:  # noqa: BLE001 - a failed check is its answer
-        ok, text = False, f'{type(error).__name__}: {error}'
-    after = dict(_touch(s, ctx, before), last_check_at=clock.now_iso(), last_check_ok=ok, last_check_text=text[:500])
-    return Plan(project(s, after), dict(before=before, after=after,
-                                        summary=f"checked sending connection {before['name']}: "
-                                                f"{'ok' if ok else 'failed'}"))
+        result = transport.bounded(lambda: entry.open(info(before)).check(info(before)), transport.CALL_TIMEOUT)
+        return bool(result.ok), transport.clean_text(result.text or '')
+    except Exception as error:  # noqa: BLE001 - a failed check (or one that never answers) is its answer
+        return False, transport.clean_text(f'{type(error).__name__}: {error}')
 
 
 def apply(plan, ctx, s) -> Applied:
-    before, after = plan.data['before'], plan.data['after']
+    before, after = plan.data['before'], plan.data.get('after')
+    if plan.data.get('check'):
+        ok, text = _ask(before)
+        after = dict(_touch(s, ctx, before), last_check_at=clock.now_iso(), last_check_ok=ok, last_check_text=text)
+        plan.preview.warnings.clear()
+        plan.data['summary'] = f"checked sending connection {before['name']}: {'ok' if ok else 'failed'}"
     t = c.delivery_connections
     if before is None:
         s.company.conn.execute(t.insert().values(**after))

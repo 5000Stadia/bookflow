@@ -752,9 +752,18 @@ def prepare_update(s, ctx, inp) -> Plan:
         raise _invalid('message', 'nothing to change: give to, cc, bcc, subject or body, or refresh')
     if before['status'] == 'held' and before['hold_reason'] == 'no_recipient' and json.loads(after['to_addresses']):
         after.update(status='draft', hold_reason=None)
+    drop_go(before, after, details)  # an edit or a refresh changes what a go was given for
     return _plan_single(s, ctx, before, after, 'edited', {'changed': sorted(changed), **details,
                         **{k: v for k, v in changed.items() if k in ('to', 'cc', 'bcc')}},
                         f"edited message {before['number']} ({', '.join(sorted(changed))})", extra=extra)
+
+
+def drop_go(before, after, details=None) -> None:
+    """A go is given for the exact frozen content and recipients it saw: it ends when the message is held, refreshed
+    or edited, or released by an actor without the send authority. The event says whose go ended."""
+    after.update(go_by=None, go_at=None)
+    if before.get('go_by') and details is not None:
+        details['go_withdrawn'] = before['go_by']
 
 
 def _edited_fields(s, message_id) -> set[str]:
@@ -911,7 +920,9 @@ def prepare_send(s, ctx, inp) -> Plan:
         after = _touch(s, ctx, before, at)
         if stale:
             after.update(status='held', hold_reason=stale)
-            plans.append((before, after, 'held', {'reason': stale, 'at': 'release'}))
+            held = {'reason': stale, 'at': 'release'}
+            drop_go(before, after, held)
+            plans.append((before, after, 'held', held))
             warnings.append(f"Message {before['number']} is held: {HOLD_TEXT[stale]}. "
                             + _refresh_hint(before['number'], stale))
             continue
@@ -920,6 +931,8 @@ def prepare_send(s, ctx, inp) -> Plan:
         if person:
             after.update(go_by=s.actor.id, go_at=at)
             details.update(go_by=s.actor.id, go_at=at)
+        else:  # R187: an actor without delivery.send; whatever go the message carried does not survive its release
+            drop_go(before, after, details)
         plans.append((before, after, 'released', details))
     if any(a['status'] == 'ready' for _, a, _, _ in plans):
         from bookflow.company import delivery_connections as conns
@@ -1006,7 +1019,8 @@ def prepare_export(s, ctx, inp) -> Plan:
             held.append(row['number'])
             # Asking again for a message already held for this reason holds nothing more.
             if not (row['status'] == 'held' and row['hold_reason'] == stale):
-                holds.append((row, dict(_touch(s, ctx, row, at), status='held', hold_reason=stale)))
+                holds.append((row, dict(_touch(s, ctx, row, at), status='held', hold_reason=stale, go_by=None,
+                                        go_at=None)))
             warnings.append(f"Message {row['number']} is held, not exported: {HOLD_TEXT[stale]}. "
                             + _refresh_hint(row['number'], stale))
             continue
@@ -1037,8 +1051,9 @@ def apply_export(plan, ctx, s) -> Applied:
     touched = []
     for before, after in plan.data['holds']:
         _write_row(s, before, after)
-        event = _event(s, ctx, after['id'], 'held', 'held', {'reason': after['hold_reason'], 'at': 'export'},
-                       at=after['updated_at'])
+        event = _event(s, ctx, after['id'], 'held', 'held', {'reason': after['hold_reason'], 'at': 'export',
+                                                             **({'go_withdrawn': before['go_by']} if before['go_by']
+                                                                else {})}, at=after['updated_at'])
         touched += [Touched(RECORD, after['id'], 'update', before['version'], after['version'], after, before,
                             db='company'),
                     Touched('delivery_event', event['id'], 'create', None, None, event, db='company')]
