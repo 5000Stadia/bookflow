@@ -333,7 +333,7 @@ def plan_decide(s, ctx, inp) -> dict:
                             'it runs. Preview the file again.', details={'field': 'run', 'state': run['state']})
     kind = kinds.kind(run['kind'])
     pending = imports.pending_references(s, run)
-    books = imports.Books(s, kind, run['source'])
+    books = imports.books_for(s, kind, run['source'])
     out: list[dict] = []
     seen: set[tuple] = set()
 

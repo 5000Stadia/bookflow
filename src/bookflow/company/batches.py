@@ -102,7 +102,7 @@ def list_record(record_type: str) -> ListRecord | None:
 
 
 def _record(record_type: str) -> ListRecord:
-    found = list_record(record_type)
+    found = list_record(record_type) or document_record(record_type)
     if found is None:
         raise BookflowError('E_VALIDATION', message=f'No inverse is known for {record_type} records.',
                             details={'record_type': record_type})
@@ -177,9 +177,11 @@ def touched_effects(applied, record_types: set[str]) -> list[tuple[str, str, str
 
 
 def run_nested(s, ctx, name: str, payload: dict, *, source_ref: str, dry_run: bool = False,
-               recorder: Callable | None = None) -> dict:
+               recorder: Callable | None = None, recovery: bool = True) -> dict:
     """Run one registry command inside this session, as `cutover` nests its steps: the caller's own authority,
-    validation and audit, with ``source_ref`` naming where the write came from."""
+    validation and audit, with ``source_ref`` naming where the write came from. ``recovery=False`` skips a command's
+    permanent-recovery lookup (a replay by operation key), which closes and reopens the session's company: a nested
+    step that carries no operation key has nothing to replay."""
     from bookflow.core import registry
     from bookflow.core.dispatch import run_in_session, validate_input
     command = registry.get(name)
@@ -187,7 +189,8 @@ def run_nested(s, ctx, name: str, payload: dict, *, source_ref: str, dry_run: bo
     saved = (s.company_touched, s.hub_touched, list(s.warnings), s.dry_run, getattr(s, 'batch_recorder', None))
     s.batch_recorder = recorder
     try:
-        return run_in_session(command, validate_input(command, payload), nested, s, dry_run=dry_run)
+        return run_in_session(command, validate_input(command, payload), nested, s, dry_run=dry_run,
+                              _recovery_checked=not recovery)
     finally:
         s.company_touched, s.hub_touched, s.warnings, s.dry_run, s.batch_recorder = saved
         if s.company is not None and s.company.write_transaction:
@@ -373,9 +376,90 @@ def require_batch_read(s, batch: dict) -> None:
     types = s.company.conn.execute(sa.select(c.batch_effects.c.record_type).where(
         c.batch_effects.c.batch_id == batch['id']).distinct()).scalars().all()
     for record_type in sorted(types):
-        rec = list_record(record_type)
+        rec = list_record(record_type) or document_record(record_type)
         if rec is not None:
             require_read(s, f'{rec.noun} show')
+
+
+# ------------------------------------------------------------------ documents a batch made (R107 increment 4)
+
+@dataclass(frozen=True)
+class DocumentRecord:
+    """A document an import made: retired by its family's delete, history preserved (else its void), one step."""
+    noun: str
+    table: sa.Table
+    name_field: str
+    selector: str
+    inverse: str
+    type_value: str
+    type_column: str
+    document = True
+    number_field = None
+
+
+@lru_cache(maxsize=None)
+def document_record(record_type: str) -> DocumentRecord | None:
+    from bookflow.company import import_kinds
+    for k in import_kinds.DOC_KINDS.values():
+        if k.family == record_type:
+            return DocumentRecord(k.noun, c.metadata.tables[k.table], 'number', k.selector, k.inverse, k.family,
+                                  k.type_column)
+    return None
+
+
+def _document_steps(s, group: dict, rec: DocumentRecord) -> list[tuple[str, dict]]:
+    """A document's retiring command; a payment the same batch made, still applied (to an invoice the batch made
+    too), is unapplied first, since a payment is deleted only once nothing is applied."""
+    steps = []
+    if rec.type_value == 'payment':
+        rows = s.company.raw.execute(
+            'SELECT a.id, t.version FROM applications a JOIN transactions t ON t.id = a.paid_transaction_id '
+            'WHERE a.paying_transaction_id = ? AND a.reverses_application_id IS NULL AND NOT EXISTS '
+            '(SELECT 1 FROM applications r WHERE r.reverses_application_id = a.id)', (group['record_id'],)).fetchall()
+        if rows:
+            steps.append(('payment unapply', {'payment': group['record_id'], 'operation_key': f"reverse-{group['record_id']}",
+                                              'applications': [{'application_id': a, 'invoice_expected_version': v}
+                                                               for a, v in rows]}))
+    steps.append((rec.inverse, {rec.selector: group['record_id']}))
+    return steps
+
+
+def _document_edit(s, rec: DocumentRecord, record_id: str) -> dict | None:
+    """A document edited since the import made it: a revision after its first. Settling it (a payment applied)
+    changes its version, not its revisions, and is found as a use instead."""
+    table, column = ('work_revisions', 'document_id') if rec.table.name == 'work_documents' else (
+        'transaction_revisions', 'transaction_id')
+    row = s.company.raw.execute(f'SELECT count(*), max(created_at) FROM {table} WHERE {column} = ?',
+                                (record_id,)).fetchone()
+    if not row or row[0] <= 1:
+        return None
+    by = s.company.raw.execute(f'SELECT created_by FROM {table} WHERE {column} = ? ORDER BY created_at DESC LIMIT 1',
+                               (record_id,)).fetchone()
+    return {'revisions': row[0], 'at': row[1], 'by': by[0] if by else None}
+
+
+def _document_uses(s, rec: DocumentRecord, ids: list[str], made_here: set[str]) -> dict[str, dict]:
+    """What holds a document an import made: a payment applied to it (a customer's payment to an invoice, a bill
+    payment or credit to a bill) that still stands, named by its number, unless the same batch made the payment too
+    (it is reversed first, newest first)."""
+    found: dict[str, dict] = {}
+    for table, paid, paying in (('applications', 'paid_transaction_id', 'paying_transaction_id'),
+                                ('ap_applications', 'obligation_transaction_id', 'source_transaction_id')):
+        sql = (f'SELECT a.{paid}, a.id, t.id, t.type, t.number FROM {table} a JOIN transactions t ON t.id = a.{paying} '
+               f'WHERE a.{paid} IN (SELECT value FROM json_each(?)) AND a.reverses_application_id IS NULL '
+               f'AND NOT EXISTS (SELECT 1 FROM {table} r WHERE r.reverses_application_id = a.id) '
+               "AND t.status NOT IN ('voided', 'deleted')")
+        for target, application, payer, kind, number in s.company.raw.execute(sql, (json.dumps(ids),)).fetchall():
+            if payer in made_here:
+                continue
+            uses = found.setdefault(target, {'tables': [], 'rows': [], 'documents': []})
+            text = f"{kind.replace('_', ' ')} {number or payer}"
+            if text not in uses['documents'] and len(uses['documents']) < 3:
+                uses['documents'].append(text)
+            if table not in uses['tables']:
+                uses['tables'].append(table)
+            uses['rows'].append({'table': table, 'column': paid, 'id': application, 'transaction_id': payer})
+    return found
 
 
 # ------------------------------------------------------------------ planning a reversal
@@ -429,7 +513,8 @@ def _latest(s, keys: list[tuple[str, str]]) -> dict[tuple[str, str], dict]:
 def _current(s, record_type: str, ids: list[str]) -> dict[str, dict]:
     rec = _record(record_type)
     t = rec.table
-    cols = [t.c.id, t.c.version, t.c.updated_by, t.c.updated_at, t.c.active, t.c[rec.name_field]]
+    active = t.c.active if 'active' in t.c else sa.literal(True).label('active')
+    cols = [t.c.id, t.c.version, t.c.updated_by, t.c.updated_at, active, t.c[rec.name_field]]
     out = {}
     for start in range(0, len(ids), 500):
         chunk = ids[start:start + 500]
@@ -469,6 +554,8 @@ def _in_use(s, record_type: str, ids: list[str], made_here: set[str]) -> dict[st
     found: dict[str, dict] = {}
     if not ids:
         return found
+    if getattr(rec, 'document', False):
+        return _document_uses(s, rec, ids, made_here)
     payload = json.dumps(ids)
     for table, column in _referrers(s, rec.table.name):
         meta = c.metadata.tables.get(table)
@@ -492,11 +579,15 @@ def _in_use(s, record_type: str, ids: list[str], made_here: set[str]) -> dict[st
     return found
 
 
-def _steps_for(group: dict, rec: ListRecord, version: int) -> list[tuple[str, dict]]:
+def _steps_for(group: dict, rec: ListRecord, version: int, s=None) -> list[tuple[str, dict]]:
     """The inverse commands for one record, in order, given its version when the first one runs."""
+    if group['action'] == 'created' and getattr(rec, 'document', False):
+        return _document_steps(s, group, rec)
     if group['action'] == 'updated':
         return [(f'{rec.noun} update', {rec.selector: group['record_id'], 'expected_version': version,
                                         **group['before']})]
+    if group['action'] == 'created' and getattr(rec, 'document', False):
+        return [(rec.inverse, {rec.selector: group['record_id']})]
     if group['action'] == 'created':
         return [('rename', {}), (f'{rec.noun} deactivate', {rec.selector: group['record_id']})]
     raise BookflowError('E_VALIDATION', message=f"No inverse for a {group['action']} effect.",
@@ -548,9 +639,16 @@ def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
     pending = []
     for g in reversed(groups):
         steps_done = done.get(g['key'], [])
-        if len(steps_done) >= (1 if g['action'] == 'updated' else 2):
+        rec = _record(g['record_type'])
+        if getattr(rec, 'document', False):
+            # A document's remaining steps are read from the books (a payment's unapply only while applied): it is
+            # done once its retiring command ran.
+            if any(json.loads(e['before'] or '{}').get('command') == rec.inverse for e in steps_done):
+                continue
+            steps_done = []
+        elif len(steps_done) >= (1 if g['action'] == 'updated' else 2):
             continue
-        pending.append((g, _record(g['record_type']), steps_done))
+        pending.append((g, rec, steps_done))
     latest = _latest(s, [g['key'] for g, _, _ in pending])
     by_type: dict[str, list[str]] = {}
     for g, _, _ in pending:
@@ -574,7 +672,14 @@ def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
                                      clears=f"reverse batch {last['batch_id']} first", batch=last['batch_id']))
             continue
         expected = last['version_after'] if last is not None else None
-        if expected is not None and row['version'] != expected:
+        edit = _document_edit(s, rec, g['record_id']) if getattr(rec, 'document', False) else None
+        if edit is not None:
+            blockers.append(_blocker(g, rec, 'edited_again', f"{label} was edited since the batch (revision "
+                                     f"{edit['revisions']}), by {edit['by']} at {edit['at']}.",
+                                     clears=f"`{rec.noun} show {row[rec.name_field]}` shows the change; undo it or "
+                                            'keep the batch', changed_by=edit['by'], changed_at=edit['at']))
+            continue
+        if expected is not None and row['version'] != expected and not getattr(rec, 'document', False):
             blockers.append(_blocker(g, rec, 'edited_again',
                                      f"{label} was changed since the batch (version {row['version']}, the batch left "
                                      f"{expected}), by {row['updated_by']} at {row['updated_at']}.",
@@ -588,7 +693,7 @@ def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
                                                                'rows of ' + ', '.join(use['tables'])) + ' refer to it.',
                                      clears=f"void, delete or move what uses {label} first", used_by=use['rows']))
             continue
-        steps = _steps_for(g, rec, row['version'])[len(steps_done):]
+        steps = _steps_for(g, rec, row['version'], s)[len(steps_done):]
         steps_out.append({'seq': g['seq'], 'record_type': g['record_type'], 'record_id': g['record_id'],
                           'name': row[rec.name_field], 'action': g['action'], 'version': row['version'],
                           'steps': [name if name != 'rename' else f'{rec.noun} update' for name, _ in steps]})
@@ -627,13 +732,23 @@ def _free_initials(s, record_id: str) -> str:
 def _probe(s, ctx, batch, g, rec, row, steps, made) -> dict | None:
     """Dry-run the inverse commands still to run: their own refusals, permission included, name the blocker. A
     deactivate refused only for children this same batch made (and reverses first) is not a blocker."""
-    for name, payload in steps:
+    for i, (name, payload) in enumerate(steps):
+        if i and getattr(rec, 'document', False):
+            try:  # a later step waits on the first (a payment is deleted once unapplied): its own grant, here
+                from bookflow.core import registry
+                from bookflow.hub import access
+                access.require_explicit_grant(s, registry.get(name).capability)
+            except BookflowError as error:
+                return _blocker(g, rec, error.code, f"{rec.noun} {row[rec.name_field]}: {error.message}",
+                                clears=_clears_for(error, rec), details=error.details)
+            continue
         command = f'{rec.noun} update' if name == 'rename' else name
         body = _payload(s, rec, batch, row, name, payload, row['version'])
         if name.endswith(' deactivate'):
             body.pop('expected_version', None)
         try:
-            run_nested(s, ctx, command, body, source_ref=f"reverse:{batch['id']}", dry_run=True)
+            run_nested(s, ctx, command, body, source_ref=f"reverse:{batch['id']}", dry_run=True,
+                       recovery=not getattr(rec, 'document', False))
         except BookflowError as error:
             if error.code == 'E_ACTIVE_DEPENDENTS' and _only_batch_children(s, rec, row, g, made):
                 continue
@@ -705,7 +820,7 @@ def reverse(s, ctx, batch_id: str, *, reason: str | None, dry_run: bool = False,
     work = found['work'][:max(1, limit)]
     reversed_now = 0
     for g, rec, row, steps, offset in work:
-        total = 1 if g['action'] == 'updated' else 2
+        total = offset + len(steps)
         version = row['version']
         for i, (name, payload) in enumerate(steps):
             index = offset + i
@@ -714,7 +829,8 @@ def reverse(s, ctx, batch_id: str, *, reason: str | None, dry_run: bool = False,
                 output = run_nested(s, ctx, command, _payload(s, rec, batch, row, name, payload, version),
                                     source_ref=f'reverse:{batch_id}',
                                     recorder=_reversal_recorder(reversal_id, g, index,
-                                                                adapter if index == total - 1 else None))
+                                                                adapter if index == total - 1 else None),
+                                    recovery=not getattr(rec, 'document', False))
             except BookflowError as error:
                 raise _stopped(found, g, rec, row, error, reversed_now) from None
             version = output.get('version') if isinstance(output, dict) else None

@@ -57,7 +57,7 @@ def _preview_output(s, prepared) -> m.ImportRunOutput:
     table, mapping = prepared['table'], prepared['mapping']
     return m.ImportRunOutput(
         run={'id': prepared['run_id'], 'kind': prepared['kind'].name, 'mode': prepared['input'].mode,
-             'state': 'waiting' if prepared['references'] else 'previewed', 'source': prepared['source'],
+             'state': 'waiting' if len(prepared['references']) > len(prepared['create']) else 'previewed', 'source': prepared['source'],
              'file_sha256': table.sha256, 'encoding': table.encoding, 'rows': len(rows),
              'atomic': not prepared['input'].partial},
         counts=counts, mapping=mapping.as_dict(table.headers), unknown_references=prepared['references'],
