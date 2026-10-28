@@ -428,8 +428,9 @@ def test_reversing_a_document_import_deletes_with_history_and_is_refused_while_a
     # The payment's run reverses first (unapplied, then deleted); then the invoices'.
     assert books.run('import reverse', {'run': pay_run}, reason='Wrong file')['state'] == 'reversed'
     assert books.run('import reverse', {'run': invoices_run}, reason='Wrong file')['state'] == 'reversed'
-    for n in ('INV-0001', 'INV-0002', 'INV-0003'):
-        assert books.run('invoice show', {'invoice': n, 'include_deleted': True})['status'] == 'deleted'
+    suffix = '~R' + books.run('import show', {'run': invoices_run})['run']['batch']['id'][-6:].upper()
+    for n in ('INV-0001', 'INV-0002', 'INV-0003'):  # deleted under their retired numbers
+        assert books.run('invoice show', {'invoice': n + suffix, 'include_deleted': True})['status'] == 'deleted'
     debits, credits = balances(books)
     assert debits == credits and debits - before[0] == credits - before[1]
     with db(books) as conn:  # the postings net to nothing: each account's balance is as before the imports
@@ -438,10 +439,9 @@ def test_reversing_a_document_import_deletes_with_history_and_is_refused_while_a
     for account, d, c in rows:
         net[account] = net.get(account, 0) + (d or 0) - (c or 0)
     assert set(net.values()) == {0}
-    # The keys are released: the same file previews as new, and says the numbers stay with the deleted invoices.
+    # The keys and numbers are released (renumbered `INV-0001~R<batch>` first): the same file imports again.
     check = books.run('import check', {'kind': 'invoice', 'content': invoices(n=3)})
-    assert {g['code'] for g in check['problems']} == {'E_DUPLICATE_NUMBER'}
-    assert 'deleted document keeps its number' in check['problems'][0]['message']
+    assert check['ok'], check['summary']
 
 
 # ------------------------------------------------------------------ the seeded check, extended to documents
@@ -496,11 +496,13 @@ def test_seeded_document_imports_payments_and_reversals_keep_the_invariants(book
             batches.append({'run': run, 'kind': 'invoice', 'numbers': numbers, 'live': True, 'before': state,
                             'at': changes})
         elif choice < 0.5 and files:
-            source, content, numbers = rng.choice(files)  # a rerun creates nothing
+            source, content, numbers = rng.choice(files)  # a rerun creates nothing while its import stands
             preview = books.run('import preview', {'kind': 'invoice', 'content': content, 'source': source,
                                                    'partial': True, 'decimal': '.'})
-            assert set(preview['counts']) <= {'already_in', 'refused'}
-            assert all(r['code'] == 'E_DUPLICATE_NUMBER' for r in preview['refused'])  # reversed: number kept
+            standing = any(b['live'] and b['kind'] == 'invoice' and b['numbers'] == numbers for b in batches)
+            # A reversed import gave its numbers up (`~R`): the same file would import again.
+            assert set(preview['counts']) <= ({'already_in', 'refused'} if standing else {'create'})
+            assert not preview['refused']
             totals['reruns'] += 1
         elif choice < 0.75:
             open_ = [n for n, d in dues.items() if d > 0]
@@ -605,24 +607,50 @@ def _nets(books):
 
 
 @pytest.mark.parametrize('kind', sorted(KINDS))
-def test_every_kind_imports_reverses_to_the_exact_prior_state_and_a_corrected_file_imports_again(books, kind):
-    """High 2 and 3: a bill payment is unapplied then voided; a purchase order is found in its own table."""
+def test_every_kind_imports_reverses_to_the_exact_prior_state_and_the_same_file_imports_again(books, kind):
+    """High 2 and 3: a bill payment is unapplied then voided; a purchase order is found in its own table. The
+    reversal gives each document's number up (renumbered `<number>~R<batch>` before its delete or void), so the same
+    file, numbers and all, imports again and the books equal one import."""
+    from bookflow.company import import_kinds
     setup, header, rows, _ = KINDS[kind]
     if setup is not None:
         setup(books)
-
-    def content(n):
-        return text(header, [[cell.replace('{n}', n) for cell in row] for row in rows])
+    content = text(header, [[cell.replace('{n}', 'IMP-1') for cell in row] for row in rows])
     before = _nets(books)
-    preview = books.run('import preview', {'kind': kind, 'content': content('IMP-1'), 'key_by_content': True})
+    preview = books.run('import preview', {'kind': kind, 'content': content, 'key_by_content': True})
     assert run_all(books, preview['run']['id'], key_by_content=True)['counts']['created'] == 1
+    once = _nets(books)
+    first = books.run('import rows', {'run': preview['run']['id'], 'phase': 'run'})['items'][0]['record_id']
+    # A check's number in the file is its cheque number (`check_instruments`); every other kind's its own.
+    table, column, key = ((import_kinds.kind(kind).table, 'number', 'id') if kind != 'check'
+                          else ('check_instruments', 'check_number', 'transaction_id'))
+    with db(books) as conn:
+        number = conn.execute(f'SELECT {column} FROM {table} WHERE {key} = ?', (first,)).fetchone()[0]
     assert _reverse(books, preview['run']['id']) == 'reversed'
     assert _nets(books) == before
-    # The corrected file (a new number where the kind has one: see "Number reuse" in As built) imports again.
-    check = books.run('import check', {'kind': kind, 'content': content('IMP-2'), 'key_by_content': True})
+    batch = books.run('import show', {'run': preview['run']['id']})['run']['batch']['id']
+    with db(books) as conn:
+        retired = conn.execute(f'SELECT {column} FROM {table} WHERE {key} = ?', (first,)).fetchone()[0]
+    assert retired == f'{number}~R{batch[-6:].upper()}'
+    # The batch's reversal effect keeps the original number beside the retired one.
+    reversal = books.run('batch show', {'batch': batch})['batch']['reversed_by']
+    said = [e['before'] for e in books.run('batch show', {'batch': reversal})['batch']['effects']
+            if e['record_id'] == first and 'retired_as' in e['before']]
+    assert [(e['number'], e['retired_as']) for e in said] == [(number, retired)]
+    check = books.run('import check', {'kind': kind, 'content': content, 'key_by_content': True})
     assert check['ok'], check['summary']
-    again = books.run('import preview', {'kind': kind, 'content': content('IMP-2'), 'key_by_content': True})
+    again = books.run('import preview', {'kind': kind, 'content': content, 'key_by_content': True})
     assert run_all(books, again['run']['id'], key_by_content=True)['counts']['created'] == 1
+    assert _nets(books) == once
+    second = books.run('import rows', {'run': again['run']['id'], 'phase': 'run'})['items'][0]['record_id']
+    if kind not in ('bill', 'vendor-credit', 'card-charge', 'payment', 'bill-payment'):  # numbered by the file
+        with db(books) as conn:
+            assert conn.execute(f'SELECT {column} FROM {table} WHERE {key} = ?', (second,)).fetchone()[0] == number
+    if kind in ('check', 'bill-payment'):  # the cheque number on the bank account is given up and used again
+        with db(books) as conn:
+            held = dict(conn.execute('SELECT transaction_id, check_number FROM check_instruments '
+                                     'WHERE transaction_id IN (?, ?)', (first, second)).fetchall())
+        assert held[second] == 'IMP-1' and held[first] == f'IMP-1~R{batch[-6:].upper()}'
 
 
 def test_a_purchase_order_number_the_books_use_is_refused_in_the_check(books):
@@ -786,3 +814,67 @@ def test_an_estimate_line_cost_and_markup_are_typed_as_money_and_percent():
     fields = import_kinds.fields('estimate')
     assert fields['lines[].estimated_unit_cost'].type == 'money'
     assert fields['lines[].markup_percent'].type == 'decimal'
+
+
+def test_a_reversed_import_retires_its_numbers_where_history_find_and_audit_say_so_and_a_typed_delete_keeps_it(books):
+    """The retired document shows `<number>~R<batch>`; its revisions, the reversal's audit event and the batch effect
+    keep the original. A document a person deletes keeps its number, as before (a limit against the anchor)."""
+    rows = [['IMP-7', 'Acme Plumbing', '2026-04-02', 'Labor', '1', '85.00', 'Callout']]
+    estimates = text(SALE + ['Title'], [rows[0] + ['Kitchen']])
+    invoice_run = books.run('import preview', {'kind': 'invoice', 'content': text(SALE, rows)})['run']['id']
+    estimate_run = books.run('import preview', {'kind': 'estimate', 'content': estimates})['run']['id']
+    run_all(books, invoice_run)
+    run_all(books, estimate_run)
+    old_invoice = books.run('invoice show', {'invoice': 'IMP-7'})['id']
+    old_estimate = books.run('estimate show', {'estimate': 'IMP-7'})['id']
+    assert _reverse(books, invoice_run) == 'reversed' and _reverse(books, estimate_run) == 'reversed'
+    batch = books.run('import show', {'run': invoice_run})['run']['batch']['id']
+    retired = f'IMP-7~R{batch[-6:].upper()}'
+    # The deleted invoice: shown with its retired number, its first revision still says IMP-7.
+    shown = books.run('invoice show', {'invoice': old_invoice, 'include_deleted': True})
+    assert shown['status'] == 'deleted' and shown['number'] == retired
+    history = books.run('invoice history', {'invoice': old_invoice, 'include_deleted': True})
+    assert history['number'] == retired
+    with db(books) as conn:
+        numbers = [n for (n,) in conn.execute('SELECT number FROM transaction_revisions WHERE transaction_id = ? '
+                                              'ORDER BY revision_number', (old_invoice,))]
+    assert numbers == ['IMP-7', retired]
+    # The renumbering is its own audit event, made by the reversal (its source and reason).
+    events = books.run('audit list', {'record_id': old_invoice, 'command': 'invoice update'})['items']
+    assert len(events) == 1
+    event = books.run('audit show', {'event': events[0]['id']})
+    assert event['source_ref'] == f'reverse:{batch}' and event['reason'] == 'Wrong file'
+    # The same numbers import again; find, show and payments name the new documents.
+    run_all(books, books.run('import preview', {'kind': 'invoice', 'content': text(SALE, rows)})['run']['id'])
+    run_all(books, books.run('import preview', {'kind': 'estimate', 'content': estimates})['run']['id'])
+    assert books.run('invoice show', {'invoice': 'IMP-7'})['id'] != old_invoice
+    found = books.run('transaction find', {'number': 'IMP-7'})['items']
+    assert sorted(r['type'] for r in found) == ['estimate', 'invoice'] and old_estimate not in {r['id'] for r in found}
+    estimate_batch = books.run('import show', {'run': estimate_run})['run']['batch']['id']
+    voided = books.run('transaction find', {'number': f'IMP-7~R{estimate_batch[-6:].upper()}'})['items']
+    assert [(r['id'], r['status']) for r in voided] == [(old_estimate, 'void')]
+    # A person's delete keeps the number: the corrected file is refused with the reason.
+    typed = books.run('invoice post', {'customer': 'Acme Plumbing', 'date': '2026-04-02', 'number': 'TYPED-1',
+                                       'lines': [{'item': 'Labor', 'quantity': '1'}]})
+    books.run('invoice delete', {'invoice': typed['id'], 'expected_version': typed['version']}, reason='Typo')
+    check = books.run('import check', {'kind': 'invoice', 'content': text(SALE, [['TYPED-1'] + rows[0][1:]])})
+    assert [g['code'] for g in check['problems']] == ['E_DUPLICATE_NUMBER']
+    assert 'deleted document keeps its number' in check['problems'][0]['message']
+
+
+def test_a_number_a_voided_document_of_another_kind_carries_names_the_standing_one(books):
+    """Lookups by number across kinds prefer the standing document: an estimate H-1 a person voided does not make
+    the sales order H-1 ambiguous where money is held for "H-1"; two standing ones still are."""
+    lines = [{'item': 'Labor', 'quantity': '1'}]
+    estimate = books.run('estimate create', {'customer': 'Acme Plumbing', 'date': '2026-04-01', 'number': 'H-1',
+                                             'title': 'Kitchen', 'lines': lines})
+    order = books.run('sales-order create', {'customer': 'Acme Plumbing', 'date': '2026-04-01', 'number': 'H-1',
+                                             'lines': lines})
+    with pytest.raises(BookflowError) as caught:
+        books.run('prepayment query', {'document': 'H-1'})
+    assert '2 documents carry number H-1' in str(caught.value.details)
+    books.run('estimate void', {'estimate': estimate['id'], 'expected_version': estimate['version']}, reason='Wrong')
+    books.run('prepayment receive', {'document': 'H-1', 'amount': '20.00', 'date': '2026-04-02',
+                                     'payment_method': 'Cash'})
+    held = books.run('prepayment query', {'document': 'H-1'})
+    assert held['items'] and all(r.get('document_id', order['id']) == order['id'] for r in held['items'])

@@ -110,9 +110,9 @@ def require_command_activation(s: Session, cmd) -> None:
     """Admission before company opening, saved recovery facts or planner reads."""
     from bookflow.core.registry import EXPLICIT_GRANT_ONLY_CAPABILITIES
     if s.actor is not None and s.actor.kind != "human":
-        # Who can do what is a person's call, whatever an agent's role (catalog human-administration-v1).
-        from .people_only import require_person_for_command
-        require_person_for_command(s, cmd)
+        # Five acts stay a person's; the rest are capabilities an agent holds only when granted (capabilities-v1).
+        from .capabilities import require_for_command
+        require_for_command(s, cmd)
     from .permission_access import activated
     if activated(s):
         from .permission_runtime import current_catalog

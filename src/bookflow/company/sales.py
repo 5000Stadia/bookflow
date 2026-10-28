@@ -7,6 +7,7 @@ import zlib
 import sqlalchemy as sa
 
 from bookflow.core import unit_price
+from bookflow.company import document_numbers
 from bookflow.company import schema as c, journals, document_effects as effects
 from bookflow.company import inventory, inventory_effects
 from bookflow.company import journal_custom_fields as custom, list_service
@@ -69,7 +70,7 @@ def resolve(s, selector, document_type):
     key = selector.upper() if is_ulid(selector) else selector
     found = effects.rows(s, t, t.c.type.in_(types), t.c.id == key)
     if not found:
-        found = effects.rows(s, t, t.c.type.in_(types), t.c.number == selector)
+        found = document_numbers.prefer_live(effects.rows(s, t, t.c.type.in_(types), t.c.number == selector))
         kinds = sorted({row['type'] for row in found})
         if len(kinds) > 1:
             raise _invalid(types[0], 'number ' + selector + ' names ' + ' and '.join(

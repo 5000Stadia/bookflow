@@ -970,7 +970,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             panels=Home.resolve(show["company_id"], permits=company_permits(request, show)),
             clocks=_open_clocks(request, show["company_id"]),
         )
-        resp.set_cookie(LAST_COMPANY, show["company_id"], samesite="lax", secure=secure_cookies, max_age=90 * 86400, path="/")  # a per-browser convenience, no identity in it
+        resp.set_cookie(LAST_COMPANY, show["company_id"], httponly=True, samesite="lax", secure=secure_cookies, max_age=90 * 86400, path="/")  # a per-browser convenience, no identity in it
         return resp
 
     @app.get("/c/{company_id}/_overview", response_class=HTMLResponse)

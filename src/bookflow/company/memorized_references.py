@@ -67,8 +67,11 @@ def enterable(command) -> bool:
 
 
 def _people_only() -> frozenset[str]:
+    # The five a person keeps, and every former people-only act that is a capability now (capabilities-v1):
+    # replaying one unattended is an automation, which R187 increment 2 governs, not a memorized entry.
     from bookflow.hub.people_only import people_only_commands
-    return people_only_commands()
+    from bookflow.hub.capabilities import COMMAND_CAPABILITY
+    return people_only_commands() | frozenset(COMMAND_CAPABILITY)
 
 
 def enterable_commands() -> list[str]:

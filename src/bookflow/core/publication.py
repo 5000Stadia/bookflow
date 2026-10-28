@@ -362,12 +362,18 @@ class PublicationPermit:
                     _deny()
                 for capability, required in self.cmd.resource_requirements:
                     access.require_resource(s, capability, required)
+                if s.actor.kind != "human":  # a former people-only act, as dispatch asks it (capabilities-v1)
+                    from bookflow.hub.capabilities import require_company as require_capability
+                    require_capability(s, self.cmd.name)
                 # Role/resource predicates live in the hub. Open company data
                 # only for a predicate that actually reads protected targets.
                 if self.cmd.authorize_input is not None or self.cmd.name == "undo" or self.cmd.transfer is not None or self.projection.get('payment_roots'):
                     open_company(s, self.ctx, False)
             elif self.cmd.required_role == "hub_admin" and not s.is_hub_admin:
-                if self.execution_succeeded:
+                from bookflow.hub.capabilities import HUB, capability_for, holds_hub
+                granted = s.actor.kind != "human" and capability_for(self.cmd.name) in HUB and holds_hub(
+                    s, capability_for(self.cmd.name))
+                if self.execution_succeeded and not granted:
                     _deny()
             if not self.execution_succeeded:
                 return

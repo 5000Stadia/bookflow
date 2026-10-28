@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import logging
 import sqlite3
 from datetime import datetime, timezone
@@ -18,7 +19,7 @@ from bookflow.core.errors import BookflowError, explain_permission
 from bookflow.core.fs import check_local
 from bookflow.core.ids import is_ulid, normalize_ulid
 from bookflow.core.locks import RootLock
-from bookflow.core.models import redact_paths
+from bookflow.core.models import PATH_FIELD_NAMES, redact_paths
 from bookflow.core.perms import private_umask
 from bookflow.core import performance, timings
 from bookflow.core.registry import Command, Plan, Touched
@@ -84,9 +85,36 @@ def parse_when(value: str, zone: str | None, end: bool = False) -> str:
 _log = logging.getLogger("bookflow.dispatch")
 
 
+_ABSOLUTE_PATH = re.compile(r"""(?<![\w/:.~-])(?:/|[A-Za-z]:\\)[^\s/\\()'":;,]+(?:[/\\][^\s/\\()'":;,]+)+""")
+
+
+def _path_values(obj: Any) -> list[str]:
+    if isinstance(obj, dict):
+        return [x for k, v in obj.items() for x in (
+            [v] if isinstance(v, str) and (k in PATH_FIELD_NAMES or k.endswith("_path")) else _path_values(v))]
+    if isinstance(obj, list):
+        return [x for v in obj for x in _path_values(v)]
+    return []
+
+
+_FILESYSTEM_SHAPE = re.compile(r"^(?:/|~[/\\]|[A-Za-z]:[/\\])|[/\\]")
+
+
+def redact_message(message: str, details: Any) -> str:
+    """No filesystem path in what a non-administrator reads: the paths the details name, then any absolute path.
+
+    Only a details value shaped like a filesystem path (absolute, home-relative, or holding a separator) is replaced:
+    imports key input field paths (`billing_address.town`) as `path` too, and those read as they are."""
+    for value in sorted(set(_path_values(details)), key=len, reverse=True):
+        if value and _FILESYSTEM_SHAPE.search(value):
+            message = message.replace(value, "<path withheld>")
+    return _ABSOLUTE_PATH.sub("<path withheld>", message)
+
+
 def redact_error(err: BookflowError, allowed: bool) -> BookflowError:
     if allowed:
         return err
+    err.message = redact_message(err.message, err.details)
     err.details = redact_paths(err.details, False)
     return err
 
@@ -591,11 +619,18 @@ def authorize(cmd: Command, ctx: Context, s: Session, *, company_selector: str |
             raise BookflowError("E_PERMISSION", details={"capability": cmd.capability, "required_role": cmd.required_role, "role": role})
         for capability, required_role in cmd.resource_requirements:
             access.require_resource(s, capability, required_role)
+        if s.actor is not None and s.actor.kind != "human":
+            # A former people-only act: the agent's own grant and its principal's holding (capabilities-v1).
+            from bookflow.hub.capabilities import require_company as require_capability
+            require_capability(s, cmd.name)
         ctx = ctx.model_copy(update={"company_id": s.company_row["id"]})
         if s.company is None:
             open_company(s, ctx, "company" in cmd.writes and not dry_run and not read_only)
     elif cmd.required_role == "hub_admin" and not s.is_hub_admin:
-        raise BookflowError("E_PERMISSION", details={"capability": cmd.capability, "required_role": "hub_admin"})
+        from bookflow.hub.capabilities import HUB, capability_for, require_hub
+        if s.actor is None or s.actor.kind == "human" or capability_for(cmd.name) not in HUB:
+            raise BookflowError("E_PERMISSION", details={"capability": cmd.capability, "required_role": "hub_admin"})
+        require_hub(s, capability_for(cmd.name), cmd.name)  # an agent granted it, acting for a hub administrator
     if _recovery_only:
         if cmd.permanent_recovery is None or not read_only:
             raise BookflowError('E_INTERNAL', message='Invalid permanent recovery authorization route')
@@ -840,8 +875,10 @@ def _plans_in_write(cmd: Command, s: Session, dry_run: bool) -> bool:
 
     Only a real (not dry-run) company-only write that opted in: a preview, a read, an advisory
     command or one that also writes the hub or config plans before any transaction, as before.
+    A batch step with its own write first (`batch_before`, an import reversal's retiring step) plans there too.
     """
-    return (getattr(cmd, "plan_in_write", False) and not dry_run and cmd.is_write
+    return ((getattr(cmd, "plan_in_write", False) or getattr(s, "batch_before", None) is not None)
+            and not dry_run and cmd.is_write
             and cmd.kind != "advisory" and set(cmd.writes) == {"company"} and s.company is not None)
 
 
@@ -874,6 +911,11 @@ def _apply(cmd: Command, plan: Plan | None, ctx: Context, s: Session, key=(None,
         try:
             if co_tx:
                 _upsert_principals(s, ctx)
+            # A batch step's own write before the command's (an import reversal retires a document's number while
+            # the document still stands), in the command's transaction and before its plan reads the document.
+            before = getattr(s, "batch_before", None)
+            if before is not None and co_tx and planner is not None:
+                before(s)
             if planner is not None:
                 s.plan_in_write = True
                 try:

@@ -419,7 +419,9 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 4286 -> 4304 (R107 inc 6, measured per command): bulk-edit preview 9 (query, records, paste, paste_columns,
     # and each operation's by, round, find, replace, from), grid 3 (query, records, columns), query 3 (kind, state,
     # cursor), show 2 (outcome, cursor), reverse 1 (fingerprint) -- their null branches. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==4304
+    # 4304 -> 4306 (R107 inc 6 review fixes): bulk-edit preview's selection_fingerprint and apply's limit -- their
+    # null branches.
+    assert sum(len(group["paths"]) for group in mapped)==4306
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

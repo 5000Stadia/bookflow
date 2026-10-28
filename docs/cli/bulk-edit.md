@@ -4,7 +4,7 @@
 
 ## `bulk-edit apply`
 
-Apply a previewed grid edit: one ordinary update per record carrying the version the preview read, each its own audit event, all one batch. A record someone changed meanwhile merges when they changed other fields, and is refused (conflict, naming who and when) when they changed the same one; the rest go on (all or nothing undoes them instead). Returns each record's outcome. Example: {"run": "01J..."}.
+Apply a previewed grid edit: one ordinary update per record carrying the version the preview read, each its own audit event, all one batch. A record someone changed meanwhile merges when they changed other fields, and is refused (conflict, naming who and when) when they changed the same one; the rest go on (all or nothing undoes them instead). Returns each record's outcome. `limit` applies a slice (call again to go on); `cancel` stops an unfinished apply and puts back what it changed. Example: {"run": "01J..."}.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -35,6 +35,8 @@ The same example as complete `bookflow_run` arguments:
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `run` | `RUN` | string | yes | no | — | The grid edit (from `bulk-edit preview`).; minimum length 26; maximum length 26 |
+| `limit` | `--limit` | integer \| null | no | yes | null | Apply at most this many records in this call (a slice; the run stays `applying` and the same command goes on); default every one. |
+| `cancel` | `--cancel` | boolean | no | no | false | Instead of going on, stop an unfinished apply: the records already changed get their prior values back as one unit and the rest never run (the edit ends `cancelled`). |
 
 ### Command and context options
 
@@ -71,7 +73,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
 | `run` | object[string, any] | yes | no | — | The edit: id, kind, state, label, atomic, reason, who and when, its batch (state, reversible, first blocker). |
-| `counts` | object[string, integer] | yes | no | — | selected, change, refused, unchanged; after apply also updated, merged, conflict, not_run. |
+| `counts` | object[string, integer] | yes | no | — | selected, change, refused, unchanged, pending (still to apply); after apply also updated, merged, conflict, not_run. |
 | `totals` | object[string, any] | yes | no | — | Per money column: the sum before and after over the records that change (exact, in the currency). |
 | `rows` | array[object[string, any]] | yes | no | — | The diff, per record: seq, record, label, version, status, changes [{field, before, after}], the refusal at preview, and the outcome at apply (merged_over, version_after). |
 | `next_cursor` | integer \| null | no | yes | null | Pass as `cursor` for more rows. |
@@ -258,7 +260,8 @@ The same example as complete `bookflow_run` arguments:
 | `records` | `--records` | array[string] \| null | no | yes | null | Exactly these records (id or full name; an account's number), in this order, instead of a filter. |
 | `kind` | `KIND` | literal["customer", "vendor", "item", "account"] | yes | no | — | customer, vendor, item or account. |
 | `columns` | `--columns` | array[string] \| null | no | yes | null | Fields to show (`bulk-edit columns`); default a few per kind (an item's name, price, cost, description). |
-| `limit` | `--limit` | integer | no | no | 2000 | Most records to return.; minimum 1; maximum 5000 |
+| `limit` | `--limit` | integer | no | no | 50 | Most records to return (a page); `total` counts the whole selection, which a preview or operation covers.; minimum 1; maximum 5000 |
+| `offset` | `--offset` | integer | no | no | 0 | Records to skip first, for the next page.; minimum 0; maximum 5000 |
 
 ### Command and context options
 
@@ -290,7 +293,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `columns` | array[object[string, any]] | yes | no | — | The columns shown, as `bulk-edit columns` gives them. |
 | `records` | array[object[string, any]] | yes | no | — | id, version, label, and `values` (each field as shown: a reference by name, money as an amount). |
 | `total` | integer | yes | no | — | Records the selection holds. |
-| `truncated` | boolean | yes | no | — | True when more records match than `limit`. |
+| `offset` | integer | no | no | 0 | Records skipped before these. |
+| `truncated` | boolean | yes | no | — | True when more records match after these (pass `offset` for the next page). |
+| `selection_fingerprint` | string \| null | no | yes | null | The whole selection, in order: give it to a preview with a header-less paste. |
 
 Example JSON output:
 
@@ -298,7 +303,9 @@ Example JSON output:
 {
   "columns": [],
   "kind": "human",
+  "offset": 0,
   "records": [],
+  "selection_fingerprint": null,
   "total": 1,
   "truncated": false
 }
@@ -375,6 +382,7 @@ The same example as complete `bookflow_run` arguments:
 | `changes[].value` | inside `--changes` JSON array | any | no | no | null | New value as typed ("12.50", "Net 30", true); null or "" clears it. |
 | `paste` | `--paste` | string \| null | no | yes | null | Cells pasted from a spreadsheet (tab text). With a header row, columns match by name or label and a Name column picks the record; without one, rows fill the selection in order over `paste_columns`. |
 | `paste_columns` | `--paste-columns` | array[string] \| null | no | yes | null | The columns a header-less paste fills, left to right (default: the grid's columns). |
+| `selection_fingerprint` | `--selection-fingerprint` | string \| null | no | yes | null | The grid's `selection_fingerprint`. A paste without a header row fills the selection by position, so over a filter or search it needs this, and is refused if the records changed since the grid (named `records` need none: their order is yours). |
 | `operations[].op` | inside `--operations` JSON array | literal["set", "clear", "copy_down", "replace", "add", "multiply", "percent", "set_from"] | yes | no | — | set: one value on every selected record; clear; copy_down: the first record's value on the rest; replace: `find` with `replace` in text; add: `by` to a number; multiply: by `by`; percent: up (or down, negative) by `by` percent; set_from: copy column `from` of the same record. |
 | `operations[].field` | inside `--operations` JSON array | string | yes | no | — | Column the operation changes.; minimum length 1; maximum length 120 |
 | `operations[].value` | inside `--operations` JSON array | any | no | no | null | For set. |
@@ -420,7 +428,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
 | `run` | object[string, any] | yes | no | — | The edit: id, kind, state, label, atomic, reason, who and when, its batch (state, reversible, first blocker). |
-| `counts` | object[string, integer] | yes | no | — | selected, change, refused, unchanged; after apply also updated, merged, conflict, not_run. |
+| `counts` | object[string, integer] | yes | no | — | selected, change, refused, unchanged, pending (still to apply); after apply also updated, merged, conflict, not_run. |
 | `totals` | object[string, any] | yes | no | — | Per money column: the sum before and after over the records that change (exact, in the currency). |
 | `rows` | array[object[string, any]] | yes | no | — | The diff, per record: seq, record, label, version, status, changes [{field, before, after}], the refusal at preview, and the outcome at apply (merged_over, version_after). |
 | `next_cursor` | integer \| null | no | yes | null | Pass as `cursor` for more rows. |
@@ -503,7 +511,7 @@ The same example as complete `bookflow_run` arguments:
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `kind` | `--kind` | literal["customer", "vendor", "item", "account"] \| null | no | yes | null | Only edits of this list. |
-| `state` | `--state` | literal["previewed", "applying", "applied", "applied_partly", "rolled_back", "failed"] \| null | no | yes | null | Only edits in this state. |
+| `state` | `--state` | literal["previewed", "applying", "applied", "applied_partly", "rolled_back", "cancelled", "failed"] \| null | no | yes | null | Only edits in this state. |
 | `limit` | `--limit` | integer | no | no | 50 | Most edits to return.; minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | From `next_cursor`. |
 
@@ -575,7 +583,7 @@ Example JSON output:
 
 ## `bulk-edit reverse`
 
-Undo a grid edit as one unit: every record it changed gets its exact prior values back through its update. Refused (E_BATCH_BLOCKED), naming each record and who changed it when, if any was edited again since; `skip_changed` restores the rest and leaves those (reversed_partly). --dry-run shows the plan and a fingerprint. Example: {"run": "01J..."}.
+Undo a grid edit as one unit: every record it changed gets its exact prior values back through its update. Refused (E_BATCH_BLOCKED), naming each record and who changed it when, if any was edited again since; `skip_changed` restores the rest and leaves those (reversed_partly). Refused while the apply is unfinished (finish or cancel it first). --dry-run shows the plan and a fingerprint. Example: {"run": "01J..."}.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -647,9 +655,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `batch` | object[string, any] | yes | no | — | Its batch after this call. |
 | `state` | string | yes | no | — | live (dry run), reversed or reversed_partly. |
 | `reversed_now` | integer | yes | no | — | Records restored by this call. |
-| `steps` | array[object[string, any]] | yes | no | — | The plan: per record, the update that restores it. |
+| `steps` | array[object[string, any]] | yes | no | — | The plan: per record, the update that restores it (the first 50; `remaining` counts them all). |
+| `remaining` | integer | no | no | 0 | Records the plan restores (dry run), or still to restore. |
 | `blockers` | array[object[string, any]] | yes | no | — | What blocks the reversal (empty when it can run). |
-| `skipped` | array[object[string, any]] | yes | no | — | Records edited again since, left as they are (only with skip_changed), each naming who and when. |
+| `skipped` | array[object[string, any]] | yes | no | — | Records edited again since, left as they are (only with skip_changed), each naming who and when (the first 50; `skipped_total` counts them all). |
+| `skipped_total` | integer | no | no | 0 | How many records skip_changed leaves. |
 | `fingerprint` | string \| null | yes | yes | — | Pass to the real reversal so it refuses if the batch changed since. |
 | `reversal_batch` | string \| null | yes | yes | — | The batch recording the reversal, once begun. |
 | `event_id` | string \| null | yes | yes | — | Audit event that finished the reversal. |
@@ -662,10 +672,12 @@ Example JSON output:
   "blockers": [],
   "event_id": null,
   "fingerprint": null,
+  "remaining": 0,
   "reversal_batch": null,
   "reversed_now": 1,
   "run": "value",
   "skipped": [],
+  "skipped_total": 0,
   "state": "value",
   "steps": []
 }
@@ -766,7 +778,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
 | `run` | object[string, any] | yes | no | — | The edit: id, kind, state, label, atomic, reason, who and when, its batch (state, reversible, first blocker). |
-| `counts` | object[string, integer] | yes | no | — | selected, change, refused, unchanged; after apply also updated, merged, conflict, not_run. |
+| `counts` | object[string, integer] | yes | no | — | selected, change, refused, unchanged, pending (still to apply); after apply also updated, merged, conflict, not_run. |
 | `totals` | object[string, any] | yes | no | — | Per money column: the sum before and after over the records that change (exact, in the currency). |
 | `rows` | array[object[string, any]] | yes | no | — | The diff, per record: seq, record, label, version, status, changes [{field, before, after}], the refusal at preview, and the outcome at apply (merged_over, version_after). |
 | `next_cursor` | integer \| null | no | yes | null | Pass as `cursor` for more rows. |

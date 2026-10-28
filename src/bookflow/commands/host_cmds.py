@@ -74,7 +74,8 @@ class ServeInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     bind: str = Field(DEFAULT_BIND, description="Address to listen on, host:port", max_length=128)
     allow_network: bool = Field(False, description="Allow a bind address outside loopback")
-    secure_cookies: bool | None = Field(None, description="Set Secure on the session cookie; defaults on for non-loopback binds")
+    secure_cookies: bool | None = Field(None, description="Set Secure on the session cookie; defaults on for non-loopback binds and for an https public origin")
+    public_origin: str | None = Field(None, max_length=256, description="The https://host[:port] a TLS proxy in front of this host serves (for example what `colony serve` prints); links, the printed address and Origin checks use it, and the host then binds 127.0.0.1 only. Defaults to [host] public_origin in config.toml")
     background: bool = Field(False, description="Start the host as a background process, wait until it answers, print its address and return; its log is host.log in the data root")
 
 
@@ -85,6 +86,7 @@ class ServeOutput(BaseModel):
     socket: str | None
     pid: int
     secure_cookies: bool
+    public_origin: str | None = Field(None, description="The configured public origin, when the host sits behind a TLS proxy")
     companies_migrated: list[str]
     companies_failed: list[dict[str, str]]
     warnings: list[str] = Field(default_factory=list)
@@ -139,9 +141,11 @@ def is_loopback(host: str) -> bool:
         return False
 
 
-def cookie_security(host: str, explicit: bool | None) -> bool:
-    """Resolve the tri-state cookie option without losing an explicit false."""
-    return not is_loopback(host) if explicit is None else explicit
+def cookie_security(host: str, explicit: bool | None, public_origin: str | None = None) -> bool:
+    """Resolve the tri-state cookie option without losing an explicit false; an https public origin means Secure."""
+    if explicit is not None:
+        return explicit
+    return not is_loopback(host) or bool(public_origin and public_origin.startswith("https://"))
 
 
 def _serve_actor(s: Session) -> dict[str, Any]:
@@ -170,16 +174,19 @@ def _serve_actor(s: Session) -> dict[str, Any]:
 
 def run_serve(cmd, inp: ServeInput, ctx: Context, s: Session) -> dict[str, Any]:
     """The bootstrap path for `serve` (dispatch._run_bootstrap): no lock path, no plan/apply."""
+    from bookflow.core import public_origin as po
     host_name, port = parse_bind(inp.bind)
+    origin = po.resolve(s.data_root, inp.public_origin)
+    po.require_proxy_bind(origin, host_name, inp.bind)
     if not inp.allow_network and not is_loopback(host_name):
         raise BookflowError("E_NETWORK_NOT_ALLOWED", details={"bind": inp.bind})
     _serve_actor(s)
-    secure = cookie_security(host_name, inp.secure_cookies)
+    secure = cookie_security(host_name, inp.secure_cookies, origin)
     if inp.background:
         started = start_in_background(s.data_root, inp.bind, allow_network=inp.allow_network,
-                                      secure_cookies=inp.secure_cookies)
-        return ServeOutput(bind=inp.bind, url=started["url"], log=started["log"], socket=None, pid=started["pid"],
-                           secure_cookies=secure, companies_migrated=[], companies_failed=[],
+                                      secure_cookies=inp.secure_cookies, public_origin=origin)
+        return ServeOutput(bind=inp.bind, url=po.base_url(origin, started["url"]), log=started["log"], socket=None,
+                           pid=started["pid"], secure_cookies=secure, public_origin=origin, companies_migrated=[], companies_failed=[],
                            warnings=[] if started["started"] else ["a host was already answering at this address"]).model_dump(mode="json")
     import socket as _socket
     import uvicorn
@@ -191,7 +198,7 @@ def run_serve(cmd, inp: ServeInput, ctx: Context, s: Session) -> dict[str, Any]:
         # publication remains delayed until both listeners are ready.
         handle = start_serving(
             s.data_root, client_version(), bind=inp.bind,
-            secure_cookies=secure, publish_descriptor=False,
+            secure_cookies=secure, publish_descriptor=False, public_origin=origin,
         )
         tcp = _socket.socket(_socket.AF_INET6 if ":" in host_name else _socket.AF_INET, _socket.SOCK_STREAM)
         tcp.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
@@ -207,7 +214,7 @@ def run_serve(cmd, inp: ServeInput, ctx: Context, s: Session) -> dict[str, Any]:
                     "errno": errno.errorcode.get(e.errno, str(e.errno)),
                 },
             )
-        handle.host.write_descriptor(inp.bind, str(handle.socket))
+        handle.host.write_descriptor(inp.bind, str(handle.socket), public_origin=origin)
         log.warning("bookflow host listening on %s (socket %s)", inp.bind, handle.socket)
         from bookflow.adapters.http.admission import AdmissionProtocol
         server = uvicorn.Server(uvicorn.Config(handle.app, http=AdmissionProtocol, loop="asyncio",
@@ -230,7 +237,7 @@ def run_serve(cmd, inp: ServeInput, ctx: Context, s: Session) -> dict[str, Any]:
             for signum in (signal.SIGINT, signal.SIGTERM):
                 previous[signum] = signal.getsignal(signum)
                 signal.signal(signum, request_shutdown)
-        announce_when_ready(server, inp.bind)
+        announce_when_ready(server, inp.bind, origin)
         try:
             server.run(sockets=[tcp])
         finally:
@@ -244,7 +251,8 @@ def run_serve(cmd, inp: ServeInput, ctx: Context, s: Session) -> dict[str, Any]:
                 tcp.close()
             except OSError:  # pragma: no cover
                 pass
-    out = ServeOutput(bind=inp.bind, url=host_url(inp.bind), socket=str(handle.socket), pid=os.getpid(), secure_cookies=secure,
+    out = ServeOutput(bind=inp.bind, url=po.base_url(origin, host_url(inp.bind)), socket=str(handle.socket), pid=os.getpid(),
+                      secure_cookies=secure, public_origin=origin,
                       companies_migrated=list(handle.companies_migrated), companies_failed=list(handle.companies_failed))
     return out.model_dump(mode="json")
 
@@ -259,7 +267,7 @@ def host_url(bind: str) -> str:
 READY_PREFIX = "Bookflow is ready at "
 
 
-def announce_when_ready(server, bind: str) -> None:
+def announce_when_ready(server, bind: str, public_origin: str | None = None) -> None:
     """Print one line on stderr once uvicorn accepts requests, so nobody has to poll for it (R182)."""
     import sys
     import threading
@@ -270,7 +278,9 @@ def announce_when_ready(server, bind: str) -> None:
             if server.should_exit:
                 return
             time.sleep(0.02)
-        print(f"{READY_PREFIX}{host_url(bind)} (health check: GET {host_url(bind)}health)", file=sys.stderr, flush=True)
+        # The health check stays on the local address: that is what the proxy and `serve --background` reach.
+        where = f"{public_origin}/ (through its TLS proxy; locally {host_url(bind)})" if public_origin else host_url(bind)
+        print(f"{READY_PREFIX}{where} (health check: GET {host_url(bind)}health)", file=sys.stderr, flush=True)
 
     threading.Thread(target=watch, name="bookflow-ready", daemon=True).start()
 
@@ -300,7 +310,7 @@ def serving_pid(root: Path, bind: str) -> int | None:
 
 
 def start_in_background(root: Path, bind: str, *, allow_network: bool = False, secure_cookies: bool | None = None,
-                        wait_seconds: float = 180.0) -> dict[str, Any]:
+                        public_origin: str | None = None, wait_seconds: float = 180.0) -> dict[str, Any]:
     """Start `serve` detached and wait, inside this call, until it answers; or report the one already answering."""
     import subprocess
     import sys
@@ -317,6 +327,8 @@ def start_in_background(root: Path, bind: str, *, allow_network: bool = False, s
             "--data-root", str(root)]
     if allow_network:
         args.append("--allow-network")
+    if public_origin:
+        args += ["--public-origin", public_origin]
     if secure_cookies is not None:
         args.append("--secure-cookies" if secure_cookies else "--no-secure-cookies")
     fd = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
@@ -371,7 +383,8 @@ class ServeHandle:
 
 
 def start_serving(data_root: Path | str, version: str, *, bind: str = DEFAULT_BIND,
-                  secure_cookies: bool = False, publish_descriptor: bool = True) -> ServeHandle:
+                  secure_cookies: bool = False, publish_descriptor: bool = True,
+                  public_origin: str | None = None) -> ServeHandle:
     """Take the lock, migrate everything, build the app, listen on the socket, and write host.json."""
     from bookflow.adapters.http.app import create_app
     from bookflow.adapters.http.local import LocalListener
@@ -402,12 +415,12 @@ def start_serving(data_root: Path | str, version: str, *, bind: str = DEFAULT_BI
         raise
     try:
         migrated, failed = migrate_everything(host)
-        app = create_app(host, secure_cookies=secure_cookies)
+        app = create_app(host, secure_cookies=secure_cookies, public_origin=public_origin, bind=bind)
         sock = socket_path(root)
         listener = LocalListener(host, sock, make_local_handler(host, version))
         listener.start()
         if publish_descriptor:
-            host.write_descriptor(bind, str(sock))
+            host.write_descriptor(bind, str(sock), public_origin=public_origin)
     except BaseException:
         host.stop()
         raise
@@ -678,9 +691,16 @@ def administers_scope(s: Session, scope: Scope, required: str) -> bool:
 
 
 def authorize_membership_scope(s: Session, scope: Scope, required: str) -> None:
-    """A human administrator of that scope; installation shortcut only in legacy mode."""
+    """An administrator of that scope; installation shortcut only in legacy mode. An agent also needs membership.grant
+    there (capabilities-v1); hub.identity_admin checks its principal and ceilings when the edit is prepared."""
     if s.actor.kind != "human":
-        raise BookflowError("E_PERMISSION", details={"capability": "membership", "required_role": "human"})
+        from bookflow.hub import capabilities
+        command = getattr(s, "_permission_command", None) or "membership grant"
+        if not capabilities._activated(s):
+            raise capabilities.refusal("membership.grant", command, "activation_required")
+        covering = {(scope.scope_type, scope.scope_id), ("organization", scope.organization_id)}
+        if not capabilities.granted(s, s.actor.id, "membership.grant", covering):
+            raise capabilities.refusal("membership.grant", command)
     if not administers_scope(s, scope, required):
         raise BookflowError("E_PERMISSION", details={"capability": "membership", "required_role": required,
                                                      "role": actor_scope_role(s, scope)})
@@ -769,12 +789,21 @@ user_add = command("user add", scope="hub",
                    input_model=UserAddInput, output_model=UserAddOutput, writes={"hub"},
                    positional=["username"], required_role="hub_admin",
                    error_codes=["E_VALIDATION", "E_PERMISSION", "E_COMPANY_NOT_FOUND", "E_COMPANY_AMBIGUOUS", "E_ORGANIZATION_NOT_FOUND"],
-                   authorization="human hub administrator; the grant also needs administration of that scope")
+                   authorization="hub administrator, or an agent granted user.manage (no hub administrator, no password, no role above its own); the grant also needs administration of that scope")
 
 
 def authorize_user_add(inp: UserAddInput, ctx: Context, s: Session) -> Scope | None:
     if s.actor.kind != "human":
-        raise BookflowError("E_PERMISSION", details={"capability": "user", "required_role": "human"})
+        # user.manage (capabilities-v1): never an installation administrator, and never a password the agent would
+        # know -- setting one is the person's (user set-password), or the agent could sign in as them.
+        from bookflow.hub.capabilities import require_hub
+        require_hub(s, "user.manage", "user add")
+        if inp.hub_admin or inp.password:
+            raise BookflowError("E_PERMISSION", message=(
+                "An agent adds a user without a password and never as an installation administrator; an installation "
+                "administrator sets the password with `user set-password`."),
+                details={"capability": "user.manage", "reason": "above_own_authority",
+                         "field": "hub_admin" if inp.hub_admin else "password"})
     if inp.company is None and inp.organization is None:
         if inp.role != "standard":
             raise BookflowError("E_VALIDATION", details={"fields": [
@@ -803,10 +832,11 @@ def plan_user_add(inp: UserAddInput, ctx: Context, s: Session) -> Plan:
 @user_add.applier
 def apply_user_add(plan: Plan, ctx: Context, s: Session) -> Applied:
     inp, scope = plan.data["input"], plan.data["scope"]
-    generated = None if inp.password else _generate_password()
+    by_person = s.actor.kind == "human"
+    generated = None if inp.password or not by_person else _generate_password()
     row = users.create_human(s, username=inp.username, display_name=plan.data["display_name"],
                              created_by=s.actor.id, via=VIA(ctx), hub_admin=inp.hub_admin,
-                             password_hash=auth.hash_password(inp.password or generated))
+                             password_hash=auth.hash_password(inp.password or generated) if by_person else None)
     touched = [Touched("user", row["id"], "create", None, 1, row)]
     membership = None
     if scope is not None:
@@ -820,6 +850,9 @@ def apply_user_add(plan: Plan, ctx: Context, s: Session) -> Applied:
                    f"give them one with `membership grant {row['username']} --company <company>`.")
     if generated is not None:
         message = INITIAL_PASSWORD_SHOWN_ONCE + " " + message
+    if not by_person:
+        message += (f" They have no password yet: an installation administrator sets one with "
+                    f"`user set-password {row['username']}`.")
     out = UserAddOutput(user_id=row["id"], username=row["username"], display_name=row["display_name"],
                         hub_admin=bool(row["hub_admin"]), password=generated, membership=membership, message=message)
     summary = f"added the user {row['username']}"
@@ -870,7 +903,7 @@ membership_grant = command("membership grant", scope="hub",
                            positional=["user"],
                            error_codes=["E_USER_NOT_FOUND", "E_VALIDATION", "E_PERMISSION", "E_VERSION_CONFLICT",
                                         "E_COMPANY_NOT_FOUND", "E_COMPANY_AMBIGUOUS", "E_ORGANIZATION_NOT_FOUND"],
-                           authorization="human administrator of that company or organization; owner to grant or move an owner; installation shortcut only before permission activation")
+                           authorization="administrator of that company or organization (an agent: granted membership.grant, never its own, a principal's or a hub administrator's membership, no role or capability above its own or its principal's); owner to grant or move an owner; installation shortcut only before permission activation")
 
 
 def authorize_membership_grant(inp: MembershipGrantInput, ctx: Context, s: Session):
@@ -901,7 +934,7 @@ def plan_membership_grant(inp: MembershipGrantInput, ctx: Context, s: Session) -
         prepared = setup.edit(s,ctx,intent,preview=True)
         row = _prepared_membership_row(prepared, user, scope)
         out = _membership_out(row,user,scope,changed=prepared.visible.changed)
-        return Plan(MembershipOutput(**out.model_dump(),message=_grant_message(user,scope,inp.role,out.changed)),
+        return Plan(MembershipOutput(**out.model_dump(),message=_grant_message(user,scope,inp.role,out.changed,out.denies)),
                     data={'input':inp,'intent':intent,'user':user,'scope':scope})
     if inp.grants is not None or inp.denies is not None:
         raise BookflowError('E_VALIDATION',message='Activate permissions before configuring grants or denies.')
@@ -914,10 +947,22 @@ def plan_membership_grant(inp: MembershipGrantInput, ctx: Context, s: Session) -
                 data={"user": user, "scope": scope, "existing": existing, "role": inp.role})
 
 
-def _grant_message(user: dict[str, Any], scope: Scope, role: str, changed: bool) -> str:
+def _grant_message(user: dict[str, Any], scope: Scope, role: str, changed: bool, denies=()) -> str:
     if not changed:
-        return f"{user['username']} already had {role} access to {scope.scope_name}."
-    return f"{user['username']} has {role} access to {scope.scope_name}."
+        message = f"{user['username']} already had {role} access to {scope.scope_name}."
+    else:
+        message = f"{user['username']} has {role} access to {scope.scope_name}."
+    return message + _person_deny_note(user, denies)
+
+
+def _person_deny_note(user: dict[str, Any], denies) -> str:
+    """A person holds the capabilities-v1 acts at their role; denying one binds only the agents acting for them."""
+    from bookflow.hub.permission_capabilities_catalog import CAPABILITIES
+    named = sorted(x for x in (denies or ()) if x in CAPABILITIES)
+    if user.get("kind") != "human" or not named:
+        return ""
+    return (f" The deny of {', '.join(named)} binds only the agents acting for {user['username']}: as a person, "
+            f"{user['username']} still holds {'it' if len(named) == 1 else 'them'} at their role.")
 
 
 @membership_grant.applier
@@ -928,7 +973,7 @@ def apply_membership_grant(plan: Plan, ctx: Context, s: Session) -> Applied:
         user,scope = plan.data['user'],plan.data['scope']
         row = _prepared_membership_row(prepared, user, scope)
         out = _membership_out(row,user,scope,changed=prepared.visible.changed)
-        return Applied(MembershipOutput(**out.model_dump(),message=_grant_message(user,scope,row['role'],out.changed)),
+        return Applied(MembershipOutput(**out.model_dump(),message=_grant_message(user,scope,row['role'],out.changed,out.denies)),
                        [],'Updated company permissions.',audited=out.changed)
     user, scope, existing = plan.data["user"], plan.data["scope"], plan.data["existing"]
     role = plan.data["role"]
@@ -946,7 +991,7 @@ membership_revoke = command("membership revoke", scope="hub",
                             positional=["user"],
                             error_codes=["E_USER_NOT_FOUND", "E_RECORD_NOT_FOUND", "E_VALIDATION", "E_PERMISSION", "E_VERSION_CONFLICT",
                                          "E_COMPANY_NOT_FOUND", "E_COMPANY_AMBIGUOUS", "E_ORGANIZATION_NOT_FOUND"],
-                            authorization="human administrator of that company or organization; owner to revoke an owner; installation shortcut only before permission activation")
+                            authorization="administrator of that company or organization (an agent: granted membership.grant, never its own, a principal's or a hub administrator's membership, nor one carrying a deny it could not lift); owner to revoke an owner; installation shortcut only before permission activation")
 
 
 def authorize_membership_revoke(inp: MembershipSelector, ctx: Context, s: Session):

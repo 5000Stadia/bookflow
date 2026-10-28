@@ -158,7 +158,7 @@ def test_an_agent_is_refused(client, root):
         with pytest.raises(BookflowError) as error:
             dispatch_run(registry.get(name), body, ctx, data_root=str(root), company_selector=COMPANY,
                          company_source="option", _login="merge-agent")
-        assert error.value.code == "E_PERMISSION" and error.value.details.get("required_role") == "human"
+        assert error.value.code == "E_PERMISSION" and error.value.details.get("capability") == "party.merge"
     # The person the agent acts for may merge.
     assert as_user(root, "merge-person").run("customer merge", {"merged": MERGED, "into": SURVIVOR},
                                              company=COMPANY, reason="same customer twice")["changed"]

@@ -10,7 +10,7 @@ Database: `company`.
 |---|---|---|---|---|---|---|---|
 | `id` | VARCHAR(26) | no | — | primary key 1 | — | — | Stable ULID of this grid edit. |
 | `kind` | VARCHAR(32) | no | — | — | — | — | List edited: customer, vendor, item or account. |
-| `state` | VARCHAR(16) | no | — | — | — | — | previewed, applying, applied, applied_partly (some records refused), rolled_back (all or nothing, undone at a refusal) or failed (that undo was refused). |
+| `state` | VARCHAR(16) | no | — | — | — | — | previewed, applying, applied, applied_partly (some records refused), rolled_back (all or nothing, undone at a refusal), cancelled (stopped part way, what it changed put back) or failed (that undo was refused). |
 | `atomic` | BOOLEAN | no | — | — | — | — | True when the first refusal undoes the whole edit. |
 | `selection` | TEXT | no | — | — | — | — | JSON of the records chosen: the list filter, search text or named records. |
 | `operations` | TEXT | no | — | — | — | — | JSON of what was asked: cell changes, pasted text and column operations, in order. |

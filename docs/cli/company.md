@@ -1204,7 +1204,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 |---|---|
 | Scope | company |
 | Kind | write |
-| Required role | company admin; changing the closing date needs a person, never an agent |
+| Required role | company admin; changing the closing date needs company.closing-date |
 | Capability | company |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/company.update` |

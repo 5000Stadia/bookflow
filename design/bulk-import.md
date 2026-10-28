@@ -1059,8 +1059,9 @@ Each finding has a test that failed before its fix (`test_import_rules.py`, `tes
   to it (`applications`, `ap_applications`, not reversed, the payer not voided), and the blocker names the payment
   (`invoice INV-1 is in use: payment 1 refers to it`) unless the same batch made it. **Edited again** for a document is
   a revision after its first (a settlement changes its version, not its revisions). The released keys let the same
-  file preview as new, but a deleted document keeps its number, so the corrected file needs new numbers; the check
-  says so. A bill payment the batch made is unapplied (`bill payment unapply`) and then voided, as a bank import's
+  file preview as new, and the reversal retires each document's number first (*Number reuse after reversal* below),
+  so the corrected file imports again with the same numbers. A bill payment the batch made is unapplied (`bill
+  payment unapply`) and then voided, as a bank import's
   reversal does; a purchase order is read from `purchase_orders` and its revisions from `purchase_order_revisions`.
   An all-or-nothing undo (a refusal mid-run, or a cancel) runs its nested deletes under the run's stored reason, so
   a run called without one still lands nothing.
@@ -1103,16 +1104,36 @@ Each finding has a test that failed before its fix (`test_import_rules.py`, `tes
     once) exactly (`amount_mismatch`); with no Rate column, Amount is the line amount. A journal with a Debit and a
     Credit column maps (`lines[].debit`, `lines[].credit` become the line's side and amount). An estimate line's
     estimated unit cost is money (sub-cent, as typed) and its markup percent a decimal.
-  - *Number reuse after reversal: not built.* The Navigator's decision (a deleted document frees its number, a
-    voided one keeps it unless an import reversal voided it; lookups by number prefer the live document) assumed no
-    unique index on document numbers. The books have three: `uq_transaction_type_number` (and
-    `uq_transaction_receivable_number` for invoices and credit memos), `uq_purchase_order_number` and
-    `uq_work_kind_number`, and a deleted document's header is fenced immutable (`*_deletions_transaction_fence`). Reuse
-    needs a migration that replaces those constraints with guard triggers counting standing rows only (rebuilding
-    `transactions`, `purchase_orders` and `work_documents`), or renaming a freed header; that choice is the
-    Navigator's. Until then a reversed import's numbers stay held and the corrected file takes new numbers (the check
-    says so); the command-side changes (live-first lookups, occupancy that skips freed numbers) are ready apart from
-    the schema.
+  - *Number reuse after reversal* (Navigator, decided 2026-10-28; no migration). Reversing an import retires each
+    document's number before removing it, so the corrected file imports again with the same numbers and the books
+    equal one import (`test_every_kind_imports_reverses_to_the_exact_prior_state_and_the_same_file_imports_again`,
+    all 14 kinds). The retired form is `<number>~R<batch>`: the original (cut to fit 64 characters), `~R` and the
+    import batch id's last 6 characters upper-cased, taking 10 or the whole id if a row of that table already holds
+    it, so it never collides with a real number; the columns have no pattern beyond non-blank and 64 characters.
+    Where the family's update takes a number (`invoice`, `credit-memo`, `sales-receipt`, `estimate`, `sales-order`,
+    `bill`, `vendor-credit`, `purchase-order`, `journal`, `check`, `payment`), a `renumber` step runs that update
+    (`<noun> update`, a revision and an audit event of its own, `source_ref reverse:<batch>` under the reversal's
+    reason; a payment's after its unapply, with operation key `retire-<id>`), then the delete or void. A check's
+    number in the file is its cheque number, so its update renumbers the cheque (`check_instruments`) and the
+    journal-series document number stays. The probe dry-runs the renumber and the retiring command against the
+    standing document, so a refusal (a closed period, a missing grant: the update needs `ledger.post`, or
+    `customer-work` for estimates and sales orders) blocks before anything changes. A reversal that stopped after
+    renumbering goes on from there: the renumber is not repeated, and that one revision is not an `edited_again`.
+    Kinds with no such update (`bill payment void`, `inventory void`, `card-charge delete`) renumber inside the
+    retiring command's own transaction (`batches._retire`, through dispatch's `batch_before` hook, which then plans
+    in that write), with a bill payment's cheque number on its instrument; there the original stays on the revision
+    and in the batch effect, not in a revision of its own. The reversal's batch effect for the step carries
+    `number` and `retired_as` (`batch show <reversal>`).
+    Where the original shows: the document's first revision (`invoice history --include-deleted`, the
+    `transaction_revisions` rows), the renumbering's audit event (`audit list --record-id <id> --command
+    "invoice update"`) and the batch effect. `<noun> show --include-deleted` and `transaction find` (voided kinds
+    only; it leaves deleted ones out) show the retired number, whose `~R` marks it removed by an import reversal
+    (`test_a_reversed_import_retires_its_numbers_where_history_find_and_audit_say_so_and_a_typed_delete_keeps_it`).
+    Lookups by number across kinds (`sales.resolve` with several types, `money_out.resolve`,
+    `prepayments.resolve_document`) prefer the standing document (`document_numbers.prefer_live`), so a voided one
+    of another kind never makes it ambiguous; within one kind the unique constraints allow one row per number.
+    *Known limit against the anchor:* a document a person deletes or voids keeps its number, as before; the anchor
+    frees a deleted document's number. The check still says so for those (`a deleted document keeps its number`).
 - **Seeded check** (`test_seeded_document_imports_payments_and_reversals_keep_the_invariants`, seeds 5, 41, 107, 20
   steps each): invoice files from two sources, reruns, partial payments to random open invoices and reversals of
   random live batches; after every step the books balance (Python integers over posting lines), every invoice's due
@@ -1141,7 +1162,7 @@ per call), the preview about 0.055 s per invoice, and the reversal about 0.15 s 
   the record.
 - **Commands** (`company/bulk_edit.py`, `commands/bulk_edit_cmds.py`): `bulk-edit columns`, `grid`, `show`, `query`
   (member reads) and `preview`, `apply`, `reverse` (standard writes), under the new capability `bulk-edit` (layer
-  `bulk-edit-v1` on `bank-line-v1`: 841 commands, descriptor a7c58783), each record checked again by its own
+  `bulk-edit-v1`, re-chained at the merge onto `capabilities-v1`: 841 commands, descriptor 4d42ba55), each record checked again by its own
   `update` and `show`. No `approve`, no threshold (Kabe's 2026-10-28 ruling above).
 - **Columns** are the update command's scalar inputs that its `show` also gives, so a reversal can restore each
   exactly: never nested records (addresses, contacts, members, vendor profiles, site settings), never an account's

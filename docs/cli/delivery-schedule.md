@@ -4,7 +4,7 @@
 
 ## `delivery-schedule create`
 
-Save a recurring batch: kind and selection as delivery batch takes them (statements take a period word), a frequency from start_date (a month-end start stays at month end), optional stop_date or remaining_runs. Each slot runs once on the host; after downtime only the latest missed slot runs, within catch_up_days (7). mode send is a draft until a person makes it live. Missing details are refused, never guessed. Example: {"name": "Month-end statements", "kind": "statement", "period": "month-to-date", "balance_over": "0", "frequency": "monthly", "start_date": "2026-10-31", "mode": "send"}.
+Save a recurring batch: kind and selection as delivery batch takes them (statements take a period word), a frequency from start_date (a month-end start stays at month end), optional stop_date or remaining_runs. Each slot runs once on the host; after downtime only the latest missed slot runs, within catch_up_days (7). mode send is a draft until a holder of automate.delivery makes it live. Missing details are refused, never guessed. Example: {"name": "Month-end statements", "kind": "statement", "period": "month-to-date", "balance_over": "0", "frequency": "monthly", "start_date": "2026-10-31", "mode": "send"}.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -260,7 +260,7 @@ Example JSON output:
 
 ## `delivery-schedule live`
 
-Make a send schedule live: its runs then release with your go and pause if you lose it. One check first: run it with dry_run, show the person the check (selection, cadence, first run, who it would reach today), then run it with the check's fingerprint as confirm. A person's act.
+Make a send schedule live: its runs then release with your go and pause if you lose it. One check first: run it with dry_run, show your principal the check (selection, cadence, first run, who it would reach today), then run it with the check's fingerprint as confirm. Needs automate.delivery, which a principal may grant an agent.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -1576,7 +1576,7 @@ Example JSON output:
 
 ## `delivery-schedule update`
 
-Change a schedule. A change to what or when it sends returns a live one to draft, unless a person passes the changed schedule's check fingerprint as confirm (dry_run shows it).
+Change a schedule. A change to what or when it sends returns a live one to draft, unless a holder of automate.delivery passes the changed schedule's check fingerprint as confirm (dry_run shows it).
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

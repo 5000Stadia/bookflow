@@ -1,4 +1,4 @@
-"""Add grid edits (R107 increment 6) without rewriting any accepted descriptor.
+"""Add grid edits (R107 increment 6) on capabilities-v1, without rewriting any accepted descriptor.
 
 A new capability, `bulk-edit` (design/bulk-import.md §8), held at `member` by every role and at `standard` by
 standard, admin and owner, as list writes are: `bulk-edit columns`, `grid`, `show` and `query` are member reads;
@@ -11,10 +11,10 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_bank_line_catalog as previous, permission_catalog as c
+from . import permission_capabilities_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = '034b64050e284452d9c597f9edf5b849c773c63b'
+SOURCE_COMMIT = 'cc14944b6eba4f92ac7b5d239cbfea68b0323fae'
 _OWNER = 'bookflow.commands.bulk_edit_cmds.{}|src/bookflow/commands/bulk_edit_cmds.py'
 # (name, threshold, planner)
 _ADDED = (
