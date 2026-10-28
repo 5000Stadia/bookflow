@@ -2597,6 +2597,10 @@ MATRIX['pick-list show'] = {'E_RECORD_NOT_FOUND': 'unknown pick list', 'E_FEATUR
 MATRIX['pick-list query'] = {'E_RECORD_NOT_FOUND': 'unknown site or order', 'E_VALIDATION': 'invalid input',
                              'E_FEATURE_DISABLED': 'picking is off'}
 MATRIX['report shipped-not-invoiced'] = {'E_RECORD_NOT_FOUND': 'unknown customer', 'E_VALIDATION': 'invalid input'}
+MATRIX['report order-fulfillment'] = {'E_RECORD_NOT_FOUND': 'unknown site or customer',
+                                     'E_VALIDATION': 'an unknown status', 'E_QUERY_STALE': 'books changed between pages'}
+MATRIX['report shipments'] = {'E_RECORD_NOT_FOUND': 'unknown customer, site or ship method',
+                              'E_VALIDATION': 'date_from after date_to', 'E_QUERY_STALE': 'books changed between pages'}
 MATRIX['shipment invoice'] = {
     'E_VALIDATION': 'an invoice dated before the ship date, nothing left to invoice',
     'E_RECORD_NOT_FOUND': 'unknown shipment or account',

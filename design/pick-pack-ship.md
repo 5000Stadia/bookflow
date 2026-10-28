@@ -815,6 +815,58 @@ For the builder, defaults standing unless review finds otherwise:
   the review's lows 5 (dry run of `--invoice` does not foresee a refused invoice; no invoice-now on the pack screen's
   Ship) and 6 (`_freight_facts` compares an omitted item as the company default).
 
+## As built: increment 5
+
+- **`report order-fulfillment`** (`company/fulfillment.py`), the worksheet for every shipper: each open, active sales
+  order with stocked units to ship or shipped and not invoiced, by line and in total, in base units: ordered, shipped,
+  shipped not invoiced, to ship, **can ship now**, on picks and picked, drafted and packed; to-ship, shippable and
+  shipped-not-invoiced amounts at the order prices (exact integers, rounded per line); promised ship date (the order's
+  ship date) and days late against `as_of` (default today); fulfillment status beside the billing progress; the live
+  pick lists and drafts holding it.
+- **Can ship now is what `shipment post --sales-order <n>` ships**, by `shipments._plan`'s own steps with no lines
+  named: `_order_lines` to ship, less what live drafts hold, at the site `shipment post` picks (the one site the
+  lines to ship name, else the default site) or the `site` asked for, taken in line order from what is available to
+  the order (on hand less what every other document commits and pending builds reserve, as `available_to`). The
+  availability is read once for the company and the order's own commitment added back, not once per order. An order a
+  live pick list holds (picking on) is refused by `shipment post` from the order alone, so it reads zero with a note
+  naming the list and `shipment post --pick-list`. `by_site` (companies with more than one site) gives the same figure
+  at the row's site, every site a line to ship names, and the default site when a line names none.
+- **Statuses (§2):** `shipped` once nothing is left to ship; else, while pick and pack is on, `packed` (a live draft
+  with every unit boxed), `picking` (a live open list with units still to pick), `picked` (picked units waiting); else
+  `partly_shipped` once something shipped, `to_pick` before. With the switch off only `to_pick` (shown as To ship),
+  `partly_shipped` and `shipped` occur.
+- **Sorts and filters:** sort `date` (order date, then number, natural), `shippable_amount` (largest first), `customer`;
+  filters `site` (orders with something to ship there, or shipped from there and not invoiced), `customer`, `status`
+  (comma-separated, checked in the planner so the report export's sample filter stays valid), `complete_only` (every
+  line's to-ship covered by can-ship-now plus what drafts hold, at the row's site), `can_ship`, `shipped_not_invoiced`,
+  and **`newly_shippable`** (a date): orders that can ship more of some line now than with the stock on hand at the end
+  of that date, everything else as now; so a receipt dated after it makes a short order newly shippable, and a shipment
+  of another order never does. Totals cover every row; rows page through `ledger.page_of`, so report export covers it.
+- **`report shipments`**: posted shipments (current revision shipped) by ship date, `date_to` default today,
+  `date_from` optional; filters customer, site, ship method; each with order, customer, site, ship method, carrier,
+  tracking numbers (the shipment's and its boxes'), quantity, boxes with type, weight and tracking, total weight and
+  unweighed units (the pack screen's own arithmetic), freight to bill; totals of shipments, boxes and weight.
+- **Permission layer `worksheet-v1`** on `packing-v1`: both reports `reports` member (776 commands, descriptor
+  daba86b3). No migration: the worksheet stores nothing.
+- **Browser.** Items > Fulfillment (`/inventory/fulfillment`), opening on Can ship now, with tabs To pick, Picking, To
+  pack (picked), Shipped not invoiced and All while pick and pack is on, and To ship instead of the three without it;
+  sort, site, customer, shippable-since and complete-only filters; per order its lines in a disclosure. Selected orders
+  take **Ship** (`shipment post` per order) and **Create invoices** (`sales-order invoice` per order), each through htmx,
+  each order its own command so a refusal of one leaves the rest standing and the result lists each; **Print packing
+  slips** (one PDF from a real click, a slip per order: its live draft, else its latest shipment); while the switch
+  is on, **Create pick list** (one list for the selected orders) and **Print pick lists** (each live list holding them,
+  one per page). Items also lists Shipments by date (`report shipments`).
+- **Measured** (this machine, under the other builders' load): worksheet on the demo 0.26 s (one open order with
+  stock to ship); on 1,000 open order lines (200 orders of five lines over 20 stocked items) 2.5 s for all 200 rows
+  (`test_fulfillment_worksheet`, which keeps a 30 s bound against a regression).
+- **Batch reversal: candidates for R186.** Batch Ship and batch Create invoices write one shipment or invoice per order
+  and are undone one by one today (`shipment void`, `invoice void`). Kabe's rule says a large batch should be
+  reversible as one unit; the shared batch ledger is R107's, so these two actions (and Create pick list, one list,
+  already one `pick-list cancel`) are recorded as R186 candidates to record their documents as one batch and void it
+  whole. Printing writes nothing.
+- **Not in this increment:** a fulfillment column on `sales-order show` (the worksheet gives it); a per-line
+  selection in the batch (whole orders only, as the anchor's worksheet ships them).
+
 ## Decided (2026-10-26)
 
 - K1 carrier integration: none. Carrier and tracking are recorded and printed as text only (Kabe, gate gba01e0).
