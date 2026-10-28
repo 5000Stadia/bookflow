@@ -341,3 +341,94 @@ def test_seeded_batches_duplicate_nothing_name_every_skip_and_cancel_whole(desk,
                     events = [e['event'] for e in run('delivery history', {'message': row['number']})['events']]
                     assert 'exported' in events, (seed, step, number, row['number'])
     print('batch seed', seed, 'batches', len(batches), dict(sorted(tally.items())))
+
+
+# ---------------------------------------------------------------- increment 4: schedules on a test clock
+
+SCHEDULE_STEPS = int(os.environ.get('BF_DELIVERY_SCHEDULE_STEPS', '30'))
+
+
+@pytest.mark.parametrize('seed', SEEDS)
+def test_seeded_schedules_run_once_per_slot_never_catch_up_past_the_window_and_send_nothing_without_authority(
+        desk, seed, monkeypatch):
+    """Two schedules (daily unsent invoices in send mode, made live; month-end statements as drafts) on a clock moved
+    0 to 12 days a step, with runs, stops and resumes, a live schedule made live again, and its establisher losing
+    and regaining the authority. After every step: one run per slot; every run began no more than its window after
+    its slot; a run that began while the establisher lacked the authority carries no go, and neither do its
+    messages; nothing ran while stopped."""
+    from datetime import date, datetime, timedelta, timezone
+    from bookflow.company import delivery_batches, delivery_schedules as ds
+    from bookflow.core import clock as bf_clock
+    monkeypatch.setattr(delivery_batches, 'CHUNK', 2)
+    rng, run, tally = random.Random(seed), desk['run'], {}
+    today = [date(2026, 3, 1)]
+    monkeypatch.setattr(bf_clock, 'now', lambda: datetime.combine(today[0], datetime.min.time(),
+                                                                  timezone.utc).replace(hour=12))
+    lost = [False]
+    real = ds.authority_lost
+    monkeypatch.setattr(ds, 'authority_lost', lambda s, user: 'the establisher lost the authority' if lost[0]
+                        else real(s, user))
+    run('customer update', {'customer': desk['customer'], 'preferred_delivery_method': 'email'})
+    run('delivery-schedule create', {'name': 'Daily', 'kind': 'invoice', 'unsent': True, 'frequency': 'daily',
+                                     'start_date': '2026-03-01', 'mode': 'send', 'catch_up_days': 3})
+    run('delivery-schedule create', {'name': 'Month end', 'kind': 'statement', 'period': 'previous-month',
+                                     'frequency': 'monthly', 'start_date': '2026-03-31'})
+
+    def make_live():
+        check = run('delivery-schedule live', {'schedule': 'Daily'}, dry_run=True)['check']
+        run('delivery-schedule live', {'schedule': 'Daily', 'confirm': check['fingerprint']}, reason='Turn on')
+
+    make_live()
+    began_without = set()
+    stopped = {'Daily': False, 'Month end': False}
+    counter = [0]
+    for step in range(SCHEDULE_STEPS):
+        choice = rng.choice(('advance', 'advance', 'run', 'run', 'run', 'lose', 'stop', 'invoice', 'invoice', 'live'))
+        try:
+            if choice == 'advance':
+                today[0] += timedelta(days=rng.choice((0, 1, 1, 2, 3, 5, 12)))
+            elif choice == 'run':
+                for name in ('Daily', 'Month end'):
+                    shown = run('delivery-schedule show', {'schedule': name, 'runs': 400})
+                    before = {r['run_id'] for r in shown['runs']}
+                    out = run('delivery-schedule run', {'schedule': name}, reason='Tick')
+                    started = [r for r in out['ran'] if r['run_id'] not in before and r['state'] != 'skipped']
+                    assert not (started and stopped[name]), (seed, step)
+                    if name == 'Daily' and (lost[0] or out['state'] == 'paused'):
+                        began_without |= {r['run_id'] for r in started}
+            elif choice == 'lose':
+                lost[0] = not lost[0]
+            elif choice == 'stop':
+                name = rng.choice(('Daily', 'Month end'))
+                run('delivery-schedule ' + ('resume' if stopped[name] else 'pause'), {'schedule': name})
+                stopped[name] = not stopped[name]
+            elif choice == 'invoice':
+                counter[0] += 1
+                run('invoice post', {'number': f'SCH-{seed}-{counter[0]}', 'date': today[0].isoformat(),
+                                     'customer': desk['customer'], 'lines': [{'item': 'Site visit', 'quantity': '1'}]},
+                    reason='Seed')
+            elif choice == 'live' and not lost[0]:
+                make_live()
+            tally[choice] = tally.get(choice, 0) + 1
+        except BookflowError as e:
+            assert e.code in EXPECTED_REFUSALS | {'E_RECORD_NOT_FOUND'}, (seed, step, choice, e.code, e.message)
+            tally['refused ' + e.code] = tally.get('refused ' + e.code, 0) + 1
+        for name in ('Daily', 'Month end'):
+            shown = run('delivery-schedule show', {'schedule': name, 'runs': 400})
+            slots = [r['slot_date'] for r in shown['runs']]
+            assert len(slots) == len(set(slots)), (seed, step, name)  # one run per slot
+            for r in shown['runs']:
+                if r['state'] in ('done', 'drafting'):  # no catch-up beyond the window
+                    began = date.fromisoformat(r['started_at'][:10])
+                    assert (began - date.fromisoformat(r['slot_date'])).days <= shown['catch_up_days'], (seed, step, r)
+                if r['run_id'] in began_without:
+                    assert not r['go'], (seed, step, r)
+                    if r['batch']:
+                        msgs = run('delivery query', {'batch': r['batch'], 'status': 'all', 'limit': 500})['rows']
+                        assert all(not m['status'] in ('sent', 'sending') and (m['status'] != 'ready'
+                                   or m['waiting_for_go']) for m in msgs), (seed, step, r)
+    runs = run('delivery-schedule show', {'schedule': 'Daily', 'runs': 400})['runs']
+    tally['runs done'] = sum(r['state'] == 'done' for r in runs)
+    tally['slots skipped'] = sum(r['state'] == 'skipped' for r in runs)
+    tally['runs without authority'] = len(began_without)
+    print('schedule seed', seed, dict(sorted(tally.items())))

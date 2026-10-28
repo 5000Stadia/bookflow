@@ -93,7 +93,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # reverse/cancel, batch show/query.
     # +2 the fulfillment worksheet (R181 increment 5): report order-fulfillment, report shipments.
     # +7 flags and batches (R112 increment 3): delivery flag/unflag/queue/batch/batch-show/batch-query/batch-cancel.
-    assert len(rows) == 812
+    # +8 recurring schedules (R112 increment 4): delivery-schedule create/update/live/pause/resume/run/show/query.
+    assert len(rows) == 820
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
@@ -390,7 +391,9 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # cursor, report shipments' date_from, customer, site, ship_method and cursor -- their null branches.
     # 4146 -> 4167 (R112 inc 3, measured): seven delivery commands' optional inputs, draft's documents, send's
     # messages and batch, approve's and query's batch, company update's auto-flag date -- their null branches.
-    assert sum(len(group["paths"]) for group in mapped)==4167
+    # 4167 -> 4208 (R112 inc 4, measured): eight delivery-schedule commands' optional inputs (the selection, template,
+    # timing, mode, catch-up window, confirm and expected_version) -- their null branches.
+    assert sum(len(group["paths"]) for group in mapped)==4208
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

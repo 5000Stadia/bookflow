@@ -310,7 +310,10 @@ DELIVERY_COMMANDS = frozenset(('delivery draft', 'delivery update', 'delivery se
     'delivery-connection check', 'delivery-connection show', 'delivery-connection query',
     # R112 increment 3: flags, the queue and batches.
     'delivery flag', 'delivery unflag', 'delivery queue', 'delivery batch', 'delivery batch-show', 'delivery batch-query',
-    'delivery batch-cancel'))
+    'delivery batch-cancel',
+    # R112 increment 4: recurring schedules.
+    'delivery-schedule create', 'delivery-schedule update', 'delivery-schedule live', 'delivery-schedule pause',
+    'delivery-schedule resume', 'delivery-schedule run', 'delivery-schedule show', 'delivery-schedule query'))
 
 # R107 increments 0 and 1: a file previewed, run, read back, its batch read and reversed; another cancelled.
 IMPORT_COMMANDS = frozenset(('import kinds', 'import template', 'import preview', 'import run', 'import show',
