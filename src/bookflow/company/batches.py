@@ -477,7 +477,7 @@ def _in_use(s, record_type: str, ids: list[str], made_here: set[str]) -> dict[st
         sql = (f'SELECT "{column}", {key}, {document} FROM "{table}" '
                f'WHERE "{column}" IN (SELECT value FROM json_each(?))')
         for target, referrer, transaction in s.company.raw.execute(sql, (payload,)).fetchall():
-            if table == rec.table.name and referrer in made_here:
+            if referrer in made_here:  # a record the same batch made (a customer using a type it made too)
                 continue
             uses = found.setdefault(target, {'tables': [], 'rows': [], 'documents': []})
             if transaction and len(uses['documents']) < 3:
@@ -557,7 +557,7 @@ def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
         by_type.setdefault(g['record_type'], []).append(g['record_id'])
     current = {t: _current(s, t, ids) for t, ids in by_type.items()}
     in_use = {t: _in_use(s, t, [g['record_id'] for g, _, _ in pending if g['record_type'] == t
-                                and g['action'] == 'created'], {i for rt, i in made if rt == t})
+                                and g['action'] == 'created'], {i for _, i in made})
               for t in by_type}
     steps_out, work = [], []
     for g, rec, steps_done in pending:

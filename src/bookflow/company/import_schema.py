@@ -15,12 +15,21 @@
   what runs is what was previewed) and ``run``.
 - ``import_keys``: the key ledger. A record an import made, by source and key hash, unique among unreleased keys; a
   reversal releases them (``released_by``), so the corrected file imports again as new.
+
+**Saved mappings and decisions** (co0110, increment 2; ``import_mappings.py``):
+
+- ``import_sources``: a named origin of files for one kind. Never deleted; only ``active``, ``version`` and who and
+  when changed.
+- ``import_mappings``: the recipe for a source's files, append-only: a mapping changes only by saving a new version.
+- ``import_decisions``: what a person or agent decided about an unknown reference in a run (map, create, skip).
+  Immutable.
 """
 import sqlalchemy as sa
 
 BATCH_STATES = ('live', 'reversing', 'blocked', 'reversed', 'reversed_partly')
 ORDERINGS = ('strict', 'record')
 EFFECT_ACTIONS = ('created', 'updated', 'linked', 'rule_learned', 'reversed')
+DECISION_ACTIONS = ('map', 'create', 'skip')
 RUN_STATES = ('previewed', 'running', 'stopped', 'waiting', 'done', 'cancelled', 'rolled_back', 'failed')
 MODES = ('create', 'update', 'upsert')
 PHASES = ('preview', 'run')
@@ -150,5 +159,62 @@ def define_tables(metadata, C, T):
         sa.Index('ix_import_keys_record', 'record_type', 'record_id'),
         description='The import key ledger: which record each keyed row made, so a re-run never duplicates. Only the '
                     'release columns change, once.')
+    sources = T('import_sources',
+        ident('id', 'Stable ULID of this source.', primary_key=True),
+        C('name', sa.String(200), 'Its name as given ("Square customer export").', nullable=False),
+        C('name_key', sa.String(200), 'The name trimmed, case-folded and with spaces collapsed; unique.', nullable=False),
+        C('kind', sa.String(32), 'The import kind its files hold.', nullable=False),
+        C('active', sa.Boolean, 'False once deactivated: its mapping no longer matches files.', nullable=False),
+        C('version', sa.Integer, 'Latest mapping version (and optimistic-concurrency version of the source).',
+          nullable=False),
+        C('created_at', sa.String(32), 'UTC time the source was first saved.', nullable=False),
+        C('created_by', sa.String(26), 'Principal that first saved it.', nullable=False),
+        C('updated_at', sa.String(32), 'UTC time of the last new version or deactivation.', nullable=False),
+        C('updated_by', sa.String(26), 'Principal that made that change.', nullable=False),
+        sa.Index('ux_import_sources_name_key', 'name_key', unique=True),
+        description='Named origins of import files, one kind each. Never deleted; only active, version and who and '
+                    'when change.')
+
+    mappings = T('import_mappings',
+        ident('id', 'Stable ULID of this mapping version.', primary_key=True),
+        ident('source_id', 'The source it belongs to.', 'import_sources.id'),
+        C('version', sa.Integer, 'Version within the source, from 1.', nullable=False),
+        C('header_fingerprint', sa.String(64), 'SHA-256 of the sorted set of normalized headers.', nullable=False),
+        C('headers', sa.Text, 'JSON list of the file headers as saved, in file order.', nullable=False),
+        C('columns', sa.Text, 'JSON of file header to input path, for the mapped headers.', nullable=False),
+        C('formats', sa.Text, 'JSON of decimal mark, thousands separator, date order, sheet and delimiter.',
+          nullable=False),
+        C('key_paths', sa.Text, 'JSON list of the input paths that key a row; empty when keyed by content.',
+          nullable=False),
+        C('mode', sa.String(8), 'create, update or upsert.', nullable=False),
+        C('on_unknown', sa.String(8), 'What an unknown reference does: ask.', nullable=False),
+        C('value_maps', sa.Text, 'JSON of input path to {file text: replacement}, applied before reading a cell.',
+          nullable=False),
+        C('defaults', sa.Text, 'JSON of input path to a value given to rows that have none.', nullable=False),
+        ident('run_id', 'The run it was saved from; null when none.', 'import_runs.id', nullable=True),
+        C('created_at', sa.String(32), 'UTC time it was saved.', nullable=False),
+        C('created_by', sa.String(26), 'Principal that saved it.', nullable=False),
+        sa.Index('ux_import_mappings_version', 'source_id', 'version', unique=True),
+        sa.Index('ix_import_mappings_fingerprint', 'header_fingerprint'),
+        description='Saved import mappings, append-only: each save is a new version of its source.')
+
+    decisions = T('import_decisions',
+        ident('id', 'Stable ULID of this decision.', primary_key=True),
+        ident('run_id', 'The run it decides for.', 'import_runs.id'),
+        C('field', sa.String(200), 'Input path of the reference (terms_id).', nullable=False),
+        C('value', sa.Text, 'The text the file wrote.', nullable=False),
+        C('value_key', sa.String(400), 'That text normalized (trimmed, case-folded, spaces collapsed).',
+          nullable=False),
+        C('action', sa.String(8), 'map (to an existing record), create (a new one) or skip (its rows).',
+          nullable=False),
+        C('target', sa.Text, 'The name mapped to or created; null for skip.', nullable=True),
+        C('input', sa.Text, "JSON of the create command's further input; null otherwise.", nullable=True),
+        C('remembered', sa.Boolean, "True when the map was also saved in the source's value maps.", nullable=False),
+        C('created_at', sa.String(32), 'UTC time it was decided.', nullable=False),
+        C('created_by', sa.String(26), 'Principal that decided it.', nullable=False),
+        sa.CheckConstraint(f'action IN ({quoted(DECISION_ACTIONS)})', name='ck_import_decision_action'),
+        sa.Index('ux_import_decisions_value', 'run_id', 'field', 'value_key', unique=True),
+        description='Decisions about unknown references in an import run. Immutable.')
     return {'batches': batches, 'batch_effects': effects, 'import_runs': runs, 'import_rows': rows,
-            'import_keys': keys}
+            'import_keys': keys, 'import_sources': sources, 'import_mappings': mappings,
+            'import_decisions': decisions}

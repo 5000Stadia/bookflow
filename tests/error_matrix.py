@@ -2614,6 +2614,16 @@ MATRIX['import kinds'] = {}
 MATRIX['import template'] = {'E_VALIDATION': 'unknown kind'}
 for _name in ('import show', 'import query', 'import rows', 'import errors', 'batch show', 'batch query'):
     MATRIX[_name] = {'E_VALIDATION': 'invalid input', 'E_RECORD_NOT_FOUND': 'unknown run or batch'}
+# R107 increment 2 and Kabe's rules.
+MATRIX['import check'] = {'E_VALIDATION': 'no file or two, an unknown kind or column, an unreadable or non-text file',
+                          'E_RECORD_NOT_FOUND': 'unknown attachment or saved mapping', 'E_IO': 'an attachment body collected'}
+MATRIX['import decide'] = dict(_IMPORT_WRITE)
+MATRIX['import-mapping save'] = dict(_IMPORT_WRITE, E_VERSION_CONFLICT='the source was saved meanwhile')
+MATRIX['import-mapping deactivate'] = dict(_IMPORT_WRITE, E_VERSION_CONFLICT='the source changed meanwhile')
+for _name in ('import-mapping show', 'import-mapping history'):
+    MATRIX[_name] = {'E_VALIDATION': 'invalid input', 'E_RECORD_NOT_FOUND': 'unknown source or version'}
+MATRIX['import-mapping query'] = {}
+MATRIX['import-mapping match'] = dict(MATRIX['import check'])
 MATRIX['report shipped-not-invoiced'] = {'E_RECORD_NOT_FOUND': 'unknown customer', 'E_VALIDATION': 'invalid input'}
 MATRIX['report order-fulfillment'] = {'E_RECORD_NOT_FOUND': 'unknown site or customer',
                                      'E_VALIDATION': 'an unknown status', 'E_QUERY_STALE': 'books changed between pages'}

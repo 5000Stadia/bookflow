@@ -78,8 +78,10 @@ def test_random_imports_edits_and_reversals_keep_the_invariants(books, seed):
             ids_before = {n: books.run('customer show', {'customer': n})['id'] for n in names
                           if n in active_customers(books)}
             snapshots = {i: _shown(books, i) for i in ids_before.values()}
+            # A name another source made differs, and the model expects it left as it is: accepted explicitly, as all
+            # or nothing otherwise refuses it.
             preview = books.run('import preview', {'kind': 'customer', 'content': text, 'source': source,
-                                                   'mode': mode})
+                                                   'mode': mode, 'allow': ['differs']})
             run_id = preview['run']['id']
             while True:
                 out = books.run('import run', {'run': run_id, 'limit': rng.choice([1, 2, 50])})
@@ -162,4 +164,96 @@ def test_random_imports_edits_and_reversals_keep_the_invariants(books, seed):
         assert len(names) == len(set(names))
     assert _receivable(books) == invoices * INVOICE_MINOR
     assert totals['imports'] and (totals['reversed'] or totals['refused']), totals
+    print(f'seed {seed}: {totals}')
+
+
+RULE_SEEDS = (5, 31, 77)
+CONTROL = ('\x00', '\x07', '\x1b')
+
+
+def _rule_counts(books):
+    from tests.test_imports import company_db
+    with company_db(books) as db:
+        return {t: db.execute(f'SELECT count(*) FROM {t}').fetchone()[0]
+                for t in ('customers', 'import_runs', 'import_rows', 'import_keys', 'batches', 'audit_events',
+                          'import_sources', 'import_mappings', 'import_decisions')}
+
+
+@pytest.mark.parametrize('seed', RULE_SEEDS)
+def test_random_files_meet_kabes_rules(books, seed):
+    """Check then run, all or nothing, dropped characters, blanks and saved mappings, against a model.
+
+    Each step writes a random file of new and earlier names: some cells blank, some names carrying a control character
+    (dropped, reported at its position), sometimes a junk amount (the check names exactly those rows, and the refused
+    preview changes nothing at all) or an unknown terms name (asked once, remembered in the source's mapping). Headers
+    come in a random order; after the first save, a file runs from the saved mapping without a source being named.
+    """
+    from tests.test_imports import run_all as run_to_end
+    rng = random.Random(seed)
+    header = ['Name', 'Phone', 'Credit Limit', 'Terms']
+    made = set()  # names the source made
+    saved = False
+    remembered = False
+    totals = {'refused': 0, 'ran': 0, 'dropped': 0, 'asked': 0}
+    for step in range(10):
+        order = header[:] if not saved else rng.sample(header, len(header))
+        names = rng.sample(POOL, rng.randint(2, 5))
+        junk = rng.random() < 0.3
+        rows, expected_drops, junk_rows = [], [], []
+        for row_no, name in enumerate(names, start=1):
+            cells = {'Name': name, 'Phone': rng.choice(['', str(rng.randint(100, 999))]),
+                     'Credit Limit': rng.choice(['', '10.00', '5.25']),
+                     'Terms': rng.choice(['', 'Net 30', 'Net 30 days'])}
+            if rng.random() < 0.3:
+                at = rng.randint(1, len(name))
+                ch = rng.choice(CONTROL)
+                cells['Name'] = name[:at - 1] + ch + name[at - 1:]
+                expected_drops.append((row_no, at))
+            if junk and (row_no == 1 or rng.random() < 0.3):
+                cells['Credit Limit'] = '$5.♎0'
+                junk_rows.append(row_no)
+            rows.append(cells)
+        text = '\n'.join([','.join(order)] + [','.join(r[h] for h in order) for r in rows]) + '\n'
+        request = {'kind': 'customer', 'content': text}
+        if not saved:
+            request['source'] = 'Seeded export'
+        checked = books.run('import check', request)
+        assert [(d['row'], d['position']) for d in checked['dropped']] == expected_drops
+        totals['dropped'] += len(expected_drops)
+        if junk_rows:
+            assert [(g['column'], g['rows']) for g in checked['problems']] == [('Credit Limit', junk_rows)]
+            before = _rule_counts(books)
+            with pytest.raises(BookflowError) as caught:
+                books.run('import preview', request)
+            assert caught.value.code == 'E_VALIDATION'
+            assert _rule_counts(books) == before  # a refused run changes nothing
+            totals['refused'] += 1
+            continue
+        assert checked['clean'] and checked['problems'] == []  # (ok waits on an unknown terms name, if any)
+        if saved:
+            assert checked['matched']['match'] == 'exact'
+        preview = books.run('import preview', request)
+        run_id = preview['run']['id']
+        asks = [d for d in preview['decisions'] if d['decision'] == 'reference']
+        if any(r['Terms'] == 'Net 30 days' for r in rows) and not remembered:
+            assert [a['value'] for a in asks] == ['Net 30 days']
+            books.run('import decide', {'run': run_id, 'map': ['Net 30 days=Net 30'], 'remember': True})
+            remembered = True
+            totals['asked'] += 1
+        else:
+            assert asks == []  # decided once, never asked again
+        out = run_to_end(books, run_id)
+        assert out['run']['state'] == 'done'
+        assert out['counts'].get('created', 0) == len(set(names) - made)
+        assert out['counts'].get('already_in', 0) == len(set(names) & made)
+        for cells, name in zip(rows, names):
+            shown = books.run('customer show', {'customer': name})  # the dropped character is gone
+            assert shown['name'] == name
+            if name not in made and not cells['Phone']:
+                assert shown.get('phone') in (None, '')  # a blank cell left the field empty
+        made |= set(names)
+        if not saved:
+            books.run('import-mapping save', {'source': 'Seeded export', 'from_run': run_id})
+            saved = True
+        totals['ran'] += 1
     print(f'seed {seed}: {totals}')

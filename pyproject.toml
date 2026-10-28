@@ -23,6 +23,10 @@ dependencies = [
     "mcp==2.1.1",
     "httpx2>=2.5.0",
     "ijson==3.5.1",
+    # Reading .xlsx imports (R107): values only, read-only; defusedxml hardens openpyxl's XML parsing.
+    # Vetted in design/bulk-import.md, "As built: increment 2 and Kabe's rules"; pinned to the vetted versions.
+    "openpyxl==3.1.5",
+    "defusedxml==0.7.1",
 ]
 
 [project.scripts]

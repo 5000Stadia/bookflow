@@ -1,10 +1,11 @@
 """Baseline timings of list imports (R107 increment 1, design/bulk-import.md §5): one size per process.
 
-    python tools/measure_imports.py ROWS [WORKDIR] [--baseline]
+    python tools/measure_imports.py ROWS [WORKDIR] [--baseline] [--check]
 
 Builds a fresh data root under WORKDIR (default: a temporary folder; use the root NVMe), a company on the general
-chart, and a customer file of ROWS rows. Times, in seconds: reading the file and guessing its mapping; `import
-preview` (every row dry-run through `customer create`); `import run` to the end and `import reverse --dry-run` then
+chart, and a customer file of ROWS rows. Times, in seconds: reading the file and guessing its mapping; `import check`
+(every cell against its field and every reference looked up, no command run; with ``--check`` only this is timed, on
+the clean file and on one with a junk amount in every tenth row); `import preview` (every row dry-run through `customer create`); `import run` to the end and `import reverse --dry-run` then
 `import reverse` carrying its fingerprint, each called again until done at its default slice, as an agent would; and,
 with ``--baseline``, in a second company, a loop calling `customer create` once per row in-process, the
 single-command baseline. Prints one JSON line, with the peak resident memory of the process.
@@ -54,6 +55,22 @@ def main():
         return client.run(name, raw, company=company, **context)
 
     start = time.perf_counter()
+    checked = run('import check', {'kind': 'customer', 'content': text})
+    out['check_s'] = round(time.perf_counter() - start, 3)
+    assert checked['ok'], checked['summary'][:3]
+    if '--check' in sys.argv:
+        junk = '\n'.join(line.replace('.25,', '.\u264e25,') if i % 10 == 1 else line
+                         for i, line in enumerate(text.split('\n')))
+        start = time.perf_counter()
+        bad = run('import check', {'kind': 'customer', 'content': junk})
+        out['check_junk_s'] = round(time.perf_counter() - start, 3)
+        out['check_junk_problems'] = bad['problems_total']
+        out['peak_rss_mb'] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1)
+        print(json.dumps(out))
+        shutil.rmtree(root, ignore_errors=True)
+        return
+
+    start = time.perf_counter()
     preview = run('import preview', {'kind': 'customer', 'content': text}, reason='Measure')
     out['preview_s'] = round(time.perf_counter() - start, 3)
     assert preview['counts'] == {'create': rows}, preview['counts']
@@ -78,7 +95,7 @@ def main():
     out['reverse_calls'] = calls
     out['reverse_s'] = round(time.perf_counter() - start, 3)
     out['reverse_over_run'] = round(out['reverse_s'] / out['run_s'], 2)
-    names = ['preview', 'run', 'reverse_dry_run', 'reverse']
+    names = ['check', 'preview', 'run', 'reverse_dry_run', 'reverse']
     if baseline:
         start = time.perf_counter()
         for raw in raw_rows:
