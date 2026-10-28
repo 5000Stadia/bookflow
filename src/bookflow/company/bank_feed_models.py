@@ -324,7 +324,7 @@ class _Entering(Model):
     payee: str | None = Field(None, min_length=1, max_length=1000, description=(
         'Who the money went to or came from: an existing name (or its id) on the payee_type list. Unsure? Ask the '
         'person; never guess.'))
-    payee_type: Literal['vendor', 'customer', 'employee', 'other_name'] | None = Field(None, description=(
+    payee_type: Literal['customer', 'vendor', 'employee', 'other_name'] | None = Field(None, description=(
         'The list the payee is on; default vendor.'))
     account: str | None = Field(None, min_length=1, max_length=1004, description=(
         'The account it was for (an expense or income account...). Unsure? Ask the person; never guess.'))

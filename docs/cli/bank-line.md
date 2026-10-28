@@ -4,7 +4,7 @@
 
 ## `bank-line add`
 
-Enter a waiting bank line in the books, run as you with the account's own command (check post or deposit post on a bank account, card-charge post or card-credit post on a card), so the entry is exactly the one you would type: the line's date and amount, your payee and account (or splits), class and memo (default the bank's text). No payee or account: refused, asking -- ask the person, never guess. A closed period refuses with the command's own code. Give `line`, or `lines` for several as one batch (undone together by `bank-line undo`); a batch is all or nothing. Reversing the import undoes it too. Example: {"line": "01J...", "payee": {"name_type": "vendor", "name_id": "Shell"}, "account": "Fuel"}.
+Enter a waiting bank line in the books, run as you with the account's own command (check post or deposit post on a bank account, card-charge post or card-credit post on a card), so the entry is exactly the one you would type: the line's date and amount, your payee and account (or splits), class and memo (default the bank's text). No payee or account: refused, asking -- ask the person, never guess. A closed period refuses with the command's own code. Give `line`, or `lines` for several as one batch (undone together by `bank-line undo`); a batch is all or nothing. Reversing the import undoes it too. Example: {"line": "01J...", "payee": "Shell", "account": "Fuel"}.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -21,22 +21,22 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 ### CLI
 
-`bookflow bank-line add --line 01J9ZK4QF8T7E2V5N3B6C1D0BG --payee-name-type vendor --payee-name-id "Northside Supply" --account "Office Supplies" --company "Demo Plumbing Co" --reason "Enter the supplies purchase" --dry-run --json`
+`bookflow bank-line add --line 01J9ZK4QF8T7E2V5N3B6C1D0BG --payee "Central Supply" --account "Office Supplies" --company "Demo Plumbing Co" --reason "Enter the supplies purchase" --dry-run --json`
 
 ### MCP
 
 The same example as complete `bookflow_run` arguments:
 
 ```json
-{"command": "bank-line add", "input": {"line": "01J9ZK4QF8T7E2V5N3B6C1D0BG", "payee": {"name_type": "vendor", "name_id": "Northside Supply"}, "account": "Office Supplies"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+{"command": "bank-line add", "input": {"line": "01J9ZK4QF8T7E2V5N3B6C1D0BG", "payee": "Central Supply", "account": "Office Supplies"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
 ```
 
 ### Input
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `payee.name_type` | `--payee-name-type` | literal["vendor", "customer", "employee", "other_name"] | no | no | "vendor" | — |
-| `payee.name_id` | `--payee-name-id` | string | yes | no | — | The name on that list, or its id.; minimum length 1; maximum length 1000 |
+| `payee` | `--payee` | string \| null | no | yes | null | Who the money went to or came from: an existing name (or its id) on the payee_type list. Unsure? Ask the person; never guess. |
+| `payee_type` | `--payee-type` | literal["customer", "vendor", "employee", "other_name"] \| null | no | yes | null | The list the payee is on; default vendor. |
 | `account` | `--account` | string \| null | no | yes | null | The account it was for (an expense or income account...). Unsure? Ask the person; never guess. |
 | `splits[].account` | inside `--splits` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
 | `splits[].amount` | inside `--splits` JSON array | string | yes | no | — | A positive amount; the splits add up to the line.; minimum length 1; maximum length 40 |
@@ -46,8 +46,8 @@ The same example as complete `bookflow_run` arguments:
 | `memo` | `--memo` | string \| null | no | yes | null | Default: the bank's text. |
 | `number` | `--number` | string \| null | no | yes | null | A check's number; default the line's when it is a plain number. |
 | `line` | `--line` | string \| null | no | yes | null | The waiting line to enter in the books. |
-| `lines[].payee.name_type` | inside `--lines` JSON array | literal["vendor", "customer", "employee", "other_name"] | no | no | "vendor" | — |
-| `lines[].payee.name_id` | inside `--lines` JSON array | string | yes | no | — | The name on that list, or its id.; minimum length 1; maximum length 1000 |
+| `lines[].payee` | inside `--lines` JSON array | string \| null | no | yes | null | Who the money went to or came from: an existing name (or its id) on the payee_type list. Unsure? Ask the person; never guess. |
+| `lines[].payee_type` | inside `--lines` JSON array | literal["customer", "vendor", "employee", "other_name"] \| null | no | yes | null | The list the payee is on; default vendor. |
 | `lines[].account` | inside `--lines` JSON array | string \| null | no | yes | null | The account it was for (an expense or income account...). Unsure? Ask the person; never guess. |
 | `lines[].splits[].account` | inside `--lines` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
 | `lines[].splits[].amount` | inside `--lines` JSON array | string | yes | no | — | A positive amount; the splits add up to the line.; minimum length 1; maximum length 40 |

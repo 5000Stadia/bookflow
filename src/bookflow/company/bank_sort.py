@@ -29,8 +29,8 @@ from bookflow.core.ids import new_id
 
 SORT_KIND = 'bank-sort'
 SORT_SCOPE = 'bank-inbox'
-# Days apart the two lines of one transfer may be (design/bank-feeds.md §12, default 3): money leaves one account and
-# arrives in the other within a few business days.
+# Days apart the two lines of one transfer may be (design/bank-feeds.md §4 and §12, default 5): money leaves one
+# account and arrives in the other within a few business days.
 TRANSFER_DAYS = 5
 _LINK = ('state', 'entry_id', 'movement', 'link_how', 'match_reason', 'created', 'payee_display', 'ignore_reason')
 _CLEAR = dict(state='waiting', entry_id=None, movement=None, link_how=None, match_reason=None, created=0,
