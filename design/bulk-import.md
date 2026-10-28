@@ -174,6 +174,16 @@ NFC, trim, case-fold and collapsed spaces.
 >   other scripts, symbols, emoji) are kept as written.
 > - **Numbers, money, dates and references are exact or refused.** A stray character in an amount, quantity, date,
 >   rate, id or reference means the data is junk: the row, and so the run, is refused, never repaired.
+> - **Empty is allowed unless something truly needs it** (Kabe: "Reflex should allow empty fields unless it's
+>   architecturally mandatory to ground its index field (which may or may not exist) or a transaction type that may
+>   inherently require something to transact"). A blank cell, or a column the file lacks, leaves that field empty or at
+>   the default it would have when entered by hand. Only two things are required: what identifies the record (a
+>   customer's or item's name, an account's name or number, the row key when one is mapped) and what the transaction
+>   cannot exist without (an invoice's customer and a line with an amount; a payment's customer, amount and deposit
+>   account; a journal's balanced lines with accounts). An invoice line with no item is a description and amount line,
+>   as typed by hand. The import is never stricter than the single command: its required fields are exactly that
+>   command's. A blank is not a reference that fails: a named item, customer or account that does not exist ("Mulch"
+>   not in the item list) is refused in the check, or created on request (`create_missing`).
 
 Per row: `create`/`update` in a preview; then `created`, `updated`, `unchanged`, `exists`, `differs`, `already_in`,
 `skipped` or `refused`, with a stable `code` (the command's error code, or `header_conflict`, `unknown_reference`,
