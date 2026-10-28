@@ -1,0 +1,53 @@
+{% extends "base.html" %}{% block title %}Fulfillment{% endblock %}{% block body %}<link rel="stylesheet" href="{{ static_urls['picks.css'] }}"><section id="fulfillment">
+{% set base = '/c/' ~ company_id %}
+<nav class="crumbs"><a href="{{ base }}/_group/items">Items</a> / Fulfillment</nav>
+<h1>Fulfillment worksheet</h1>
+<nav class="fulfillment-tabs" aria-label="Worksheet views">{% for key, label, _ in tabs %}<a href="{{ base }}/inventory/fulfillment?tab={{ key }}"{% if key == tab %} aria-current="page"{% endif %} data-tab="{{ key }}">{{ label }}</a>{% endfor %}</nav>
+{% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}</div>{% endif %}
+{% if results %}<section class="workspace-card" aria-label="What the batch did" data-batch-results><h2>Done, one document per order</h2><ul>
+{% for r in results %}<li class="{{ 'ok' if r.ok else 'refused' }}" data-batch-result="{{ r.order }}"><strong>{{ r.order }}</strong>: {% if r.link %}<a href="{{ base }}{{ r.link }}">{{ r.text }}</a>{% else %}{{ r.text }}{% endif %}</li>{% endfor %}
+</ul></section>{% endif %}
+<form method="get" action="{{ base }}/inventory/fulfillment" class="fulfillment-filters" data-worksheet-filters>
+<input type="hidden" name="tab" value="{{ tab }}">
+<label>Sort <select name="sort">{% for value, label in (('date', 'Order date'), ('shippable_amount', 'Shippable amount'), ('customer', 'Customer')) %}<option value="{{ value }}"{% if params.get('sort', 'date') == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+{% if sites|length > 1 %}<label>Site <select name="site"><option value="">Each order's own</option>{% for s in sites %}<option value="{{ s.name }}"{% if params.get('site') == s.name %} selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></label>{% endif %}
+<label>Customer <input name="customer" value="{{ params.get('customer', '') }}" autocomplete="off"></label>
+<label>Shippable since <input type="date" name="newly_shippable" value="{{ params.get('newly_shippable', '') }}"></label>
+<label class="check"><input type="checkbox" name="complete_only" value="1"{% if params.get('complete_only') %} checked{% endif %}> Only orders that can ship complete</label>
+<button type="submit">Show</button>
+</form>
+<form method="get" action="{{ base }}/inventory/fulfillment/packing-slips" target="_blank" data-worksheet-batch>
+<input type="hidden" name="tab" value="{{ tab }}">{% for key in ('site', 'customer', 'newly_shippable', 'sort', 'complete_only') %}{% if params.get(key) %}<input type="hidden" name="{{ key }}" value="{{ params.get(key) }}">{% endif %}{% endfor %}
+<p class="fulfillment-summary">{{ report.totals.orders }} order{{ '' if report.totals.orders == 1 else 's' }} · to ship {{ report.totals.to_ship_amount.amount }} · can ship now {{ report.totals.shippable_amount.amount }} · shipped not invoiced {{ report.totals.shipped_not_invoiced_amount.amount }}</p>
+{% if report.rows %}<div class="table-wrap"><table class="list-table fulfillment-orders"><thead><tr><th>Order</th><th>Date</th><th>Customer</th><th>Status</th><th>Ship by</th><th>Site</th><th class="num">To ship</th><th class="num">Can ship now</th><th class="num">Not invoiced</th><th>Lines</th></tr></thead><tbody>
+{% for row in report.rows %}<tr data-order="{{ row.sales_order_number }}" data-status="{{ row.fulfillment_status }}">
+<td data-label="Order"><label class="check"><input type="checkbox" name="order" value="{{ row.sales_order_number }}" data-select-order> <a href="{{ base }}/sales-order/{{ row.sales_order_id }}">{{ row.sales_order_number }}</a></label></td>
+<td data-label="Date">{{ row.date }}</td><td data-label="Customer">{{ row.customer_name }}</td>
+<td data-label="Status">{% if picking %}{{ {'to_pick': 'To pick', 'picking': 'Picking', 'picked': 'Picked', 'packed': 'Packed', 'partly_shipped': 'Partly shipped', 'shipped': 'Shipped'}[row.fulfillment_status] }}{% else %}{{ {'to_pick': 'To ship', 'picking': 'To ship', 'picked': 'To ship', 'packed': 'To ship', 'partly_shipped': 'Partly shipped', 'shipped': 'Shipped'}[row.fulfillment_status] }}{% endif %} · {{ row.invoice_progress|replace('_', ' ') }}{% if row.can_ship_complete %} · <span class="complete">complete</span>{% endif %}</td>
+<td data-label="Ship by">{{ row.promised_ship_date or '' }}{% if row.days_late %} <span class="late">{{ row.days_late }} day{{ '' if row.days_late == 1 else 's' }} late</span>{% endif %}</td>
+<td data-label="Site">{{ row.site_name or '' }}</td>
+<td class="num" data-label="To ship">{{ row.to_ship_amount.amount }}</td><td class="num" data-label="Can ship now" data-shippable>{{ row.shippable_amount.amount }}</td><td class="num" data-label="Not invoiced">{{ row.shipped_not_invoiced_amount.amount }}</td>
+<td data-label="Lines"><details><summary>{{ row.lines|length }} line{{ '' if row.lines|length == 1 else 's' }}</summary><ul class="fulfillment-lines">{% for l in row.lines %}<li data-line="{{ l.order_line_id }}">{{ l.item_name }}{% if l.site_name %} ({{ l.site_name }}){% endif %}: to ship {{ l.to_ship }}, now <strong data-can-ship>{{ l.can_ship_now }}</strong>{% if l.shipped != '0' %}, shipped {{ l.shipped }}{% endif %}{% if l.shipped_not_invoiced != '0' %}, not invoiced {{ l.shipped_not_invoiced }}{% endif %}{% if picking and l.on_picks != '0' %}, on picks {{ l.on_picks }} (picked {{ l.picked }}){% endif %}{% if picking and l.drafted != '0' %}, drafted {{ l.drafted }} (boxed {{ l.packed }}){% endif %}</li>{% endfor %}</ul>
+{% if row.by_site|length > 1 %}<p class="by-site">{% for site in row.by_site %}{{ site.site_name }}: {{ site.shippable_amount.amount }}{% if site.complete %} complete{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+{% if row.pick_lists %}<p>Pick lists: {% for n in row.pick_lists %}<a href="{{ base }}/inventory/pick-lists/{{ n|urlencode }}">{{ n }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+{% if row.drafts %}<p>Drafts: {% for n in row.drafts %}<a href="{{ base }}/shipments/{{ n|urlencode }}/pack">{{ n }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+{% if row.note %}<p class="note">{{ row.note }}</p>{% endif %}</details></td>
+</tr>{% endfor %}
+</tbody></table></div>
+<section class="workspace-card fulfillment-actions" aria-label="Selected orders" data-batch-actions>
+<h2>Selected orders</h2>
+<p>Each action makes one document per order; one that is refused leaves the others standing.</p>
+<label>Date <input type="date" name="date" value="{{ today }}"></label>
+<label>Reason (shown in the audit trail) <input name="ctx:reason" placeholder="Afternoon trucks"></label>
+<div class="actions">
+{% if can_ship %}<button type="button" hx-vals='{"action": "ship"}' hx-post="{{ base }}/inventory/fulfillment" hx-include="closest form" hx-target="body" hx-swap="outerHTML" data-batch-ship>Ship</button>{% endif %}
+{% if can_invoice %}<button type="button" hx-vals='{"action": "invoice"}' hx-post="{{ base }}/inventory/fulfillment" hx-include="closest form" hx-target="body" hx-swap="outerHTML" data-batch-invoice>Create invoices</button>{% endif %}
+{% if can_pick %}<button type="button" hx-vals='{"action": "pick"}' hx-post="{{ base }}/inventory/fulfillment" hx-include="closest form" hx-target="body" hx-swap="outerHTML" data-batch-pick>Create pick list</button>{% endif %}
+<button type="submit" formaction="{{ base }}/inventory/fulfillment/packing-slips" data-batch-slips>Print packing slips</button>
+{% if picking %}<button type="submit" formaction="{{ base }}/inventory/fulfillment/pick-lists" data-batch-picks>Print pick lists</button>{% endif %}
+</div>
+</section>
+{% else %}<p data-worksheet-none>No orders in this view.</p>{% endif %}
+</form>
+<p class="actions"><a href="{{ base }}/shipments">Shipments</a> <a href="{{ base }}/report/shipments">Shipments report</a> <a href="{{ base }}/report/order-fulfillment">Worksheet as a report</a>{% if picking %} <a href="{{ base }}/inventory/pick-lists">Pick lists</a>{% endif %}</p>
+</section>{% endblock %}
