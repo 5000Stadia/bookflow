@@ -27,7 +27,9 @@ class GridInput(Selection):
     kind: Kind = Field(description='customer, vendor, item or account.')
     columns: list[str] | None = Field(None, max_length=40, description=(
         'Fields to show (`bulk-edit columns`); default a few per kind (an item\'s name, price, cost, description).'))
-    limit: int = Field(2000, ge=1, le=5000, description='Most records to return.')
+    limit: int = Field(50, ge=1, le=5000, description=(
+        'Most records to return (a page); `total` counts the whole selection, which a preview or operation covers.'))
+    offset: int = Field(0, ge=0, le=5000, description='Records to skip first, for the next page.')
 
 
 class Change(_Input):
@@ -63,6 +65,10 @@ class PreviewInput(Selection):
         'Name column picks the record; without one, rows fill the selection in order over `paste_columns`.'))
     paste_columns: list[str] | None = Field(None, max_length=40, description=(
         'The columns a header-less paste fills, left to right (default: the grid\'s columns).'))
+    selection_fingerprint: str | None = Field(None, min_length=64, max_length=64, description=(
+        'The grid\'s `selection_fingerprint`. A paste without a header row fills the selection by position, so over a '
+        'filter or search it needs this, and is refused if the records changed since the grid (named `records` '
+        'need none: their order is yours).'))
     operations: list[Operation] = Field(default_factory=list, max_length=50, description=(
         'Column operations over the selection, in order, after the cell edits: '
         '[{"op": "percent", "field": "price", "by": "5", "round": "0.05"}].'))
@@ -83,7 +89,12 @@ class ShowInput(RunSelector):
 
 
 class ApplyInput(RunSelector):
-    pass
+    limit: int | None = Field(None, ge=1, le=5000, description=(
+        'Apply at most this many records in this call (a slice; the run stays `applying` and the same command goes '
+        'on); default every one.'))
+    cancel: bool = Field(False, description=(
+        'Instead of going on, stop an unfinished apply: the records already changed get their prior values back as '
+        'one unit and the rest never run (the edit ends `cancelled`).'))
 
 
 class ReverseInput(RunSelector):
@@ -96,7 +107,7 @@ class ReverseInput(RunSelector):
 
 class QueryInput(_Input):
     kind: Kind | None = Field(None, description='Only edits of this list.')
-    state: Literal['previewed', 'applying', 'applied', 'applied_partly', 'rolled_back', 'failed'] | None = Field(
+    state: Literal['previewed', 'applying', 'applied', 'applied_partly', 'rolled_back', 'cancelled', 'failed'] | None = Field(
         None, description='Only edits in this state.')
     limit: int = Field(50, ge=1, le=200, description='Most edits to return.')
     cursor: str | None = Field(None, max_length=64, description='From `next_cursor`.')
@@ -115,14 +126,18 @@ class GridOutput(BaseModel):
     records: list[dict[str, Any]] = Field(description=(
         'id, version, label, and `values` (each field as shown: a reference by name, money as an amount).'))
     total: int = Field(description='Records the selection holds.')
-    truncated: bool = Field(description='True when more records match than `limit`.')
+    offset: int = Field(0, description='Records skipped before these.')
+    truncated: bool = Field(description='True when more records match after these (pass `offset` for the next page).')
+    selection_fingerprint: str | None = Field(None, description=(
+        'The whole selection, in order: give it to a preview with a header-less paste.'))
 
 
 class RunOutput(BaseModel):
     run: dict[str, Any] = Field(description=(
         'The edit: id, kind, state, label, atomic, reason, who and when, its batch (state, reversible, first blocker).'))
     counts: dict[str, int] = Field(description=(
-        'selected, change, refused, unchanged; after apply also updated, merged, conflict, not_run.'))
+        'selected, change, refused, unchanged, pending (still to apply); after apply also updated, merged, '
+        'conflict, not_run.'))
     totals: dict[str, Any] = Field(description=(
         'Per money column: the sum before and after over the records that change (exact, in the currency).'))
     rows: list[dict[str, Any]] = Field(description=(
@@ -144,10 +159,14 @@ class ReverseOutput(BaseModel):
     batch: dict[str, Any] = Field(description='Its batch after this call.')
     state: str = Field(description='live (dry run), reversed or reversed_partly.')
     reversed_now: int = Field(description='Records restored by this call.')
-    steps: list[dict[str, Any]] = Field(description='The plan: per record, the update that restores it.')
+    steps: list[dict[str, Any]] = Field(description=(
+        'The plan: per record, the update that restores it (the first 50; `remaining` counts them all).'))
+    remaining: int = Field(0, description='Records the plan restores (dry run), or still to restore.')
     blockers: list[dict[str, Any]] = Field(description='What blocks the reversal (empty when it can run).')
     skipped: list[dict[str, Any]] = Field(description=(
-        'Records edited again since, left as they are (only with skip_changed), each naming who and when.'))
+        'Records edited again since, left as they are (only with skip_changed), each naming who and when (the '
+        'first 50; `skipped_total` counts them all).'))
+    skipped_total: int = Field(0, description='How many records skip_changed leaves.')
     fingerprint: str | None = Field(description='Pass to the real reversal so it refuses if the batch changed since.')
     reversal_batch: str | None = Field(description='The batch recording the reversal, once begun.')
     event_id: str | None = Field(description='Audit event that finished the reversal.')

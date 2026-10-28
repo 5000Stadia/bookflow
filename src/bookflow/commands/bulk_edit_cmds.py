@@ -24,11 +24,13 @@ _APPLY = (
     'Apply a previewed grid edit: one ordinary update per record carrying the version the preview read, each its own '
     'audit event, all one batch. A record someone changed meanwhile merges when they changed other fields, and is '
     'refused (conflict, naming who and when) when they changed the same one; the rest go on (all or nothing undoes '
-    'them instead). Returns each record\'s outcome. Example: {"run": "01J..."}.')
+    'them instead). Returns each record\'s outcome. `limit` applies a slice (call again to go on); `cancel` stops '
+    'an unfinished apply and puts back what it changed. Example: {"run": "01J..."}.')
 _REVERSE = (
     'Undo a grid edit as one unit: every record it changed gets its exact prior values back through its update. '
     'Refused (E_BATCH_BLOCKED), naming each record and who changed it when, if any was edited again since; '
-    '`skip_changed` restores the rest and leaves those (reversed_partly). --dry-run shows the plan and a fingerprint. '
+    '`skip_changed` restores the rest and leaves those (reversed_partly). Refused while the apply is unfinished '
+    '(finish or cancel it first). --dry-run shows the plan and a fingerprint. '
     'Example: {"run": "01J..."}.')
 
 
@@ -79,15 +81,20 @@ def plan_apply(inp, ctx, s) -> Plan:
 
 
 def apply_apply(plan: Plan, ctx, s) -> Applied:
+    inp = plan.data['input']
+
     def work():
-        out = bulk_edit.apply(s, ctx, plan.data['input'].run)
+        out = (bulk_edit.cancel(s, ctx, inp.run) if inp.cancel else
+               bulk_edit.apply(s, ctx, inp.run, limit=inp.limit))
         out.pop('notes', None)
         return out
     return _finalized(s, ctx, 'bulk-edit.apply', work, m.RunOutput)
 
 
 def _reverse_out(out: dict) -> dict:
-    return {k: out.get(k) for k in m.ReverseOutput.model_fields} | {'skipped': out.get('skipped') or []}
+    return {k: out.get(k) for k in m.ReverseOutput.model_fields} | {
+        'skipped': out.get('skipped') or [], 'skipped_total': out.get('skipped_total') or 0,
+        'remaining': out.get('remaining') or 0}
 
 
 def plan_reverse(inp, ctx, s) -> Plan:

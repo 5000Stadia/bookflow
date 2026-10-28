@@ -6,6 +6,11 @@ the column 5 percent rounded to 0.05, reads the changes (each item's price befor
 it and nothing changes, and "Leave 1, undo the other 19" restores the rest to the cent. Every post is a real click
 through htmx (the page never navigates), and at 390 px nothing scrolls sideways. With BF_BULK_SHOTS set to a folder,
 the grid, the changes and the reverse plan are saved there at each width.
+
+At 390 px with 2,000 items (review finding 4 and 3): the grid shows 50 cards with Preview in a bar at the foot of the
+screen, "All 2000 matching" reprices every one, the changes list 50 with the true count, the apply runs in slices with
+progress, a reload part way shows "Still applying" with Finish applying and Cancel (never Undo), and finishing it
+reaches the outcomes, 50 listed of 2,000.
 """
 import base64
 import json
@@ -93,6 +98,7 @@ def test_a_person_reprices_twenty_items_and_undoes_it(register_browser, width):
     b.wait_for('!!document.querySelector("[data-bulk-grid]")', timeout=60)
     assert b.evaluate('document.querySelectorAll("[data-bulk-grid] tbody tr[data-record]").length') == 20
     assert '20 items' in b.evaluate('document.querySelector("[data-bulk-count]").innerText')
+    assert b.evaluate('document.querySelector(\'[data-record="Grid part 02"] input[data-name$=":price"]\').value') == '2.10'
 
     # One price typed into its cell, then the column raised 5 percent to the nearest 0.05.
     _set(b, '[data-record="Grid part 01"] input[data-name$=":price"]', '9.99')
@@ -125,3 +131,74 @@ def test_a_person_reprices_twenty_items_and_undoes_it(register_browser, width):
     after = {name: _price(b, site, name) for name in names}
     assert after == {**before, 'Grid part 02': '5.00'}
     _fits(b)
+
+
+def _in_view(b, selector):
+    return b.evaluate(f'''(() => {{ const r = document.querySelector({json.dumps(selector)}).getBoundingClientRect();
+        return r.top >= 0 && r.bottom <= innerHeight && r.height > 0; }})()''')
+
+
+@pytest.mark.timeout(900)
+def test_two_thousand_items_on_a_phone(register_browser):
+    env, b = register_browser, register_browser.browser
+    site = env.site
+    base = f'{site.base_url}/c/{site.company_id}'
+    income = next(a['id'] for a in _command(b, site, 'account.list', {})['items'] if a['type'] == 'income')
+    exempt = next(c['id'] for c in _command(b, site, 'sales-tax-code.list', {})['items'] if not c['taxable'])
+    made = b.evaluate(f'''(async () => {{ let n = 0;
+        for (let i = 1; i <= 2000; i++) {{
+          const r = await fetch('/companies/{site.company_id}/commands/item.create', {{method: 'POST',
+            credentials: 'same-origin', headers: {{'Content-Type': 'application/json', 'X-Bookflow-Workbench': '1',
+            'X-Bookflow-Client-Name': 'bookflow-workbench'}}, body: JSON.stringify({{name: 'Phone part ' +
+            String(i).padStart(4, '0'), type: 'service', sales_enabled: true, income_account_id: {json.dumps(income)},
+            sales_tax_code_id: {json.dumps(exempt)}, price: '10.00'}})}});
+          if (r.status === 200) n++; }}
+        return n; }})()''', await_promise=True, timeout=600)
+    assert made == 2000
+    b.viewport(390, 844)
+
+    # The grid: 50 cards of 2,000, Preview at the foot of the screen without scrolling past them, and pages.
+    b.navigate(f'{base}/bulk-edit?kind=item&q=Phone+part&columns=price')
+    b.wait_for('!!document.querySelector("[data-bulk-grid]")', timeout=120)
+    assert b.evaluate('document.querySelectorAll("[data-bulk-grid] tbody tr[data-record]").length') == 50
+    assert '2000 items; 1 to 50 shown' in b.evaluate('document.querySelector("[data-bulk-count]").innerText')
+    assert _in_view(b, '[data-bulk-preview]')
+    b.evaluate('window.scrollTo(0, document.documentElement.scrollHeight / 2)')
+    assert _in_view(b, '[data-bulk-preview]')
+    _shot(b, 390, '4-grid-2000')
+    b.evaluate('document.querySelector("[data-bulk-next]").click()')
+    b.wait_for('!!document.querySelector(\'[data-record="Phone part 0051"]\')', timeout=120)
+    b.navigate(f'{base}/bulk-edit?kind=item&q=Phone+part&columns=price')
+    b.wait_for('!!document.querySelector("[data-bulk-scope-all]")', timeout=120)
+
+    # Every one of the 2,000 matching, up 5 percent: the changes list 50 and count 2,000.
+    b.evaluate('document.querySelector("[data-bulk-scope-all]").click()')
+    _set(b, '[data-bulk-op-field]', 'price')
+    _set(b, '[data-bulk-op-kind]', 'percent')
+    _set(b, '[data-bulk-op-by]', '5')
+    _click(b, '[data-bulk-preview]', 'changes')
+    assert '2000 to change' in b.evaluate('document.querySelector("[data-bulk-counts]").innerText')
+    assert b.evaluate('document.querySelectorAll("[data-bulk-row]").length') == 50
+    assert '50 of 2000' in b.evaluate('document.querySelector("[data-bulk-pager-says]").innerText')
+    assert 'Change 2000 items' in b.evaluate('document.querySelector("[data-bulk-apply]").innerText')
+    assert _in_view(b, '[data-bulk-apply]')
+    _shot(b, 390, '5-changes-2000')
+
+    # The apply runs in slices with progress; a reload part way finds it still applying, never offering Undo.
+    _click(b, '[data-bulk-apply]', 'done')
+    assert b.evaluate('!!document.querySelector("[data-bulk-applying] [data-bulk-pause]")')
+    done = int(b.evaluate('document.querySelector("[data-bulk-done-count]").innerText'))
+    assert 0 < done < 2000
+    run_url = b.evaluate('location.href')
+    assert '?run=' in run_url
+    b.navigate(run_url)
+    b.wait_for('!!document.querySelector("[data-bulk-applying]")', timeout=120)
+    assert 'Still applying' in _text(b) and b.evaluate('!!document.querySelector("[data-bulk-cancel]")')
+    assert not b.evaluate('!!document.querySelector("[data-bulk-undo-start]")')
+    _shot(b, 390, '6-still-applying')
+    _click(b, '[data-bulk-finish]', 'done')
+    b.wait_for('!!document.querySelector("[data-bulk-undo-start]")', timeout=600)
+    assert '2000 changed' in b.evaluate('document.querySelector("[data-bulk-counts]").innerText')
+    assert b.evaluate('document.querySelectorAll("[data-bulk-row]").length') == 50
+    assert _price(b, site, 'Phone part 2000') == '10.50'
+    _shot(b, 390, '7-done-2000')

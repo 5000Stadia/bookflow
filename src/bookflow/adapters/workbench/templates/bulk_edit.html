@@ -10,6 +10,7 @@
 <ul class="bulk-diff-fields">{% for c in row.changes %}<li><span class="bulk-field">{{ by_field[c.field].label if c.field in by_field else c.field }}</span> <span class="bulk-before">{{ c.before_text or 'blank' }}</span> <span class="bulk-arrow" aria-label="to">&rarr;</span> <span class="bulk-after">{{ c.after_text or 'blank' }}</span></li>{% endfor %}</ul>
 {% if row.status == 'refused' %}<p class="bulk-why">{{ row.message }} <span class="muted">({{ row.code }})</span></p>{% endif %}
 {% if show_outcome and row.outcome_message %}<p class="bulk-why">{{ row.outcome_message }}</p>{% endif %}</li>{% endfor %}</ol>{% endmacro %}
+{% macro run_pager(result) %}{% set listed = result.counts.get(outcome, 0) if outcome else result.counts.change + result.counts.refused %}{% if listed > result.rows|length or after %}<nav class="bulk-pager" data-bulk-pager><span data-bulk-pager-says>{{ result.rows|length }} of {{ listed }} listed here</span>{% if after %}<a href="{{ post }}?{{ {'run': result.run.id, 'outcome': outcome or ''}|urlencode }}" data-bulk-first>First {{ page_size }}</a>{% endif %}{% if result.next_cursor %}<a href="{{ post }}?{{ {'run': result.run.id, 'after': result.next_cursor, 'outcome': outcome or ''}|urlencode }}" data-bulk-next>Next {{ page_size }}</a>{% endif %}</nav>{% endif %}{% endmacro %}
 {% macro totals_view(totals) %}{% if totals %}<dl class="bulk-totals" data-bulk-totals>{% for f, t in totals.items() %}<div><dt>{{ by_field[f].label if f in by_field else f }} total</dt><dd>{{ t.before }} &rarr; {{ t.after }} <span class="muted">({{ '+' if not t.change.startswith('-') }}{{ t.change }})</span></dd></div>{% endfor %}</dl>{% endif %}{% endmacro %}
 <section id="bulk-workspace" class="bulk" data-bulk-step="{{ step }}" data-company="{{ company_id }}">
 <nav class="crumbs"><a href="/c/{{ company_id }}/{{ kind|segment }}">{{ kind_label }}</a> / Edit many</nav>
@@ -27,8 +28,12 @@
 <button type="submit">Show</button>
 </form>
 <form {{ htmx() }} class="bulk-grid-form" data-bulk-grid>
-<input type="hidden" name="kind" value="{{ kind }}"><input type="hidden" name="q" value="{{ q }}"><input type="hidden" name="columns" value="{{ chosen|join(',') }}">{% if inactive %}<input type="hidden" name="inactive" value="on">{% endif %}
-<p class="bulk-count" data-bulk-count>{{ grid.total }} {{ noun(grid.total) }}{% if grid.truncated %}, the first {{ grid.records|length }} shown{% endif %}. Type in any cell; only what you change is sent.</p>
+{% set more = grid.total > grid.records|length %}
+<input type="hidden" name="kind" value="{{ kind }}"><input type="hidden" name="q" value="{{ q }}"><input type="hidden" name="columns" value="{{ chosen|join(',') }}">{% if inactive %}<input type="hidden" name="inactive" value="on">{% endif %}<input type="hidden" name="selection_fingerprint" value="{{ grid.selection_fingerprint or '' }}"><input type="hidden" name="shown" value="{{ grid.records|map(attribute='id')|join(',') }}">
+<p class="bulk-count" data-bulk-count>{{ grid.total }} {{ noun(grid.total) }}{% if more %}; {{ grid.offset + 1 }} to {{ grid.offset + grid.records|length }} shown{% endif %}. Type in any cell; only what you change is sent.</p>
+{% if more %}<fieldset class="bulk-scope" data-bulk-scope><legend>Change</legend>
+<label class="choice"><input type="radio" name="scope" value="shown"{% if values.get('scope', 'shown') == 'shown' %} checked{% endif %} data-bulk-scope-shown> Only the {{ grid.records|length }} shown</label>
+<label class="choice"><input type="radio" name="scope" value="all"{% if values.get('scope') == 'all' %} checked{% endif %} data-bulk-scope-all> All {{ grid.total }} matching</label></fieldset>{% endif %}
 <fieldset class="bulk-op" data-bulk-op><legend>Change a whole column</legend>
 <div class="bulk-op-row"><label class="bulk-label">Column <select name="op_field" data-bulk-op-field><option value="">Choose…</option>{% for f in chosen %}<option value="{{ f }}"{% if values.get('op_field') == f %} selected{% endif %}>{{ by_field[f].label }}</option>{% endfor %}</select></label>
 <label class="bulk-label">Change <select name="op" data-bulk-op-kind>{% for op, label in ops %}<option value="{{ op }}"{% if values.get('op', 'percent') == op %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
@@ -38,14 +43,15 @@
 <label class="bulk-label" data-op-for="replace">Find <input name="op_find" value="{{ values.get('op_find', '') }}"></label>
 <label class="bulk-label" data-op-for="replace">Replace with <input name="op_replace" value="{{ values.get('op_replace', '') }}"></label>
 <label class="bulk-label" data-op-for="set_from">From column <select name="op_from">{% for c in columns %}<option value="{{ c.field }}">{{ c.label }}</option>{% endfor %}</select></label></div>
-<p class="muted bulk-small">Applies to every {{ kind }} below, after any cell you type. Amounts round half-up to the cent, or to the step you give.</p></fieldset>
+<p class="muted bulk-small">Applies to {{ ('every ' ~ kind ~ ' chosen above') if more else ('every ' ~ kind ~ ' below') }}, after any cell you type. Amounts round half-up to the cent, or to the step you give.</p></fieldset>
 <details class="bulk-paste"{% if values.get('paste') %} open{% endif %}><summary>Paste cells from a spreadsheet</summary>
 <textarea name="paste" rows="5" placeholder="Name&#9;Price&#10;Widget&#9;14.00" data-bulk-paste>{{ values.get('paste', '') }}</textarea>
 <p class="muted bulk-small">With a header row, columns match by name and a Name column picks each row's {{ kind }}; without one, rows fill the {{ kind_label|lower }} shown, in order, over the columns shown.</p></details>
 <div class="bulk-grid-wrap"><table class="bulk-grid"><thead><tr><th scope="col">Name</th>{% for f in chosen %}<th scope="col">{{ by_field[f].label }}</th>{% endfor %}</tr></thead>
-<tbody>{% for r in grid.records %}<tr data-record="{{ r.label }}"><th scope="row">{{ r.label }}{% if not r.active %} <span class="muted">(inactive)</span>{% endif %}</th>{% for f in chosen %}{% set key = 'cell:' ~ r.id ~ ':' ~ f %}{% set col = by_field[f] %}<td data-label="{{ col.label }}">{% if col.type == 'boolean' %}<select data-name="{{ key }}"{% if key in typed %} name="{{ key }}"{% endif %} aria-label="{{ col.label }} of {{ r.label }}"><option value=""{% if r.values[f] == '' %} selected{% endif %}></option><option value="yes"{% if r.values[f] == 'Yes' %} selected{% endif %}>Yes</option><option value="no"{% if r.values[f] == 'No' %} selected{% endif %}>No</option></select>{% else %}<input data-name="{{ key }}"{% if key in typed %} name="{{ key }}"{% endif %} value="{{ typed.get(key, r.values[f]) }}" aria-label="{{ col.label }} of {{ r.label }}"{% if col.type in ('money', 'decimal', 'integer') %} inputmode="decimal"{% endif %} autocomplete="off">{% endif %}</td>{% endfor %}</tr>{% else %}<tr><td colspan="{{ chosen|length + 1 }}">Nothing matches.</td></tr>{% endfor %}</tbody></table></div>
+<tbody>{% for r in grid.records %}<tr data-record="{{ r.label }}"><th scope="row">{{ r.label }}{% if not r.active %} <span class="muted">(inactive)</span>{% endif %}</th>{% for f in chosen %}{% set key = 'cell:' ~ r.id ~ ':' ~ f %}{% set col = by_field[f] %}<td data-label="{{ col.label }}">{% if col.type == 'boolean' %}<select data-name="{{ key }}"{% if key in typed %} name="{{ key }}"{% endif %} aria-label="{{ col.label }} of {{ r.label }}"><option value=""{% if r['values'][f] == '' %} selected{% endif %}></option><option value="yes"{% if r['values'][f] == 'Yes' %} selected{% endif %}>Yes</option><option value="no"{% if r['values'][f] == 'No' %} selected{% endif %}>No</option></select>{% else %}<input data-name="{{ key }}"{% if key in typed %} name="{{ key }}"{% endif %} value="{{ typed.get(key, r['values'][f]) }}" aria-label="{{ col.label }} of {{ r.label }}"{% if col.type in ('money', 'decimal', 'integer') %} inputmode="decimal"{% endif %} autocomplete="off">{% endif %}</td>{% endfor %}</tr>{% else %}<tr><td colspan="{{ chosen|length + 1 }}">Nothing matches.</td></tr>{% endfor %}</tbody></table></div>
+{% if more %}{% set link = {'kind': kind, 'q': q, 'columns': chosen|join(','), 'inactive': 'on' if inactive else ''} %}<nav class="bulk-pager" data-bulk-pager>{% if grid.offset %}<a href="{{ post }}?{{ dict(link, offset=[grid.offset - page_size, 0]|max)|urlencode }}" data-bulk-prev>Previous {{ page_size }}</a>{% endif %}{% if grid.truncated %}<a href="{{ post }}?{{ dict(link, offset=grid.offset + page_size)|urlencode }}" data-bulk-next>Next {{ page_size }}</a>{% endif %}<span class="muted bulk-small">Cells typed here are sent from this page only; preview them before moving on.</span></nav>{% endif %}
 <label class="bulk-label bulk-reason">Why (kept with the change) <input name="ctx:reason" value="{{ values.get('ctx:reason', '') }}" placeholder="Prices up for the new season"></label>
-{% if can_write %}<div class="bulk-actions"><button type="submit" name="action" value="preview" class="primary-button" data-bulk-preview>Preview the changes</button></div>{% endif %}
+{% if can_write %}<div class="bulk-sticky" data-bulk-actionbar><span class="bulk-small">Nothing changes until you confirm the preview.</span><button type="submit" name="action" value="preview" class="primary-button" data-bulk-preview>Preview the changes</button></div>{% endif %}
 </form>
 
 {% elif step == 'changes' %}{% set r = result.run %}{% set n = result.counts.change %}
@@ -53,27 +59,45 @@
 <p data-bulk-label>{{ r.label }}{% if r.reason %} <span class="muted">({{ r.reason }})</span>{% endif %}</p>
 {{ totals_view(result.totals) }}
 {{ change_list(result.rows, False) }}
-{% if can_write and n %}<form {{ htmx() }} class="bulk-actions"><input type="hidden" name="run" value="{{ r.id }}"><input type="hidden" name="kind" value="{{ kind }}">
-<button type="submit" name="action" value="apply" class="primary-button" data-bulk-apply>Change {{ n }} {{ noun(n) }}</button>
-<a href="/c/{{ company_id }}/bulk-edit?kind={{ kind }}">Back to the grid</a></form>
+{{ run_pager(result) }}
+{% if can_write and n %}<form {{ htmx() }} class="bulk-sticky" data-bulk-actionbar><input type="hidden" name="run" value="{{ r.id }}"><input type="hidden" name="kind" value="{{ kind }}">
+<a href="/c/{{ company_id }}/bulk-edit?kind={{ kind }}">Back to the grid</a>
+<button type="submit" name="action" value="apply" class="primary-button" data-bulk-apply>Change {{ n }} {{ noun(n) }}</button></form>
 {% else %}<p><a href="/c/{{ company_id }}/bulk-edit?kind={{ kind }}">Back to the grid</a></p>{% endif %}
+
+{% elif result.run.state == 'applying' %}{% set r = result.run %}{% set total = result.counts.change %}{% set left = result.counts.pending %}{% set done = total - left %}
+<section class="workspace-card bulk-progress" data-bulk-progress data-bulk-applying aria-live="polite">
+<h2>{{ 'Applying…' if auto else 'Still applying' }}</h2>
+<progress max="{{ total or 1 }}" value="{{ done }}" aria-label="Records changed">{{ done }} of {{ total }}</progress>
+<p><strong data-bulk-done-count>{{ done }}</strong> of {{ total }} {{ noun(total) }} done{% for key in ('updated', 'merged', 'conflict', 'refused') if result.counts.get(key) %} · {{ result.counts[key] }} {{ outcomes[key]|lower }}{% endfor %}</p>
+<p data-bulk-label>{{ r.label }}</p>
+{% if not auto %}<p data-bulk-stopped>This edit stopped part way: {{ done }} done, {{ left }} not yet. Finish applying changes the rest; Cancel puts back the {{ done }} already changed. Once it is finished it can be undone as one unit.</p>{% endif %}
+{% if can_write %}<form {{ htmx() }} class="bulk-actions"><input type="hidden" name="run" value="{{ r.id }}">
+{% if auto %}<button type="submit" name="action" value="pause" data-bulk-pause>Pause</button>{% else %}<button type="submit" name="action" value="apply" class="primary-button" data-bulk-finish>Finish applying</button>
+<button type="submit" name="action" value="cancel" class="danger-button" data-bulk-cancel hx-confirm="Cancel this edit? The {{ done }} {{ noun(done) }} already changed are put back, and the rest are left as they are.">Cancel</button>{% endif %}</form>{% endif %}
+<p class="muted bulk-small">Nothing applies while this page is closed; open it again to finish or cancel.</p>
+{% if auto %}<div hidden hx-post="{{ post }}" hx-vals='{"action": "apply", "run": "{{ r.id }}"}' hx-trigger="load delay:150ms" hx-target="#bulk-workspace" hx-select="#bulk-workspace" hx-swap="outerHTML" data-bulk-auto></div>{% endif %}
+</section>
 
 {% else %}{% set r = result.run %}{% set batch = r.batch or {} %}
 <div class="bulk-bar" data-bulk-counts>{% for key in ('updated', 'merged', 'conflict', 'refused', 'not_run') if result.counts.get(key) %}<span class="{{ 'good' if key in ('updated', 'merged') else 'bad' }}">{{ result.counts[key] }} {{ outcomes[key]|lower }}</span>{% endfor %}</div>
-<p data-bulk-label>{{ r.label }}{% if r.state == 'rolled_back' %} <strong>All or nothing: a record was refused, so every change was put back.</strong>{% endif %}</p>
+<p data-bulk-label>{{ r.label }}{% if r.state == 'rolled_back' %} <strong>All or nothing: a record was refused, so every change was put back.</strong>{% elif r.state == 'cancelled' %} <strong data-bulk-cancelled>Cancelled: every change it had made was put back.</strong>{% elif r.state == 'failed' %} <strong>Stopped, and putting back what it changed was refused; Undo below finishes it once that is cleared.</strong>{% endif %}</p>
 {{ totals_view(result.totals) }}
 <section class="workspace-card bulk-undo" data-bulk-undo>
 {% if undo and undo.state == 'planned' %}{% set plan = undo.plan %}
-<h2>Undo this edit?</h2><p data-bulk-undo-plan>Undo restores all {{ plan.steps|length }} {{ noun(plan.steps|length) }} to their values before this edit{% if r.created_by_name %}, made by {{ r.created_by_name }} on {{ (r.created_at or '')[:10] }}{% endif %}.</p>
+<h2>Undo this edit?</h2><p data-bulk-undo-plan>Undo restores all {{ plan.remaining }} {{ noun(plan.remaining) }} to their values before this edit{% if r.created_by_name %}, made by {{ r.created_by_name }} on {{ (r.created_at or '')[:10] }}{% endif %}.</p>
 <form {{ htmx() }} class="bulk-actions"><input type="hidden" name="run" value="{{ r.id }}"><input type="hidden" name="fingerprint" value="{{ plan.fingerprint or '' }}"><button type="submit" name="action" value="undo" class="danger-button" data-bulk-undo-confirm>Undo the whole edit</button></form>
-{% elif undo and undo.state == 'blocked' %}<h2>Undo is blocked</h2><p>Nothing was changed. {{ undo.blockers|length }} {{ noun(undo.blockers|length) }} changed since:</p>
+{% elif undo and undo.state == 'blocked' %}<h2>Undo is blocked</h2><p data-bulk-blocked-count>Nothing was changed. {{ undo.total }} {{ noun(undo.total) }} changed since{{ ', the first ' ~ undo.blockers|length ~ ' listed' if undo.total > undo.blockers|length }}:</p>
 <ul data-bulk-blockers>{% for b in undo.blockers[:50] %}<li>{{ b.person or b.message }}{% if b.clears and not b.person %} <span class="muted">({{ b.clears }})</span>{% endif %}</li>{% else %}<li>{{ undo.error.message }}</li>{% endfor %}</ul>
-{% if undo.skip_plan %}<form {{ htmx() }} class="bulk-actions"><input type="hidden" name="run" value="{{ r.id }}"><input type="hidden" name="skip_changed" value="on"><button type="submit" name="action" value="undo" class="danger-button" data-bulk-undo-skip>Leave {{ undo.skip_plan.skipped|length }}, undo the other {{ undo.skip_plan.steps|length }}</button></form>{% endif %}
-{% elif batch.state in ('reversed', 'reversed_partly') %}<h2>Undone</h2><p data-bulk-undone>Every {{ kind }} this edit changed has its values from before{% if result.skipped %}, except {{ result.skipped|length }} changed since, left as they are: {{ result.skipped|map(attribute='label')|join(', ') }}{% endif %}.</p>
+{% if undo.skip_plan %}<form {{ htmx() }} class="bulk-actions"><input type="hidden" name="run" value="{{ r.id }}"><input type="hidden" name="skip_changed" value="on"><button type="submit" name="action" value="undo" class="danger-button" data-bulk-undo-skip>Leave {{ undo.skip_plan.skipped_total }}, undo the other {{ undo.skip_plan.remaining }}</button></form>{% endif %}
+{% elif batch.state in ('reversed', 'reversed_partly') %}<h2>Undone</h2><p data-bulk-undone>Every {{ kind }} this edit changed has its values from before{% if result.skipped %}, except {{ result.skipped|length }} changed since, left as they are: {{ result.skipped[:50]|map(attribute='label')|join(', ') }}{{ ' and ' ~ (result.skipped|length - 50) ~ ' more' if result.skipped|length > 50 }}{% endif %}.</p>
 {% elif batch.state == 'live' and can_write %}<h2>Undo</h2><p class="muted bulk-small">Restores every {{ kind }} this edit changed, as one unit. It is refused, naming the {{ kind }}, if one was changed since.</p>
 <form {{ htmx() }}><input type="hidden" name="run" value="{{ r.id }}"><button type="submit" name="action" value="undo-plan" data-bulk-undo-start>Undo this edit</button></form>{% endif %}
 </section>
+{% set shown_outcomes = [] %}{% for key in ('conflict', 'refused', 'merged', 'not_run') if result.counts.get(key) %}{% set _ = shown_outcomes.append(key) %}{% endfor %}
+{% if shown_outcomes %}<nav class="bulk-pager" data-bulk-filter>Show: {% if outcome %}<a href="{{ post }}?{{ {'run': r.id}|urlencode }}">every record</a>{% else %}<strong>every record</strong>{% endif %}{% for key in shown_outcomes %} · {% if outcome == key %}<strong>{{ outcomes[key]|lower }}</strong>{% else %}<a href="{{ post }}?{{ {'run': r.id, 'outcome': key}|urlencode }}" data-bulk-filter-{{ key }}>{{ outcomes[key]|lower }} ({{ result.counts[key] }})</a>{% endif %}{% endfor %}</nav>{% endif %}
 {{ change_list(result.rows, True) }}
+{{ run_pager(result) }}
 <p><a href="/c/{{ company_id }}/bulk-edit?kind={{ kind }}">Edit more {{ kind_label|lower }}</a></p>
 {% endif %}
 </section>

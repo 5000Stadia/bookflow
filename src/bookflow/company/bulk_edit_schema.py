@@ -13,7 +13,7 @@ with its prior values, written in the update's own transaction.
 import sqlalchemy as sa
 
 KINDS = ('customer', 'vendor', 'item', 'account')
-RUN_STATES = ('previewed', 'applying', 'applied', 'applied_partly', 'rolled_back', 'failed')
+RUN_STATES = ('previewed', 'applying', 'applied', 'applied_partly', 'rolled_back', 'cancelled', 'failed')
 ROW_STATUSES = ('change', 'refused')
 OUTCOMES = ('updated', 'merged', 'conflict', 'refused', 'not_run', 'rolled_back')
 
@@ -30,7 +30,8 @@ def define_tables(metadata, C, T):
         ident('id', 'Stable ULID of this grid edit.', primary_key=True),
         C('kind', sa.String(32), 'List edited: customer, vendor, item or account.', nullable=False),
         C('state', sa.String(16), 'previewed, applying, applied, applied_partly (some records refused), rolled_back '
-                                  '(all or nothing, undone at a refusal) or failed (that undo was refused).',
+                                  '(all or nothing, undone at a refusal), cancelled (stopped part way, what it '
+                                  'changed put back) or failed (that undo was refused).',
           nullable=False),
         C('atomic', sa.Boolean, 'True when the first refusal undoes the whole edit.', nullable=False),
         C('selection', sa.Text, 'JSON of the records chosen: the list filter, search text or named records.',

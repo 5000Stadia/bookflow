@@ -70,3 +70,15 @@
   .bulk-op-row{flex-direction:column;align-items:stretch}
   .bulk-diff{grid-template-columns:1fr}
 }
+/* The action bar stays at the foot of the screen over a long grid or diff, so Preview and Apply are never 2,000
+   cards away; pagers and the scope choice. */
+.bulk-sticky{position:sticky;bottom:0;z-index:5;display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;justify-content:flex-end;margin:.75rem 0 0;padding:.6rem .8rem;background:#fff;border-top:1px solid #d0d9e4;box-shadow:0 -2px 6px rgba(0,0,0,.08)}
+.bulk-sticky .bulk-small{margin-right:auto;color:#555}
+.bulk-pager{display:flex;flex-wrap:wrap;gap:.4rem 1rem;align-items:center;margin:.5rem 0}
+.bulk-scope{border:1px solid #d0d9e4;border-radius:.4rem;margin:.5rem 0;padding:.3rem .8rem;display:flex;flex-wrap:wrap;gap:.2rem 1.2rem}
+.bulk-progress progress{width:100%;height:1.2rem}
+@media (max-width:700px){
+  .bulk-sticky{padding:.5rem .6rem}
+  .bulk-sticky button,.bulk-sticky a,.bulk-pager a,.bulk-progress button{min-height:44px;display:inline-flex;align-items:center}
+  .bulk-scope{flex-direction:column}
+}

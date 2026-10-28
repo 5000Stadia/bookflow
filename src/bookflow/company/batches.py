@@ -163,7 +163,13 @@ def last_event_id(s) -> str | None:
 
 def record_effect(s, batch_id: str, *, record_type: str, record_id: str, action: str, version_after: int | None,
                   before: dict | None = None, event_id: str | None = None) -> int:
-    """Append one effect inside the caller's open transaction; returns its seq."""
+    """Append one effect inside the caller's open transaction; returns its seq. Only a live batch takes effects: one
+    reversed, part way reversed or blocked is closed, and a write recorded into it could never be undone with it."""
+    state = s.company.conn.execute(sa.select(c.batches.c.state).where(c.batches.c.id == batch_id)).scalar()
+    if state != 'live':
+        raise BookflowError('E_VALIDATION', message=(
+            f"Batch {batch_id} is {state or 'missing'}; nothing more can be recorded in it."),
+            details={'field': 'batch', 'batch': batch_id, 'state': state, 'problem': 'batch_not_live'})
     seq = (s.company.conn.execute(sa.select(sa.func.max(c.batch_effects.c.seq))
                                   .where(c.batch_effects.c.batch_id == batch_id)).scalar() or 0) + 1
     s.company.conn.execute(sa.insert(c.batch_effects).values(
@@ -742,7 +748,8 @@ def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
                 and last['reversal_of'] is None:
             blockers.append(_blocker(g, rec, 'later_batch',
                                      f"{label} was changed since by a later batch, {last['label']} ({last['state']}).",
-                                     clears=f"reverse batch {last['batch_id']} first", batch=last['batch_id']))
+                                     clears=_later_clears(last), batch=last['batch_id'],
+                                     batch_reversible=last['state'] in ('live', 'reversing', 'blocked')))
             continue
         expected = last['version_after'] if last is not None else None
         changed = expected is not None and row['version'] != expected
@@ -784,6 +791,17 @@ def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
                 blockers.append(refusal)
     return {'batch': batch, 'steps': steps_out, 'blockers': blockers, 'fingerprint': _fingerprint(steps_out),
             'work': work, 'records': len(groups), 'pending': len(pending)}
+
+
+def _later_clears(last: dict) -> str:
+    """What clears a later batch's standing change: reverse it while it can be; once it is reversed partly without
+    reaching this record, its change stands for good, so the record can only be put right by hand or left."""
+    if last['state'] == 'live':
+        return f"reverse batch {last['batch_id']} first"
+    if last['state'] in ('reversing', 'blocked'):
+        return f"finish reversing batch {last['batch_id']} first"
+    return (f"batch {last['batch_id']} was {last['state'].replace('_', ' ')} and left this record, so its change "
+            "stands and cannot be reversed; put the record right by hand, or leave it")
 
 
 def _payload(s, rec: ListRecord, batch: dict, row: dict, name: str, payload: dict, version: int | None) -> dict:
@@ -878,6 +896,14 @@ def refuse(found: dict) -> BookflowError:
 
 CHANGED = ('edited_again', 'later_batch')  # what skip_changed leaves: a record changed since the batch
 
+
+def _skippable(blocker: dict, adapter: Adapter) -> bool:
+    """A record changed since the batch, which skip_changed may leave. Never the ordering rule of a strict kind (a
+    later batch in the same scope must be reversed first): that is a batch-level blocker, not a changed record."""
+    return blocker['code'] in CHANGED and blocker.get('record_type') != 'batch' \
+        and not (adapter.ordering == 'strict' and blocker['code'] == 'later_batch')
+
+
 def reverse(s, ctx, batch_id: str, *, reason: str | None, dry_run: bool = False, limit: int = DEFAULT_SLICE,
             fingerprint: str | None = None, interrupt: Callable[[int], None] | None = None,
             then: Callable[[], Any] | None = None, on_begin: Callable[[Any, str], None] | None = None,
@@ -898,9 +924,9 @@ def reverse(s, ctx, batch_id: str, *, reason: str | None, dry_run: bool = False,
     adapter = adapter_for(batch['kind'])
     starting = batch['state'] not in ('reversing', 'blocked')
     found = plan(s, ctx, batch_id, probe=dry_run or (starting and fingerprint is None))
-    skipped = [b for b in found['blockers'] if b['code'] in CHANGED] if skip_changed else []
+    skipped = [b for b in found['blockers'] if _skippable(b, adapter)] if skip_changed else []
     if skipped:
-        found['blockers'] = [b for b in found['blockers'] if b['code'] not in CHANGED]
+        found['blockers'] = [b for b in found['blockers'] if not _skippable(b, adapter)]
     if found['blockers']:
         if not dry_run and not starting and adapter.blocks:
             _set_state(s, batch_id, 'blocked')
@@ -911,7 +937,7 @@ def reverse(s, ctx, batch_id: str, *, reason: str | None, dry_run: bool = False,
                             details={'field': 'fingerprint', 'current': found['fingerprint']})
     if dry_run:
         return dict(_result(s, found, state=batch['state'], reversed_now=0, dry_run=True),
-                    skipped=skipped[:MAX_BLOCKERS])
+                    skipped=skipped[:MAX_BLOCKERS], skipped_total=len(skipped))
     if batch['state'] == 'blocked':
         _set_state(s, batch_id, 'reversing')
     reversal_id = batch['reversed_by'] or _begin(s, ctx, batch, reason, on_begin)
@@ -951,13 +977,14 @@ def reverse(s, ctx, batch_id: str, *, reason: str | None, dry_run: bool = False,
     if len(found['work']) > len(work):
         rest = found['steps'][len(work):]
         return dict(_result(s, dict(found, steps=rest, fingerprint=_fingerprint(rest)), state='reversing',
-                            reversed_now=reversed_now), skipped=skipped[:MAX_BLOCKERS])
+                            reversed_now=reversed_now), skipped=skipped[:MAX_BLOCKERS], skipped_total=len(skipped))
     event_id, then_out = _finish(s, ctx, batch_id, reversal_id, batch, then,
                                  state='reversed_partly' if skipped else 'reversed')
     final = _batch(s, batch_id)
     return {'batch': describe(s, final), 'state': final['state'], 'reversed_now': reversed_now, 'remaining': 0,
             'blockers': [], 'steps': [], 'fingerprint': None, 'reversal_batch': reversal_id, 'event_id': event_id,
-            'dry_run': False, 'then': then_out, 'skipped': skipped[:MAX_BLOCKERS]}
+            'dry_run': False, 'then': then_out, 'skipped': skipped[:MAX_BLOCKERS],
+            'skipped_total': len(skipped)}
 
 
 def _stopped(found: dict, g: dict, rec: ListRecord, row: dict, error: BookflowError, reversed_now: int):

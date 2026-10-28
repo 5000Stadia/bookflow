@@ -1195,6 +1195,37 @@ per call), the preview about 0.055 s per invoice, and the reversal about 0.15 s 
   still standing), `tests/test_bulk_edit_surfaces.py` (Python, CLI, HTTP and MCP alike),
   `tests/test_bulk_edit_browser.py` (20 items repriced and undone in real Chrome at 1440 and 390).
 
+### As built: the review of increment 6 (`notes/reviews/r107-inc6-review.md`)
+
+Kabe's rule governs each fix: every batch is reversible as one unit, a preview shows exactly what will change, and
+nothing ever ends up changed but impossible to undo.
+
+- **An unfinished apply is never undone in part** (high). `bulk-edit reverse` refuses a run still `applying`,
+  saying to finish it (`bulk-edit apply <run>`) or cancel it (`bulk-edit apply <run> --cancel`). Cancel marks the
+  rows still waiting `not_run` and reverses what landed through the batch, as one unit; the run ends `cancelled`
+  (a new state in co0115), or `failed` with its batch still live if that reversal is refused, so Undo finishes it
+  later. An apply refuses to resume once its batch is no longer live (the run ends `cancelled`, the rest
+  `not_run`), and the ledger itself (`batches.record_effect`, shared by imports and bank sorts) refuses an effect
+  written into a batch that is not live, so a write can never land in a closed batch.
+- **Counts are the whole edit's** (medium). Lists stay capped at 50 for display, but a blocked reversal says the
+  true total (`details.total`), a plan gives `remaining` (every record it restores) and `skipped_total`, and the
+  page's "Undo restores all N", "N changed since" and "Leave K, undo the other M" use them.
+- **The browser apply runs in slices** (medium). `bulk-edit apply --limit N` changes at most N records and leaves
+  the run `applying`; the page applies 50 at a time (about 2 s), each its own command, so the single writer is free between
+  slices, and shows a progress bar (`counts.pending`). A reload, or a stopped apply, shows "Still applying" with
+  Finish applying and Cancel, never Undo; a reload that arrives while a slice is still writing waits for it (up to
+  20 s) instead of showing the busy refusal.
+- **Big lists on a phone** (medium). The grid shows 50 records a page (`bulk-edit grid --offset`, default `limit`
+  50, `total` the whole selection), with "Only the 50 shown" or "All N matching" for what a change covers; Preview
+  and Apply sit in a bar fixed to the foot of the screen; Changes and Done list 50 rows at a time (`show --cursor`)
+  with a filter by outcome, and every count is the whole edit's. Checked in Chrome at 390 px with 2,000 items.
+- **Lows.** A `later_batch` blocker says what clears it: "reverse batch X first" only while X can be reversed;
+  once X was reversed partly without reaching the record, it says that change stands and the record can only be
+  put right by hand or left (`batch_reversible`). `skip_changed` leaves only record-level changes: never the
+  ordering rule of a strict kind (a later live batch in a bank import's scope). A paste without a header row over a
+  filter or search needs the grid's `selection_fingerprint` (the selection's records in order) and is refused if
+  the records changed since; named `records` need none. The 300-item test has its own 900 s timeout.
+
 **Timings** (`tools/measure_bulk_edit.py ROWS`, root NVMe, service items, three columns, a 5 percent rise rounded
 to 0.05 over every item; seconds, 2026-10-28):
 

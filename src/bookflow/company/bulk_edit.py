@@ -22,6 +22,7 @@ currency's places (or the step asked for).
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import re
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation, localcontext
@@ -40,6 +41,7 @@ OWNER = batches.OWNER
 KIND = 'bulk-edit'
 MAX_RECORDS = 5000
 ROWS_SHOWN = 200
+GRID_PAGE = 50  # records a grid shows at once by default; the selection itself may hold up to MAX_RECORDS
 SOURCE = 'bulk-edit'
 DEFAULT_COLUMNS = {'customer': ('terms_id', 'credit_limit', 'email', 'phone'),
                    'vendor': ('terms_id', 'account_number', 'email', 'phone'),
@@ -233,6 +235,12 @@ def display(col: dict, value: Any, names: Names) -> str:
     return str(value)
 
 
+def selection_fingerprint(kind_name: str, ids: list[str]) -> str:
+    """The selection's records in order: a paste without a header fills them by position, so it must land on the
+    records the grid showed (a record added, removed or renamed into another place since moves every row after it)."""
+    return hashlib.sha256('\n'.join([kind_name, *ids]).encode()).hexdigest()
+
+
 def grid(s, ctx, inp) -> dict:
     k = _kind(inp.kind)
     batches.require_read(s, f'{k.noun} show')
@@ -241,7 +249,8 @@ def grid(s, ctx, inp) -> dict:
     cols = [_column(cmap, f) for f in wanted]
     books = _books(s, k)
     names = Names(books)
-    ids, total = select(s, ctx, k, inp, books, limit=inp.limit)
+    every, total = select(s, ctx, k, inp, books)
+    ids = every[inp.offset:inp.offset + inp.limit]
     records = shown(s, ctx, k, ids)
     out = []
     for rid in ids:
@@ -249,7 +258,9 @@ def grid(s, ctx, inp) -> dict:
         out.append({'id': rid, 'version': record.get('version'), 'label': _label_of(record),
                     'active': record.get('active', True),
                     'values': {col['field']: display(col, current_value(col, record), names) for col in cols}})
-    return {'kind': inp.kind, 'columns': cols, 'records': out, 'total': total, 'truncated': total > len(ids)}
+    return {'kind': inp.kind, 'columns': cols, 'records': out, 'total': total, 'offset': inp.offset,
+            'truncated': total > inp.offset + len(ids),
+            'selection_fingerprint': selection_fingerprint(inp.kind, every) if total <= MAX_RECORDS else None}
 
 
 # ------------------------------------------------------------------ values
@@ -380,6 +391,17 @@ def _paste_changes(inp, k, cmap: dict, ids: list[str], labels: dict[str, str], b
         fields = {i: col['field'] for i, col in matched.items() if col is not None and i not in named}
         body = table[1:]
     else:
+        if not inp.records and inp.selection_fingerprint != selection_fingerprint(k.name, ids):
+            raise BookflowError('E_VALIDATION', message=(
+                'A paste without a header row fills the records by position, and the records the grid showed '
+                'have changed since (one added, removed or renamed), so its rows would land on other records. Show '
+                'the grid again and paste once more, or paste with a header row and a Name column.'
+                if inp.selection_fingerprint else
+                'A paste without a header row fills the records by position: give the grid\'s '
+                '`selection_fingerprint` (so it is refused if the records changed since), name the `records`, or '
+                'paste with a header row and a Name column.'),
+                details={'field': 'selection_fingerprint', 'problem': 'selection_changed'
+                         if inp.selection_fingerprint else 'required'})
         given = inp.paste_columns or [f for f in DEFAULT_COLUMNS[k.name]]
         fields = {i: _column(cmap, f)['field'] for i, f in enumerate(given)}
         body = table
@@ -708,12 +730,42 @@ def _recorder(run: dict, row: dict, k, cols: dict, current: dict, payload: dict)
     return record
 
 
-def apply(s, ctx, run_id: str, *, interrupt=None) -> dict:
+def _batch_state(s, run: dict) -> str | None:
+    if not run['batch_id']:
+        return None
+    return s.company.conn.execute(sa.select(c.batches.c.state).where(c.batches.c.id == run['batch_id'])).scalar()
+
+
+def _not_run(s, run: dict) -> int:
+    """Close the rows still waiting (``not_run``), inside the caller's transaction; returns how many."""
+    return s.company.conn.execute(sa.update(c.bulk_edit_rows).where(
+        c.bulk_edit_rows.c.run_id == run['id'], c.bulk_edit_rows.c.outcome.is_(None),
+        c.bulk_edit_rows.c.status == 'change').values(outcome='not_run', applied_at=now())).rowcount
+
+
+def _pending(s, run_id: str) -> int:
+    return s.company.conn.execute(sa.select(sa.func.count()).select_from(c.bulk_edit_rows).where(
+        c.bulk_edit_rows.c.run_id == run_id, c.bulk_edit_rows.c.status == 'change',
+        c.bulk_edit_rows.c.outcome.is_(None))).scalar()
+
+
+def apply(s, ctx, run_id: str, *, limit: int | None = None, interrupt=None) -> dict:
+    """Apply the diff, or its next ``limit`` records (a slice: the run stays `applying` and the same call goes on)."""
     run = run_read(s, run_id)
     k = _kind(run['kind'])
     if run['state'] not in ('previewed', 'applying'):
         raise BookflowError('E_VALIDATION', message=f"Grid edit {run_id} is already {run['state']}.",
                             details={'field': 'run', 'state': run['state']})
+    batch_state = _batch_state(s, run)
+    if run['state'] == 'applying' and batch_state != 'live':
+        # Its batch was reversed (or is being) meanwhile, so nothing more may land in it: a write recorded there
+        # could never be undone with the rest. What is still waiting is left, and the edit ends cancelled.
+        left = _tx(s, lambda: _not_run(s, run))
+        _set_state(s, run, 'cancelled')
+        raise BookflowError('E_VALIDATION', message=(
+            f"Grid edit {run_id} cannot go on: its batch is {batch_state}, so nothing more may be added to it. The "
+            f"{left} record(s) not yet changed were left as they are, and the edit is cancelled."),
+            details={'field': 'run', 'state': 'cancelled', 'batch_state': batch_state, 'not_run': left})
     rows = [dict(r) for r in s.company.conn.execute(sa.select(c.bulk_edit_rows).where(
         c.bulk_edit_rows.c.run_id == run_id).order_by(c.bulk_edit_rows.c.seq)).mappings()]
     if run['atomic'] and any(r['status'] == 'refused' for r in rows):
@@ -728,6 +780,8 @@ def apply(s, ctx, run_id: str, *, interrupt=None) -> dict:
     for row in rows:
         if row['status'] != 'change' or row['outcome'] is not None:
             continue
+        if limit is not None and done >= limit:
+            return show(s, ctx, run_id)  # a slice: the rest waits for the next call
         diff = json.loads(row['changes'])
         payload = _payload(k, cols, row['record_id'], row['version'], {d['field']: d['after'] for d in diff})
         current = shown(s, ctx, k, [row['record_id']])[row['record_id']]
@@ -735,6 +789,8 @@ def apply(s, ctx, run_id: str, *, interrupt=None) -> dict:
             batches.run_nested(s, ctx, k.update, payload, source_ref=f"bulk-edit:{run_id}",
                                recorder=_recorder(run, row, k, cols, current, payload), recovery=False)
         except BookflowError as error:
+            if (error.details or {}).get('problem') == 'batch_not_live':
+                raise
             outcome = 'conflict' if error.code == 'E_VERSION_CONFLICT' else 'refused'
             _tx(s, lambda: _outcome(s, run_id, row['seq'], outcome=outcome, outcome_code=error.code,
                                     outcome_message=imports._message(error)))
@@ -750,30 +806,46 @@ def apply(s, ctx, run_id: str, *, interrupt=None) -> dict:
     return show(s, ctx, run_id)
 
 
-def _roll_back(s, ctx, run: dict, row: dict, error: BookflowError) -> dict:
-    """All or nothing met a refusal: the records already changed get their prior values back through the batch."""
-    def not_run():
-        s.company.conn.execute(sa.update(c.bulk_edit_rows).where(
-            c.bulk_edit_rows.c.run_id == run['id'], c.bulk_edit_rows.c.outcome.is_(None),
-            c.bulk_edit_rows.c.status == 'change').values(outcome='not_run', applied_at=now()))
-    _tx(s, not_run)
+def _put_back(s, ctx, run: dict, *, note: str, why: str, state: str) -> dict:
+    """Stop the apply: the rows still waiting become ``not_run`` and the records already changed get their prior
+    values back through the batch; the run ends ``state``, or ``failed`` (its batch still live, so `bulk-edit reverse`
+    can finish the undo) if that reversal is refused."""
+    _tx(s, lambda: _not_run(s, run))
     made = batches.counts(s, run['batch_id'])
-    note = f"{row['label']} was refused ({error.code}: {imports._message(error)})"
-    undo = ctx.model_copy(update={'reason': run.get('reason') or ctx.reason or f"Grid edit {run['id']} undone"})
+    undo = ctx.model_copy(update={'reason': ctx.reason or run.get('reason') or f"Grid edit {run['id']} undone"})
     try:
-        if made:
-            batches.reverse(s, undo, run['batch_id'], reason=f"All-or-nothing grid edit stopped: {note}"[:500],
-                            limit=10 ** 9)
+        if made and _batch_state(s, run) in ('live', 'reversing', 'blocked'):
+            batches.reverse(s, undo, run['batch_id'], reason=f"{why}: {note}"[:500], limit=10 ** 9)
     except BookflowError as failed:
         _set_state(s, run, 'failed')
         out = show(s, ctx, run['id'])
         out['notes'] = [f"{note}; undoing the {sum(made.values())} record(s) already changed was refused too: "
                         f"{failed.message} `bulk-edit reverse {run['id']}` finishes it once that is cleared."]
         return out
-    _set_state(s, run, 'rolled_back')
+    _set_state(s, run, state)
     out = show(s, ctx, run['id'])
-    out['notes'] = [f"{note}; all or nothing, so the {sum(made.values())} record(s) already changed were put back."]
+    out['notes'] = [f"{note}; the {sum(made.values())} record(s) already changed were put back."]
     return out
+
+
+def _roll_back(s, ctx, run: dict, row: dict, error: BookflowError) -> dict:
+    """All or nothing met a refusal: the records already changed get their prior values back through the batch."""
+    note = f"{row['label']} was refused ({error.code}: {imports._message(error)}); all or nothing"
+    return _put_back(s, ctx, run, note=note, why='All-or-nothing grid edit stopped', state='rolled_back')
+
+
+def cancel(s, ctx, run_id: str) -> dict:
+    """Stop an unfinished apply: what it changed so far is put back as one unit, and the rest never runs."""
+    run = run_read(s, run_id)
+    if run['state'] != 'applying':
+        raise BookflowError('E_VALIDATION', message=(
+            f"Only an unfinished apply can be cancelled; grid edit {run_id} is {run['state']}."
+            + (f" `bulk-edit reverse {run_id}` undoes it." if run['state'] in ('applied', 'applied_partly') else '')),
+            details={'field': 'run', 'state': run['state']})
+    done = s.company.conn.execute(sa.select(sa.func.count()).select_from(c.bulk_edit_rows).where(
+        c.bulk_edit_rows.c.run_id == run_id, c.bulk_edit_rows.c.outcome.isnot(None))).scalar()
+    return _put_back(s, ctx, run, note=f"Cancelled after {done} record(s)", why='Grid edit cancelled',
+                     state='cancelled')
 
 
 # ------------------------------------------------------------------ reverse
@@ -785,7 +857,15 @@ def reverse(s, ctx, inp, *, dry_run: bool) -> dict:
     if run['batch_id'] is None:
         raise BookflowError('E_VALIDATION', message=f'Grid edit {inp.run} was never applied; nothing to reverse.',
                             details={'field': 'run', 'state': run['state']})
-    reversed_now, fingerprint, skipped = 0, inp.fingerprint, []
+    if run['state'] == 'applying':
+        # Undoing a part of it would leave the rest to land afterwards, changed and beyond any undo.
+        left = _pending(s, inp.run)
+        raise BookflowError('E_VALIDATION', message=(
+            f"Grid edit {inp.run} is still applying ({left} record(s) not yet changed). Finish it "
+            f"(`bulk-edit apply {inp.run}`) or cancel it (`bulk-edit apply {inp.run} --cancel`, which puts back "
+            "what already changed) first; then it is undone as one unit."),
+            details={'field': 'run', 'state': 'applying', 'pending': left})
+    reversed_now, fingerprint, skipped, skipped_total = 0, inp.fingerprint, [], 0
     while True:
         try:
             out = batches.reverse(s, ctx, run['batch_id'], reason=ctx.reason, dry_run=dry_run,
@@ -796,19 +876,21 @@ def reverse(s, ctx, inp, *, dry_run: bool) -> dict:
                 _readable(s, run, error.details.get('blockers') or [])
                 first = (error.details.get('blockers') or [{}])[0]
                 if first.get('person'):
-                    error.message = (f"{len(error.details['blockers'])} record(s) changed since this edit, first "
+                    total = error.details.get('total') or len(error.details['blockers'])
+                    error.message = (f"{total} record(s) changed since this edit, first "
                                      f"{first['person']} Nothing was changed; skip_changed reverses the rest."
                                      if first.get('code') in batches.CHANGED else error.message)
                     error.args = (f'{error.code}: {error.message}',)
             raise
         reversed_now += out['reversed_now']
-        skipped = out.get('skipped') or skipped
+        if out.get('skipped'):  # every slice leaves the same records; the first reports them
+            skipped, skipped_total = out['skipped'], out.get('skipped_total', len(out['skipped']))
         fingerprint = None
         if dry_run or out['state'] != 'reversing':
             break
     _readable(s, run, out.get('blockers') or [])
     _readable(s, run, skipped)
-    out.update(reversed_now=reversed_now, skipped=skipped, run=inp.run)
+    out.update(reversed_now=reversed_now, skipped=skipped, skipped_total=skipped_total, run=inp.run)
     return out
 
 
@@ -828,7 +910,8 @@ def _readable(s, run: dict, blockers: list[dict]) -> None:
         if b.get('code') == 'edited_again':
             b['person'] = f"{label} was changed since this edit by {who}{' at ' + when + ' UTC' if when else ''}."
         elif b.get('code') == 'later_batch':
-            b['person'] = f"{label} was changed since by a later batch: {b.get('message', '').split(', ', 1)[-1]}"
+            later = b.get('message', '').split(', ', 1)[-1].rstrip('.')
+            b['person'] = f"{label} was changed since by a later batch, {later}: {b.get('clears')}."
         else:
             b['person'] = b.get('message')
 
@@ -878,6 +961,8 @@ def show(s, ctx, run_id: str, *, outcome: str | None = None, limit: int = ROWS_S
     counts = {'selected': run['record_count'], 'unchanged': run['unchanged_count'],
               'change': sum(r['status'] == 'change' for r in all_rows),
               'refused': sum(r['status'] == 'refused' for r in all_rows)}
+    counts['pending'] = sum(r['status'] == 'change' and r['outcome'] is None for r in all_rows) \
+        if run['state'] in ('previewed', 'applying') else 0
     for r in all_rows:
         if r['outcome']:
             counts[r['outcome']] = counts.get(r['outcome'], 0) + 1
@@ -895,7 +980,7 @@ def show(s, ctx, run_id: str, *, outcome: str | None = None, limit: int = ROWS_S
     out_run.update(selection=json.loads(run['selection']), asked=json.loads(run['operations']), batch=batch,
                    created_by_name=by)
     nxt = (f'bulk-edit apply {run_id}' if state == 'previewed' and counts['change'] else
-           f'bulk-edit apply {run_id}' if state == 'applying' else
+           f'bulk-edit apply {run_id} (or --cancel)' if state == 'applying' else
            f'bulk-edit reverse {run_id} --dry-run' if batch.get('state') == 'live' else None)
     return {'run': out_run, 'counts': counts, 'totals': _totals(s, run, all_rows), 'rows': [_row_out(r) for r in page],
             'next_cursor': page[-1]['seq'] if len(picked) > len(page) else None,
