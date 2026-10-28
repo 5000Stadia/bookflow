@@ -380,5 +380,23 @@ def test_seeded_grid_edits_edits_between_and_reversals_equal_a_replay(books, see
             totals['partly' if skipped else 'reversed'] += 1
             live.remove(run)
         assert books_now() == replay(), (seed, step)
-    print(seed, totals)
+    print('\nPROPERTY', seed, totals)
     assert totals['grid edits'] and (totals['reversed'] + totals['partly'])
+
+
+def test_a_custom_field_is_a_column_and_reverses_exactly(books):
+    books.run('custom-field create', {'name': 'Region', 'kind': 'text', 'scopes': ['customer']})
+    for name in ('North Co', 'South Co'):
+        books.run('customer create', {'name': name})
+    books.run('customer update', {'customer': 'South Co', 'custom_fields': {
+        next(c['definition_id'] for c in books.run('bulk-edit columns', {'kind': 'customer'})['columns']
+             if c['field'] == 'custom:Region'): 'South'}})
+    preview = books.run('bulk-edit preview', {'kind': 'customer', 'operations': [
+        {'op': 'set', 'field': 'custom:Region', 'value': 'East'}]})
+    assert {r['label']: r['changes'][0]['before'] for r in preview['rows']} == {'North Co': None, 'South Co': 'South'}
+    books.run('bulk-edit apply', {'run': preview['run']['id']})
+    grid = books.run('bulk-edit grid', {'kind': 'customer', 'columns': ['custom:Region']})
+    assert {r['values']['custom:Region'] for r in grid['records']} == {'East'}
+    books.run('bulk-edit reverse', {'run': preview['run']['id']})
+    grid = books.run('bulk-edit grid', {'kind': 'customer', 'columns': ['custom:Region']})
+    assert {r['label']: r['values']['custom:Region'] for r in grid['records']} == {'North Co': '', 'South Co': 'South'}
