@@ -1121,6 +1121,14 @@ def test_filesystem_operations_release_every_affected_pooled_company(hosted):
         hosted.ok("company.update", {"fax": marker}, company=cid)
         assert is_pooled(cid)
 
+    # Demo reset first, while the hosted company is still the demo's own: it never runs while the
+    # demo organization holds a company the demo did not create (R187), and the detach/attach below
+    # registers this one again as such a company. The reset's fresh demo company carries the rest.
+    pool_company("555-6100")
+    reset = hosted.ok("demo.reset", {})
+    assert reset["company_id"] != cid and not is_pooled(cid)
+    cid = reset["company_id"]
+
     pool_company("555-6101")
     renamed = hosted.ok("company.rename", {"name": "Release Witness", "move": True}, company=cid)
     assert renamed["moved"] is True and not is_pooled(cid)
@@ -1137,7 +1145,7 @@ def test_filesystem_operations_release_every_affected_pooled_company(hosted):
     assert not is_pooled(cid)
 
     pool_company("555-6104")
-    folder = Path(hosted.info()["path"])
+    folder = Path(hosted.ok("company.show", company=cid)["path"])
     hosted.ok("company.detach", {"company": cid})
     assert not is_pooled(cid)
 
@@ -1148,11 +1156,6 @@ def test_filesystem_operations_release_every_affected_pooled_company(hosted):
     assert is_pooled(cid)
     hosted.ok("company.attach", {"path": str(folder), "administrator": hosted.login})
     assert not is_pooled(cid)
-
-    pool_company("555-6105")
-    # The root holds a real company beside the demo, so the reset names the root (R168).
-    reset = hosted.ok("demo.reset", {"force": str(hosted.root)})
-    assert reset["company_id"] != cid and not is_pooled(cid)
 
 
 def test_a_durable_write_error_still_checkpoints_and_wakes_subscribers(hosted, root):
@@ -1532,6 +1535,11 @@ DEDICATED_PAGES = {
     # R111's Reminders page: its filter form carries the date, the bills window and Only mine; `limit` is
     # the page's own (25 a section).
     "reminders": ("/reminders", ("as_of", "bills_days_ahead", "mine")),
+    # R112's Email a batch page: a bare page picks the selection and its filters; the preview it draws
+    # carries the rest (keep, seen, fingerprint, send), which test_delivery_batch_browser drives.
+    "delivery batch": ("/delivery/batch", ("selection", "kind", "date_from", "date_to", "combine", "customer")),
+    # R112's Email later box beside Print on a document: the document it flags rides as hidden fields.
+    "delivery flag": ("/delivery/flag", ("kind", "document", "email_later")),
 }
 
 
@@ -1607,6 +1615,9 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted,
               "expected_version": member["version"],
               "grants": sorted({c.capability for c in registry.routed_commands() if c.requires_explicit_grant})},
               headers={"X-Bookflow-Reason": "Open every delete confirmation"})
+    # Pick lists are an optional layer on shipping (R181): while it is off no pick form renders.
+    # Turn it on, as a company that picks would, so each pick-list form opens.
+    hosted.ok("company.update", {"pick_and_pack_enabled": True}, company=hosted.company_id)
     from tests.mcp_coverage import delete_confirmation_row
     for cmd in registry.routed_commands():
         if cmd.requires_explicit_grant:
