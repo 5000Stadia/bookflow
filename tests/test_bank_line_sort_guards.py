@@ -241,7 +241,7 @@ def test_retries_are_idempotent_and_refusals_point_at_what_clears_them(client):
         assert run(client, name, data, idempotency_key=f'{name}-1')['batch_id'] == one['batch_id']
 
 
-def test_a_lines_add_that_fails_first_leaves_no_batch(client):
+def test_a_lines_add_that_fails_first_leaves_no_batch(client, monkeypatch):
     d = imp(client, 'Checking', csv_file([('2026-10-06', 'A', '-5.00')]))
     batches_before = table(client, "SELECT count(*) FROM batches WHERE kind = 'bank-sort'")
     from bookflow.company import bank_sort
@@ -251,10 +251,8 @@ def test_a_lines_add_that_fails_first_leaves_no_batch(client):
         if not kw.get('dry_run'):
             raise BookflowError('E_VALIDATION', message='refused by the test')
         return original(s, ctx, name, payload, **kw)
-    bank_sort.batches.run_nested = fail
-    try:
-        refused(client, 'bank-line add', dict(lines=[dict(line=d['lines'][0]['id'])], payee='Central Supply',
-                                              account='Vehicle Expense'))
-    finally:
-        bank_sort.batches.run_nested = original
+    monkeypatch.setattr(bank_sort.batches, 'run_nested', fail)
+    refused(client, 'bank-line add', dict(lines=[dict(line=d['lines'][0]['id'])], payee='Central Supply',
+                                          account='Vehicle Expense'))
+    monkeypatch.undo()
     assert table(client, "SELECT count(*) FROM batches WHERE kind = 'bank-sort'") == batches_before

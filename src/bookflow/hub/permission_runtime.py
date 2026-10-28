@@ -175,8 +175,9 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.IMPORT_MAPPING_POLICY_VERSION: '66a2d6a6c90f23b6f547ec27aa823a1440b892c22a7bd0b50ce8c142c5dc7b5f',
     c.DELIVERY_SCHEDULE_POLICY_VERSION: '66aed81b62dd65713f27e55f39cea8ba2aa393d8584b08013a4a0298ec50dd59',
     c.BANK_FEED_POLICY_VERSION: '37f3a79e1ad520b97153c7863f0d3111c821e75bd944b0193c727ff94b3e9a29',
+    c.IMPORT_DOCUMENTS_POLICY_VERSION: '6418e208309e3f01e38b4749e62895dad640e66deada78c513ed3bf7127cf13a',
     c.BANK_FEED_REVERSE_POLICY_VERSION: 'df70eed353fe2243e74c722b39a0e7a9b12f98a2e3bd1a9c03bfc382325328c6',
-    c.BANK_LINE_POLICY_VERSION: '99c5123f5323536a3b23289f43701b9c188c720cb40a20ebac70be7568c04667',
+    c.BANK_LINE_POLICY_VERSION: 'bd11005cfa5a7630090a663bf20f7dd2bd8d7c4ee4a764cd7295a40e1f4f61e9',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -327,6 +328,7 @@ def _full_known():
     from . import permission_import_mapping_catalog
     from . import permission_delivery_schedule_catalog
     from . import permission_bank_feed_catalog
+    from . import permission_import_documents_catalog
     from . import permission_bank_feed_reverse_catalog
     from . import permission_bank_line_catalog
     known = {
@@ -405,6 +407,7 @@ def _full_known():
         c.IMPORT_MAPPING_POLICY_VERSION: permission_import_mapping_catalog,
         c.DELIVERY_SCHEDULE_POLICY_VERSION: permission_delivery_schedule_catalog,
         c.BANK_FEED_POLICY_VERSION: permission_bank_feed_catalog,
+        c.IMPORT_DOCUMENTS_POLICY_VERSION: permission_import_documents_catalog,
         c.BANK_FEED_REVERSE_POLICY_VERSION: permission_bank_feed_reverse_catalog,
         c.BANK_LINE_POLICY_VERSION: permission_bank_line_catalog,
     }

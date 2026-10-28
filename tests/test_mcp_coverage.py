@@ -414,7 +414,8 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # memo, number, each split's memo and class_id, and the same seven again inside each --lines item), match 3
     # (line, entry, each item's entry), transfer 3 (pair, to, entry), ignore 2 (line, note), unmatch 1 (line),
     # undo 1 (fingerprint) -- their null branches. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==4285
+    # 4285 -> 4286 (R108 inc 3 review fixes, measured): bank-line query's entry_gone filter -- its null branch.
+    assert sum(len(group["paths"]) for group in mapped)==4286
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

@@ -740,15 +740,15 @@ line for line and match for match, with the same account records.
 
 ## As built: increment 3
 
-- **Migration co0113** (on co0112) adds five columns to `bank_lines`, moving no row: `created` (0; 1 when the line's
+- **Migration co0114** (on co0113, R107's document imports) adds five columns to `bank_lines`, moving no row: `created` (0; 1 when the line's
   entry was made from it), `payee_display`, `proposal` (the matcher's suggestion at import with its reason, a JSON
   object), `ignore_reason` (`already_entered`, `not_ours`, `duplicate`, `other`) and `entry_date` (the linked entry's
   date on the line's account when linked, so a later change shows as `entry_gone`). `entry_id`, `movement`,
   `link_how` and `match_reason` came with co0112. Decided: `pair_line_id` is not stored but read (a live line of
   another account linked to the same entry), so a reversal never leaves a pointer to a hidden line; `rule_id` waits for
   increment 4, whose table it names. The line's guards are unchanged.
-- **Six commands** (`company/bank_sort.py`, layer `bank-line-v1` on `bank-feed-reverse-v1`, 834 commands, descriptor
-  `99c5123f`; each standard under `bank-feed` with `ledger.read` member; all `not-a-record` for imports):
+- **Six commands** (`company/bank_sort.py`, layer `bank-line-v1` on `import-documents-v1`, 834 commands, descriptor
+  `bd11005c`; each standard under `bank-feed` with `ledger.read` member; all `not-a-record` for imports):
   `bank-line match`, `unmatch`, `ignore`, `add`, `transfer` and `undo`. Decided: `unmatch` is the one way back to
   waiting -- from a match or transfer link (the entry stays), an ignore (`unignored` event), or an added line whose
   entry was since deleted, voided or changed (`released`); an added line whose entry stands is refused naming its
@@ -819,7 +819,7 @@ line for line and match for match, with the same account records.
 - **Proposals with reasons** on waiting lines (`bank-line query`, `bank-feed show`): `match` (the matcher's suggestion
   kept at import, its entries still standing and free, `unique` when one) and `transfer` (read live, `unique` when sure
   both ways), each with `next`, the command that accepts it. Transfer fits for a whole page are read in one query
-  (`bank-line query --limit 1000` over 5,000 waiting lines: MEASURE). Rules' proposals are increment 4's.
+  (`bank-line query --limit 1000` over 5,000 waiting lines with 2,500 opposite ones: 0.15 s, was 5.7 s). Rules' proposals are increment 4's.
 - **Not built here:** rules and learning (increment 4: no auto-add, no history proposals, no `rule_id`), the company
   preference `--bank-auto-match` (auto-match stays per import), add more details (5), the browser pages (7), creating
   a payee from a line.

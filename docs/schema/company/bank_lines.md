@@ -33,3 +33,4 @@ Database: `company`.
 | `payee_display` | TEXT | yes | — | — | — | — | The payee the entry was entered under; null until one was. |
 | `proposal` | TEXT | yes | — | — | — | — | What the matcher suggested at import, with its reason, as a JSON object; null when nothing. |
 | `ignore_reason` | VARCHAR(16) | yes | — | — | — | — | Why the line was set aside: already_entered, not_ours, duplicate, other; null unless ignored. |
+| `entry_date` | VARCHAR(10) | yes | — | — | — | — | The entry's date on this account when the line was linked to it (YYYY-MM-DD), so a later change shows as entry_gone; null while none. |

@@ -69,6 +69,7 @@ The same example as complete `bookflow_run` arguments:
 | `--source-ref TEXT` | Identifier of the source that triggered the write. |
 | `--interactive` | Prompt for input fields not supplied as arguments or options. |
 | `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
 ### HTTP
@@ -87,6 +88,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
 | `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
 | `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
 
 ### Output
 
@@ -117,6 +119,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].payee_display` | string \| null | no | yes | null | The payee the entry was entered under. |
 | `lines[].ignore_reason` | string \| null | no | yes | null | — |
 | `lines[].pair_line_id` | string \| null | no | yes | null | A transfer's other end: a live line of another account linked to the same entry. |
+| `lines[].entry_gone` | string \| null | no | yes | null | Set when the line's entry was voided, deleted or changed in amount or date since it was linked, with why: the line is not done (bank-line unmatch returns it to waiting). |
 | `lines[].proposals` | array[object] | no | no | [] | For a waiting line: what it could be, with why. |
 | `lines[].proposals[].kind` | literal["match", "transfer"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts. |
 | `lines[].proposals[].reason` | string | yes | no | — | Why it is proposed; when several fit equally, says so (never chosen for you). |
@@ -161,6 +164,7 @@ Example JSON output:
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
 | `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
@@ -230,6 +234,7 @@ The same example as complete `bookflow_run` arguments:
 | `--source-ref TEXT` | Identifier of the source that triggered the write. |
 | `--interactive` | Prompt for input fields not supplied as arguments or options. |
 | `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
 ### HTTP
@@ -248,6 +253,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
 | `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
 | `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
 
 ### Output
 
@@ -278,6 +284,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].payee_display` | string \| null | no | yes | null | The payee the entry was entered under. |
 | `lines[].ignore_reason` | string \| null | no | yes | null | — |
 | `lines[].pair_line_id` | string \| null | no | yes | null | A transfer's other end: a live line of another account linked to the same entry. |
+| `lines[].entry_gone` | string \| null | no | yes | null | Set when the line's entry was voided, deleted or changed in amount or date since it was linked, with why: the line is not done (bank-line unmatch returns it to waiting). |
 | `lines[].proposals` | array[object] | no | no | [] | For a waiting line: what it could be, with why. |
 | `lines[].proposals[].kind` | literal["match", "transfer"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts. |
 | `lines[].proposals[].reason` | string | yes | no | — | Why it is proposed; when several fit equally, says so (never chosen for you). |
@@ -320,6 +327,7 @@ Example JSON output:
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
 | `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
 | `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
@@ -387,6 +395,7 @@ The same example as complete `bookflow_run` arguments:
 | `--source-ref TEXT` | Identifier of the source that triggered the write. |
 | `--interactive` | Prompt for input fields not supplied as arguments or options. |
 | `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
 ### HTTP
@@ -405,6 +414,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
 | `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
 | `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
 
 ### Output
 
@@ -435,6 +445,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].payee_display` | string \| null | no | yes | null | The payee the entry was entered under. |
 | `lines[].ignore_reason` | string \| null | no | yes | null | — |
 | `lines[].pair_line_id` | string \| null | no | yes | null | A transfer's other end: a live line of another account linked to the same entry. |
+| `lines[].entry_gone` | string \| null | no | yes | null | Set when the line's entry was voided, deleted or changed in amount or date since it was linked, with why: the line is not done (bank-line unmatch returns it to waiting). |
 | `lines[].proposals` | array[object] | no | no | [] | For a waiting line: what it could be, with why. |
 | `lines[].proposals[].kind` | literal["match", "transfer"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts. |
 | `lines[].proposals[].reason` | string | yes | no | — | Why it is proposed; when several fit equally, says so (never chosen for you). |
@@ -477,6 +488,7 @@ Example JSON output:
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
 | `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
 | `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
@@ -534,6 +546,7 @@ The same example as complete `bookflow_run` arguments:
 | `text` | `--text` | string \| null | no | yes | null | Words in the payee, memo or number. |
 | `amount` | `--amount` | string \| null | no | yes | null | An exact amount, bank sign ("-4.50"). |
 | `include_reversed` | `--include-reversed` | boolean | no | no | false | — |
+| `entry_gone` | `--entry-gone` | boolean \| null | no | yes | null | true: only lines whose entry was voided, deleted or changed since; false: none of them. |
 | `limit` | `--limit` | integer | no | no | 100 | minimum 1; maximum 1000 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
 
@@ -588,6 +601,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].payee_display` | string \| null | no | yes | null | The payee the entry was entered under. |
 | `lines[].ignore_reason` | string \| null | no | yes | null | — |
 | `lines[].pair_line_id` | string \| null | no | yes | null | A transfer's other end: a live line of another account linked to the same entry. |
+| `lines[].entry_gone` | string \| null | no | yes | null | Set when the line's entry was voided, deleted or changed in amount or date since it was linked, with why: the line is not done (bank-line unmatch returns it to waiting). |
 | `lines[].proposals` | array[object] | no | no | [] | For a waiting line: what it could be, with why. |
 | `lines[].proposals[].kind` | literal["match", "transfer"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts. |
 | `lines[].proposals[].reason` | string | yes | no | — | Why it is proposed; when several fit equally, says so (never chosen for you). |
@@ -639,7 +653,7 @@ Example JSON output:
 
 ## `bank-line transfer`
 
-Record a waiting bank line as a transfer between two of your accounts, as one entry: with its other end (`pair`, or the one proposed when exactly one fits both ways), both lines link to an existing transfer of that amount nearby, or to one posted with transfer post; with `to` and no line yet, the transfer is posted now and the other account's line matches it when imported. Several fits are listed, never chosen. Example: {"line": "01J...", "pair": "01J..."}.
+Record a waiting bank line as a transfer between two of your accounts, as one entry: with its other end (`pair`, or the one proposed when exactly one fits both ways), both lines link to an existing transfer of that amount nearby, or to one posted with transfer post; with `to` and no line yet, the transfer is posted now and the other account's line matches it when imported; that line, arriving later, completes it (never a second transfer). Several fits are listed, never chosen. Example: {"line": "01J...", "pair": "01J..."}.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -674,6 +688,7 @@ The same example as complete `bookflow_run` arguments:
 | `pair` | `--pair` | string \| null | no | yes | null | The other end: a waiting line of the other account. |
 | `to` | `--to` | string \| null | no | yes | null | The other account, when its line is not imported yet (a one-sided transfer). |
 | `entry` | `--entry` | string \| null | no | yes | null | An existing entry moving the money between the two accounts. |
+| `new` | `--new` | boolean | no | no | false | With to: post a new transfer even though one already posted from that account may be this line's other end (refused otherwise, naming it). |
 
 ### Command and context options
 
@@ -686,6 +701,7 @@ The same example as complete `bookflow_run` arguments:
 | `--source-ref TEXT` | Identifier of the source that triggered the write. |
 | `--interactive` | Prompt for input fields not supplied as arguments or options. |
 | `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
 ### HTTP
@@ -704,6 +720,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
 | `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
 | `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
 
 ### Output
 
@@ -734,6 +751,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].payee_display` | string \| null | no | yes | null | The payee the entry was entered under. |
 | `lines[].ignore_reason` | string \| null | no | yes | null | — |
 | `lines[].pair_line_id` | string \| null | no | yes | null | A transfer's other end: a live line of another account linked to the same entry. |
+| `lines[].entry_gone` | string \| null | no | yes | null | Set when the line's entry was voided, deleted or changed in amount or date since it was linked, with why: the line is not done (bank-line unmatch returns it to waiting). |
 | `lines[].proposals` | array[object] | no | no | [] | For a waiting line: what it could be, with why. |
 | `lines[].proposals[].kind` | literal["match", "transfer"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts. |
 | `lines[].proposals[].reason` | string | yes | no | — | Why it is proposed; when several fit equally, says so (never chosen for you). |
@@ -778,6 +796,7 @@ Example JSON output:
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
 | `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
@@ -846,6 +865,7 @@ The same example as complete `bookflow_run` arguments:
 | `--source-ref TEXT` | Identifier of the source that triggered the write. |
 | `--interactive` | Prompt for input fields not supplied as arguments or options. |
 | `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
 ### HTTP
@@ -864,6 +884,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
 | `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
 | `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
 
 ### Output
 
@@ -918,6 +939,7 @@ Example JSON output:
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
 | `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
 | `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
@@ -938,7 +960,7 @@ Example JSON output:
 
 ## `bank-line unmatch`
 
-Return a bank line to waiting: undo its match or transfer link (the entry stays), or its ignore. A line entered as an entry is taken back with that entry (its delete or void) or the import's reversal; once that entry is gone, this releases the line. Give `line`, or `lines` for several as one batch (undone together by `bank-line undo`); a batch is all or nothing. Reversing the import undoes it too. Example: {"line": "01J..."}.
+Return a bank line to waiting: undo its match or transfer link (the entry stays), or its ignore. A line entered as an entry is taken back with that entry (its delete or void) or the import's reversal; once that entry is gone (entry_gone), this releases the line. Give `line`, or `lines` for several as one batch (undone together by `bank-line undo`); a batch is all or nothing. Reversing the import undoes it too. Example: {"line": "01J..."}.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -983,6 +1005,7 @@ The same example as complete `bookflow_run` arguments:
 | `--source-ref TEXT` | Identifier of the source that triggered the write. |
 | `--interactive` | Prompt for input fields not supplied as arguments or options. |
 | `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
 | `--company TEXT` | Company id, `Organization/Company`, or display name. |
 
 ### HTTP
@@ -1001,6 +1024,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
 | `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
 | `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
 
 ### Output
 
@@ -1031,6 +1055,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].payee_display` | string \| null | no | yes | null | The payee the entry was entered under. |
 | `lines[].ignore_reason` | string \| null | no | yes | null | — |
 | `lines[].pair_line_id` | string \| null | no | yes | null | A transfer's other end: a live line of another account linked to the same entry. |
+| `lines[].entry_gone` | string \| null | no | yes | null | Set when the line's entry was voided, deleted or changed in amount or date since it was linked, with why: the line is not done (bank-line unmatch returns it to waiting). |
 | `lines[].proposals` | array[object] | no | no | [] | For a waiting line: what it could be, with why. |
 | `lines[].proposals[].kind` | literal["match", "transfer"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts. |
 | `lines[].proposals[].reason` | string | yes | no | — | Why it is proposed; when several fit equally, says so (never chosen for you). |
@@ -1073,6 +1098,7 @@ Example JSON output:
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
 | `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INTERNAL` | Internal failure. |
 | `E_IO` | A filesystem operation failed. |
 | `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |

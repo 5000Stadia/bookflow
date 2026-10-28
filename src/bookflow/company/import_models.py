@@ -18,8 +18,8 @@ class ImportTemplateInput(_Input):
 
 class ImportCheckInput(_Input):
     kind: str = Field(min_length=1, max_length=32, description=(
-        'What each row is: customer, vendor, item, account, term, class, customer-type, vendor-type, job-type, '
-        'payment-method, ship-method, sales-rep, price-level, item-category, customer-message, employee, other-name.'))
+        'What each row is: a list record (customer, vendor, item, account, term, class...) or a document, whose rows '
+        'sharing its key are its lines (invoice, bill, payment, journal...); `import kinds` lists them.'))
     content: str | None = Field(None, min_length=1, max_length=16_000_000, description=(
         'The file as text: a CSV, or cells pasted from a spreadsheet (tab text). Give this or `attachment`.'))
     attachment: str | None = Field(None, min_length=26, max_length=26, description=(
@@ -50,6 +50,9 @@ class ImportCheckInput(_Input):
     decimal: Literal['.', ','] | None = Field(None, description='Decimal mark of money columns; read when omitted.')
     date_order: Literal['MDY', 'DMY', 'YMD'] | None = Field(None, description=(
         'Day and month order of date columns; read from every value when omitted, and asked when all are ambiguous.'))
+    key_by_content: bool = Field(False, description=(
+        'A document file with no key column (each row a document keyed by its content) runs only with this: an '
+        'edited amount would import a second copy.'))
 
 
 class ImportPreviewInput(ImportCheckInput):
@@ -60,6 +63,10 @@ class ImportPreviewInput(ImportCheckInput):
         'refused alone and the others import.'))
     stop_after_refusals: int = Field(100, ge=1, le=100_000, description=(
         'Refusals in one `import run` call after which a partial run stops itself, keeping what it did.'))
+    create_missing: bool = Field(False, description=(
+        'Create each unknown customer, vendor or other list record an import may make from its name alone, when the '
+        'run reaches it, instead of asking. One that looks like an existing record is never made; an item or account '
+        'never is.'))
     allow: list[Literal['differs', 'skipped']] = Field(default_factory=list, description=(
         'All or nothing refuses a row that would change nothing because a record with its name differs (`differs`) '
         'or, in update mode, matches none (`skipped`); name the outcomes to accept instead.'))
@@ -141,6 +148,8 @@ class ImportCheckOutput(BaseModel):
     source: str = Field(description='The source the rows would be keyed in.')
     rows: int = Field(description='Data rows read.')
     rows_with_problems: int = Field(description='Rows with at least one problem.')
+    documents: int | None = Field(None, description="A document file's documents (rows sharing a key are one).")
+    documents_with_problems: int | None = Field(None, description='Documents with at least one problem.')
     problems_total: int = Field(description='Problems found, every cell counted.')
     problems: list[dict[str, Any]] = Field(description=(
         'Grouped by column, then cell text: column, code, value (the exact cell text), message and rows.'))
@@ -192,6 +201,8 @@ class ImportRunInput(_Input):
     run: str = Field(min_length=26, max_length=26, description='The run `import preview` returned.')
     limit: int = Field(500, ge=1, le=20_000, description='Most rows to run in this call (a slice).')
     seconds: int = Field(20, ge=1, le=600, description='Stop the slice after about this many seconds.')
+    key_by_content: bool = Field(False, description=(
+        'Run a document file keyed by content (no key column): accepted that an edited row imports again.'))
 
 
 class ImportRunSelector(_Input):

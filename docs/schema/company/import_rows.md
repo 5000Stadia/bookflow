@@ -20,5 +20,6 @@ Database: `company`.
 | `record_type` | VARCHAR(64) | yes | — | — | — | — | Record the row made, matched or updated; null when none. |
 | `record_id` | VARCHAR(26) | yes | — | — | — | — | That record; null when none. |
 | `payload` | TEXT | yes | — | — | — | — | JSON of the mapped command input, references as the file wrote them (preview only). |
-| `cells` | TEXT | yes | — | — | — | — | JSON of the row's own cells (preview only), for the error file. |
+| `cells` | TEXT | yes | — | — | — | — | JSON of the row's own cells (preview only), for the error file; a document's, a list of its rows' cells. |
 | `created_at` | VARCHAR(32) | no | — | — | — | — | UTC time the outcome was recorded. |
+| `spans` | TEXT | yes | — | — | — | — | JSON of a document's file rows, each [row number, line] (preview only, co0113); null for a list row. |

@@ -841,6 +841,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].payee_display` | string \| null | no | yes | null | The payee the entry was entered under. |
 | `lines[].ignore_reason` | string \| null | no | yes | null | — |
 | `lines[].pair_line_id` | string \| null | no | yes | null | A transfer's other end: a live line of another account linked to the same entry. |
+| `lines[].entry_gone` | string \| null | no | yes | null | Set when the line's entry was voided, deleted or changed in amount or date since it was linked, with why: the line is not done (bank-line unmatch returns it to waiting). |
 | `lines[].proposals` | array[object] | no | no | [] | For a waiting line: what it could be, with why. |
 | `lines[].proposals[].kind` | literal["match", "transfer"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts. |
 | `lines[].proposals[].reason` | string | yes | no | — | Why it is proposed; when several fit equally, says so (never chosen for you). |

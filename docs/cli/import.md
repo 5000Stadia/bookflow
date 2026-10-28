@@ -167,7 +167,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `kind` | `--kind` | string | yes | no | — | What each row is: customer, vendor, item, account, term, class, customer-type, vendor-type, job-type, payment-method, ship-method, sales-rep, price-level, item-category, customer-message, employee, other-name.; minimum length 1; maximum length 32 |
+| `kind` | `--kind` | string | yes | no | — | What each row is: a list record (customer, vendor, item, account, term, class...) or a document, whose rows sharing its key are its lines (invoice, bill, payment, journal...); `import kinds` lists them.; minimum length 1; maximum length 32 |
 | `content` | `--content` | string \| null | no | yes | null | The file as text: a CSV, or cells pasted from a spreadsheet (tab text). Give this or `attachment`. |
 | `attachment` | `--attachment` | string \| null | no | yes | null | An attachment holding the file, a CSV or an .xlsx workbook (`attachment add company_info <company id> FILE`); read as bytes, so its encoding is detected. Give this or `content`. |
 | `sheet` | `--sheet` | string \| null | no | yes | null | The worksheet of an .xlsx file to read (default: the first). Values as last saved; no formula is run. |
@@ -182,6 +182,7 @@ The same example as complete `bookflow_run` arguments:
 | `skip_rows` | `--skip-rows` | integer | no | no | 0 | Title rows above the header to pass over.; minimum 0; maximum 50 |
 | `decimal` | `--decimal` | literal[".", ","] \| null | no | yes | null | Decimal mark of money columns; read when omitted. |
 | `date_order` | `--date-order` | literal["MDY", "DMY", "YMD"] \| null | no | yes | null | Day and month order of date columns; read from every value when omitted, and asked when all are ambiguous. |
+| `key_by_content` | `--key-by-content` | boolean | no | no | false | A document file with no key column (each row a document keyed by its content) runs only with this: an edited amount would import a second copy. |
 
 ### Command and context options
 
@@ -216,6 +217,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `source` | string | yes | no | — | The source the rows would be keyed in. |
 | `rows` | integer | yes | no | — | Data rows read. |
 | `rows_with_problems` | integer | yes | no | — | Rows with at least one problem. |
+| `documents` | integer \| null | no | yes | null | A document file's documents (rows sharing a key are one). |
+| `documents_with_problems` | integer \| null | no | yes | null | Documents with at least one problem. |
 | `problems_total` | integer | yes | no | — | Problems found, every cell counted. |
 | `problems` | array[object[string, any]] | yes | no | — | Grouped by column, then cell text: column, code, value (the exact cell text), message and rows. |
 | `summary` | array[string] | yes | no | — | Each group as a line: "Credit Limit, rows 14, 92: not an amount: ..." |
@@ -237,6 +240,8 @@ Example JSON output:
   "choices": {},
   "clean": false,
   "decisions": [],
+  "documents": null,
+  "documents_with_problems": null,
   "dropped": [],
   "dropped_total": 1,
   "kind": "human",
@@ -662,7 +667,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `kind` | `--kind` | string | yes | no | — | What each row is: customer, vendor, item, account, term, class, customer-type, vendor-type, job-type, payment-method, ship-method, sales-rep, price-level, item-category, customer-message, employee, other-name.; minimum length 1; maximum length 32 |
+| `kind` | `--kind` | string | yes | no | — | What each row is: a list record (customer, vendor, item, account, term, class...) or a document, whose rows sharing its key are its lines (invoice, bill, payment, journal...); `import kinds` lists them.; minimum length 1; maximum length 32 |
 | `content` | `--content` | string \| null | no | yes | null | The file as text: a CSV, or cells pasted from a spreadsheet (tab text). Give this or `attachment`. |
 | `attachment` | `--attachment` | string \| null | no | yes | null | An attachment holding the file, a CSV or an .xlsx workbook (`attachment add company_info <company id> FILE`); read as bytes, so its encoding is detected. Give this or `content`. |
 | `sheet` | `--sheet` | string \| null | no | yes | null | The worksheet of an .xlsx file to read (default: the first). Values as last saved; no formula is run. |
@@ -677,9 +682,11 @@ The same example as complete `bookflow_run` arguments:
 | `skip_rows` | `--skip-rows` | integer | no | no | 0 | Title rows above the header to pass over.; minimum 0; maximum 50 |
 | `decimal` | `--decimal` | literal[".", ","] \| null | no | yes | null | Decimal mark of money columns; read when omitted. |
 | `date_order` | `--date-order` | literal["MDY", "DMY", "YMD"] \| null | no | yes | null | Day and month order of date columns; read from every value when omitted, and asked when all are ambiguous. |
+| `key_by_content` | `--key-by-content` | boolean | no | no | false | A document file with no key column (each row a document keyed by its content) runs only with this: an edited amount would import a second copy. |
 | `file_name` | `--file-name` | string \| null | no | yes | null | A label for the file in results. |
 | `partial` | `--partial` | boolean | no | no | false | False (the default): all or nothing. A file the check finds any problem in is refused whole, a run starts only when its preview refused no row, and a row refused while running undoes the run. True: each bad row is refused alone and the others import. |
 | `stop_after_refusals` | `--stop-after-refusals` | integer | no | no | 100 | Refusals in one `import run` call after which a partial run stops itself, keeping what it did.; minimum 1; maximum 100000 |
+| `create_missing` | `--create-missing` | boolean | no | no | false | Create each unknown customer, vendor or other list record an import may make from its name alone, when the run reaches it, instead of asking. One that looks like an existing record is never made; an item or account never is. |
 | `allow` | `--allow` | array[literal["differs", "skipped"]] | no | no | [] | All or nothing refuses a row that would change nothing because a record with its name differs (`differs`) or, in update mode, matches none (`skipped`); name the outcomes to accept instead. |
 
 ### Command and context options
@@ -1159,6 +1166,7 @@ The same example as complete `bookflow_run` arguments:
 | `run` | `RUN` | string | yes | no | — | The run `import preview` returned.; minimum length 26; maximum length 26 |
 | `limit` | `--limit` | integer | no | no | 500 | Most rows to run in this call (a slice).; minimum 1; maximum 20000 |
 | `seconds` | `--seconds` | integer | no | no | 20 | Stop the slice after about this many seconds.; minimum 1; maximum 600 |
+| `key_by_content` | `--key-by-content` | boolean | no | no | false | Run a document file keyed by content (no key column): accepted that an edited row imports again. |
 
 ### Command and context options
 

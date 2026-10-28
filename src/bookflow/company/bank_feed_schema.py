@@ -93,7 +93,7 @@ def define_tables(metadata, C, T):
                                        'null when none.', 'bank_lines.id', nullable=True),
         C('warnings', sa.Text, 'Warnings on the line (fitid_reused, possible_duplicate), as a JSON array.',
           nullable=False),
-        # co0113 (increment 3): sorting.
+        # co0114 (increment 3): sorting.
         C('created', sa.Integer, '1 when the linked entry was made from this line (bank-line add, or a transfer it '
                                  'posted); 0 for a match.', sa.CheckConstraint('created IN (0, 1)',
                                                                               name='ck_bank_line_created'),

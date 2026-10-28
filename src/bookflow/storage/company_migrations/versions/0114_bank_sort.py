@@ -1,4 +1,4 @@
-"""co0113. Bank feeds, increment 3: sorting the bank inbox (R108, design/bank-feeds.md §2, §4, §9).
+"""co0114. Bank feeds, increment 3: sorting the bank inbox (R108, design/bank-feeds.md §2, §4, §9).
 
 Five columns on ``bank_lines``, moving no stored row: ``created`` (0; 1 when the line's entry was made from it, by
 ``bank-line add`` or a transfer it posted, so only reversing that entry takes it back), ``payee_display`` (the payee
@@ -11,8 +11,8 @@ metadata.
 """
 from alembic import op
 
-revision = 'co0113'
-down_revision = 'co0112'
+revision = 'co0114'
+down_revision = 'co0113'
 branch_labels = depends_on = None
 
 IGNORE_REASONS = ('already_entered', 'not_ours', 'duplicate', 'other')
@@ -34,7 +34,7 @@ def upgrade():
     connection = op.get_bind()
     existing = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info('bank_lines')").fetchall()}
     if set(NAMES) & existing:
-        raise RuntimeError('co0113 reserved column already exists')
+        raise RuntimeError('co0114 reserved column already exists')
     for statement in COLUMNS:
         connection.exec_driver_sql(statement)
 
