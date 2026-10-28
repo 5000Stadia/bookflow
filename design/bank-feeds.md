@@ -627,3 +627,77 @@ by OFX with re-dated pending lines, reused FITIDs and identical coffees; the oth
 repeat refused, 183 transactions shown and 183 live lines, so none twice; every import one live batch with one effect
 per import row, line and match; the books unchanged after every round; `reconcile import` of the sample statement
 equal before and after in every field but `previously_imported`.
+
+## As built: increment 2
+
+- **One reverser, an adapter.** A bank import reverses through the shared batch ledger (bulk-import.md §8a): the ledger
+  keeps the strict ordering, the plan and its fingerprint, the `reversal` batch, slices, `reversing` and `blocked`,
+  and resuming; `company/bank_reversal.py` registers the `bank-import` adapter. The ledger's `Adapter` gained four
+  optional fields for a kind whose effects are not list records (`planner`, `runner`, `reader`, `blocks`), `reverse`
+  a `then` hook that runs inside the transaction that marks the batch reversed, and `run_nested` a `recovery=False`
+  switch (a nested step with no operation key skips the permanent-recovery lookup, which closes and reopens the
+  session's company). Generic imports behave as before.
+- **What a reversal does.** Entries the import created (a `transaction` `created` effect; increments 3 to 5 add them)
+  are the slices: each taken back, newest first, by its family's own command (`journal`, `check`, `card-charge`,
+  `payment`, `sales-receipt`, `invoice`, `bill`, `credit-memo`, `deposit` `delete`; `transfer` and `card-credit`
+  `void`), so history is preserved, each recorded as a `reversed` effect of the reversal batch. Then, in the one
+  transaction that marks the batch `reversed`: every live line hidden (`live` cleared, so its key is released) with a
+  `reversed` event naming the entry it left, every match undone (a `reversed` effect per `linked` one), the account
+  record returned to its `before` (a first import's record goes back to no number; the version moves on), each later
+  increment's effects retired through `bank_reversal.RETIRE` (increment 4 registers learned rules there), and a
+  `reversed` effect for the import. Nothing is erased: the import, lines, events and both batches stay.
+- **Blockers**, each with the record, a message and what clears it, up to 50 and the total in `E_BATCH_BLOCKED`:
+  `later_import` (the ledger's strict ordering, named as the import with its date and lines), `entry_edited` (version
+  after the import's), `entry_linked` (another import's live line matches a created entry), `statement_copy` (checked
+  once increment 6 adds `statement_lines.bank_line_id`; inert until then), and the family command's own refusal from a
+  dry run: `entry_reconciled`, `entry_deposited`, `entry_applied`, `no_authority`, `period_closed`. Decided: an entry
+  only ticked on an open draft is not a blocker -- the family `delete` allows it (it refuses once a certified statement
+  cleared it), and the plan reports that command's rules rather than adding its own. An entry already deleted or
+  voided by a person is nothing to take back and is skipped.
+- **`bank-feed reverse <import>`** (`--through` reverses every later live import of the account first, in one plan;
+  `--limit` the entries per slice, default 100 (measured, below); `--fingerprint` from the dry run). A slice left over returns
+  `reversing` with `next` the same command; while an import of an account is `reversing` or `blocked`, the account
+  takes no new import (`E_VALIDATION` naming it). A blocker appearing between slices marks the batch `blocked` and
+  names it; the same command resumes once it is cleared. A kill between entries repeats nothing (each deletion is
+  recorded with its own command; tested by killing the runner part way).
+- **`bank-feed move <import> --to <account>`**: the reversal, then, inside the transaction that finishes it, an import of
+  the stored lines into the target (the parser's ids rebuilt from FITID or key; the file's digest kept; `again`, so a
+  file once in the target is not refused whole), deduped, matched and checked there; the new import records
+  `moved_from`. Checked whole first: the dry run shows the reversal plan and the target's preview. Refused: the same
+  account, another currency (`E_VALIDATION`), and an OFX import whose number or kind the target's check refuses
+  (`E_ACCOUNT_MISMATCH`; `confirm_account` goes on). The number an import taught the source (first or confirmed) is not
+  counted as the source's for the target's check, since the reversal takes it back. A move whose reversal needs slices
+  completes the re-import after the last one (`target` is null until then); if the re-import itself fails, the final
+  transaction rolls back and the batch stays `reversing` for the same command to finish.
+- **Permissions.** Layer `bank-feed-reverse-v1` on `bank-feed-v1` (828 commands, descriptor `df70eed3`): both commands
+  standard under `bank-feed` with `ledger.read` member; deleting a created entry asks that family's own delete grant
+  through its own command (`no_authority` otherwise); `batches.require_read` re-declared with `bank-feed show`'s
+  requirements, since `batch show` of a bank import reads it as that command does. Both classified `not-a-record` for
+  imports. No migration: co0112's columns, states and event kinds already held all of it.
+
+**Measured** (`tools/measure_bank_reversal.py`, one process per size, the root NVMe, a fresh company on the general
+chart; an OFX import whose first 200 lines matched 200 journal entries; for the created-entry case, 200 more journal
+entries recorded as the import's `created` effects; seconds, 2026-10-28):
+
+| Lines | Matched | Created entries | Plan (`--dry-run`) | Reverse | Move (`--dry-run` / move) | Peak RSS |
+|---|---|---|---|---|---|---|
+| 200 | 200 | 200 | 14.57 | 49.39 (0.25 s an entry) | | 312 MB |
+| 1,000 | 200 | 0 | 0.05 | 0.29 | 0.10 / 0.60 | 312 MB |
+| 10,000 | 200 | 0 | 0.44 | 0.88 | 0.88 / 2.87 | 332 MB |
+
+**The slice bound, set from it.** An import's lines, matches and account record are released in one transaction at
+any size (10,000 lines in under a second). What costs is deleting created entries, one family `delete` each at about
+a quarter second (the dry run probes each the same way): 200 took 49 s in one call, close to the minute an agent's
+tool call commonly allows, so the default slice is **100 created entries** (about 25 s); `--limit` takes up to 20,000.
+Each slice is its own sequence of commands, recorded and resumable, with the plan checked whole first.
+
+**Property check** (`tests/test_bank_feed_reversal_property.py`, seeds 108 and 2026, 14 rounds each over Checking by
+CSV and Payment Example Bank by OFX, each with entries for part of its pool): seed 108 -- 9 imports, 5 reversed (1 by
+`--through`), 41 lines and 16 matches brought in, 4 imports kept; seed 2026 -- 9 imports, 7 reversed (1 by
+`--through`), 48 lines and 18 matches, 2 kept. After each, every live import reversed returned the inbox and account
+records to the start with the books unchanged, and importing only the kept files in their order gave the same inbox
+line for line and match for match, with the same account records.
+
+**Not built here:** the browser undo and move dialog (increment 7), entries created from lines (increment 3: the
+`created` effects this reverses are recorded by `bank-line add`; here the tests record them directly), rule retirement
+(increment 4 registers in `RETIRE`), the `statement_copy` column (increment 6).

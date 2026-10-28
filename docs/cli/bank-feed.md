@@ -286,7 +286,7 @@ The same example as complete `bookflow_run` arguments:
 | `auto_match` | `--auto-match` | boolean | no | no | true | Link each line the matcher pairs surely with its entry. |
 | `match_days` | `--match-days` | integer | no | no | 4 | As for `bank-feed import`.; minimum 0; maximum 60 |
 | `suggest_days` | `--suggest-days` | integer | no | no | 14 | As for `bank-feed import`.; minimum 0; maximum 120 |
-| `limit` | `--limit` | integer | no | no | 200 | Most created entries to delete in this call.; minimum 1; maximum 20000 |
+| `limit` | `--limit` | integer | no | no | 100 | Most created entries to delete in this call.; minimum 1; maximum 20000 |
 | `fingerprint` | `--fingerprint` | string \| null | no | yes | null | The `fingerprint` a dry run returned; refused if anything changed since. |
 
 ### Command and context options
@@ -624,7 +624,7 @@ The same example as complete `bookflow_run` arguments:
 |---|---|---|---|---|---|---|
 | `import_id` | `IMPORT_ID` | string | yes | no | — | The import to reverse.; pattern "^[0-9A-HJKMNP-TV-Z]{26}$" |
 | `through` | `--through` | boolean | no | no | false | Also reverse every later live import of the same account, newest first, in one plan (each import blocks the reversal of those before it). |
-| `limit` | `--limit` | integer | no | no | 200 | Most created entries to delete in this call (a slice); the inbox is released with the last one.; minimum 1; maximum 20000 |
+| `limit` | `--limit` | integer | no | no | 100 | Most created entries to delete in this call (a slice, about a quarter second each); the inbox is released with the last one.; minimum 1; maximum 20000 |
 | `fingerprint` | `--fingerprint` | string \| null | no | yes | null | The `fingerprint` a dry run returned; refused if anything changed since. |
 
 ### Command and context options

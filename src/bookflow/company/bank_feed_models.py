@@ -230,13 +230,18 @@ class LineQueryOutput(Model):
 
 # ------------------------------------------------------------------ reverse and move (increment 2)
 
+# Created entries a reversal deletes per call. Measured (tools/measure_bank_reversal.py): about 0.25 s an entry, so 200
+# took 49 s in one call, close to an agent tool call's minute; 100 keeps a slice near 25 s.
+SLICE = 100
+
 class ReverseInput(Model):
     import_id: ID = Field(description='The import to reverse.')
     through: bool = Field(False, description=(
         'Also reverse every later live import of the same account, newest first, in one plan (each import blocks '
         'the reversal of those before it).'))
-    limit: int = Field(200, strict=True, ge=1, le=20_000, description=(
-        'Most created entries to delete in this call (a slice); the inbox is released with the last one.'))
+    limit: int = Field(SLICE, strict=True, ge=1, le=20_000, description=(
+        'Most created entries to delete in this call (a slice, about a quarter second each); the inbox is released '
+        'with the last one.'))
     fingerprint: str | None = Field(None, min_length=64, max_length=64, description=(
         'The `fingerprint` a dry run returned; refused if anything changed since.'))
 
@@ -252,7 +257,7 @@ class MoveInput(Model):
     auto_match: bool = Field(True, description='Link each line the matcher pairs surely with its entry.')
     match_days: int = Field(files.MATCH_DAYS, strict=True, ge=0, le=60, description='As for `bank-feed import`.')
     suggest_days: int = Field(files.SUGGEST_DAYS, strict=True, ge=0, le=120, description='As for `bank-feed import`.')
-    limit: int = Field(200, strict=True, ge=1, le=20_000, description='Most created entries to delete in this call.')
+    limit: int = Field(SLICE, strict=True, ge=1, le=20_000, description='Most created entries to delete in this call.')
     fingerprint: str | None = Field(None, min_length=64, max_length=64, description=(
         'The `fingerprint` a dry run returned; refused if anything changed since.'))
 
