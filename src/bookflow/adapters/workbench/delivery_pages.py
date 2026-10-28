@@ -32,6 +32,11 @@ CONNECTION = ('No sending connection is set up. Nothing leaves this machine: mes
 COMPOSE_NOTE = ('No sending connection is set up. This will wait in the outbox. Export it to send it yourself.')
 
 
+def _connection_note(name):
+    return CONNECTION if name == 'none' else (f'Messages with a go are sent through the connection {name}; one '
+                                              'waiting for a go stays here until a person approves it.')
+
+
 def compose_url(company_id: str, kind: str, **identity) -> str:
     return f"/c/{quote(str(company_id), safe='')}/delivery/compose?" + urlencode(
         {'kind': kind, **{k: v for k, v in identity.items() if v}})
@@ -181,7 +186,8 @@ def mount(app, *, render, run, credential, page_error, role_allows):
                       company_id=shown['company_id'], listing=listing, tabs=TABS, tab=query['status'],
                       filters=query, kinds=KINDS, kind_label=KIND_LABEL, states=states, error=error, result=result,
                       export=export,
-                      connection=CONNECTION, can_write=allowed(request, shown, 'delivery send'),
+                      connection=_connection_note(listing.get('connection', 'none')),
+                      can_write=allowed(request, shown, 'delivery send'),
                       can_mark=credential(request) is not None)
 
     @app.get('/c/{company_id}/delivery')
@@ -199,6 +205,10 @@ def mount(app, *, render, run, credential, page_error, role_allows):
         if action == 'export':
             return _exported(run(request, 'delivery export', {'messages': numbers}, company_id,
                                  headers=headers(form, 'Exported to send by hand')))
+        if action == 'approve':  # a person's go (R187: delivery.send)
+            out = run(request, 'delivery approve', {'messages': numbers}, company_id, headers=headers(form, 'Go'))
+            return f"Approved {', '.join(m['number'] for m in out['messages']) or 'nothing new'}. " + ' '.join(
+                w for w in out.get('warnings') or [] if not w.startswith('No sending connection'))
         if action == 'send':
             out = run(request, 'delivery send', {'messages': numbers}, company_id, headers=headers(form, 'Send'))
             return f"Released {', '.join(m['number'] for m in out['messages'])}. " + ' '.join(
@@ -212,6 +222,9 @@ def mount(app, *, render, run, credential, page_error, role_allows):
                 out = run(request, 'delivery mark-sent', raw, company_id, headers=headers(form, 'Sent by hand'))
             elif action == 'cancel':
                 out = run(request, 'delivery cancel', {'message': number}, company_id, headers=headers(form))
+            elif action == 'retry':
+                out = run(request, 'delivery retry', {'message': number}, company_id,
+                          headers=headers(form, 'Not in the sent mail; try again'))
             else:
                 raise BookflowError('E_VALIDATION', message='Choose an action.',
                                     details={'fields': [{'field': 'action', 'problem': 'unknown action'}]})
@@ -246,8 +259,9 @@ def mount(app, *, render, run, credential, page_error, role_allows):
         return render('delivery_message.html', request, status_code=status_code, company=shown,
                       company_id=shown['company_id'], message=message, history=history, error=error, result=result,
                       export=export,
-                      values=values or {}, connection=CONNECTION, kind_label=KIND_LABEL,
-                      can_write=allowed(request, shown, 'delivery update'))
+                      values=values or {}, connection=_connection_note(message['connection']),
+                      kind_label=KIND_LABEL, can_write=allowed(request, shown, 'delivery update'),
+                      is_person=credential(request) is not None)
 
     @app.get('/c/{company_id}/delivery/{number}')
     def delivery_message(request: Request, company_id: str, number: str):
@@ -305,10 +319,11 @@ def mount(app, *, render, run, credential, page_error, role_allows):
         shown = company(request, company_id)
         templates = run(request, 'delivery-template query', {'include_inactive': True}, company_id)['rows']
         fields = run(request, 'delivery-template fields', {}, company_id)['fields']
+        connections = run(request, 'delivery-connection query', {}, company_id)
         return render('delivery_settings.html', request, status_code=status_code, company=shown,
                       company_id=shown['company_id'], info=shown.get('info', {}), templates=templates, fields=fields,
                       kinds=KINDS, kind_label=KIND_LABEL, error=error, result=result, values=values or {},
-                      editing=editing, can_admin=allowed(request, shown, 'company update'),
+                      editing=editing, connections=connections, can_admin=allowed(request, shown, 'company update'),
                       can_write=allowed(request, shown, 'delivery-template create'))
 
     @app.get('/c/{company_id}/delivery-settings')
