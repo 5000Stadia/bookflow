@@ -18,6 +18,7 @@ FORMATS = ('ofx', 'qfx', 'csv', 'feed')
 EVENT_KINDS = ('imported', 'seen_again', 'matched', 'unmatched', 'added', 'transferred', 'ignored', 'unignored',
                'released', 'reversed')
 KINDS = ('bank', 'card')
+IGNORE_REASONS = ('already_entered', 'not_ours', 'duplicate', 'other')
 
 
 def define_tables(metadata, C, T):
@@ -92,6 +93,20 @@ def define_tables(metadata, C, T):
                                        'null when none.', 'bank_lines.id', nullable=True),
         C('warnings', sa.Text, 'Warnings on the line (fitid_reused, possible_duplicate), as a JSON array.',
           nullable=False),
+        # co0113 (increment 3): sorting.
+        C('created', sa.Integer, '1 when the linked entry was made from this line (bank-line add, or a transfer it '
+                                 'posted); 0 for a match.', sa.CheckConstraint('created IN (0, 1)',
+                                                                              name='ck_bank_line_created'),
+          nullable=False, server_default='0'),
+        C('payee_display', sa.Text, 'The payee the entry was entered under; null until one was.', nullable=True),
+        C('proposal', sa.Text, 'What the matcher suggested at import, with its reason, as a JSON object; null when '
+                               'nothing.', sa.CheckConstraint("proposal IS NULL OR (json_valid(proposal) AND "
+                                                              "json_type(proposal) = 'object')",
+                                                              name='ck_bank_line_proposal'), nullable=True),
+        C('ignore_reason', sa.String(16), f'Why the line was set aside: {", ".join(IGNORE_REASONS)}; null unless '
+                                          'ignored.', sa.CheckConstraint(
+            f'ignore_reason IS NULL OR ignore_reason IN ({quoted(IGNORE_REASONS)})', name='ck_bank_line_ignore_reason'),
+          nullable=True),
         sa.CheckConstraint(f'state IN ({quoted(LINE_STATES)})', name='ck_bank_line_state'),
         sa.CheckConstraint(f'link_how IS NULL OR link_how IN ({quoted(LINK_HOWS)})', name='ck_bank_line_how'),
         sa.CheckConstraint('live IN (0, 1) AND version >= 1 AND ordinal >= 0', name='ck_bank_line_values'),

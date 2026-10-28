@@ -76,7 +76,8 @@ CLEARS = {
 # ('bank_rule', 'rule_learned') here; a learned rule a person edited is kept.
 RETIRE: dict = {}
 _OWN = {('bank_feed_import', 'created'), ('bank_line', 'created'), ('transaction', 'linked'),
-        ('bank_feed_account', 'created'), ('bank_feed_account', 'updated'), ('transaction', 'created')}
+        ('bank_feed_account', 'created'), ('bank_feed_account', 'updated'), ('transaction', 'created'),
+        ('bank_line', 'updated')}
 _ACCOUNT_FIELDS = ('bank_number', 'account_last4', 'kind', 'last_import_id')
 
 
@@ -147,7 +148,43 @@ def _plan(s, ctx, batch: dict, all_effects: list[dict], done: dict, probe: bool,
             f"({later['lines_new']} lines, {later['date_from']} to {later['date_to']}).",
             f"`bank-feed reverse {later['id']}` first, or `bank-feed reverse {imp['id']} --through` to reverse the "
             'newer ones with it', batch=b['record_id'], at=later['created_at'], lines=later['lines_new']))
-    # Entries the import created (increments 3 to 5): each taken back by its family's own command(s).
+    # A --lines sort (bank-sort batch) of this import's lines being undone, or stopped part way: finish it first.
+    sorting = conn.execute(sa.text(
+        "SELECT DISTINCT b.id, b.state FROM batch_effects e JOIN batches b ON b.id = e.batch_id "
+        "JOIN bank_lines l ON l.id = e.record_id WHERE b.kind = 'bank-sort' AND b.state IN ('reversing', 'blocked') "
+        "AND e.record_type = 'bank_line' AND l.import_id = :imp"), {'imp': imp['id']}).all()
+    for sort_id, sort_state in sorting:
+        blockers.append(_blocker('sort_under_way', 'batch', sort_id,
+                                 f'an undo of sort batch {sort_id} over lines of this import is part way ({sort_state}).',
+                                 f'`bank-line undo {sort_id}` finishes it'))
+    steps, work, more, entries, created = entry_plan(s, ctx, batch, all_effects, done, probe,
+                                                     lambda ids: _linked(s, imp, ids))
+    blockers += more
+    # A line copied into a reconciliation's statement (increment 6 records the copy on `statement_lines`).
+    if 'bank_line_id' in c.statement_lines.c:
+        copied = conn.execute(sa.select(c.statement_lines.c.bank_line_id, c.statement_lines.c.draft_id).join(
+            c.bank_lines, c.bank_lines.c.id == c.statement_lines.c.bank_line_id).where(
+            c.bank_lines.c.import_id == imp['id'])).first()
+        if copied is not None:
+            blockers.append(_blocker('statement_copy', 'bank_line', copied[0],
+                                     f'a line of this import is in reconciliation draft {copied[1]}.',
+                                     'not clearable while that draft exists', draft=copied[1]))
+    lines, matches = _inbox_counts(s, imp['id'])
+    inbox = {'seq': 0, 'record_type': 'bank_feed_import', 'record_id': imp['id'], 'name': f"import {imp['id']}",
+             'action': 'created', 'version': lines,
+             'steps': [f'hide {lines} line(s) and release their keys', f'undo {matches} match(es)',
+                       'restore the account record', *(f'retire {t} ({a})' for t, a in sorted(
+                           {(e['record_type'], e['action']) for e in all_effects} & set(RETIRE)))]}
+    return {'steps': [*steps, inbox], 'work': work, 'blockers': blockers, 'records': len(created) + 1,
+            'pending': entries + 1, 'lines': lines, 'matches': matches, 'entries': entries}
+
+
+def entry_plan(s, ctx, batch: dict, all_effects: list[dict], done: dict, probe, linked_for) -> tuple:
+    """The entries a batch created (its `transaction` `created` effects), each taken back by its family's own
+    command(s), newest first: (steps, work, blockers, entries, created). ``linked_for(ids)`` names the entries a live
+    line the reversal does not itself release is matched to, each with the blocker it makes."""
+    conn = s.company.conn
+    blockers = []
     created: dict[str, dict] = {}
     for e in all_effects:
         if e['record_type'] == 'transaction' and e['action'] == 'created':
@@ -160,7 +197,7 @@ def _plan(s, ctx, batch: dict, all_effects: list[dict], done: dict, probe: bool,
                                           c.transactions.c.number, c.transactions.c.updated_by,
                                           c.transactions.c.updated_at).where(c.transactions.c.id.in_(chunk))).mappings():
             rows[row['id']] = dict(row)
-    linked = _linked(s, imp, pending_ids)
+    linked = linked_for(pending_ids)
     ticked = _ticked(s, pending_ids)
     # ``probe``: True dry-runs every entry's inverse; a number, only that many (the slice this call runs, when a dry
     # run's fingerprint vouches for the rest); False, none.
@@ -220,23 +257,7 @@ def _plan(s, ctx, batch: dict, all_effects: list[dict], done: dict, probe: bool,
                 blockers.append(_blocker(CODES.get(error.code, error.code), 'transaction', transaction_id,
                                          f'{label}: {error.message}', CLEARS.get(error.code), seq=e['seq'],
                                          error=error.code, details=error.details))
-    # A line copied into a reconciliation's statement (increment 6 records the copy on `statement_lines`).
-    if 'bank_line_id' in c.statement_lines.c:
-        copied = conn.execute(sa.select(c.statement_lines.c.bank_line_id, c.statement_lines.c.draft_id).join(
-            c.bank_lines, c.bank_lines.c.id == c.statement_lines.c.bank_line_id).where(
-            c.bank_lines.c.import_id == imp['id'])).first()
-        if copied is not None:
-            blockers.append(_blocker('statement_copy', 'bank_line', copied[0],
-                                     f'a line of this import is in reconciliation draft {copied[1]}.',
-                                     'not clearable while that draft exists', draft=copied[1]))
-    lines, matches = _inbox_counts(s, imp['id'])
-    inbox = {'seq': 0, 'record_type': 'bank_feed_import', 'record_id': imp['id'], 'name': f"import {imp['id']}",
-             'action': 'created', 'version': lines,
-             'steps': [f'hide {lines} line(s) and release their keys', f'undo {matches} match(es)',
-                       'restore the account record', *(f'retire {t} ({a})' for t, a in sorted(
-                           {(e['record_type'], e['action']) for e in all_effects} & set(RETIRE)))]}
-    return {'steps': [*steps, inbox], 'work': work, 'blockers': blockers, 'records': len(created) + 1,
-            'pending': entries + 1, 'lines': lines, 'matches': matches, 'entries': entries}
+    return steps, work, blockers, entries, created
 
 
 def _step_payload(item: dict, k: int, version: int | None) -> dict:

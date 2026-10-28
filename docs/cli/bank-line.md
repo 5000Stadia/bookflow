@@ -2,6 +2,499 @@
 
 # `bank-line` commands
 
+## `bank-line add`
+
+Enter a waiting bank line in the books, run as you with the account's own command (check post or deposit post on a bank account, card-charge post or card-credit post on a card), so the entry is exactly the one you would type: the line's date and amount, your payee and account (or splits), class and memo (default the bank's text). No payee or account: refused, asking -- ask the person, never guess. A closed period refuses with the command's own code. Give `line`, or `lines` for several as one batch (undone together by `bank-line undo`); a batch is all or nothing. Reversing the import undoes it too. Example: {"line": "01J...", "payee": {"name_type": "vendor", "name_id": "Shell"}, "account": "Fuel"}.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | bank-feed |
+| Additional resources | ledger.read: member |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/bank-line.add` |
+| External binary body | none |
+
+### CLI
+
+`bookflow bank-line add --line 01J9ZK4QF8T7E2V5N3B6C1D0BG --payee-name-type vendor --payee-name-id "Northside Supply" --account "Office Supplies" --company "Demo Plumbing Co" --reason "Enter the supplies purchase" --dry-run --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "bank-line add", "input": {"line": "01J9ZK4QF8T7E2V5N3B6C1D0BG", "payee": {"name_type": "vendor", "name_id": "Northside Supply"}, "account": "Office Supplies"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `payee.name_type` | `--payee-name-type` | literal["vendor", "customer", "employee", "other_name"] | no | no | "vendor" | — |
+| `payee.name_id` | `--payee-name-id` | string | yes | no | — | The name on that list, or its id.; minimum length 1; maximum length 1000 |
+| `account` | `--account` | string \| null | no | yes | null | The account it was for (an expense or income account...). Unsure? Ask the person; never guess. |
+| `splits[].account` | inside `--splits` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
+| `splits[].amount` | inside `--splits` JSON array | string | yes | no | — | A positive amount; the splits add up to the line.; minimum length 1; maximum length 40 |
+| `splits[].memo` | inside `--splits` JSON array | string \| null | no | yes | null | — |
+| `splits[].class_id` | inside `--splits` JSON array | string \| null | no | yes | null | — |
+| `class_id` | `--class-id` | string \| null | no | yes | null | — |
+| `memo` | `--memo` | string \| null | no | yes | null | Default: the bank's text. |
+| `number` | `--number` | string \| null | no | yes | null | A check's number; default the line's when it is a plain number. |
+| `line` | `--line` | string \| null | no | yes | null | The waiting line to enter in the books. |
+| `lines[].payee.name_type` | inside `--lines` JSON array | literal["vendor", "customer", "employee", "other_name"] | no | no | "vendor" | — |
+| `lines[].payee.name_id` | inside `--lines` JSON array | string | yes | no | — | The name on that list, or its id.; minimum length 1; maximum length 1000 |
+| `lines[].account` | inside `--lines` JSON array | string \| null | no | yes | null | The account it was for (an expense or income account...). Unsure? Ask the person; never guess. |
+| `lines[].splits[].account` | inside `--lines` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
+| `lines[].splits[].amount` | inside `--lines` JSON array | string | yes | no | — | A positive amount; the splits add up to the line.; minimum length 1; maximum length 40 |
+| `lines[].splits[].memo` | inside `--lines` JSON array | string \| null | no | yes | null | — |
+| `lines[].splits[].class_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
+| `lines[].class_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
+| `lines[].memo` | inside `--lines` JSON array | string \| null | no | yes | null | Default: the bank's text. |
+| `lines[].number` | inside `--lines` JSON array | string \| null | no | yes | null | A check's number; default the line's when it is a plain number. |
+| `lines[].line` | inside `--lines` JSON array | string | yes | no | — | pattern "^[0-9A-HJKMNP-TV-Z]{26}$" |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/bank-line.add`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `lines` | array[object] | yes | no | — | The lines as they now stand (as they would, on a dry run). |
+| `lines[].id` | string | yes | no | — | — |
+| `lines[].import_id` | string | yes | no | — | — |
+| `lines[].account_id` | string | yes | no | — | — |
+| `lines[].line_key` | string | yes | no | — | — |
+| `lines[].fitid` | string \| null | yes | yes | — | — |
+| `lines[].date` | string | yes | no | — | — |
+| `lines[].amount` | integer | yes | no | — | — |
+| `lines[].amount_decimal` | string | yes | no | — | — |
+| `lines[].payee` | string | yes | no | — | — |
+| `lines[].memo` | string | yes | no | — | — |
+| `lines[].number` | string | yes | no | — | — |
+| `lines[].kind` | string | yes | no | — | — |
+| `lines[].state` | literal["waiting", "matched", "added", "transfer", "ignored", "settled"] | yes | no | — | — |
+| `lines[].live` | boolean | yes | no | — | — |
+| `lines[].entry_id` | string \| null | yes | yes | — | — |
+| `lines[].link_how` | string \| null | yes | yes | — | — |
+| `lines[].reason` | string \| null | yes | yes | — | — |
+| `lines[].possible_duplicate_of` | string \| null | yes | yes | — | — |
+| `lines[].warnings` | array[string] | yes | no | — | — |
+| `lines[].version` | integer | yes | no | — | — |
+| `lines[].created` | boolean | no | no | false | The entry was made from this line (an add, or a transfer it posted). |
+| `lines[].payee_display` | string \| null | no | yes | null | The payee the entry was entered under. |
+| `lines[].ignore_reason` | string \| null | no | yes | null | — |
+| `lines[].pair_line_id` | string \| null | no | yes | null | A transfer's other end: a live line of another account linked to the same entry. |
+| `lines[].proposals` | array[object] | no | no | [] | For a waiting line: what it could be, with why. |
+| `lines[].proposals[].kind` | literal["match", "transfer"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts. |
+| `lines[].proposals[].reason` | string | yes | no | — | Why it is proposed; when several fit equally, says so (never chosen for you). |
+| `lines[].proposals[].entry_ids` | array[string] | no | no | [] | — |
+| `lines[].proposals[].line_ids` | array[string] | no | no | [] | Lines of other accounts (transfer). |
+| `lines[].proposals[].unique` | boolean | yes | no | — | True when exactly one fits: the act with no choice named accepts it. |
+| `lines[].proposals[].next` | string | yes | no | — | The command that accepts it, or names one of several. |
+| `entries` | array[object] | no | no | [] | — |
+| `entries[].line_id` | string | yes | no | — | — |
+| `entries[].entry_id` | string \| null | yes | yes | — | The entry made (null on a dry run). |
+| `entries[].command` | string | yes | no | — | The command that made it, run as you: the same entry as typing it in. |
+| `entries[].input` | dict | yes | no | — | That command's input, exactly. |
+| `batch_id` | string \| null | no | yes | null | The bank-sort batch of a --lines act; `bank-line undo` takes it. |
+| `summary` | string | yes | no | — | — |
+| `next` | string \| null | no | yes | null | — |
+
+Example JSON output:
+
+```json
+{
+  "batch_id": null,
+  "entries": [],
+  "lines": [],
+  "next": null,
+  "summary": "value"
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_AMOUNT_PRECISION` | The amount has more decimal places than the currency allows. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
+## `bank-line ignore`
+
+Set a waiting bank line aside with a reason: already_entered, not_ours, duplicate (a possible_duplicate flag) or other. `bank-line unmatch` brings it back. Give `line`, or `lines` for several as one batch (undone together by `bank-line undo`); a batch is all or nothing. Reversing the import undoes it too. Example: {"line": "01J...", "ignore_reason": "duplicate"}.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | bank-feed |
+| Additional resources | ledger.read: member |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/bank-line.ignore` |
+| External binary body | none |
+
+### CLI
+
+`bookflow bank-line ignore --line 01J9ZK4QF8T7E2V5N3B6C1D0BG --ignore-reason duplicate --company "Demo Plumbing Co" --reason "Same charge twice" --dry-run --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "bank-line ignore", "input": {"line": "01J9ZK4QF8T7E2V5N3B6C1D0BG", "ignore_reason": "duplicate"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `line` | `--line` | string \| null | no | yes | null | The line. |
+| `lines` | `--lines` | array[string] | no | no | [] | Several lines as one batch (kind bank-sort, undone together by `bank-line undo`); instead of `line`. |
+| `ignore_reason` | `--ignore-reason` | literal["already_entered", "not_ours", "duplicate", "other"] | yes | no | — | Why: already_entered, not_ours, duplicate or other. |
+| `note` | `--note` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/bank-line.ignore`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `lines` | array[object] | yes | no | — | The lines as they now stand (as they would, on a dry run). |
+| `lines[].id` | string | yes | no | — | — |
+| `lines[].import_id` | string | yes | no | — | — |
+| `lines[].account_id` | string | yes | no | — | — |
+| `lines[].line_key` | string | yes | no | — | — |
+| `lines[].fitid` | string \| null | yes | yes | — | — |
+| `lines[].date` | string | yes | no | — | — |
+| `lines[].amount` | integer | yes | no | — | — |
+| `lines[].amount_decimal` | string | yes | no | — | — |
+| `lines[].payee` | string | yes | no | — | — |
+| `lines[].memo` | string | yes | no | — | — |
+| `lines[].number` | string | yes | no | — | — |
+| `lines[].kind` | string | yes | no | — | — |
+| `lines[].state` | literal["waiting", "matched", "added", "transfer", "ignored", "settled"] | yes | no | — | — |
+| `lines[].live` | boolean | yes | no | — | — |
+| `lines[].entry_id` | string \| null | yes | yes | — | — |
+| `lines[].link_how` | string \| null | yes | yes | — | — |
+| `lines[].reason` | string \| null | yes | yes | — | — |
+| `lines[].possible_duplicate_of` | string \| null | yes | yes | — | — |
+| `lines[].warnings` | array[string] | yes | no | — | — |
+| `lines[].version` | integer | yes | no | — | — |
+| `lines[].created` | boolean | no | no | false | The entry was made from this line (an add, or a transfer it posted). |
+| `lines[].payee_display` | string \| null | no | yes | null | The payee the entry was entered under. |
+| `lines[].ignore_reason` | string \| null | no | yes | null | — |
+| `lines[].pair_line_id` | string \| null | no | yes | null | A transfer's other end: a live line of another account linked to the same entry. |
+| `lines[].proposals` | array[object] | no | no | [] | For a waiting line: what it could be, with why. |
+| `lines[].proposals[].kind` | literal["match", "transfer"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts. |
+| `lines[].proposals[].reason` | string | yes | no | — | Why it is proposed; when several fit equally, says so (never chosen for you). |
+| `lines[].proposals[].entry_ids` | array[string] | no | no | [] | — |
+| `lines[].proposals[].line_ids` | array[string] | no | no | [] | Lines of other accounts (transfer). |
+| `lines[].proposals[].unique` | boolean | yes | no | — | True when exactly one fits: the act with no choice named accepts it. |
+| `lines[].proposals[].next` | string | yes | no | — | The command that accepts it, or names one of several. |
+| `entries` | array[object] | no | no | [] | — |
+| `entries[].line_id` | string | yes | no | — | — |
+| `entries[].entry_id` | string \| null | yes | yes | — | The entry made (null on a dry run). |
+| `entries[].command` | string | yes | no | — | The command that made it, run as you: the same entry as typing it in. |
+| `entries[].input` | dict | yes | no | — | That command's input, exactly. |
+| `batch_id` | string \| null | no | yes | null | The bank-sort batch of a --lines act; `bank-line undo` takes it. |
+| `summary` | string | yes | no | — | — |
+| `next` | string \| null | no | yes | null | — |
+
+Example JSON output:
+
+```json
+{
+  "batch_id": null,
+  "entries": [],
+  "lines": [],
+  "next": null,
+  "summary": "value"
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
+## `bank-line match`
+
+Match a waiting bank line to the entry it is, already in the books; the entry is not changed. Name the entry, or leave it out to take the line's one candidate; when several fit equally they are listed, never chosen. Amounts must agree exactly. Give `line`, or `lines` for several as one batch (undone together by `bank-line undo`); a batch is all or nothing. Reversing the import undoes it too. Example: {"line": "01J...", "entry": "01J..."}.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | bank-feed |
+| Additional resources | ledger.read: member |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/bank-line.match` |
+| External binary body | none |
+
+### CLI
+
+`bookflow bank-line match --line 01J9ZK4QF8T7E2V5N3B6C1D0BG --entry 01J9ZK4QF8T7E2V5N3B6C1D0BH --company "Demo Plumbing Co" --reason "Bank line is this check" --dry-run --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "bank-line match", "input": {"line": "01J9ZK4QF8T7E2V5N3B6C1D0BG", "entry": "01J9ZK4QF8T7E2V5N3B6C1D0BH"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `line` | `--line` | string \| null | no | yes | null | The line to match. |
+| `entry` | `--entry` | string \| null | no | yes | null | The transaction it is; omitted, the line's one candidate (refused, listing them, when several fit). |
+| `lines[].line` | inside `--lines` JSON array | string | yes | no | — | pattern "^[0-9A-HJKMNP-TV-Z]{26}$" |
+| `lines[].entry` | inside `--lines` JSON array | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/bank-line.match`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `lines` | array[object] | yes | no | — | The lines as they now stand (as they would, on a dry run). |
+| `lines[].id` | string | yes | no | — | — |
+| `lines[].import_id` | string | yes | no | — | — |
+| `lines[].account_id` | string | yes | no | — | — |
+| `lines[].line_key` | string | yes | no | — | — |
+| `lines[].fitid` | string \| null | yes | yes | — | — |
+| `lines[].date` | string | yes | no | — | — |
+| `lines[].amount` | integer | yes | no | — | — |
+| `lines[].amount_decimal` | string | yes | no | — | — |
+| `lines[].payee` | string | yes | no | — | — |
+| `lines[].memo` | string | yes | no | — | — |
+| `lines[].number` | string | yes | no | — | — |
+| `lines[].kind` | string | yes | no | — | — |
+| `lines[].state` | literal["waiting", "matched", "added", "transfer", "ignored", "settled"] | yes | no | — | — |
+| `lines[].live` | boolean | yes | no | — | — |
+| `lines[].entry_id` | string \| null | yes | yes | — | — |
+| `lines[].link_how` | string \| null | yes | yes | — | — |
+| `lines[].reason` | string \| null | yes | yes | — | — |
+| `lines[].possible_duplicate_of` | string \| null | yes | yes | — | — |
+| `lines[].warnings` | array[string] | yes | no | — | — |
+| `lines[].version` | integer | yes | no | — | — |
+| `lines[].created` | boolean | no | no | false | The entry was made from this line (an add, or a transfer it posted). |
+| `lines[].payee_display` | string \| null | no | yes | null | The payee the entry was entered under. |
+| `lines[].ignore_reason` | string \| null | no | yes | null | — |
+| `lines[].pair_line_id` | string \| null | no | yes | null | A transfer's other end: a live line of another account linked to the same entry. |
+| `lines[].proposals` | array[object] | no | no | [] | For a waiting line: what it could be, with why. |
+| `lines[].proposals[].kind` | literal["match", "transfer"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts. |
+| `lines[].proposals[].reason` | string | yes | no | — | Why it is proposed; when several fit equally, says so (never chosen for you). |
+| `lines[].proposals[].entry_ids` | array[string] | no | no | [] | — |
+| `lines[].proposals[].line_ids` | array[string] | no | no | [] | Lines of other accounts (transfer). |
+| `lines[].proposals[].unique` | boolean | yes | no | — | True when exactly one fits: the act with no choice named accepts it. |
+| `lines[].proposals[].next` | string | yes | no | — | The command that accepts it, or names one of several. |
+| `entries` | array[object] | no | no | [] | — |
+| `entries[].line_id` | string | yes | no | — | — |
+| `entries[].entry_id` | string \| null | yes | yes | — | The entry made (null on a dry run). |
+| `entries[].command` | string | yes | no | — | The command that made it, run as you: the same entry as typing it in. |
+| `entries[].input` | dict | yes | no | — | That command's input, exactly. |
+| `batch_id` | string \| null | no | yes | null | The bank-sort batch of a --lines act; `bank-line undo` takes it. |
+| `summary` | string | yes | no | — | — |
+| `next` | string \| null | no | yes | null | — |
+
+Example JSON output:
+
+```json
+{
+  "batch_id": null,
+  "entries": [],
+  "lines": [],
+  "next": null,
+  "summary": "value"
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
 ## `bank-line query`
 
 The bank inbox: lines by account, state (waiting, matched, settled...), import, dates, words or an exact amount, with counts by state. Example: {"account": "Checking", "state": "waiting"}.
@@ -91,6 +584,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].possible_duplicate_of` | string \| null | yes | yes | — | — |
 | `lines[].warnings` | array[string] | yes | no | — | — |
 | `lines[].version` | integer | yes | no | — | — |
+| `lines[].created` | boolean | no | no | false | The entry was made from this line (an add, or a transfer it posted). |
+| `lines[].payee_display` | string \| null | no | yes | null | The payee the entry was entered under. |
+| `lines[].ignore_reason` | string \| null | no | yes | null | — |
+| `lines[].pair_line_id` | string \| null | no | yes | null | A transfer's other end: a live line of another account linked to the same entry. |
+| `lines[].proposals` | array[object] | no | no | [] | For a waiting line: what it could be, with why. |
+| `lines[].proposals[].kind` | literal["match", "transfer"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts. |
+| `lines[].proposals[].reason` | string | yes | no | — | Why it is proposed; when several fit equally, says so (never chosen for you). |
+| `lines[].proposals[].entry_ids` | array[string] | no | no | [] | — |
+| `lines[].proposals[].line_ids` | array[string] | no | no | [] | Lines of other accounts (transfer). |
+| `lines[].proposals[].unique` | boolean | yes | no | — | True when exactly one fits: the act with no choice named accepts it. |
+| `lines[].proposals[].next` | string | yes | no | — | The command that accepts it, or names one of several. |
 | `counts` | object[string, integer] | yes | no | — | Live lines matching the filters other than state, by state. |
 | `next_cursor` | string \| null | yes | yes | — | — |
 
@@ -132,3 +636,457 @@ Example JSON output:
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
+
+## `bank-line transfer`
+
+Record a waiting bank line as a transfer between two of your accounts, as one entry: with its other end (`pair`, or the one proposed when exactly one fits both ways), both lines link to an existing transfer of that amount nearby, or to one posted with transfer post; with `to` and no line yet, the transfer is posted now and the other account's line matches it when imported. Several fits are listed, never chosen. Example: {"line": "01J...", "pair": "01J..."}.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | bank-feed |
+| Additional resources | ledger.read: member |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/bank-line.transfer` |
+| External binary body | none |
+
+### CLI
+
+`bookflow bank-line transfer --line 01J9ZK4QF8T7E2V5N3B6C1D0BG --to Savings --company "Demo Plumbing Co" --reason "Moved to savings" --dry-run --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "bank-line transfer", "input": {"line": "01J9ZK4QF8T7E2V5N3B6C1D0BG", "to": "Savings"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `line` | `--line` | string | yes | no | — | A waiting line.; pattern "^[0-9A-HJKMNP-TV-Z]{26}$" |
+| `pair` | `--pair` | string \| null | no | yes | null | The other end: a waiting line of the other account. |
+| `to` | `--to` | string \| null | no | yes | null | The other account, when its line is not imported yet (a one-sided transfer). |
+| `entry` | `--entry` | string \| null | no | yes | null | An existing entry moving the money between the two accounts. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/bank-line.transfer`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `lines` | array[object] | yes | no | — | The lines as they now stand (as they would, on a dry run). |
+| `lines[].id` | string | yes | no | — | — |
+| `lines[].import_id` | string | yes | no | — | — |
+| `lines[].account_id` | string | yes | no | — | — |
+| `lines[].line_key` | string | yes | no | — | — |
+| `lines[].fitid` | string \| null | yes | yes | — | — |
+| `lines[].date` | string | yes | no | — | — |
+| `lines[].amount` | integer | yes | no | — | — |
+| `lines[].amount_decimal` | string | yes | no | — | — |
+| `lines[].payee` | string | yes | no | — | — |
+| `lines[].memo` | string | yes | no | — | — |
+| `lines[].number` | string | yes | no | — | — |
+| `lines[].kind` | string | yes | no | — | — |
+| `lines[].state` | literal["waiting", "matched", "added", "transfer", "ignored", "settled"] | yes | no | — | — |
+| `lines[].live` | boolean | yes | no | — | — |
+| `lines[].entry_id` | string \| null | yes | yes | — | — |
+| `lines[].link_how` | string \| null | yes | yes | — | — |
+| `lines[].reason` | string \| null | yes | yes | — | — |
+| `lines[].possible_duplicate_of` | string \| null | yes | yes | — | — |
+| `lines[].warnings` | array[string] | yes | no | — | — |
+| `lines[].version` | integer | yes | no | — | — |
+| `lines[].created` | boolean | no | no | false | The entry was made from this line (an add, or a transfer it posted). |
+| `lines[].payee_display` | string \| null | no | yes | null | The payee the entry was entered under. |
+| `lines[].ignore_reason` | string \| null | no | yes | null | — |
+| `lines[].pair_line_id` | string \| null | no | yes | null | A transfer's other end: a live line of another account linked to the same entry. |
+| `lines[].proposals` | array[object] | no | no | [] | For a waiting line: what it could be, with why. |
+| `lines[].proposals[].kind` | literal["match", "transfer"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts. |
+| `lines[].proposals[].reason` | string | yes | no | — | Why it is proposed; when several fit equally, says so (never chosen for you). |
+| `lines[].proposals[].entry_ids` | array[string] | no | no | [] | — |
+| `lines[].proposals[].line_ids` | array[string] | no | no | [] | Lines of other accounts (transfer). |
+| `lines[].proposals[].unique` | boolean | yes | no | — | True when exactly one fits: the act with no choice named accepts it. |
+| `lines[].proposals[].next` | string | yes | no | — | The command that accepts it, or names one of several. |
+| `entries` | array[object] | no | no | [] | — |
+| `entries[].line_id` | string | yes | no | — | — |
+| `entries[].entry_id` | string \| null | yes | yes | — | The entry made (null on a dry run). |
+| `entries[].command` | string | yes | no | — | The command that made it, run as you: the same entry as typing it in. |
+| `entries[].input` | dict | yes | no | — | That command's input, exactly. |
+| `batch_id` | string \| null | no | yes | null | The bank-sort batch of a --lines act; `bank-line undo` takes it. |
+| `summary` | string | yes | no | — | — |
+| `next` | string \| null | no | yes | null | — |
+
+Example JSON output:
+
+```json
+{
+  "batch_id": null,
+  "entries": [],
+  "lines": [],
+  "next": null,
+  "summary": "value"
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_AMOUNT_PRECISION` | The amount has more decimal places than the currency allows. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
+## `bank-line undo`
+
+Undo a bank-line batch (the batch_id of a --lines act) as one unit: delete the entries it made (with preserved history, by each family's own command) and return its lines to how they stood. Refused, naming each blocker, when a line was sorted again since or an entry was edited or used. --dry-run shows the plan. Example: {"batch": "01J..."}.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | bank-feed |
+| Additional resources | ledger.read: member |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/bank-line.undo` |
+| External binary body | none |
+
+### CLI
+
+`bookflow bank-line undo 01J9ZK4QF8T7E2V5N3B6C1D0BJ --company "Demo Plumbing Co" --reason "Wrong account on the batch" --dry-run --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "bank-line undo", "input": {"batch": "01J9ZK4QF8T7E2V5N3B6C1D0BJ"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `batch` | `BATCH` | string | yes | no | — | The bank-sort batch (`batch_id` of a --lines act).; pattern "^[0-9A-HJKMNP-TV-Z]{26}$" |
+| `limit` | `--limit` | integer | no | no | 100 | Most created entries to delete in this call.; minimum 1; maximum 20000 |
+| `fingerprint` | `--fingerprint` | string \| null | no | yes | null | The `fingerprint` a dry run returned; refused if anything changed since. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/bank-line.undo`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `batch_id` | string | yes | no | — | — |
+| `state` | string | yes | no | — | live (dry run), reversing (more slices to run), blocked, or reversed. |
+| `lines` | integer | yes | no | — | Lines it returns to how they stood before the batch. |
+| `entries` | integer | yes | no | — | Entries the batch created that it deletes (with preserved history). |
+| `reversed_now` | integer | yes | no | — | — |
+| `remaining` | integer | yes | no | — | — |
+| `steps` | array[dict] | yes | no | — | — |
+| `blockers` | array[dict] | yes | no | — | — |
+| `total_blockers` | integer | no | no | 0 | — |
+| `fingerprint` | string \| null | yes | yes | — | — |
+| `reversal_batch_id` | string \| null | yes | yes | — | — |
+| `summary` | string | yes | no | — | — |
+| `next` | string \| null | no | yes | null | — |
+
+Example JSON output:
+
+```json
+{
+  "batch_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "blockers": [],
+  "entries": 1,
+  "fingerprint": null,
+  "lines": 1,
+  "next": null,
+  "remaining": 1,
+  "reversal_batch_id": null,
+  "reversed_now": 1,
+  "state": "value",
+  "steps": [],
+  "summary": "value",
+  "total_blockers": 0
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_BATCH_BLOCKED` | The batch cannot be reversed now; the details name each blocker and what clears it. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
+## `bank-line unmatch`
+
+Return a bank line to waiting: undo its match or transfer link (the entry stays), or its ignore. A line entered as an entry is taken back with that entry (its delete or void) or the import's reversal; once that entry is gone, this releases the line. Give `line`, or `lines` for several as one batch (undone together by `bank-line undo`); a batch is all or nothing. Reversing the import undoes it too. Example: {"line": "01J..."}.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | bank-feed |
+| Additional resources | ledger.read: member |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/bank-line.unmatch` |
+| External binary body | none |
+
+### CLI
+
+`bookflow bank-line unmatch --line 01J9ZK4QF8T7E2V5N3B6C1D0BG --company "Demo Plumbing Co" --reason "Wrong entry" --dry-run --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "bank-line unmatch", "input": {"line": "01J9ZK4QF8T7E2V5N3B6C1D0BG"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `line` | `--line` | string \| null | no | yes | null | The line. |
+| `lines` | `--lines` | array[string] | no | no | [] | Several lines as one batch (kind bank-sort, undone together by `bank-line undo`); instead of `line`. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/bank-line.unmatch`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `lines` | array[object] | yes | no | — | The lines as they now stand (as they would, on a dry run). |
+| `lines[].id` | string | yes | no | — | — |
+| `lines[].import_id` | string | yes | no | — | — |
+| `lines[].account_id` | string | yes | no | — | — |
+| `lines[].line_key` | string | yes | no | — | — |
+| `lines[].fitid` | string \| null | yes | yes | — | — |
+| `lines[].date` | string | yes | no | — | — |
+| `lines[].amount` | integer | yes | no | — | — |
+| `lines[].amount_decimal` | string | yes | no | — | — |
+| `lines[].payee` | string | yes | no | — | — |
+| `lines[].memo` | string | yes | no | — | — |
+| `lines[].number` | string | yes | no | — | — |
+| `lines[].kind` | string | yes | no | — | — |
+| `lines[].state` | literal["waiting", "matched", "added", "transfer", "ignored", "settled"] | yes | no | — | — |
+| `lines[].live` | boolean | yes | no | — | — |
+| `lines[].entry_id` | string \| null | yes | yes | — | — |
+| `lines[].link_how` | string \| null | yes | yes | — | — |
+| `lines[].reason` | string \| null | yes | yes | — | — |
+| `lines[].possible_duplicate_of` | string \| null | yes | yes | — | — |
+| `lines[].warnings` | array[string] | yes | no | — | — |
+| `lines[].version` | integer | yes | no | — | — |
+| `lines[].created` | boolean | no | no | false | The entry was made from this line (an add, or a transfer it posted). |
+| `lines[].payee_display` | string \| null | no | yes | null | The payee the entry was entered under. |
+| `lines[].ignore_reason` | string \| null | no | yes | null | — |
+| `lines[].pair_line_id` | string \| null | no | yes | null | A transfer's other end: a live line of another account linked to the same entry. |
+| `lines[].proposals` | array[object] | no | no | [] | For a waiting line: what it could be, with why. |
+| `lines[].proposals[].kind` | literal["match", "transfer"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts. |
+| `lines[].proposals[].reason` | string | yes | no | — | Why it is proposed; when several fit equally, says so (never chosen for you). |
+| `lines[].proposals[].entry_ids` | array[string] | no | no | [] | — |
+| `lines[].proposals[].line_ids` | array[string] | no | no | [] | Lines of other accounts (transfer). |
+| `lines[].proposals[].unique` | boolean | yes | no | — | True when exactly one fits: the act with no choice named accepts it. |
+| `lines[].proposals[].next` | string | yes | no | — | The command that accepts it, or names one of several. |
+| `entries` | array[object] | no | no | [] | — |
+| `entries[].line_id` | string | yes | no | — | — |
+| `entries[].entry_id` | string \| null | yes | yes | — | The entry made (null on a dry run). |
+| `entries[].command` | string | yes | no | — | The command that made it, run as you: the same entry as typing it in. |
+| `entries[].input` | dict | yes | no | — | That command's input, exactly. |
+| `batch_id` | string \| null | no | yes | null | The bank-sort batch of a --lines act; `bank-line undo` takes it. |
+| `summary` | string | yes | no | — | — |
+| `next` | string \| null | no | yes | null | — |
+
+Example JSON output:
+
+```json
+{
+  "batch_id": null,
+  "entries": [],
+  "lines": [],
+  "next": null,
+  "summary": "value"
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |

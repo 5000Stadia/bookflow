@@ -102,6 +102,7 @@ ACCEPTED = {
     'delivery-schedule-v1': (822, '66aed81b62dd65713f27e55f39cea8ba2aa393d8584b08013a4a0298ec50dd59'),
     'bank-feed-v1': (826, '37f3a79e1ad520b97153c7863f0d3111c821e75bd944b0193c727ff94b3e9a29'),
     'bank-feed-reverse-v1': (828, 'df70eed353fe2243e74c722b39a0e7a9b12f98a2e3bd1a9c03bfc382325328c6'),
+    'bank-line-v1': (834, '99c5123f5323536a3b23289f43701b9c188c720cb40a20ebac70be7568c04667'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -243,6 +244,8 @@ CHAIN_ADDITIONS = {
                              'delivery-schedule show', 'delivery-schedule update'},
     'bank-feed-v1': {'bank-feed import', 'bank-feed query', 'bank-feed show', 'bank-line query'},
     'bank-feed-reverse-v1': {'bank-feed move', 'bank-feed reverse'},
+    'bank-line-v1': {'bank-line add', 'bank-line ignore', 'bank-line match', 'bank-line transfer', 'bank-line undo',
+                     'bank-line unmatch'},
 }
 
 _ANCESTOR_EDIT = """

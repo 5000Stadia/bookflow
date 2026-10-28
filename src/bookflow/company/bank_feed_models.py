@@ -167,6 +167,16 @@ class ImportRow(Model):
     created_at: str
 
 
+class Proposal(Model):
+    kind: Literal['match', 'transfer'] = Field(description=(
+        'match: an entry already in the books; transfer: the other end of a movement between two of your accounts.'))
+    reason: str = Field(description='Why it is proposed; when several fit equally, says so (never chosen for you).')
+    entry_ids: tuple[ID, ...] = ()
+    line_ids: tuple[ID, ...] = Field((), description='Lines of other accounts (transfer).')
+    unique: bool = Field(description='True when exactly one fits: the act with no choice named accepts it.')
+    next: str = Field(description='The command that accepts it, or names one of several.')
+
+
 class InboxLine(Model):
     id: ID
     import_id: ID
@@ -188,6 +198,12 @@ class InboxLine(Model):
     possible_duplicate_of: str | None
     warnings: tuple[str, ...]
     version: int
+    created: bool = Field(False, description='The entry was made from this line (an add, or a transfer it posted).')
+    payee_display: str | None = Field(None, description='The payee the entry was entered under.')
+    ignore_reason: str | None = None
+    pair_line_id: ID | None = Field(None, description="A transfer's other end: a live line of another account linked "
+                                                      'to the same entry.')
+    proposals: tuple[Proposal, ...] = Field((), description='For a waiting line: what it could be, with why.')
 
 
 class ImportShowOutput(Model):
@@ -289,3 +305,133 @@ class MoveOutput(Model):
         'The re-import into the target: a preview on a dry run, the new import once done; null while the reversal '
         'still has slices to run.'))
     next: str | None = Field(None, description='The command to run next, or null.')
+
+
+# ------------------------------------------------------------------ sorting (increment 3)
+
+IgnoreReason = Literal['already_entered', 'not_ours', 'duplicate', 'other']
+_BATCH = ('Several lines as one batch (kind bank-sort, undone together by `bank-line undo`); instead of `line`.')
+
+
+class Split(Model):
+    account: str = Field(min_length=1, max_length=1004)
+    amount: str = Field(min_length=1, max_length=40, description='A positive amount; the splits add up to the line.')
+    memo: str | None = Field(None, max_length=4000)
+    class_id: str | None = Field(None, max_length=1004)
+
+
+class _Entering(Model):
+    payee: str | None = Field(None, min_length=1, max_length=1000, description=(
+        'Who the money went to or came from: an existing name (or its id) on the payee_type list. Unsure? Ask the '
+        'person; never guess.'))
+    payee_type: Literal['vendor', 'customer', 'employee', 'other_name'] | None = Field(None, description=(
+        'The list the payee is on; default vendor.'))
+    account: str | None = Field(None, min_length=1, max_length=1004, description=(
+        'The account it was for (an expense or income account...). Unsure? Ask the person; never guess.'))
+    splits: tuple[Split, ...] = Field((), max_length=199, description='Instead of `account`: several accounts.')
+    class_id: str | None = Field(None, max_length=1004)
+    memo: str | None = Field(None, max_length=4000, description="Default: the bank's text.")
+    number: str | None = Field(None, max_length=64, description=(
+        "A check's number; default the line's when it is a plain number."))
+
+
+class AddItem(_Entering):
+    line: ID
+
+
+class AddInput(_Entering):
+    line: ID | None = Field(None, description='The waiting line to enter in the books.')
+    lines: tuple[AddItem, ...] = Field((), max_length=500, description=_BATCH + (
+        ' Each item may carry its own payee, account and so on; fields given at the top fill what an item leaves out.'))
+
+    @model_validator(mode='after')
+    def one(self):
+        if (self.line is None) == (not self.lines):
+            raise ValueError('give exactly one of line or lines')
+        return self
+
+
+class MatchItem(Model):
+    line: ID
+    entry: ID | None = None
+
+
+class MatchInput(Model):
+    line: ID | None = Field(None, description='The line to match.')
+    entry: ID | None = Field(None, description=(
+        "The transaction it is; omitted, the line's one candidate (refused, listing them, when several fit)."))
+    lines: tuple[MatchItem, ...] = Field((), max_length=500, description=_BATCH)
+
+    @model_validator(mode='after')
+    def one(self):
+        if (self.line is None) == (not self.lines) or (self.lines and self.entry is not None):
+            raise ValueError('give line (with entry, or none) or lines, not both')
+        return self
+
+
+class LinesInput(Model):
+    line: ID | None = Field(None, description='The line.')
+    lines: tuple[ID, ...] = Field((), max_length=500, description=_BATCH)
+
+    @model_validator(mode='after')
+    def one(self):
+        if (self.line is None) == (not self.lines):
+            raise ValueError('give exactly one of line or lines')
+        return self
+
+
+class IgnoreInput(LinesInput):
+    ignore_reason: IgnoreReason = Field(description='Why: already_entered, not_ours, duplicate or other.')
+    note: str | None = Field(None, max_length=500)
+
+
+class TransferInput(Model):
+    line: ID = Field(description='A waiting line.')
+    pair: ID | None = Field(None, description="The other end: a waiting line of the other account.")
+    to: AccountSelector | None = Field(None, description=(
+        "The other account, when its line is not imported yet (a one-sided transfer)."))
+    entry: ID | None = Field(None, description='An existing entry moving the money between the two accounts.')
+
+    @model_validator(mode='after')
+    def one(self):
+        if self.pair is not None and self.to is not None:
+            raise ValueError('give pair or to, not both')
+        return self
+
+
+class UndoInput(Model):
+    batch: ID = Field(description='The bank-sort batch (`batch_id` of a --lines act).')
+    limit: int = Field(SLICE, strict=True, ge=1, le=20_000, description='Most created entries to delete in this call.')
+    fingerprint: str | None = Field(None, min_length=64, max_length=64, description=(
+        'The `fingerprint` a dry run returned; refused if anything changed since.'))
+
+
+class Entered(Model):
+    line_id: ID
+    entry_id: ID | None = Field(description='The entry made (null on a dry run).')
+    command: str = Field(description='The command that made it, run as you: the same entry as typing it in.')
+    input: dict = Field(description="That command's input, exactly.")
+
+
+class SortOutput(Model):
+    lines: tuple[InboxLine, ...] = Field(description='The lines as they now stand (as they would, on a dry run).')
+    entries: tuple[Entered, ...] = ()
+    batch_id: ID | None = Field(None, description='The bank-sort batch of a --lines act; `bank-line undo` takes it.')
+    summary: str
+    next: str | None = None
+
+
+class UndoOutput(Model):
+    batch_id: ID
+    state: str = Field(description='live (dry run), reversing (more slices to run), blocked, or reversed.')
+    lines: Count = Field(description='Lines it returns to how they stood before the batch.')
+    entries: Count = Field(description='Entries the batch created that it deletes (with preserved history).')
+    reversed_now: Count
+    remaining: Count
+    steps: tuple[dict, ...]
+    blockers: tuple[dict, ...]
+    total_blockers: Count = 0
+    fingerprint: str | None
+    reversal_batch_id: ID | None
+    summary: str
+    next: str | None = None

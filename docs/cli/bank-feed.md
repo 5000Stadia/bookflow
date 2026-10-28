@@ -837,6 +837,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].possible_duplicate_of` | string \| null | yes | yes | — | — |
 | `lines[].warnings` | array[string] | yes | no | — | — |
 | `lines[].version` | integer | yes | no | — | — |
+| `lines[].created` | boolean | no | no | false | The entry was made from this line (an add, or a transfer it posted). |
+| `lines[].payee_display` | string \| null | no | yes | null | The payee the entry was entered under. |
+| `lines[].ignore_reason` | string \| null | no | yes | null | — |
+| `lines[].pair_line_id` | string \| null | no | yes | null | A transfer's other end: a live line of another account linked to the same entry. |
+| `lines[].proposals` | array[object] | no | no | [] | For a waiting line: what it could be, with why. |
+| `lines[].proposals[].kind` | literal["match", "transfer"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts. |
+| `lines[].proposals[].reason` | string | yes | no | — | Why it is proposed; when several fit equally, says so (never chosen for you). |
+| `lines[].proposals[].entry_ids` | array[string] | no | no | [] | — |
+| `lines[].proposals[].line_ids` | array[string] | no | no | [] | Lines of other accounts (transfer). |
+| `lines[].proposals[].unique` | boolean | yes | no | — | True when exactly one fits: the act with no choice named accepts it. |
+| `lines[].proposals[].next` | string | yes | no | — | The command that accepts it, or names one of several. |
 | `next_cursor` | string \| null | yes | yes | — | — |
 
 Example JSON output:

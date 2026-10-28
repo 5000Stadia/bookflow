@@ -97,7 +97,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +8 recurring schedules (R112 increment 4): delivery-schedule create/update/live/pause/resume/run/show/query.
     # +4 the bank inbox (R108 increment 1): bank-feed import/show/query, bank-line query.
     # +2 reverse and move (R108 increment 2): bank-feed reverse, bank-feed move.
-    assert len(rows) == 834
+    # +6 sorting the inbox (R108 increment 3): bank-line match, unmatch, ignore, add, transfer, undo.
+    assert len(rows) == 840
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
@@ -409,7 +410,11 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # answer's target and input. No new variant kind.
     # 4256 -> 4258 (R108 inc 2, measured): the fingerprint of bank-feed reverse and of bank-feed move -- their null
     # branches. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==4258
+    # 4258 -> 4285 (R108 inc 3, measured per command): bank-line add 17 (line, payee, payee_type, account, class_id,
+    # memo, number, each split's memo and class_id, and the same seven again inside each --lines item), match 3
+    # (line, entry, each item's entry), transfer 3 (pair, to, entry), ignore 2 (line, note), unmatch 1 (line),
+    # undo 1 (fingerprint) -- their null branches. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==4285
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

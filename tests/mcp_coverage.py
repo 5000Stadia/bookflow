@@ -325,7 +325,10 @@ IMPORT_COMMANDS = frozenset(('import kinds', 'import template', 'import preview'
 
 # R108 increment 1: a statement previewed and imported into the bank inbox, refused twice, read back.
 BANK_FEED_COMMANDS = frozenset(('bank-feed import', 'bank-feed show', 'bank-feed query', 'bank-line query',
-                                'bank-feed reverse', 'bank-feed move'))  # R108 increment 2: moved, then undone
+                                'bank-feed reverse', 'bank-feed move',  # R108 increment 2: moved, then undone
+                                # R108 increment 3: sorting the inbox.
+                                'bank-line match', 'bank-line unmatch', 'bank-line ignore', 'bank-line add',
+                                'bank-line transfer', 'bank-line undo'))
 
 LANDED_COST_COMMANDS = frozenset(('landed-cost setup', 'landed-cost charges', 'landed-cost post', 'landed-cost void',
     'landed-cost show', 'landed-cost query'))

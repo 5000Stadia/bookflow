@@ -138,3 +138,87 @@ bank_feed_move = command(
     error_codes=[*_REVERSE_ERRORS, 'E_ACCOUNT_MISMATCH'])(plan_bank_feed_move)
 bank_feed_move.applier(apply_bank_feed_move)
 bank_feed_move.resource_requirements = _READ
+
+
+# ------------------------------------------------------------------ sorting the inbox (increment 3)
+
+_ONE_OR_MANY = (' Give `line`, or `lines` for several as one batch (undone together by `bank-line undo`); a batch is '
+                'all or nothing. Reversing the import undoes it too.')
+_MATCH = ("Match a waiting bank line to the entry it is, already in the books; the entry is not changed. Name the "
+          "entry, or leave it out to take the line's one candidate; when several fit equally they are listed, never "
+          "chosen. Amounts must agree exactly." + _ONE_OR_MANY + ' Example: {"line": "01J...", "entry": "01J..."}.')
+_ADD = ("Enter a waiting bank line in the books, run as you with the account's own command (check post or deposit "
+        "post on a bank account, card-charge post or card-credit post on a card), so the entry is exactly the one you "
+        "would type: the line's date and amount, your payee and account (or splits), class and memo (default the "
+        "bank's text). No payee or account: refused, asking -- ask the person, never guess. A closed period refuses "
+        "with the command's own code." + _ONE_OR_MANY
+        + ' Example: {"line": "01J...", "payee": "Shell", "account": "Fuel"}.')
+_UNMATCH = ("Return a bank line to waiting: undo its match or transfer link (the entry stays), or its ignore. A line "
+            "entered as an entry is taken back with that entry (its delete or void) or the import's reversal; once "
+            "that entry is gone, this releases the line." + _ONE_OR_MANY + ' Example: {"line": "01J..."}.')
+_IGNORE = ("Set a waiting bank line aside with a reason: already_entered, not_ours, duplicate (a possible_duplicate "
+           "flag) or other. `bank-line unmatch` brings it back." + _ONE_OR_MANY
+           + ' Example: {"line": "01J...", "ignore_reason": "duplicate"}.')
+_TRANSFER = ("Record a waiting bank line as a transfer between two of your accounts, as one entry: with its other "
+             "end (`pair`, or the one proposed when exactly one fits both ways), both lines link to an existing "
+             "transfer of that amount nearby, or to one posted with transfer post; with `to` and no line yet, the "
+             "transfer is posted now and the other account's line matches it when imported. Several fits are listed, "
+             'never chosen. Example: {"line": "01J...", "pair": "01J..."}.')
+_UNDO = ("Undo a bank-line batch (the batch_id of a --lines act) as one unit: delete the entries it made (with "
+         "preserved history, by each family's own command) and return its lines to how they stood. Refused, naming "
+         'each blocker, when a line was sorted again since or an entry was edited or used. --dry-run shows the plan. '
+         'Example: {"batch": "01J..."}.')
+_SORT_ERRORS = ['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT']
+_POST_ERRORS = [*_SORT_ERRORS, 'E_AMOUNT_PRECISION', 'E_PERIOD_CLOSED', 'E_INACTIVE_REFERENCE', 'E_DUPLICATE_NUMBER']
+
+
+def _sorter(name, model, work, description, errors=_SORT_ERRORS, output=m.SortOutput, positional=()):
+    from bookflow.commands.import_cmds import _finalized
+
+    def planner(inp, ctx, s):
+        if s.dry_run:
+            return Plan(output(**work(s, ctx, inp, dry_run=True)), {'input': inp})
+        return Plan(output(**_PENDING_SORT) if output is m.SortOutput else output(**_pending_undo(inp)), {'input': inp})
+
+    def applier(plan, ctx, s):
+        return _finalized(s, ctx, name.replace(' ', '.'), lambda: work(s, ctx, plan.data['input'], dry_run=False),
+                          output)
+    cmd = command(name, scope='company', description=description, input_model=model, output_model=output,
+                  writes={'company'}, required_role='standard', capability='bank-feed', positional=list(positional),
+                  error_codes=list(errors))(planner)
+    cmd.applier(applier)
+    cmd.resource_requirements = _READ
+    return cmd
+
+
+_PENDING_SORT = dict(lines=(), entries=(), batch_id=None, summary='')
+
+
+def _pending_undo(inp):
+    return dict(batch_id=inp.batch, state='live', lines=0, entries=0, reversed_now=0, remaining=0, steps=(),
+                blockers=(), fingerprint=None, reversal_batch_id=None, summary='')
+
+
+def _sort_module():
+    from bookflow.company import bank_sort
+    return bank_sort
+
+
+bank_line_match = _sorter('bank-line match', m.MatchInput,
+                          lambda s, ctx, inp, dry_run: _sort_module().act(s, ctx, 'match', inp, dry_run=dry_run), _MATCH)
+bank_line_unmatch = _sorter('bank-line unmatch', m.LinesInput,
+                            lambda s, ctx, inp, dry_run: _sort_module().act(s, ctx, 'unmatch', inp, dry_run=dry_run),
+                            _UNMATCH)
+bank_line_ignore = _sorter('bank-line ignore', m.IgnoreInput,
+                           lambda s, ctx, inp, dry_run: _sort_module().act(s, ctx, 'ignore', inp, dry_run=dry_run),
+                           _IGNORE)
+bank_line_add = _sorter('bank-line add', m.AddInput,
+                        lambda s, ctx, inp, dry_run: _sort_module().add(s, ctx, inp, dry_run=dry_run), _ADD,
+                        errors=_POST_ERRORS)
+bank_line_transfer = _sorter('bank-line transfer', m.TransferInput,
+                             lambda s, ctx, inp, dry_run: _sort_module().transfer(s, ctx, inp, dry_run=dry_run),
+                             _TRANSFER, errors=_POST_ERRORS)
+bank_line_undo = _sorter('bank-line undo', m.UndoInput,
+                         lambda s, ctx, inp, dry_run: _sort_module().undo(s, ctx, inp, dry_run=dry_run), _UNDO,
+                         errors=['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_BATCH_BLOCKED', 'E_VERSION_CONFLICT'],
+                         output=m.UndoOutput, positional=('batch',))

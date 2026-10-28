@@ -2785,3 +2785,30 @@ _BANK_REVERSE = {
 MATRIX['bank-feed reverse'] = dict(_BANK_REVERSE)
 MATRIX['bank-feed move'] = {**_BANK_REVERSE, 'E_ACCOUNT_MISMATCH': "the import's account number or kind differs "
                                                                   "from the target's"}
+# Sorting the inbox (R108 increment 3).
+_BANK_SORT = {
+    'E_VALIDATION': 'a line not waiting (or not live, or its import being reversed), no payee or account given (ask), '
+                    'several candidates or pairs fitting equally, amounts that differ, a line named twice',
+    'E_RECORD_NOT_FOUND': 'unknown line, entry, account or payee',
+    'E_VERSION_CONFLICT': 'the line changed meanwhile',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+MATRIX['bank-line match'] = dict(_BANK_SORT)
+MATRIX['bank-line unmatch'] = dict(_BANK_SORT)
+MATRIX['bank-line ignore'] = dict(_BANK_SORT)
+_BANK_POST = {**_BANK_SORT, 'E_AMOUNT_PRECISION': 'a split with more places than the currency has',
+              'E_PERIOD_CLOSED': "the line's date is in a closed period (the posting command's own refusal)",
+              'E_INACTIVE_REFERENCE': 'an inactive account, payee or class (the posting command\'s own refusal)',
+              'E_DUPLICATE_NUMBER': "a check number already used on the account (the line's number)"}
+MATRIX['bank-line add'] = dict(_BANK_POST)
+MATRIX['bank-line transfer'] = dict(_BANK_POST)
+MATRIX['bank-line undo'] = {
+    'E_VALIDATION': 'not a bank-sort batch, or already undone',
+    'E_RECORD_NOT_FOUND': 'unknown batch',
+    'E_BATCH_BLOCKED': 'a line sorted again since, an entry edited, linked, reconciled, deposited, applied, in a '
+                       'closed period or without the delete grant (every blocker named)',
+    'E_VERSION_CONFLICT': 'the fingerprint of an older dry run, or a line changed meanwhile',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
