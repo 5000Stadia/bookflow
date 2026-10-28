@@ -1290,3 +1290,5 @@ globals().update(_delivery_schema.define_queue_tables(metadata, _column, _table,
 from bookflow.company import import_schema as _import_schema
 globals().update(_import_schema.define_tables(metadata, _column, _table))
 globals().update(_delivery_schema.define_batch_tables(metadata, _column, _table, _common, delivery_messages))
+# Document delivery, increment 4 (co0110, R112): recurring sends and their runs.
+globals().update(_delivery_schema.define_schedule_tables(metadata, _column, _table, _common))

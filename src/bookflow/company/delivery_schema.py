@@ -301,3 +301,100 @@ def define_batch_tables(metadata, C, T, common, messages):
 
 
 BATCH_TABLES = ('delivery_flags', 'delivery_batches')
+
+
+SCHEDULE_STATES = ('draft', 'live', 'paused')
+SCHEDULE_MODES = ('draft', 'send')
+RUN_STATES = ('drafting', 'done', 'skipped', 'failed')
+SCHEDULE_FREQUENCIES = ('daily', 'weekly', 'every_other_week', 'every_four_weeks', 'twice_a_month', 'monthly',
+                        'every_other_month', 'quarterly', 'twice_a_year', 'annually')
+
+
+def define_schedule_tables(metadata, C, T, common):
+    """Increment 4 (co0110): recurring sends and their runs, one per slot."""
+    def quoted(values):
+        return ', '.join(f"'{value}'" for value in values)
+
+    schedules = T('delivery_schedules', *common(),
+        C('name', sa.String(100), 'Schedule name as entered.', nullable=False),
+        C('name_key', sa.String(100), 'Case-folded name, unique.', nullable=False),
+        C('kind', sa.String(16), 'Kind of document it emails: ' + ', '.join(KINDS) + '.', nullable=False),
+        C('selection', sa.Text, "What each run drafts, as a batch's selection (queued, unsent, ready notices, or "
+          'statements with a period word: previous-month, month-to-date, since-last-run), a JSON object.',
+          nullable=False),
+        C('template_id', sa.String(26), "Template; null for the kind's default.", sa.ForeignKey('delivery_templates.id'),
+          nullable=True),
+        C('combine', sa.Boolean, "One message per customer with all its documents.", nullable=False),
+        C('frequency', sa.String(24), 'How often: ' + ', '.join(SCHEDULE_FREQUENCIES) + '.', nullable=False),
+        C('start_date', sa.String(10), 'The first slot.', nullable=False),
+        C('stop_date', sa.String(10), 'No slot after this day; null for none.', nullable=True),
+        C('remaining_runs', sa.Integer, 'Runs left; null for no limit.', nullable=True),
+        C('next_date', sa.String(10), 'The next slot not yet run or skipped; null once it has run out.', nullable=True),
+        C('anchor_day', sa.Integer, 'The day of the month a monthly family keeps (31 for a month-end start); null for '
+          'the others.', nullable=True),
+        C('mode', sa.String(8), 'draft (each run leaves drafts) or send (each run releases what it drafts).',
+          nullable=False),
+        C('active', sa.Boolean, 'False while stopped (delivery-schedule pause): nothing runs.', nullable=False),
+        C('state', sa.String(8), "draft, live (a send schedule made live: its releases carry the establisher's go) "
+          'or paused (its establisher lost the authority, or it could not run; the reason says which).',
+          nullable=False),
+        C('established_by', sa.String(26), 'Who made it live; its runs send under their authority.', nullable=True),
+        C('established_at', sa.String(32), 'When it was made live.', nullable=True),
+        C('paused_reason', sa.String(500), 'Why it is paused.', nullable=True),
+        C('paused_at', sa.String(32), 'When it was paused.', nullable=True),
+        C('catch_up_days', sa.Integer, 'A missed slot runs only if no older than this many days (default 7); older '
+          'ones are skipped.', nullable=False),
+        C('run_as', sa.String(26), 'Who last set what it drafts: its runs draft as them.', nullable=False),
+        C('run_as_for', sa.String(26), 'The person run_as (an agent) acted for; null for a person.', nullable=True),
+        C('run_as_epoch', sa.Integer, "An agent run_as's authority epoch when it saved; its runs need the same.",
+          nullable=True),
+        sa.CheckConstraint('length(trim(name)) BETWEEN 1 AND 100', name='ck_delivery_schedule_name'),
+        sa.CheckConstraint(f'kind IN ({quoted(KINDS)})', name='ck_delivery_schedule_kind'),
+        sa.CheckConstraint(f'frequency IN ({quoted(SCHEDULE_FREQUENCIES)})', name='ck_delivery_schedule_frequency'),
+        sa.CheckConstraint(f'mode IN ({quoted(SCHEDULE_MODES)})', name='ck_delivery_schedule_mode'),
+        sa.CheckConstraint(f'state IN ({quoted(SCHEDULE_STATES)})', name='ck_delivery_schedule_state'),
+        sa.CheckConstraint("state != 'live' OR (mode = 'send' AND established_by IS NOT NULL)",
+                           name='ck_delivery_schedule_live'),
+        sa.CheckConstraint("(state = 'paused') = (paused_reason IS NOT NULL)", name='ck_delivery_schedule_paused'),
+        sa.CheckConstraint("json_valid(selection) AND json_type(selection) = 'object'",
+                           name='ck_delivery_schedule_selection'),
+        sa.CheckConstraint('catch_up_days BETWEEN 0 AND 31', name='ck_delivery_schedule_catch_up'),
+        sa.CheckConstraint('remaining_runs IS NULL OR remaining_runs >= 0', name='ck_delivery_schedule_remaining'),
+        sa.CheckConstraint('anchor_day IS NULL OR anchor_day BETWEEN 1 AND 31', name='ck_delivery_schedule_anchor'),
+        sa.UniqueConstraint('name_key', name='uq_delivery_schedule_name'),
+        description='Recurring sends: a saved batch with a frequency. A send schedule is a draft until a person '
+                    "makes it live; then it runs under that person's authority and pauses if they lose it.")
+    sa.Index('ix_delivery_schedules_due', schedules.c.next_date, sqlite_where=sa.text('active = 1'))
+    runs = T('delivery_schedule_runs', *common(),
+        C('schedule_id', sa.String(26), 'The schedule.', sa.ForeignKey('delivery_schedules.id'), nullable=False),
+        C('slot_date', sa.String(10), 'The slot: one run per schedule and slot.', nullable=False),
+        C('state', sa.String(10), 'drafting, done, skipped (never run: why says) or failed.', nullable=False),
+        C('batch_id', sa.String(26), 'The batch it drafts in; null until it begins, or when nothing matched.',
+          sa.ForeignKey('delivery_batches.id'), nullable=True),
+        C('mode', sa.String(8), "The schedule's mode when the run began.", nullable=False),
+        C('go_by', sa.String(26), "The establisher whose go its releases carry; null when they wait for a go.",
+          nullable=True),
+        C('date_from', sa.String(10), 'Statements: the period start.', nullable=True),
+        C('date_to', sa.String(10), 'Statements: the period end.', nullable=True),
+        C('planned', sa.Integer, 'Messages to draft.', nullable=False),
+        C('drafted', sa.Integer, 'Messages drafted.', nullable=False),
+        C('released', sa.Integer, 'Messages released to the outbox.', nullable=False),
+        C('skipped_count', sa.Integer, 'Documents or customers skipped, each named on the batch.', nullable=False),
+        C('reason', sa.String(24), 'Skipped or failed: superseded, outside_window, stopped, no_authority, failed.',
+          nullable=True),
+        C('reason_text', sa.String(500), 'The reason in words.', nullable=True),
+        C('finished_at', sa.String(32), 'When it ended.', nullable=True),
+        sa.CheckConstraint(f'state IN ({quoted(RUN_STATES)})', name='ck_delivery_schedule_run_state'),
+        sa.CheckConstraint(f'mode IN ({quoted(SCHEDULE_MODES)})', name='ck_delivery_schedule_run_mode'),
+        sa.CheckConstraint("(state IN ('skipped', 'failed')) = (reason IS NOT NULL)",
+                           name='ck_delivery_schedule_run_reason'),
+        sa.CheckConstraint('planned >= 0 AND drafted >= 0 AND released >= 0 AND skipped_count >= 0',
+                           name='ck_delivery_schedule_run_counts'),
+        sa.UniqueConstraint('schedule_id', 'slot_date', name='uq_delivery_schedule_run_slot'),
+        description='Each slot of a schedule, claimed once: run (drafting, then done with counts), or skipped with '
+                    'why (a later slot was due, older than the catch-up window, stopped, no authority).')
+    sa.Index('ix_delivery_schedule_runs_open', runs.c.schedule_id, sqlite_where=sa.text("state = 'drafting'"))
+    return dict(delivery_schedules=schedules, delivery_schedule_runs=runs)
+
+
+SCHEDULE_TABLES = ('delivery_schedules', 'delivery_schedule_runs')

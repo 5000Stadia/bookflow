@@ -1901,4 +1901,24 @@ EXAMPLES.update({
     'delivery batch-query': Example('bookflow delivery batch-query' + _C + ' --json', {}),
     'delivery batch-cancel': Example('bookflow delivery batch-cancel B-1001' + _C + ' --reason "Wrong month" --json',
                                      {'batch': 'B-1001'}),
+    'delivery-schedule create': Example(
+        'bookflow delivery-schedule create --name "Month-end statements" --kind statement --period month-to-date'
+        ' --balance-over 0 --frequency monthly --start-date 2026-11-30 --mode send' + _C
+        + ' --reason "Statements each month end" --json',
+        {'name': 'Month-end statements', 'kind': 'statement', 'period': 'month-to-date', 'balance_over': '0',
+         'frequency': 'monthly', 'start_date': '2026-11-30', 'mode': 'send'}),
+    'delivery-schedule update': Example('bookflow delivery-schedule update "Month-end statements" --combine'
+                                        + _C + ' --reason "One email each" --json',
+                                        {'schedule': 'Month-end statements', 'combine': True}),
+    'delivery-schedule live': Example('bookflow delivery-schedule live "Month-end statements"' + _C
+                                      + ' --dry-run --json', {'schedule': 'Month-end statements'}),
+    'delivery-schedule pause': Example('bookflow delivery-schedule pause "Month-end statements"' + _C
+                                       + ' --reason "Holiday" --json', {'schedule': 'Month-end statements'}),
+    'delivery-schedule resume': Example('bookflow delivery-schedule resume "Month-end statements"' + _C
+                                        + ' --reason "Back" --json', {'schedule': 'Month-end statements'}),
+    'delivery-schedule run': Example('bookflow delivery-schedule run "Month-end statements"' + _C
+                                     + ' --reason "Run it now" --json', {'schedule': 'Month-end statements'}),
+    'delivery-schedule show': Example('bookflow delivery-schedule show "Month-end statements"' + _C + ' --json',
+                                      {'schedule': 'Month-end statements'}),
+    'delivery-schedule query': Example('bookflow delivery-schedule query' + _C + ' --json', {}),
 })

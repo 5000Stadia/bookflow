@@ -382,3 +382,90 @@ delivery_batch_cancel = _write('delivery batch-cancel', _BATCH_CANCEL, bm.BatchC
                                plan_delivery_batch_cancel, db.apply_cancel, positional=('batch',),
                                version=_BATCH_VERSION,
                                errors=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_REASON_REQUIRED'])
+
+
+# ---------------------------------------------------------------- recurring schedules (increment 4)
+
+from bookflow.company import delivery_schedule_models as sm  # noqa: E402
+from bookflow.company import delivery_schedules as ds  # noqa: E402
+
+_SCHEDULE_VERSION = ('delivery-schedule show', 'schedule', 'version')
+_SCHEDULE_CREATE = (
+    'Save a recurring batch: kind and selection as delivery batch takes them (statements take a period word), a '
+    'frequency from start_date (a month-end start stays at month end), optional stop_date or remaining_runs. Each '
+    'slot runs once on the host; after downtime only the latest missed slot runs, within catch_up_days (7). mode send '
+    'is a draft until a person makes it live. Missing details are refused, never guessed. Example: {"name": '
+    '"Month-end statements", "kind": "statement", "period": "month-to-date", "balance_over": "0", "frequency": '
+    '"monthly", "start_date": "2026-10-31", "mode": "send"}.')
+_SCHEDULE_UPDATE = ('Change a schedule. A change to what or when it sends returns a live one to draft, unless a person '
+                    "passes the changed schedule's check fingerprint as confirm (dry_run shows it).")
+_SCHEDULE_LIVE = (
+    "Make a send schedule live: its runs then release with your go and pause if you lose it. One check first: run it "
+    'with dry_run, show the person the check (selection, cadence, first run, who it would reach today), then run it '
+    "with the check's fingerprint as confirm. A person's act.")
+_SCHEDULE_PAUSE = 'Stop a schedule: nothing runs until it is resumed.'
+_SCHEDULE_RESUME = ('Run a stopped or paused schedule again from today; slots that passed are skipped. A paused send '
+                    'schedule comes back as a draft.')
+_SCHEDULE_RUN = ('Do now what the host does on its tick: claim the due slot (once) and draft a chunk of its run, or '
+                 'continue an open run. Nothing if nothing is due.')
+_SCHEDULE_SHOW = 'A schedule, its state and recent runs; check includes the details a person confirms to make it live.'
+_SCHEDULE_QUERY = 'The schedules, with cadence, next slot, state and last run.'
+
+
+def plan_schedule_create(inp, ctx, s) -> Plan:
+    return ds.prepare_create(s, ctx, inp)
+
+
+def plan_schedule_update(inp, ctx, s) -> Plan:
+    return ds.prepare_update(s, ctx, inp)
+
+
+def plan_schedule_live(inp, ctx, s) -> Plan:
+    return ds.prepare_live(s, ctx, inp)
+
+
+def plan_schedule_pause(inp, ctx, s) -> Plan:
+    return ds.prepare_pause(s, ctx, inp)
+
+
+def plan_schedule_resume(inp, ctx, s) -> Plan:
+    return ds.prepare_resume(s, ctx, inp)
+
+
+def plan_schedule_run(inp, ctx, s) -> Plan:
+    return ds.prepare_run(s, ctx, inp)
+
+
+def plan_schedule_show(inp, ctx, s) -> Plan:
+    return Plan(ds.show(s, ctx, inp))
+
+
+def plan_schedule_query(inp, ctx, s) -> Plan:
+    return Plan(ds.query(s, inp))
+
+
+_SCHED_ERRORS = ['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_WORK_DEPENDENCY']
+delivery_schedule_create = _write('delivery-schedule create', _SCHEDULE_CREATE, sm.ScheduleCreateInput,
+                                  sm.ScheduleOutput, plan_schedule_create, ds.apply_create,
+                                  errors=['E_VALIDATION', 'E_RECORD_NOT_FOUND'])
+# R187: confirm (staying live through a change) needs automate.delivery; today a person.
+delivery_schedule_update = _write('delivery-schedule update', _SCHEDULE_UPDATE, sm.ScheduleUpdateInput,
+                                  sm.ScheduleOutput, plan_schedule_update, ds.apply_update, positional=('schedule',),
+                                  version=_SCHEDULE_VERSION, errors=[*_SCHED_ERRORS, 'E_PERMISSION'])
+# R187: people-only until the capability automate.delivery exists.
+delivery_schedule_live = _write('delivery-schedule live', _SCHEDULE_LIVE, sm.ScheduleLiveInput, sm.ScheduleOutput,
+                                plan_schedule_live, ds.apply_act, positional=('schedule',), version=_SCHEDULE_VERSION,
+                                errors=[*_SCHED_ERRORS, 'E_PERMISSION'])
+delivery_schedule_pause = _write('delivery-schedule pause', _SCHEDULE_PAUSE, sm.ScheduleActInput, sm.ScheduleOutput,
+                                 plan_schedule_pause, ds.apply_act, positional=('schedule',),
+                                 version=_SCHEDULE_VERSION, errors=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT'])
+delivery_schedule_resume = _write('delivery-schedule resume', _SCHEDULE_RESUME, sm.ScheduleActInput,
+                                  sm.ScheduleOutput, plan_schedule_resume, ds.apply_act, positional=('schedule',),
+                                  version=_SCHEDULE_VERSION, errors=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT'])
+delivery_schedule_run = _write('delivery-schedule run', _SCHEDULE_RUN, sm.ScheduleSelector, sm.ScheduleOutput,
+                               plan_schedule_run, ds.apply_run, positional=('schedule',), errors=_SCHED_ERRORS)
+delivery_schedule_show = _read('delivery-schedule show', _SCHEDULE_SHOW, sm.ScheduleShowInput, sm.ScheduleOutput,
+                               plan_schedule_show, errors=['E_RECORD_NOT_FOUND', 'E_VALIDATION'],
+                               positional=('schedule',))
+delivery_schedule_query = _read('delivery-schedule query', _SCHEDULE_QUERY, sm.ScheduleQueryInput,
+                                sm.SchedulePageOutput, plan_schedule_query, errors=['E_VALIDATION'])
