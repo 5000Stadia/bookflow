@@ -1246,6 +1246,14 @@ nothing ever ends up changed but impossible to undo.
   ordering rule of a strict kind (a later live batch in a bank import's scope). A paste without a header row over a
   filter or search needs the grid's `selection_fingerprint` (the selection's records in order) and is refused if
   the records changed since; named `records` need none. The 300-item test has its own 900 s timeout.
+- **Also found:** every grid cell rendered blank (in Jinja `r.values` is a dict's `values` method); the template now
+  reads `r['values']`, and the browser test checks a cell's value.
+- **Tests:** in `tests/test_bulk_edit.py`, an unfinished apply refused undo until it is finished or cancelled; an
+  apply refused once its batch is not live (and the ledger's own refusal); true totals on 60 items with 55 edited
+  since; grid pages and the paste fingerprint; a later batch named only when it can be reversed; a strict kind's
+  ordering never skipped. In `tests/test_bulk_edit_browser.py`, 2,000 items at 390 px: 50 cards, the bar in view,
+  "All 2000 matching", the changes paged, the apply in slices, a reload part way showing Still applying, then done.
+  After merging main (cc14944b), `bulk-edit-v1` sits on `capabilities-v1` (841 commands, descriptor 4d42ba55).
 
 **Timings** (`tools/measure_bulk_edit.py ROWS`, root NVMe, service items, three columns, a 5 percent rise rounded
 to 0.05 over every item; seconds, 2026-10-28):
