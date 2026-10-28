@@ -1753,6 +1753,16 @@ EXAMPLES.update({
                                            {'as_of': '2026-12-12'}),
 })
 
+# Draft shipments and packing (R181 increment 4).
+EXAMPLES.update({
+    'shipment create': Example('bookflow shipment create --sales-order 1001' + _C
+                               + ' --reason "Pack before the truck" --dry-run --json', {'sales_order': '1001'}),
+    'shipment pack': Example('bookflow shipment pack 1004 --unit WH-1001 --box 2' + _C
+                             + ' --reason "Heater in box 2" --json', {'shipment': '1004', 'unit': 'WH-1001', 'box': 2}),
+    'shipment cancel': Example('bookflow shipment cancel 1004' + _C + ' --reason "Not going today" --json',
+                               {'shipment': '1004'}),
+})
+
 # Imports and reversible batches (R107 increments 0 and 1).
 _RUN = '01J9ZK4QF8T7E2V5N3B6C1D0AR'
 EXAMPLES.update({
@@ -1801,4 +1811,69 @@ EXAMPLES.update({
     'shipment-return show': Example('bookflow shipment-return show 1001' + _C + ' --json', {'shipment_return': '1001'}),
     'shipment-return query': Example('bookflow shipment-return query --shipment 1001' + _C + ' --json',
                                      {'shipment': '1001'}),
+})
+
+# Document delivery (R112 increment 1): nothing leaves the machine; messages wait in the outbox.
+_C = ' --company "Demo Plumbing Co"'
+EXAMPLES.update({
+    'delivery draft': Example('bookflow delivery draft invoice DEMO-SALE-INV-ACTIVE --to \'["ap@example.com"]\'' + _C
+                              + ' --reason "Customer asked for a copy" --json',
+                              {'kind': 'invoice', 'document': 'DEMO-SALE-INV-ACTIVE', 'to': ['ap@example.com']}),
+    'delivery update': Example('bookflow delivery update M-1001 --subject "Your invoice"' + _C
+                               + ' --reason "Shorter subject" --json', {'message': 'M-1001', 'subject': 'Your invoice'}),
+    'delivery send': Example('bookflow delivery send --messages \'["M-1001"]\'' + _C + ' --reason "Ready to go" --json',
+                             {'messages': ['M-1001']}),
+    'delivery cancel': Example('bookflow delivery cancel M-1001' + _C + ' --reason "Sent by post instead" --json',
+                               {'message': 'M-1001'}),
+    'delivery mark-sent': Example('bookflow delivery mark-sent M-1001 --method webmail' + _C
+                                  + ' --reason "Sent from Gmail" --json', {'message': 'M-1001', 'method': 'webmail'}),
+    'delivery export': Example('bookflow delivery export --messages \'["M-1001"]\'' + _C + ' --reason "To send by hand" '
+                               '--json', {'messages': ['M-1001']}),
+    'delivery show': Example('bookflow delivery show M-1001' + _C + ' --json', {'message': 'M-1001'}),
+    'delivery query': Example('bookflow delivery query --status waiting' + _C + ' --json', {'status': 'waiting'}),
+    'delivery history': Example('bookflow delivery history M-1001' + _C + ' --json', {'message': 'M-1001'}),
+    'delivery-template create': Example(
+        'bookflow delivery-template create --kind invoice --name Brief --subject "Invoice {{document.number}}" '
+        '--body "Total {{document.total}}."' + _C + ' --reason "A short one" --json',
+        {'kind': 'invoice', 'name': 'Brief', 'subject': 'Invoice {{document.number}}', 'body': 'Total {{document.total}}.'}),
+    'delivery-template update': Example('bookflow delivery-template update Brief --kind invoice --is-default' + _C
+                                        + ' --reason "Use the short one" --json',
+                                        {'template': 'Brief', 'kind': 'invoice', 'is_default': True}),
+    'delivery-template deactivate': Example('bookflow delivery-template deactivate Brief --kind invoice' + _C
+                                            + ' --reason "Not used" --json', {'template': 'Brief', 'kind': 'invoice'}),
+    'delivery-template show': Example('bookflow delivery-template show Invoice --kind invoice' + _C + ' --json',
+                                      {'template': 'Invoice', 'kind': 'invoice'}),
+    'delivery-template query': Example('bookflow delivery-template query --kind statement' + _C + ' --json',
+                                       {'kind': 'statement'}),
+    'delivery-template fields': Example('bookflow delivery-template fields --kind invoice' + _C + ' --json',
+                                        {'kind': 'invoice'}),
+    'delivery-template preview': Example('bookflow delivery-template preview invoice DEMO-SALE-INV-ACTIVE' + _C
+                                         + ' --json', {'kind': 'invoice', 'document': 'DEMO-SALE-INV-ACTIVE'}),
+})
+
+# Document delivery (R112 increment 2): the queue and the transport seam. No transport is registered in this build.
+EXAMPLES.update({
+    'delivery approve': Example('bookflow delivery approve --all-waiting' + _C + ' --reason "Checked them" --json',
+                                {'all_waiting': True}),
+    'delivery retry': Example('bookflow delivery retry M-1001' + _C + ' --reason "Not in the sent mail" --json',
+                              {'message': 'M-1001'}),
+    'delivery run': Example('bookflow delivery run' + _C + ' --reason "Send what is due" --json', {}),
+    'delivery-connection add': Example(
+        'bookflow delivery-connection add --name Office --kind mcp-mail --secret-ref env:OFFICE_MAIL_TOKEN' + _C
+        + ' --reason "Our mail server" --json', {'name': 'Office', 'kind': 'mcp-mail',
+                                                  'secret_ref': 'env:OFFICE_MAIL_TOKEN'}),
+    'delivery-connection update': Example('bookflow delivery-connection update Office --daily-limit 200' + _C
+                                          + ' --reason "Provider limit" --json',
+                                          {'connection': 'Office', 'daily_limit': 200}),
+    'delivery-connection enable': Example('bookflow delivery-connection enable Office' + _C
+                                          + ' --reason "Send from this machine" --json', {'connection': 'Office'}),
+    'delivery-connection disable': Example('bookflow delivery-connection disable Office' + _C
+                                           + ' --reason "Pause sending" --json', {'connection': 'Office'}),
+    'delivery-connection remove': Example('bookflow delivery-connection remove Office' + _C
+                                          + ' --reason "Changed provider" --json', {'connection': 'Office'}),
+    'delivery-connection check': Example('bookflow delivery-connection check Office' + _C
+                                         + ' --reason "Test the key" --json', {'connection': 'Office'}),
+    'delivery-connection show': Example('bookflow delivery-connection show Office' + _C + ' --json',
+                                        {'connection': 'Office'}),
+    'delivery-connection query': Example('bookflow delivery-connection query' + _C + ' --json', {}),
 })

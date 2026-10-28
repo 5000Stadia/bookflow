@@ -114,5 +114,9 @@ only: the tests read the text back out of the produced PDF.
 
 No template selection or editor, no template groups, no paper profiles beyond Letter, no
 receipt-width output, no labels or envelopes, no logos or uploaded images, no batch
-printing or print queues, no check printing, no purchase-side documents, and no email or
-other sending. Nothing on any page offers to send a document, because nothing can.
+printing or print queues, no check printing and no purchase-side documents. Emailing a
+document is [document delivery](document-delivery.md) (R112): it attaches this renderer's own
+bytes (`render.drawn`, the second half of `render`), and since R112 the PDF is drawn invariant
+-- no creation clock, no random file id -- so the same document always gives the same bytes and
+a frozen attachment can be checked against a fresh render by its hash. No sender is built:
+nothing leaves the machine.

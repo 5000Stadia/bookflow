@@ -145,10 +145,13 @@ def detail_context(record, company_id, *, preview=False):
     # a recorded stretch of time are internal and have no customer-facing form to hand over --
     # what a customer sees of somebody's hours is the invoice they become.
     # A sales order is the customer's order, so it prints too, shaped like the invoice it becomes.
+    from bookflow.adapters.workbench.delivery_pages import compose_url
     print_url = (document_url(company_id, record['kind'].replace('_', '-'), record['id'])
                  if record['kind'] in ('estimate', 'sales_order') and not preview else None)
     return dict(record=record, revision=r, facts=r['facts'], profile=r['facts']['profile'],
         preview=preview, base=base, related=related, print_url=print_url,
+        email_url=(compose_url(company_id, 'estimate', document=record['id'])
+                   if print_url and record['kind'] == 'estimate' and record['status'] != 'voided' else None),
         tax_labels=POLICY_LABELS, tax_explanations=POLICY_EXPLANATIONS,
         title=KIND_TITLES.get(record['kind'], record['kind'].replace('_', ' ').capitalize()))
 

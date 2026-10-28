@@ -1,4 +1,4 @@
-"""Reversible batches and list imports (co0105, R107 increments 0 and 1; design/bulk-import.md §2, §5, §8a, §9).
+"""Reversible batches and list imports (co0108, R107 increments 0 and 1; design/bulk-import.md §2, §5, §8a, §9).
 
 **The batch ledger** (increment 0, shared with bank feeds R108 and later grid edits):
 

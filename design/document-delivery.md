@@ -108,7 +108,7 @@ facts a person can inspect; a message never changes the books.
 | Act | From → to | What it records (event, audit, columns) |
 |---|---|---|
 | `delivery draft` | → `draft` | `drafted`: actor, interface, template, each source's kind, id and revision, warnings (empty merge fields) |
-| `delivery update` | `draft`, `held` | `edited`: the fields changed; version bump (stale writers get E_VERSION_CONFLICT) |
+| `delivery update` | `draft`, `held` | `edited`: the fields changed; version bump (stale writers get E_VERSION_CONFLICT). `--refresh` re-freezes the documents as they are now (old and new revision and SHA-256 in the event), refills the subject and body the person did not write, and returns a `document_changed` hold to `draft` |
 | `delivery send` | `draft` → `ready` | `released`: who, when; `go_by` and `go_at` when the actor holds `delivery.send` (an actor without it leaves the message `ready` with no go, a request) |
 | `delivery approve` | `ready` | `approved`: `go_by`, `go_at`. Needs `delivery.send` |
 | dispatcher claims | `ready` → `sending` | `claimed`: attempt number, connection, lease expiry |
@@ -117,7 +117,7 @@ facts a person can inspect; a message never changes the books.
 | transport refuses, or last attempt fails | `sending` → `failed` | `attempt_failed`: code, text; `failure_code` |
 | lease runs out, or the outcome is unknown | `sending` → `held` | `held`: `outcome_unknown` |
 | precheck fails at claim | `ready` → `held` | `held`: `document_changed`, `document_voided`, `no_recipient`, `template_error` |
-| `delivery retry` | `held`, `failed` → `ready` | `retried`: who; `--refresh` first re-renders from the document's current revision |
+| `delivery retry` | `held`, `failed` → `ready` | `retried`: who. (Refreshing is `delivery update --refresh`, one verb; 2026-10-27) |
 | `delivery cancel` | any but `sent` | `cancelled`: reason required |
 | `delivery mark-sent` | `draft`, `ready`, `held`, `failed` → `sent` | `marked_sent`: who, `method` (`mail-program`, `webmail`, `other`), `sent_at` as told (not future). Needs `delivery.mark-sent` |
 
@@ -169,10 +169,13 @@ files share one), and records per file the source kind, id and revision, file na
 `--with-attached-files`, files linked to the document in the attachment store are attached too [M 320],
 recorded the same way. A full attachment store refuses the draft with the store's own error.
 
-**Staleness.** At claim and at export, a document message checks that each source is still at the
-drafted revision and not voided; if not it becomes `held` (`document_changed` or `document_voided`).
-`delivery retry --refresh` re-renders from the current revision and re-applies the template; edits the
-person made are kept and listed. Statements and notices are dated readings and are never stale.
+**Staleness.** At claim and at export, a document message checks that each source is not voided and
+still says what the frozen PDF says: same revision, and the document drawn now hashes to the frozen
+SHA-256; if not it becomes `held` (`document_changed` or `document_voided`). *(Amended 2026-10-27: the
+revision alone missed a payment, which changes the balance an invoice prints without a new revision;
+drawing costs about what a draft does, 0.13-0.27 s per document.)* `delivery update --refresh`
+re-renders from the document as it is now and re-applies the template; edits the person made are kept and
+listed. Statements and notices are dated readings and are never stale.
 
 **Duplicates and again.** Drafting is idempotent per `(kind, customer, sources and revisions,
 recipients)`: a second draft returns the first message while it is live. A message for a source already
@@ -322,9 +325,9 @@ existing capability or role default.
 
 | Acts | Who |
 |---|---|
-| `delivery-template` writes; `delivery draft`, `update`, `retry`, `cancel`, `batch`, `flag`, `unflag`; `delivery-schedule` writes (a `send` schedule is `draft` until made live) | standard, `delivery` (an agent may do all of it) |
+| `delivery-template` writes; `delivery draft`, `update`, `export`, `retry`, `cancel`, `batch`, `flag`, `unflag`; `delivery-schedule` writes (a `send` schedule is `draft` until made live) | standard, `delivery` (an agent may do all of it) |
 | `delivery send` (release with a go) and `delivery approve` | standard, `delivery` plus **`delivery.send`**; without it, `delivery send` leaves the message `ready` and waiting |
-| `delivery show`, `query`, `history`, `queue`, `export`, `run --dry-run`; `delivery-template show`, `query`, `fields`, `preview`; `delivery-schedule show`, `query` | member |
+| `delivery show`, `query`, `history`, `queue`, `run --dry-run`; `delivery-template show`, `query`, `fields`, `preview`; `delivery-schedule show`, `query` | member |
 | `delivery mark-sent`; making a `send` schedule live; every `delivery-connection` write and `check` | standard plus **`delivery.mark-sent`**; standard plus **`automate.delivery`**; admin plus **`delivery.connect`** |
 | `company update` delivery preferences (from-name, reply-to, copy-to, auto-flag date) | admin, as other company preferences |
 
@@ -375,7 +378,7 @@ message and event tables are never deleted from.
 |---|---|
 | `delivery-template create`, `update`, `deactivate`, `show`, `query`, `fields`, `preview` | §3; `preview` renders a template against a named document without drafting |
 | `delivery draft` | One message for a document (`kind` + identity), `--template`, `--to --cc --subject --body`, `--combine`, `--with-attached-files`, `--again` |
-| `delivery update`, `cancel`, `retry [--refresh]` | §2 |
+| `delivery update [--refresh]`, `cancel`, `retry` | §2 |
 | `delivery send` | Release drafts (one, several, or a batch) to `ready` |
 | `delivery approve` | Give a go (needs `delivery.send`) to `ready` messages (ids, a batch, or `--all-waiting`) |
 | `delivery mark-sent` | Record a hand-sent message: `--method`, `--sent-at` |
@@ -506,3 +509,174 @@ Each default stands if nobody decides. D1 to D3 are the person's to decide; the 
 - 6. **Message numbers.** *Default:* a sequence from 1001. **Bcc to self:** off; `delivery_copy_to` enables.
 - 7. **Inbound replies and bounces by mailbox.** *Default:* not built; bounces arrive only as a transport's
   `events`.
+
+## As built: increment 1 (2026-10-27)
+
+**What exists.** co0105 (`delivery_templates`, `delivery_files`, `delivery_messages`, `delivery_message_documents`,
+`delivery_events`; `company_info.delivery_reply_to`, `delivery_copy_to`, `delivery_auto_flag_from`), one seeded
+default template per kind, and sixteen commands under the `delivery-v1` layer (on `picking-v1`): `delivery draft`,
+`update`, `send` (draft to ready only), `cancel`, `mark-sent` (people-only), `export`, `show`, `query`, `history`, and
+`delivery-template create`, `update`, `deactivate`, `show`, `query`, `fields`, `preview`. `company update` gains
+reply-to and copy-to. The browser has the Email panel (Email… beside Print on invoices, sales receipts, estimates,
+statement rows and ready overdue notices), the Outbox (Customers menu), a message page with its frozen PDF and
+history, and Email and sending settings (addresses, templates, "Connections: none"). Code:
+`company/delivery*.py`, `commands/delivery_cmds.py`, `adapters/workbench/delivery_pages.py`.
+
+**Decisions taken in the build, each reversible:**
+
+- **No new capability, no hub migration.** The brief allowed one migration, so messages are admitted as R111's
+  overdue notices are: `customer` at `member` (reads) and `standard` (writes, export included: it holds and writes
+  events, so it needs what drafting needs; amended 2026-10-27), and every `delivery` command
+  also needs `ledger.read` and `customer-work` at `member`, so a principal who cannot read an invoice or an estimate
+  cannot see it in the outbox. Drafting and previewing read the document as the principal, so its own read is
+  checked too. No capability or role default changes. A `delivery` capability (§7) can be added later by its own hub
+  migration if a company needs to grant email separately from customers.
+- **Frozen bytes live in `delivery_files`, in the company file,** content-addressed (one row per SHA-256), not in the
+  attachment store: that store's bodies arrive through upload transfers and are subject to collection, while a frozen
+  PDF is the company's own output that must never be collected. It travels with backups. `delivery_message_documents`
+  keeps `attachment_id` for linked files (`--with-attached-files`, later).
+- **PDFs are drawn invariant** (`documents/pdf.py`): no creation clock, no random file id, so the same document gives
+  the same bytes and "the attached bytes equal `render`'s" is checkable by hash. `render` was split into `build` and
+  `drawn`; drafting describes the document once, fills the template from that description and draws it.
+- **One live message per document.** Beyond §3's dedupe key: a second, different draft for a document already in the
+  outbox is refused (E_WORK_DEPENDENCY naming it), not added beside it. `--again` makes one more, naming the newest sent
+  message or else the original; asking again returns that same message.
+- **Staleness is derived.** Every read compares revisions and voids; release, export and `delivery show` also draw
+  the document now and compare its SHA-256 with the frozen PDF's (2026-10-27: a payment changed an invoice's balance
+  due without a new revision, and the frozen PDF still read 120.00 owed). The outbox list keeps the cheap check.
+  Release and export hold a stale message (`document_changed`, `document_voided`) instead of acting; exporting a
+  message already held for the same reason holds nothing more. `delivery update --refresh` re-freezes the documents
+  into the same message (number and history kept; the `edited` event lists the old and new revision and SHA-256, the
+  subject and body refilled, and those kept because the person wrote them) and returns a `document_changed` hold to
+  `draft`. It is the one refresh verb: increment 2's `retry` no longer takes `--refresh`. A voided document is not
+  refreshed; that message is cancelled. The refusal of a second draft for a document whose message is stale names
+  `--refresh`. To allow it, `delivery_message_documents` may be rewritten while its message is a draft or held (the
+  guard checks the message's standing state and the fixed columns).
+- **Frozen files are pruned on cancel** when no standing message carries them: a cancelled message that was never
+  exported gives its PDF up unless another live, sent or exported message has the same bytes. The rows and the
+  history keep the SHA-256; the message page says the file was removed. The guard on `delivery_files` refuses any
+  other delete, and `delivery_message_documents.sha256` no longer has a foreign key so the hash outlives the bytes.
+- **The notice hand-off:** marking a notice's message sent calls `notices.mark_sent(..., 'email')` in the same write;
+  `notice mark-sent` *and* `notice dismiss` are refused while a live message carries the notice.
+- Message numbers are `M-1001`, `M-1002`, ...; Message-IDs are `<id@bookflow.invalid>`. `sender.name` is the drafting
+  person, or the company name for an agent. `statement.overdue` is the statement's aging total less its current
+  column. The `.eml` uses CRLF line ends (RFC 5322) and `X-Unsent: 1`; several messages export as a zip.
+- In the browser every form posts through htmx, Export .eml too (cookie-authenticated writes need the header only
+  htmx sends; 2026-10-27): the answering page carries the file as a data link that `workflow.js` clicks once, and a
+  held message's page says why instead. The Email panel passes "send it again" through, and offers Refresh PDF when
+  its message is stale; the message page offers it too. `delivery show --include-files` returns the frozen bytes the
+  message page links to (none for a pruned file).
+
+**Not in this increment:** `approve`, `retry`, connections, dispatch (increment 2); `--combine`,
+`--with-attached-files`, flags, the auto-flag setting in `company update` (its column exists) and batches
+(increment 3); schedules (increment 4); the contact-point picker and demo messages (increment 5).
+
+**Measured:** draft time per kind through the HTTP host, demo copy, after a warm-up: invoice 0.25 s, sales receipt
+0.14 s, estimate 0.12 s, statement 0.15 s, notice 0.15 s (`tests/test_delivery.py`, printed with `-s`).
+
+**Tests:** `tests/test_delivery.py` (a draft per kind against `render`, templates, dedupe and `--again`, stale and
+voided sources, `.eml` parsed with the standard library, people-only `mark-sent` and an agent's release waiting for a
+go, the notice hand-off, the workbench through the test client), `tests/test_delivery_seeded.py` (five seeds of thirty
+random acts), `tests/test_delivery_surfaces.py` (Python, CLI, HTTP and MCP agree), `tests/test_delivery_browser.py`
+(a real Chrome submit of the Email panel at 1440 and 390, and Export .eml clicked in the Outbox and the Email panel
+with the downloaded file parsed). Review fixes (2026-10-27) are tested in `tests/test_delivery.py`: payment
+staleness and refresh, the draft refusal naming refresh, held export idempotent, blank template names, export's
+role, pruning on cancel, and the panel's again, export and hold answers.
+
+## As built: increment 2 (2026-10-27)
+
+**What exists.** co0107 (`delivery_connections`, removed and never deleted), the seam in
+`bookflow/delivery/transport.py` (`Transport`, `OutgoingMessage`, `TransportResult`, `TransportEvent`, `TransportKind`, the
+registry, `resolve_secret`), the dispatcher in `company/delivery_dispatch.py`, connections in
+`company/delivery_connections.py`, and eleven commands under the `delivery-queue-v1` layer (on `delivery-v1`): `delivery
+approve`, `retry`, `run`, and `delivery-connection add`, `update`, `enable`, `disable`, `remove`, `check`, `show`,
+`query`. **The registry is empty in production**: `add` refuses every kind, naming the kinds available (none), and a
+test asserts no module registers one. The browser gains Approve (a person, on a message waiting for a go, and in the
+Outbox), Retry (a failed message or an unknown outcome), the failure and hold explained on the message page, and the
+connections listed in Email and sending.
+
+**Decisions taken in the build, each reversible:**
+
+- **Interim permissions, marked for R187.** `approve` and every connection write and `check` are people-only admin
+  actions (approve at `customer` standard, connections at `company` admin; reads at `company` member), as `mark-sent`
+  is. A go counts at the claim while its giver is an active person with a standing membership of the company or its
+  organization at standard or above whose `denies` do not name `customer`, and, where permissions are activated,
+  while the policy in force still admits them for `customer` at standard; an installation administrator counts only
+  through such a membership. `delivery send` and `retry` by a person give the go; an agent's leave the message
+  waiting.
+- **A go is for the exact content and recipients it saw.** Holding a message (at release, export, the claim, an
+  unknown outcome or a lease that ran out), editing it, refreshing it and an agent's release each clear `go_by` and
+  `go_at`, and the event records `go_withdrawn` (whose go ended). A changed document therefore always needs a new go
+  after its refresh. Each place carries a comment naming `delivery.send` or
+  `delivery.connect`. No hub migration.
+- **A withdrawn go is an `edited` event** (`changed: ['go']`, `go_withdrawn`, why): the event list is fixed by co0105's
+  CHECK, and the message stays `ready`, waiting for a new go.
+- **Three steps, no transaction open across a send.** `decide` reads, `claim` writes in one write (lease 10 minutes, one
+  more attempt, the `claimed` event with `attempt_key` `<id>:<n>`), the transports are called with nothing open, and
+  `record` writes every outcome in one write. Every update is guarded by the version read, so a message changed
+  meanwhile is left for the next pass. `delivery run` owns its transactions as `memorized process` does, and reopens
+  the commit barrier (`CommitHooks.reopen`) once its claim is committed, so readers go on while the transports talk;
+  through the host it still occupies the writer thread for its chunk's calls (at most 10), which a person asked for.
+  On the host, the scheduler tick claims on the writer and hands the calls to the host's own `bookflow-delivery`
+  thread (never the writer or the timer thread), which submits the record as one more writer job; the timer does not
+  wait for it, and a tick claims nothing more for any company while that thread is still busy.
+- **Each claim is read again just before its send** (on the writer, through the host): it is sent only while still
+  `sending` under this attempt and connection with at least one bounded send's time (`SEND_TIMEOUT`) left on its
+  lease. A claim that fails the check is skipped: nothing leaves, and a still-live one goes back to `ready` with its go
+  (an `attempt_failed` event, code `not_sent`, not counted as a failure).
+- **Every transport call is bounded:** `send` by `transport.SEND_TIMEOUT` (120 s; an answer that does not come is an
+  unknown outcome, held), `open`, `check` and `events` by `CALL_TIMEOUT` (30 s), each on its own daemon thread that is
+  abandoned if it hangs. Host shutdown waits `delivery_stop_seconds` (10 s) for the delivery thread, then records what
+  it could not: a send in flight is held `outcome_unknown` ("the host stopped before the transport answered"), a claim
+  never handed over goes back to ready.
+- **Retries:** 5 min, 30 min, 2 h, then `failed`: four attempts counted since the last `retry` (the `retried` event
+  keeps `attempts_before`; `attempts` never resets, so attempt keys never repeat). An unknown outcome, a transport that
+  raises, and a lease that runs out are held `outcome_unknown`; a late answer after the lease is kept in the history
+  (`late: true`) and moves nothing, except a late `accepted` for a message now `held` or `ready` (retried, not yet
+  claimed), which resolves it to `sent`. `retry` refuses once any `accepted` is on record for the message (its next
+  step is `mark-sent`), so a late acceptance can never be duplicated. A transport that cannot be opened is a temporary
+  failure (nothing left). The backoff counts from the time of the record (on the host, the tick's time plus the
+  send's duration), not the claim.
+- **The claim precheck** draws each document as the go's giver where the host allows acting for someone (its writer
+  thread); an in-process `delivery run` reads as the actor running it, who holds the same reads.
+- **The daily limit** counts `claimed` events through the connection in the last 24 hours (a rolling day).
+- **Copies are inert three times over.** `company restore` and `company attach` clear every connection (`enabled`,
+  `enabled_host`); a connection sends only where `enabled_host` matches this installation: a fingerprint of a random
+  install id (`<data root>/install-id`, created once, never inside a company file), the host name, the data folder and
+  the company id, so a hand copy onto a replacement machine with the same name and path does not match; and the next
+  pass (`delivery run` or the tick) disables any connection enabled elsewhere (`connection disabled`). Backups keep
+  `secret_ref` (a name, never a secret) and the restore side disables every connection, as §4 asks ("arrives with
+  every connection disabled").
+- **Tracking** polls a transport that defines `events` for messages it accepted in the last 14 days until one bounces
+  (a relay's `delivered` is often followed by the far end's bounce; at most 50 refs, every 15 minutes on the tick);
+  `delivered` and `bounced` are events, `delivery` on the message is derived from the newest, and a bounce raises one
+  to-do (`delivery-bounce:<id>`) for the person who drafted it (or who gave the go). A tick with only tracking to ask
+  takes no write (and so no commit barrier) unless an answer came back.
+- **A transport's own words are redacted and capped** (`transport.clean_text`): addresses, `password=`/`token:`-style
+  pairs, `Bearer` values and long token-like strings are replaced, then the text is cut at 500 characters, before it
+  lands in `failure_text`, `last_check_text`, an event, the audit, a backup or a member's view. `secret_ref` must match
+  `env:NAME` or `keyring:service/name` exactly (no trailing newline).
+- **The conformance suite** (`tests/delivery_transport_contract.py`) runs through the dispatcher against a company: a
+  harness scripts the far side (`plan`) and reports what arrived (`delivered`, `deliveries_of`). The fake
+  (`tests/delivery_fake_transport.py`) is its first harness; a real adapter's wraps a local test server.
+- `delivery-connection check` calls the transport when applied (a person's explicit act, bounded by `CALL_TIMEOUT`);
+  `--dry-run` asks the transport nothing.
+
+**Not in this increment:** a sender; flags, batches (increment 3); schedules (increment 4).
+
+**Measured:** the idle scheduler tick for a company with no connection and nothing in flight, through the host
+(median of 25): 9.56 ms with the delivery hook, 9.43 ms without; the hook's one statement on the writer, 44.5 µs
+(`tests/test_delivery_queue.py`, printed with `-s`). Within the run-to-run noise: nothing measurable.
+
+**Tests:** `tests/test_delivery_queue.py` (the empty production registry; connections never holding a secret; the
+conformance suite against the fake; backoff; a crash between claim and record and the lease; unknown outcomes and a
+raise; the claim precheck and retry pointing at refresh; the daily limit; tracking and the bounce to-do; a restored
+copy disabled; a full pass with sockets and processes blocked; the go for a person, an agent and a person deactivated
+before the claim, through the host's tick; the idle-tick measurement; and the review fixes: a go ended by the hold,
+the refresh and an agent's release (nothing sends), a giver denied `customer` or an installation administrator
+without a membership, the commit barrier open during a host `delivery run`'s send, a claim skipped when its lease ran
+short or a concurrent pass held it, a late acceptance resolved to sent and a retry refused after one, a hung send
+bounded in process and on the host's delivery thread with checkpoints going on and shutdown holding it, a connection
+from another installation and an attached file disabled, tracking after delivered, the backoff from the answer, a
+poll-only tick without the barrier, a dry-run check and redacted text), `tests/test_delivery_seeded.py` (the queue,
+five seeds of 30 steps: 20 messages reached the fake server, none twice; 20 crashes between send and record, 4 leases expired, 6 held unknown outcomes, 4 failed, 11 retry waits, 11 sent), and `tests/test_delivery_surfaces.py` (the new commands on all four surfaces).

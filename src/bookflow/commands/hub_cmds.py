@@ -786,6 +786,12 @@ def apply_company_attach(plan: Plan, ctx: Context, s: Session) -> Applied:
                 write_company_marker(folder, company_id=raw["id"], state="ready", display_name=name, schema_revision=after or raw["revision"])
             except BookflowError as e:
                 s.warnings.append(f"registered, but the database was not migrated ({e.code}); run `bookflow upgrade`")
+        # An attached file may be a copy: every sending connection waits for a person to enable it here (R112).
+        from bookflow.company.delivery_connections import disable_all
+        with engine.open_database(folder / "company.db", writable=True) as db:
+            with s.commits.autocommit(db, "hub.attach_projection"):
+                if disable_all(db.raw):
+                    s.warnings.append("every sending connection arrived disabled; enable one on this machine to send")
         return Applied(AttachOutput(company_id=raw["id"], organization_id=orow["id"], display_name=name, path=str(folder)), touched, f"attached company {name} to {orow['display_name']}")
 
 

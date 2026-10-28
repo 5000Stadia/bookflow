@@ -1273,6 +1273,19 @@ from bookflow.company import pick_list_schema as _pick_list_schema
 globals().update(_pick_list_schema.define_tables(metadata, _column, _table))
 company_info.append_column(_pick_list_schema.company_info_column(_column))
 inventory_sites.append_column(_pick_list_schema.staging_column(_column))
-# Reversible batches and list imports (co0105, R107 increments 0 and 1).
+# Document delivery (co0105, R112 increment 1): templates, messages, frozen files and their history.
+from bookflow.company import delivery_schema as _delivery_schema
+globals().update(_delivery_schema.define_tables(metadata, _column, _table, _common))
+for _delivery_column in _delivery_schema.company_info_columns(_column):
+    company_info.append_column(_delivery_column)
+# Packing and shipping facts (co0106, R181 increment 4): drafts, boxes, freight to bill, the weight unit.
+from bookflow.company import shipment_packing_schema as _shipment_packing_schema
+globals().update(_shipment_packing_schema.define_tables(metadata, _column, _table))
+for _col in _shipment_packing_schema.company_info_columns(_column):
+    company_info.append_column(_col)
+for _col in _shipment_packing_schema.revision_columns(_column):
+    shipment_revisions.append_column(_col)
+globals().update(_delivery_schema.define_queue_tables(metadata, _column, _table, _common))
+# Reversible batches and list imports (co0108, R107 increments 0 and 1).
 from bookflow.company import import_schema as _import_schema
 globals().update(_import_schema.define_tables(metadata, _column, _table))

@@ -890,13 +890,17 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
         kept = [row['line_id'] for row in pending['document_lines'] if row['line_id'] in shipped]
         if kept:
             _shipments.check_invoice_date(s, header['id'], kept, revision['date'])
-    shipment_billings = []
+    shipment_billings, freight_billings = [], []
     if operation != 'void' and resolved is not None:
         for envelope, line in zip(pending['document_lines'], resolved['lines']):
             for part in line.get('shipment_lines') or ():
                 shipment_billings.append(dict(id=new_id(), transaction_id=header['id'], line_id=envelope['line_id'],
                     shipment_id=part.shipment_id, shipment_line_identity=part.identity,
                     quantity_microunits=part.waiting, **row_provenance, audit_event_id=event))
+            if line.get('shipment_freight'):
+                freight_billings.append(dict(id=new_id(), transaction_id=header['id'], line_id=envelope['line_id'],
+                                             shipment_id=line['shipment_freight'], **row_provenance,
+                                             audit_event_id=event))
     stock = inventory_effects.plan(
         s, entries=[] if operation == 'void' else _stock_entries(pending, resolved['lines'] if resolved else None,
                                                                  skip=shipped),
@@ -938,7 +942,8 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
         # Only a sale billed from quoted work says which of its lines were billed; the deposit
         # coordinator reads every other sale plan against a closed set of keys.
         **({'billed_sources': resolved['billed_sources']} if resolved and 'billed_sources' in resolved else {}),
-        **({'shipment_billings': shipment_billings} if shipment_billings else {})))
+        **({'shipment_billings': shipment_billings} if shipment_billings else {}),
+        **({'shipment_freight_billings': freight_billings} if freight_billings else {})))
     from bookflow.company.billing_edits import carry_allocations
     carry_allocations(plan, s)
     if 'billing_allocations' in plan.data and operation != 'void':

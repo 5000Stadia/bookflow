@@ -143,6 +143,8 @@ class SalesOrderInvoiceInput(ConversionInput, InvoiceFields, PrepaymentChoice):
         'bills the units shipments shipped and no invoice billed yet, and when there are none, what can ship.'))
     shipments: list[Selector] | None = Field(default=None, min_length=1, max_length=50, description=(
         'Bill exactly these shipments\' units not yet invoiced (numbers or ids); the invoice moves no stock.'))
+    # `shipment invoice` (R181 increment 4): the shipment's freight to bill, (shipment id, item id, minor units),
+    # added as one more line. Set in code only; never part of the request or its hashes.
 
     @field_validator('selections', 'line_ids')
     @classmethod

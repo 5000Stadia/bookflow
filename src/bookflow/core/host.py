@@ -70,6 +70,16 @@ class Host:
         self.backup_check_seconds = backup_check_seconds
         self.schedule_check_seconds = schedule_check_seconds
         self._notices_checked: dict[str, Any] = {}  # company id -> when the scheduler last looked at notices
+        self._delivery_pending: list[Any] = []  # (company row, claims, now): sent off the writer after a tick (R112)
+        # Document delivery's own thread (R112): the transports are called there, never on the writer or the timer
+        # thread, so a hung transport stalls no checkpoint, sweep, backup, scheduler tick or shutdown.
+        self._delivery_jobs: "queue.Queue[Any]" = queue.Queue()
+        self._delivery_thread: threading.Thread | None = None
+        self._delivery_lock = threading.Lock()
+        self._delivery_busy = False
+        self._delivery_closed = False
+        self._delivery_unrecorded: dict[tuple[str, str, int], dict[str, Any]] = {}
+        self.delivery_stop_seconds = 10.0  # how long shutdown waits for a send in flight before holding it
         self._lock: RootLock | None = None
         self._queue: "queue.Queue[_Job | None]" = queue.Queue()
         self._writer = threading.Thread(target=self._writer_loop, name="bookflow-writer", daemon=True)
@@ -116,6 +126,7 @@ class Host:
             self._timer.join(timeout=min(10, self.shutdown_wait_seconds))
             if self._timer.is_alive():
                 raise BookflowError("E_DB_BUSY", message="Host timers are still closing; retry shutdown.")
+        self._stop_delivery()
         self.retry_transfer_cleanup()
         # A read snapshot can prevent the final checkpoint. Keep the root
         # lock until admitted readers have actually closed their handles.
@@ -572,7 +583,7 @@ class Host:
             if now - last_schedule_check >= self.schedule_check_seconds:
                 last_schedule_check = now
                 try:
-                    self.schedule_now()
+                    self.schedule_now(wait=False)
                 except BaseException as e:  # noqa: BLE001
                     log.warning("scheduler: %s", e)
 
@@ -728,21 +739,168 @@ class Host:
         return status
 
     # ---------------------------------------------------------------- the scheduler (R111)
-    def schedule_now(self, now=None) -> dict[str, Any]:
+    def schedule_now(self, now=None, *, wait: bool = True) -> dict[str, Any]:
         """One scheduler tick for every company at ``now`` (default: the clock), on the writer.
 
         Enters due automatic memorized transactions, assigns to-dos for the ones that need a
         person, and generates overdue notices (``company/scheduler.py``). Returns
         ``{company_id: what it did}``. Tests pass ``now`` to move time; nothing here sleeps.
+        Messages the tick claimed are sent on the host's delivery thread; ``wait`` (an explicit
+        call) waits for them and adds what happened, the timer never does.
         """
         if not self._writer.is_alive():
             return {}
-        return self.submit(lambda: self._schedule_on_writer(now), _maintenance=True)
+        done = self.submit(lambda: self._schedule_on_writer(now), _maintenance=True)
+        self._send_claimed(done, wait=wait)
+        return done
+
+    # ---------------------------------------------------------------- document delivery (R112)
+    def _send_claimed(self, done, *, wait: bool = True) -> None:
+        """The tick claimed on the writer; the transports are called on the delivery thread with no transaction
+        open, and each company's outcomes are recorded by one more writer job."""
+        pending, self._delivery_pending = self._delivery_pending, []
+        if not pending:
+            return
+        batch = {"pending": pending, "done": threading.Event(), "results": {}}
+        with self._delivery_lock:
+            if self._delivery_closed:
+                return  # stopping: the claims are held when their leases run out
+            for row, claimed, now in pending:
+                for cl in claimed.claims:
+                    self._delivery_unrecorded[(row["id"], cl.message_id, cl.attempt)] = {
+                        "row": row, "claim": cl, "now": now, "state": "waiting", "outcome": None}
+            self._delivery_busy = True
+            if self._delivery_thread is None:
+                self._delivery_thread = threading.Thread(target=self._delivery_loop, name="bookflow-delivery",
+                                                         daemon=True)
+                self._delivery_thread.start()
+            self._delivery_jobs.put(batch)
+        if wait:
+            batch["done"].wait()
+            for cid, counts in batch["results"].items():
+                done.setdefault(cid, {}).setdefault("delivery", {}).update(counts)
+
+    def _delivery_loop(self) -> None:
+        while True:
+            batch = self._delivery_jobs.get()
+            if batch is None:
+                return
+            try:
+                for row, claimed, now in batch["pending"]:
+                    self._deliver_for(row, claimed, now, batch["results"])
+            except BaseException as e:  # noqa: BLE001 - the delivery thread never dies; unrecorded claims are held
+                log.warning("delivery: %s", e, exc_info=True)
+            finally:
+                with self._delivery_lock:
+                    self._delivery_busy = not self._delivery_jobs.empty()
+                batch["done"].set()
+
+    def _deliver_for(self, row, claimed, now, results) -> None:
+        from bookflow.company import delivery_dispatch
+        from bookflow.core import clock
+
+        def check(cl) -> bool:
+            if self._stopping:
+                return False
+            try:
+                ok = self.submit(lambda: self._on_company_writer(
+                    row, lambda s: delivery_dispatch.still_claimed(s, cl, clock.now())), _maintenance=True)
+            except Exception:  # noqa: BLE001 - unreadable or stopping: nothing is sent
+                return False
+            with self._delivery_lock:
+                entry = self._delivery_unrecorded.get((row["id"], cl.message_id, cl.attempt))
+                if not ok or entry is None or self._delivery_closed:
+                    return False
+                entry["state"] = "sending"
+            return True
+
+        def answered(outcome) -> None:
+            with self._delivery_lock:
+                entry = self._delivery_unrecorded.get((row["id"], outcome.message_id, outcome.attempt))
+                if entry is not None:
+                    entry["state"], entry["outcome"] = "answered", outcome
+
+        started = time.monotonic()
+        outcomes, reports = delivery_dispatch.send(claimed.claims, claimed.polls, check=check, answered=answered)
+        # Recorded at the time of the record, so a backoff counts from the answer, not from the claim.
+        at = now + timedelta(seconds=time.monotonic() - started)
+        keys = [(row["id"], o.message_id, o.attempt) for o in outcomes]
+        with self._delivery_lock:
+            if self._delivery_closed:
+                return  # shutdown has recorded (or held) these already
+        if not outcomes and not any(events for _, events in reports):
+            return  # tracking that heard nothing writes nothing
+        try:
+            out = self.submit(lambda: self._on_company_writer(
+                row, lambda s: delivery_dispatch.tick_record(s, self._system_id(s), outcomes, reports, at)),
+                _maintenance=True)
+            results[row["id"]] = dict(sent=out.sent, retrying=out.retrying, failed=out.failed, held=out.held)
+        except Exception as e:  # noqa: BLE001 - an unrecorded attempt is held when its lease runs out
+            log.warning("delivery record for %s failed: %s", row["id"], e, exc_info=True)
+            if self._stopping:
+                return  # left for shutdown to record
+        with self._delivery_lock:
+            for key in keys:
+                self._delivery_unrecorded.pop(key, None)
+
+    def _stop_delivery(self) -> None:
+        """Shutdown: wait a bounded time for the delivery thread, then record what it could not. A send still in
+        flight is held (``outcome_unknown``) for a person; a claim never handed to its transport goes back to ready."""
+        from bookflow.company import delivery_dispatch
+        from bookflow.delivery import transport
+        thread = self._delivery_thread
+        if thread is not None and thread.is_alive():
+            self._delivery_jobs.put(None)
+            thread.join(timeout=min(self.delivery_stop_seconds, self.shutdown_wait_seconds))
+        with self._delivery_lock:
+            self._delivery_closed = True
+            left, self._delivery_unrecorded = list(self._delivery_unrecorded.values()), {}
+        by_company: dict[str, Any] = {}
+        for entry in left:
+            cl = entry["claim"]
+            outcome = entry["outcome"]
+            if outcome is None and entry["state"] == "sending":
+                outcome = transport.Outcome(cl.message_id, cl.attempt, cl.connection["id"], transport.TransportResult.unknown(
+                    "the host stopped before the transport answered; the message may have left"))
+            elif outcome is None:
+                outcome = transport.Outcome(cl.message_id, cl.attempt, cl.connection["id"], transport.TransportResult.temporary(
+                    "not_sent", "the host stopped before it was handed to the transport; nothing left"), skipped=True)
+            by_company.setdefault(entry["row"]["id"], (entry["row"], entry["now"], []))[2].append(outcome)
+        from bookflow.core import clock
+        for row, now, outcomes in by_company.values():
+            try:
+                self.submit(lambda: self._on_company_writer(
+                    row, lambda s: delivery_dispatch.tick_record(s, self._system_id(s), outcomes, [], clock.now())),
+                    timeout=self.shutdown_wait_seconds, _during_shutdown=True, _maintenance=True)
+            except Exception as e:  # noqa: BLE001 - the leases run out and hold them at the next start
+                log.warning("delivery record at shutdown for %s failed: %s", row["id"], e)
+
+    def _system_id(self, s) -> str:
+        return s.actor.id
+
+    def _on_company_writer(self, row, fn):
+        """Run ``fn(session)`` on the writer with ``row``'s company open as the system user."""
+        import sqlalchemy as sa
+
+        from bookflow.company import scheduler
+        from bookflow.core.dispatch import _load_actor_by_id, open_company
+        from bookflow.hub import schema as h
+        hub = self._ensure_hub_on_writer()
+        system = hub.conn.execute(sa.select(h.users).where(h.users.c.kind == "system")).mappings().first()
+        s = self._writer_session()
+        try:
+            _load_actor_by_id(s, system["id"])
+            s.company_row = row
+            open_company(s, scheduler.context(), True)
+            return fn(s)
+        finally:
+            s.close_company(release=False)
+            self._after_write()
 
     def _schedule_on_writer(self, now=None) -> dict[str, Any]:
         import sqlalchemy as sa
 
-        from bookflow.company import scheduler
+        from bookflow.company import delivery_dispatch, scheduler
         from bookflow.core import clock
         from bookflow.core.dispatch import _load_actor_by_id, open_company
         from bookflow.hub import schema as h
@@ -773,6 +931,19 @@ class Host:
                 done[row["id"]] = scheduler.run_company(s, system["id"], now, notices=notices)
                 if notices:
                     self._notices_checked[row["id"]] = now
+                # Document delivery (R112): one EXISTS for a company with no connection and nothing in flight.
+                # While the delivery thread is still busy with an earlier tick, nothing more is claimed.
+                busy = self._delivery_busy
+                try:
+                    claimed = None if busy else delivery_dispatch.tick_claim(s, system["id"], now)
+                except Exception as e:  # noqa: BLE001 - recorded, never fatal to the host
+                    log.warning("delivery claim for %s failed: %s", row["id"], e, exc_info=True)
+                    done[row["id"]]["delivery"] = scheduler._failure(e)
+                    claimed = None
+                if claimed is not None:
+                    done[row["id"]]["delivery"] = {"connection": claimed.connection, "claimed": len(claimed.claims)}
+                    if claimed.claims or claimed.polls:
+                        self._delivery_pending.append((row, claimed, now))
             except Exception as e:  # noqa: BLE001 - one company failing never stops the others or the host
                 log.warning("scheduler for %s failed: %s", row["id"], e, exc_info=True)
                 done[row["id"]] = scheduler._failure(e)

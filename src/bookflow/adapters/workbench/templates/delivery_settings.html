@@ -1,0 +1,29 @@
+{% extends "base.html" %}{% block title %}Email and sending{% endblock %}{% block body %}<style>
+#delivery-settings label{display:block;margin:8px 0}#delivery-settings input[type=text],#delivery-settings textarea,#delivery-settings select{width:100%;max-width:640px;box-sizing:border-box}
+#delivery-settings textarea{min-height:9em;font:inherit}.template-body{white-space:pre-wrap;overflow-wrap:anywhere;max-width:640px;margin:4px 0 0}
+.fields-list code{overflow-wrap:anywhere}.delivery-buttons{display:flex;flex-wrap:wrap;gap:8px;align-items:center}</style>
+<section id="delivery-settings">
+<nav class="crumbs"><a href="/c/{{ company_id }}/delivery">Outbox</a> / Email and sending</nav>
+<h1>Email and sending</h1>
+{% if result %}<p class="notice" role="status" data-settings-result>{{ result }}</p>{% endif %}
+{% if error %}<div role="alert" class="error" data-delivery-error><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
+<section class="workspace-card" aria-label="Sending connections"><h2>Sending connections</h2>{% if connections.rows %}<ul data-connections>{% for cn in connections.rows %}<li>{{ cn.name }} ({{ cn.kind }}): {{ 'sending from this machine' if cn.usable else 'enabled on another machine or copy' if cn.enabled else 'disabled' }}{% if cn.daily_limit %}, at most {{ cn.daily_limit }} a day{% endif %}</li>{% endfor %}</ul><p>{{ connections.note }}</p>{% else %}<p data-connections>None. Nothing leaves this machine: messages wait in the outbox until you export them and send them yourself.</p>{% endif %}</section>
+<section class="workspace-card" aria-label="Addresses"><h2>Addresses</h2>
+{% if can_admin %}<form method="post" action="/c/{{ company_id }}/delivery-settings" hx-post="/c/{{ company_id }}/delivery-settings" hx-target="body" hx-swap="outerHTML" data-addresses><input type="hidden" name="action" value="addresses">
+<p>From: {{ company.display_name }}{% if info.get('email') %} &lt;{{ info.email }}&gt;{% endif %} (the company's name and email)</p>
+<label>Reply-To <input type="text" name="delivery_reply_to" value="{{ values.get('delivery_reply_to', info.get('delivery_reply_to') or '') }}" placeholder="accounts@example.com"></label>
+<label>Copy every message to (Bcc) <input type="text" name="delivery_copy_to" value="{{ values.get('delivery_copy_to', info.get('delivery_copy_to') or '') }}"></label>
+<button type="submit">Save addresses</button></form>
+{% else %}<p>Reply-To: {{ info.get('delivery_reply_to') or 'none' }} · Copy to: {{ info.get('delivery_copy_to') or 'none' }}</p>{% endif %}</section>
+<section class="workspace-card" aria-label="Templates"><h2>Templates</h2>
+{% for t in templates %}<article data-template="{{ t.name }}"><h3>{{ kind_label[t.kind] }}: {{ t.name }}{% if t.is_default %} (default){% endif %}{% if not t.active %} (inactive){% endif %}</h3>
+{% if editing == t.id and can_write %}<form method="post" action="/c/{{ company_id }}/delivery-settings" hx-post="/c/{{ company_id }}/delivery-settings" hx-target="body" hx-swap="outerHTML" data-template-form><input type="hidden" name="action" value="template"><input type="hidden" name="template" value="{{ t.id }}">
+<label>Name <input type="text" name="name" value="{{ values.get('name', t.name) }}"></label><label>Subject <input type="text" name="subject" value="{{ values.get('subject', t.subject) }}"></label><label>Body <textarea name="body">{{ values.get('body', t.body) }}</textarea></label>
+{% if not t.is_default %}<label class="check"><input type="checkbox" name="is_default"> Make it the default</label>{% endif %}<div class="delivery-buttons"><button type="submit">Save template</button></div></form>
+{% else %}<p><strong>Subject:</strong> {{ t.subject }}</p><p class="template-body">{{ t.body }}</p>{% if can_write %}<p class="delivery-buttons"><a href="/c/{{ company_id }}/delivery-settings?template={{ t.id }}#delivery-settings">Edit</a>{% if t.active and not t.is_default %}<form method="post" action="/c/{{ company_id }}/delivery-settings" hx-post="/c/{{ company_id }}/delivery-settings" hx-target="body" hx-swap="outerHTML"><input type="hidden" name="action" value="deactivate"><input type="hidden" name="template" value="{{ t.id }}"><button type="submit">Deactivate</button></form>{% endif %}</p>{% endif %}{% endif %}</article>{% endfor %}
+{% if can_write %}<details {% if editing == 'new' %}open{% endif %}><summary>New template</summary><form method="post" action="/c/{{ company_id }}/delivery-settings" hx-post="/c/{{ company_id }}/delivery-settings" hx-target="body" hx-swap="outerHTML" data-template-new><input type="hidden" name="action" value="template">
+<label>For <select name="kind">{% for k in kinds %}<option value="{{ k }}" {% if values.get('kind') == k %}selected{% endif %}>{{ kind_label[k] }}</option>{% endfor %}</select></label><label>Name <input type="text" name="name" value="{{ values.get('name', '') if editing == 'new' else '' }}"></label>
+<label>Subject <input type="text" name="subject" value="{{ values.get('subject', '') if editing == 'new' else '' }}"></label><label>Body <textarea name="body">{{ values.get('body', '') if editing == 'new' else '' }}</textarea></label>
+<label class="check"><input type="checkbox" name="is_default"> Make it the default</label><button type="submit">Create template</button></form></details>{% endif %}
+<details class="fields-list"><summary>Merge fields</summary><p>Write a field as <code>{{ '{{customer.name}}' }}</code>. <code>{{ '{{if document.po_number}} ... {{end}}' }}</code> shows its text only when the field has a value.</p><ul>{% for f in fields %}<li><code>{{ '{{' ~ f.field ~ '}}' }}</code> {{ f.description }} <span class="muted">({{ f.kinds|join(', ') }})</span></li>{% endfor %}</ul></details>
+</section></section>{% endblock %}

@@ -267,6 +267,16 @@ def prepare_write(s, ctx, inp, verb) -> Plan:
             'current_version': before['version'], 'updated_by': before['updated_by'], 'updated_via': before['updated_via']})
     if before['status'] != 'ready':
         raise _invalid('notice', f"is {before['status']}; only a notice ready to send can be marked sent or dismissed")
+    from bookflow.company import delivery
+    live = delivery.live_for_notice(s, before['id'])
+    if live is not None:
+        # Document delivery (R112) holds the notice while an email carrying it is in the outbox: marking the
+        # notice sent there is what records it, so the two never disagree.
+        raise BookflowError('E_WORK_DEPENDENCY', message=(
+            f"Overdue notice is in email message {live['number']} ({live['status']}); mark that message sent or "
+            'cancel it first.'), details={'record_type': 'delivery_message', 'record_id': live['id'],
+                                          'number': live['number'], 'status': live['status'],
+                                          'next': f"delivery mark-sent {live['number']}"})
     at = clock.now_iso()
     row = dict(before, version=before['version'] + 1, updated_at=at, updated_by=s.actor.id, updated_via=ctx.interface.value)
     if verb == 'mark-sent':

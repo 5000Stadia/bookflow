@@ -55,6 +55,10 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # setup-trial-v1 adds none: `owner-link` is a local bootstrap command and `reconcile discard` is bookkeeping.
     # shipments-returns-v1 adds none: shipment returns are ledger writes.
     # picking-v1 adds none: pick lists are stock records that post nothing.
+    # delivery-v1 adds `delivery mark-sent`: what happened in the owner's own mail program is known to the owner.
+    # packing-v1 adds none: drafts and boxes are stock records that post nothing.
+    # delivery-queue-v1 adds `delivery approve` (a go) and every `delivery-connection` write and check (where mail goes
+    # under whose keys); R187 converts them to delivery.send and delivery.connect.
     # import-v1 adds none: an import runs each row's own command, under that command's own capability.
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {
@@ -63,7 +67,9 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
         'account merge', 'account unmerge', 'item merge', 'item unmerge', 'clock link',
         'accountant add', 'accountant remove', 'accountant-copy cancel', 'accountant-copy import',
         'check print-confirm', 'check print-cancel', 'check reprint',
-        'costing-method set', 'costing-method withdraw'}
+        'costing-method set', 'costing-method withdraw', 'delivery mark-sent', 'delivery approve',
+        'delivery-connection add', 'delivery-connection update', 'delivery-connection enable',
+        'delivery-connection disable', 'delivery-connection remove', 'delivery-connection check'}
 
     # Every write at the identity capabilities is people-only; the one exception lets an
     # agent revoke its own token. Reads are not listed.

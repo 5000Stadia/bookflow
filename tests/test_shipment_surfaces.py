@@ -19,7 +19,9 @@ COMMANDS = frozenset(('shipment post', 'shipment update', 'shipment void', 'ship
                       # R181 increment 3: picking turned on, a list for an order of two, a retried pick, read back,
                       # shipped from the list; a second list closed and a third cancelled.
                       'pick-list create', 'pick-list enter', 'pick-list show', 'pick-list query', 'pick-list close',
-                      'pick-list cancel'))
+                      'pick-list cancel',
+                      # R181 increment 4: a draft made, packed (retried), shipped with its invoice; another cancelled.
+                      'shipment create', 'shipment pack', 'shipment cancel'))
 
 
 @pytest.mark.timeout(900)
@@ -84,7 +86,19 @@ def test_the_same_shipment_through_python_cli_http_and_mcp(root, tmp_path):
                 second = await call(surface, 'pick-list create', {'orders': [spare['number']], 'date': DEMO_AS_OF})
                 closed = await call(surface, 'pick-list close', {'pick_list': second['number']})
                 cancelled = await call(surface, 'pick-list cancel', {'pick_list': second['number']})
-                results[surface] = dict(pick=pick, picked=picked, picked_again=picked_again, pick_shown=pick_shown,
+                draft = await call(surface, 'shipment create', {'sales_order': spare['number'], 'date': DEMO_AS_OF})
+                pack_input = {'shipment': draft['number'], 'line': '1', 'box': 1, 'expected_version': 1}
+                packed = await call(surface, 'shipment pack', pack_input, idempotency_key='pack-a')
+                packed_again = await call(surface, 'shipment pack', pack_input, idempotency_key='pack-a')
+                from_draft = await call(surface, 'shipment post', {'shipment': draft['number'], 'date': DEMO_AS_OF,
+                                                                   'invoice': True})
+                third = await call(surface, 'sales-order create', {'customer': customer, 'date': DEMO_AS_OF,
+                                                                   'lines': [{'item': item['id'], 'quantity': '1',
+                                                                              'unit_price': '20.00'}]})
+                dropped = await call(surface, 'shipment create', {'sales_order': third['number']})
+                dropped = await call(surface, 'shipment cancel', {'shipment': dropped['number'], 'expected_version': 1})
+                results[surface] = dict(draft=draft, packed=packed, packed_again=packed_again, from_draft=from_draft,
+                                        dropped=dropped, pick=pick, picked=picked, picked_again=picked_again, pick_shown=pick_shown,
                                         pick_listed=pick_listed, from_list=from_list, closed=closed, cancelled=cancelled,
                                         preview=preview, first=first, again=again, tracked=tracked, shown=shown,
                                         listed=listed, history=history, waiting=waiting, invoice=invoice,
@@ -117,4 +131,9 @@ def test_the_same_shipment_through_python_cli_http_and_mcp(root, tmp_path):
         assert [line['quantity'] for line in r['from_list']['lines']] == ['2'], surface
         assert r['closed']['status'] == 'done' and r['cancelled']['status'] == 'cancelled', surface
         shapes.add(('pick', r['pick']['number'], r['from_list']['cost']['minor_units']))
-    assert len(shapes) == 2
+        assert r['draft']['status'] == 'draft' and r['packed']['packing']['packed'] is True, surface
+        assert r['packed_again']['version'] == r['packed']['version'] == 2, surface
+        assert r['from_draft']['number'] == r['draft']['number'] and r['from_draft']['invoice']['id'], surface
+        assert len(r['from_draft']['packing']['packages']) == 1 and r['dropped']['status'] == 'cancelled', surface
+        shapes.add(('pack', r['draft']['number'], r['from_draft']['invoice']['total']['minor_units']))
+    assert len(shapes) == 3

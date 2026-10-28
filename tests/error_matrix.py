@@ -35,7 +35,7 @@ MATRIX = {
     "audit list": {"E_VALIDATION": "bad since/until"},
     "audit show": {"E_EVENT_NOT_FOUND": "absent event"},
     "audit tail": {"E_VALIDATION": "bad since/until"},
-    "company update": {"E_VERSION_CONFLICT": "stale expected_version with overlapping fields", "E_PARTIAL_WRITE": "hub projection failed after the company commit", "E_PERMISSION": "standard member", "E_VALIDATION": "bad merged row, unknown or non-nullable --clear", "E_DIRECTIVE_NOT_FOUND": "unknown --directive", "E_DIRECTIVE_INACTIVE": "deactivated --directive"},
+    "company update": {"E_VERSION_CONFLICT": "stale expected_version with overlapping fields", "E_PARTIAL_WRITE": "hub projection failed after the company commit", "E_PERMISSION": "standard member", "E_VALIDATION": "bad merged row, unknown or non-nullable --clear", "E_DIRECTIVE_NOT_FOUND": "unknown --directive", "E_DIRECTIVE_INACTIVE": "deactivated --directive", "E_WORK_DEPENDENCY": "turning picking off while a pick list is open"},
     "directive add": {"E_PERMISSION": "agent without a principal; readonly member", "E_IDEMPOTENCY_MISMATCH": "same key, different input", "E_DIRECTIVE_NOT_FOUND": "unknown --directive", "E_DIRECTIVE_INACTIVE": "deactivated --directive"},
     "directive list": {},
     "activity": {"E_RECORD_NOT_FOUND": "target absent from selected company", "E_VALIDATION": "invalid date, kinds, or scoped cursor"},
@@ -2410,6 +2410,7 @@ MATRIX['notice list'] = {'E_VALIDATION': 'malformed filter', 'E_RECORD_NOT_FOUND
 MATRIX['notice show'] = {'E_VALIDATION': 'malformed selector', 'E_RECORD_NOT_FOUND': 'unknown notice'}
 _NOTICE_WRITE = {
     'E_VALIDATION': 'the notice is not ready to send (already sent or dismissed)',
+    'E_WORK_DEPENDENCY': 'an email message carrying the notice is still in the outbox',
     'E_RECORD_NOT_FOUND': 'unknown notice',
     'E_VERSION_CONFLICT': 'stale expected_version',
     **_SCHED_TAIL,
@@ -2537,7 +2538,10 @@ _SHIPMENT_WRITE = {
     'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
     'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
 }
-MATRIX['shipment post'] = dict(_SHIPMENT_WRITE, E_FEATURE_DISABLED='--pick-list while picking is off')
+MATRIX['shipment post'] = dict(_SHIPMENT_WRITE, E_FEATURE_DISABLED='--pick-list, --shipment or --packages while pick and pack is off',
+                               E_CONVERSION_KEY_REUSED='--invoice: the derived invoice key reused for other input',
+                               E_AMOUNT_PRECISION='freight amount with too many decimals',
+                               E_DUPLICATE_NUMBER='--invoice: the invoice number taken')
 MATRIX['shipment update'] = dict(_SHIPMENT_WRITE)
 MATRIX['shipment void'] = dict(_SHIPMENT_WRITE, E_REASON_REQUIRED='a void without --reason')
 # Shipment returns (R181 increment 2).
@@ -2561,6 +2565,19 @@ MATRIX['shipment-return query'] = {'E_RECORD_NOT_FOUND': 'unknown shipment or cu
 MATRIX['shipment show'] = {'E_RECORD_NOT_FOUND': 'unknown shipment'}
 MATRIX['shipment history'] = {'E_RECORD_NOT_FOUND': 'unknown shipment'}
 MATRIX['shipment query'] = {'E_RECORD_NOT_FOUND': 'unknown order or customer', 'E_VALIDATION': 'invalid input'}
+# Draft shipments and packing (R181 increment 4): an optional layer, off until the company turns it on.
+_PACK_WRITE = {
+    'E_VALIDATION': 'nothing to ship, a draft not open, more in boxes than a line ships, a serial number the line does not ship',
+    'E_RECORD_NOT_FOUND': 'unknown shipment, order, item or site',
+    'E_FEATURE_DISABLED': 'pick and pack is off for the company (company update --pick-and-pack-enabled true)',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+MATRIX['shipment create'] = dict(_PACK_WRITE, E_INACTIVE_REFERENCE='an inactive site or item',
+                                 E_VALUE_RANGE='a quantity out of range', E_WORK_DEPENDENCY='a closed order, a pick list holding it')
+MATRIX['shipment pack'] = dict(_PACK_WRITE, E_VERSION_CONFLICT='a stale expected_version')
+MATRIX['shipment cancel'] = dict(_PACK_WRITE, E_VERSION_CONFLICT='a stale expected_version')
 # Pick lists (R181 increment 3): an optional layer, off until the company turns it on.
 _PICK_WRITE = {
     'E_VALIDATION': 'nothing to pick, an order not open, an item not on the list, a serial number held elsewhere or picked on another list, a list not open',
@@ -2615,3 +2632,69 @@ MATRIX['shipment invoice'] = {
     'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
     'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
 }
+# Document delivery (R112 increment 1): messages and the outbox.
+_DELIVERY_TAIL = {'E_IDEMPOTENCY_MISMATCH': 'same key, different input', 'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+                  'E_DIRECTIVE_INACTIVE': 'deactivated --directive'}
+MATRIX['delivery draft'] = {
+    'E_VALIDATION': 'a voided document, a notice not ready, a statement without its period, a bad address',
+    'E_RECORD_NOT_FOUND': 'unknown document, customer, notice or template',
+    'E_INACTIVE_REFERENCE': 'an inactive template',
+    'E_WORK_DEPENDENCY': 'the document is already in a live message or was sent (use --again)', **_DELIVERY_TAIL}
+MATRIX['delivery update'] = {'E_VALIDATION': 'a bad address or nothing to change', 'E_RECORD_NOT_FOUND': 'unknown message',
+                             'E_WORK_DEPENDENCY': 'the message is not a draft or held',
+                             'E_VERSION_CONFLICT': 'stale expected_version', **_DELIVERY_TAIL}
+MATRIX['delivery send'] = {'E_VALIDATION': 'a message with no To address', 'E_RECORD_NOT_FOUND': 'unknown message',
+                           'E_WORK_DEPENDENCY': 'the message is not a draft',
+                           'E_VERSION_CONFLICT': 'changed while releasing', **_DELIVERY_TAIL}
+MATRIX['delivery cancel'] = {'E_RECORD_NOT_FOUND': 'unknown message', 'E_WORK_DEPENDENCY': 'already sent or cancelled',
+                             'E_VERSION_CONFLICT': 'stale expected_version', 'E_REASON_REQUIRED': 'no --reason',
+                             **_DELIVERY_TAIL}
+MATRIX['delivery mark-sent'] = {'E_VALIDATION': 'sent_at in the future or malformed',
+                                'E_RECORD_NOT_FOUND': 'unknown message',
+                                'E_WORK_DEPENDENCY': 'already sent or cancelled',
+                                'E_VERSION_CONFLICT': 'stale expected_version',
+                                'E_PERMISSION': "an agent: marking sent is a person's act", **_DELIVERY_TAIL}
+MATRIX['delivery export'] = {'E_RECORD_NOT_FOUND': 'unknown message', 'E_WORK_DEPENDENCY': 'a cancelled message',
+                             'E_VERSION_CONFLICT': 'changed while exporting', **_DELIVERY_TAIL}
+MATRIX['delivery show'] = {'E_RECORD_NOT_FOUND': 'unknown message'}
+MATRIX['delivery history'] = {'E_RECORD_NOT_FOUND': 'unknown message'}
+MATRIX['delivery query'] = {'E_RECORD_NOT_FOUND': 'unknown customer', 'E_VALIDATION': 'invalid filter'}
+MATRIX['delivery-template create'] = {'E_VALIDATION': 'an unknown merge field, nested {{if}}, or a name in use',
+                                      **_DELIVERY_TAIL}
+MATRIX['delivery-template update'] = {'E_VALIDATION': 'an unknown merge field or nothing to change',
+                                      'E_RECORD_NOT_FOUND': 'unknown template',
+                                      'E_VERSION_CONFLICT': 'stale expected_version', **_DELIVERY_TAIL}
+MATRIX['delivery-template deactivate'] = {'E_VALIDATION': 'the default, or already inactive',
+                                          'E_RECORD_NOT_FOUND': 'unknown template',
+                                          'E_VERSION_CONFLICT': 'stale expected_version', **_DELIVERY_TAIL}
+MATRIX['delivery-template show'] = {'E_RECORD_NOT_FOUND': 'unknown template', 'E_VALIDATION': 'a name of two kinds'}
+MATRIX['delivery-template query'] = {}
+MATRIX['delivery-template fields'] = {}
+MATRIX['delivery-template preview'] = {'E_VALIDATION': 'a voided document or missing identity',
+                                       'E_RECORD_NOT_FOUND': 'unknown document or template',
+                                       'E_INACTIVE_REFERENCE': 'an inactive template'}
+# Document delivery (R112 increment 2): the queue and the transport seam.
+MATRIX['delivery approve'] = {'E_VALIDATION': 'no messages and not all_waiting', 'E_RECORD_NOT_FOUND': 'unknown message',
+                              'E_WORK_DEPENDENCY': 'the message is not ready', 'E_VERSION_CONFLICT': 'changed while approving',
+                              'E_PERMISSION': "an agent: a go is a person's act", **_DELIVERY_TAIL}
+MATRIX['delivery retry'] = {'E_VALIDATION': 'no To address', 'E_RECORD_NOT_FOUND': 'unknown message',
+                            'E_WORK_DEPENDENCY': 'not held or failed, or held because the document changed',
+                            'E_VERSION_CONFLICT': 'stale expected_version', **_DELIVERY_TAIL}
+MATRIX['delivery run'] = {**_DELIVERY_TAIL}
+_CONNECTION_WRITE = {'E_PERMISSION': "an agent: a sending connection is a person's act", **_DELIVERY_TAIL}
+MATRIX['delivery-connection add'] = {'E_VALIDATION': 'no transport of that kind, bad settings or secret_ref, name in use',
+                                     **_CONNECTION_WRITE}
+MATRIX['delivery-connection update'] = {'E_VALIDATION': 'bad settings or secret_ref, or nothing to change',
+                                        'E_RECORD_NOT_FOUND': 'unknown connection',
+                                        'E_VERSION_CONFLICT': 'stale expected_version', **_CONNECTION_WRITE}
+MATRIX['delivery-connection enable'] = {'E_VALIDATION': 'its kind is not available here',
+                                        'E_RECORD_NOT_FOUND': 'unknown connection',
+                                        'E_VERSION_CONFLICT': 'stale expected_version', **_CONNECTION_WRITE}
+MATRIX['delivery-connection disable'] = {'E_RECORD_NOT_FOUND': 'unknown connection',
+                                         'E_VERSION_CONFLICT': 'stale expected_version', **_CONNECTION_WRITE}
+MATRIX['delivery-connection remove'] = {'E_RECORD_NOT_FOUND': 'unknown connection',
+                                        'E_VERSION_CONFLICT': 'stale expected_version', **_CONNECTION_WRITE}
+MATRIX['delivery-connection check'] = {'E_VALIDATION': 'its kind is not available here',
+                                       'E_RECORD_NOT_FOUND': 'unknown connection', **_CONNECTION_WRITE}
+MATRIX['delivery-connection show'] = {'E_RECORD_NOT_FOUND': 'unknown connection'}
+MATRIX['delivery-connection query'] = {}

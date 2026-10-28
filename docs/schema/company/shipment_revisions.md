@@ -25,3 +25,5 @@ Database: `company`.
 | `created_by` | VARCHAR(26) | no | — | — | — | — | Company principal that recorded this shipment revision. |
 | `created_via` | VARCHAR(16) | no | — | — | — | — | Interface that recorded this shipment revision. |
 | `audit_event_id` | VARCHAR(26) | no | — | — | — | audit_events.id | Audit event that committed this shipment revision. |
+| `freight_minor_units` | BIGINT | yes | — | — | — | — | Freight to bill the customer, in the order's currency; null: none. |
+| `freight_item_id` | VARCHAR(26) | yes | — | — | — | items.id | Item the freight bills as; null when no freight. |

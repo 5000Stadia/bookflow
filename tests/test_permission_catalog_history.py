@@ -92,7 +92,10 @@ ACCEPTED = {
     'setup-trial-v1': (745, '4e16e82de135a51dd6da3e05b717f128851ddb97e9001b35b3946db7379830de'),
     'shipments-returns-v1': (749, 'f2c9af3e35a8f1708cf051173e262624f264d266576a028990579e07d4323883'),
     'picking-v1': (755, '34c39c80a09a3d5ef8b10808cb187830a236f340946a45cbc9e2b9ca817e71af'),
-    'import-v1': (767, '0c16a48eab1c87f60974f82a6cfc67fbaf36ce6e252a9f8fbe8bd06f5fe85f93'),
+    'delivery-v1': (771, '085b7a93194e439557234ed8d88a7d7bdfd39ed06f8b2cbdddb732daca07561b'),
+    'packing-v1': (774, '10872774b49e7497c34eccde2882c74e49c36ead5d7d2ff765399dd31fae79c8'),
+    'delivery-queue-v1': (785, '2e19e20f01b2cdc3110be9f381a9ec54fa4f7f0ba5ef6880b49189576076554c'),
+    'import-v1': (797, '0db21ee9713630abf0d4a5d81c282ee608483cd6f16b8a2aa40e3a14712dfe4a'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -213,6 +216,15 @@ CHAIN_ADDITIONS = {
     'shipments-returns-v1': {'shipment return', 'shipment-return query', 'shipment-return show', 'shipment-return void'},
     'picking-v1': {'pick-list cancel', 'pick-list close', 'pick-list create', 'pick-list enter', 'pick-list query',
                    'pick-list show'},
+    'delivery-v1': {'delivery cancel', 'delivery draft', 'delivery export', 'delivery history', 'delivery mark-sent',
+                    'delivery query', 'delivery send', 'delivery show', 'delivery update', 'delivery-template create',
+                    'delivery-template deactivate', 'delivery-template fields', 'delivery-template preview',
+                    'delivery-template query', 'delivery-template show', 'delivery-template update'},
+    'packing-v1': {'shipment cancel', 'shipment create', 'shipment pack'},
+    'delivery-queue-v1': {'delivery approve', 'delivery retry', 'delivery run', 'delivery-connection add',
+                          'delivery-connection check', 'delivery-connection disable', 'delivery-connection enable',
+                          'delivery-connection query', 'delivery-connection remove', 'delivery-connection show',
+                          'delivery-connection update'},
     'import-v1': {'batch query', 'batch show', 'import cancel', 'import errors', 'import kinds', 'import preview',
                   'import query', 'import reverse', 'import rows', 'import run', 'import show', 'import template'},
 }

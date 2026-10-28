@@ -83,9 +83,15 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +3 owner-link, agent run and reconcile discard (R183).
     # +4 shipment returns (R181 increment 2): shipment return, shipment-return void/show/query.
     # +6 pick lists (R181 increment 3): pick-list create/enter/close/cancel/show/query.
+    # +16 document delivery (R112 increment 1): delivery draft/update/send/cancel/mark-sent/export/show/query/history,
+    # delivery-template create/update/deactivate/show/query/fields/preview.
+    # +3 drafts and packing (R181 increment 4): shipment create, pack, cancel.
+    # +11 the delivery queue (R112 increment 2): delivery approve/retry/run, delivery-connection
+    # add/update/enable/disable/remove/check/show/query.
+
     # +12 imports and batches (R107 increments 0 and 1): import kinds/template/preview/run/show/query/rows/errors/
     # reverse/cancel, batch show/query.
-    assert len(rows) == 773
+    assert len(rows) == 803
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
@@ -368,11 +374,17 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # shipment-return void's expected_version, the query filters, and company update's invoice_when_shipping -- their
     # null branches. No new variant kind. 3965 -> 3966: report shipped-not-invoiced pages, its cursor's null branch.
     # 3966 -> 3991 (R181 inc 3, measured): six pick-list commands and shipment post's pick_list and optional sales_order.
-    # 3991 -> 4012 (R107 inc 0-1, measured): the null branches of the import and batch commands' optional inputs --
+    # 3991 -> 4033 (R112 inc 1, measured): sixteen delivery commands, company update's reply-to and copy-to.
+    # 4033 -> 4103 (R181 inc 4, measured per command on both trees): shipment create 29, shipment pack 21, shipment
+    # cancel 1; shipment post 15 (shipment, expected_version, packages and their contents, freight_amount and
+    # freight_item, invoice), shipment update 2 (freight), company update 2 (weight_unit, shipping_item_id).
+    # 4103 -> 4115 (R112 inc 2, measured): the queue's optional inputs (approve's messages, retry's and the connection
+    # writes' expected_version, a connection's secret_ref, daily_limit and settings) -- their null branches.
+    # 4115 -> 4136 (R107 inc 0-1, measured): the null branches of the import and batch commands' optional inputs --
     # import preview's content, attachment, file_name, source, columns, constants, key, delimiter, decimal and
     # date_order (10); import query's kind, state, cursor (3); import rows' phase, status, cursor (3); import reverse's
     # fingerprint (1); batch query's kind, state, scope, cursor (4). No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==4012
+    assert sum(len(group["paths"]) for group in mapped)==4136
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

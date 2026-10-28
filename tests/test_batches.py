@@ -164,12 +164,12 @@ def test_a_reversal_needs_the_callers_own_grants(books):
     assert len(active_customers(books)) == 2
 
 
-def test_co0105_ddl_is_the_metadata():
+def test_co0108_ddl_is_the_metadata():
     import importlib
     from sqlalchemy.dialects.sqlite import dialect
     from sqlalchemy.schema import CreateIndex, CreateTable
     from bookflow.company import schema as c
-    m = importlib.import_module('bookflow.storage.company_migrations.versions.0105_batches_imports')
+    m = importlib.import_module('bookflow.storage.company_migrations.versions.0108_batches_imports')
     assert m.DDL == tuple(str(CreateTable(c.metadata.tables[t]).compile(dialect=dialect()))
                           for t in reversed(m.TABLES))
     assert set(m.INDEXES) == {str(CreateIndex(i).compile(dialect=dialect())) for t in m.TABLES

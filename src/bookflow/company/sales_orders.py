@@ -365,9 +365,10 @@ def billing_choice(s, inp, header, rev, lines, identities):
     """What an order invoice bills (``_billing_choice``), refused while a live pick list holds a line it would issue
     stock for: those units ship from the list (R181 increment 3)."""
     choice = _billing_choice(s, inp, header, rev, lines, identities)
-    from bookflow.company import pick_lists
+    from bookflow.company import pick_lists, shipment_packing
     held = pick_lists.holding(s, order_id=header['id'])
-    if not held:
+    drafted = shipment_packing.draft_holding(s, order_id=header['id'])
+    if not held and not drafted:
         return choice
     if choice.selections is not None:
         issuing = {entry.line_id for entry in choice.selections}
@@ -376,6 +377,11 @@ def billing_choice(s, inp, header, rev, lines, identities):
     else:
         issuing = {line['line_id'] for line in lines}
     issuing -= set(choice.from_shipments)
+    issuing_roots = {_root(s, identities, line) for line in lines if line['line_id'] in issuing}
+    in_drafts = {root: drafted[root] for root in issuing_roots if root in drafted}
+    if in_drafts:
+        # A live draft holds those units (R181 increment 4): they ship from the draft, then bill from the shipment.
+        shipment_packing.refuse_drafted(in_drafts, 'invoicing it from the order would issue the units the draft holds')
     found = {root: held[root] for root in {_root(s, identities, line) for line in lines
                                            if line['line_id'] in issuing} if root in held}
     if found:
@@ -448,7 +454,10 @@ def _billing_choice(s, inp, header, rev, lines, identities):
                     details={'fields': [{'field': 'date', 'problem': 'before the ship date of shipped units'}],
                              'ship_date': first.ship_date})
             if wanted is not None:
-                raise _invalid('shipments', 'these shipments have nothing left to invoice')
+                raise BookflowError('E_VALIDATION', message=(
+                    'These shipments have nothing left to invoice: invoices already billed their units.'),
+                    details={'fields': [{'field': 'shipments', 'problem': 'these shipments have nothing left to invoice'}],
+                             'reason': 'nothing_to_invoice'})
             return _order_choice(s, inp, header, rev, lines, identities)
         selections, from_shipments = [], {}
         for line_id, entry in ready.items():

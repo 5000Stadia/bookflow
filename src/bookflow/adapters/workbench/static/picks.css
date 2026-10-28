@@ -23,3 +23,20 @@
 #pick-list form.inline { display: inline-flex; flex-wrap: wrap; gap: .5rem; align-items: center; vertical-align: middle; }
 #pick-list form.inline input[type=date] { width: auto; max-width: 11rem; }
 #pick-list .pick-foot input { max-width: 24rem; }
+/* The pack screen (R181 increment 4) shares the pick screen's sticky scan bar. */
+#pack-screen { overflow-wrap: anywhere; }
+#pack-screen .pick-entry { position: sticky; top: 0; z-index: 5; background: var(--surface, #fff);
+  border-bottom: 1px solid var(--border, #d0d5dd); padding: .5rem 0; display: flex; flex-wrap: wrap; gap: .5rem; align-items: end; }
+#pack-screen .pick-entry label { display: flex; flex-direction: column; font-size: .85rem; min-width: 0; }
+#pack-screen .pick-entry .scan { flex: 1 1 100%; }
+#pack-screen .pick-entry .scan input { width: 100%; font-size: 1.1rem; padding: .5rem; box-sizing: border-box; }
+#pack-screen .pick-entry .qty input { width: 5rem; font-size: 1.1rem; padding: .5rem; text-align: right; }
+#pack-screen .pick-entry button { font-size: 1.05rem; padding: .55rem 1rem; }
+#pack-screen .pick-lines td.num, #pack-screen .pick-lines th.num { text-align: right; }
+#pack-screen .pick-lines tr.done td { color: var(--muted, #667085); }
+#pack-screen form.inline { display: inline-flex; flex-wrap: wrap; gap: .5rem; align-items: end; }
+#pack-screen .pack-boxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: .75rem; margin-top: .75rem; }
+#pack-screen .pack-box { min-width: 0; }
+#pack-screen .pack-facts label { display: flex; flex-direction: column; font-size: .85rem; min-width: 0; }
+#pack-screen .pack-facts input { max-width: 100%; box-sizing: border-box; }
+#pack-screen .pick-foot, #pack-screen .pack-foot { margin-top: 1rem; }
