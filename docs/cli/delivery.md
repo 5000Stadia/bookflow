@@ -4,7 +4,7 @@
 
 ## `delivery approve`
 
-A person's go for ready messages waiting for one (an agent's release): by number, or all_waiting. A message leaves only with a go, and only through a sending connection. A person's act. Example: {"messages": ["M-1001"]}.
+A person's go for ready messages waiting for one (an agent's release): by number, or all_waiting. A message leaves only with a go, and only through a sending connection. Needs delivery.send. Example: {"messages": ["M-1001"]}.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -1698,7 +1698,7 @@ Example JSON output:
 
 ## `delivery mark-sent`
 
-Record that a person sent the message from their own mail program (shown 'Sent by hand', never delivered). For an overdue notice it also marks the notice sent. A person's act.
+Record that a person sent the message from their own mail program (shown 'Sent by hand', never delivered). For an overdue notice it also marks the notice sent. Needs delivery.mark-sent, which a principal may grant an agent.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

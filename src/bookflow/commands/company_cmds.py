@@ -405,7 +405,7 @@ def _validate_merged(new: dict[str, Any], s: Session, changed: set[str]) -> None
 company_update = command("company update", scope="company", description="Update the selected company's information; versioned, blind, or merged per the concurrency rules.",
                          input_model=CompanyUpdateInput, output_model=UpdateOutput, writes={"company", "hub"}, required_role="admin", truth="company", clearable=True,
                          error_codes=["E_VERSION_CONFLICT", "E_PARTIAL_WRITE", "E_DIRECTIVE_NOT_FOUND", "E_DIRECTIVE_INACTIVE", "E_WORK_DEPENDENCY"], version_source=("company show", None, "info_version"),
-                         authorization="company admin; changing the closing date needs a person, never an agent")
+                         authorization="company admin; changing the closing date needs company.closing-date")
 
 
 def _future_closing_warning(closing_date: str, timezone_name: str | None, now: Any = None) -> str | None:
@@ -432,9 +432,9 @@ def plan_company_update(inp: CompanyUpdateInput, ctx: Context, s: Session) -> Pl
     new, fields_set = _merged_row(current, inp)
     changed = {f for f in fields_set if any(new.get(col) != current.get(col) for col in ([f] if f not in ("address", "legal_address", "ship_address") else [f"{f}_{c}" for c in ADDRESS_FIELDS]))}
     if "closing_date" in changed:
-        # Setting, moving or clearing the closing date is a person's act (catalog human-administration-v1).
-        from bookflow.hub.people_only import require_person_for_closing_date
-        require_person_for_closing_date(s)
+        # Setting, moving or clearing the closing date needs company.closing-date (capabilities-v1).
+        from bookflow.hub.capabilities import require_closing_date
+        require_closing_date(s)
     if changed:
         _validate_merged(new, s, changed)
     window = current.get("recent_activity_window_seconds", 60)

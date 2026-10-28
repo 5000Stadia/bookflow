@@ -15,9 +15,9 @@ _JOURNAL_ERRORS = ['E_RECORD_NOT_FOUND', 'E_UNBALANCED_ENTRY', 'E_PERIOD_CLOSED'
 
 
 def _person(s, command):
-    if s.actor is None or s.actor.kind != 'human':
-        from bookflow.hub import people_only
-        raise people_only.refusal(people_only.ROLES_RULE, command=command, capability='company')
+    """accountant.manage (capabilities-v1): asked of an agent at dispatch, and here too."""
+    from bookflow.hub import capabilities
+    capabilities.require_company(s, command)
 
 
 # ------------------------------------------------------------------ the external accountant

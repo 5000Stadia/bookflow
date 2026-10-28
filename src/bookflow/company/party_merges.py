@@ -109,11 +109,10 @@ def _refuse(problem: str, **details: Any) -> BookflowError:
 
 
 def require_person(s, kind: str, verb: str = "merge") -> None:
-    """The catalog's people-only list (party-merge-v1) refuses an agent at dispatch; this is the same
-    refusal (hub/people_only.py, R168) for a caller that arrives without an actor."""
-    if s.actor is None or s.actor.kind != "human":
-        from bookflow.hub import people_only
-        raise people_only.refusal("", command=f"{kind} {verb}", capability=kind)
+    """A capability since capabilities-v1 (party.merge, list.merge, item.convert): dispatch asks it of an agent; this is
+    the same question here, and a refusal for a caller that arrives without an actor."""
+    from bookflow.hub import capabilities
+    capabilities.require_company(s, f"{kind} {verb}")
 
 
 # --- what moves -------------------------------------------------------------------------

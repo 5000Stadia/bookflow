@@ -591,11 +591,18 @@ def authorize(cmd: Command, ctx: Context, s: Session, *, company_selector: str |
             raise BookflowError("E_PERMISSION", details={"capability": cmd.capability, "required_role": cmd.required_role, "role": role})
         for capability, required_role in cmd.resource_requirements:
             access.require_resource(s, capability, required_role)
+        if s.actor is not None and s.actor.kind != "human":
+            # A former people-only act: the agent's own grant and its principal's holding (capabilities-v1).
+            from bookflow.hub.capabilities import require_company as require_capability
+            require_capability(s, cmd.name)
         ctx = ctx.model_copy(update={"company_id": s.company_row["id"]})
         if s.company is None:
             open_company(s, ctx, "company" in cmd.writes and not dry_run and not read_only)
     elif cmd.required_role == "hub_admin" and not s.is_hub_admin:
-        raise BookflowError("E_PERMISSION", details={"capability": cmd.capability, "required_role": "hub_admin"})
+        from bookflow.hub.capabilities import HUB, capability_for, require_hub
+        if s.actor is None or s.actor.kind == "human" or capability_for(cmd.name) not in HUB:
+            raise BookflowError("E_PERMISSION", details={"capability": cmd.capability, "required_role": "hub_admin"})
+        require_hub(s, capability_for(cmd.name), cmd.name)  # an agent granted it, acting for a hub administrator
     if _recovery_only:
         if cmd.permanent_recovery is None or not read_only:
             raise BookflowError('E_INTERNAL', message='Invalid permanent recovery authorization route')

@@ -875,7 +875,7 @@ class DemoResetOutput(WriteOutput):
 demo_reset = command("demo reset", scope="hub", description="Move the entire existing demo organization and all its companies to trash, then recreate Demo Plumbing Co; optionally also seed Reference Plumbing Co. Other organizations are untouched. On a data root that also holds a real (non-demo) company it refuses unless force names that root.",
                      input_model=DemoResetInput, output_model=DemoResetOutput, writes={"hub", "company", "config"}, required_role="hub_admin",
                      error_codes=["E_DEMO_RESET_INCOMPLETE", "E_NAME_TAKEN", "E_PERMISSION"],
-                     authorization="human hub administrator; a root holding real books needs force naming it")
+                     authorization="hub administrator, or an agent granted demo.reset; a root holding real books needs force naming it")
 
 
 def _load_seed(resource: str = "seed.toml") -> dict[str, Any]:
@@ -1157,6 +1157,11 @@ def _seed_demo_agent(s: Session, ctx: Context, company: dict[str, Any]) -> None:
     from bookflow.hub.permission_access import activated
     if not activated(s):
         s.warnings.append(f"the demo agent {DEMO_AGENT} needs activated permissions; run `permission activate`")
+        return
+    if s.actor.kind != "human":
+        # Assigning and authorizing an agent stay a person's acts (capabilities-v1), so a person sets the demo's agent up.
+        s.warnings.append(f"the demo agent {DEMO_AGENT} is assigned and authorized by a person; run the reset yourself "
+                          "or `agent assign` and `agent authorize` it")
         return
     hub_ctx = ctx.model_copy(update={"company_id": None})
 

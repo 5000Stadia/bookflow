@@ -96,9 +96,13 @@ def _company_timezone(s: Session, row: dict[str, Any]) -> str:
 def plan_backup_schedule(inp: ScheduleInput, ctx: Context, s: Session) -> Plan:
     from bookflow.core import clock
     from bookflow.core.dispatch import resolve_company
-    if s.actor is None or s.actor.kind != "human":
-        raise BookflowError("E_PERMISSION", details={"capability": "company", "required_role": "human"},
-                            message="Only a person may change where and when backups are written; an agent cannot.")
+    if s.actor is None:
+        raise BookflowError("E_PERMISSION", details={"capability": "backup.schedule", "required_role": "human"},
+                            message="Only a person, or an agent granted backup.schedule, may change where and when "
+                                    "backups are written.")
+    if s.actor.kind != "human":  # backup.schedule (capabilities-v1)
+        from bookflow.hub.capabilities import require_hub
+        require_hub(s, "backup.schedule", "backup schedule")
     row = resolve_company(s, inp.company, "option")
     current = sched.entry(s.config.data, row["id"])
     now = clock.now()

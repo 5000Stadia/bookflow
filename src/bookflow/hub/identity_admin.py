@@ -223,8 +223,85 @@ def _actor(tx,binding,request_id,purpose):
         actor_id=binding.mapped_user_id
     else:fail('invalid_input','binding')
     row=tx.raw.execute('SELECT id,kind,active,hub_admin FROM main.users WHERE id=?',(actor_id,)).fetchone()
-    if row is None or row[1]!='human' or row[2]!=1:fail('not_administrator','binding')
+    if row is None or row[2]!=1:fail('not_administrator','binding')
+    if row[1]=='agent' and type(binding) is TokenBinding and binding.principal_id is not None:
+        return row[0]  # capabilities-v1: only the edits _agent_admission allows, under its grants and its principal's
+    if row[1]!='human':fail('not_administrator','binding')
     return row[0]
+
+
+def _principal(binding):
+    return binding.principal_id if type(binding) is TokenBinding else None
+
+
+def _held(old,user_id,capability,scopes=None):
+    """An explicit grant on a live membership (within scopes, if given) and no deny of it there."""
+    rows=[m for m in old.memberships if m.user_id==user_id and m.revoked_at is None and (scopes is None or (m.scope_type,m.scope_id) in scopes)]
+    grants=[set(json.loads(m.grants or '[]')) for m in rows];denies=[set(json.loads(m.denies or '[]')) for m in rows]
+    return any(capability in g for g in grants) and not any(capability in d for d in denies)
+
+
+def _covering(old,scope):
+    parent=dict(old.keys.companies).get(scope.id) if scope.kind=='company' else None
+    return {(scope.kind,scope.id),*((('organization',parent),) if parent else ())}
+
+
+def _agent_admission(old,base_pair,actor,principal_id,intent):
+    """An agent's identity edit (capabilities-v1, design/principal-directives.md §1): only membership.grant,
+    user.manage and agent.manage acts, each needing the agent's own grant, its principal holding the same, the agent
+    eligible and unsuspended; never its own membership or its principal's, never a hub administrator, and no role or
+    capability above its own."""
+    from .permission_capabilities_catalog import CAPABILITIES
+    principal=next((x for x in old.users if x.id==principal_id),None)
+    authority=next((x for x in old.authorities if x.agent_user_id==actor.id),None)
+    assigned=any(x.agent_user_id==actor.id and x.principal_user_id==principal_id and x.revoked_at is None for x in old.assignments)
+    if principal is None or principal.kind!='human' or not principal.active or not assigned or authority is None or authority.suspended_at is not None:
+        fail('not_administrator','binding')
+    if type(intent) in (PutMembership,RevokeMembership):
+        if type(intent) is PutMembership:scope=intent.scope;target=intent.user_id;before=None
+        else:
+            before=next((x for x in old.memberships if x.id==intent.membership_id),None)
+            if before is None:fail('unavailable_target','scope')
+            scope=c.ScopeKey(before.scope_type,before.scope_id);target=before.user_id
+        covering=_covering(old,scope)
+        if not _held(old,actor.id,'membership.grant',covering):fail('not_administrator','capability')
+        if any('membership.grant' in json.loads(m.denies or '[]') for m in old.memberships if m.user_id==principal_id and m.revoked_at is None):
+            fail('not_administrator','capability')
+        existing=next((x for x in old.memberships if x.user_id==target and (x.scope_type,x.scope_id)==(scope.kind,scope.id) and x.revoked_at is None),None)
+        owner=(type(intent) is PutMembership and intent.role=='owner') or bool(existing and existing.role=='owner')
+        _scope_admin(old,base_pair,principal,scope,owner=owner)  # the principal administers that scope too
+        if target in (actor.id,principal_id):fail('protected_identity','target')
+        if type(intent) is PutMembership:
+            before=next((x for x in old.memberships if x.user_id==target and (x.scope_type,x.scope_id)==(scope.kind,scope.id)),None)
+            old_grants,old_denies=(set(json.loads(before.grants or '[]')),set(json.loads(before.denies or '[]'))) if before is not None and before.revoked_at is None else (set(),set())
+            widened=(set(intent.grants or ())-old_grants)|(old_denies-set(intent.denies or ()))
+            for capability in widened:
+                if not _held(old,actor.id,capability,None if CAPABILITIES.get(capability,('',))[0]=='hub_admin' else covering):
+                    fail('not_administrator','grants')
+        return
+    if type(intent) is SetUserActive:
+        target=_target(old,intent.user_id)
+        capability='agent.manage' if target.kind=='agent' else 'user.manage'
+    elif type(intent) is SetAssignments:
+        target=_target(old,intent.agent_id)
+        current={x.principal_user_id for x in old.assignments if x.agent_user_id==intent.agent_id and x.revoked_at is None}
+        if set(intent.principals)-current:fail('not_administrator','principals')  # assigning is the principal's own act
+        capability='agent.manage'
+    else:fail('not_administrator','binding')
+    if not _held(old,actor.id,capability):fail('not_administrator','capability')
+    if not principal.hub_admin or any(capability in json.loads(m.denies or '[]') for m in old.memberships if m.user_id==principal_id and m.revoked_at is None):
+        fail('not_administrator','hub')
+    if target.id in (actor.id,principal_id) or target.hub_admin:fail('protected_identity','target')
+
+
+def _human_grant_ceiling(old,actor,intent):
+    """A person gives an installation-wide capability only as an installation administrator (capabilities-v1)."""
+    from .permission_capabilities_catalog import CAPABILITIES
+    if type(intent) is not PutMembership or actor.hub_admin:return
+    before=next((x for x in old.memberships if x.user_id==intent.user_id and (x.scope_type,x.scope_id)==(intent.scope.kind,intent.scope.id) and x.revoked_at is None),None)
+    old_grants,old_denies=(set(json.loads(before.grants or '[]')),set(json.loads(before.denies or '[]'))) if before else (set(),set())
+    widened=(set(intent.grants or ())-old_grants)|(old_denies-set(intent.denies or ()))
+    if any(CAPABILITIES.get(x,('',))[0]=='hub_admin' for x in widened):fail('not_administrator','grants')
 
 
 def _scope_admin(old,base_pair,actor,scope,owner=False):
@@ -285,9 +362,12 @@ def _mutation(table,before,after,key_names):
     return Mutation(table,key,expected,tuple(v.items()) if before is None else values,before is None)
 
 
-def _prepare(tx,*,actor_id,intent,catalog,visibility,context=None):
+def _prepare(tx,*,actor_id,intent,catalog,visibility,context=None,principal_id=None):
     preview=context is None
     _require_tx(tx,not preview)
+    if type(intent) not in (PutMembership,RevokeMembership,SetUserActive,SetAssignments) and \
+            tx.raw.execute('SELECT kind FROM main.users WHERE id=?',(actor_id,)).fetchone()!=('human',):
+        fail('not_administrator','binding')  # activation, authorization and the catalog stay a person's
     if type(intent) is ActivatePolicy:
         from .permission_activation import prepare
         return prepare(tx, actor_id=actor_id, intent=intent, catalog=catalog, context=context)
@@ -299,6 +379,10 @@ def _prepare(tx,*,actor_id,intent,catalog,visibility,context=None):
     old_state=audit_owner.read_state(tx);old_tokens=aa.read_tokens(tx);old_users=audit_owner.read_users(tx)
     actor=next(x for x in old.users if x.id==actor_id)
     base_pair=_pair(old,old,catalog,catalog,visibility)
+    agent_actor=actor.kind=='agent'
+    if agent_actor:_agent_admission(old,base_pair,actor,principal_id,intent)
+    elif actor.kind=='human':_human_grant_ceiling(old,actor,intent)
+    else:fail('not_administrator','binding')
     at='prospective' if preview else context.at
     via='python' if preview else context.interface
     updates=dict(updated_at=at,updated_by=actor_id,updated_via=via)
@@ -343,7 +427,7 @@ def _prepare(tx,*,actor_id,intent,catalog,visibility,context=None):
         if semantic:
             members=[replace(before,revoked_at=at,version=increment(before.version,'membership_version'),**updates)];version=members[0].version
     else:
-        if not actor.hub_admin:fail('not_administrator','hub')
+        if not actor.hub_admin and not agent_actor:fail('not_administrator','hub')  # an agent: _agent_admission
         if type(intent) is SetUserActive:
             before=_target(old,intent.user_id);_expected(before.version,intent.expected_version,'user_version')
             semantic=before.active!=intent.active;target_id=before.id;version=before.version
@@ -545,7 +629,7 @@ def preview_edit(tx: Database, *, binding: TrustedBinding, intent: Edit,
     """Fresh conditional preview; no durable identity/time allocation or writes."""
     _require_tx(tx)
     actor_id=_actor(tx,binding,request_id,'preview')
-    return _prepare(tx,actor_id=actor_id,intent=intent,catalog=catalog,visibility=visibility)
+    return _prepare(tx,actor_id=actor_id,intent=intent,catalog=catalog,visibility=visibility,principal_id=_principal(binding))
 
 
 def apply_edit(tx: Database, *, binding: TrustedBinding, intent: Edit,
@@ -563,7 +647,8 @@ def apply_edit(tx: Database, *, binding: TrustedBinding, intent: Edit,
     tx.raw.execute('SAVEPOINT '+savepoint)
     try:
         before=_observe(tx)
-        prepared=_prepare(tx,actor_id=actor_id,intent=intent,catalog=catalog,visibility=visibility,context=audit)
+        prepared=_prepare(tx,actor_id=actor_id,intent=intent,catalog=catalog,visibility=visibility,context=audit,
+                          principal_id=_principal(binding))
         expected=_expected_storage(tx,before,prepared)
         for mutation in prepared.mutations:_write_mutation(tx,mutation)
         if prepared.audit is not None:audit_owner.insert_audit(tx,prepared.audit)

@@ -1,9 +1,10 @@
-"""What only a person may do: the closing date, and every change to who can do what.
+"""What stays a person's own act: five commands no capability could make safe (design/principal-directives.md §2 b).
 
-The list is the catalog's (`permission_human_admin_catalog`): human-only admin actions under
-`admin:people-only:<command>` and `admin:company:closing-date`, read from the tip, which is what
-every command is admitted against. An agent -- or any actor that is not a person -- is refused
-with E_PERMISSION whatever its role, and told to ask its principal.
+The list is the catalog's: `admin:people-only:<command>` admin actions still `human_only` in the tip (capabilities-v1
+leaves exactly five: user set-password, token issue, agent assign, agent authorize, permission activate). An agent
+-- or any actor that is not a person -- is refused with E_PERMISSION whatever its role or grants, `reason:
+people_only` and `principal_only: true`, and told to ask its principal. Every other former people-only act is a
+capability now (hub.capabilities); `act_subject` names the act in both refusals.
 """
 from __future__ import annotations
 
@@ -44,9 +45,22 @@ ACT_SUBJECTS = {
     'delivery-connection check': 'Checking a sending connection',
     # delivery-schedule-v1: a send schedule made live sends unattended under its establisher (R187: automate.delivery).
     'delivery-schedule live': 'Making a send schedule live',
+    # capabilities-v1: the installation-wide acts, and the five that stay a person's.
+    'backup schedule': 'Scheduling backups', 'demo reset': 'Resetting the demo organization',
+    'user add': 'Adding a user', 'user activate': 'Reactivating a user', 'user deactivate': 'Deactivating a user',
+    'membership grant': "Changing someone's access", 'membership revoke': "Revoking someone's access",
+    'agent create': 'Creating an agent', 'agent activate': 'Reactivating an agent',
+    'agent deactivate': 'Deactivating an agent', 'agent unassign': 'Taking an agent off a principal',
+    'user set-password': 'Setting a password', 'token issue': 'Issuing a token',
+    'agent assign': 'Assigning an agent to the person it acts for', 'agent authorize': 'Authorizing an agent',
+    'permission activate': 'Activating permissions',
 }
-# The capability R187 turns a people-only act into, named in its refusal so an agent knows what to ask for.
-R187_CAPABILITY = {'delivery-schedule live': 'automate.delivery'}
+
+
+def act_subject(command: str, field: str | None = None) -> str:
+    if field == 'closing_date':
+        return 'Changing the closing date'
+    return ACT_SUBJECTS.get(command) or f'`{command}`'
 
 
 @lru_cache(maxsize=4)
@@ -74,25 +88,16 @@ def _is_person(s) -> bool:
 
 
 def refusal(rule: str, *, command: str, capability: str, field: str | None = None) -> BookflowError:
-    act = ACT_SUBJECTS.get(command)
-    if act and not field:
-        rule = f"{act[0].lower()}{act[1:]} is a person's act"
-        details = {'capability': capability, 'reason': 'people_only', 'rule': rule, 'command': command,
-                   'required_role': 'human',
-                   'next_step': 'Ask your principal (the person you act for) to make this change themselves.'}
-        needs = R187_CAPABILITY.get(command)
-        if needs:
-            details['needs'] = needs
-        return BookflowError('E_PERMISSION', message=(
-            f"{act} is a person's act, not an agent's" + (f" (it needs {needs})" if needs else '') +
-            '. Ask your principal to make this change.'), details=details)
-    subject = 'The closing date' if field == 'closing_date' else 'Who can do what in Bookflow'
-    details = {'capability': capability, 'reason': 'people_only', 'rule': rule, 'command': command, 'required_role': 'human',
-               'next_step': 'Ask your principal (the person you act for) to make this change themselves.'}
+    """One of the five: no grant opens it. `people_only` stays the reason so existing clients keep working."""
+    act = act_subject(command, field)
+    details = {'capability': capability, 'reason': 'people_only', 'principal_only': True, 'rule': rule or
+               f"{act[0].lower()}{act[1:]} is your principal's own act", 'command': command, 'required_role': 'human',
+               'next_step': 'Ask your principal (the person you act for) to do this themselves; no grant can give it to you.'}
     if field:
         details['field'] = field
     return BookflowError('E_PERMISSION', message=(
-        f'{subject} is set by a person, not an agent. Ask your principal to make this change.'), details=details)
+        f"{act} is your principal's own act, not an agent's, and no capability grants it. Ask your principal to do it."),
+        details=details)
 
 
 def require_person_for_command(s, cmd) -> None:

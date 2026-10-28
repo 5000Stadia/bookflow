@@ -117,7 +117,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 |---|---|
 | Scope | hub |
 | Kind | write |
-| Required role | human administrator of that company or organization; owner to grant or move an owner; installation shortcut only before permission activation |
+| Required role | administrator of that company or organization (an agent: granted membership.grant, never its own membership, no role or capability above its own); owner to grant or move an owner; installation shortcut only before permission activation |
 | Capability | membership |
 | Feature | — |
 | HTTP | `POST /commands/membership.grant` |
@@ -384,7 +384,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 |---|---|
 | Scope | hub |
 | Kind | write |
-| Required role | human administrator of that company or organization; owner to revoke an owner; installation shortcut only before permission activation |
+| Required role | administrator of that company or organization (an agent: granted membership.grant, never its own membership); owner to revoke an owner; installation shortcut only before permission activation |
 | Capability | membership |
 | Feature | — |
 | HTTP | `POST /commands/membership.revoke` |

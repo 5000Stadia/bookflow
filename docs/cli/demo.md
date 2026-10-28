@@ -12,7 +12,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 |---|---|
 | Scope | hub |
 | Kind | write |
-| Required role | human hub administrator; a root holding real books needs force naming it |
+| Required role | hub administrator, or an agent granted demo.reset; a root holding real books needs force naming it |
 | Capability | demo |
 | Feature | — |
 | HTTP | `POST /commands/demo.reset` |
