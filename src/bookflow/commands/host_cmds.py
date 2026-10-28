@@ -76,6 +76,7 @@ class ServeInput(BaseModel):
     allow_network: bool = Field(False, description="Allow a bind address outside loopback")
     secure_cookies: bool | None = Field(None, description="Set Secure on the session cookie; defaults on for non-loopback binds and for an https public origin")
     public_origin: str | None = Field(None, max_length=256, description="The https://host[:port] a TLS proxy in front of this host serves (for example what `colony serve` prints); links, the printed address and Origin checks use it, and the host then binds 127.0.0.1 only. Defaults to [host] public_origin in config.toml")
+    scan_decoders: str | None = Field(None, max_length=256, description="The camera scanner's decoders, tried in order in the browser, comma-separated: native (the browser's BarcodeDetector) and zxing-wasm (vendored, works offline). Defaults to the environment variable BOOKFLOW_SCAN_DECODERS, else native,zxing-wasm")
     background: bool = Field(False, description="Start the host as a background process, wait until it answers, print its address and return; its log is host.log in the data root")
 
 
@@ -87,6 +88,7 @@ class ServeOutput(BaseModel):
     pid: int
     secure_cookies: bool
     public_origin: str | None = Field(None, description="The configured public origin, when the host sits behind a TLS proxy")
+    scan_decoders: str = Field("native,zxing-wasm", description="The camera scanner's decoder order the pages carry")
     companies_migrated: list[str]
     companies_failed: list[dict[str, str]]
     warnings: list[str] = Field(default_factory=list)
@@ -175,8 +177,10 @@ def _serve_actor(s: Session) -> dict[str, Any]:
 def run_serve(cmd, inp: ServeInput, ctx: Context, s: Session) -> dict[str, Any]:
     """The bootstrap path for `serve` (dispatch._run_bootstrap): no lock path, no plan/apply."""
     from bookflow.core import public_origin as po
+    from bookflow.core import scan_decoders as sd
     host_name, port = parse_bind(inp.bind)
     origin = po.resolve(s.data_root, inp.public_origin)
+    decoders = sd.resolve(inp.scan_decoders)
     po.require_proxy_bind(origin, host_name, inp.bind)
     if not inp.allow_network and not is_loopback(host_name):
         raise BookflowError("E_NETWORK_NOT_ALLOWED", details={"bind": inp.bind})
@@ -184,9 +188,10 @@ def run_serve(cmd, inp: ServeInput, ctx: Context, s: Session) -> dict[str, Any]:
     secure = cookie_security(host_name, inp.secure_cookies, origin)
     if inp.background:
         started = start_in_background(s.data_root, inp.bind, allow_network=inp.allow_network,
-                                      secure_cookies=inp.secure_cookies, public_origin=origin)
+                                      secure_cookies=inp.secure_cookies, public_origin=origin,
+                                      scan_decoders=inp.scan_decoders)
         return ServeOutput(bind=inp.bind, url=po.base_url(origin, started["url"]), log=started["log"], socket=None,
-                           pid=started["pid"], secure_cookies=secure, public_origin=origin, companies_migrated=[], companies_failed=[],
+                           pid=started["pid"], secure_cookies=secure, public_origin=origin, scan_decoders=decoders, companies_migrated=[], companies_failed=[],
                            warnings=[] if started["started"] else ["a host was already answering at this address"]).model_dump(mode="json")
     import socket as _socket
     import uvicorn
@@ -198,7 +203,7 @@ def run_serve(cmd, inp: ServeInput, ctx: Context, s: Session) -> dict[str, Any]:
         # publication remains delayed until both listeners are ready.
         handle = start_serving(
             s.data_root, client_version(), bind=inp.bind,
-            secure_cookies=secure, publish_descriptor=False, public_origin=origin,
+            secure_cookies=secure, publish_descriptor=False, public_origin=origin, scan_decoders=decoders,
         )
         tcp = _socket.socket(_socket.AF_INET6 if ":" in host_name else _socket.AF_INET, _socket.SOCK_STREAM)
         tcp.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
@@ -252,7 +257,7 @@ def run_serve(cmd, inp: ServeInput, ctx: Context, s: Session) -> dict[str, Any]:
             except OSError:  # pragma: no cover
                 pass
     out = ServeOutput(bind=inp.bind, url=po.base_url(origin, host_url(inp.bind)), socket=str(handle.socket), pid=os.getpid(),
-                      secure_cookies=secure, public_origin=origin,
+                      secure_cookies=secure, public_origin=origin, scan_decoders=decoders,
                       companies_migrated=list(handle.companies_migrated), companies_failed=list(handle.companies_failed))
     return out.model_dump(mode="json")
 
@@ -310,7 +315,8 @@ def serving_pid(root: Path, bind: str) -> int | None:
 
 
 def start_in_background(root: Path, bind: str, *, allow_network: bool = False, secure_cookies: bool | None = None,
-                        public_origin: str | None = None, wait_seconds: float = 180.0) -> dict[str, Any]:
+                        public_origin: str | None = None, scan_decoders: str | None = None,
+                        wait_seconds: float = 180.0) -> dict[str, Any]:
     """Start `serve` detached and wait, inside this call, until it answers; or report the one already answering."""
     import subprocess
     import sys
@@ -329,6 +335,8 @@ def start_in_background(root: Path, bind: str, *, allow_network: bool = False, s
         args.append("--allow-network")
     if public_origin:
         args += ["--public-origin", public_origin]
+    if scan_decoders:
+        args += ["--scan-decoders", scan_decoders]
     if secure_cookies is not None:
         args.append("--secure-cookies" if secure_cookies else "--no-secure-cookies")
     fd = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
@@ -384,7 +392,7 @@ class ServeHandle:
 
 def start_serving(data_root: Path | str, version: str, *, bind: str = DEFAULT_BIND,
                   secure_cookies: bool = False, publish_descriptor: bool = True,
-                  public_origin: str | None = None) -> ServeHandle:
+                  public_origin: str | None = None, scan_decoders: str | None = None) -> ServeHandle:
     """Take the lock, migrate everything, build the app, listen on the socket, and write host.json."""
     from bookflow.adapters.http.app import create_app
     from bookflow.adapters.http.local import LocalListener
@@ -415,7 +423,8 @@ def start_serving(data_root: Path | str, version: str, *, bind: str = DEFAULT_BI
         raise
     try:
         migrated, failed = migrate_everything(host)
-        app = create_app(host, secure_cookies=secure_cookies, public_origin=public_origin, bind=bind)
+        app = create_app(host, secure_cookies=secure_cookies, public_origin=public_origin, bind=bind,
+                         scan_decoders=scan_decoders)
         sock = socket_path(root)
         listener = LocalListener(host, sock, make_local_handler(host, version))
         listener.start()

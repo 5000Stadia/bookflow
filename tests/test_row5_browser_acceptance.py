@@ -33,7 +33,7 @@ CHROME = Path(os.environ.get("BOOKFLOW_TEST_CHROME", "/opt/google/chrome/chrome"
 class _Cdp:
     """The small subset of the Chrome DevTools Protocol used by this witness."""
 
-    def __init__(self, profile: Path):
+    def __init__(self, profile: Path, extra_args: tuple[str, ...] = ()):
         self._process = subprocess.Popen(
             [
                 str(CHROME),
@@ -51,6 +51,7 @@ class _Cdp:
                 "--remote-debugging-port=0",
                 f"--user-data-dir={profile}",
                 "--window-size=1280,800",
+                *extra_args,
                 "about:blank",
             ],
             stdin=subprocess.DEVNULL,
@@ -277,6 +278,7 @@ def browser_site(tmp_path, monkeypatch, _seeded_template):
             base_url=f"http://127.0.0.1:{port}",
             company_id=company_id,
             login=login,
+            app=handle.app,
         )
     finally:
         server.should_exit = True
