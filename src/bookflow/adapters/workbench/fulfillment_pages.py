@@ -88,7 +88,10 @@ def mount(app, *, render, run, credential, page_error, role_allows):
         first = {key: value for key, value in params.items() if key != 'cursor' and value}
         first['tab'] = chosen[0]
         more = dict(first, cursor=report['next_cursor']) if report and report.get('next_cursor') else None
-        return render('fulfillment.html', request, status_code=status_code, company=company,
+        from bookflow.adapters.workbench.item_picture_pages import thumbs as item_thumbs
+        thumbs = item_thumbs(lambda name, raw, company: run(request, name, raw, company), company_id,
+                             [line.get('item_id') for row in (report or {}).get('rows', []) for line in row.get('lines', [])])
+        return render('fulfillment.html', request, status_code=status_code, company=company, thumbs=thumbs,
                       company_id=company['company_id'], report=report, tabs=tabs, tab=chosen[0], params=params,
                       sites=sites, picking=picking, results=results, error=error, today=company_today(company),
                       notice=notice, more=more, first=first, paged=bool(cursor), batch_key=secrets.token_hex(8),

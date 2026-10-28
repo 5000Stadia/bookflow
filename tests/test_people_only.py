@@ -31,7 +31,7 @@ FIVE = {"user set-password", "token issue", "agent assign", "agent authorize", "
 def test_the_people_only_list_is_exactly_the_five_and_every_other_entry_is_a_capability():
     registry.load_all()
     tip = runtime.current_catalog()
-    # bulk-edit-v1 (on capabilities-v1) adds none: every record changes through its own update command, as the caller.
+    # bulk-edit-v1 (on item-picture-v1) adds none: every record changes through its own update command, as the caller.
     assert tip is runtime.known_catalog(c.BULK_EDIT_POLICY_VERSION)
     assert people_only.people_only_commands() == FIVE == set(layer.STAYS_HUMAN)
     assert sorted(a.key for a in tip.CATALOG.admin_actions if a.human_only) == sorted(
@@ -378,7 +378,7 @@ def test_a_root_activated_at_the_previous_catalog_upgrades_with_nothing_broader_
                                                      "expected_catalog_sha256": state["catalog_sha256"]}, headers=REASON)
         assert upgraded["changed"] and upgraded["affected_agents"] == []
         with sqlite3.connect((root / "hub.db").as_uri() + "?mode=ro", uri=True) as db:
-            assert db.execute("SELECT catalog_version FROM permission_state").fetchone() == ("bulk-edit-v1",)  # the tip, on capabilities-v1
+            assert db.execute("SELECT catalog_version FROM permission_state").fetchone() == ("bulk-edit-v1",)  # the tip, on item-picture-v1
             assert db.execute("SELECT count(*) FROM agent_authority WHERE suspended_at IS NOT NULL AND agent_user_id=?",
                               (agent,)).fetchone() == (0,)
             assert db.execute("SELECT count(*) FROM api_tokens WHERE revoked_at IS NOT NULL").fetchone() == (0,)

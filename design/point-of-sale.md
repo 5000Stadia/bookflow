@@ -210,6 +210,10 @@ Tendered and change are facts on `pos_sales`, not postings: the receipt debits U
 - **Everywhere.** Item page, the item list (a thumbnail column, on by default when any item has a picture), the item
   reference picker's results, POS boxes, the pick screen's lines and the pack screen's lines. Attachment URLs are
   content-addressed, so pictures are served with an immutable cache header and load once per device.
+- **Who sees pictures (2026-10-28, Navigator decision after the increment 1 review).** Reading items is enough: the
+  picture route serves under `item` read (`item picture get`), but only an attachment that is an item's chosen picture,
+  its thumbnail, or the image it falls back to (or inherits through a merge). Every other attachment still needs the
+  `attachment` capability. So the POS clerk (`item` and `pos.sell`) sees pictures on the POS boxes and in lookup.
 
 ## 7. Camera scanning (R190)
 
@@ -464,6 +468,70 @@ then the POS itself. Every increment keeps a company without POS reading exactly
 photos, builds a two-level layout, rings up ten sales (walk-in and named, cash with change, card, one split, one held and
 resumed), refunds one, closes the day and makes the deposit; a clerk signs in and sees only the POS; an agent arranges a
 group and answers "what should be in the drawer?". Checked afterwards: criteria 1–9, against the twin company.
+
+### As built: increment 1 (item pictures)
+
+- **Storage.** co0115 on co0114 (renumbered after main's head at the merge of 2026-10-28; R107 bulk edit renumbers
+  after it if it lands later): `items.picture_attachment_id` and `items.picture_thumbnail_attachment_id`, each a
+  foreign key to `attachments` with RESTRICT, and an index on each. Neither demo seed carries a picture (a seed has no
+  image files). Pixel sizes are checked, not stored: storing them would add columns to `attachments` (whose output
+  copies every column) for no reader yet.
+- **Commands.** `item picture set <item> PATH [--thumbnail-attachment ID]` (a binary transfer, as `attachment add`),
+  `item picture use <item> <attachment> [--thumbnail-attachment ID]` (an image already uploaded; linked to the item if
+  it is not), `item picture clear <item> [--keep-file]`, and `item picture get <attachment>` (a binary download).
+  The contract's `set --attachment` is `use`, because a transfer command always takes a body. `set`, `use` and `clear`
+  are capability `item` (standard) with `attachment` (standard) beside it; `get` is `item` (member) alone and serves
+  only a file some item shows as its picture or thumbnail (any other is not found). Layer `item-picture-v1` on
+  `capabilities-v1` (838 commands, descriptor fb1968ec). The bytes decide: JPEG, PNG or WebP by their first bytes,
+  stored under that type; HEIC (and AVIF) refused with the camera-settings message; a picture is at most 20,000,000
+  bytes, a thumbnail 1,000,000; the width and height are read from the header (PNG IHDR, WebP VP8, VP8L or VP8X, a
+  JPEG's SOF segment within its first 256 KiB) and a picture over 12,000 px on a side or 50 megapixels in all, or
+  whose size cannot be read, is refused. Neither `set` nor `use` takes the picture as its own thumbnail. Replacing a
+  picture unlinks the old picture and its thumbnail from the item (bytes and history kept), and `clear` unlinks the
+  picture and its thumbnail, so Remove removes and nothing replaced comes back; the item then shows its newest
+  remaining image. `attachment unlink` refuses the link of a chosen picture or thumbnail ("remove it with
+  `item picture clear`"), so a picture never dangles. A merged-away item's picture changes only by undoing the merge
+  (`E_RECORD_IN_USE`, declared on the three writes).
+- **Reading.** `item show`, `item list` and every item output carry `picture` and `thumbnail` (attachment id, sha256,
+  media type, size, `chosen`, and `url` `/c/<company>/picture/<id>/<sha256>`); `item query` offers both as columns.
+  With nothing chosen, `picture` is the newest active linked attachment whose stored type is JPEG, PNG or WebP and that
+  is not a thumbnail; with none of those, a merge's survivor shows the chosen picture (and thumbnail) of the newest
+  item merged into it (`chosen: false`). A thumbnail is any item's current thumbnail or any file ever linked to an item
+  under the caption "Item picture thumbnail": each thumbnail's link carries that caption (an existing link is
+  recaptioned when the file becomes one), so a former thumbnail is never a fallback, even linked again. The thumbnail
+  shows only beside a chosen or inherited picture.
+- **Browser.** The item page shows the picture beside the name with Take photo (`accept="image/*"
+  capture="environment"`), Choose picture and Remove, posted through htmx. `static/item-picture.js` decodes with
+  `createImageBitmap` (EXIF orientation applied), sends a 1600 px JPEG and a 320 px JPEG thumbnail; a file the browser
+  cannot decode goes up as it is so the server's refusal shows; a photo no larger than 320 px goes up with no thumbnail
+(the server also keeps none when both bodies are the same bytes); a post htmx does not swap (refused, 404, 5xx, no
+  network) shows what happened. The thumbnail goes up first as an ordinary file (`attachment add`, caption "Item
+  picture thumbnail", its type from its bytes), then the picture (`item picture set`); if the picture is refused the
+  thumbnail is unlinked again. The upload refuses a post over the limits before reading it (Content-Length, then the
+  stream capped, then `max_part_size`), and the upload and Remove run their work in the thread pool. Images are
+  served at `/c/<company>/picture/<attachment>/<sha256>` through `item picture get`, streamed chunk by chunk, only
+  when the bytes are an image and the hash matches, with the sniffed type, `Cache-Control: private,
+  max-age=31536000, immutable`, `nosniff` and `Content-Security-Policy: default-src 'none'; sandbox`; an image that
+  will not load shows "No picture". Thumbnails show in the item list (a Picture column, present when any item on the
+  page has a picture; on phone cards too), the pick screen, the pack screen and the fulfillment worksheet; a picture
+  with no thumbnail (set from the CLI or MCP, or a fallback) shows a placeholder there, never the full picture (no
+  server-side scaling, so no new dependency). The item reference picker is a datalist, which cannot draw images: each
+  item option carries `data-picture` for the POS picker.
+- **Imports and bulk edit.** Not importable: `item picture set` and `use` are listed "not-a-record" and `clear`
+  "destructive" in `import_kinds.NOT_IMPORTABLE`; a picture is a file, never a cell of a row. Not bulk-editable for
+  the same reason (R107 bulk edit takes item fields from the `item update` input, which has no picture).
+- **Known limits.** The fallback reads the stored media type, so a non-image uploaded under an image name can be the
+  fallback; the workbench refuses to serve it (404) and the page shows "No picture". A JPEG whose frame header lies
+  beyond its first 256 KiB is refused as unreadable (save it again). A caption "Item picture thumbnail" typed on an
+  ordinary file keeps it from being a fallback.
+- **Tests.** `tests/test_item_pictures.py` (set, replace, clear and fall back; a CLI picture with no thumbnail;
+  refusals; `item query`), `tests/test_item_pictures_review.py` (the review's fixes: set A, set B, Remove shows no
+  picture; pixel caps from PNG, JPEG and WebP headers; own-thumbnail refusal; merge inheritance; the thread pool; an
+  oversize post refused before it is read; a reader of items without attachments; the list placeholder; the
+  thumbnail's type from its bytes), `tests/test_item_pictures_surfaces.py` (four transports, `get` included), and
+  `tests/test_item_pictures_browser.py` (real Chrome at 1440 and 390: Take photo, the HEIC message, scaling to
+  1600x1200 and 320x240, headers, the item list, the pick screen, Remove; nothing scrolls sideways; a photo with EXIF
+  orientation 6 stored upright; a broken image shows "No picture"; an unswapped failure shows its message).
 
 ## 16. Open questions
 

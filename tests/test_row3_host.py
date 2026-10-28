@@ -558,6 +558,18 @@ def _strip(details):
 
 # ---------------------------------------------------------------- parity: library and HTTP
 
+def _demo_picture(hosted, cid):
+    """Give a demo item a picture over HTTP, so the picture download has one to serve."""
+    from bookflow.core.transfer_protocol import encode_input
+    from tests.test_item_pictures import png
+    body = {"item": "Pipe Sealant", "original_filename": "sealant.png", "media_type": "image/png"}
+    reply = hosted.api.post(f"/companies/{cid}/transfers/item.picture.set", headers={
+        **hosted.bearer, "X-Bookflow-Input": encode_input(body), "X-Bookflow-Reason": "HTTP parity",
+        "Content-Type": "application/octet-stream"}, content=png())
+    assert reply.status_code == 200, reply.text
+    return reply.json()["picture"]["attachment_id"]
+
+
 def _read_calls(hosted):
     """One call per routed read command, with real identifiers taken from the running host."""
     cid = hosted.company_id
@@ -578,6 +590,7 @@ def _read_calls(hosted):
         "note show": ({"note": note["id"]}, cid),
         "attachment list": ({"record_type": "company_info", "record_id": cid}, cid),
         "attachment get": ({"attachment": hosted.ok("attachment.list", {"record_type": "company_info", "record_id": cid}, company=cid)["items"][0]["attachment_id"]}, cid),
+        "item picture get": ({"attachment": _demo_picture(hosted, cid)}, cid),
         "activity": ({"record_type": "company_info", "record_id": cid}, cid),
         "hub audit list": ({"limit": 5}, None),
         "hub audit show": ({"event": hub_event}, None),

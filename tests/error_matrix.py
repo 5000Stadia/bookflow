@@ -2814,6 +2814,25 @@ MATRIX['bank-line undo'] = {
     'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
     'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
 }
+
+# R114 increment 1: the item picture.
+_ITEM_PICTURE = {
+    'E_RECORD_NOT_FOUND': 'no such item, or no such attachment to use or as the thumbnail',
+    'E_VERSION_CONFLICT': 'the item changed since its expected_version',
+    'E_DB_BUSY': 'attachment collection requires recovery',
+    'E_IDEMPOTENCY_MISMATCH': 'the key was used for a different picture write',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown directive', 'E_DIRECTIVE_INACTIVE': 'inactive directive',
+    'E_RECORD_IN_USE': 'the item is merged into another; undo the merge first',
+}
+MATRIX['item picture set'] = dict(_ITEM_PICTURE, E_IO='the attachment body could not be read or published',
+                                  E_VALUE_RANGE='the picture is larger than 20,000,000 bytes or the company limit')
+MATRIX['item picture use'] = dict(_ITEM_PICTURE, E_IO='the attachment body was collected or cannot be verified',
+                                  E_VALUE_RANGE='the picture or thumbnail is larger than its limit')
+MATRIX['item picture clear'] = dict(_ITEM_PICTURE)
+MATRIX['item picture get'] = {
+    'E_RECORD_NOT_FOUND': 'no item shows this attachment as its picture or thumbnail',
+    'E_IO': 'the picture body was collected, missing or corrupt', 'E_DB_BUSY': 'attachment collection requires recovery',
+    'E_VALUE_RANGE': 'invalid company byte limit'}
 # Grid edits (R107 increment 6).
 _BULK_WRITE = {
     'E_VALIDATION': 'an unknown column or kind, a value the column cannot hold, nothing asked, an operation on the '

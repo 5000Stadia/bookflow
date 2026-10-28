@@ -1,4 +1,4 @@
-"""co0115. Grid edits (R107 increment 6, design/bulk-import.md §7, §8a).
+"""co0116. Grid edits (R107 increment 6, design/bulk-import.md §7, §8a).
 
 Two new tables, moving no stored row: ``bulk_edit_runs`` (one grid edit: the selection and what was asked, previewed
 then applied as one batch) and ``bulk_edit_rows`` (its diff, one row per record changed or refused, with the apply
@@ -8,8 +8,8 @@ is frozen: this migration never imports current application metadata.
 """
 from alembic import op
 
-revision = 'co0115'
-down_revision = 'co0114'
+revision = 'co0116'
+down_revision = 'co0115'
 branch_labels = depends_on = None
 
 DDL = ("\nCREATE TABLE bulk_edit_runs (\n\tid VARCHAR(26) NOT NULL, \n\tkind VARCHAR(32) NOT NULL, \n\tstate VARCHAR(16) NOT NULL, \n\tatomic BOOLEAN NOT NULL, \n\tselection TEXT NOT NULL, \n\toperations TEXT NOT NULL, \n\tlabel VARCHAR(200) NOT NULL, \n\trecord_count INTEGER NOT NULL, \n\tunchanged_count INTEGER NOT NULL, \n\tbatch_id VARCHAR(26), \n\treason TEXT, \n\tversion INTEGER NOT NULL, \n\tcreated_at VARCHAR(32) NOT NULL, \n\tcreated_by VARCHAR(26) NOT NULL, \n\tcreated_via VARCHAR(16) NOT NULL, \n\tupdated_at VARCHAR(32) NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT ck_bulk_edit_run_state CHECK (state IN ('previewed', 'applying', 'applied', 'applied_partly', 'rolled_back', 'cancelled', 'failed')), \n\tCONSTRAINT ck_bulk_edit_run_kind CHECK (kind IN ('customer', 'vendor', 'item', 'account')), \n\tFOREIGN KEY(batch_id) REFERENCES batches (id)\n)\n\n", "\nCREATE TABLE bulk_edit_rows (\n\trun_id VARCHAR(26) NOT NULL, \n\tseq INTEGER NOT NULL, \n\trecord_type VARCHAR(64) NOT NULL, \n\trecord_id VARCHAR(26) NOT NULL, \n\tlabel VARCHAR(1004) NOT NULL, \n\tversion INTEGER NOT NULL, \n\tstatus VARCHAR(16) NOT NULL, \n\tchanges TEXT NOT NULL, \n\tcode VARCHAR(64), \n\tmessage TEXT, \n\toutcome VARCHAR(16), \n\toutcome_code VARCHAR(64), \n\toutcome_message TEXT, \n\tversion_after INTEGER, \n\tmerged_over TEXT, \n\tevent_id VARCHAR(26), \n\tapplied_at VARCHAR(32), \n\tPRIMARY KEY (run_id, seq), \n\tCONSTRAINT ck_bulk_edit_row_status CHECK (status IN ('change', 'refused')), \n\tCONSTRAINT ck_bulk_edit_row_outcome CHECK (outcome IS NULL OR outcome IN ('updated', 'merged', 'conflict', 'refused', 'not_run', 'rolled_back')), \n\tFOREIGN KEY(run_id) REFERENCES bulk_edit_runs (id), \n\tFOREIGN KEY(event_id) REFERENCES audit_events (id)\n)\n\n")
@@ -25,7 +25,7 @@ def upgrade():
     reserved = set(TABLES) | set(TRIGGERS) | {statement.split()[2] for statement in INDEXES}
     existing = {name.casefold() for name in connection.exec_driver_sql('SELECT name FROM sqlite_schema').scalars().all()}
     if {name.casefold() for name in reserved} & existing:
-        raise RuntimeError('co0115 reserved object already exists')
+        raise RuntimeError('co0116 reserved object already exists')
     for statement in DDL + INDEXES + GUARDS:
         connection.exec_driver_sql(statement)
 

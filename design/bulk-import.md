@@ -1154,7 +1154,7 @@ per call), the preview about 0.055 s per invoice, and the reversal about 0.15 s 
 
 ## As built: increment 6
 
-- **Migration co0115** (on co0114): `bulk_edit_runs` (one grid edit: the selection, what was asked, its label, the
+- **Migration co0116** (on co0115; numbered co0115 until item pictures took that number at the merge): `bulk_edit_runs` (one grid edit: the selection, what was asked, its label, the
   count of records it leaves as they are; only state, version and the batch, once set, change) and `bulk_edit_rows`
   (its diff, one row per record changed or refused, with field, before and after, input-shaped and as shown, the
   version the preview read, and the apply outcome written once: `updated`, `merged`, `conflict`, `refused`,
@@ -1162,7 +1162,7 @@ per call), the preview about 0.055 s per invoice, and the reversal about 0.15 s 
   the record.
 - **Commands** (`company/bulk_edit.py`, `commands/bulk_edit_cmds.py`): `bulk-edit columns`, `grid`, `show`, `query`
   (member reads) and `preview`, `apply`, `reverse` (standard writes), under the new capability `bulk-edit` (layer
-  `bulk-edit-v1`, re-chained at the merge onto `capabilities-v1`: 841 commands, descriptor 4d42ba55), each record checked again by its own
+  `bulk-edit-v1`, re-chained at the merges onto `item-picture-v1`: 845 commands, descriptor c4664e87), each record checked again by its own
   `update` and `show`. No `approve`, no threshold (Kabe's 2026-10-28 ruling above).
 - **Columns** are the update command's scalar inputs that its `show` also gives, so a reversal can restore each
   exactly: never nested records (addresses, contacts, members, vendor profiles, site settings), never an account's
@@ -1224,7 +1224,7 @@ nothing ever ends up changed but impossible to undo.
 - **An unfinished apply is never undone in part** (high). `bulk-edit reverse` refuses a run still `applying`,
   saying to finish it (`bulk-edit apply <run>`) or cancel it (`bulk-edit apply <run> --cancel`). Cancel marks the
   rows still waiting `not_run` and reverses what landed through the batch, as one unit; the run ends `cancelled`
-  (a new state in co0115), or `failed` with its batch still live if that reversal is refused, so Undo finishes it
+  (a new state in co0116), or `failed` with its batch still live if that reversal is refused, so Undo finishes it
   later. An apply refuses to resume once its batch is no longer live (the run ends `cancelled`, the rest
   `not_run`), and the ledger itself (`batches.record_effect`, shared by imports and bank sorts) refuses an effect
   written into a batch that is not live, so a write can never land in a closed batch.
@@ -1253,7 +1253,7 @@ nothing ever ends up changed but impossible to undo.
   since; grid pages and the paste fingerprint; a later batch named only when it can be reversed; a strict kind's
   ordering never skipped. In `tests/test_bulk_edit_browser.py`, 2,000 items at 390 px: 50 cards, the bar in view,
   "All 2000 matching", the changes paged, the apply in slices, a reload part way showing Still applying, then done.
-  After merging main (cc14944b), `bulk-edit-v1` sits on `capabilities-v1` (841 commands, descriptor 4d42ba55).
+  After merging main (7f307eb8, item pictures), the migration is co0116 on co0115 and `bulk-edit-v1` sits on `item-picture-v1` (845 commands, descriptor c4664e87).
 
 **Timings** (`tools/measure_bulk_edit.py ROWS`, root NVMe, service items, three columns, a 5 percent rise rounded
 to 0.05 over every item; seconds, 2026-10-28):

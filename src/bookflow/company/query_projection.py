@@ -181,6 +181,13 @@ def configure(noun, descriptors, p, session):
             p.columns[name] = table.c.system_role.is_not(None)
         elif name == 'conversion_target':
             p.columns[name] = table.c.converted_to_type
+        elif noun == 'item' and name in ('picture', 'thumbnail'):  # R114 increment 1
+            from bookflow.company import item_pictures
+            p.columns[name] = item_pictures.query_column(table, name)
+            p.extra['__picture_chosen'] = table.c.picture_attachment_id.is_not(None)
+            company = session.company_row['id']
+            decoders[name] = lambda value, row, which=name: item_pictures.decode_query(
+                company, value, row['__picture_chosen'], which)
         elif name == 'item_count':
             p.columns[name] = p.sorts['item_count']
         elif name == 'usage_count':

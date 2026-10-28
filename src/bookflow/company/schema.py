@@ -1295,6 +1295,11 @@ globals().update(_delivery_schema.define_schedule_tables(metadata, _column, _tab
 # The bank inbox (co0112, R108 increment 1): imports, lines, their history, what each account last received.
 from bookflow.company import bank_feed_schema as _bank_feed_schema
 globals().update(_bank_feed_schema.define_tables(metadata, _column, _table))
-# Grid edits (co0115, R107 increment 6): a selection's diff, applied as one reversible batch.
+# Item pictures (co0115, R114 increment 1, design/point-of-sale.md §6): one picture and its thumbnail per item.
+items.append_column(_column("picture_attachment_id", sa.String(26), "The item's chosen picture: an image attachment linked to the item; null shows its newest linked image.", sa.ForeignKey("attachments.id", ondelete="RESTRICT"), nullable=True))
+items.append_column(_column("picture_thumbnail_attachment_id", sa.String(26), "A small copy of the chosen picture, linked to the item; null when none was made.", sa.ForeignKey("attachments.id", ondelete="RESTRICT"), nullable=True))
+sa.Index("ix_items_picture_attachment_id", items.c.picture_attachment_id)
+sa.Index("ix_items_picture_thumbnail_attachment_id", items.c.picture_thumbnail_attachment_id)
+# Grid edits (co0116, R107 increment 6): a selection's diff, applied as one reversible batch.
 from bookflow.company import bulk_edit_schema as _bulk_edit_schema
 globals().update(_bulk_edit_schema.define_tables(metadata, _column, _table))

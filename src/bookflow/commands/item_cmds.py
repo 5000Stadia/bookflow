@@ -152,6 +152,9 @@ def _localized(record: items.ItemOutput, session: Session) -> dict[str, Any]:
     values = record.model_dump(mode="python")
     values["created_at"] = localize(session, values["created_at"])
     values["updated_at"] = localize(session, values["updated_at"])
+    from bookflow.company.item_pictures import absolute
+    for key in ("picture", "thumbnail"):
+        values[key] = absolute(session.company_row["id"], values.get(key))
     return values
 
 

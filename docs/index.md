@@ -83,6 +83,7 @@ An AI agent installing Bookflow for someone starts with the agent install page: 
 - [`inventory-transfer`](cli/inventory-transfer.md)
 - [`invoice`](cli/invoice.md)
 - [`item`](cli/item.md)
+- [`item picture`](cli/item-picture.md)
 - [`item query`](cli/item-query.md)
 - [`item-category`](cli/item-category.md)
 - [`item-category query`](cli/item-category-query.md)

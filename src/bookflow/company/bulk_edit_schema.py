@@ -1,4 +1,4 @@
-"""Grid edits (co0115, R107 increment 6; design/bulk-import.md §7, §8a).
+"""Grid edits (co0116, R107 increment 6; design/bulk-import.md §7, §8a).
 
 - ``bulk_edit_runs``: one grid edit of one list kind: what was asked (the selection, the cell changes and column
   operations), previewed, then applied as one batch. Only ``state``, ``batch_id`` (once), ``version`` and
