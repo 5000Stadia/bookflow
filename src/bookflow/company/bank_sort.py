@@ -475,7 +475,7 @@ def add(s, ctx, inp, *, dry_run: bool) -> dict:
         raise _many(problems, len(items), 'added')
     # Each command is tried first (a closed period, a locked account, an inactive name refuse here, with the
     # command's own code), so a batch is added whole or not at all.
-    if dry_run or len(plans) > 1:
+    if dry_run or inp.lines:
         for line, plan in plans:
             try:
                 batches.run_nested(s, ctx, plan['command'], plan['input'], source_ref=f"bank-line:{line['id']}",
