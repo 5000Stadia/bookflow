@@ -197,8 +197,17 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0106 = importlib.import_module("bookflow.storage.company_migrations.versions.0106_shipment_packing")
     co0107 = importlib.import_module("bookflow.storage.company_migrations.versions.0107_delivery_connections")
 
+    co0108 = importlib.import_module("bookflow.storage.company_migrations.versions.0108_batches_imports")
+
     def older(conn):
-        # Newest first: co0107 (on co0106): its guard and the connections table.
+        # Newest first: co0108 (on co0107): its guards, the hierarchy lists' path indexes and five tables.
+        for trigger in co0108.TRIGGERS:
+            conn.execute(f"DROP TRIGGER {trigger}")
+        for statement in co0108.PATH_INDEXES:
+            conn.execute(f"DROP INDEX {statement.split()[2]}")
+        for table in co0108.TABLES:
+            conn.execute(f"DROP TABLE {table}")
+        # Then co0107 (on co0106): its guard and the connections table.
         for trigger in co0107.TRIGGERS:
             conn.execute(f"DROP TRIGGER {trigger}")
         for table in co0107.TABLES:
@@ -425,7 +434,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))
     restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older",
                                               "organization": "Older Books Organization"})
-    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0107"
+    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0108"
     folder = _folder(client, restored["company_id"])
     # The migration took its verified backup of the restored database first, as every migration does.
     assert list((folder / "backups").glob("*-from-co0062.db"))

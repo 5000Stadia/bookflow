@@ -24,7 +24,7 @@ Database: `company`.
 | `full_name` | VARCHAR(1004) | no | — | — | — | — | Materialized colon-delimited name from the root through this record. |
 | `full_name_key` | VARCHAR(2004) | no | — | unique | — | — | NFC-normalized and case-folded full-name key. |
 | `depth` | INTEGER | no | — | — | — | — | One-based hierarchy depth from one through five. |
-| `path` | VARCHAR(136) | no | — | — | — | — | Binary-collated internal path encoded as slash-delimited ULIDs. |
+| `path` | VARCHAR(136) | no | — | — | ix_items_path | — | Binary-collated internal path encoded as slash-delimited ULIDs. |
 | `type` | VARCHAR(24) | no | — | — | — | — | Discriminated standard item type. |
 | `category_id` | VARCHAR(26) | yes | — | — | ix_items_category_id | item_categories.id | Independent active item-category id; null when unclassified. |
 | `description` | TEXT | yes | — | — | — | — | Sales description; null when not recorded. |

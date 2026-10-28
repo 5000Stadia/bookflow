@@ -108,6 +108,7 @@ def _hierarchy(table_name: str) -> list:
         sa.UniqueConstraint("full_name_key", name=f"uq_{table_name}_full_name_key"),
         sa.Index(f"ux_{table_name}_root_name", "name_key", unique=True, sqlite_where=sa.text("parent_id IS NULL AND active = 1")),
         sa.Index(f"ux_{table_name}_sibling_name", "parent_id", "name_key", unique=True, sqlite_where=sa.text("parent_id IS NOT NULL AND active = 1")),
+        sa.Index(f"ix_{table_name}_path", "path"),
     ]
 
 
@@ -1285,3 +1286,6 @@ for _col in _shipment_packing_schema.company_info_columns(_column):
 for _col in _shipment_packing_schema.revision_columns(_column):
     shipment_revisions.append_column(_col)
 globals().update(_delivery_schema.define_queue_tables(metadata, _column, _table, _common))
+# Reversible batches and list imports (co0108, R107 increments 0 and 1).
+from bookflow.company import import_schema as _import_schema
+globals().update(_import_schema.define_tables(metadata, _column, _table))

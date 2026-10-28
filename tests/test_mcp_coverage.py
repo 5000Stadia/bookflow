@@ -88,8 +88,11 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +3 drafts and packing (R181 increment 4): shipment create, pack, cancel.
     # +11 the delivery queue (R112 increment 2): delivery approve/retry/run, delivery-connection
     # add/update/enable/disable/remove/check/show/query.
+
+    # +12 imports and batches (R107 increments 0 and 1): import kinds/template/preview/run/show/query/rows/errors/
+    # reverse/cancel, batch show/query.
     # +2 the fulfillment worksheet (R181 increment 5): report order-fulfillment, report shipments.
-    assert len(rows) == 793
+    assert len(rows) == 805
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
@@ -378,9 +381,13 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # freight_item, invoice), shipment update 2 (freight), company update 2 (weight_unit, shipping_item_id).
     # 4103 -> 4115 (R112 inc 2, measured): the queue's optional inputs (approve's messages, retry's and the connection
     # writes' expected_version, a connection's secret_ref, daily_limit and settings) -- their null branches.
-    # 4115 -> 4125 (R181 inc 5, measured): report order-fulfillment's site, customer, status, newly_shippable and
+    # 4115 -> 4136 (R107 inc 0-1, measured): the null branches of the import and batch commands' optional inputs --
+    # import preview's content, attachment, file_name, source, columns, constants, key, delimiter, decimal and
+    # date_order (10); import query's kind, state, cursor (3); import rows' phase, status, cursor (3); import reverse's
+    # fingerprint (1); batch query's kind, state, scope, cursor (4). No new variant kind.
+    # 4136 -> 4146 (R181 inc 5, measured): report order-fulfillment's site, customer, status, newly_shippable and
     # cursor, report shipments' date_from, customer, site, ship_method and cursor -- their null branches.
-    assert sum(len(group["paths"]) for group in mapped)==4125
+    assert sum(len(group["paths"]) for group in mapped)==4146
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

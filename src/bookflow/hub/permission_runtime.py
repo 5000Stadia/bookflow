@@ -169,7 +169,8 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.DELIVERY_POLICY_VERSION: '085b7a93194e439557234ed8d88a7d7bdfd39ed06f8b2cbdddb732daca07561b',
     c.PACKING_POLICY_VERSION: '10872774b49e7497c34eccde2882c74e49c36ead5d7d2ff765399dd31fae79c8',
     c.DELIVERY_QUEUE_POLICY_VERSION: '2e19e20f01b2cdc3110be9f381a9ec54fa4f7f0ba5ef6880b49189576076554c',
-    c.WORKSHEET_POLICY_VERSION: 'a920b7395590070c31aeb2c1fbcba51165fa2f9ab4a03924e93b56fcf01dbe18',
+    c.IMPORT_POLICY_VERSION: '0db21ee9713630abf0d4a5d81c282ee608483cd6f16b8a2aa40e3a14712dfe4a',
+    c.WORKSHEET_POLICY_VERSION: '7e3d2e9ea7d8bf2413dd1d177365ca0600e896d2975a8c57a360f99ea34ac51c',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -314,6 +315,7 @@ def _full_known():
     from . import permission_delivery_catalog
     from . import permission_packing_catalog
     from . import permission_delivery_queue_catalog
+    from . import permission_import_catalog
     from . import permission_worksheet_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
@@ -385,6 +387,7 @@ def _full_known():
         c.DELIVERY_POLICY_VERSION: permission_delivery_catalog,
         c.PACKING_POLICY_VERSION: permission_packing_catalog,
         c.DELIVERY_QUEUE_POLICY_VERSION: permission_delivery_queue_catalog,
+        c.IMPORT_POLICY_VERSION: permission_import_catalog,
         c.WORKSHEET_POLICY_VERSION: permission_worksheet_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is

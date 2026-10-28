@@ -24,7 +24,7 @@ Database: `company`.
 | `full_name` | VARCHAR(1004) | no | — | — | — | — | Materialized colon-delimited name from the root through this record. |
 | `full_name_key` | VARCHAR(2004) | no | — | unique | — | — | NFC-normalized and case-folded full-name key. |
 | `depth` | INTEGER | no | — | — | — | — | One-based hierarchy depth from one through five. |
-| `path` | VARCHAR(136) | no | — | — | — | — | Binary-collated internal path encoded as slash-delimited ULIDs. |
+| `path` | VARCHAR(136) | no | — | — | ix_accounts_path | — | Binary-collated internal path encoded as slash-delimited ULIDs. |
 | `number` | VARCHAR(7) | yes | — | — | — | — | Company-unique account number of one through seven ASCII digits; null when unnumbered. |
 | `number_key` | VARCHAR(7) | yes | — | unique | — | — | Normalized account-number key; identical to the ASCII-digit number or null. |
 | `type` | VARCHAR(32) | no | — | — | — | — | Standard account type used for posting and statements. |

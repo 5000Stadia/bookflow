@@ -966,6 +966,11 @@ def _apply(cmd: Command, plan: Plan | None, ctx: Context, s: Session, key=(None,
                     write_event_to(s.company, ctx, cmd.name, applied.summary, co_entries, actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code)
                 if key_db is s.company and ihash and changed:
                     idempotency.store(s.company, s.actor.id, ctx.idempotency_key, cmd.name, ihash, ctx.request_id, output)
+                # A batch (an import row, a reversal step) records what this write did in its own transaction,
+                # so a ledger row never exists without its write or the reverse (design/bulk-import.md §8a).
+                recorder = getattr(s, "batch_recorder", None)
+                if recorder is not None and s.company is not None and s.company.write_transaction:
+                    recorder(s, cmd, applied, output)
                 if s.company.write_transaction:
                     s.commits.commit(s.company, "dispatch.apply")
                 try:
