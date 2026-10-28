@@ -32,9 +32,17 @@ SORT_SCOPE = 'bank-inbox'
 # Days apart the two lines of one transfer may be (design/bank-feeds.md §4 and §12, default 5): money leaves one
 # account and arrives in the other within a few business days.
 TRANSFER_DAYS = 5
-_LINK = ('state', 'entry_id', 'movement', 'link_how', 'match_reason', 'created', 'payee_display', 'ignore_reason')
+# Days either side a one-sided transfer already posted from the other account is looked for, when that account's line
+# comes in later than TRANSFER_DAYS (a cheque-like transfer can take weeks to show on the other statement): it is
+# completed, never posted twice.
+LATE_TRANSFER_DAYS = 30
+_LINK = ('state', 'entry_id', 'movement', 'link_how', 'match_reason', 'created', 'payee_display', 'ignore_reason',
+         'entry_date')
 _CLEAR = dict(state='waiting', entry_id=None, movement=None, link_how=None, match_reason=None, created=0,
-              payee_display=None, ignore_reason=None)
+              payee_display=None, ignore_reason=None, entry_date=None)
+# What a line's sort is, compared by an undo: the state and link, not the wording around it.
+_IDENT = ('state', 'entry_id', 'created', 'ignore_reason')
+_LINKED = ('matched', 'settled', 'transfer', 'added')
 _NOUN = {'vendor': 'vendor', 'customer': 'customer', 'employee': 'employee', 'other_name': 'other-name'}
 
 
@@ -77,7 +85,8 @@ def _import_batch(s, line: dict) -> dict:
 
 
 def _sortable(s, line: dict, states=('waiting',)) -> str:
-    """The line's import batch, once the line can be sorted: live, its import standing, in one of ``states``."""
+    """The line's import batch, once the line can be sorted: live, its import standing, no undo of a batch over it part
+    way, in one of ``states``."""
     if not line['live']:
         raise _refuse('line', f"{_label(s, line)} went with its import's reversal; it can no longer be sorted.",
                       line=line['id'])
@@ -86,11 +95,108 @@ def _sortable(s, line: dict, states=('waiting',)) -> str:
         raise _refuse('line', f"{_label(s, line)} belongs to import {line['import_id']}, which is being reversed "
                               f"({batch['state']}); `bank-feed reverse {line['import_id']}` finishes it.",
                       line=line['id'], state=batch['state'])
+    undoing = _undoing(s, line['id'])
+    if undoing is not None:
+        raise _refuse('line', f"{_label(s, line)}: undo in progress; finish it with `bank-line undo {undoing}` (its "
+                              'lines stay as they are until it ends).', line=line['id'], batch=undoing)
     if line['state'] not in states:
         raise _refuse('line', f"{_label(s, line)} is {line['state']}" + (
-            '; `bank-line unmatch` returns it to waiting first.' if line['state'] != 'waiting' else '.'),
+            f'; {_way_back(s, line)}.' if line['state'] != 'waiting' else '.'),
             line=line['id'], state=line['state'])
     return batch['id']
+
+
+def _undoing(s, line_id: str) -> str | None:
+    """A bank-sort batch over this line whose undo is part way (reversing, or blocked part way): the line is frozen."""
+    return s.company.conn.execute(sa.text(
+        "SELECT b.id FROM batch_effects e JOIN batches b ON b.id = e.batch_id WHERE e.record_type = 'bank_line' "
+        "AND e.record_id = :line AND b.kind = :kind AND b.state IN ('reversing', 'blocked') LIMIT 1"),
+        {'line': line_id, 'kind': SORT_KIND}).scalar()
+
+
+def _sort_batch_of(s, line: dict) -> str | None:
+    """The live bank-sort batch that last sorted this line as it now stands (its undo takes the act back)."""
+    return s.company.conn.execute(sa.text(
+        "SELECT b.id FROM batch_effects e JOIN batches b ON b.id = e.batch_id WHERE e.record_type = 'bank_line' "
+        "AND e.record_id = :line AND e.version_after = :version AND b.kind = :kind AND b.state = 'live' LIMIT 1"),
+        {'line': line['id'], 'version': line['version'], 'kind': SORT_KIND}).scalar()
+
+
+def _way_back(s, line: dict) -> str:
+    """How this line returns to waiting, as it stands now: the one command (or two) that will do it."""
+    if (line['created'] or line['state'] == 'added') and line['entry_id'] and \
+            line['id'] not in entry_trouble(s, [line]):
+        kind = s.company.conn.execute(sa.select(c.transactions.c.type).where(
+            c.transactions.c.id == line['entry_id'])).scalar() or 'entry'
+        family = bank_reversal._family(s, line['entry_id'], kind)
+        inverse = ' then '.join(f'`{cmd}`' for cmd, _ in bank_reversal.INVERSE.get(family, ())) or 'its own command'
+        sort_id = _sort_batch_of(s, line)
+        return (f"it was entered as {family.replace('_', ' ')} {line['entry_id']}: "
+                + (f'`bank-line undo {sort_id}` takes back its batch, or ' if sort_id else '')
+                + f"delete that entry ({inverse}) and then `bank-line unmatch --line {line['id']}` releases it, or "
+                f"reverse its import (`bank-feed reverse {line['import_id']}`)")
+    return f"`bank-line unmatch --line {line['id']}` returns it to waiting first"
+
+
+def entry_trouble(s, rows) -> dict[str, str]:
+    """Each linked line whose entry is no longer what it was linked to (design §2, `entry_gone`): voided, deleted, or
+    changed in amount or date on the line's account; with the reason. Read for many lines in a few queries."""
+    linked = [r for r in rows if r.get('entry_id') and r.get('live', 1) and r.get('state') in _LINKED]
+    if not linked:
+        return {}
+    from bookflow.company.reconciliation_preparation import groups, statement_amount
+    conn = s.company.conn
+    ids = sorted({r['entry_id'] for r in linked})
+    present, voided = set(), set()
+    for chunk in bank_feeds._chunks(ids):
+        for tid, at in conn.execute(sa.select(c.transactions.c.id, c.transactions.c.voided_at).where(
+                c.transactions.c.id.in_(chunk))).all():
+            present.add(tid)
+            if at is not None:
+                voided.add(tid)
+    from bookflow.core.deletion_families import tombstone_tables
+    deleted = set(ids) - present
+    for name in tombstone_tables():
+        table = c.metadata.tables[name]
+        for chunk in bank_feeds._chunks(ids):
+            deleted |= set(conn.execute(sa.select(table.c.transaction_id).where(
+                table.c.transaction_id.in_(chunk))).scalars())
+    voided -= deleted
+    t = c.metadata.tables
+    versions, heads = t['reconciliation_effect_versions'], t['reconciliation_effect_heads']
+    moves: dict[tuple[str, str], list[tuple[str, int]]] = {}
+    for chunk in bank_feeds._chunks([i for i in ids if i not in deleted and i not in voided]):
+        values = [dict(v) for v in conn.execute(sa.select(
+            versions.c.key_id, versions.c.transaction_id, versions.c.account_id, versions.c.account_type,
+            versions.c.effective_date, versions.c.signed_debit, versions.c.movement_snapshot).select_from(
+            versions.join(heads, heads.c.version_id == versions.c.id)).where(
+            versions.c.transaction_id.in_(chunk), versions.c.active == 1)).mappings()]
+        for group in groups(values).values():
+            first = group[0]
+            moves.setdefault((first['transaction_id'], first['account_id']), []).append(
+                (first['effective_date'], sum(statement_amount(v) for v in group)))
+    kinds = {}
+    for chunk in bank_feeds._chunks(sorted({r['account_id'] for r in linked})):
+        kinds.update(conn.execute(sa.select(c.accounts.c.id, c.accounts.c.type).where(c.accounts.c.id.in_(chunk))).all())
+    out = {}
+    for r in linked:
+        e = r['entry_id']
+        if e in deleted:
+            out[r['id']] = f'entry {e} was deleted'
+        elif e in voided:
+            out[r['id']] = f'entry {e} was voided'
+        else:
+            signed = -r['amount'] if kinds.get(r['account_id']) == 'credit_card' else r['amount']
+            found = moves.get((e, r['account_id']), [])
+            days = [d for d, a in found if a == signed]
+            if not days:
+                places = bank_feeds._currency_places(s, r['account_id'])
+                now = ', '.join(bank_feeds.decimal(abs(a), places) for _, a in found) or 'nothing'
+                out[r['id']] = (f"entry {e} was changed: it moves this account by {now}, not the line's "
+                                f"{bank_feeds.decimal(abs(r['amount']), places)}")
+            elif r.get('entry_date') and r['entry_date'] not in days:
+                out[r['id']] = f"entry {e} was changed: it is dated {days[0]}, not {r['entry_date']}"
+    return out
 
 
 def _how(s) -> str:
@@ -127,8 +233,10 @@ def _write_line(s, ctx, line: dict, after: dict, *, kind: str, details: dict, ev
     if done.rowcount != 1:
         raise BookflowError('E_VERSION_CONFLICT', message=f"Line {line['id']} changed meanwhile; read it again.",
                             details={'line': line['id']})
-    before = {k: line[k] for k in _LINK}
+    before = {k: line.get(k) for k in _LINK}
     before['version'] = line['version']
+    # What the act left, so an undo compares the line with exactly that (not with an ever-growing version).
+    before['after'] = {k: after.get(k, _CLEAR.get(k)) for k in _IDENT}
     for batch_id in batch_ids:
         batches.record_effect(s, batch_id, record_type='bank_line', record_id=line['id'], action='updated',
                               version_after=line['version'] + 1, before=before, event_id=event_id)
@@ -262,7 +370,7 @@ def _match_after(s, line: dict, entry_id: str | None, taken: set[str]) -> tuple[
         reason = result.reason or 'the one candidate'
     return dict(state='settled' if chosen.reconciled else 'matched', entry_id=_entry_of(chosen),
                 movement=chosen.ref[0].model_dump_json(), link_how=_how(s), match_reason=reason[:500], created=0,
-                payee_display=None, ignore_reason=None), 'matched'
+                payee_display=None, ignore_reason=None, entry_date=chosen.date), 'matched'
 
 
 # ------------------------------------------------------------------ unmatch and ignore
@@ -271,15 +379,9 @@ def _unmatch_after(s, line: dict) -> tuple[dict, str]:
     if line['state'] == 'waiting':
         raise _refuse('line', f'{_label(s, line)} is already waiting.', line=line['id'])
     if line['created'] or line['state'] == 'added':
-        if line['entry_id'] and not _gone(s, line['entry_id']):
-            kind = s.company.conn.execute(sa.select(c.transactions.c.type).where(
-                c.transactions.c.id == line['entry_id'])).scalar() or 'entry'
-            family = bank_reversal._family(s, line['entry_id'], kind)
-            inverse = ' then '.join(f'`{cmd}`' for cmd, _ in bank_reversal.INVERSE.get(family, ())) or 'its own command'
-            raise _refuse('line', f"{_label(s, line)} was entered as {family.replace('_', ' ')} {line['entry_id']}: "
-                                  f"it is taken back with that entry ({inverse}), or by reversing its import "
-                                  f"(`bank-feed reverse {line['import_id']}`).", line=line['id'],
-                          entry=line['entry_id'])
+        if line['entry_id'] and line['id'] not in entry_trouble(s, [line]):
+            raise _refuse('line', f"{_label(s, line)} cannot be returned to waiting while its entry stands; "
+                                  f"{_way_back(s, line)}.", line=line['id'], entry=line['entry_id'])
         return dict(_CLEAR), 'released'
     if line['state'] == 'ignored':
         return dict(_CLEAR), 'unignored'
@@ -491,8 +593,8 @@ def add(s, ctx, inp, *, dry_run: bool) -> dict:
                                             input=plan['input']) for line, plan in plans),
                     batch_id=None, summary=f'Dry run: {len(plans)} line(s) would be entered. Nothing was changed.',
                     next='the same call without --dry-run')
-    sort_id = batches.open_batch(s, ctx, kind=SORT_KIND, label=f'Bank inbox: add {len(plans)} line(s)',
-                                 scope=SORT_SCOPE, ordering='record', source_type='bank_line') if inp.lines else None
+    # A --lines add's batch opens in the first posting's own transaction, so a failure there leaves no empty batch.
+    opened: list[str] = []
     how = _how(s)
     entered, written = [], []
     for n, (line, plan) in enumerate(plans):
@@ -505,10 +607,13 @@ def add(s, ctx, inp, *, dry_run: bool) -> dict:
             batch = _import_batch(s2, current)
             if batch['state'] != 'live':
                 raise _refuse('line', f"Import {line['import_id']} is being reversed; nothing was entered.")
+            if inp.lines and not opened:
+                opened.append(_open_sort(s2, ctx, f'Bank inbox: add {len(plans)} line(s)'))
+            sort_id = opened[0] if opened else None
             written.append(_write_line(
                 s2, ctx, current, dict(state='added', entry_id=entry_id, movement=None, link_how=how,
                                        match_reason=f'entered with {cmd.name}', created=1,
-                                       payee_display=plan['payee'], ignore_reason=None),
+                                       payee_display=plan['payee'], ignore_reason=None, entry_date=line['date']),
                 kind='added', details={'entry': entry_id, 'command': cmd.name, 'payee': plan['payee'], 'how': how,
                                        'sort_batch': sort_id},
                 event_id=batches.last_event_id(s2), batch_ids=[batch['id']] + ([sort_id] if sort_id else []),
@@ -520,10 +625,12 @@ def add(s, ctx, inp, *, dry_run: bool) -> dict:
         except BookflowError as error:
             if not n:
                 raise
+            sort_id = opened[0]
             raise BookflowError(error.code, message=(
                 f"{error.message} {n} of the {len(plans)} lines were entered (batch {sort_id}); the rest wait. "
                 f"`bank-line undo {sort_id}` takes back those entered."),
                 details={**(error.details or {}), 'batch': sort_id, 'entered': n, 'line': line['id']}) from None
+    sort_id = opened[0] if opened else None
     return dict(lines=tuple(_out(s, v) for v in written), entries=tuple(entered), batch_id=sort_id,
                 summary=f'{len(entered)} line(s) entered: ' + ', '.join(
                     f'{e.command.split()[0]} {e.entry_id}' for e in entered[:5]) + ('...' if len(entered) > 5 else '')
@@ -532,28 +639,42 @@ def add(s, ctx, inp, *, dry_run: bool) -> dict:
 
 # ------------------------------------------------------------------ transfers
 
-def _fits(s, line: dict) -> list[dict]:
-    """Waiting lines of other accounts in the same currency that could be this line's other end: the opposite
-    amount in the bank's sign, within TRANSFER_DAYS."""
-    currency = _account(s, line['account_id'])['currency']
-    rows = s.company.conn.execute(sa.select(c.bank_lines).join(c.accounts, c.accounts.c.id == c.bank_lines.c.account_id)
-                                  .where(c.bank_lines.c.live == 1, c.bank_lines.c.state == 'waiting',
-                                         c.bank_lines.c.account_id != line['account_id'],
-                                         c.bank_lines.c.amount == -line['amount'], c.accounts.c.currency == currency,
-                                         c.bank_lines.c.date >= _shift(line['date'], -TRANSFER_DAYS),
-                                         c.bank_lines.c.date <= _shift(line['date'], TRANSFER_DAYS))
-                                  .order_by(c.bank_lines.c.date, c.bank_lines.c.id)).mappings().all()
-    return [dict(v) for v in rows]
+def _pairings(s, rows: list[dict]) -> dict[str, tuple[list[dict], bool]]:
+    """For each waiting line: the waiting lines of other accounts in its currency that could be its other end (the
+    opposite amount in the bank's sign, within TRANSFER_DAYS), and whether the pair is certain: exactly one fits it,
+    and it is the only one that fits that one (never chosen among equals). One read for all the lines."""
+    waiting = [r for r in rows if r.get('state') == 'waiting' and r.get('live', 1) and r.get('id')]
+    if not waiting:
+        return {}
+    conn, t = s.company.conn, c.bank_lines
+    lo = _shift(min(r['date'] for r in waiting), -2 * TRANSFER_DAYS)
+    hi = _shift(max(r['date'] for r in waiting), 2 * TRANSFER_DAYS)
+    amounts = sorted({v for r in waiting for v in (r['amount'], -r['amount'])})
+    by_amount: dict[int, list[dict]] = {}
+    for chunk in bank_feeds._chunks(amounts):
+        for v in conn.execute(sa.select(t.c.id, t.c.account_id, t.c.amount, t.c.date).where(
+                t.c.live == 1, t.c.state == 'waiting', t.c.amount.in_(chunk), t.c.date >= lo, t.c.date <= hi)
+                .order_by(t.c.date, t.c.id)).mappings():
+            by_amount.setdefault(v['amount'], []).append(dict(v))
+    accounts = {r['account_id'] for r in waiting} | {v['account_id'] for vs in by_amount.values() for v in vs}
+    currency = {}
+    for chunk in bank_feeds._chunks(sorted(accounts)):
+        currency.update(conn.execute(sa.select(c.accounts.c.id, c.accounts.c.currency).where(
+            c.accounts.c.id.in_(chunk))).all())
+
+    def fits(line):
+        lo_, hi_ = _shift(line['date'], -TRANSFER_DAYS), _shift(line['date'], TRANSFER_DAYS)
+        return [v for v in by_amount.get(-line['amount'], ()) if v['account_id'] != line['account_id']
+                and currency.get(v['account_id']) == currency.get(line['account_id']) and lo_ <= v['date'] <= hi_]
+    out = {}
+    for r in waiting:
+        found = fits(r)
+        out[r['id']] = (found, len(found) == 1 and [v['id'] for v in fits(found[0])] == [r['id']])
+    return out
 
 
 def _pairing(s, line: dict) -> tuple[list[dict], bool]:
-    """The lines that fit, and whether the pair is certain: exactly one fits this line, and this line is the only one
-    that fits it (never chosen among equals)."""
-    fits = _fits(s, line)
-    if len(fits) != 1:
-        return fits, False
-    back = _fits(s, fits[0])
-    return fits, [v['id'] for v in back] == [line['id']]
+    return _pairings(s, [line]).get(line['id'], ([], False))
 
 
 def _transfer_entries(s, a_line: dict, b_account: str, b_signed: int, besides: tuple[str, ...]) -> list[str]:
@@ -575,6 +696,41 @@ def _transfer_entries(s, a_line: dict, b_account: str, b_signed: int, besides: t
         .order_by(c.money_out_documents.c.transaction_id)).scalars())
 
 
+def _one_sided(s, line: dict, b_account: str | None = None) -> list[dict]:
+    """Transfers already in the books that this line could be the other end of, within LATE_TRANSFER_DAYS: a
+    `transfer` entry moving this line's account by exactly its amount, between it and one other account (``b_account``
+    when given), not matched by another live line of this account. Usually one posted one-sided from the other
+    account's line, whose own line is in; listed when several, never chosen."""
+    from bookflow.commands.reconcile_import_cmds import window_candidates
+    lo, hi = _shift(line['date'], -LATE_TRANSFER_DAYS), _shift(line['date'], LATE_TRANSFER_DAYS)
+    signed = _signed(s, line)
+    linked = _linked_entries(s, line['account_id'], besides=(line['id'],))
+    dates = {}
+    for v in window_candidates(s, line['account_id'], lo, hi, hi):
+        if v.amount == signed and _entry_of(v) not in linked:
+            dates.setdefault(_entry_of(v), v.date)
+    if not dates:
+        return []
+    conn = s.company.conn
+    ids = list(conn.execute(sa.select(c.money_out_documents.c.transaction_id).where(
+        c.money_out_documents.c.transaction_id.in_(sorted(dates)), c.money_out_documents.c.kind == 'transfer')
+        .order_by(c.money_out_documents.c.transaction_id)).scalars())
+    out = []
+    for entry_id in ids:
+        others = sorted(set(conn.execute(sa.select(c.posting_lines.c.account_id).where(
+            c.posting_lines.c.transaction_id == entry_id, c.posting_lines.c.account_id != line['account_id']))
+            .scalars()))
+        if len(others) != 1 or (b_account is not None and others[0] != b_account):
+            continue
+        end = conn.execute(sa.select(c.bank_lines.c.id).where(
+            c.bank_lines.c.live == 1, c.bank_lines.c.entry_id == entry_id,
+            c.bank_lines.c.account_id == others[0])).scalar()
+        out.append({'entry': entry_id, 'account': others[0], 'account_name': bank_feeds._full_name(s, others[0]),
+                    'date': dates[entry_id], 'days_apart': bank_feeds._days(dates[entry_id], line['date']),
+                    'line': end})
+    return out
+
+
 def _movement(s, account_id: str, entry_id: str, signed: int):
     found = [v for v in _entry_candidates(s, account_id, entry_id) if v.amount == signed]
     return found[0] if found else None
@@ -584,7 +740,7 @@ def transfer(s, ctx, inp, *, dry_run: bool) -> dict:
     line = lines(s, [inp.line])[0]
     _sortable(s, line)
     a = _account(s, line['account_id'])
-    pair = None
+    pair, completes = None, None
     if inp.pair is not None:
         pair = lines(s, [inp.pair])[0]
         _sortable(s, pair)
@@ -600,17 +756,28 @@ def transfer(s, ctx, inp, *, dry_run: bool) -> dict:
             raise _refuse('to', 'A transfer goes to another account.')
     else:
         fits, sure = _pairing(s, line)
-        if not fits:
+        late = [v for v in _one_sided(s, line) if inp.entry in (None, v['entry'])] if not fits else []
+        if len(late) > 1:
+            raise _refuse('entry', f"{len(late)} transfers already in the books fit {_label(s, line)} (within "
+                                   f"{LATE_TRANSFER_DAYS} days): name the one this line completes with entry (never "
+                                   'chosen for you).', line=line['id'], candidates=late[:10])
+        if not fits and not late:
             raise _refuse('pair', f'No waiting line of another account is the opposite of {_label(s, line)} within '
-                                  f'{TRANSFER_DAYS} days: pass to (the other account) to send it now; its line will '
+                                  f'{TRANSFER_DAYS} days, and no transfer already posted fits it within '
+                                  f'{LATE_TRANSFER_DAYS}: pass to (the other account) to send it now; its line will '
                                   'match the transfer when it comes in.', line=line['id'])
-        if not sure:
+        if fits and not sure:
             raise _refuse('pair', f"{_label(s, line)} could pair with {len(fits)} line(s), and they with others: name "
                                   'one with pair (never chosen for you).', line=line['id'],
                           candidates=[{'line': v['id'], 'account': bank_feeds._full_name(s, v['account_id']),
                                        'date': v['date']} for v in fits[:10]])
-        pair = fits[0]
-        b_id = pair['account_id']
+        if late:
+            b_id, completes = late[0]['account'], late[0]
+            if inp.entry is None:
+                inp = inp.model_copy(update={'entry': late[0]['entry']})
+        else:
+            pair = lines(s, [fits[0]['id']])[0]
+            b_id = pair['account_id']
     b = _account(s, b_id)
     places = bank_feeds._places(a['currency'])
     b_signed = (line['amount'] if b['type'] == 'credit_card' else -line['amount'])
@@ -630,6 +797,16 @@ def transfer(s, ctx, inp, *, dry_run: bool) -> dict:
         if len(existing) > 1:
             raise _refuse('entry', f'{len(existing)} transfers between these accounts fit {_label(s, line)}: name one '
                                    'with entry (never chosen for you).', candidates=existing[:10])
+        if not existing and pair is None and not inp.new:
+            late = _one_sided(s, line, b_id)
+            if late:
+                named = '; '.join(f"transfer {v['entry']} of {v['date']} ({v['days_apart']} day(s) apart"
+                                  + (f", its {v['account_name']} line {v['line']} in" if v['line'] else '') + ')'
+                                  for v in late[:3])
+                raise _refuse('to', f"{_label(s, line)} may be the other end of a transfer already posted with "
+                                    f"{bank_feeds._full_name(s, b_id)}: {named}. `bank-line transfer --line "
+                                    f"{line['id']} --entry {late[0]['entry']}` completes it; pass new to post "
+                                    'another transfer anyway.', line=line['id'], candidates=late[:10])
     leaving = line if line['amount'] < 0 else (pair or line)
     source, target = (line['account_id'], b_id) if line['amount'] < 0 else (b_id, line['account_id'])
     memo = (line['payee'] or line['memo'] or '').strip() or None
@@ -669,7 +846,8 @@ def transfer(s, ctx, inp, *, dry_run: bool) -> dict:
                 s2, ctx, current, dict(state='transfer', entry_id=entry_id,
                                        movement=moved.ref[0].model_dump_json() if moved else None, link_how=how,
                                        match_reason=f'transfer {names}', created=1 if mine else 0,
-                                       payee_display=None, ignore_reason=None),
+                                       payee_display=None, ignore_reason=None,
+                                       entry_date=moved.date if moved else payload['date']),
                 kind='transferred', details={'entry': entry_id, 'pair': (pair or {}).get('id') if n == 0 else
                                              line['id'], 'created': mine, 'how': how},
                 event_id=event_id, batch_ids=[batch['id']],
@@ -697,7 +875,10 @@ def transfer(s, ctx, inp, *, dry_run: bool) -> dict:
     return dict(lines=tuple(_out(s, v) for v in written), entries=tuple(entered), batch_id=None,
                 summary=f"Transfer {names}: " + (f'matched to transfer {entry_id}' if existing else
                                                 f'transfer {entry_id} posted') + (
-                    '' if pair else '; its other end matches it when that account\'s statement comes in') + '.',
+                    '' if pair else (f"; this line completes it, posted {completes['days_apart']} day(s) "
+                                      "from the line's date"
+                                     if completes else
+                                     '; its other end matches it when that account\'s statement comes in')) + '.',
                 next=None)
 
 
@@ -715,8 +896,9 @@ def _out(s, row: dict) -> m.InboxLine:
 
 
 def decorate(s, rows: list[dict]) -> dict[str, dict]:
-    """For each line: its transfer pair (a live line of another account linked to the same entry) and, while it
-    waits, its proposals with why (the matcher's suggestion kept at import, still free; the other end of a transfer)."""
+    """For each line: its transfer pair (a live line of another account linked to the same entry), `entry_gone` when
+    its entry was voided, deleted or changed since, and, while it waits, its proposals with why (the matcher's
+    suggestion, still standing and free; the other end of a transfer). Read in a few queries for all the rows."""
     out: dict[str, dict] = {}
     conn = s.company.conn
     entries = {r['entry_id'] for r in rows if r.get('entry_id') and r.get('live', 1)}
@@ -726,30 +908,47 @@ def decorate(s, rows: list[dict]) -> dict[str, dict]:
                 c.bank_lines.c.id, c.bank_lines.c.account_id, c.bank_lines.c.entry_id).where(
                 c.bank_lines.c.live == 1, c.bank_lines.c.entry_id.in_(chunk))).all():
             pairs.setdefault(entry_id, []).append((line_id, account_id))
-    linked = None
+    trouble = entry_trouble(s, rows)
+    pairings = _pairings(s, rows)
+    stored = {r['id']: json.loads(r['proposal']) for r in rows
+              if r.get('state') == 'waiting' and r.get('live', 1) and r.get('id') and r.get('proposal')}
+    proposed = sorted({e for v in stored.values() for e in v.get('entries', ())})
+    unavailable = (_linked_entries(s) | bank_reversal._gone(s, proposed)) if proposed else set()
+    names, places = {}, {}
+
+    def name(account_id):
+        if account_id not in names:
+            names[account_id] = bank_feeds._full_name(s, account_id)
+        return names[account_id]
+
+    def places_of(account_id):
+        if account_id not in places:
+            places[account_id] = bank_feeds._currency_places(s, account_id)
+        return places[account_id]
     for r in rows:
         extra = {}
         if r.get('entry_id'):
             other = [i for i, a in pairs.get(r['entry_id'], ()) if a != r['account_id']]
             if other:
                 extra['pair_line_id'] = other[0]
+        if r.get('id') in trouble:
+            extra['entry_gone'] = trouble[r['id']] + '; the line is not done: `bank-line unmatch --line ' + \
+                r['id'] + '` returns it to waiting'
         if r.get('state') == 'waiting' and r.get('live', 1) and r.get('id'):
             proposals = []
-            stored = json.loads(r['proposal']) if r.get('proposal') else None
-            if stored and stored.get('entries'):
-                if linked is None:
-                    linked = _linked_entries(s)
-                free = [e for e in stored['entries'] if e not in linked]
+            kept = stored.get(r['id'])
+            if kept and kept.get('entries'):
+                free = [e for e in kept['entries'] if e not in unavailable]
                 if free:
                     proposals.append(m.Proposal(
-                        kind='match', reason=stored.get('reason') or 'the matcher suggested it', entry_ids=tuple(free),
+                        kind='match', reason=kept.get('reason') or 'the matcher suggested it', entry_ids=tuple(free),
                         unique=len(free) == 1,
                         next=f"bank-line match --line {r['id']}" + ('' if len(free) == 1 else ' --entry <one of them>')))
-            fits, sure = _pairing(s, r)
+            fits, sure = pairings.get(r['id'], ([], False))
             if fits:
-                places = bank_feeds._currency_places(s, r['account_id'])
-                where = ', '.join(sorted({bank_feeds._full_name(s, v['account_id']) for v in fits}))
-                reason = (f"Transfer with {where}, {bank_feeds.decimal(abs(r['amount']), places)}: the opposite amount "
+                where = ', '.join(sorted({name(v['account_id']) for v in fits}))
+                reason = (f"Transfer with {where}, {bank_feeds.decimal(abs(r['amount']), places_of(r['account_id']))}: "
+                          f"the opposite amount "
                           f"{', '.join(str(bank_feeds._days(v['date'], r['date'])) for v in fits[:3])} day(s) apart")
                 if not sure:
                     reason += f"; {len(fits)} line(s) fit, or another line fits them too: name one"
@@ -772,23 +971,60 @@ def proposal_for(result_reason: str, entries: list[str]) -> str | None:
 # ------------------------------------------------------------------ undoing a --lines batch (bank-sort)
 
 def _touched(all_effects: list[dict]) -> dict[str, dict]:
-    """Each line the batch sorted: how it stood before the batch's first change, and the version it last left."""
+    """Each line the batch sorted: how it stood before the batch's first change, what the batch left (its state and
+    link), and the version it last left."""
     out: dict[str, dict] = {}
     for e in all_effects:
         if e['record_type'] == 'bank_line' and e['action'] == 'updated':
-            info = out.setdefault(e['record_id'], {'seq': e['seq'], 'before': json.loads(e['before'])})
+            before = json.loads(e['before'])
+            info = out.setdefault(e['record_id'], {'seq': e['seq'], 'before': before})
             info['version_after'] = e['version_after']
+            info['after'] = before.get('after')
     return out
 
 
-def _restorable(s, touched: dict[str, dict]) -> tuple[dict[str, dict], list[dict]]:
-    """The touched lines still live (a line whose import was reversed went with it), with blockers for any changed
-    since the batch, or whose import is being reversed."""
+def _ident(values: dict) -> dict:
+    return {k: values.get(k, _CLEAR[k]) or _CLEAR[k] for k in _IDENT}
+
+
+def _shown(values: dict) -> str:
+    state = values.get('state') or 'waiting'
+    return state + (f" to entry {values['entry_id']}" if values.get('entry_id') else '') + (
+        f" ({values['ignore_reason']})" if values.get('ignore_reason') else '')
+
+
+def _later_sorts(s, batch_id: str, ids: list[str]) -> dict[str, str]:
+    """For each line, a later bank-sort batch over it not yet undone: undos unwind newest first."""
+    out = {}
+    for chunk in bank_feeds._chunks(ids):
+        rows = s.company.conn.execute(sa.text(
+            "SELECT e.record_id, b.id FROM batch_effects e JOIN batches b ON b.id = e.batch_id WHERE b.kind = :kind "
+            "AND b.state IN ('live', 'reversing', 'blocked') AND b.reversal_of IS NULL AND b.id != :me "
+            "AND b.rowid > (SELECT rowid FROM batches WHERE id = :me) AND e.record_type = 'bank_line' "
+            f"AND e.record_id IN ({', '.join(f':l{n}' for n in range(len(chunk)))}) ORDER BY b.rowid DESC"),
+            {'kind': SORT_KIND, 'me': batch_id, **{f'l{n}': v for n, v in enumerate(chunk)}}).all()
+        for line_id, later in rows:
+            out.setdefault(line_id, later)
+    return out
+
+
+def _restorable(s, touched: dict[str, dict], batch_id: str) -> tuple[dict[str, dict], list[dict]]:
+    """The touched lines to put back: live (a line whose import was reversed went with it), standing as the batch
+    left them (state and link compared, not versions, so undos unwind in any order), and not already back as they
+    were before. Blockers for any sorted otherwise since, whose import is being reversed, or that would be linked
+    back to an entry no longer what it was, or now held by another line."""
     rows = {v['id']: v for v in lines(s, list(touched))} if touched else {}
+    later = _later_sorts(s, batch_id, list(touched)) if touched else {}
     live, blockers = {}, []
     for line_id, info in touched.items():
         row = rows[line_id]
         if not row['live']:
+            continue
+        if line_id in later:
+            blockers.append(bank_reversal._blocker(
+                'later_sort', 'bank_line', line_id, f"{_label(s, row)} was sorted again by a later batch, "
+                f"{later[line_id]}, not undone.", f"`bank-line undo {later[line_id]}` first", seq=info['seq'],
+                batch=later[line_id]))
             continue
         state = _import_batch(s, row)['state']
         if state != 'live':
@@ -796,13 +1032,43 @@ def _restorable(s, touched: dict[str, dict]) -> tuple[dict[str, dict], list[dict
                 'import_under_way', 'bank_line', line_id, f"{_label(s, row)}: its import {row['import_id']} is being "
                 f'reversed ({state}).', f"`bank-feed reverse {row['import_id']}` finishes it", seq=info['seq']))
             continue
-        if row['version'] != info['version_after']:
+        now, before, after = _ident(row), _ident(info['before']), info.get('after')
+        if now == before:
+            continue  # already back as it stood (by any path): nothing to put back
+        if (_ident(after) != now) if after is not None else (row['version'] != info['version_after']):
+            clears = _way_back(s, row) if row['state'] != 'waiting' else None
+            if after is not None and 'waiting' not in (before['state'], after['state']):
+                clears = (clears + ', then ' if clears else '') + f"put it back as this batch left it ({_shown(after)})"
             blockers.append(bank_reversal._blocker(
                 'line_changed', 'bank_line', line_id, f"{_label(s, row)} was sorted again since this batch (now "
-                f"{row['state']}).", f"`bank-line unmatch --line {line_id}` (or take back what was done to it) first",
-                seq=info['seq']))
+                f"{_shown(row)}; the batch left it {_shown(after or {})}).", clears, seq=info['seq']))
             continue
         live[line_id] = row
+    relink = {i: touched[i]['before'] for i in live
+              if touched[i]['before'].get('entry_id') and touched[i]['before'].get('state') in _LINKED}
+    if relink:
+        trouble = entry_trouble(s, [{**live[i], 'state': b['state'], 'entry_id': b['entry_id'],
+                                     'entry_date': b.get('entry_date')} for i, b in relink.items()])
+        for i, why in trouble.items():
+            gone = 'changed' not in why
+            blockers.append(bank_reversal._blocker(
+                'entry_gone', 'bank_line', i, f"{_label(s, live[i])} would be linked back to an entry no longer what "
+                f'it was: {why}.', 'not clearable while that entry is gone: leave this batch as it is (each line can '
+                'still be sorted on its own)' if gone else 'change that entry back as it was, or leave this batch as '
+                'it is', seq=touched[i]['seq'], entry=relink[i]['entry_id']))
+        wanted = sorted({b['entry_id'] for b in relink.values()})
+        for chunk in bank_feeds._chunks(wanted):
+            for other, entry_id in s.company.conn.execute(sa.select(c.bank_lines.c.id, c.bank_lines.c.entry_id).where(
+                    c.bank_lines.c.live == 1, c.bank_lines.c.entry_id.in_(chunk))).all():
+                if other in live and touched[other]['before'].get('entry_id') != entry_id:
+                    continue  # this undo frees it
+                for i, b in relink.items():
+                    if b['entry_id'] == entry_id and other != i and i not in trouble:
+                        blockers.append(bank_reversal._blocker(
+                            'entry_matched', 'bank_line', i, f"{_label(s, live[i])} would be linked back to entry "
+                            f"{entry_id}, which line {other} holds now: a bank line is never doubled.",
+                            f"`bank-line unmatch --line {other}` first, or leave this batch as it is",
+                            seq=touched[i]['seq'], entry=entry_id, matched_line=other))
     return live, blockers
 
 
@@ -813,7 +1079,7 @@ def _sort_plan(s, ctx, batch: dict, all_effects: list[dict], done: dict, probe, 
         raise BookflowError('E_VALIDATION', message=f'No inverse is known for {unknown[0][0]} {unknown[0][1]} effects.',
                             details={'field': 'batch', 'effects': [list(u) for u in unknown]})
     touched = _touched(all_effects)
-    live, blockers = _restorable(s, touched)
+    live, blockers = _restorable(s, touched, batch['id'])
     blockers = list(ordering) + blockers
 
     def linked_for(ids):
@@ -837,8 +1103,10 @@ def _sort_plan(s, ctx, batch: dict, all_effects: list[dict], done: dict, probe, 
     restore = {'seq': 0, 'record_type': 'batch', 'record_id': batch['id'], 'name': 'the lines it sorted',
                'action': 'updated', 'version': len(live),
                'steps': [f'return {len(live)} line(s) to how they stood before the batch']}
+    freed = sum(1 for i, row in live.items() if row['entry_id'] and not row['created']
+                and touched[i]['before'].get('entry_id') != row['entry_id'])
     return {'steps': [*steps, restore], 'work': work, 'blockers': blockers, 'records': len(created) + 1,
-            'pending': entries + 1, 'lines': len(live), 'entries': entries}
+            'pending': entries + 1, 'lines': len(live), 'entries': entries, 'freed': freed}
 
 
 def _sort_release(s, batch: dict) -> None:
@@ -849,7 +1117,7 @@ def _sort_release(s, batch: dict) -> None:
     event = batches.last_event_id(s)
     via = conn.execute(sa.select(c.batches.c.via).where(c.batches.c.id == reversal_id)).scalar()
     touched = _touched(batches.effects(s, batch['id']))
-    live, blockers = _restorable(s, touched)
+    live, blockers = _restorable(s, touched, batch['id'])
     if blockers:
         raise BookflowError('E_VERSION_CONFLICT', message=f"{blockers[0]['message']} Run the undo again to see it.",
                             details={'blockers': blockers[:batches.MAX_BLOCKERS]})
@@ -869,6 +1137,42 @@ def _sort_release(s, batch: dict) -> None:
         batches.record_effect(s, reversal_id, record_type='bank_line', record_id=line_id, action='reversed',
                               version_after=row['version'] + 1,
                               before={'of_seq': info['seq'], 'restored': before['state']}, event_id=event)
+    # A line a match held is waiting again with its entry free: read its proposals afresh, and those of the waiting
+    # lines of its account that entry could be (one imported meanwhile skipped it while it was taken).
+    freed = [row for line_id, row in live.items() if row['entry_id'] and not row['created']
+             and touched[line_id]['before'].get('entry_id') != row['entry_id']]
+    if freed:
+        _propose_again(s, freed)
+
+
+def _proposal_now(s, line: dict) -> str | None:
+    """The matcher's suggestion for a waiting line as the books stand now (the import's proposal, read again)."""
+    from bookflow.commands.reconcile_import_cmds import window_candidates
+    lo, hi = _shift(line['date'], -files.SUGGEST_DAYS), _shift(line['date'], files.SUGGEST_DAYS)
+    linked = _linked_entries(s, line['account_id'], besides=(line['id'],))
+    population = [v for v in window_candidates(s, line['account_id'], lo, hi, hi) if _entry_of(v) not in linked]
+    result = files.match([_as_line(line, _signed(s, line))], population)[0]
+    if result.status in ('matched', 'reconciled') and result.match is not None:
+        return proposal_for(result.reason, [_entry_of(result.match)])
+    return proposal_for(result.reason, [_entry_of(v) for v in result.suggestions]) if result.status == 'suggested' \
+        else None
+
+
+def _propose_again(s, freed: list[dict]) -> None:
+    conn, t = s.company.conn, c.bank_lines
+    seen = set()
+    for row in freed:
+        near = conn.execute(sa.select(t).where(
+            t.c.live == 1, t.c.state == 'waiting', t.c.account_id == row['account_id'], t.c.amount == row['amount'],
+            t.c.date >= _shift(row['date'], -2 * files.SUGGEST_DAYS),
+            t.c.date <= _shift(row['date'], 2 * files.SUGGEST_DAYS))).mappings().all()
+        for line in near:
+            if line['id'] in seen:
+                continue
+            seen.add(line['id'])
+            proposal = _proposal_now(s, dict(line))
+            if proposal != line['proposal']:
+                conn.execute(t.update().where(t.c.id == line['id']).values(proposal=proposal))
 
 
 def _read(s, batch: dict) -> None:
@@ -889,14 +1193,19 @@ def undo(s, ctx, inp, *, dry_run: bool) -> dict:
                           fingerprint=inp.fingerprint)
     lines_n = found['lines'] if found else 0
     entries_n = found['entries'] if found else 0
+    freed = found.get('freed', 0) if found else 0
+    # What does not come back as it was: the matches' entries are offered afresh, not where they were.
+    note = (f' {freed} line(s) it had matched are free of their entries again; their proposals, and those of the '
+            "account's waiting lines of the same amount (an import made meanwhile skipped an entry while it was "
+            'taken), are read afresh.') if freed else ''
     again = f'bank-line undo {inp.batch}'
     if dry_run:
         summary = (f'Dry run: delete {entries_n} entr{"y" if entries_n == 1 else "ies"} the batch made and return '
-                   f'{lines_n} line(s) to how they stood. Nothing was changed.')
+                   f'{lines_n} line(s) to how they stood.{note} Nothing was changed.')
         next_ = f"{again} --fingerprint {out['fingerprint']}"
     elif out['state'] == 'reversed':
-        summary, next_ = (f'Undone: {entries_n} entr{"y" if entries_n == 1 else "ies"} deleted, {lines_n} line(s) '
-                          'returned.'), None
+        summary, next_ = (f'Undone: {entries_n} entr{"y" if entries_n == 1 else "ies"} deleted (their history kept), '
+                          f'{lines_n} line(s) returned.{note}'), None
     else:
         summary, next_ = f"Undoing: {out['reversed_now']} entr(ies) deleted in this slice; run `{again}` to go on.", again
     return dict(batch_id=inp.batch, state=out['state'], lines=lines_n, entries=entries_n,

@@ -795,6 +795,7 @@ def write(s, ctx, prepared: dict, *, moved_from: str | None = None) -> tuple[m.I
                 number=line.number[:64], kind=(line.kind or '')[:32], state=r['state'], live=1, version=1,
                 entry_id=_entry_id(entry) if entry is not None else None,
                 movement=entry.ref[0].model_dump_json() if entry is not None else None,
+                entry_date=entry.date if entry is not None else None,
                 link_how='auto' if entry is not None else None, match_reason=(r['reason'] or None) and r['reason'][:500],
                 possible_duplicate_of=r.get('duplicate_of'), warnings=json.dumps(r['warnings']),
                 proposal=_proposal(r)))
@@ -964,6 +965,17 @@ def line_query(s, inp) -> dict:
         sa.select(t.c.state, sa.func.count()).where(*filters).group_by(t.c.state)).all()}
     if inp.state:
         filters.append(t.c.state == inp.state)
+    if inp.entry_gone is not None:
+        # Whether a line's entry is gone or changed is read, not stored: test every linked line the other filters
+        # leave, then page over those (or over the rest).
+        linked = [dict(v) for v in s.company.conn.execute(sa.select(
+            t.c.id, t.c.account_id, t.c.amount, t.c.state, t.c.live, t.c.entry_id, t.c.entry_date).where(
+            *filters, t.c.entry_id.is_not(None))).mappings()]
+        gone = sorted(_sort.entry_trouble(s, linked))
+        if inp.entry_gone:
+            filters.append(t.c.id.in_(gone))
+        elif gone:
+            filters.append(t.c.id.not_in(gone))
     start = _offset(inp.cursor)
     found = s.company.conn.execute(sa.select(t).where(*filters).order_by(t.c.date, t.c.import_id, t.c.ordinal)
                                    .offset(start).limit(inp.limit + 1)).mappings().all()

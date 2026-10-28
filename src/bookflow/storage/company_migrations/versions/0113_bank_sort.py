@@ -1,9 +1,10 @@
 """co0113. Bank feeds, increment 3: sorting the bank inbox (R108, design/bank-feeds.md §2, §4, §9).
 
-Four columns on ``bank_lines``, moving no stored row: ``created`` (0; 1 when the line's entry was made from it, by
+Five columns on ``bank_lines``, moving no stored row: ``created`` (0; 1 when the line's entry was made from it, by
 ``bank-line add`` or a transfer it posted, so only reversing that entry takes it back), ``payee_display`` (the payee
 the entry was entered under; null until then), ``proposal`` (what the matcher suggested at import, with its reason,
-as a JSON object; null when nothing) and ``ignore_reason`` (why a line was set aside; null unless ignored). Every
+as a JSON object; null when nothing), ``ignore_reason`` (why a line was set aside; null unless ignored) and
+``entry_date`` (the linked entry's date on the line's account when linked, so a later change shows as entry_gone). Every
 other link column (``entry_id``, ``movement``, ``link_how``, ``match_reason``) came with co0112. The line's guards are
 unchanged: what the bank printed stays fixed. DDL below is frozen: this migration never imports current application
 metadata.
@@ -23,9 +24,10 @@ COLUMNS = (
     "(json_valid(proposal) AND json_type(proposal) = 'object'))",
     'ALTER TABLE bank_lines ADD COLUMN ignore_reason VARCHAR(16) CONSTRAINT ck_bank_line_ignore_reason CHECK '
     "(ignore_reason IS NULL OR ignore_reason IN ('already_entered', 'not_ours', 'duplicate', 'other'))",
+    'ALTER TABLE bank_lines ADD COLUMN entry_date VARCHAR(10)',
 )
 # What a test rewinding this head drops: nothing of its own, since co0112's bank_lines goes whole.
-NAMES = ('created', 'payee_display', 'proposal', 'ignore_reason')
+NAMES = ('created', 'payee_display', 'proposal', 'ignore_reason', 'entry_date')
 
 
 def upgrade():

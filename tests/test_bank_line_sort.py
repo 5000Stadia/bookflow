@@ -202,11 +202,18 @@ def test_match_ignore_unmatch_never_guess_and_a_lines_batch_undoes_whole(client)
     sort = run(client, 'bank-line ignore', dict(lines=[coffee_a['id'], coffee_b['id']], ignore_reason='other'))
     assert sort['batch_id'] and {v['state'] for v in sort['lines']} == {'ignored'}
     matched = run(client, 'bank-line match', dict(lines=[dict(line=single['id'], entry=other)]))
-    # Sorted again since: the undo is refused naming the line, and changes nothing.
+    # Sorted otherwise since (not as the batch left it, nor as it was before): the undo is refused naming the line
+    # and what clears it, and changes nothing.
     run(client, 'bank-line unmatch', dict(line=coffee_b['id']))
+    run(client, 'bank-line ignore', dict(line=coffee_b['id'], ignore_reason='duplicate'))
     blocked = refused(client, 'bank-line undo', dict(batch=sort['batch_id']), 'E_BATCH_BLOCKED')
     assert [(b['code'], b['record_id']) for b in blocked.details['blockers']] == [('line_changed', coffee_b['id'])]
+    assert f"bank-line unmatch --line {coffee_b['id']}" in blocked.details['blockers'][0]['clears']
     assert inbox_line(client, coffee_a['id'], 'Checking')['state'] == 'ignored'
+    # Back as it was before the batch (by any path), the line needs nothing; the undo goes ahead for the rest.
+    run(client, 'bank-line unmatch', dict(line=coffee_b['id']))
+    assert run(client, 'bank-line undo', dict(batch=sort['batch_id']))['state'] == 'reversed'
+    assert inbox_line(client, coffee_a['id'], 'Checking')['state'] == 'waiting'
     # A batch whose lines stand as it left them is undone whole.
     plan = run(client, 'bank-line undo', dict(batch=matched['batch_id']), dry_run=True)
     assert plan['lines'] == 1 and plan['blockers'] == [] and plan['fingerprint']

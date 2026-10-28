@@ -107,6 +107,8 @@ def define_tables(metadata, C, T):
                                           'ignored.', sa.CheckConstraint(
             f'ignore_reason IS NULL OR ignore_reason IN ({quoted(IGNORE_REASONS)})', name='ck_bank_line_ignore_reason'),
           nullable=True),
+        C('entry_date', sa.String(10), "The entry's date on this account when the line was linked to it (YYYY-MM-DD), "
+                                       'so a later change shows as entry_gone; null while none.', nullable=True),
         sa.CheckConstraint(f'state IN ({quoted(LINE_STATES)})', name='ck_bank_line_state'),
         sa.CheckConstraint(f'link_how IS NULL OR link_how IN ({quoted(LINK_HOWS)})', name='ck_bank_line_how'),
         sa.CheckConstraint('live IN (0, 1) AND version >= 1 AND ordinal >= 0', name='ck_bank_line_values'),

@@ -155,15 +155,16 @@ _ADD = ("Enter a waiting bank line in the books, run as you with the account's o
         + ' Example: {"line": "01J...", "payee": "Shell", "account": "Fuel"}.')
 _UNMATCH = ("Return a bank line to waiting: undo its match or transfer link (the entry stays), or its ignore. A line "
             "entered as an entry is taken back with that entry (its delete or void) or the import's reversal; once "
-            "that entry is gone, this releases the line." + _ONE_OR_MANY + ' Example: {"line": "01J..."}.')
+            "that entry is gone (entry_gone), this releases the line." + _ONE_OR_MANY + ' Example: {"line": "01J..."}.')
 _IGNORE = ("Set a waiting bank line aside with a reason: already_entered, not_ours, duplicate (a possible_duplicate "
            "flag) or other. `bank-line unmatch` brings it back." + _ONE_OR_MANY
            + ' Example: {"line": "01J...", "ignore_reason": "duplicate"}.')
 _TRANSFER = ("Record a waiting bank line as a transfer between two of your accounts, as one entry: with its other "
              "end (`pair`, or the one proposed when exactly one fits both ways), both lines link to an existing "
              "transfer of that amount nearby, or to one posted with transfer post; with `to` and no line yet, the "
-             "transfer is posted now and the other account's line matches it when imported. Several fits are listed, "
-             'never chosen. Example: {"line": "01J...", "pair": "01J..."}.')
+             "transfer is posted now and the other account's line matches it when imported; that line, arriving "
+             'later, completes it (never a second transfer). Several fits are listed, never chosen. '
+             'Example: {"line": "01J...", "pair": "01J..."}.')
 _UNDO = ("Undo a bank-line batch (the batch_id of a --lines act) as one unit: delete the entries it made (with "
          "preserved history, by each family's own command) and return its lines to how they stood. Refused, naming "
          'each blocker, when a line was sorted again since or an entry was edited or used. --dry-run shows the plan. '
@@ -181,11 +182,21 @@ def _sorter(name, model, work, description, errors=_SORT_ERRORS, output=m.SortOu
         return Plan(output(**_PENDING_SORT) if output is m.SortOutput else output(**_pending_undo(inp)), {'input': inp})
 
     def applier(plan, ctx, s):
-        return _finalized(s, ctx, name.replace(' ', '.'), lambda: work(s, ctx, plan.data['input'], dry_run=False),
-                          output)
+        applied = _finalized(s, ctx, name.replace(' ', '.'), lambda: work(s, ctx, plan.data['input'], dry_run=False),
+                             output)
+        if ctx.idempotency_key:
+            # Its writes committed through nested commands, so the key is kept here: a retry with it returns this
+            # result. (Lost before this, a retry is refused by the line's state; nothing is ever done twice.)
+            from bookflow.core import idempotency
+            ihash = idempotency.input_hash(plan.data['input'].model_dump(mode='json'),
+                                           s.company_row['id'] if s.company_row else None)
+            out = applied.output.model_dump(mode='json')
+            _sort_module()._in_tx(s, lambda: idempotency.store(s.company, s.actor.id, ctx.idempotency_key, name, ihash,
+                                                               ctx.request_id, out))
+        return applied
     cmd = command(name, scope='company', description=description, input_model=model, output_model=output,
                   writes={'company'}, required_role='standard', capability='bank-feed', positional=list(positional),
-                  error_codes=list(errors))(planner)
+                  accepts_idempotency_key=True, error_codes=list(errors))(planner)
     cmd.applier(applier)
     cmd.resource_requirements = _READ
     return cmd

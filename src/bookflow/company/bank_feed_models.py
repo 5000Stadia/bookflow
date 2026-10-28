@@ -203,6 +203,9 @@ class InboxLine(Model):
     ignore_reason: str | None = None
     pair_line_id: ID | None = Field(None, description="A transfer's other end: a live line of another account linked "
                                                       'to the same entry.')
+    entry_gone: str | None = Field(None, description=(
+        "Set when the line's entry was voided, deleted or changed in amount or date since it was linked, with why: the "
+        "line is not done (bank-line unmatch returns it to waiting)."))
     proposals: tuple[Proposal, ...] = Field((), description='For a waiting line: what it could be, with why.')
 
 
@@ -237,6 +240,8 @@ class LineQueryInput(Model):
     text: str | None = Field(None, min_length=1, max_length=200, description='Words in the payee, memo or number.')
     amount: str | None = Field(None, max_length=40, description='An exact amount, bank sign ("-4.50").')
     include_reversed: bool = False
+    entry_gone: bool | None = Field(None, description=(
+        'true: only lines whose entry was voided, deleted or changed since; false: none of them.'))
     limit: int = Field(100, strict=True, ge=1, le=1000)
     cursor: str | None = Field(None, max_length=64)
 
@@ -391,6 +396,9 @@ class TransferInput(Model):
     to: AccountSelector | None = Field(None, description=(
         "The other account, when its line is not imported yet (a one-sided transfer)."))
     entry: ID | None = Field(None, description='An existing entry moving the money between the two accounts.')
+    new: bool = Field(False, description=(
+        'With to: post a new transfer even though one already posted from that account may be this line\'s other '
+        'end (refused otherwise, naming it).'))
 
     @model_validator(mode='after')
     def one(self):
