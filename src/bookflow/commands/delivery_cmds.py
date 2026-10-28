@@ -28,7 +28,7 @@ _SEND = (
 _CANCEL = 'Set an unsent message aside, with --reason. Final; draft again for a new one.'
 _MARK = (
     "Record that a person sent the message from their own mail program (shown 'Sent by hand', never delivered). "
-    'For an overdue notice it also marks the notice sent. A person\'s act.')
+    'For an overdue notice it also marks the notice sent. Needs delivery.mark-sent, which a principal may grant an agent.')
 _EXPORT = (
     'Export messages as RFC 5322 .eml files (X-Unsent: 1) with their frozen PDFs, to open and send in a mail program: '
     'one message gives a .eml, several a .zip. Sends nothing; a stale message is held instead of exported.')
@@ -191,7 +191,7 @@ from bookflow.company import delivery_dispatch as dq  # noqa: E402
 from bookflow.company import delivery_queue_models as qm  # noqa: E402
 
 _APPROVE = ("A person's go for ready messages waiting for one (an agent's release): by number, or all_waiting. A "
-            'message leaves only with a go, and only through a sending connection. A person\'s act. '
+            'message leaves only with a go, and only through a sending connection. Needs delivery.send. '
             'Example: {"messages": ["M-1001"]}.')
 _RETRY = ('Put a failed message, or one held because an attempt ended without an answer, back in the outbox. Check '
           'the sent mail first: if it went, mark it sent instead. A person\'s retry is their go; an agent\'s waits.')
@@ -395,15 +395,15 @@ _SCHEDULE_CREATE = (
     'Save a recurring batch: kind and selection as delivery batch takes them (statements take a period word), a '
     'frequency from start_date (a month-end start stays at month end), optional stop_date or remaining_runs. Each '
     'slot runs once on the host; after downtime only the latest missed slot runs, within catch_up_days (7). mode send '
-    'is a draft until a person makes it live. Missing details are refused, never guessed. Example: {"name": '
+    'is a draft until a holder of automate.delivery makes it live. Missing details are refused, never guessed. Example: {"name": '
     '"Month-end statements", "kind": "statement", "period": "month-to-date", "balance_over": "0", "frequency": '
     '"monthly", "start_date": "2026-10-31", "mode": "send"}.')
-_SCHEDULE_UPDATE = ('Change a schedule. A change to what or when it sends returns a live one to draft, unless a person '
+_SCHEDULE_UPDATE = ('Change a schedule. A change to what or when it sends returns a live one to draft, unless a holder of automate.delivery '
                     "passes the changed schedule's check fingerprint as confirm (dry_run shows it).")
 _SCHEDULE_LIVE = (
     "Make a send schedule live: its runs then release with your go and pause if you lose it. One check first: run it "
-    'with dry_run, show the person the check (selection, cadence, first run, who it would reach today), then run it '
-    "with the check's fingerprint as confirm. A person's act.")
+    'with dry_run, show your principal the check (selection, cadence, first run, who it would reach today), then run it '
+    "with the check's fingerprint as confirm. Needs automate.delivery, which a principal may grant an agent.")
 _SCHEDULE_PAUSE = 'Stop a schedule: nothing runs until it is resumed.'
 _SCHEDULE_RESUME = ('Run a stopped or paused schedule again from today; slots that passed are skipped. A paused send '
                     'schedule comes back as a draft.')

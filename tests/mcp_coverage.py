@@ -330,8 +330,8 @@ BANK_FEED_COMMANDS = frozenset(('bank-feed import', 'bank-feed show', 'bank-feed
                                 'bank-line match', 'bank-line unmatch', 'bank-line ignore', 'bank-line add',
                                 'bank-line transfer', 'bank-line undo'))
 
-# R114 increment 1: an item's picture uploaded, chosen from its files, and removed.
-ITEM_PICTURE_COMMANDS = frozenset(('item picture set', 'item picture use', 'item picture clear'))
+# R114 increment 1: an item's picture uploaded, chosen from its files, read by a reader of items, and removed.
+ITEM_PICTURE_COMMANDS = frozenset(('item picture set', 'item picture use', 'item picture get', 'item picture clear'))
 
 LANDED_COST_COMMANDS = frozenset(('landed-cost setup', 'landed-cost charges', 'landed-cost post', 'landed-cost void',
     'landed-cost show', 'landed-cost query'))

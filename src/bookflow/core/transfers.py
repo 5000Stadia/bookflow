@@ -23,13 +23,16 @@ class TransferPreparation:
     metadata: dict[str, Any] | None = None
 
 
+HEAD_BYTES = 256 * 1024  # an image's header, its pixel size included (bookflow.company.item_pictures.HEAD_BYTES)
+
+
 @dataclass
 class TransferResource:
     lease: TransferLease
     store: Path
     info: BodyInfo | None = None
     staged: StagedAttachment | None = None
-    head: bytes = b""  # the body's first bytes, kept for a command that checks what the body is (an item picture)
+    head: bytes = b""  # the body's first HEAD_BYTES, kept for a command that checks what the body is (an item picture)
 
 
 def prepare(cmd, raw, ctx, s, *, selector=None, source="option", dry_run=False):
@@ -89,8 +92,8 @@ class InputBody:
             raise BookflowError("E_VALUE_RANGE", details={"field": "body", "limit": self.limit})
         if self.stage is not None:
             self.stage.write(chunk)
-        if len(self.resource.head) < 64:
-            self.resource.head += chunk[:64 - len(self.resource.head)]
+        if len(self.resource.head) < HEAD_BYTES:
+            self.resource.head += chunk[:HEAD_BYTES - len(self.resource.head)]
         self.digest.update(chunk)
         self.size += len(chunk)
 

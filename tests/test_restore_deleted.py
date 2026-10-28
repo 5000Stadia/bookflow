@@ -177,7 +177,7 @@ def test_an_agent_is_refused(ledger, monkeypatch):
     from bookflow.company import restorations
     with pytest.raises(BookflowError) as refused:
         restorations.admit(SimpleNamespace(actor=SimpleNamespace(kind='agent', id='x')), 'journal_entry')
-    assert refused.value.code == 'E_PERMISSION' and refused.value.details['reason'] == 'people_only'
+    assert refused.value.code == 'E_PERMISSION' and refused.value.details['capability'] == 'restore.document'
 
 
 def test_restore_into_a_closed_period_is_refused(ledger):

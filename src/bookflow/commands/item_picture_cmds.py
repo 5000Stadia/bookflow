@@ -80,7 +80,7 @@ def _head(s, row, limit, field):
     """Check a stored attachment is a usable picture, from its verified bytes."""
     files._available(s, row)
     with store_api.open_verified(files._store_limit(s)[0], store_api.BodyInfo(row["sha256"], row["size_bytes"])) as body:
-        head = body.read(64)
+        head = body.read(pics.HEAD_BYTES)
     return pics.require_image(head, row["size_bytes"], field=field, limit=limit)
 
 
@@ -90,12 +90,44 @@ def _linked(s, ctx, item_id, attachment, caption):
     return link, new
 
 
-def _thumbnail(s, ctx, item_id, key):
+def _thumbnail(s, ctx, item_id, key, picture_id):
+    """The thumbnail's row and its link to the item, captioned as a thumbnail (an existing link is recaptioned, so the
+    file is never the item's fallback picture later)."""
     if key is None:
-        return None, None
+        return None, None, []
     row = files._get(s, "attachment", key)
+    if row["id"] == picture_id:
+        raise _error("A thumbnail is a smaller copy, not the picture itself.", "thumbnail_attachment",
+                     "same as the picture")
     _head(s, row, pics.THUMBNAIL_MAX_BYTES, "thumbnail_attachment")
-    return row, _linked(s, ctx, item_id, row, "Item picture thumbnail")
+    link, new = _linked(s, ctx, item_id, row, pics.THUMBNAIL_CAPTION)
+    if new or link["caption"] == pics.THUMBNAIL_CAPTION:
+        return row, (link, new), []
+    return row, (link, new), [_changed(s, ctx, link, caption=pics.THUMBNAIL_CAPTION)]
+
+
+def _changed(s, ctx, link, **values):
+    from bookflow.core.clock import now_iso
+    return {**link, **values, "version": link["version"] + 1, "updated_at": now_iso(), "updated_by": s.actor.id,
+            "updated_via": ctx.interface.value}
+
+
+def _unlinks(s, ctx, item_id, gone):
+    """The item's active links to these attachments, unlinked (bytes and history kept)."""
+    gone = sorted(set(gone) - {None})
+    if not gone:
+        return []
+    links = c.attachment_links
+    rows = s.company.conn.execute(sa.select(links).where(
+        links.c.record_type == pics.RECORD_TYPE, links.c.record_id == item_id, links.c.active.is_(True),
+        links.c.attachment_id.in_(gone)).order_by(links.c.id)).mappings()
+    return [_changed(s, ctx, dict(row), active=False) for row in rows]
+
+
+def _replaced(s, ctx, current, keep):
+    """Replacing a picture unlinks the old picture and its thumbnail from the item, so neither comes back."""
+    old = {current.get("picture_attachment_id"), current.get("picture_thumbnail_attachment_id")} - set(keep)
+    return _unlinks(s, ctx, current["id"], old)
 
 
 def _current(s, selector):
@@ -141,7 +173,7 @@ def _apply(plan: Plan, ctx: Context, s, touched) -> Applied:
     for link in plan.data.get("links", ()):
         s.company.conn.execute(c.attachment_links.insert().values(**link))
         touched.append(Touched("attachment_link", link["id"], "create", None, 1, link, db="company"))
-    for link in plan.data.get("unlinks", ()):
+    for link in (*plan.data.get("recaptions", ()), *plan.data.get("unlinks", ())):
         s.company.conn.execute(c.attachment_links.update().where(c.attachment_links.c.id == link["id"]).values(**link))
         touched.append(Touched("attachment_link", link["id"], "update", link["version"] - 1, link["version"], link, db="company"))
     mutation = plan.data.get("mutation")
@@ -164,7 +196,8 @@ item_picture_set = command("item picture set", scope="company", capability="item
     description="Upload a JPEG, PNG or WebP as the item's picture: linked to the item as a file, then chosen.",
     input_model=PictureSetInput, output_model=PictureWriteOutput, writes={"company"}, accepts_idempotency_key=True,
     positional=["item"], transfer=TransferDescriptor("input", prepare_set),
-    error_codes=["E_VALIDATION", "E_RECORD_NOT_FOUND", "E_VERSION_CONFLICT", "E_IO", "E_VALUE_RANGE", "E_DB_BUSY"])
+    error_codes=["E_VALIDATION", "E_RECORD_NOT_FOUND", "E_VERSION_CONFLICT", "E_IO", "E_VALUE_RANGE", "E_DB_BUSY",
+                 "E_RECORD_IN_USE"])
 
 
 @item_picture_set
@@ -184,14 +217,17 @@ def plan_set(inp: PictureSetInput, ctx: Context, s) -> Plan:
         attachment.update(collected_at=None, version=attachment["version"] + 1, updated_at=now_iso(),
                           updated_by=s.actor.id, updated_via=ctx.interface.value)
     link, new_link = _linked(s, ctx, current["id"], attachment, inp.caption)
-    thumb, thumb_link = _thumbnail(s, ctx, current["id"], inp.thumbnail_attachment)
+    thumb, thumb_link, recaptions = _thumbnail(s, ctx, current["id"], inp.thumbnail_attachment, attachment["id"])
     values = {"picture_attachment_id": attachment["id"], "picture_thumbnail_attachment_id": thumb and thumb["id"]}
     mutation = _mutation(s, ctx, current, values, inp.expected_version)
     links = [l for l, new in (((link, new_link),) + ((thumb_link,) if thumb_link else ())) if new]
+    unlinks = _replaced(s, ctx, current, values.values())
     owner = mutation.after if mutation else current
-    preview = _preview(s, owner, linked=[l["attachment_id"] for l in links], extra={attachment["id"]: attachment})
+    preview = _preview(s, owner, linked=[l["attachment_id"] for l in links],
+                       unlinked=[l["attachment_id"] for l in unlinks], extra={attachment["id"]: attachment})
     return Plan(preview, dict(attachment=attachment, new_attachment=not found, restore=restore, links=links,
-                              mutation=mutation, summary=f"set the picture of item {current['full_name']}"))
+                              recaptions=recaptions, unlinks=unlinks, mutation=mutation,
+                              summary=f"set the picture of item {current['full_name']}"))
 
 
 plan_set.resource_requirements = (("attachment", "standard"),)
@@ -215,7 +251,8 @@ item_picture_use = command("item picture use", scope="company", capability="item
     description="Choose an image attachment as the item's picture, linking it to the item if it is not.",
     input_model=PictureUseInput, output_model=PictureWriteOutput, writes={"company"}, accepts_idempotency_key=True,
     positional=["item", "attachment"],
-    error_codes=["E_VALIDATION", "E_RECORD_NOT_FOUND", "E_VERSION_CONFLICT", "E_IO", "E_VALUE_RANGE", "E_DB_BUSY"])
+    error_codes=["E_VALIDATION", "E_RECORD_NOT_FOUND", "E_VERSION_CONFLICT", "E_IO", "E_VALUE_RANGE", "E_DB_BUSY",
+                 "E_RECORD_IN_USE"])
 
 
 @item_picture_use
@@ -225,15 +262,16 @@ def plan_use(inp: PictureUseInput, ctx: Context, s) -> Plan:
     attachment = files._get(s, "attachment", inp.attachment)
     _head(s, attachment, pics.PICTURE_MAX_BYTES, "attachment")
     link, new_link = _linked(s, ctx, current["id"], attachment, "Item picture")
-    thumb, thumb_link = _thumbnail(s, ctx, current["id"], inp.thumbnail_attachment)
-    if thumb and thumb["id"] == attachment["id"]:
-        raise _error("A thumbnail is a smaller copy, not the picture itself.", "thumbnail_attachment", "same as the picture")
+    thumb, thumb_link, recaptions = _thumbnail(s, ctx, current["id"], inp.thumbnail_attachment, attachment["id"])
     values = {"picture_attachment_id": attachment["id"], "picture_thumbnail_attachment_id": thumb and thumb["id"]}
     mutation = _mutation(s, ctx, current, values, inp.expected_version)
     links = [l for l, new in (((link, new_link),) + ((thumb_link,) if thumb_link else ())) if new]
+    unlinks = _replaced(s, ctx, current, values.values())
     owner = mutation.after if mutation else current
-    return Plan(_preview(s, owner, linked=[l["attachment_id"] for l in links]),
-                dict(links=links, mutation=mutation, summary=f"set the picture of item {current['full_name']}"))
+    return Plan(_preview(s, owner, linked=[l["attachment_id"] for l in links],
+                         unlinked=[l["attachment_id"] for l in unlinks]),
+                dict(links=links, recaptions=recaptions, unlinks=unlinks, mutation=mutation,
+                     summary=f"set the picture of item {current['full_name']}"))
 
 
 plan_use.resource_requirements = (("attachment", "standard"),)
@@ -248,28 +286,18 @@ item_picture_clear = command("item picture clear", scope="company", capability="
     description="Remove the item's picture: unlinks it and its thumbnail from the item (bytes and history kept); "
                 "the item then shows its newest remaining image.",
     input_model=PictureClearInput, output_model=PictureWriteOutput, writes={"company"}, accepts_idempotency_key=True,
-    positional=["item"], error_codes=["E_RECORD_NOT_FOUND", "E_VERSION_CONFLICT", "E_DB_BUSY"])
+    positional=["item"], error_codes=["E_RECORD_NOT_FOUND", "E_VERSION_CONFLICT", "E_DB_BUSY", "E_RECORD_IN_USE"])
 
 
 @item_picture_clear
 def plan_clear(inp: PictureClearInput, ctx: Context, s) -> Plan:
-    from bookflow.core.clock import now_iso
     files._pending(s)
     current = _current(s, inp.item)
     shown, _thumb = pics.pictures(s.company, [current]).get(current["id"], (None, None))
-    gone = {current.get("picture_thumbnail_attachment_id")} - {None}
+    gone = {current.get("picture_thumbnail_attachment_id")}
     if not inp.keep_file:
-        gone |= {current.get("picture_attachment_id") or (shown and shown["attachment_id"])} - {None}
-    unlinks = []
-    if gone:
-        rows = s.company.conn.execute(sa.select(c.attachment_links).where(
-            c.attachment_links.c.record_type == pics.RECORD_TYPE, c.attachment_links.c.record_id == current["id"],
-            c.attachment_links.c.active.is_(True), c.attachment_links.c.attachment_id.in_(sorted(gone)))).mappings()
-        for row in rows:
-            row = dict(row)
-            row.update(active=False, version=row["version"] + 1, updated_at=now_iso(), updated_by=s.actor.id,
-                       updated_via=ctx.interface.value)
-            unlinks.append(row)
+        gone |= {current.get("picture_attachment_id") or (shown and shown["attachment_id"])}
+    unlinks = _unlinks(s, ctx, current["id"], gone)
     values = {"picture_attachment_id": None, "picture_thumbnail_attachment_id": None}
     mutation = _mutation(s, ctx, current, values, inp.expected_version)
     owner = mutation.after if mutation else current
@@ -283,3 +311,39 @@ plan_clear.resource_requirements = (("attachment", "standard"),)
 @item_picture_clear.applier
 def apply_clear(plan: Plan, ctx: Context, s) -> Applied:
     return _apply(plan, ctx, s, [])
+
+
+class PictureGetInput(_Strict):
+    attachment: str = Field(min_length=1, max_length=26, description=(
+        "The attachment id of an item's picture or thumbnail, as `item show` or `item query` gives it."))
+
+
+def prepare_get(inp: PictureGetInput, ctx: Context, s):
+    """Only a file some item shows as its picture or thumbnail; any other attachment is not found here (`attachment
+    get`, under the `attachment` capability, reads every file)."""
+    from bookflow.core.errors import BookflowError
+    from bookflow.core.transfers import TransferPreparation
+    files._pending(s)
+    row = s.company.conn.execute(sa.select(c.attachments).where(c.attachments.c.id == inp.attachment)).mappings().first()
+    if row is None or not pics.shown_by(s.company, row["id"]):
+        raise BookflowError("E_RECORD_NOT_FOUND", "No item shows this file as its picture.",
+                            {"record_type": "attachment", "record_id": inp.attachment})
+    row = dict(row)
+    files._available(s, row)
+    store, limit = files._store_limit(s)
+    return TransferPreparation(store, limit, store_api.BodyInfo(row["sha256"], row["size_bytes"]),
+                               {"original_filename": row["original_filename"], "media_type": row["media_type"]})
+
+
+item_picture_get = command("item picture get", scope="company", capability="item", required_role="member",
+    description="Download an item's picture or thumbnail (verified bytes): a reader of items sees the pictures "
+                "without the attachment capability, and no other file.",
+    input_model=PictureGetInput, output_model=files.AttachmentOut, positional=["attachment"],
+    transfer=TransferDescriptor("output", prepare_get), error_codes=["E_RECORD_NOT_FOUND", "E_IO", "E_DB_BUSY", "E_VALUE_RANGE"])
+
+
+@item_picture_get
+def plan_get(inp: PictureGetInput, ctx: Context, s) -> Plan:
+    files._resource(s, prepare_get(inp, ctx, s))
+    row = s.company.conn.execute(sa.select(c.attachments).where(c.attachments.c.id == inp.attachment)).mappings().one()
+    return Plan(files._out(s, dict(row), files.AttachmentOut))

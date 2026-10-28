@@ -17,7 +17,14 @@ def png(width=4, height=3, rgb=(200, 30, 30)):
             + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
 
 
-JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00" + b"\x00" * 64 + b"\xff\xd9"
+def jpeg(width=4, height=3):
+    """A JPEG header: SOI, JFIF APP0 and a baseline frame header (SOF0) giving its size; enough for the size check."""
+    sof = b"\xff\xc0\x00\x11\x08" + height.to_bytes(2, "big") + width.to_bytes(2, "big") + b"\x03" + b"\x01\x11\x00" * 3
+    return (b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00" + sof + b"\x00" * 64
+            + b"\xff\xd9")
+
+
+JPEG = jpeg()
 HEIC = b"\x00\x00\x00\x18ftypheic\x00\x00\x00\x00mif1heic" + b"\x00" * 64
 
 
@@ -59,12 +66,14 @@ def test_set_replace_clear_and_fall_back(cli, files):
     linked = cli.json("attachment", "list", "item", item_id(cli), "--company", COMPANY)["items"]
     assert {link["attachment_id"] for link in linked} == {old["id"], new["attachment_id"]}
 
-    # Replacing with an image already attached, with a thumbnail; a thumbnail is never the fallback picture.
+    # Replacing with an image already attached, with a thumbnail; a thumbnail is never the fallback picture. The
+    # replaced picture is unlinked from the item (bytes and history kept), so it never comes back.
     thumb = cli.json("attachment", "add", "item", item_id(cli), files["thumb.png"], "--company", COMPANY)["attachment"]
     used = cli.json("item", "picture", "use", ITEM, old["id"], "--thumbnail-attachment", thumb["id"],
                     "--company", COMPANY)
     assert used["picture"]["attachment_id"] == old["id"] and used["picture"]["chosen"] is True
-    assert used["thumbnail"]["attachment_id"] == thumb["id"]
+    assert used["thumbnail"]["attachment_id"] == thumb["id"] and used["unlinked"] == [new["attachment_id"]]
+    other = cli.json("attachment", "add", "item", item_id(cli), files["other.png"], "--company", COMPANY)["attachment"]
 
     # A chosen picture cannot be unlinked out from under the item.
     link = next(l for l in cli.json("attachment", "list", "item", item_id(cli), "--company", COMPANY)["items"]
@@ -77,7 +86,7 @@ def test_set_replace_clear_and_fall_back(cli, files):
     cleared = cli.json("item", "picture", "clear", ITEM, "--company", COMPANY)
     assert set(cleared["unlinked"]) == {old["id"], thumb["id"]}
     after = show(cli)
-    assert after["picture"]["attachment_id"] == new["attachment_id"] and after["picture"]["chosen"] is False
+    assert after["picture"]["attachment_id"] == other["id"] and after["picture"]["chosen"] is False
     assert after["thumbnail"] is None
     # Clearing again removes that one too; then nothing shows.
     cli.json("item", "picture", "clear", ITEM, "--company", COMPANY)

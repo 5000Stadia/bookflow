@@ -1,7 +1,7 @@
 {# The item picture (R114 increment 1): beside the item's name; the htmx target of its own forms. #}
 {% set p = item_picture %}{% set shown = p.picture %}
 <section class="item-picture" id="item-picture" aria-label="Picture" data-item-picture>
-<div class="item-picture-frame">{% if shown %}<img src="{{ shown.url }}" alt="Picture of {{ p.name }}" data-item-picture-image onerror="this.hidden=true">{% else %}<span class="muted">No picture</span>{% endif %}</div>
+<div class="item-picture-frame">{% if shown %}<img src="{{ shown.url }}" alt="Picture of {{ p.name }}" data-item-picture-image onerror="const s = document.createElement('span'); s.className = 'muted'; s.textContent = 'No picture'; s.dataset.pictureNone = ''; this.replaceWith(s)">{% else %}<span class="muted" data-picture-none>No picture</span>{% endif %}</div>
 <div class="item-picture-side">
 {% if shown and not shown.chosen %}<p class="muted small">The newest image attached to this item.</p>{% endif %}
 {% if p.can_edit %}<form hx-post="/c/{{ company_id }}/item-picture/{{ p.item }}" hx-encoding="multipart/form-data" hx-target="#item-picture" hx-swap="outerHTML" hx-trigger="picture-ready" data-item-picture-form>

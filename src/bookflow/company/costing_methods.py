@@ -193,10 +193,9 @@ def _summary_message(inp, change):
 
 
 def _person(s, command):
-    """A person's act (fifo-v1's people-only list), refused here too for a caller that arrives without an actor."""
-    if s.actor is None or s.actor.kind != 'human':
-        from bookflow.hub import people_only
-        raise people_only.refusal('', command=command, capability='company')
+    """costing.method (capabilities-v1): asked of an agent at dispatch, and here too."""
+    from bookflow.hub import capabilities
+    capabilities.require_company(s, command)
 
 
 def plan_set(s, ctx, inp) -> Plan:

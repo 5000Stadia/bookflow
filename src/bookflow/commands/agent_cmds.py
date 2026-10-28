@@ -32,6 +32,9 @@ VIA = lambda ctx: ctx.interface.value  # noqa: E731
 
 NOT_YET_AUTHORIZED = "not_yet_authorized"
 ADMIN_ONLY = "human installation administrator on an activated installation"
+# capabilities-v1: what a principal may grant an agent (hub.permission_capabilities_catalog keeps the same words).
+AGENT_MANAGE = "installation administrator, or an agent its principal granted agent.manage, on an activated installation"
+USER_MANAGE = "installation administrator, or an agent its principal granted user.manage, on an activated installation"
 PERMITTED_USE_REQUIRED = ("Confirm that the people this agent acts for permit it to act for them with their full "
                           "permissions.")
 FRESH_CONTEXT_REQUIRED = ("Acknowledge a fresh context: the people this agent acts for, or their permissions, were "
@@ -44,8 +47,14 @@ FRESH_CONTEXT = ("Acknowledge that the agent will resume in a fresh, isolated ex
 
 # ---------------------------------------------------------------- shared
 
-def require_agent_administration(s: Session, *, activated_only: bool = True) -> None:
-    """A human installation administrator; writes also need an activated installation."""
+def require_agent_administration(s: Session, *, activated_only: bool = True, capability: str | None = None,
+                                 command: str = "") -> None:
+    """A human installation administrator; writes also need an activated installation. Where the act is a capability
+    (agent.manage, user.manage), an agent its principal granted it, acting for an installation administrator."""
+    if s.actor.kind != "human" and capability is not None:
+        from bookflow.hub.capabilities import require_hub
+        require_hub(s, capability, command)
+        return
     if s.actor.kind != "human":
         raise BookflowError("E_PERMISSION", details={"capability": "user", "required_role": "human"})
     if not s.is_hub_admin:
@@ -66,7 +75,9 @@ def require_activated(s: Session) -> None:
 
 def republish(name: str, inp, s: Session) -> None:
     """The publication re-check: the caller still administers agents, and what it named still resolves."""
-    require_agent_administration(s, activated_only=name not in ("agent show", "agent list"))
+    from bookflow.hub.capabilities import HUB, capability_for
+    capability = capability_for(name) if capability_for(name) in HUB else None
+    require_agent_administration(s, activated_only=name not in ("agent show", "agent list"), capability=capability, command=name)
     if name in ("agent show", "agent assign", "agent unassign", "agent authorize"):
         _find_agent(s, inp.agent, include_inactive=name == "agent show")
     if name in ("agent deactivate", "agent activate"):
@@ -249,15 +260,22 @@ agent_create = command("agent create", scope="hub", capability="user", required_
                        description=("Create an agent identity. It starts suspended with no principals and no access: "
                                     "assign the humans it acts for, grant its memberships, authorize it, then issue a token."),
                        input_model=AgentCreateInput, output_model=AgentCreateOutput, writes={"hub"}, positional=["username"],
-                       error_codes=["E_VALIDATION", "E_PERMISSION", "E_USER_NOT_FOUND"], authorization=ADMIN_ONLY)
+                       error_codes=["E_VALIDATION", "E_PERMISSION", "E_USER_NOT_FOUND"], authorization=AGENT_MANAGE)
 
 
 @agent_create
 def plan_agent_create(inp: AgentCreateInput, ctx: Context, s: Session) -> Plan:
-    require_agent_administration(s)
+    require_agent_administration(s, capability="agent.manage", command="agent create")
     if users.username_key(inp.username) == "system" or users.username_matches(s.hub, inp.username):
         raise BookflowError("E_VALIDATION", details={"fields": [{"field": "username", "problem": "already in use"}]})
     owner = _find_principal(s, inp.owner).get("id") if inp.owner is not None else s.actor.id
+    if s.actor.kind != "human":
+        # An agent's new agent belongs to the person it acts for, never to the agent or to someone else.
+        from bookflow.hub.capabilities import principal_of
+        if inp.owner is not None and owner != principal_of(s):
+            raise BookflowError("E_PERMISSION", message="An agent creates agents only for its own principal.",
+                                details={"capability": "agent.manage", "reason": "owner_not_principal", "field": "owner"})
+        owner = principal_of(s)
     at = now_iso()
     agent = {"id": "", "kind": "agent", "username": inp.username, "display_name": inp.display_name or inp.username,
              "owner_user_id": owner, "active": True, **users.common(s.actor.id, VIA(ctx), at)}
@@ -388,12 +406,12 @@ agent_unassign = command("agent unassign", scope="hub", capability="user", requi
                                       "it holds is revoked, including tokens for its other principals, until it is authorized again."),
                          input_model=AgentUnassignInput, output_model=AgentWriteOutput, writes={"hub"}, positional=["agent"],
                          error_codes=["E_PERMISSION", "E_USER_NOT_FOUND", "E_RECORD_NOT_FOUND", "E_VALIDATION", "E_VERSION_CONFLICT"],
-                         authorization=ADMIN_ONLY)
+                         authorization=AGENT_MANAGE)
 
 
 @agent_unassign
 def plan_agent_unassign(inp: AgentUnassignInput, ctx: Context, s: Session) -> Plan:
-    require_agent_administration(s)
+    require_agent_administration(s, capability="agent.manage", command="agent unassign")
     agent = _find_agent(s, inp.agent)
     person = _find_principal(s, inp.principal)
     current = _principals(s, agent["id"])
@@ -501,12 +519,12 @@ agent_deactivate = command("agent deactivate", scope="hub", capability="user", r
                                         "revives no token; it must be authorized again."),
                            input_model=AgentStatusInput, output_model=AgentWriteOutput, writes={"hub"}, positional=["agent"],
                            error_codes=["E_PERMISSION", "E_USER_NOT_FOUND", "E_VALIDATION", "E_VERSION_CONFLICT"],
-                           authorization=ADMIN_ONLY)
+                           authorization=AGENT_MANAGE)
 
 
 @agent_deactivate
 def plan_agent_deactivate(inp: AgentStatusInput, ctx: Context, s: Session) -> Plan:
-    require_agent_administration(s)
+    require_agent_administration(s, capability="agent.manage", command="agent deactivate")
     agent = _find_agent(s, inp.agent, include_inactive=True)
     intent = _status_intent(s, agent, inp.expected_version, False)
     prepared = _status_edit(s, ctx, intent, preview=True)
@@ -524,12 +542,12 @@ agent_activate = command("agent activate", scope="hub", capability="user", requi
                                       "`agent authorize`, then issue a new token."),
                          input_model=AgentStatusInput, output_model=AgentWriteOutput, writes={"hub"}, positional=["agent"],
                          error_codes=["E_PERMISSION", "E_USER_NOT_FOUND", "E_VALIDATION", "E_VERSION_CONFLICT"],
-                         authorization=ADMIN_ONLY)
+                         authorization=AGENT_MANAGE)
 
 
 @agent_activate
 def plan_agent_activate(inp: AgentStatusInput, ctx: Context, s: Session) -> Plan:
-    require_agent_administration(s)
+    require_agent_administration(s, capability="agent.manage", command="agent activate")
     agent = _find_agent(s, inp.agent, include_inactive=True)
     intent = _status_intent(s, agent, inp.expected_version, True)
     prepared = _status_edit(s, ctx, intent, preview=True)
@@ -606,12 +624,12 @@ user_deactivate = command("user deactivate", scope="hub", capability="user", req
                                        "administrator cannot be deactivated."),
                           input_model=UserStatusInput, output_model=UserStatusOutput, writes={"hub"}, positional=["user"],
                           error_codes=["E_PERMISSION", "E_USER_NOT_FOUND", "E_VALIDATION", "E_VERSION_CONFLICT"],
-                          authorization=ADMIN_ONLY)
+                          authorization=USER_MANAGE)
 
 
 @user_deactivate
 def plan_user_deactivate(inp: UserStatusInput, ctx: Context, s: Session) -> Plan:
-    require_agent_administration(s)
+    require_agent_administration(s, capability="user.manage", command="user deactivate")
     person = _find_person(s, inp.user)
     intent = _status_intent(s, person, inp.expected_version, False)
     prepared = _status_edit(s, ctx, intent, preview=True)
@@ -633,12 +651,12 @@ user_activate = command("user activate", scope="hub", capability="user", require
                                      "and tokens stay revoked, and agents suspended by the deactivation stay suspended until authorized."),
                         input_model=UserStatusInput, output_model=UserStatusOutput, writes={"hub"}, positional=["user"],
                         error_codes=["E_PERMISSION", "E_USER_NOT_FOUND", "E_VALIDATION", "E_VERSION_CONFLICT"],
-                        authorization=ADMIN_ONLY)
+                        authorization=USER_MANAGE)
 
 
 @user_activate
 def plan_user_activate(inp: UserStatusInput, ctx: Context, s: Session) -> Plan:
-    require_agent_administration(s)
+    require_agent_administration(s, capability="user.manage", command="user activate")
     person = _find_person(s, inp.user)
     intent = _status_intent(s, person, inp.expected_version, True)
     prepared = _status_edit(s, ctx, intent, preview=True)

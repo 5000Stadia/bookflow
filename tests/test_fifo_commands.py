@@ -180,11 +180,11 @@ def test_an_agent_is_refused_costing_method_set_and_withdraw_and_a_person_is_not
     r = hosted.call('costing-method.set', switch, company=cid, headers=as_agent)
     assert r.status_code == 403, r.text
     body = r.json()
-    assert body['code'] == 'E_PERMISSION' and body['details']['reason'] == 'people_only'
-    assert "Changing the costing method is a person's act" in body['message']
+    assert body['code'] == 'E_PERMISSION' and body['details']['reason'] == 'capability_not_granted'
+    assert "Changing the costing method needs the capability costing.method" in body['message']
     hosted.ok('costing-method.set', switch, company=cid, headers=REASON)
     r = hosted.call('costing-method.withdraw', {'switch': '2099-01-01'}, company=cid, headers=as_agent)
-    assert r.status_code == 403 and r.json()['details']['reason'] == 'people_only', r.text
+    assert r.status_code == 403 and r.json()['details']['reason'] == 'capability_not_granted', r.text
     bearer = {k: v for k, v in as_agent.items() if k == 'Authorization'}
     shown = hosted.ok('costing-method.show', {}, company=cid, headers=bearer)    # reads stay allowed
     assert [row['status'] for row in shown['switches']] == ['standing']

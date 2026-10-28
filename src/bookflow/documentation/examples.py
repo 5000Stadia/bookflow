@@ -1989,4 +1989,6 @@ EXAMPLES.update({
                                 {'item': 'Pipe Sealant', 'attachment': ID}),
     'item picture clear': Example('bookflow item picture clear "Pipe Sealant" --company "Demo Plumbing Co"'
                                   ' --reason "Wrong photo" --json', {'item': 'Pipe Sealant'}),
+    'item picture get': Example(f'bookflow item picture get {ID} --out sealant.jpg --company "Demo Plumbing Co" --json',
+                                {'attachment': ID}),
 })
