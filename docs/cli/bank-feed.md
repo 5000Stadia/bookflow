@@ -814,6 +814,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `bank_import.created_via` | string | yes | no | — | — |
 | `bank_import.on_behalf_of` | string \| null | yes | yes | — | — |
 | `bank_import.created_at` | string | yes | no | — | — |
+| `part_way` | dict \| null | no | yes | null | A reversal or move of this import under way or blocked: entries taken back and left, the lines still in the inbox, the account a move goes to, and `next`, the command that finishes it; null otherwise. |
 | `by_state` | object[string, integer] | yes | no | — | — |
 | `lines` | array[object] | yes | no | — | — |
 | `lines[].id` | string | yes | no | — | — |
@@ -867,7 +868,8 @@ Example JSON output:
   },
   "by_state": {},
   "lines": [],
-  "next_cursor": null
+  "next_cursor": null,
+  "part_way": null
 }
 ```
 

@@ -28,10 +28,13 @@ MATCHED = 200
 
 
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith('--')]
-    created = int(sys.argv[sys.argv.index('--created') + 1]) if '--created' in sys.argv else 0
-    if '--created' in sys.argv:
-        args.remove(str(created))
+    argv = sys.argv[1:]
+    created = 0
+    if '--created' in argv:
+        at = argv.index('--created')
+        created = int(argv[at + 1])
+        del argv[at:at + 2]
+    args = [a for a in argv if not a.startswith('--')]
     moving = '--move' in sys.argv
     first_call = '--first-call' in sys.argv
     lines = int(args[0])
