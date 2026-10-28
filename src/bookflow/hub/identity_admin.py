@@ -298,13 +298,23 @@ def _agent_admission(old,base_pair,actor,principal_id,intent):
 
 def _agent_may_give(old,actor,principal,capability,covering):
     """An agent gives (or un-denies) a capability only if it holds it by explicit grant and its principal could give
-    it: an installation-wide one only for an active hub administrator, and never one the principal is denied."""
+    it: an installation-wide one only for an active hub administrator, and never one the agent or principal is denied
+    anywhere the act reaches (at an organization, any company in it)."""
     from .permission_capabilities_catalog import CAPABILITIES
     hub=CAPABILITIES.get(capability,('',))[0]=='hub_admin'
     if not _held(old,actor.id,capability,None if hub else covering):fail('not_administrator','grants')
     if hub and not (principal.hub_admin and principal.active):fail('not_administrator','grants')
-    denied=[m for m in old.memberships if m.user_id==principal.id and m.revoked_at is None and (hub or (m.scope_type,m.scope_id) in covering)]
+    reach=covering|_carve_outs(old,covering)
+    denied=[m for m in old.memberships if m.user_id in (principal.id,actor.id) and m.revoked_at is None and (hub or (m.scope_type,m.scope_id) in reach)]
     if any(capability in json.loads(m.denies or '[]') for m in denied):fail('not_administrator','grants')
+
+
+def _carve_outs(old,covering):
+    """An organization scope reaches every company in it: a deny at any of them is a carve-out the organization-wide
+    act would step over (a grant, role change, deny lift or revoke at the organization)."""
+    if any(kind=='company' for kind,_ in covering):return set()
+    orgs={sid for kind,sid in covering if kind=='organization'}
+    return {('company',cid) for cid,oid in old.keys.companies if oid in orgs}
 
 
 def _human_grant_ceiling(old,actor,intent):

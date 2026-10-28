@@ -263,3 +263,78 @@ def test_co_principals_must_match_on_hub_administration_and_new_capability_denie
         r = hosted.call("agent.assign", {"agent": agent, "principal": second, "confirm_permitted_use": True},
                         headers=REASON)
         assert r.status_code != 200 and r.json()["code"] == "E_AGENT_PRINCIPAL_MISMATCH", r.text
+
+
+def test_an_organization_wide_grant_never_steps_over_a_company_carve_out(hosted):
+    """Verification round 2: agent A (granted party.merge at the organization, denied it at the company) gave D
+    party.merge organization-wide, and D then lifted A's company deny. Each step is now refused, as are a role change,
+    a deny lift and a revoke at the organization that would widen past the carve-out."""
+    cid, oid = hosted.company_id, _org(hosted)
+    add_membership(hosted.root, _uid(hosted, hosted.login), "organization", oid, "owner")
+    hosted.ok("user.add", {"username": "principal-n", "company": cid, "role": "owner", "hub_admin": True,
+                           "password": "pw-principal-n-12345"}, headers=REASON)
+    add_membership(hosted.root, _uid(hosted, "principal-n"), "organization", oid, "owner")
+    a = make_agent(hosted_call(hosted), "cl-carve-a", principals="principal-n", company=cid, role="admin")
+    d = make_agent(hosted_call(hosted), "cl-carve-d", principals="principal-n", company=cid, role="standard")
+    assert _grant(hosted, a, "admin", scope=("organization", oid),
+                  grants=["membership.grant", "party.merge"]).status_code == 200
+    assert _grant(hosted, a, "admin", denies=["party.merge"]).status_code == 200
+    for agent in (a, d):
+        _authorize(hosted, agent)
+    as_a, as_d = _bearer(hosted, a, "principal-n"), _bearer(hosted, d, "principal-n")
+    _refused(_grant(hosted, d, "standard", grants=["party.merge"], headers=as_a), "grants")  # company: already refused
+    before = _rows(hosted, d)
+    _refused(_grant(hosted, d, "admin", scope=("organization", oid), grants=["party.merge", "membership.grant"],
+                    headers=as_a), "grants")
+    assert _rows(hosted, d) == before
+    # The chain's second step: D, holding nothing A could not give, cannot lift A's company deny.
+    before_a = _rows(hosted, a)
+    _refused(_grant(hosted, a, "admin", denies=[], headers=as_d))
+    assert _rows(hosted, a) == before_a
+    for name in ("Carve A", "Carve B"):
+        hosted.ok("customer.create", {"name": name}, company=cid, headers=REASON)
+    merge = hosted.call("customer.merge?dry_run=true", {"merged": "Carve A", "into": "Carve B"},
+                        company=cid, headers={**REASON, **as_a})
+    assert merge.status_code == 403, merge.text
+    # A role change, a deny lift and a revoke at the organization run through the same rule.
+    u = hosted.ok("user.add", {"username": "clerk-w", "password": "pw-clerk-w-1234567"}, headers=REASON)["user_id"]
+    assert _grant(hosted, u, "standard", scope=("organization", oid), denies=["party.merge"]).status_code == 200
+    before_u = _rows(hosted, u)
+    _refused(_grant(hosted, u, "admin", scope=("organization", oid), grants=["party.merge"],
+                    denies=["party.merge"], headers=as_a), None)
+    _refused(_grant(hosted, u, "standard", scope=("organization", oid), denies=[], headers=as_a), "grants")
+    _refused(_revoke(hosted, u, as_a, scope=("organization", oid)), "grants")
+    assert _rows(hosted, u) == before_u
+    # The principal's own carve-out binds the same way: with A's lifted by a person, the principal's deny refuses.
+    assert _grant(hosted, a, "admin", denies=[]).status_code == 200
+    assert _grant(hosted, _uid(hosted, "principal-n"), "owner", denies=["party.merge"]).status_code == 200
+    _authorize(hosted, a)
+    as_a = _bearer(hosted, a, "principal-n", label="t3")
+    _refused(_grant(hosted, d, "standard", scope=("organization", oid), grants=["party.merge"], headers=as_a), "grants")
+
+
+def test_import_messages_read_as_written_and_a_data_root_is_still_withheld(hosted):
+    """Verification round 2: imports name input field paths under `path`; redaction garbled them for everyone but
+    administrators. Only a filesystem-shaped value is withheld now."""
+    from bookflow.core.dispatch import redact_message
+    cid = hosted.company_id
+    hosted.ok("user.add", {"username": "principal-p", "company": cid, "role": "owner", "hub_admin": True,
+                           "password": "pw-principal-p-12345"}, headers=REASON)
+    r = hosted.ok("user.add", {"username": "clerk-r", "password": "pw-clerk-r-1234567"}, headers=REASON)["user_id"]
+    assert _grant(hosted, r, "standard").status_code == 200
+    agent = make_agent(hosted_call(hosted), "cl-import", principals="principal-p", company=cid, role="standard")
+    readers = {"person": _bearer(hosted, "clerk-r"), "agent": _bearer(hosted, agent, "principal-p"), "admin": {}}
+    content = "Name,Town\nAcme Supply,Springfield\n"
+    for target in ("billing_address.nowhere", "a"):
+        messages = {}
+        for who, headers in readers.items():
+            got = hosted.call("import.check", {"kind": "customer", "content": content, "columns": {"Town": target}},
+                              company=cid, headers=headers)
+            assert got.status_code in (400, 422), (who, got.text)
+            messages[who] = got.json()["message"]
+        assert "withheld" not in messages["person"], messages
+        assert messages["person"] == messages["agent"] == messages["admin"], messages
+        assert f"'{target}' is not a field of `customer create`" in messages["person"], messages
+    root = str(hosted.root)
+    said = redact_message(f"Cannot read {root}/hub.db.", {"path": f"{root}/hub.db"})
+    assert root not in said and "<path withheld>" in said

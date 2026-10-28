@@ -97,10 +97,16 @@ def _path_values(obj: Any) -> list[str]:
     return []
 
 
+_FILESYSTEM_SHAPE = re.compile(r"^(?:/|~[/\\]|[A-Za-z]:[/\\])|[/\\]")
+
+
 def redact_message(message: str, details: Any) -> str:
-    """No filesystem path in what a non-administrator reads: the paths the details name, then any absolute path."""
+    """No filesystem path in what a non-administrator reads: the paths the details name, then any absolute path.
+
+    Only a details value shaped like a filesystem path (absolute, home-relative, or holding a separator) is replaced:
+    imports key input field paths (`billing_address.town`) as `path` too, and those read as they are."""
     for value in sorted(set(_path_values(details)), key=len, reverse=True):
-        if value:
+        if value and _FILESYSTEM_SHAPE.search(value):
             message = message.replace(value, "<path withheld>")
     return _ABSOLUTE_PATH.sub("<path withheld>", message)
 
