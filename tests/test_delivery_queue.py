@@ -336,7 +336,7 @@ def test_the_go_holder_non_holder_and_a_holder_who_lost_it_and_the_tick(hosted_q
     hosted.ok('delivery-connection.add', {'name': 'Office', 'kind': 'fake', 'settings': SETTINGS}, company=cid,
               headers=person)
     refused = hosted.call('delivery-connection.enable', {'connection': 'Office'}, company=cid, headers=as_agent)
-    assert refused.status_code == 403 and refused.json()['details']['reason'] == 'people_only'
+    assert refused.status_code == 403 and refused.json()['details']['capability'] == 'delivery.connect'
     hosted.ok('delivery-connection.enable', {'connection': 'Office'}, company=cid, headers=person)
 
     # A non-holder (an agent): released, it waits; its approval is refused; a person's go sends it on the tick.
@@ -344,7 +344,7 @@ def test_the_go_holder_non_holder_and_a_holder_who_lost_it_and_the_tick(hosted_q
     hosted.ok('delivery.send', {'messages': [draft['number']]}, company=cid, headers=as_agent)
     assert host.schedule_now()[cid]['delivery']['claimed'] == 0
     r = hosted.call('delivery.approve', {'messages': [draft['number']]}, company=cid, headers=as_agent)
-    assert r.status_code == 403 and r.json()['details']['reason'] == 'people_only'
+    assert r.status_code == 403 and r.json()['details']['capability'] == 'delivery.send'
     approved = hosted.ok('delivery.approve', {'all_waiting': True}, company=cid, headers=person)
     assert [m['number'] for m in approved['messages']] == [draft['number']]
     ticked = host.schedule_now()[cid]['delivery']

@@ -44,7 +44,7 @@ def test_an_agent_clocks_only_its_principal_and_cannot_link_logins(hosted):
 
     # Linking a login to an employee is a person's act.
     r = hosted.call("clock.link", {"employee": "Dave Brazer", "user": "dave-d"}, company=cid, headers=as_agent)
-    assert r.status_code == 403 and r.json()["details"]["reason"] == "people_only", r.text
+    assert r.status_code == 403 and r.json()["details"]["capability"] == "clock.link", r.text
     hosted.ok("user.add", {"username": "outsider-o", "password": "pw-outsider-o-12345"}, headers=REASON)
     r = hosted.call("clock.link", {"employee": "Dave Brazer", "user": "outsider-o"}, company=cid, headers=REASON)
     assert r.status_code == 422 and "not a member" in r.text, r.text

@@ -121,7 +121,7 @@ def test_only_a_person_changes_the_schedule(root, tmp_path):
     agent = SimpleNamespace(actor=SimpleNamespace(kind="agent", id="x"))
     with pytest.raises(bookflow.BookflowError) as refused:
         plan_backup_schedule.plan(ScheduleInput(company="x", off=True), None, agent)
-    assert refused.value.code == "E_PERMISSION" and refused.value.details["required_role"] == "human"
+    assert refused.value.code == "E_PERMISSION" and refused.value.details["capability"] == "backup.schedule"
     client = bookflow.connect(data_root=str(root))
     company = _company(client)
     make_actor(root, "ada", company_role=(company, "admin"))

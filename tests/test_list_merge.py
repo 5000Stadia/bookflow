@@ -111,7 +111,8 @@ def test_an_agent_is_refused(books, tmp_path):
         with pytest.raises(BookflowError) as error:
             dispatch_run(registry.get(name), body, ctx, data_root=str(root), company_selector=COMPANY,
                          company_source="option", _login="merge-agent")
-        assert error.value.code == "E_PERMISSION" and error.value.details.get("required_role") == "human", name
+        assert error.value.code == "E_PERMISSION" and error.value.details.get("capability") == "list.merge", name
+        assert error.value.details["reason"] == "capability_not_granted", name
     assert as_user(root, "merge-person").run("account merge", {"merged": "Truck Fuel", "into": "Truck Fuel Costs"},
                                              company=COMPANY, reason=REASON)["changed"]
 

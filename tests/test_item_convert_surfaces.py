@@ -66,8 +66,8 @@ def test_an_agent_is_refused(client, root):
     with pytest.raises(BookflowError) as error:
         dispatch_run(registry.get("item convert"), {"item": ITEM, "to": "inventory"}, ctx, data_root=str(root),
                      company_selector=COMPANY, company_source="option", _login="convert-agent")
-    assert error.value.code == "E_PERMISSION" and error.value.details.get("required_role") == "human"
-    assert "Converting an item to an inventory part is a person's act" in error.value.message
+    assert error.value.code == "E_PERMISSION" and error.value.details.get("capability") == "item.convert"
+    assert "Converting an item to an inventory part needs the capability item.convert" in error.value.message
     # The person the agent acts for may convert.
     done = as_user(root, "convert-person").run("item convert", {"item": ITEM, "to": "inventory"},
                                                company=COMPANY, reason="we stock couplings now")

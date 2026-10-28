@@ -189,8 +189,8 @@ def test_only_a_person_marks_a_message_sent_and_an_agents_release_waits_for_a_go
         'Waiting for your go'
     assert any("person's go" in w for w in released['warnings'])
     r = hosted.call('delivery.mark-sent', {'message': drafted['number']}, company=cid, headers=as_agent)
-    assert r.status_code == 403 and r.json()['details']['reason'] == 'people_only', r.text
-    assert 'sent by hand' in r.json()['message']
+    assert r.status_code == 403 and r.json()['details']['reason'] == 'capability_not_granted', r.text
+    assert r.json()['details']['capability'] == 'delivery.mark-sent' and 'sent by hand' in r.json()['message']
     sent = hosted.ok('delivery.mark-sent', {'message': drafted['number'], 'sent_at': '2026-08-11'}, company=cid,
                      headers={**hosted.bearer, **REASON})
     assert sent['status_label'] == 'Sent by hand' and sent['delivery'] == 'unknown' and sent['sent_via'] == 'manual'

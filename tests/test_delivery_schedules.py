@@ -205,8 +205,8 @@ def test_an_agents_send_schedule_sends_nothing_until_a_person_makes_it_live(host
         refused = hosted.call('delivery-schedule.live', {'schedule': 'Daily invoices'}, company=cid,
                               headers=as_agent)
         body = refused.json()
-        assert refused.status_code == 403 and body['details']['reason'] == 'people_only'
-        assert body['details']['needs'] == 'automate.delivery' and 'automate.delivery' in body['message']
+        assert refused.status_code == 403 and body['details']['reason'] == 'capability_not_granted'
+        assert body['details']['capability'] == 'automate.delivery' and 'automate.delivery' in body['message']
         # The tick runs it as the agent: released, every message waits for a go; nothing leaves; one to-do.
         ticked = host.schedule_now(now=datetime(2026, 6, 1, 12, tzinfo=timezone.utc))[cid]
         ran = ticked['delivery_schedules']['Daily invoices']['ran']
@@ -234,7 +234,7 @@ def test_an_agents_send_schedule_sends_nothing_until_a_person_makes_it_live(host
         assert edited['state'] == 'draft' and 'returns it to draft' in edited['warnings'][0]
         r = hosted.call('delivery-schedule.update', {'schedule': 'Daily invoices', 'confirm': 'x'}, company=cid,
                         headers=as_agent)
-        assert r.status_code == 403 and r.json()['details']['needs'] == 'automate.delivery'
+        assert r.status_code == 403 and r.json()['details']['capability'] == 'automate.delivery'
         check = hosted.ok('delivery-schedule.live?dry_run=true', {'schedule': 'Daily invoices'}, company=cid,
                           headers=person)['check']
         hosted.ok('delivery-schedule.live', {'schedule': 'Daily invoices', 'confirm': check['fingerprint']},
