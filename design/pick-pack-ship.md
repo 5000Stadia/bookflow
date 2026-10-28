@@ -892,6 +892,28 @@ For the builder, defaults standing unless review finds otherwise:
   CSV export's Sales order, Customer and Site id columns (the export prints every row field and has no per-report
   display columns; deferred to the export framework).
 
+## As built: closing-trial fixes
+
+From the R181 closing trial (notes/trials/r181-trial/results.md); `tests/test_shipment_trial_fixes.py`.
+
+- **Availability is by site.** `shipment post --sales-order` (no lines) and the worksheet's can-ship-now read
+  `commitments.available_at`: on hand at the shipping site less what other documents commit there (a line naming no
+  site commits at the default site) and pending builds there reserve. They read the company-wide figure before, so a
+  shipment could plan, and post, units another site held, taking this site's bins below zero with only a warning.
+  The planned lines now name the bins and lots the units leave, taken as a pick takes them (default bin first, lots
+  earliest expiry first, staging and live pick reservations left out).
+- **`sales-order invoice`** takes no date (today), conversion key (one per idempotency key, else per order version)
+  or expected version (optional guard); the request hash leaves out a defaulted date and version. Its help says it
+  bills every shipped, unbilled unit in one invoice.
+- **Part of a pick list.** `shipment post --pick-list` with `lines` (order line or item, bin, lot, serial numbers,
+  quantity) ships part of what was picked. `pick_lists.live_states` takes what live shipments from a list took off
+  its picks and plan; an order stays on the list until no picked unit is left of a line with anything to ship.
+  `picked_on_list` offers `lines` before cancelling.
+- **`barcode lookup`** on a serial number or lot gives `fulfillment`: each live pick list, draft and posted shipment
+  holding it, with box numbers.
+- JSON numbers are taken exactly where `quantity` or a pick `line` asks decimal text (integers, or a float whose
+  shortest repr is a plain decimal); E_CONTEXT_IN_INPUT says where `reason` goes.
+
 ## Decided (2026-10-26)
 
 - K1 carrier integration: none. Carrier and tracking are recorded and printed as text only (Kabe, gate gba01e0).

@@ -391,9 +391,11 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # cursor, report shipments' date_from, customer, site, ship_method and cursor -- their null branches.
     # 4146 -> 4167 (R112 inc 3, measured): seven delivery commands' optional inputs, draft's documents, send's
     # messages and batch, approve's and query's batch, company update's auto-flag date -- their null branches.
-    # 4167 -> 4208 (R112 inc 4, measured): eight delivery-schedule commands' optional inputs (the selection, template,
+    # 4167 -> 4170 (R181 closing-trial fixes): sales-order invoice's expected_version, conversion_key and date
+    # are optional now -- their null branches.
+    # 4170 -> 4211 (R112 inc 4, measured): eight delivery-schedule commands' optional inputs (the selection, template,
     # timing, mode, catch-up window, confirm and expected_version) -- their null branches.
-    assert sum(len(group["paths"]) for group in mapped)==4208
+    assert sum(len(group["paths"]) for group in mapped)==4211
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.
