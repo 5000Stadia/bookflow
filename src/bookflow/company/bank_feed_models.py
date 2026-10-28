@@ -35,6 +35,8 @@ class ImportInput(Model):
     confirm_account: bool = Field(False, description=(
         "Go on although the file's account number or kind differs from what this account last received "
         '(needs bank-feed.connect).'))
+    account_confirmed: bool = Field(False, description=(
+        "Go on although a file with no account number (CSV) looks like another account's statement."))
     limit: int = Field(100, strict=True, ge=0, le=1000, description='Lines to return in the result (the counts '
                                                                     'always cover the whole file).')
 
@@ -86,6 +88,7 @@ class AccountCheck(Model):
     known_bank_number: str | None = None
     known_account_last4: str | None = None
     known_kind: Literal['bank', 'card'] | None = None
+    learns: str | None = Field(None, description='The number this import teaches the account (first or confirmed).')
     status: Literal['first', 'same', 'confirmed', 'no_id'] = Field(description=(
         "first (nothing known yet; this import teaches it), same, confirmed (differs; confirm_account given), "
         'no_id (a CSV carries none: check the overlap instead).'))

@@ -2,14 +2,16 @@
 design/bank-feeds.md §2, §3).
 
 Nothing here is a second parser or matcher: a file is read by ``statement_files.parse``, each line keyed by its
-``line_id`` (FITID, or a hash with an occurrence number), and matched by ``statement_files.match`` against
-``reconcile_import_cmds.candidates``, exactly as ``reconcile import`` does; CSV mappings are the ones it saves.
+``line_id`` (FITID, or a hash with an occurrence number), and matched by ``statement_files.match`` against the
+candidates ``reconcile_import_cmds.movement_candidates`` makes, as ``reconcile import`` does, read for the file's date
+window only (``window_candidates``); CSV mappings are the ones it saves.
 
 ``prepare`` derives everything an import will do and writes nothing (the preview); ``write`` re-derives it inside the
 command's own write and records it in one transaction: the import, its new lines (each with an ``imported`` event), the
-``seen_again`` events of lines a later file repeated with a moved date, what the account received, and the import's
-**batch** (kind ``bank-import``, ordering ``strict``, scoped to the account) with one effect per row it made and per
-match, so increment 2 reverses the whole import as one unit. An import posts nothing to the books.
+``seen_again`` events of lines it repeated with a moved date, what the account received, and the import's **batch**
+(kind ``bank-import``, ordering ``strict``, scoped to the account) with one effect per row it made, per match and for
+the account record (with its ``before``), so increment 2 reverses the whole import as one unit. A file with nothing
+new writes nothing. An import posts nothing to the books.
 """
 from __future__ import annotations
 
@@ -29,6 +31,13 @@ from bookflow.core.ids import new_id
 
 BATCH_KIND = 'bank-import'
 SOFT_DAYS = 3
+# How far a bank moves a line's date between pending and posted. Banks post a pending card or debit line within one
+# to three business days, so with a weekend between five calendar days covers it; a weekly charge (seven days) is
+# already beyond it. The same FITID and amount further apart than this is a new charge the bank gave an old id
+# (a monthly subscription), kept and flagged `fitid_reused`, never read as the same line.
+DRIFT_DAYS = 5
+# A file whose lines sit mostly in another account (its inbox, or its entries) looks like that account's statement.
+ELSEWHERE_PERCENT = 50
 CHUNK = 500
 REFUSED_SHOWN = 50
 
@@ -168,28 +177,218 @@ def _live_by_fitid(conn, account_id: str, fitids) -> dict[str, list[dict]]:
     return found
 
 
-def _statement_keys(conn, account_id: str, keys) -> set[str]:
-    found = set()
-    for chunk in _chunks(keys):
-        found.update(conn.execute(sa.select(c.statement_lines.c.line_id).where(
-            c.statement_lines.c.account_id == account_id, c.statement_lines.c.line_id.in_(chunk))).scalars())
+def _standing_statement(conn, account_id: str, line_ids) -> dict[str, list[dict]]:
+    """Lines of this account's reconciliation statements under these ids, from a standing draft only: one still
+    open, or one consumed by a certificate that still stands. A canceled (discarded) draft's lines hold nothing."""
+    t = c.metadata.tables
+    drafts, revisions = t['reconciliation_drafts'], t['reconciliation_draft_revisions']
+    certificates, active = t['reconciliation_certificates'], t['reconciliation_active_certificates']
+    certified = sa.exists(sa.select(sa.literal(1)).select_from(
+        certificates.join(revisions, revisions.c.id == certificates.c.origin_draft_revision_id)
+        .join(active, active.c.certificate_id == certificates.c.id)).where(revisions.c.draft_id == drafts.c.id))
+    found: dict[str, list[dict]] = {}
+    for chunk in _chunks(line_ids):
+        for row in conn.execute(sa.select(c.statement_lines.c.line_id, c.statement_lines.c.amount,
+                                          c.statement_lines.c.date).select_from(
+                c.statement_lines.join(drafts, drafts.c.id == c.statement_lines.c.draft_id)).where(
+                c.statement_lines.c.account_id == account_id, c.statement_lines.c.line_id.in_(chunk),
+                sa.or_(drafts.c.state == 'open', sa.and_(drafts.c.state == 'consumed', certified)))).mappings():
+            found.setdefault(row['line_id'], []).append(dict(row))
     return found
 
 
-def _words(text: str) -> set[str]:
-    return files._words(text)
+# Processor and channel words a bank puts around the merchant's name, and the short forms banks print for common
+# merchants: only the merchant's own name is compared.
+_NOISE = frozenset((
+    'pos debit credit purchase card checkcard visa mastercard ach recurring payment pmt www com net org inc llc ltd '
+    'corp the usa sq tst pp paypal pending posted online web').split())
+_ALIASES = {'amzn': 'amazon', 'mktp': 'marketplace', 'mktplace': 'marketplace', 'wm': 'walmart', 'wmt': 'walmart',
+            'sbux': 'starbucks', 'pypl': 'paypal', 'goog': 'google', 'msft': 'microsoft', 'apl': 'apple',
+            'itunes': 'apple', 'whse': 'warehouse', 'svc': 'service', 'intl': 'international'}
 
 
-def _similar(a: str, b: str) -> bool:
-    """Payee texts sharing most words: more than half of the shorter one's."""
-    x, y = _words(a), _words(b)
+def _payee_name(text: str) -> list[str]:
+    """The merchant's name as words: letters and digits only, casefolded, known short forms written out; processor
+    words, words under three characters and reference numbers (runs mostly of digits) dropped."""
+    out = []
+    for word in re.findall(r'[a-z0-9]+', (text or '').casefold()):
+        word = _ALIASES.get(word, word)
+        if word in _NOISE or len(word) < 3 or 2 * sum(ch.isdigit() for ch in word) >= len(word):
+            continue
+        out.append(word)
+    return out
+
+
+def _same_payee(a: str, b: str) -> str:
+    """'same', 'different', or 'unknown' when either side names no merchant this can read. Same: the names lead with
+    the same word, one runs on from the other, or they read alike letter by letter (most of their letters in
+    order)."""
+    from difflib import SequenceMatcher
+    x, y = _payee_name(a), _payee_name(b)
     if not x or not y:
-        return False
-    return 2 * len(x & y) > min(len(x), len(y))
+        return 'unknown'
+    joined_x, joined_y = ''.join(x), ''.join(y)
+    if x[0] == y[0] or joined_x.startswith(joined_y) or joined_y.startswith(joined_x):
+        return 'same'
+    return 'same' if SequenceMatcher(None, joined_x, joined_y).ratio() >= 0.75 else 'different'
 
 
 def _days(a: str, b: str) -> int:
     return abs((date.fromisoformat(a) - date.fromisoformat(b)).days)
+
+
+def _shift(day: str, days: int) -> str:
+    return (date.fromisoformat(day) + timedelta(days=days)).isoformat()
+
+
+def _free_key(line, taken: set[str]) -> str:
+    """The line's own id, or, when a live line or an earlier line of this file holds it, the id with the amount's
+    hash (another amount), then with the date (the same amount another day): unique among the account's live lines."""
+    base = f'{line.line_id}!{_amount_hash(line.amount)}'
+    for key in (line.line_id, base, f'{base}.{line.date}'):
+        if key not in taken:
+            taken.add(key)
+            return key
+    n = 2
+    while f'{base}.{line.date}.{n}' in taken:
+        n += 1
+    taken.add(f'{base}.{line.date}.{n}')
+    return f'{base}.{line.date}.{n}'
+
+
+def _soft_duplicates(conn, account_id: str, rows: list[dict], new: list[dict]) -> None:
+    """Mark each new line that probably repeats a live line under another key `possible_duplicate`, pointing at it.
+    Each live line is claimed once; lines of this file never flag each other (two coffees are two lines)."""
+    if not new:
+        return
+    file_keys = {r['key'] for r in rows}
+    lo = _shift(min(r['line'].date for r in new), -SOFT_DAYS)
+    hi = _shift(max(r['line'].date for r in new), SOFT_DAYS)
+    by_amount: dict[int, list[dict]] = {}
+    for v in conn.execute(sa.select(
+            c.bank_lines.c.id, c.bank_lines.c.line_key, c.bank_lines.c.date, c.bank_lines.c.amount,
+            c.bank_lines.c.payee, c.bank_lines.c.memo).where(
+            c.bank_lines.c.account_id == account_id, c.bank_lines.c.live == 1,
+            c.bank_lines.c.date >= lo, c.bank_lines.c.date <= hi)).mappings():
+        if v['line_key'] not in file_keys:
+            by_amount.setdefault(v['amount'], []).append(dict(v))
+    claimed = set()
+    for r in new:
+        line = r['line']
+        fits = []
+        for v in by_amount.get(line.amount, ()):
+            if v['id'] in claimed or _days(v['date'], line.date) > SOFT_DAYS:
+                continue
+            payee = _same_payee(v['payee'] or v['memo'], line.payee or line.memo)
+            if payee != 'different':
+                fits.append((payee != 'same', _days(v['date'], line.date), v['id']))
+        if fits:
+            fits.sort()
+            r['duplicate_of'] = fits[0][2]
+            claimed.add(fits[0][2])
+            r['warnings'] = [*r['warnings'], 'possible_duplicate']
+
+
+def _movements_near(conn, lo: str, hi: str, account_ids=None) -> list[dict]:
+    """The current, active statement effects dated lo..hi, one row per effect key (reconciliation sign by
+    `statement_amount`), of these accounts or of every account."""
+    t = c.metadata.tables
+    versions, heads = t['reconciliation_effect_versions'], t['reconciliation_effect_heads']
+    q = sa.select(versions).select_from(versions.join(heads, heads.c.version_id == versions.c.id)).where(
+        versions.c.active == 1, versions.c.effective_date >= lo, versions.c.effective_date <= hi)
+    if account_ids is not None:
+        q = q.where(versions.c.account_id.in_(list(account_ids)))
+    return [dict(v) for v in conn.execute(q).mappings()]
+
+
+def _content_check(s, account: dict, rows: list[dict], overlap: list[dict], inp) -> None:
+    """A file with no account number (CSV) whose lines mostly sit in another account -- in its inbox, or as its
+    entries (same amount in that account's sign, within match_days) where this account holds fewer -- looks like
+    that account's statement: refused unless the caller passes account_confirmed."""
+    if inp.account_confirmed:
+        return
+    read = [r for r in rows if r['outcome'] != 'repeated_in_file']
+    if not read:
+        return
+    found = []
+    for o in overlap:
+        if o['percent'] > ELSEWHERE_PERCENT:
+            found.append((o['lines'], o['account_id'], o['account'], f"{o['lines']} of its {len(read)} lines are "
+                          f"already in {o['account']}'s bank inbox"))
+    from bookflow.company.reconciliation_preparation import statement_amount
+    conn = s.company.conn
+    lo = _shift(min(r['line'].date for r in read), -inp.match_days)
+    hi = _shift(max(r['line'].date for r in read), inp.match_days)
+    others = {row['id']: row['type'] for row in conn.execute(sa.select(c.accounts.c.id, c.accounts.c.type).where(
+        c.accounts.c.type.in_(('bank', 'credit_card')), c.accounts.c.currency == account['currency'])).mappings()}
+    held: dict[str, dict[int, list[str]]] = {}
+    for v in _movements_near(conn, lo, hi, others):
+        held.setdefault(v['account_id'], {}).setdefault(statement_amount(v), []).append(v['effective_date'])
+
+    def matching(account_id: str) -> int:
+        dates = {amount: sorted(ds) for amount, ds in held.get(account_id, {}).items()}
+        sign = -1 if others.get(account_id) == 'credit_card' else 1
+        n = 0
+        for r in read:
+            line = r['line']
+            pool = dates.get(sign * line.amount, [])
+            near = next((d for d in pool if _days(d, line.date) <= inp.match_days), None)
+            if near is not None:
+                pool.remove(near)
+                n += 1
+        return n
+
+    own = matching(account['id'])
+    for other in others:
+        if other == account['id']:
+            continue
+        n = matching(other)
+        if n * 100 > ELSEWHERE_PERCENT * len(read) and n > own:
+            name = _full_name(s, other)
+            found.append((n, other, name, f"{n} of its {len(read)} lines match entries in {name} "
+                                          f"({own} match entries in this account)"))
+    if not found:
+        return
+    found.sort(key=lambda f: (-f[0], f[2]))
+    _, other, name, why = found[0]
+    raise BookflowError('E_ACCOUNT_MISMATCH', message=(
+        f"This looks like {name}'s statement: {why}. Import it to {name}, or pass account_confirmed if it is "
+        f"{_full_name(s, account['id'])}'s."), details={
+        'account': account['id'], 'account_name': _full_name(s, account['id']), 'looks_like': other,
+        'looks_like_name': name, 'problems': [f[3] for f in found], 'field': 'account_confirmed'})
+
+
+_MATCHED: dict[str, list] = {}  # fingerprint -> matcher results, newest last
+_MATCHED_KEPT = 4
+
+
+def _match(s, account_id: str, lines: list, inp) -> list:
+    """The shared matcher over the entries dated within the suggestion window of these lines (the only ones it can
+    pair), loaded alone rather than the account's whole history.
+
+    The preview's match is kept in this process under a fingerprint of everything it read -- the lines, every
+    candidate (its movement and version fingerprint, date, amount, number, text, cleared state) and the windows --
+    so the real import that follows a preview with nothing changed in between reuses it instead of matching
+    again."""
+    from bookflow.commands.reconcile_import_cmds import window_candidates
+    lo = _shift(min(v.date for v in lines), -inp.suggest_days)
+    hi = _shift(max(v.date for v in lines), inp.suggest_days)
+    linked = set(s.company.conn.execute(sa.select(c.bank_lines.c.entry_id).where(
+        c.bank_lines.c.account_id == account_id, c.bank_lines.c.live == 1,
+        c.bank_lines.c.entry_id.is_not(None))).scalars())
+    population = [v for v in window_candidates(s, account_id, lo, hi, hi) if _entry_id(v) not in linked]
+    digest = hashlib.sha256(json.dumps([
+        str(s.company.path) if hasattr(s.company, 'path') else '', account_id, inp.match_days, inp.suggest_days,
+        [(v.line_id, v.date, v.amount, v.payee, v.memo, v.number) for v in lines],
+        [(v.ref[1], v.ref[0].model_dump_json(), v.date, v.amount, v.number, list(v.payees), v.memo, v.selected,
+          v.reconciled, v.eligible) for v in population]]).encode()).hexdigest()
+    if digest in _MATCHED:
+        return _MATCHED[digest]
+    results = files.match(lines, population, match_days=inp.match_days, suggest_days=inp.suggest_days)
+    _MATCHED[digest] = results
+    while len(_MATCHED) > _MATCHED_KEPT:
+        _MATCHED.pop(next(iter(_MATCHED)))
+    return results
 
 
 # ------------------------------------------------------------------ preparing an import
@@ -224,8 +423,6 @@ def _mapping(s, account_id: str, inp) -> dict:
 
 def prepare(s, ctx, inp) -> dict:
     """What importing this file would do, derived afresh; writes nothing."""
-    from bookflow.commands import reconcile_cmds as rc
-    from bookflow.commands.reconcile_import_cmds import candidates
     conn = s.company.conn
     account = _account(s, inp.account)
     account_id = account['id']
@@ -262,15 +459,19 @@ def prepare(s, ctx, inp) -> dict:
         warnings.append(f"this exact file came in on {same_file['created_at'][:10]} (import {same_file['id']})")
 
     check = _account_check(s, account, parsed, text, inp)
+    sign = -1 if card else 1
 
-    # Keys: the parser's ids. A FITID is the same line while its amount is the same (a pending line the bank re-dated
-    # when it posted); a FITID the bank reused for another amount is kept apart (`!<amount hash>`), never dropped.
+    # Keys: the parser's ids. A FITID is the same line while its amount is the same and its date moved no further
+    # than a bank re-dates a pending line (DRIFT_DAYS); the same FITID for another amount, or for the same amount
+    # on a clearly different date (a monthly charge under one id), is a new line kept apart and flagged
+    # `fitid_reused`, never dropped.
     rows = []  # dicts: line, key, outcome, warnings (and held: the live line it repeats)
     ordered = sorted((*parsed.lines, *parsed.duplicates), key=lambda v: (v.date, v.line_id, v.amount))
     by_fitid = _live_by_fitid(conn, account_id, {v.fitid for v in ordered if v.fitid})
     live = _live_lines(conn, account_id, {v.line_id for v in ordered if not v.fitid})
     taken = {row['line_key'] for held in by_fitid.values() for row in held}
-    in_file: dict[tuple[str, int], dict] = {}
+    claimed_held: set[str] = set()
+    in_file: dict[str, list[dict]] = {}
     for line in ordered:
         r = {'line': line, 'key': line.line_id, 'outcome': 'new', 'warnings': []}
         rows.append(r)
@@ -278,68 +479,66 @@ def prepare(s, ctx, inp) -> dict:
             if line.line_id in live:
                 r['outcome'], r['held'] = 'already_in', live[line.line_id]
             continue
-        if (line.fitid, line.amount) in in_file:
+        kept = in_file.setdefault(line.fitid, [])
+        if any(k['line'].amount == line.amount and _days(k['line'].date, line.date) <= DRIFT_DAYS for k in kept):
             r['outcome'] = 'repeated_in_file'
             continue
-        in_file[(line.fitid, line.amount)] = r
         held = by_fitid.get(line.fitid, [])
-        same = next((row for row in held if row['amount'] == line.amount), None)
-        if same is not None:
-            r['key'], r['outcome'], r['held'] = same['line_key'], 'already_in', same
+        same = sorted((_days(row['date'], line.date), row['date'], row['id']) for row in held
+                      if row['amount'] == line.amount and row['id'] not in claimed_held
+                      and _days(row['date'], line.date) <= DRIFT_DAYS)
+        kept.append(r)
+        if same:
+            row = next(row for row in held if row['id'] == same[0][2])
+            claimed_held.add(row['id'])
+            r['key'], r['outcome'], r['held'] = row['line_key'], 'already_in', row
             continue
-        if held or any(f == line.fitid and a != line.amount for f, a in in_file):
+        if held or len(kept) > 1:
             r['warnings'] = ['fitid_reused']
-        if r['key'] in taken:
-            r['key'] = f"{line.line_id}!{_amount_hash(line.amount)}"
-        taken.add(r['key'])
-    in_statement = _statement_keys(conn, account_id, {r['key'] for r in rows if r['outcome'] == 'new'})
+        r['key'] = _free_key(line, taken)
+
+    # A reconciliation's statement holds the line only when it is the same line (same amount, a date within the
+    # drift) on a standing draft or certificate; the same id for anything else is a reused FITID, kept.
+    held_in_statement = _standing_statement(conn, account_id, {r['line'].line_id for r in rows if r['outcome'] == 'new'})
     for r in rows:
-        if r['outcome'] == 'new' and r['key'] in in_statement:
+        if r['outcome'] != 'new' or r['line'].line_id not in held_in_statement:
+            continue
+        line = r['line']
+        if any(v['amount'] == sign * line.amount and _days(v['date'], line.date) <= DRIFT_DAYS
+               for v in held_in_statement[line.line_id]):
             r['outcome'] = 'in_statement'
+        elif 'fitid_reused' not in r['warnings']:
+            r['warnings'] = [*r['warnings'], 'fitid_reused']
     new = [r for r in rows if r['outcome'] == 'new']
 
-    # Soft duplicates: a new hash line that probably repeats a live line whose text the bank cleaned up.
-    file_keys = {r['key'] for r in rows}
-    claimed = set()
-    hash_new = [r for r in new if r['key'].startswith('hash:')]
-    if hash_new:
-        lo = min(r['line'].date for r in hash_new)
-        hi = max(r['line'].date for r in hash_new)
-        lo = (date.fromisoformat(lo) - timedelta(days=SOFT_DAYS)).isoformat()
-        hi = (date.fromisoformat(hi) + timedelta(days=SOFT_DAYS)).isoformat()
-        nearby = [dict(v) for v in conn.execute(sa.select(
-            c.bank_lines.c.id, c.bank_lines.c.line_key, c.bank_lines.c.date, c.bank_lines.c.amount,
-            c.bank_lines.c.payee, c.bank_lines.c.memo).where(
-            c.bank_lines.c.account_id == account_id, c.bank_lines.c.live == 1,
-            c.bank_lines.c.date >= lo, c.bank_lines.c.date <= hi)).mappings()
-            if v['line_key'] not in file_keys]
-        by_amount: dict[int, list[dict]] = {}
-        for v in nearby:
-            by_amount.setdefault(v['amount'], []).append(v)
-        for r in hash_new:
-            line = r['line']
-            fits = [v for v in by_amount.get(line.amount, ()) if v['id'] not in claimed
-                    and _days(v['date'], line.date) <= SOFT_DAYS
-                    and _similar(v['payee'] or v['memo'], line.payee or line.memo)]
-            if fits:
-                fits.sort(key=lambda v: (_days(v['date'], line.date), v['id']))
-                r['duplicate_of'] = fits[0]['id']
-                claimed.add(fits[0]['id'])
-                r['warnings'] = [*r['warnings'], 'possible_duplicate']
+    # Soft duplicates: a new line, FITID or hash, that probably repeats a live line under another key (a pending
+    # line posted with a new FITID, text the bank cleaned up). Same amount, dates within SOFT_DAYS, and a payee that
+    # reads as the same merchant, or that cannot be read: then it is flagged rather than doubled silently.
+    _soft_duplicates(conn, account_id, rows, new)
 
-    # Matching: the shared matcher, in reconciliation sign, against entries no live inbox line is linked to yet.
-    sign = -1 if card else 1
+    # Which account: a file with no account number is checked by what it holds.
+    overlap = _overlap(s, account_id, [r['key'] for r in rows if r['outcome'] != 'repeated_in_file'])
+    if check['status'] == 'no_id':
+        _content_check(s, account, rows, overlap, inp)
+    for o in overlap:
+        if o['percent'] >= ELSEWHERE_PERCENT:
+            warnings.append(f"{o['lines']} of these lines ({o['percent']}%) are already in {o['account']}: "
+                            'check this is the right account')
+    read = [r for r in rows if r['outcome'] != 'repeated_in_file']
+    mine = sum(1 for r in read if r['outcome'] in ('already_in', 'in_statement'))
+    if read and new and mine * 100 // len(read) >= ELSEWHERE_PERCENT:
+        warnings.append(f'{mine} of these lines ({mine * 100 // len(read)}%) are already in this account: only the '
+                        'new ones come in')
+    if check.get('learns'):
+        warnings.append(f"{check['account']} has received no numbered statement yet: this import teaches it "
+                        f"{check['learns']}, and a later file for another number is refused")
+
+    # Matching: the shared matcher, in reconciliation sign, against the account's entries dated near the file's new
+    # lines, leaving out entries a live inbox line is already linked to (by entry, whatever revision it is at).
     results = []
     if new:
-        snapshot = rc._loaded(s, account_id)
-        cutoff = (date.fromisoformat(max(r['line'].date for r in new)) + timedelta(days=inp.suggest_days)).isoformat()
-        linked = set(conn.execute(sa.select(c.bank_lines.c.movement).where(
-            c.bank_lines.c.account_id == account_id, c.bank_lines.c.live == 1,
-            c.bank_lines.c.movement.is_not(None))).scalars())
-        population = [v for v in candidates(snapshot, account_id, cutoff, None, conn)
-                      if v.ref[0].model_dump_json() not in linked]
-        lines = [files.Line(**{**r['line'].__dict__, 'amount': sign * r['line'].amount}) for r in new]
-        results = files.match(lines, population, match_days=inp.match_days, suggest_days=inp.suggest_days)
+        results = _match(s, account_id, [files.Line(**{**r['line'].__dict__, 'amount': sign * r['line'].amount})
+                                         for r in new], inp)
     for r, result in zip(new, results):
         r['result'] = result
         if result.status == 'reconciled':
@@ -356,18 +555,13 @@ def prepare(s, ctx, inp) -> dict:
         r.setdefault('entry', None)
         r.setdefault('reason', '')
 
-    overlap = _overlap(s, account_id, [r['key'] for r in rows if r['outcome'] != 'repeated_in_file'])
-    for o in overlap:
-        if o['percent'] >= 50:
-            warnings.append(f"{o['lines']} of these lines ({o['percent']}%) are already in {o['account']}: "
-                            'check this is the right account')
     reused = sum(1 for r in new if 'fitid_reused' in r['warnings'])
     if reused:
         warnings.append(f'{reused} line(s) carry a FITID the bank already used for another amount: kept, not dropped')
     soft = sum(1 for r in new if r.get('duplicate_of'))
     if soft:
-        warnings.append(f'{soft} new line(s) look like lines already in the inbox with the text changed '
-                        '(possible_duplicate): ignore each as a duplicate, or keep it')
+        warnings.append(f'{soft} new line(s) look like lines already in the inbox under another id or with the text '
+                        'changed (possible_duplicate, naming the line): kept; ignore each as a duplicate, or keep it')
     count = lambda outcome: sum(1 for r in rows if r['outcome'] == outcome)
     counts = dict(lines_in_file=len(rows), new=len(new), already_in=count('already_in'),
                   in_statement=count('in_statement'), repeated_in_file=count('repeated_in_file'),
@@ -427,9 +621,14 @@ def _account_check(s, account: dict, parsed, text: str, inp) -> dict:
         sa.func.coalesce(c.bank_feed_accounts.c.bank_number, '') == (hint['bank_number'] or ''))).scalar()
     if holder is not None:
         problems.append(f"account ...{hint['account_last4']} last came into {_full_name(s, holder)}")
+    learns = (f"account ...{hint['account_last4']}" + (f" at bank {hint['bank_number']}" if hint['bank_number'] else '')
+              + f" ({'card' if hint['kind'] == 'card' else 'bank'} statement)")
     if not problems:
-        status = 'first' if known is None or not known['account_last4'] else 'same'
-        return {**out, 'status': status, 'hint': hint}
+        if known is None or not known['account_last4']:
+            # The first numbered file teaches the account its number on this run: the preview names it, and the
+            # import learns it without a separate confirmation (it is recorded in the import's batch).
+            return {**out, 'status': 'first', 'hint': hint, 'learns': learns}
+        return {**out, 'status': 'same', 'hint': hint}
     if not inp.confirm_account:
         raise BookflowError('E_ACCOUNT_MISMATCH', message=(
             'This file may be for another account: ' + '; '.join(problems) + '. Import it to the right account, or '
@@ -440,7 +639,7 @@ def _account_check(s, account: dict, parsed, text: str, inp) -> dict:
             'received_by': holder, 'received_by_name': _full_name(s, holder) if holder else None,
             'problems': problems, 'field': 'confirm_account'})
     _require_connect(s)
-    return {**out, 'status': 'confirmed', 'hint': hint}
+    return {**out, 'status': 'confirmed', 'hint': hint, 'learns': learns}
 
 
 def _overlap(s, account_id: str, keys: list[str]) -> list[dict]:
@@ -516,10 +715,12 @@ def write(s, ctx, prepared: dict) -> tuple[m.ImportOutput, bool]:
     inp = prepared['input']
     account_id = prepared['account_id']
     new = prepared['new']
-    moved = [r for r in prepared['rows'] if r['outcome'] == 'already_in'
+    # A file with nothing new writes nothing: a re-dated line it repeats is noted only by an import that brings a
+    # line, inside that import's batch. A mapping it saves is the one exception: saved on its own (below).
+    moved = [r for r in prepared['rows'] if new and r['outcome'] == 'already_in'
              and r['held']['date'] != r['line'].date]
     saving = bool(inp.save_mapping) and store.saved_mapping(conn, account_id, inp.save_mapping) != prepared['mapping']
-    if not new and not saving and not moved:
+    if not new and not saving:
         return output(prepared), False
     actor = s.actor
     at = clock.now_iso()
@@ -576,20 +777,28 @@ def write(s, ctx, prepared: dict) -> tuple[m.ImportOutput, bool]:
                     for v in line_rows]
         effects += [dict(record_type='transaction', record_id=v['entry_id'], action='linked', version_after=None)
                     for v in line_rows if v['entry_id'] is not None]
-        for chunk in _chunks([dict(batch_id=batch_id, seq=n, before=None, event_id=event, created_at=at, **e)
-                              for n, e in enumerate(effects, start=1)]):
-            conn.execute(c.batch_effects.insert(), chunk)
+        # What the account received: its last import and, from a first numbered file or a confirmed one, the number
+        # it learns. Recorded with what it was before, so reversing the import restores it.
         hint = prepared['check'].get('hint')
         values = dict(last_import_id=import_id, updated_at=at)
         if hint is not None and prepared['check']['status'] in ('first', 'confirmed'):
             values.update(bank_number=hint['bank_number'], account_last4=hint['account_last4'], kind=hint['kind'])
-        known = conn.execute(sa.select(c.bank_feed_accounts.c.version).where(
-            c.bank_feed_accounts.c.account_id == account_id)).scalar()
+        known = conn.execute(sa.select(c.bank_feed_accounts).where(
+            c.bank_feed_accounts.c.account_id == account_id)).mappings().first()
         if known is None:
             conn.execute(c.bank_feed_accounts.insert().values(account_id=account_id, version=1, **values))
+            effects.append(dict(record_type='bank_feed_account', record_id=account_id, action='created',
+                                version_after=1, before=None))
         else:
             conn.execute(c.bank_feed_accounts.update().where(c.bank_feed_accounts.c.account_id == account_id)
-                         .values(version=known + 1, **values))
+                         .values(version=known['version'] + 1, **values))
+            effects.append(dict(record_type='bank_feed_account', record_id=account_id, action='updated',
+                                version_after=known['version'] + 1, before=json.dumps({
+                                    k: known[k] for k in ('bank_number', 'account_last4', 'kind', 'last_import_id',
+                                                          'updated_at', 'version')}, sort_keys=True)))
+        for chunk in _chunks([dict(batch_id=batch_id, seq=n, event_id=event, created_at=at, **{'before': None, **e})
+                              for n, e in enumerate(effects, start=1)]):
+            conn.execute(c.batch_effects.insert(), chunk)
     else:
         event_rows = []
     # A line the bank re-dated (a pending item that posted) is the same line: its date drift is noted on it.
@@ -601,6 +810,8 @@ def write(s, ctx, prepared: dict) -> tuple[m.ImportOutput, bool]:
             created_by=actor.id, created_via=via, created_at=at, audit_event_id=event))
     for chunk in _chunks(event_rows):
         conn.execute(c.bank_line_events.insert(), chunk)
+    # A saved CSV mapping stays outside the batch: it is shared with `reconcile import`, which may use it after this
+    # import is reversed, so reversing an import never takes it away.
     if saving:
         store.save_mapping(conn, account_id=account_id, name=inp.save_mapping, mapping=prepared['mapping'],
                            created_at=at, created_by=actor.id if actor else None, audit_event_id=event)

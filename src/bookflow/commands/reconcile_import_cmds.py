@@ -249,7 +249,11 @@ def candidates(snapshot, account_id, cutoff, draft, conn=None):
     """Each whole movement on the account as a match candidate, in reconciliation sign."""
     values, _ = account_population(snapshot, account_id, cutoff)
     selected = {v.key_id for v in draft.selections} if draft is not None else set()
-    claims = claimed(snapshot)
+    return movement_candidates(values, set(claimed(snapshot)), selected, cutoff, conn)
+
+
+def movement_candidates(values, claimed_keys, selected, cutoff, conn=None):
+    """The candidates these current effect rows make, one per whole movement, sorted by date."""
     result = []
     grouped = list(groups(values).values())
     movements = [m.MovementKey.model_validate_json(g[0]['movement_snapshot']) for g in grouped]
@@ -263,10 +267,44 @@ def candidates(snapshot, account_id, cutoff, draft, conn=None):
             amount=sum(statement_amount(v) for v in group),
             number=written.get(movement.revision_id) or display['number'] or '',
             payees=tuple(display['payees']), memo=display['memo'] or '',
-            selected=bool(keys & selected), reconciled=bool(keys & set(claims)),
+            selected=bool(keys & selected), reconciled=bool(keys & claimed_keys),
             eligible=first['effective_date'] <= cutoff))
     result.sort(key=lambda c: (c.date, c.ref[0].model_dump_json()))
     return result
+
+
+def window_candidates(s, account_id, lo, hi, cutoff):
+    """The account's movements dated lo..hi as candidates, read from the stored current effects alone.
+
+    For the bank inbox, which posts nothing and only proposes links: it reads the effects of the transactions with
+    an effect on the account in the window (each whole, so a movement is never cut), not the account's whole
+    history, and does not re-prove the account's ledger as a reconciliation does. The same effects are read after
+    the same materialization check, and the same permission owner authorizes the transactions they name.
+    """
+    import sqlalchemy as sa
+    from bookflow.company import payment_authority, schema as c
+    from bookflow.company.reconciliation_materialization import assert_materialized
+    assert_materialized(s.company)
+    conn = s.company.conn
+    t = c.metadata.tables
+    versions, heads, members = (t['reconciliation_effect_versions'], t['reconciliation_effect_heads'],
+                                t['reconciliation_current_members'])
+    current = versions.join(heads, heads.c.version_id == versions.c.id)
+    ids = sorted(set(conn.execute(sa.select(versions.c.transaction_id).select_from(current).where(
+        versions.c.account_id == account_id, versions.c.active == 1, versions.c.effective_date >= lo,
+        versions.c.effective_date <= hi)).scalars()))
+    payment_authority.authorize(s, ids)
+    values = []
+    for start in range(0, len(ids), 400):
+        values.extend(dict(v) for v in conn.execute(sa.select(versions).select_from(current).where(
+            versions.c.account_id == account_id, versions.c.active == 1,
+            versions.c.transaction_id.in_(ids[start:start + 400]))).mappings())
+    keys = sorted({v['key_id'] for v in values})
+    claimed_keys = set()
+    for start in range(0, len(keys), 400):
+        claimed_keys.update(conn.execute(sa.select(members.c.key_id).where(
+            members.c.key_id.in_(keys[start:start + 400]))).scalars())
+    return movement_candidates(values, claimed_keys, set(), cutoff, conn)
 
 
 def _prepare(inp, ctx, s, ids):

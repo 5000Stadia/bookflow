@@ -99,14 +99,14 @@ def test_random_overlapping_files_never_duplicate_and_change_no_books(client, se
             mine = [v for v in lines if v[1] == name]
             assert len({v[2] for v in mine}) == len(mine), 'a key is live twice'
             assert len(mine) == len(seen[name]), (seed, round_, name, len(mine), len(seen[name]))
-        # Every import that brought a line is one live batch, with one effect per import row, line and match.
+        # Every import that brought a line is one live batch, with one effect per import row, line and match, and the account record.
         with sqlite3.connect(database_path(client)) as conn:
             rows = conn.execute(
                 "SELECT i.lines_new, b.kind, b.state, (SELECT count(*) FROM batch_effects e WHERE e.batch_id = b.id), "
                 "(SELECT count(*) FROM bank_lines l WHERE l.import_id = i.id AND l.entry_id IS NOT NULL) "
                 'FROM bank_feed_imports i JOIN batches b ON b.id = i.batch_id').fetchall()
         assert len(rows) == imports
-        assert all(kind == 'bank-import' and state == 'live' and n > 0 and effects == 1 + n + links
+        assert all(kind == 'bank-import' and state == 'live' and n > 0 and effects == 2 + n + links
                    for n, kind, state, effects, links in rows)
         assert books(client) == before, 'an import posts nothing'
     assert imports >= 4, (seed, imports)

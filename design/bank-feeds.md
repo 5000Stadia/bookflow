@@ -530,20 +530,37 @@ For the builder, defaults standing unless review finds otherwise:
   `match_reason` come now, not with increment 3, because auto-match is this increment's and its link has to be kept;
   increment 3 adds only the proposal and rule columns. `possible_duplicate_of` and `warnings` are on the line too.
 - **One parser, one matcher, one set of mappings.** `bank-feed import` reads with `statement_files.parse`, keys by its
-  `line_id`, matches with `statement_files.match` over `reconcile_import_cmds.candidates` (in reconciliation sign, a
-  card's flipped; entries a live inbox line is already linked to are left out), and reads and saves CSV mappings in
+  `line_id`, matches with `statement_files.match` over the candidates `reconcile_import_cmds.movement_candidates`
+  builds (the builder `candidates` uses), in reconciliation sign, a card's flipped. Entries a live inbox line is
+  already linked to are left out by `entry_id`, so an entry edited to a new revision is never matched twice; a
+  second movement of a linked transaction on the same account then waits rather than risking a double. The
+  candidates are read by `window_candidates` for the new lines' dates plus `suggest_days` only (the only entries the
+  matcher can pair), from the stored current effects after the materialization check and with
+  `payment_authority.authorize` over the transactions they name; the inbox posts nothing, so it does not re-prove the
+  account's ledger as a reconciliation does. It reads and saves CSV mappings in
   `statement_csv_mappings`, so a mapping saved by either door serves both. Nothing is forked. The OFX account hint
   (`BANKID`, the last four of `ACCTID`, bank or card) is read with the parser's own tokeniser. `known_line_ids` is
   widened to the live inbox lines, which changes only `previously_imported` in `reconcile import`'s answer; a test
   imports the sample statement into the inbox both ways and checks every other field of `reconcile import` is as
   before, and the R167 golden tests run unchanged.
-- **Keys.** A FITID line is the same line while its amount is the same, whatever its date (a re-dated pending line
-  gets a `seen_again` event on the line it repeats, naming both dates); a FITID already used for another amount enters
-  as `fitid:<id>!<amount hash>` with `fitid_reused`, in either order of arrival. Lines are keyed in date order, not
-  file order, so which of two reused ids keeps the plain key does not depend on how the bank sorted the file. A hash
-  line is the parser's hash with its occurrence number. A new hash line with the same amount, a date within 3 days and
-  more than half the shorter payee's words shared with a live line this file does not itself hold is imported
-  `waiting` with `possible_duplicate`, never dropped; each live line is claimed once.
+- **Keys.** A FITID line is the same line while its amount is the same and its date moved no more than 5 days
+  (`DRIFT_DAYS`: banks post a pending line within one to three business days, five calendar days with a weekend; a
+  weekly charge at seven days is already beyond it). A re-dated line gets a `seen_again` event on the line it repeats,
+  naming both dates, written only by an import that brings a line, inside its batch. The same FITID for another
+  amount, or for the same amount further apart (a monthly subscription under one id), in one file or across files, is
+  a new line flagged `fitid_reused`, keyed `fitid:<id>!<amount hash>` (then `.<date>`) when the plain key is held.
+  Lines are keyed in date order, not file order. A hash line is the parser's hash with its occurrence number.
+- **A reconciliation's statement** holds a line (`in_statement`) only when it is the same line: the same id, the same
+  amount in reconciliation sign and a date within the drift, on a standing draft (open, or consumed by a certificate
+  that is still active). The same FITID there for anything else imports with `fitid_reused`; a discarded draft's
+  lines hold nothing.
+- **Soft duplicates.** Any new line, FITID or hash, with the same amount and a date within 3 days of a live line this
+  file does not itself hold is imported `waiting` with `possible_duplicate` naming that line (each claimed once),
+  unless their payees plainly name different merchants. Payees are compared by merchant name: letters and digits,
+  casefolded, known bank short forms written out (AMZN, MKTP, SBUX, WMT...), processor words (POS, DEBIT, SQ, TST,
+  PAYPAL...) and reference numbers dropped; the same when the names lead with the same word, one runs on from the
+  other, or they read alike letter by letter (ratio 0.75). A payee it cannot read is flagged, not passed. So a pending
+  line posted under a new FITID is kept and flagged; never dropped.
 - **All or nothing.** A file the parser refuses is read again row by row (OFX transaction by transaction) through the
   same parser, and the refusal lists every problem (`details.fields`, up to 50, and `total`); nothing is written. A
   file whose `file_sha256` an unreversed import of the account holds refuses with `E_ALREADY_IMPORTED` naming it,
@@ -552,11 +569,20 @@ For the builder, defaults standing unless review finds otherwise:
   with the account's own `institution_account_last4`; a card statement into a bank account (or the reverse), a
   different number, or a number another account received refuses with `E_ACCOUNT_MISMATCH` naming both and that
   account. `confirm_account` goes on and teaches the account the new number; it needs capability
-  `bank-feed.connect` (admin; held by admin and owner). A CSV shows `overlap_elsewhere`: each other feed account
-  holding its lines, with the percent, and a warning at 50 percent or more.
+  `bank-feed.connect` (admin; held by admin and owner). A first numbered file shows the number it will teach
+  (`account_check.learns`, and a warning) and learns it on the run with no separate confirmation. A file with no
+  number (CSV) is checked by content: when more than half its lines are already in another account's inbox, or match
+  another account's entries (same amount in that account's sign within `match_days`) where this account matches
+  fewer, it refuses with `E_ACCOUNT_MISMATCH` ("This looks like Savings's statement: ...") unless the caller passes
+  `account_confirmed` (no admin capability: it teaches nothing). `overlap_elsewhere` lists each other account holding
+  its lines; 50 percent or more of the file already in this account is a warning only, since a repeat adds nothing.
 - **The batch.** Each import that brings a line is one batch (kind `bank-import`, ordering `strict`, scope
   `bank-account:<account id>`) written in the import's own transaction with its audit event: effects for the import
-  row, each line (`created`) and each auto-match (`linked`, the transaction). No adapter is registered yet: `batch
+  row, each line (`created`), each auto-match (`linked`, the transaction) and the account record `bank_feed_account`
+  (`created`, or `updated` with `before`: its number, bank, kind, last import and version), so a reversal restores
+  the number a first or confirmed import taught. A CSV mapping saved with `save_mapping` stays outside the batch: it is
+  shared with `reconcile import`, so reversing an import never removes it. A file with nothing new writes nothing but
+  such a mapping. No adapter is registered yet: `batch
   show` reads it and reports it not reversible until increment 2 registers the reversal. Auto-match is on per import
   (`auto_match`, default true); the company preference `--bank-auto-match` waits for increment 3, where the sorting
   acts it governs are built. Matched and settled lines never touch the books.

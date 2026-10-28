@@ -4,7 +4,8 @@ process.
     python tools/measure_bank_feeds.py LINES [WORKDIR] [--entries N]
 
 Builds a fresh data root under WORKDIR (default: a temporary folder; use the root NVMe), a company on the general chart
-with a bank account holding N journal entries (default 200), and an OFX statement of LINES lines whose first N are
+with a bank account holding N journal entries (default 200; above 1,000, one journal a day with one bank line per
+entry, each its own movement), and an OFX statement of LINES lines whose first N are
 those entries (so the matcher pairs them) and the rest new. Times, in seconds: the parse alone; `bank-feed import
 --dry-run` (the preview: read, dedupe, match); the import itself (re-derived inside the write, then recorded with its
 batch); and the same file again with `again` (every line already in). Prints one JSON line, with the peak resident
@@ -45,10 +46,23 @@ def main():
     bank = run('account create', dict(name='Measure bank', type='bank'))['id']
     income = run('account create', dict(name='Measure income', type='income'))['id']
     start_day = date(2026, 1, 1)
-    for i in range(entries):
-        amount = f'{100 + i}.{i % 100:02d}'
-        run('journal post', dict(date=(start_day + timedelta(days=i % 300)).isoformat(), lines=[
-            dict(account=bank, side='debit', amount=amount), dict(account=income, side='credit', amount=amount)]))
+    seeded = time.perf_counter()
+    if entries <= 1000:
+        for i in range(entries):
+            amount = f'{100 + i}.{i % 100:02d}'
+            run('journal post', dict(date=(start_day + timedelta(days=i % 300)).isoformat(), lines=[
+                dict(account=bank, side='debit', amount=amount), dict(account=income, side='credit', amount=amount)]))
+    else:
+        # Many entries: one journal a day whose every bank line is its own movement on the account (its own match
+        # candidate), so 50,000 candidates take 300 posts rather than 50,000.
+        for d in range(300):
+            mine = [i for i in range(d, entries, 300)]
+            cents = [(100 + i) * 100 + i % 100 for i in mine]
+            total = sum(cents)
+            run('journal post', dict(date=(start_day + timedelta(days=d)).isoformat(), lines=[
+                *(dict(account=bank, side='debit', amount=f'{c // 100}.{c % 100:02d}') for c in cents),
+                dict(account=income, side='credit', amount=f'{total // 100}.{total % 100:02d}')]))
+    out_seed = time.perf_counter()
     body = []
     for i in range(lines):
         day = start_day + timedelta(days=i % 300)
@@ -58,7 +72,7 @@ def main():
     text = ('OFXHEADER:100\n\n<OFX>\n<BANKMSGSRSV1><STMTTRNRS><STMTRS>\n<CURDEF>USD\n<BANKACCTFROM><BANKID>1\n'
             '<ACCTID>99990001\n</BANKACCTFROM>\n<BANKTRANLIST>\n' + ''.join(body)
             + '</BANKTRANLIST>\n</STMTRS></STMTTRNRS></BANKMSGSRSV1>\n</OFX>\n')
-    out = {'lines': lines, 'entries': entries}
+    out = {'lines': lines, 'entries': entries, 'seed_s': round(out_seed - seeded, 1)}
     t = time.perf_counter()
     files.parse(text, 'auto', 2)
     out['parse_s'] = round(time.perf_counter() - t, 3)

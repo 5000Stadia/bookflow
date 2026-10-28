@@ -13,10 +13,10 @@ _IMPORT = (
     "Bring a bank or card statement file (OFX, QFX or CSV) into the account's bank inbox. Overlaps never duplicate: a "
     "line is known by its FITID (or, without one, a hash of the line and its occurrence in the file), so a download "
     "that overlaps an earlier one adds only the new lines; a FITID reused for another amount is kept apart and "
-    "flagged; a new line that looks like one already in with cleaned-up text is flagged possible_duplicate, never "
+    "flagged; a new line that looks like one already in under another id or text is flagged possible_duplicate, never "
     "dropped. Each line the matcher pairs surely with an entry is matched; the rest wait. Nothing is posted. A file "
     "with any unreadable line is refused whole, listing every problem. An OFX file is checked against the account "
-    "(E_ACCOUNT_MISMATCH); the same file twice is refused without again (E_ALREADY_IMPORTED). --dry-run is the "
+    "(E_ACCOUNT_MISMATCH), a CSV by its content (account_confirmed goes on); the same file twice is refused without again (E_ALREADY_IMPORTED). --dry-run is the "
     'preview. Example: {"account": "Checking", "attachment": "01J..."}.')
 
 

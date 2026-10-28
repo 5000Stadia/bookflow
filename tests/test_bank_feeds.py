@@ -77,6 +77,9 @@ def test_an_ofx_statement_comes_in_once_as_one_batch_and_posts_nothing(client):
     assert (counts['lines_in_file'], counts['new'], counts['repeated_in_file']) == (11, 10, 1)
     assert (counts['matched'], counts['settled'], counts['waiting']) == (8, 0, 2)
     assert preview['account_check']['status'] == 'first' and preview['account_check']['file_account_last4'] == '5678'
+    # The first numbered file names the number it teaches the account, and learns it on the run.
+    assert preview['account_check']['learns'] == 'account ...5678 at bank 011000015 (bank statement)'
+    assert any('teaches it account ...5678' in w for w in preview['warnings'])
     done = run(client, 'bank-feed import', dict(account='Checking', content=content))
     assert done['counts'] == counts and done['import_id'] and done['batch_id']
     assert [v['line_key'] for v in done['lines']] == [v['line_key'] for v in preview['lines']]
@@ -88,7 +91,7 @@ def test_an_ofx_statement_comes_in_once_as_one_batch_and_posts_nothing(client):
     assert batch[:2] == ('bank-import', 'strict') and batch[3] == 'live' and batch[2].startswith('bank-account:')
     effects = dict(table(client, 'SELECT record_type, count(*) FROM batch_effects WHERE batch_id = ? '
                                  'GROUP BY record_type', done['batch_id']))
-    assert effects == {'bank_feed_import': 1, 'bank_line': 10, 'transaction': 8}
+    assert effects == {'bank_feed_import': 1, 'bank_line': 10, 'transaction': 8, 'bank_feed_account': 1}
     shown = run(client, 'bank-feed show', dict(import_id=done['import_id'], state='waiting'))
     assert shown['by_state'] == {'matched': 8, 'waiting': 2} and len(shown['lines']) == 2
     assert run(client, 'bank-feed query', dict(account='Checking'))['imports'][0]['id'] == done['import_id']
@@ -176,7 +179,13 @@ def test_an_ofx_file_for_another_account_number_refuses_and_a_person_may_confirm
 def test_a_csv_mostly_in_another_account_shows_the_overlap_before_importing(client):
     rows = [(f'2026-07-{d:02d}', f'VENDOR {d}', f'-{d}.00') for d in range(1, 15)]
     run(client, 'bank-feed import', dict(account='Payment Example Bank', content=csv_file(rows[:12])))
-    preview = run(client, 'bank-feed import', dict(account='Checking', content=csv_file(rows)), dry_run=True)
+    # Most of its lines are in another account's inbox: it looks like that account's statement and is refused,
+    # preview included, unless the caller says it is this account's.
+    error = refused(client, dict(account='Checking', content=csv_file(rows)), 'E_ACCOUNT_MISMATCH')
+    assert error.message.startswith("This looks like Payment Example Bank's statement: 12 of its 14 lines")
+    assert error.details['looks_like_name'] == 'Payment Example Bank'
+    preview = run(client, 'bank-feed import', dict(account='Checking', content=csv_file(rows),
+                                                   account_confirmed=True), dry_run=True)
     overlap, = preview['overlap_elsewhere']
     assert (overlap['account'], overlap['lines'], overlap['percent']) == ('Payment Example Bank', 12, 85)
     assert any('Payment Example Bank' in w for w in preview['warnings'])
