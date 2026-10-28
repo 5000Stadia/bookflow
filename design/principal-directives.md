@@ -190,3 +190,7 @@ that sets how the business works from then on (new terms or price levels on ever
 bulk import that rewrites records) gets one double-check even when named: the agent shows the dry run's exact details
 ("212 customers, terms Net 30 to Net 15, from today") and runs it on the principal's yes. One check, of the details,
 never a repeated "are you sure".
+
+And ambiguity always gets a question, on any task: "When the guys are done send the invoice and take the payment over
+email!" leaves out which job, which customer, the amount, when "done" is and how the payment is taken, so the agent
+asks for those specifics and never fills them in by guessing. The agent guide says so plainly, with this example.
