@@ -11,7 +11,7 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_import_mapping_catalog as previous, permission_catalog as c
+from . import permission_delivery_schedule_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
 SOURCE_COMMIT = '73d7bebd640414bda46984313ac503ccd66bbcfe'

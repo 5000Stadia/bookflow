@@ -63,6 +63,8 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # worksheet-v1 adds none: the worksheet and the shipments report are reports.
     # delivery-batch-v1 adds none: drafting is anyone's, and a batch's send gives a go only as delivery send does.
     # import-mapping-v1 adds none: a decision's create runs its own command; a saved mapping is the import's own record.
+    # delivery-schedule-v1 adds `delivery-schedule live`: a send schedule made live sends unattended under its
+    # establisher; R187 converts it to automate.delivery.
     # bank-feed-v1 adds none: an import posts nothing; going past an account mismatch asks bank-feed.connect instead.
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {
@@ -73,7 +75,8 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
         'check print-confirm', 'check print-cancel', 'check reprint',
         'costing-method set', 'costing-method withdraw', 'delivery mark-sent', 'delivery approve',
         'delivery-connection add', 'delivery-connection update', 'delivery-connection enable',
-        'delivery-connection disable', 'delivery-connection remove', 'delivery-connection check'}
+        'delivery-connection disable', 'delivery-connection remove', 'delivery-connection check',
+        'delivery-schedule live'}
 
     # Every write at the identity capabilities is people-only; the one exception lets an
     # agent revoke its own token. Reads are not listed.

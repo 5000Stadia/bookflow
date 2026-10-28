@@ -23,7 +23,11 @@ COMMANDS = frozenset(('delivery draft', 'delivery update', 'delivery send', 'del
                       'delivery-connection query',
                       # Increment 3: flags, the queue and batches.
                       'delivery flag', 'delivery unflag', 'delivery queue', 'delivery batch', 'delivery batch-show', 'delivery batch-query',
-                      'delivery batch-cancel'))
+                      'delivery batch-cancel',
+                      # Increment 4: recurring schedules.
+                      'delivery-schedule create', 'delivery-schedule update', 'delivery-schedule live',
+                      'delivery-schedule pause', 'delivery-schedule resume', 'delivery-schedule run',
+                      'delivery-schedule show', 'delivery-schedule query'))
 
 
 @pytest.mark.timeout(900)
@@ -78,6 +82,20 @@ def test_the_same_delivery_through_python_cli_http_and_mcp(root, tmp_path):
                 batch_cancel = await call('delivery batch-cancel', {'batch': batch['number']})
                 flags += (batch['planned'], len(batch['messages']), batch_shown['drafted'], batch_cancel['state'],
                           len(batch_cancel['cancelled']))
+                made = await call('delivery-schedule create', {
+                    'name': 'Month end', 'kind': 'statement', 'period': 'previous-month', 'frequency': 'monthly',
+                    'start_date': '2099-01-31', 'mode': 'send'})
+                changed = await call('delivery-schedule update', {'schedule': 'Month end', 'balance_over': '10'})
+                check = (await call('delivery-schedule live', {'schedule': 'Month end'}, dry_run=True))['check']
+                live = await call('delivery-schedule live', {'schedule': 'Month end', 'confirm': check['fingerprint']})
+                idle = await call('delivery-schedule run', {'schedule': 'Month end'})
+                stopped = await call('delivery-schedule pause', {'schedule': 'Month end'})
+                resumed = await call('delivery-schedule resume', {'schedule': 'Month end'})
+                listed = await call('delivery-schedule query', {})
+                shown_schedule = await call('delivery-schedule show', {'schedule': 'Month end'})
+                flags += (made['state'], changed['selection'].get('balance_over'), check['cadence'], live['state'],
+                          idle['warnings'][0], stopped['active'], resumed['active'], listed['count'],
+                          shown_schedule['next_date'])
                 outbox = await call('delivery query', {'status': 'all'})
                 results[surface] = (fields, preview, retired, shown_template, templates, edited, shown, released,
                                     exported, sent, history, cancelled, outbox, queue, flags)
@@ -89,7 +107,9 @@ def test_the_same_delivery_through_python_cli_http_and_mcp(root, tmp_path):
     shapes = set()
     for surface, (fields, preview, retired, shown_template, templates, edited, shown, released, exported, sent,
                   history, cancelled, outbox, queue, flags) in results.items():
-        assert flags == (True, ['DEMO-SALE-INV-ACTIVE'], 'not-to-email', False, 1, 1, 1, 'cancelled', 1), \
+        assert flags == (True, ['DEMO-SALE-INV-ACTIVE'], 'not-to-email', False, 1, 1, 1, 'cancelled', 1, 'draft', '10',
+                         'Every month from 2099-01-31 (month end) at 06:00', 'live', 'Nothing is due: the next slot is 2099-01-31 from 06:00.',
+                         False, True, 1, '2099-01-31'), \
             (surface, flags)
         assert queue == (0, 'E_WORK_DEPENDENCY', 0, 'none', [], [], 'E_VALIDATION', ('E_RECORD_NOT_FOUND',) * 6), \
             (surface, queue)

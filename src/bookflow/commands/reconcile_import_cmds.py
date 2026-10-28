@@ -294,9 +294,12 @@ def window_candidates(s, account_id, lo, hi, cutoff):
         versions.c.account_id == account_id, versions.c.active == 1, versions.c.effective_date >= lo,
         versions.c.effective_date <= hi)).scalars()))
     payment_authority.authorize(s, ids)
+    # Only what a candidate is built from: never the provenance, which repeats the whole revision on every key.
+    columns = [versions.c[n] for n in ('id', 'key_id', 'transaction_id', 'account_id', 'account_type', 'effective_date',
+                                       'signed_debit', 'movement_snapshot', 'display_snapshot')]
     values = []
     for start in range(0, len(ids), 400):
-        values.extend(dict(v) for v in conn.execute(sa.select(versions).select_from(current).where(
+        values.extend(dict(v) for v in conn.execute(sa.select(*columns).select_from(current).where(
             versions.c.account_id == account_id, versions.c.active == 1,
             versions.c.transaction_id.in_(ids[start:start + 400]))).mappings())
     keys = sorted({v['key_id'] for v in values})

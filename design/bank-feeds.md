@@ -521,7 +521,7 @@ For the builder, defaults standing unless review finds otherwise:
 
 ## As built: increment 1
 
-- **Migration co0111** (on co0110, main's saved import mappings)
+- **Migration co0112** (on co0111, main's delivery schedules)
   adds `bank_feed_imports`, `bank_lines`, `bank_line_events` and `bank_feed_accounts`. The partial unique index
   `(account_id, line_key) WHERE live = 1` is what makes an overlap never duplicate. Guards: an import and an event
   never change; a line keeps what the bank printed (identity, date, amount, text, key), is never deleted and never
@@ -588,24 +588,39 @@ For the builder, defaults standing unless review finds otherwise:
   acts it governs are built. Matched and settled lines never touch the books.
 - **Commands and permissions.** `bank-feed import` (standard), `bank-feed show`, `bank-feed query`, `bank-line query`
   (member), each with `ledger.read` member beside the new capability `bank-feed`. Layer `bank-feed-v1` on
-  `import-mapping-v1` (818 commands, descriptor `2347be61`). `bank-feed import` is classified `not-a-record` for
+  `delivery-schedule-v1` (826 commands, descriptor `37f3a79e`). `bank-feed import` is classified `not-a-record` for
   imports. `plan_in_write`: the real import reuses the plan made inside its own write transaction.
 - **Not built here** (later increments): reversal and move (the batch is recorded, the adapter is increment 2's), the
   sorting acts and the company's auto-match preference, rules, the browser pages, the live-feed seam.
 
-**Measured** (`tools/measure_bank_feeds.py`, one process per size, the root NVMe, a fresh company on the general chart
-whose bank account holds 200 journal entries; an OFX file whose first 200 lines are those entries and the rest new;
-seconds, 2026-10-28):
+- **The shared matcher** (`statement_files.match`, after the increment 1 review). Each line looks only at the
+  movements of its own amount, sorted by date and cut to `suggest_days` (the only ones it could pair), and a
+  movement's rival lines are indexed rather than scanned; on random inputs with no reconciled movement it returns
+  exactly what the old pair loop did (3,000 cases compared). One change of behaviour: a movement a certified statement
+  already cleared now ranks after any open one, so a line is never `settled` on a cleared entry while the open entry it
+  belongs to stays unmatched. `reconcile import`'s golden tests (test_reconcile_import, test_reconcile_trial_fixes,
+  test_reconcile_voided_receipt and the statement-import tests of check printing, bounced payments and attachment
+  text) run unchanged.
+- **One match per preview.** A dry run keeps its match in the process under a fingerprint of the lines, every
+  candidate (movement, version fingerprint, date, amount, number, text, cleared state) and the windows; the import
+  that follows with nothing changed reuses it. Across separate CLI processes the import matches again (it is fast now).
 
-| Lines | Parse | Preview (`--dry-run`) | Import | Same file again (`again`, all already in) | Per line, import | Peak RSS |
-|---|---|---|---|---|---|---|
-| 1,000 | 0.03 | 0.40 | 1.35 | 0.19 | 1.4 ms | 304 MB |
-| 10,000 | 0.31 | 7.55 | 17.96 | 1.36 | 1.8 ms | 343 MB |
+**Measured** (`tools/measure_bank_feeds.py`, one process per size, the root NVMe, a fresh company on the general chart;
+an OFX file whose first lines are the bank account's entries and the rest new; one process runs the preview, the
+import and the same file again, so the import reuses the preview's match; seconds, 2026-10-28, after the review fixes;
+before them in brackets):
 
-All 200 entries matched at both sizes. The import plans inside its own write, so its time is the preview's work once
-plus the writing: a line, its `imported` event and its batch effect. The preview grows faster than the file (19 times
-for ten times the lines): the shared matcher pairs every line with every same-account entry, which increment 9's
-5,000-line criterion will look at; nothing here changes that matcher.
+| Lines | Entries | Parse | Preview (`--dry-run`) | Import | Same file again (`again`) | Per line, import | Peak RSS |
+|---|---|---|---|---|---|---|---|
+| 1,000 | 200 | 0.03 | 0.13 (0.40) | 0.40 (1.35) | 0.18 (0.19) | 0.4 ms | 305 MB |
+| 10,000 | 200 | 0.30 | 0.91 (7.55) | 2.29 (17.96) | 1.74 (1.36) | 0.23 ms | 345 MB |
+| 10,000 | 50,000 | 0.28 | 11.30 | 13.75 | 1.90 | 1.4 ms | 539 MB |
+
+All entries in the file matched at every size (200, 200 and 10,000). The 50,000 entries are 300 daily journals of one
+bank line per entry, each its own movement, since 50,000 single posts take hours to seed; the file spans the same 300
+days, so its window holds every entry: the preview's time is reading and building those 50,000 candidates, not
+pairing them. A first attempt read every effect column and was killed at about 3 GB: the window now reads only the
+columns a candidate is made of (a journal's provenance repeats on each of its keys).
 
 **Seeded check** (`tests/test_bank_feeds_seeded.py`, seeds 1087 and 2026, 14 rounds each over two accounts: Checking
 by OFX with re-dated pending lines, reused FITIDs and identical coffees; the other bank by CSV): 15 imports, 1 exact

@@ -42,7 +42,11 @@ ACT_SUBJECTS = {
     'delivery-connection enable': 'Enabling a sending connection', 'delivery-connection disable':
     'Disabling a sending connection', 'delivery-connection remove': 'Removing a sending connection',
     'delivery-connection check': 'Checking a sending connection',
+    # delivery-schedule-v1: a send schedule made live sends unattended under its establisher (R187: automate.delivery).
+    'delivery-schedule live': 'Making a send schedule live',
 }
+# The capability R187 turns a people-only act into, named in its refusal so an agent knows what to ask for.
+R187_CAPABILITY = {'delivery-schedule live': 'automate.delivery'}
 
 
 @lru_cache(maxsize=4)
@@ -73,10 +77,15 @@ def refusal(rule: str, *, command: str, capability: str, field: str | None = Non
     act = ACT_SUBJECTS.get(command)
     if act and not field:
         rule = f"{act[0].lower()}{act[1:]} is a person's act"
+        details = {'capability': capability, 'reason': 'people_only', 'rule': rule, 'command': command,
+                   'required_role': 'human',
+                   'next_step': 'Ask your principal (the person you act for) to make this change themselves.'}
+        needs = R187_CAPABILITY.get(command)
+        if needs:
+            details['needs'] = needs
         return BookflowError('E_PERMISSION', message=(
-            f"{act} is a person's act, not an agent's. Ask your principal to make this change."), details={
-            'capability': capability, 'reason': 'people_only', 'rule': rule, 'command': command, 'required_role': 'human',
-            'next_step': 'Ask your principal (the person you act for) to make this change themselves.'})
+            f"{act} is a person's act, not an agent's" + (f" (it needs {needs})" if needs else '') +
+            '. Ask your principal to make this change.'), details=details)
     subject = 'The closing date' if field == 'closing_date' else 'Who can do what in Bookflow'
     details = {'capability': capability, 'reason': 'people_only', 'rule': rule, 'command': command, 'required_role': 'human',
                'next_step': 'Ask your principal (the person you act for) to make this change themselves.'}

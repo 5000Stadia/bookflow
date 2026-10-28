@@ -2729,6 +2729,33 @@ MATRIX['delivery batch-show'] = {'E_RECORD_NOT_FOUND': 'unknown batch'}
 MATRIX['delivery batch-query'] = {'E_VALIDATION': 'invalid state or limit'}
 MATRIX['delivery batch-cancel'] = {'E_RECORD_NOT_FOUND': 'unknown batch', 'E_VERSION_CONFLICT': 'stale expected_version',
                                    'E_REASON_REQUIRED': 'no --reason', **_DELIVERY_TAIL}
+# Document delivery (R112 increment 4): recurring schedules.
+_SCHEDULE_ERRORS = {'E_VALIDATION': 'a missing frequency, start, selection or period; a filter for another kind; a '
+                                    'taken name', 'E_RECORD_NOT_FOUND': 'unknown schedule, template or customer',
+                    **_DELIVERY_TAIL}
+MATRIX['delivery-schedule create'] = dict(_SCHEDULE_ERRORS)
+MATRIX['delivery-schedule update'] = dict(_SCHEDULE_ERRORS, E_VERSION_CONFLICT='stale expected_version',
+                                          E_WORK_DEPENDENCY="confirm is not the changed schedule's check",
+                                          E_PERMISSION='an agent passing confirm (automate.delivery), or a person '
+                                                       'who could not give a go now')
+MATRIX['delivery-schedule live'] = {'E_VALIDATION': 'no confirm (show the check first)',
+                                    'E_RECORD_NOT_FOUND': 'unknown schedule',
+                                    'E_VERSION_CONFLICT': 'stale expected_version',
+                                    'E_WORK_DEPENDENCY': 'the details or recipients changed since the check, or no '
+                                                         'slot left',
+                                    'E_PERMISSION': "an agent (a person's act until automate.delivery), or a person "
+                                                    'who could not give a go now',
+                                    **_DELIVERY_TAIL}
+MATRIX['delivery-schedule pause'] = {'E_RECORD_NOT_FOUND': 'unknown schedule',
+                                     'E_VERSION_CONFLICT': 'stale expected_version', **_DELIVERY_TAIL}
+MATRIX['delivery-schedule resume'] = dict(MATRIX['delivery-schedule pause'])
+MATRIX['delivery-schedule run'] = {'E_VALIDATION': 'a selection the batch refuses now',
+                                   'E_RECORD_NOT_FOUND': 'unknown schedule or batch',
+                                   'E_VERSION_CONFLICT': 'the run or batch moved meanwhile',
+                                   'E_WORK_DEPENDENCY': 'a document refused while drafting (recorded as a skip)',
+                                   **_DELIVERY_TAIL}
+MATRIX['delivery-schedule show'] = {'E_RECORD_NOT_FOUND': 'unknown schedule', 'E_VALIDATION': 'invalid runs'}
+MATRIX['delivery-schedule query'] = {'E_VALIDATION': 'invalid kind or limit'}
 # The bank inbox (R108 increment 1).
 MATRIX['bank-feed import'] = {
     'E_VALIDATION': 'no file or two, not a bank or card account, a file with unreadable lines (every one listed), '

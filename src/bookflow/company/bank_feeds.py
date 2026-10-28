@@ -294,7 +294,8 @@ def _movements_near(conn, lo: str, hi: str, account_ids=None) -> list[dict]:
     `statement_amount`), of these accounts or of every account."""
     t = c.metadata.tables
     versions, heads = t['reconciliation_effect_versions'], t['reconciliation_effect_heads']
-    q = sa.select(versions).select_from(versions.join(heads, heads.c.version_id == versions.c.id)).where(
+    q = sa.select(versions.c.account_id, versions.c.account_type, versions.c.effective_date, versions.c.signed_debit,
+                  versions.c.movement_snapshot).select_from(versions.join(heads, heads.c.version_id == versions.c.id)).where(
         versions.c.active == 1, versions.c.effective_date >= lo, versions.c.effective_date <= hi)
     if account_ids is not None:
         q = q.where(versions.c.account_id.in_(list(account_ids)))

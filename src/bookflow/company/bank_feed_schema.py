@@ -1,4 +1,4 @@
-"""The bank inbox (co0111, R108 increment 1; design/bank-feeds.md §2, §3, §9).
+"""The bank inbox (co0112, R108 increment 1; design/bank-feeds.md §2, §3, §9).
 
 - ``bank_feed_imports``: one statement file brought into an account's inbox. Never updated or deleted; its batch (in
   the shared ledger) carries whether it was reversed.

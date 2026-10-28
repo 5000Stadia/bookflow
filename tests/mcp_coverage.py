@@ -310,7 +310,10 @@ DELIVERY_COMMANDS = frozenset(('delivery draft', 'delivery update', 'delivery se
     'delivery-connection check', 'delivery-connection show', 'delivery-connection query',
     # R112 increment 3: flags, the queue and batches.
     'delivery flag', 'delivery unflag', 'delivery queue', 'delivery batch', 'delivery batch-show', 'delivery batch-query',
-    'delivery batch-cancel'))
+    'delivery batch-cancel',
+    # R112 increment 4: recurring schedules.
+    'delivery-schedule create', 'delivery-schedule update', 'delivery-schedule live', 'delivery-schedule pause',
+    'delivery-schedule resume', 'delivery-schedule run', 'delivery-schedule show', 'delivery-schedule query'))
 
 # R107 increments 0 to 2: a file checked, previewed, decided, run, read back, its batch read and reversed; its mapping
 # saved and next month's file run from it; another cancelled.

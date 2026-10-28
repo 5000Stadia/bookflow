@@ -900,7 +900,7 @@ class Host:
     def _schedule_on_writer(self, now=None) -> dict[str, Any]:
         import sqlalchemy as sa
 
-        from bookflow.company import delivery_dispatch, scheduler
+        from bookflow.company import delivery_dispatch, delivery_schedules, scheduler
         from bookflow.core import clock
         from bookflow.core.dispatch import _load_actor_by_id, open_company
         from bookflow.hub import schema as h
@@ -931,6 +931,17 @@ class Host:
                 done[row["id"]] = scheduler.run_company(s, system["id"], now, notices=notices)
                 if notices:
                     self._notices_checked[row["id"]] = now
+                # Delivery schedules (R112 increment 4): one statement for a company with nothing due; before the
+                # claim, so a live schedule's releases can leave on the same tick.
+                try:
+                    scheduled = delivery_schedules.tick(s, system["id"], now)
+                except Exception as e:  # noqa: BLE001 - recorded, never fatal to the host
+                    log.warning("delivery schedules for %s failed: %s", row["id"], e, exc_info=True)
+                    if s.company.write_transaction:
+                        s.company.raw.rollback()
+                    scheduled = scheduler._failure(e)
+                if scheduled is not None:
+                    done[row["id"]]["delivery_schedules"] = scheduled
                 # Document delivery (R112): one EXISTS for a company with no connection and nothing in flight.
                 # While the delivery thread is still busy with an earlier tick, nothing more is claimed.
                 busy = self._delivery_busy
