@@ -36,7 +36,12 @@
 .import-problems li{margin:.2rem 0;overflow-wrap:anywhere}
 .import-problems .rows{font-weight:600}
 .import-problems code,.import code{background:#fff3e0;border:1px solid #f0c890;border-radius:.2rem;padding:0 .25rem;white-space:pre-wrap;overflow-wrap:anywhere}
-.import-problem-group h3{border-bottom:1px solid #f0d0d0;padding-bottom:.2rem}
+.import-problem-group{border-bottom:1px solid #f0d0d0}
+.import-problem-group>summary{cursor:pointer;display:flex;flex-wrap:wrap;align-items:baseline;gap:.2rem .6rem;min-height:2.75rem;padding:.2rem 0;list-style-position:inside}
+.import-problem-group>summary h3{display:inline;margin:0}
+.import-partial{border-top:3px double #d0d9e4;margin-top:1.25rem;padding-top:.5rem}
+.import-ref.has-error{border-left:4px solid #c62828;padding-left:.6rem;background:#fdf6f6}
+.import-ref-error{color:#8e1b1b;font-weight:600}
 .import-reupload{border-top:1px solid #e4e9f0;margin-top:.75rem}
 .import-columns-card>summary{cursor:pointer;list-style-position:inside}
 .import-columns-card>summary h2{display:inline;font-size:1.1rem}
@@ -53,8 +58,8 @@
 .import-ref p{margin:.2rem 0 .4rem;overflow-wrap:anywhere}
 .import-ref-choice{display:flex;flex-wrap:wrap;gap:.4rem .9rem;align-items:center}
 .import-ref-choice input[type=text],.import-ref-choice input:not([type]),.import-ref-choice input[list]{font:inherit;padding:.35rem .5rem;border:1px solid #9aa9bb;border-radius:.3rem;min-width:0;max-width:16rem}
-.import .choice{display:inline-flex;align-items:center;gap:.35rem;min-height:2.25rem}
-.import .choice input[type=radio],.import .choice input[type=checkbox]{width:1.15rem;height:1.15rem}
+.import .choice{display:inline-flex;align-items:center;gap:.45rem;min-height:2.75rem;cursor:pointer}
+.import .choice input[type=radio],.import .choice input[type=checkbox]{width:1.35rem;height:1.35rem;margin:0}
 .import .days{width:4.5rem;font:inherit;padding:.3rem;border:1px solid #9aa9bb;border-radius:.3rem}
 .import .warn{color:#8a5a00}
 .import-sample{display:grid;grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));gap:.6rem}
@@ -77,4 +82,13 @@
   .import-actions button{flex:1 1 100%}
   .import-ref-choice input[list]{max-width:none;flex:1 1 100%}
   .import-sample{grid-template-columns:minmax(0,1fr)}
+  /* Tap targets of 44 px: every link and choice, the whole label row of a radio. */
+  .import a{display:inline-flex;align-items:center;min-height:2.75rem}
+  .import .choice{min-height:2.75rem;min-width:2.75rem}
+  .import-ref-choice{gap:0 .9rem}
+  /* On a phone the questions come before the column cards. */
+  .import-form[data-import-check-form]{display:flex;flex-direction:column}
+  .import-form[data-import-check-form]>[data-import-columns]{order:2}
+  .import-form[data-import-check-form]>.import-next{order:3}
+  .import-partial{margin-top:1.75rem}
 }

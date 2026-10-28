@@ -79,10 +79,12 @@ def _click(b, selector, step):
     b.evaluate('document.querySelector("#import-workspace").dataset.before = "1"')
     b.evaluate(f'document.querySelector({json.dumps(selector)}).click()')
     b.wait_for(f'!!document.querySelector("[data-import-step={step}]:not([data-before])")'
-               f' || !!document.querySelector("[data-import-error]") || window.__failed', timeout=60)
+               f' || !!document.querySelector("#import-workspace:not([data-before]) [data-import-error]")'
+               ' || window.__failed', timeout=60)
     assert not b.evaluate('window.__failed'), 'the server failed: ' + str(b.evaluate('window.__failed'))
     assert b.evaluate('window.__sameDocument === true'), 'the form left the page instead of swapping through htmx'
-    assert not b.evaluate('!!document.querySelector("[data-import-error]")'), _text(b)[-2000:]
+    assert not b.evaluate('!!document.querySelector("[data-import-error]")'), b.evaluate(
+        'document.querySelector("[data-import-error]").innerText')
 
 
 def _set(b, selector, value):
@@ -116,29 +118,29 @@ def test_a_person_imports_the_messy_customer_file_and_undoes_it(register_browser
     assert b.evaluate('document.querySelector("[data-import-kind]").value') == 'customer'
     _shot(b, width, '1-file')
 
-    # File, then Check: the guessed mapping lacks the name, and the junk amount is shown with its row and cell text.
+    # File, then Check: the client's own words are guessed (Client, E-mail address, Job started); the credit column
+    # is not, so the check is clean until it is mapped.
     _choose_file(b, '[data-import-file]', first)
     _click(b, '[data-import-check]', 'check')
     text = _text(b)
     assert 'encoding: cp1252 (guessed)' in text, text[-2000:]
-    problems = b.evaluate('document.querySelector("[data-import-problems]").innerText')
-    assert 'Name' in problems or 'name' in problems, problems
-    assert b.evaluate('!document.querySelector("[data-import-preview]")'), 'a file with problems cannot preview'
+    for header, path in (('Client', 'name'), ('E-mail address', 'email'), ('Job started', 'job_start'),
+                         ('Credit', '')):
+        assert b.evaluate(f'document.querySelector(\'[data-import-field="{header}"]\').value') == path, header
     # Columns as the file has them, three values each (`import check`'s samples), beside the field picker.
     assert b.evaluate('[...document.querySelectorAll(\'[data-import-column="Client"] .col-samples span\')]'
                       '.map(s => s.textContent)') == ['Café Lumière', 'Müller Bäckerei', 'Søren Hansen']
-    _shot(b, width, '2-check-problems')
+    _shot(b, width, '2-check-guessed')
 
-    # Columns mapped on the page, then checked again: now only the junk amount is left, by column, row and cell.
-    _set(b, '[data-import-field="Client"]', 'name')
-    _set(b, '[data-import-field="E-mail address"]', 'email')
+    # The credit column mapped on the page, then checked again: the junk amount shows, by column, row and cell, and
+    # nothing can preview.
     _set(b, '[data-import-field="Credit"]', 'credit_limit')
-    _set(b, '[data-import-field="Job started"]', 'job_start')
     _click(b, '[data-import-recheck-columns]', 'check')
     groups = b.evaluate('[...document.querySelectorAll("[data-problem-column]")].map(g => g.dataset.problemColumn)')
     assert groups == ['Credit'], (groups, _text(b)[-2000:])
     problems = b.evaluate('document.querySelector("[data-import-problems]").innerText')
     assert 'Row 4' in problems and '59?9,56' in problems, problems
+    assert b.evaluate('!document.querySelector("[data-import-preview]")'), 'a file with problems cannot preview'
     _shot(b, width, '3-check-junk')
 
     # The corrected file (the mapping carries over); its new formula row is the one problem left.
@@ -153,14 +155,17 @@ def test_a_person_imports_the_messy_customer_file_and_undoes_it(register_browser
     assert sorted(refs) == ['Due in 60', 'Net 30 days'], refs
     net30 = '[data-import-ref="Net 30 days"]'
     assert b.evaluate(f'document.querySelector(\'{net30} [data-ref-target]\').value') == 'Net 30'
-    b.evaluate('''(() => { const li = document.querySelector('[data-import-ref="Due in 60"]');
-        li.querySelector('[data-ref-create]').click(); li.querySelector('.days').value = '60'; })()''')
+    # 'Due in 60' is created due in 60 days: the default is read from its words.
+    assert b.evaluate('document.querySelector(\'[data-import-ref="Due in 60"] .days\').value') == '60'
+    b.evaluate('''document.querySelector('[data-import-ref="Due in 60"] [data-ref-create]').click()''')
     _shot(b, width, '4-check-decide')
     # Kabe's rule is all or nothing: leaving the bad row out is asked for, by its own button.
     _click(b, '[data-import-partial]', 'preview')
     counts = b.evaluate('Object.fromEntries([...document.querySelectorAll("[data-count]")].map(e => '
                         '[e.dataset.count, +e.querySelector("strong").textContent]))')
-    assert counts.get('refused') == 1 and sum(counts.values()) == 5 and 'Import 4 records' in _text(b), (
+    head = b.evaluate('document.querySelector("[data-import-confirm-head]").innerText')
+    assert head == 'Import 4 customers and jobs (1 refused, left out)?', head
+    assert counts.get('refused') == 1 and sum(counts.values()) == 5, (
         counts, b.evaluate('document.querySelector("[data-import-refused]")?.innerText'))
     assert b.evaluate('!!document.querySelector("[data-import-sample]")')
     _shot(b, width, '5-preview-confirm')
@@ -195,6 +200,7 @@ def test_a_person_imports_the_messy_customer_file_and_undoes_it(register_browser
     assert 'Saved as' in b.evaluate('document.querySelector("[data-import-message]").innerText')
     _click(b, '[data-import-undo-plan]', 'done')
     assert b.evaluate('!!document.querySelector("[data-import-undo-confirm]")'), _text(b)[-1500:]
+    assert b.evaluate('document.querySelector("[data-import-undo-who]").innerText').startswith('Imported by ')
     _shot(b, width, '7-undo-confirm')
     _click(b, '[data-import-undo-confirm]', 'done')
     b.wait_for('!!document.querySelector("[data-import-undone]")', timeout=60)
@@ -224,7 +230,7 @@ def test_a_pasted_vendor_table_imports_and_a_run_left_mid_way_resumes(register_b
     assert b.evaluate('!document.querySelector("[data-import-problems]")'), _text(b)[-1500:]
     _shot(b, width, 'paste-2-check')
     _click(b, '[data-import-preview]', 'preview')
-    assert 'Import 5 records' in b.evaluate('document.querySelector("[data-import-start]").innerText')
+    assert b.evaluate('document.querySelector("[data-import-start]").innerText') == 'Import 5 vendors'
     _shot(b, width, 'paste-3-preview')
     url = b.evaluate('location.href')
     assert 'run=' in url
@@ -238,3 +244,183 @@ def test_a_pasted_vendor_table_imports_and_a_run_left_mid_way_resumes(register_b
     assert b.evaluate('document.querySelector("[data-count=created] strong").textContent') == '5'
     _shot(b, width, 'paste-4-done')
     assert run('vendor.show', {'vendor': 'Pasted Supply 5'})['email'] == 'supply5@example.test'
+
+
+# ------------------------------------------------------------------ the review of increment 3 (r107-inc3-review.md)
+
+def _site(register_browser, width=1440):
+    env, b = register_browser, register_browser.browser
+    b.viewport(width, 900)
+    base = f'{env.site.base_url}/c/{env.site.company_id}'
+    def write(name, payload):  # a read takes no reason
+        reads = ('.show', '.query')
+        return _command(b, env.site, name, payload,
+                        **({} if name.endswith(reads) else {'X-Bookflow-Reason': 'Browser test'}))
+    return env, b, base, write
+
+
+def _paste_check(b, base, kind, text):
+    b.navigate(f'{base}/import?kind={kind}')
+    b.wait_for('!!document.querySelector("[data-import-paste]")', timeout=30)
+    b.evaluate(f'''(() => {{ const a = document.querySelector('[data-import-paste]'); a.value = {json.dumps(text)};
+        a.dispatchEvent(new Event('input', {{bubbles: true}})); }})()''')
+    _click(b, '[data-import-check]', 'check')
+
+
+def _submit(b, selector):
+    """A click whose answer may be a refusal shown in place (the step stays)."""
+    b.evaluate('document.querySelector("#import-workspace").dataset.before = "1"')
+    b.evaluate(f'document.querySelector({json.dumps(selector)}).click()')
+    b.wait_for('!!document.querySelector("#import-workspace:not([data-before])")', timeout=60)
+
+
+def _ref(value, inner=''):
+    return f'[data-import-ref="{value}"] {inner}'.strip()
+
+
+def test_the_confirmation_is_true_and_a_wrong_answer_keeps_every_other(register_browser):
+    """High 1, Medium 5, 6 and 7: rows left out by an answer were counted as imported; a typo in one answer reset
+    every other and left a waiting run; 'Net45' defaulted to 30 days; a text holding "=" could not be decided."""
+    env, b, base, write = _site(register_browser)
+    text = ('Supplier\tPay terms\nDC 1\tNet 30\nDC 2\tA=B\nDC 3\tWeird terms\nDC 4\tWeird terms\nDC 5\tNet45\n'
+            'DC 6\tPay on receipt\n')
+    _paste_check(b, base, 'vendor', text)
+    assert b.evaluate(f'document.querySelector(\'{_ref("Net45", ".days")}\').value') == '45'
+    assert b.evaluate(f'document.querySelector(\'{_ref("Pay on receipt", ".days")}\').value') == '0'
+    # "Use" picks from every term the person may read, not three suggestions.
+    listed = b.evaluate(f'[...document.querySelector(\'{_ref("A=B", "[data-ref-target]")}\').list.options]'
+                        '.map(o => o.value)')
+    assert 'Net 30' in listed and len(listed) > 3, listed
+    b.evaluate(f'''(() => {{
+        document.querySelector('{_ref("Weird terms", "[data-ref-skip]")}').click();
+        document.querySelector('{_ref("A=B", "[data-ref-map]")}').click();
+        document.querySelector('{_ref("A=B", "[data-ref-target]")}').value = 'Nett 30';
+        document.querySelector('{_ref("Net45", "[data-ref-create]")}').click();
+        document.querySelector('{_ref("Pay on receipt", "[data-ref-create]")}').click(); }})()''')
+    _submit(b, '[data-import-preview]')
+    # The refusal is shown beside the answer it is about; every other answer is as it was; no run is left waiting.
+    assert b.evaluate('document.querySelector("[data-import-step]").dataset.importStep') == 'check'
+    assert 'Net 30' in b.evaluate(f'document.querySelector(\'{_ref("A=B", "[data-ref-error]")}\').innerText')
+    assert b.evaluate(f'document.querySelector(\'{_ref("Weird terms", "[data-ref-skip]")}\').checked')
+    assert b.evaluate(f'document.querySelector(\'{_ref("Net45", "[data-ref-create]")}\').checked')
+    assert b.evaluate(f'document.querySelector(\'{_ref("A=B", "[data-ref-target]")}\').value') == 'Nett 30'
+    _shot(b, 1440, 'review-answer-error')
+    states = [r['state'] for r in write('import.query', {})['items']]
+    assert 'waiting' not in states and 'previewed' not in states, states
+    _set(b, _ref('A=B', '[data-ref-target]'), 'Net 30')
+    _click(b, '[data-import-preview]', 'preview')
+    head = b.evaluate('document.querySelector("[data-import-confirm-head]").innerText')
+    assert head == 'Import 4 vendors (2 left out as you chose)?', head
+    bar = b.evaluate('Object.fromEntries([...document.querySelectorAll("[data-count]")].map(e => '
+                     '[e.dataset.count, +e.querySelector("strong").textContent]))')
+    assert bar == {'create': 1, 'answered': 3, 'left_out': 2}, bar
+    assert b.evaluate('document.querySelector("[data-import-start]").innerText') == 'Import 4 vendors'
+    _shot(b, 1440, 'review-confirm-left-out')
+    _click(b, '[data-import-start]', 'done')
+    b.wait_for('!!document.querySelector("[data-import-result=done]")', timeout=60)
+    assert b.evaluate('document.querySelector("[data-count=created] strong").textContent') == '4'
+    assert write('term.show', {'term': 'Net45'})['due_days'] == 45
+    assert write('term.show', {'term': 'Pay on receipt'})['due_days'] == 0
+    assert write('vendor.show', {'vendor': 'DC 2'})['terms_id'] == write('term.show', {'term': 'Net 30'})['id']
+
+
+def test_a_refusing_preview_offers_both_ways_on_and_hand_mapping_works(register_browser):
+    """High 2 and 3: a preview refusing a row the check passed left a disabled button and no way on; "Map the
+    columns below by hand" looped on "the preview needs decisions first"."""
+    env, b, base, write = _site(register_browser)
+    write('vendor.create', {'name': 'Old Supply', 'email': 'old@example.test'})
+    _paste_check(b, base, 'vendor', 'Supplier\tEmail\tPhone\tCity\nOld Supply\tnew@example.test\t1\tX\n'
+                 'New Supply\tn@example.test\t2\tY\n')
+    _click(b, '[data-import-preview]', 'preview')
+    assert b.evaluate('!document.querySelector("[data-import-start]")'), 'no disabled dead end'
+    assert 'all or nothing' in b.evaluate('document.querySelector("[data-import-blocked]").innerText')
+    assert b.evaluate('!!document.querySelector("[data-import-refused-form] [data-import-recheck]")')
+    _shot(b, 1440, 'review-preview-refused')
+    _click(b, '[data-import-partial]', 'preview')
+    assert b.evaluate('document.querySelector("[data-import-start]").innerText') == 'Import 1 record'
+    _click(b, '[data-import-start]', 'done')
+    b.wait_for('!!document.querySelector("[data-import-result=done]")', timeout=60)
+    assert write('vendor.show', {'vendor': 'New Supply'})['email'] == 'n@example.test'
+    # A saved mapping that probably fits is offered; choosing to map by hand works without changing a column.
+    b.evaluate('document.querySelector("[data-import-save-name]").value = "Supply list"')
+    _click(b, '[data-import-save]', 'done')
+    _paste_check(b, base, 'vendor', 'Supplier\tEmail\tPhone\tCity\tFax\nHand Supply\th@example.test\t3\tZ\t555\n')
+    assert b.evaluate('!!document.querySelector(\'input[name=mapping][value=""]\')'), _text(b)[-1500:]
+    b.evaluate('document.querySelector(\'input[name=mapping][value=""]\').click()')
+    _set(b, '[data-import-field="Fax"]', '')
+    _click(b, '[data-import-preview]', 'preview')
+    _click(b, '[data-import-start]', 'done')
+    b.wait_for('!!document.querySelector("[data-import-result=done]")', timeout=60)
+    assert write('vendor.show', {'vendor': 'Hand Supply'})['email'] == 'h@example.test'
+
+
+def test_cancel_keeps_undo_and_a_stale_confirm_says_nothing_new(register_browser):
+    """Medium 4 and 9: a cancelled run that had made records offered no Undo; a confirm another run had already
+    landed said "Import finished" and offered Save mapping and Undo for nothing."""
+    env, b, base, write = _site(register_browser)
+    text = 'Supplier\tCredit limit\n' + ''.join(f'Stop {i}\t{"12x" if i == 3 else "5"}\n' for i in range(1, 7))
+    preview = write('import.preview', {'kind': 'vendor', 'content': text, 'partial': True, 'stop_after_refusals': 1})
+    assert write('import.run', {'run': preview['run']['id']})['run']['state'] == 'stopped'
+    b.navigate(f'{base}/import?run={preview["run"]["id"]}')
+    b.wait_for('!!document.querySelector("[data-import-progress]")', timeout=30)
+    assert 'already made stay until you undo' in b.evaluate(
+        'document.querySelector("[data-import-cancel]").getAttribute("hx-confirm")')
+    assert b.evaluate('!!document.querySelector("[data-import-undo-plan]")'), 'a stopped run offers Undo'
+    b.evaluate('window.confirm = () => true')
+    _click(b, '[data-import-cancel]', 'done')
+    assert 'The 2 vendors already made stay until you undo them below' in b.evaluate(
+        'document.querySelector("[data-import-message]").innerText')
+    _shot(b, 1440, 'review-cancelled-undo')
+    _click(b, '[data-import-undo-plan]', 'done')
+    _click(b, '[data-import-undo-confirm]', 'done')
+    b.wait_for('!!document.querySelector("[data-import-undone]")', timeout=60)
+    names = [v['name'] for v in write('vendor.query', {})['items']]
+    assert not [n for n in names if n.startswith('Stop ')], names  # undone: none of them is active
+    # Two previews of one file; the second lands; the first's confirm then says nothing new was imported.
+    again = 'Supplier\nStale 1\nStale 2\n'
+    first = write('import.preview', {'kind': 'vendor', 'content': again})
+    second = write('import.preview', {'kind': 'vendor', 'content': again})
+    write('import.run', {'run': second['run']['id']})
+    b.navigate(f'{base}/import?run={first["run"]["id"]}')
+    b.wait_for('!!document.querySelector("[data-import-start]")', timeout=30)
+    assert b.evaluate('document.querySelectorAll("[data-import-sample] .import-record").length') == 2, 'reload'
+    _click(b, '[data-import-start]', 'done')
+    b.wait_for('!!document.querySelector("[data-import-nothing-new]")', timeout=60)
+    assert 'all rows were already in' in b.evaluate('document.querySelector("[data-import-nothing-new]").innerText')
+    _shot(b, 1440, 'review-nothing-new')
+    assert b.evaluate('!document.querySelector("[data-import-save-form]") && !document.querySelector("[data-import-undo]")')
+
+
+def test_on_a_phone_every_target_is_tappable_and_the_questions_come_first(register_browser):
+    """Low 11: 18 px radios and 17 px links; 66 problems in one long list; the questions below 8 column cards; the
+    partial button flush against "Check again". Low 10: an oversize upload and a too-wide form refuse on the page."""
+    env, b, base, write = _site(register_browser, 390)
+    rows = ''.join(f'Phone {i}{": a" if i % 4 == 0 else ""}\t{"x" if i % 3 == 0 else "5"}\tOdd terms {i % 2}\n'
+                   for i in range(1, 61))
+    _paste_check(b, base, 'vendor', 'Supplier\tCredit limit\tPay terms\n' + rows)
+    _fits(b)
+    small = b.evaluate('''[...document.querySelectorAll('#import-workspace a, #import-workspace .choice')]
+        .filter(e => e.offsetParent).map(e => [e.textContent.trim().slice(0, 30), e.getBoundingClientRect().height])
+        .filter(([, h]) => h < 43.5)''')
+    assert small == [], small
+    groups = b.evaluate('[...document.querySelectorAll("[data-problem-column]")].map(g => [g.open, '
+                        'g.querySelector("summary").innerText])')
+    assert groups[0][0] and not any(open_ for open_, _ in groups[1:]) and 'problem' in groups[0][1], groups
+    top = lambda sel: b.evaluate(f'document.querySelector({json.dumps(sel)}).getBoundingClientRect().top')
+    assert top('[data-import-decisions]') < top('[data-import-columns]')
+    gap = b.evaluate('''(() => { const a = document.querySelector('[data-import-recheck]').getBoundingClientRect();
+        const p = document.querySelector('[data-import-partial]').getBoundingClientRect(); return p.top - a.bottom; })()''')
+    assert gap >= 40, gap
+    _shot(b, 390, 'phone-check-problems')
+    # An upload over the limit is refused before its body is read, on the page.
+    out = b.evaluate(f'''(async () => {{ const form = new FormData(); form.append('action', 'check');
+        form.append('kind', 'vendor'); form.append('file', new Blob([new Uint8Array(19000000)]), 'big.csv');
+        const r = await fetch('{base}/import', {{method: 'POST', body: form,
+            headers: {{'HX-Request': 'true', 'X-Bookflow-Workbench': '1'}}}});
+        return [r.status, await r.text()]; }})()''', await_promise=True)
+    assert out[0] == 200 and 'over 16 MB' in out[1], out[0]
+    # A file too wide for the page's form says so on the page.
+    wide = '\t'.join(f'C{i}' for i in range(1400)) + '\n' + '\t'.join('v' for _ in range(1400)) + '\n'
+    _paste_check(b, base, 'vendor', wide)
+    _submit(b, '[data-import-recheck-columns]')
+    assert 'too wide' in b.evaluate('document.querySelector("[data-import-error]").innerText')

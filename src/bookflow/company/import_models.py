@@ -65,6 +65,15 @@ class ImportPreviewInput(ImportCheckInput):
         'or, in update mode, matches none (`skipped`); name the outcomes to accept instead.'))
 
 
+class ImportAnswer(_Input):
+    field: str = Field(min_length=1, max_length=200, description='The input path the unknown reference is in (terms_id).')
+    value: str = Field(min_length=1, max_length=1000, description='The file text, exactly as `unknown_references` gives it.')
+    action: Literal['map', 'create', 'skip'] = Field(description='Map it to an existing record, create it, or skip its rows.')
+    target: str | None = Field(None, min_length=1, max_length=1000, description='For a map: the existing record.')
+    input: dict[str, Any] | None = Field(None, description=(
+        "For a create needing more than a name, the rest of its command's input: {\"kind\": \"standard\", \"due_days\": 45}."))
+
+
 class ImportDecideInput(_Input):
     run: str = Field(min_length=26, max_length=26, description='The previewed run waiting on decisions.')
     map: list[str] | None = Field(None, max_length=500, description=(
@@ -77,8 +86,13 @@ class ImportDecideInput(_Input):
         'For a create needing more than a name, the rest of its command\'s input by file text: '
         '{"Net 45": {"kind": "standard", "due_days": 45}}.'))
     skip: list[str] | None = Field(None, max_length=500, description='Leave the rows with this text out.')
+    answers: list[ImportAnswer] | None = Field(None, max_length=500, description=(
+        'The same answers as data, each naming its field and the file text exactly, so a text holding "=" or ":", '
+        'or unknown in two columns, needs no quoting: [{"field": "terms_id", "value": "A=B", "action": "map", '
+        '"target": "Net 30"}].'))
     remember: bool = Field(False, description=(
-        "Also keep the maps in the source's saved mapping (a new version), so the next file does not ask."))
+        "Also keep the maps in the source's saved mapping (a new version), so the next file does not ask. Creates "
+        'and skips are not remembered (a created record is found by name next time).'))
 
 
 class ImportMappingSaveInput(_Input):
@@ -142,6 +156,9 @@ class ImportCheckOutput(BaseModel):
     decisions: list[dict[str, Any]] = Field(description='What must be decided before a preview can run.')
     notes: list[str] = Field(description='Things worth knowing: a guessed encoding, rows keyed by content.')
     samples: dict[str, list[str]] = Field({}, description='Up to three values of each column, as the file has them.')
+    choices: dict[str, list[str]] = Field({}, description=(
+        'For each list an unknown reference may map to and the caller may read: its active records by name (at most '
+        '2000), to pick from.'))
     next: str | None = Field(description='What to do next.')
 
 
@@ -248,6 +265,10 @@ class ImportRunOutput(BaseModel):
         'Characters no text field holds, dropped from the file: row, line, column, position, character.'))
     dropped_total: int = Field(0, description='Characters dropped in all.')
     done_now: int = Field(0, description='Rows this call ran.')
+    outlook: dict[str, int] = Field({}, description=(
+        'A preview only: what running it would land with the answers given so far: create, update, answered (rows '
+        'waiting on a reference, answered with a map or create), land (the three together), left_out (by a skip), '
+        'waiting (still unanswered), unchanged, differs, missing, refused.'))
     next: str | None = Field(description='The command to run next, or null when the run is finished.')
 
 

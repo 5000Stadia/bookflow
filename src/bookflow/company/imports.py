@@ -488,6 +488,7 @@ class Books:
         rows = self.s.company.conn.execute(sa.select(table.c.id, _key_expression(table, field_), table.c[field_],
                                                      active)).all()
         return {'by_key': {row[1]: row[0] for row in rows}, 'ids': {row[0] for row in rows},
+                'order': [row[0] for row in rows],
                 'inactive': {row[0] for row in rows if not row[3]},
                 'names': [row[2] for row in rows], 'field': field_, 'table': table, 'definition': definition}
 
@@ -549,6 +550,7 @@ class Books:
         index['ids'].add(record_id)
         index['inactive'].discard(record_id)
         index['names'].append(name)
+        index['order'].append(record_id)
 
     def selector(self, payload: dict) -> str | None:
         """The text that names this row's record among the kind's own: full name, or an account's number."""
@@ -676,6 +678,19 @@ def _input_rules(s, kind: kinds.Kind, body: dict) -> None:
     from bookflow.company import lists
     if isinstance(body.get('name'), str) and kind.name != 'sales-rep':
         lists.normalize_display_name(body['name'])
+    if kind.name == 'customer' and not body.get('parent_id'):
+        # `customer create`'s own rule (parties.py): a top-level customer owns its address and contacts, and has no
+        # job fields; the job's columns are filled only on rows naming the customer they belong to.
+        for field_ in ('job_start', 'job_projected_end', 'job_end', 'job_description', 'job_type_id',
+                       'job_sales_rep_id', 'job_status', 'address_mode', 'contact_mode'):
+            value = body.get(field_)
+            if value in (None, '') or (field_ == 'job_status' and value == 'none') or (
+                    field_ in ('address_mode', 'contact_mode') and value == 'own'):
+                continue
+            problem = ('a top-level customer owns its address and contacts' if field_.endswith('_mode') else
+                       'job fields require a parent customer or job (fill in the column naming its customer)')
+            raise BookflowError('E_VALIDATION', message=problem,
+                                details={'fields': [{'field': field_, 'problem': problem}]})
     if kind.name == 'item':
         from bookflow.company import items
         parsed = items.parse_item_input(body)
@@ -1099,9 +1114,27 @@ def check(s, ctx, inp) -> dict:
     return {**report, 'kind': p['kind'].name, 'source': p['source'], 'matched': p['matched'],
             'mapping': p['mapping'].as_dict(p['table'].headers), 'decisions': p['mapping'].decisions,
             'notes': p['notes'], 'samples': samples(p['table']),
+            'choices': reference_choices(p['books'], {u['target'] for u in report['unknown_references']}),
             'next': ('import preview with the same file' + (' and mapping' if p['matched'] else '')) if report['ok']
             else ('decide what `to_decide` lists (preview, then `import decide`, or pass the format)'
                   if report['clean'] else None)}
+
+
+CHOICES = 2000  # names offered to map an unknown reference to; a longer list is typed (and checked) instead
+
+
+def reference_choices(books: 'Books', targets) -> dict[str, list[str]]:
+    """The active records of each list an unknown reference may map to, by name, for a searchable pick: only lists
+    the caller may read (the same rule as the suggestions)."""
+    out = {}
+    for target in sorted(targets):
+        if not books.readable(target):
+            continue
+        index = books.ref_index(target)
+        names = sorted({n for n, i in zip(index['names'], index['order']) if isinstance(n, str)
+                        and i not in index['inactive']}, key=str.casefold)
+        out[target] = names[:CHOICES]
+    return out
 
 
 def refuse_on_check(report: dict, *, partial: bool, decisions: list[dict] = ()) -> None:
@@ -1580,11 +1613,20 @@ def show(s, ctx, run_id: str, *, done_now: int = 0, prepared: dict | None = None
         f"No {r['target'].replace('-', ' ')} {r['value']!r} ({r['column'] or r['field']}, {r['row_count']} row(s)): "
         f"map it to an existing one, create it ({r['create']}) or skip its rows")) for r in unknown
         if r['decided'] is None]
+    kind = kinds.kind(run['kind'])
     if prepared is not None:
         for plan in prepared['rows']:
             if plan.status in ('create', 'update') and len(sample) < SAMPLE:
                 sample.append({'row': plan.row_no, 'command': prepared['kind'].create if plan.status == 'create'
                                else prepared['kind'].update, 'input': plan.payload})
+    elif phase == 'preview':  # a reload of the preview shows the same sample, from the rows it stored
+        for r in s.company.conn.execute(sa.select(c.import_rows.c.row_no, c.import_rows.c.status,
+                                                  c.import_rows.c.payload).where(
+                c.import_rows.c.run_id == run_id, c.import_rows.c.phase == 'preview',
+                c.import_rows.c.status.in_(('create', 'update')), c.import_rows.c.payload.is_not(None))
+                .order_by(c.import_rows.c.row_no).limit(SAMPLE)):
+            sample.append({'row': r[0], 'command': kind.create if r[1] == 'create' else kind.update,
+                           'input': json.loads(r[2])})
     batch = None
     if run['batch_id']:
         b = s.company.conn.execute(sa.select(c.batches.c.state).where(c.batches.c.id == run['batch_id'])).scalar()
@@ -1600,13 +1642,16 @@ def show(s, ctx, run_id: str, *, done_now: int = 0, prepared: dict | None = None
         next_ = f'import errors {run_id}'
     if prepared is not None and len(prepared['rows']) > 100:
         mapping['notes'] = list(mapping.get('notes', [])) + ['Over 100 rows: consider `company backup` first.']
+    from bookflow.company.info import principal_names
+    by = principal_names(s.company, {run['created_by']}).get(run['created_by'])
     return {
+        'outlook': outlook(s, run, kind, mapping, counts, choices) if phase == 'preview' else {},
         'run': {'id': run['id'], 'kind': run['kind'], 'mode': run['mode'], 'atomic': run['atomic'],
                 'state': run['state'], 'source': run['source'], 'file_name': run['file_name'],
                 'attachment': run['attachment_id'], 'file_sha256': run['file_sha256'], 'encoding': run['encoding'],
                 'delimiter': tabular.DELIMITER_NAMES.get(run['delimiter'], run['delimiter']),
                 'rows': run['row_count'], 'batch': batch, 'reason': run['reason'], 'created_at': run['created_at'],
-                'created_by': run['created_by'], 'created_via': run['created_via'], 'updated_at': run['updated_at'],
+                'created_by': run['created_by'], 'created_by_name': by, 'created_via': run['created_via'], 'updated_at': run['updated_at'],
                 'version': run['version']},
         'counts': counts,
         'mapping': {k: mapping.get(k) for k in ('columns', 'found_by', 'unmapped', 'key', 'keyed_by_content',
@@ -1622,6 +1667,33 @@ def show(s, ctx, run_id: str, *, done_now: int = 0, prepared: dict | None = None
         'done_now': done_now,
         'next': next_,
     }
+
+
+def outlook(s, run: dict, kind: kinds.Kind, mapping: dict, counts: dict, choices: dict) -> dict:
+    """What a run of this preview would land, row by row, with the answers given so far: the confirmation counts
+    only these. A row waiting on an unknown reference lands once each of its references is answered with a map or a
+    create (`answered`), is left out by a skip (`left_out`), and otherwise still waits (`waiting`)."""
+    out = {'create': counts.get('create', 0), 'update': counts.get('update', 0), 'answered': 0, 'left_out': 0,
+           'waiting': 0, 'unchanged': sum(counts.get(k, 0) for k in ('unchanged', 'exists', 'already_in')),
+           'differs': counts.get('differs', 0), 'missing': counts.get('missing', 0),
+           'refused': counts.get('refused', 0)}
+    if counts.get('waiting'):
+        unknown = {(r['field'], norm_key(r['value'])) for r in mapping.get('references', [])}
+        for (payload,) in s.company.conn.execute(sa.select(c.import_rows.c.payload).where(
+                c.import_rows.c.run_id == run['id'], c.import_rows.c.phase == 'preview',
+                c.import_rows.c.status == 'waiting')):
+            body = json.loads(payload) if payload else {}
+            keys = [(p, norm_key(body[p])) for p, _ in _ref_paths(kind, body)
+                    if isinstance(body.get(p), str) and (p, norm_key(body[p])) in unknown]
+            answers = [choices.get(k) for k in keys]
+            if any(a is not None and a['action'] == 'skip' for a in answers):
+                out['left_out'] += 1
+            elif all(a is not None for a in answers):
+                out['answered'] += 1
+            else:
+                out['waiting'] += 1
+    out['land'] = out['create'] + out['update'] + out['answered']
+    return out
 
 
 def _row_out(r) -> dict:

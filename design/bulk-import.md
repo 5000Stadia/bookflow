@@ -961,6 +961,35 @@ Each finding has a test that failed before its fix (`test_import_rules.py`, `tes
   click (its `=1+2` written `'=1+2`); the mapping saved; Undo confirmed and every record inactive. A pasted vendor
   table imports the same way, and a run left after one row resumes when its page is opened again. Screens:
   `/tmp/m4-shots/import3/`.
-- **Found, not fixed here:** a customer row with a job date but no parent passes `import check` and is refused by the
-  preview (`job fields require a parent customer`): the check's "refuses what the run would" misses that rule
-  (`_input_rules` does not cover it). The guesser does not map `E-mail address` (only `e-mail` and `email address`).
+- **The review of increment 3** (`notes/reviews/r107-inc3-review.md`), each with a test that failed before:
+  - *A true confirmation.* `import show` (and so preview and decide) gains `outlook`: what a run would land with the
+    answers given so far, row by row: `create`, `update`, `answered` (waiting rows whose references are all mapped or
+    created), `land` (the three), `left_out` (a skip), `waiting`, `unchanged`, `differs`, `missing`, `refused`. The
+    counts bar, the heading and the button use it: "Import 4 vendors (2 left out as you chose)?".
+  - *No dead ends.* `import check` applies `customer create`'s job rule (job fields and inherited address or contacts
+    need a parent), so check and run agree. What still reaches Preview refused (a record that `differs`, say) is
+    listed with its reason and the same two ways on as Check: the corrected file and Check again, or "Import the
+    other N rows only" (a partial preview of the same file, mapping, formats and answers). No disabled button.
+  - *By hand.* "Map the columns below by hand" sends every column as shown, so no saved mapping is asked about again;
+    an empty choice is sent as "not imported" and kept on every later check.
+  - *Cancel and Undo.* A stopped, paused, cancelled or failed run that made records offers Undo (with who ran it).
+    Cancel says what happens first: a partial run's records stay until undone; an all-or-nothing run's are undone.
+  - *Answers kept.* `import decide` gains `answers`, each naming its field and the exact text (no "=" or "Column:"
+    parsing); a refusal names the reference (`details.ref`). A wrong answer cancels the run made to take it and shows
+    Check again with every answer as given and the refusal beside it. `import check` gains `choices`: the active
+    records of each list the caller may read (up to 2000), the "Use" picker's options. A typed target is a read of
+    its list. `remember` with only creates and skips remembers nothing and is not refused.
+  - *Due days* for a new term come from its words: the first number ("Net45" 45), 0 for receipt or COD, else 30.
+  - *Import files are not attachments.* Chosen here: `attachment add` with `record_type: import_file` (linked to the
+    company, captioned with the kind, never `attachment link`ed), no migration. `attachment get`, `text` and `list`
+    show such a file only to a caller who may read its kind. Adding one unlinks the same person's earlier file of the
+    kind and anyone's older than 7 days, unless a run landed records from it (or is running); a file the check refuses
+    is unlinked at once. Unlinked bodies go with `attachment collect`.
+  - *Stale confirm.* A run that lands nothing ends "Nothing new to import: all rows were already in", without Save
+    mapping or Undo.
+  - *Lows.* A post over 18 MB is refused from its Content-Length, and the body is read no further than that; a form
+    over 4,000 fields (a file over about 1,000 columns wide) is refused on the page. At 390 px every link and choice is at
+    least 44 px tall, problem groups collapse with counts once there are over 12, the questions come before the column
+    cards, and the partial choice is set apart. A reload keeps the preview's sample (from its stored rows).
+    "E-mail address", "Client" and "Job started" are guessed (a customer's aliases sit beside the party ones in
+    `import_kinds.py`).

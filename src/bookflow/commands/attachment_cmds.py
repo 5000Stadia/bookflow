@@ -132,6 +132,77 @@ def _link_out(s, link, attachment, names=None):
                        attachment=_out(s, attachment, AttachmentOut)), AttachmentLinkOut)
 
 
+# An import's file (R107): linked to the company under its own record type, captioned with the import kind, so it is
+# never one of the company's ordinary attachments. Reading it is reading that kind's records (a vendor file is the
+# vendors), so `attachment get`, `text` and `list` show it only to a caller who may read the kind. A newer file of the
+# same kind from the same person replaces one whose import never ran, and any such file goes after IMPORT_FILE_DAYS;
+# the file of a run that landed records stays, since a re-run of its source reads it.
+IMPORT_FILE = "import_file"
+IMPORT_FILE_DAYS = 7
+
+
+def _resolve(s, record_type, record_id):
+    return records.resolve(s, "company_info" if record_type == IMPORT_FILE else record_type, record_id)
+
+
+def _import_kind(s, caption):
+    """The import kind an import file's caption names, if the caller may read its records."""
+    from bookflow.company import batches, import_kinds
+    from bookflow.core.errors import BookflowError
+    try:
+        kind = import_kinds.kind(caption)
+    except BookflowError:
+        raise BookflowError("E_VALIDATION", "An import file's caption names its import kind (customer, vendor...).",
+                            {"fields": [{"field": "caption", "problem": "not an import kind"}]}) from None
+    batches.require_read(s, f"{kind.noun} show")
+    return kind.name
+
+
+def _readable_import_kinds(s):
+    from bookflow.company import import_kinds
+    from bookflow.core.errors import BookflowError
+    out = set()
+    for name in import_kinds.KINDS:
+        try:
+            out.add(_import_kind(s, name))
+        except BookflowError:
+            pass
+    return out
+
+
+def _guard_import_file(s, attachment_id):
+    """An attachment that is only ever an import's file is read as its kind's records."""
+    from bookflow.core.errors import BookflowError
+    links = s.company.conn.execute(sa.select(c.attachment_links.c.record_type, c.attachment_links.c.caption).where(
+        c.attachment_links.c.attachment_id == attachment_id)).all()
+    if not links or any(kind != IMPORT_FILE for kind, _ in links):
+        return
+    refused = None
+    for caption in sorted({caption for _, caption in links}):
+        try:
+            _import_kind(s, caption)
+            return
+        except BookflowError as error:
+            refused = error
+    raise refused
+
+
+def _stale_import_files(s, keep_attachment, caption):
+    """Import files to unlink as a new one is added: this person's earlier files of the same kind whose import never
+    ran, and anyone's older than IMPORT_FILE_DAYS, except a file a run landed records from (or is running)."""
+    from datetime import timedelta
+    from bookflow.core.clock import now
+    links = c.attachment_links
+    cutoff = (now() - timedelta(days=IMPORT_FILE_DAYS)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    used = sa.exists(sa.select(c.import_runs.c.id).where(
+        c.import_runs.c.attachment_id == links.c.attachment_id,
+        sa.or_(c.import_runs.c.batch_id.is_not(None), c.import_runs.c.state.in_(("running", "stopped")))))
+    return [dict(r) for r in s.company.conn.execute(sa.select(links).where(
+        links.c.record_type == IMPORT_FILE, links.c.active.is_(True), links.c.attachment_id != keep_attachment,
+        sa.or_(sa.and_(links.c.linked_by == s.actor.id, links.c.caption == caption), links.c.linked_at < cutoff),
+        ~used)).mappings()]
+
+
 def _get(s, kind, key):
     table = c.attachments if kind == "attachment" else c.attachment_links
     key = records.resolve(s, kind, key)
@@ -164,7 +235,9 @@ def _available(s, row, *, verify=False):
 def prepare_add(inp: AttachmentAddInput, ctx: Context, s):
     from bookflow.core.transfers import TransferPreparation
     _pending(s)
-    records.resolve(s, inp.record_type, inp.record_id)
+    _resolve(s, inp.record_type, inp.record_id)
+    if inp.record_type == IMPORT_FILE:
+        _import_kind(s, inp.caption)
     store, limit = _store_limit(s)
     return TransferPreparation(store, limit)
 
@@ -173,6 +246,7 @@ def prepare_get(inp: AttachmentSelector, ctx: Context, s):
     from bookflow.core.transfers import TransferPreparation
     _pending(s)
     row = _get(s, "attachment", inp.attachment)
+    _guard_import_file(s, row["id"])
     _available(s, row)
     store, limit = _store_limit(s)
     return TransferPreparation(store, limit, store_api.BodyInfo(row["sha256"], row["size_bytes"]),
@@ -218,7 +292,7 @@ def plan_add(inp: AttachmentAddInput, ctx: Context, s) -> Plan:
     from bookflow.hub.users import common
     from bookflow.core.clock import now_iso
     resource = _resource(s, prepare_add(inp, ctx, s))
-    key = records.resolve(s, inp.record_type, inp.record_id)
+    key = _resolve(s, inp.record_type, inp.record_id)
     found = s.company.conn.execute(sa.select(c.attachments).where(c.attachments.c.sha256 == resource.info.sha256)).mappings().first()
     attachment = dict(found) if found else dict(id=new_id(), **common(s.actor.id, ctx.interface.value),
         sha256=resource.info.sha256, size_bytes=resource.info.size_bytes, original_filename=inp.original_filename,
@@ -230,7 +304,12 @@ def plan_add(inp: AttachmentAddInput, ctx: Context, s) -> Plan:
     if restore:
         attachment.update(collected_at=None, version=attachment["version"]+1, updated_at=now_iso(), updated_by=s.actor.id, updated_via=ctx.interface.value)
     link, new_link = _association(s, attachment, inp.record_type, key, inp.caption, ctx)
-    return Plan(_write_preview(s, attachment, link), dict(attachment=attachment, link=link, new_attachment=not found, restore=restore, new_link=new_link))
+    stale = []
+    if inp.record_type == IMPORT_FILE:
+        for row in _stale_import_files(s, attachment["id"], inp.caption):
+            row.update(active=False, version=row["version"]+1, updated_at=now_iso(), updated_by=s.actor.id, updated_via=ctx.interface.value)
+            stale.append(row)
+    return Plan(_write_preview(s, attachment, link), dict(attachment=attachment, link=link, new_attachment=not found, restore=restore, new_link=new_link, stale=stale))
 
 
 @attachment_add.applier
@@ -244,6 +323,9 @@ def apply_add(plan: Plan, ctx: Context, s) -> Applied:
     elif plan.data["restore"]:
         s.company.conn.execute(c.attachments.update().where(c.attachments.c.id == a["id"]).values(**a))
         touched.append(Touched("attachment", a["id"], "update", a["version"]-1, a["version"], a, db="company"))
+    for row in plan.data.get("stale", ()):  # an import file it replaces, or one past its days: unlinked, bytes kept until collected
+        s.company.conn.execute(c.attachment_links.update().where(c.attachment_links.c.id == row["id"], c.attachment_links.c.active.is_(True)).values(**row))
+        touched.append(Touched("attachment_link", row["id"], "update", row["version"]-1, row["version"], row, db="company"))
     return _apply_link(plan, s, touched)
 
 
@@ -262,6 +344,10 @@ attachment_link = command("attachment link", scope="company", description="Link 
 
 @attachment_link
 def plan_link(inp: AttachmentLinkInput, ctx: Context, s) -> Plan:
+    if inp.record_type == IMPORT_FILE:
+        from bookflow.core.errors import BookflowError
+        raise BookflowError("E_VALIDATION", "An import file is added by the import itself (`attachment add import_file`), never linked.",
+                            {"fields": [{"field": "record_type", "problem": "an import file is added, not linked"}]})
     _pending(s)
     key = records.resolve(s, inp.record_type, inp.record_id)
     a = _get(s, "attachment", inp.attachment)
@@ -330,9 +416,11 @@ attachment_list = command("attachment list", scope="company", description="Page 
 def plan_list(inp: AttachmentListInput, ctx: Context, s) -> Plan:
     from bookflow.company.query import _invalid_cursor, permission_fingerprint
     from bookflow.core.ids import is_ulid
-    key = records.resolve(s, inp.record_type, inp.record_id)
+    key = _resolve(s, inp.record_type, inp.record_id)
     scope = dict(company=s.company_row["id"], record_type=inp.record_type, record_id=key, permissions=permission_fingerprint(s, ctx.on_behalf_of))
     query = sa.select(c.attachment_links).where(c.attachment_links.c.record_type == inp.record_type, c.attachment_links.c.record_id == key, c.attachment_links.c.active.is_(True))
+    if inp.record_type == IMPORT_FILE:  # only the files of kinds the caller may read
+        query = query.where(c.attachment_links.c.caption.in_(sorted(_readable_import_kinds(s))))
     if inp.cursor:
         try:
             encoded = inp.cursor.encode("ascii")
@@ -385,6 +473,7 @@ def plan_text(inp: AttachmentSelector, ctx: Context, s) -> Plan:
     from bookflow.core.errors import BookflowError
     _pending(s)
     row = _get(s, "attachment", inp.attachment)
+    _guard_import_file(s, row["id"])
     _available(s, row)
     if not _textual(row):
         raise BookflowError("E_VALIDATION", f"{row['original_filename']} ({row['media_type']}) is not a text file; download it with `attachment get`.",

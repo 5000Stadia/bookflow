@@ -55,12 +55,19 @@ class Kind:
 
 _PARTY = {'customer': 'name', 'customer name': 'name', 'vendor': 'name', 'vendor name': 'name', 'supplier': 'name',
           'supplier name': 'name', 'company': 'company_name', 'e-mail': 'email', 'email address': 'email',
+          'e-mail address': 'email', 'mail': 'email',
           'phone number': 'phone', 'telephone': 'phone', 'tel': 'phone', 'mobile': 'alt_phone', 'terms': 'terms_id',
           'payment terms': 'terms_id', 'pay terms': 'terms_id', 'note': 'notes', 'acct no': 'account_number',
           'account no': 'account_number', 'tax id': 'resale_number', 'web': 'website', 'parent': 'parent_id',
           'job of': 'parent_id', 'customer type': 'customer_type_id', 'vendor type': 'vendor_type_id',
           'rep': 'sales_rep_id', 'sales rep': 'sales_rep_id', 'class': 'default_class_id',
           'price level': 'price_level_id', 'tax code': 'sales_tax_code_id', 'contact name': 'contact'}
+# A customer's own words: what a client list or a job sheet calls its columns.
+_CUSTOMER = {'client': 'name', 'client name': 'name', 'customer/job': 'name', 'job started': 'job_start',
+             'job start': 'job_start', 'job start date': 'job_start', 'start date': 'job_start',
+             'job ended': 'job_end', 'job end': 'job_end', 'job end date': 'job_end',
+             'projected end': 'job_projected_end', 'job status': 'job_status', 'job type': 'job_type_id',
+             'job description': 'job_description'}
 _ADDRESS = {'address': 'line1', 'address 1': 'line1', 'address1': 'line1', 'street': 'line1', 'address line 1': 'line1',
             'address 2': 'line2', 'address2': 'line2', 'address line 2': 'line2', 'city': 'city', 'town': 'city',
             'state': 'state', 'province': 'state', 'region': 'state', 'zip': 'postal_code', 'zip code': 'postal_code',
@@ -68,7 +75,7 @@ _ADDRESS = {'address': 'line1', 'address 1': 'line1', 'address1': 'line1', 'stre
 
 KINDS: dict[str, Kind] = {k.name: k for k in (
     Kind('customer', 'customer', money=('credit_limit',), dates=('job_start', 'job_projected_end', 'job_end'),
-         synonyms={**_PARTY, **{k: 'billing_address.' + v for k, v in _ADDRESS.items()}},
+         synonyms={**_PARTY, **_CUSTOMER, **{k: 'billing_address.' + v for k, v in _ADDRESS.items()}},
          summary='Customers and jobs (a job names its customer in `parent_id`).'),
     Kind('vendor', 'vendor', money=('credit_limit',),
          synonyms={**_PARTY, **{k: 'address.' + v for k, v in _ADDRESS.items()}}, summary='Vendors.'),
