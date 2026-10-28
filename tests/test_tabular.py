@@ -91,3 +91,34 @@ def test_money_agrees_with_the_older_readers(text):
 def test_dates_agree_with_the_older_readers(text, order):
     ours = tabular.parse_date(text, order, current_year=2026)
     assert ours == cutover_sources.parse_date(text) == statement_files.csv_date(text, 'auto')
+
+
+def test_a_thousands_mark_only_in_groups_of_three_and_other_marks_only_at_the_edges():
+    """Review of R107 increment 2, High 1: `12,50` once landed as 1250.00, `1,5` as 15.00 and `1$5` as 15. The older
+    readers (`statement_files`, `cutover_sources`) still read `12,50` as 1250: they read report exports, whose amounts
+    are always grouped by the program that wrote them; for an import from anywhere, refusing is the right reading,
+    and the agreement above holds on every amount all three accept."""
+    for bad in ('12,50', '1,5', '1234,567', '1$5', '1 234', '$5$', '$5 USD', '12.5.0', '--5', '(5', '5%'):
+        with pytest.raises(tabular.CellError) as caught:
+            tabular.parse_money(bad)
+        assert caught.value.code == 'bad_value', bad
+    assert tabular.parse_money('12,500') == 1250000 and tabular.parse_money('USD 1,234.56') == 123456
+    assert tabular.parse_money('1.234.567,89', decimal=',', thousands='.') == 123456789
+    assert tabular.parse_money('12 EUR') == 1200 and tabular.parse_money('$-5') == -500
+    with pytest.raises(tabular.CellError):
+        tabular.parse_money('1.23,45', decimal=',', thousands='.')
+    for bad in ('1,5', '1%5', '15%%', '%15', '1$5'):
+        with pytest.raises(tabular.CellError):
+            tabular.parse_decimal(bad)
+    assert tabular.parse_decimal('15%') == '15' and tabular.parse_decimal('-1,000.5') == '-1000.5'
+    assert cutover_sources.parse_amount('12,50', 2) == 125000  # the older reader, unchanged (see above)
+
+
+def test_a_header_starting_pk_is_text_and_only_a_zip_is_a_workbook():
+    """Review Medium 7: `PK,Name` was refused as an archive by its first two letters."""
+    assert tabular.read(b'PK,Name\n1,A\n').headers == ['PK', 'Name']
+    assert tabular.read(b'PKG Name,Email\nA,b@x.test\n').rows == [(2, ['A', 'b@x.test'])]
+    for raw, problem in ((b'PK\x05\x06' + b'\x00' * 18, 'not_text'), (b'PK\x03\x04not a zip', 'not_xlsx')):
+        with pytest.raises(BookflowError) as caught:
+            tabular.read(raw)
+        assert caught.value.details['problem'] == problem

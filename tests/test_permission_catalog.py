@@ -128,13 +128,17 @@ RESOURCE_PAIRS = {
 
 
 def _import_read_pairs():
-    """worksheet-v1 declares batches.require_read: every importable kind's `show`, plus `attachment text`.
+    """worksheet-v1 declared batches.require_read: every importable kind's `show`, plus `attachment text`;
+    import-mapping-v1 re-declares it with the `show` of every list an import's rows refer to (`import check` asks
+    whether the caller may read a list before suggesting names from it).
 
-    Derived from the kind declarations, so a kind added without a delta declaring its read fails here."""
-    from bookflow.company import import_kinds
+    Derived from the kind declarations, so a kind or reference added without a delta declaring its read fails here."""
+    from bookflow.company import import_kinds, imports
     commands = {cmd.name: cmd for cmd in registry.all_commands(include_standalone=True)}
+    targets = {t for kind in import_kinds.KINDS.values() for t in imports._references(kind).values()}
     pairs = set()
-    for name in {'attachment text', *(kind.noun + ' show' for kind in import_kinds.KINDS.values())}:
+    for name in {'attachment text', *(kind.noun + ' show' for kind in import_kinds.KINDS.values()),
+                 *(t + ' show' for t in targets)}:
         cmd = commands[name]
         pairs |= {(cmd.capability, cmd.required_role or 'authenticated'), *cmd.resource_requirements}
     return pairs

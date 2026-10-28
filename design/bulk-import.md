@@ -780,3 +780,139 @@ The reversal is now linear (51 to 54 ms per record at both sizes, where the defa
 1,000 rows and hours at 10,000) and costs 2.3 to 2.5 times the run: two commands per created record (the rename and
 the deactivate) against the run's one, with the whole-plan probe paid once, by the dry run. The dry run itself is
 linear too (20 ms per record; it was 21 to 41), its subtree reads now a range on the indexed `path`.
+
+## As built: increment 2 and Kabe's rules
+
+- **`import check`** (`imports.check_report`, a member read under `import`, the kind's own read permission) reads the
+  file once and tests every cell against its field without running a command: the mapping is complete (every field the
+  create command requires has a column or a constant), each cell fits its field's type, and, for text, the length,
+  pattern and range the command's input model declares; keys repeated within the file; and every reference, looked up
+  in one query per list held in memory (`Books`). It returns every problem at once, grouped by column, then cell text,
+  with row numbers and the exact cell (`summary`: "Credit Limit, rows 2, 4: not an amount: '$599.♎56'"), the dropped
+  characters, and the unknown references (with suggestions, look-alikes and whether an import may create them).
+  `preview` starts with the same check and, all or nothing, refuses the whole file (`E_VALIDATION`, the check in
+  `details`) before any command runs and before any run is stored; an incomplete mapping is refused even with
+  `partial`. An all-or-nothing **run** starts with the half of the check the books can change since the preview (every
+  reference still found or decided) and refuses before writing if one is gone; the file's half cannot change, the run
+  holds what was previewed. Lists of 1,000 groups, dropped characters and references are shown in full beyond which
+  the totals still count every one.
+- **Codes.** A cell that the command's own input model would refuse (too long, too short, pattern, range, a required
+  field blank) carries the command's code, `E_VALIDATION`, so importing and typing still fail alike (criterion 5); the
+  reader's own codes (`bad_value`, `E_AMOUNT_PRECISION`, `ambiguous_date`, `no_key`, `duplicate_in_file`, `row_width`)
+  stay. A row with any problem never runs: its mapped input is not stored.
+- **All or nothing by default.** `atomic` gave way to `partial` (default false; `import_runs.atomic` stores its
+  inverse, so no column changed). With `partial`, each bad row is refused alone, as increment 1 did.
+- **Text keeps its words.** `tabular.clean_text` drops what no text field holds: control characters (C0, DEL, C1), lone
+  surrogates and U+FFFE/U+FFFF; tab and line breaks are kept only in long text (a field with no length limit or 1,000
+  characters or more: notes, descriptions) and dropped elsewhere. Each dropped character is reported with row, line,
+  column, 1-based position in the cell and its name; the preview and `import show` carry them (`dropped`). A NUL in a
+  cell no longer refuses the file; a file that is not text still does (more than 8 control characters and over 10
+  percent of the first 64 KB, or a PDF, image, old `.xls` or other archive signature). Headers lose control characters
+  silently. Accents, scripts, symbols and emoji are kept as written. A field ending `_id` (a sales rep's `name_id`) is
+  treated as the reference it is.
+- **Junk is refused.** A control character in a number, date, choice or reference refuses its row (`bad_value`), as a
+  stray character in an amount already did; junk no longer sways the column's detected number format.
+- **Empty is allowed unless truly needed.** `import_kinds.required(kind)` is the create command's own required inputs,
+  read from its model; a test asserts it equals the command's for all 17 kinds. Blank cells and absent columns are
+  omitted, so a field takes its hand-entry default; only in `create` mode is a blank required cell a problem.
+- **Saved mappings (co0110,** on co0109, delivery batches; `import_sources`, append-only `import_mappings`, immutable `import_decisions`;
+  guards refuse deletes and any change but a source's active flag and forward version). Fingerprint: SHA-256 of the
+  sorted set of normalized headers. A preview with no `mapping` and no `columns` uses the single exact match among the
+  kind's active sources (narrowed by `source` when given; the mapping's source becomes the run's, so keys join last
+  month's); two exact matches, or a probable one (every mapped header present, Jaccard overlap at least 0.8), become a
+  `mapping` decision with the diff, and the preview is refused or its run waits until `mapping NAME` is passed. A
+  saved mapping maps only its own columns: new headers stay unmapped and are listed. `mapping NAME` refuses a file
+  lacking any column it maps. `import-mapping save --from-run` saves a new version (or nothing, when the recipe equals
+  the latest), keeping the value maps the source already holds; `show`, `history`, `query`, `match`, `deactivate`
+  complete the set. Decided: no `event_id` column on mappings (the save's audit event names the mapping), and the run's
+  own record of which version it used lives in its stored mapping (`saved`, `matched`), not a new column.
+- **Decisions.** An unknown reference asks: the preview stores the run as `waiting`, with each unknown value once
+  (field, column, rows, suggestions: look-alikes by `cutover.alike_names` first, then edit distance). `import decide`
+  maps (`"Net 30 days=Net 30"`, or `"Terms:..."` when two columns share the text; the target must exist), creates
+  (dry-run first; never an account or item; a customer or vendor only when nothing looks like it; a create needing more
+  than a name takes the rest in `create_input`, as a term's `kind`), or skips (the rows are `skipped_by_decision` and go in
+  the error file). Each value is decided once. The created record is made through its own create command when the
+  first row needing it runs, as an effect of the run's batch, so the run's reversal retires it too (the batch's in-use
+  check now passes over any record the same batch made). `remember` adds the maps to the source's value maps as a new
+  version; value maps apply to the cell before it is read. Decided: unknown references are decisions, not check
+  problems: the check reports them, the preview waits, and nothing undecided can land.
+- **`.xlsx`** (`company/xlsx.py`): a zip attachment is read with openpyxl in read-only mode with `data_only` (saved
+  values, never formulas), `keep_vba` and `keep_links` off; the first sheet or `sheet`. Cells become the text the CSV
+  reader expects (plain decimals, ISO dates, true/false). A formula with no saved value refuses the file naming its
+  cells; an encrypted workbook, a non-xlsx zip, or one unpacking past 256 MB or 200:1 per large member is refused.
+  **Vetting** (2026-10-27): openpyxl 3.1.5, MIT, pure Python, the reader pandas uses for .xlsx; last release
+  2024-06-28 (a slow but steady cadence; mature rather than abandoned). Known vulnerabilities (OSV): one, an XML
+  external entity issue fixed in 2.4.2 (2017). It evaluates no formula and runs no macro; external links are not read
+  with `keep_links=False`. Its own documentation says it does not guard against entity-expansion attacks unless
+  defusedxml is installed, so defusedxml 0.7.1 (PSF licence, no known vulnerabilities) is a dependency too and the
+  reader refuses to run if openpyxl is not using it. Dependency et-xmlfile 2.0.0 (MIT, no known vulnerabilities).
+  Pinned exactly in `pyproject.toml` and `uv.lock` (`uv add --no-sync`).
+- **Permissions:** the eight commands are layer `import-mapping-v1` on `delivery-batch-v1` (814 commands, descriptor
+  66a2d6a6; `import-v1` stays as merged, 797, 0db21ee9); `import check` and the mapping reads at member, `import
+  decide`, `import-mapping save` and `deactivate` at standard. The layer re-declares `batches.require_read` with the
+  `show` of every list an import's rows refer to (adding sales tax codes and units of measure).
+
+**Check timings** (`tools/measure_imports.py ROWS --check`, root NVMe, the customer file of the baseline; seconds,
+2026-10-27): 1,000 rows 0.18 (a file with a junk amount in every tenth row: 0.12, 100 problems); 10,000 rows 1.35
+(junk: 0.87, 1,000 problems). Against the preview's 7.7 s and 85 s, the check is about 1/50 of it; the target was a
+few seconds at 10,000.
+
+### As built: the review of increment 2 (`notes/reviews/r107-inc2-review.md`)
+
+Each finding has a test that failed before its fix (`test_import_rules.py`, `test_import_mappings.py`,
+`test_tabular.py`, from the review's probes).
+
+- **Amounts are exact or refused** (High 1). `tabular._number_parts` reads money and plain numbers alike: a sign,
+  parentheses, one currency symbol or three-letter code (money) and `%` (numbers) only at the edges; inside, digits,
+  one decimal mark and thousands marks only in groups of three. `12,50` and `1,5` with `.` the decimal mark, `1$5`,
+  `1 234` (unless the thousands mark is a space) and `$5$` are `bad_value`, never 1250, 15 or 1234. Decided: the
+  older readers (`statement_files`, `cutover_sources`) keep reading `12,50` as 1250; they read report exports a
+  program grouped, and the agreement test still holds on every amount all three accept.
+- **Only words lose characters** (High 2). `imports.free_text` decides: a name, address, note or description is words
+  (a name even as the key: Kabe's own example is a name); a number, date, choice, reference, `_id`, a patterned field,
+  an email, phone, fax, postal code, currency, initials, barcode, `*_number`, and any mapped key other than the name are
+  identifiers, where any control character (a tab or line break inside too) refuses the row (`bad_value`). In a
+  single-line text field a tab or line break becomes one space (CR LF is one break), reported with
+  `replaced_with: SPACE`; long text keeps them.
+- **The check refuses what the run would** (High 3). `check_rows` runs each row's input through its command's own
+  `input_model` (`validate_input`), references replaced by a placeholder id, so model validators and requirements
+  that depend on another field are met in the check (standard terms need `due_days`, `fixed_percent` needs `percent`,
+  `discount_percent` 0 to 100); then what the create command refuses from its input alone (`_input_rules`: a list name
+  with a colon; an item's fields by type, through `items._determined_accounts`, `_service_defaults` and
+  `_validate_profile`). A row that will update is checked as the update's input; in upsert, a row that would create
+  as the create's, so its required fields are enforced. An amount beyond signed 64-bit minor units is
+  `E_VALUE_RANGE`. A reference to an inactive record is `E_INACTIVE_REFERENCE` unless the update leaves it as it is.
+  A parent named later in the file is the file's own (`file_names`): the preview shows the row `create`, and the run
+  makes the parent's row first, then the child (`run_slice`'s `process`, depth-bounded); a row naming itself as its
+  parent is refused. `ok` is true only when the file can run as it is: `clean` (no cell problem) and nothing in
+  `to_decide` (a decimal mark, a date order, a saved mapping, each unknown reference). The preview still refuses only
+  on problems; decisions make it wait. A property test feeds generated rows of tricky cells: whenever the check is
+  clean, the preview refuses no row and the run lands it.
+- **.xlsx read once, bounded** (High 4). openpyxl's reader runs without its worksheet step (which scans each sheet
+  whole for a `<dimension>`); the chosen sheet is parsed once by openpyxl's own `WorkSheetParser` on saved values,
+  from the cells it holds: the declared dimension is ignored, empty rows are not padded, a value past column 1,024
+  refuses (`too_wide`), and rows are capped at `tabular.MAX_ROWS` (20,000, §5's starting per-run cap), which now caps
+  a text file too (`too_many_rows`). A formula with no saved value (array formulas too) refuses (`unsaved_formula`),
+  and so does a saved error such as `#REF!` (`error_value`); damaged XML and a refused entity are "the workbook is
+  damaged" (`not_xlsx`). Merged cells read as their first cell; the rest of the merge is blank (read-only mode).
+  Measured (2026-10-28, root NVMe, other builders' tests running): the review's 4.9 KB file (declared `A1:XFD2000`, a
+  value at XFD2000) is refused in under 0.01 s, and with its far value in column B instead it reads its 3 rows in
+  under 0.01 s (was 14.3 s); a 200,000-row, 3-column workbook (12.5 MB zip, no `<dimension>`) is refused at the cap
+  after 1.7 s with peak memory 50 MB (was 75 s and 190 MB to read it all); 20,000 rows read in 1.7 s, 42 MB.
+- **All or nothing is total** (Medium 5). In an atomic run a `differs` row (create mode) and a `skipped` row (update
+  mode, no match) are refused unless the caller named the outcome in `allow` (`["differs"]`, `["skipped"]`); the
+  preview shows them refused and the run will not start. `import cancel` of an atomic run with a live batch reverses
+  what it made, any reference a decision created included, then ends `cancelled`.
+- **`remember` needs a named source** (Medium 6). A run keyed under the shared default (`customer import`) refuses
+  `remember`, and `import-mapping save` refuses that name.
+- **`PK` is a header, not an archive** (Medium 7): only `PK\x03\x04` (read as a workbook, which refuses a zip without a
+  zip's structure) and the empty or spanned zip signatures are archives.
+- **Lows.** `import-mapping show`, `history` and `deactivate` need the source's kind's read permission, and `query`
+  lists only sources of readable kinds; `import check` offers suggestions and look-alikes only from lists the caller
+  may read. Constants and a saved mapping's defaults are read and checked as cells are (a problem of the mapping, said
+  once). A remembered decision keys on the file's own text (`file_value`), before any value map changed it.
+- **Check timings, after these fixes** (`tools/measure_imports.py ROWS --check`, 2026-10-28, under the same load): the
+  per-row model check costs about a third more: 1,000 rows 0.24 s (junk file 0.19 s); 10,000 rows 1.87 s (junk
+  1.49 s), still within the target of a few seconds.
+- **Permissions**: the eight commands of increment 2 move from `import-v1` (restored as merged) to
+  `import-mapping-v1` (above). The migration is co0110, on main's co0109 (delivery batches).

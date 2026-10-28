@@ -521,7 +521,7 @@ For the builder, defaults standing unless review finds otherwise:
 
 ## As built: increment 1
 
-- **Migration co0111** (on co0109; co0110 is taken by the import and delivery branches, so whoever merges re-chains it)
+- **Migration co0111** (on co0110, main's saved import mappings)
   adds `bank_feed_imports`, `bank_lines`, `bank_line_events` and `bank_feed_accounts`. The partial unique index
   `(account_id, line_key) WHERE live = 1` is what makes an overlap never duplicate. Guards: an import and an event
   never change; a line keeps what the bank printed (identity, date, amount, text, key), is never deleted and never
@@ -588,7 +588,7 @@ For the builder, defaults standing unless review finds otherwise:
   acts it governs are built. Matched and settled lines never touch the books.
 - **Commands and permissions.** `bank-feed import` (standard), `bank-feed show`, `bank-feed query`, `bank-line query`
   (member), each with `ledger.read` member beside the new capability `bank-feed`. Layer `bank-feed-v1` on
-  `delivery-batch-v1` (810 commands, descriptor `107637da`). `bank-feed import` is classified `not-a-record` for
+  `import-mapping-v1` (818 commands, descriptor `2347be61`). `bank-feed import` is classified `not-a-record` for
   imports. `plan_in_write`: the real import reuses the plan made inside its own write transaction.
 - **Not built here** (later increments): reversal and move (the batch is recorded, the adapter is increment 2's), the
   sorting acts and the company's auto-match preference, rules, the browser pages, the live-feed seam.

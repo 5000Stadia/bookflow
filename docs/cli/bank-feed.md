@@ -4,7 +4,7 @@
 
 ## `bank-feed import`
 
-Bring a bank or card statement file (OFX, QFX or CSV) into the account's bank inbox. Overlaps never duplicate: a line is known by its FITID (or, without one, a hash of the line and its occurrence in the file), so a download that overlaps an earlier one adds only the new lines; a FITID reused for another amount is kept apart and flagged; a new line that looks like one already in with cleaned-up text is flagged possible_duplicate, never dropped. Each line the matcher pairs surely with an entry is matched; the rest wait. Nothing is posted. A file with any unreadable line is refused whole, listing every problem. An OFX file is checked against the account (E_ACCOUNT_MISMATCH); the same file twice is refused without again (E_ALREADY_IMPORTED). --dry-run is the preview. Example: {"account": "Checking", "attachment": "01J..."}.
+Bring a bank or card statement file (OFX, QFX or CSV) into the account's bank inbox. Overlaps never duplicate: a line is known by its FITID (or, without one, a hash of the line and its occurrence in the file), so a download that overlaps an earlier one adds only the new lines; a FITID reused for another amount is kept apart and flagged; a new line that looks like one already in under another id or text is flagged possible_duplicate, never dropped. Each line the matcher pairs surely with an entry is matched; the rest wait. Nothing is posted. A file with any unreadable line is refused whole, listing every problem. An OFX file is checked against the account (E_ACCOUNT_MISMATCH), a CSV by its content (account_confirmed goes on); the same file twice is refused without again (E_ALREADY_IMPORTED). --dry-run is the preview. Example: {"account": "Checking", "attachment": "01J..."}.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -57,6 +57,7 @@ The same example as complete `bookflow_run` arguments:
 | `auto_match` | `--auto-match` | boolean | no | no | true | Link each line the matcher pairs surely with its entry (the anchor's default); false leaves them waiting with the suggestion. |
 | `again` | `--again` | boolean | no | no | false | Import a file this account already received (its lines already in are skipped all the same). |
 | `confirm_account` | `--confirm-account` | boolean | no | no | false | Go on although the file's account number or kind differs from what this account last received (needs bank-feed.connect). |
+| `account_confirmed` | `--account-confirmed` | boolean | no | no | false | Go on although a file with no account number (CSV) looks like another account's statement. |
 | `limit` | `--limit` | integer | no | no | 100 | Lines to return in the result (the counts always cover the whole file).; minimum 0; maximum 1000 |
 
 ### Command and context options
@@ -128,6 +129,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `account_check.known_bank_number` | string \| null | no | yes | null | — |
 | `account_check.known_account_last4` | string \| null | no | yes | null | — |
 | `account_check.known_kind` | literal["bank", "card"] \| null | no | yes | null | — |
+| `account_check.learns` | string \| null | no | yes | null | The number this import teaches the account (first or confirmed). |
 | `account_check.status` | literal["first", "same", "confirmed", "no_id"] | yes | no | — | first (nothing known yet; this import teaches it), same, confirmed (differs; confirm_account given), no_id (a CSV carries none: check the overlap instead). |
 | `overlap_elsewhere` | array[object] | yes | no | — | Other feed accounts already holding this file's lines: the sign of a file sent to the wrong account. |
 | `overlap_elsewhere[].account_id` | string | yes | no | — | — |
@@ -174,6 +176,7 @@ Example JSON output:
     "known_bank_number": null,
     "known_kind": null,
     "last_import_at": null,
+    "learns": null,
     "status": "first",
     "type": "value"
   },

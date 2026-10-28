@@ -123,13 +123,13 @@ def test_an_atomic_undo_that_is_refused_fails_the_run_and_changes_nothing(books,
     """High 1: an atomic run on a hyphenated kind rolls back; when its undo is refused the run ends `failed`."""
     books.run('customer-type create', {'name': 'P'})
     text = 'Name,Parent\nOk One,\nChild Of P,P\n'
-    preview = books.run('import preview', {'kind': 'customer-type', 'content': text, 'atomic': True})
+    preview = books.run('import preview', {'kind': 'customer-type', 'content': text})
     books.run('customer-type deactivate', {'customer_type': 'P'})
     out = books.run('import run', {'run': preview['run']['id']})
     assert out['run']['state'] == 'rolled_back' and out['run']['batch']['state'] == 'reversed'
     books.run('customer-type create', {'name': 'Q'})
     preview = books.run('import preview', {'kind': 'customer-type', 'content': 'Name,Parent\nTwo,\nKid,Q\n',
-                                           'atomic': True, 'source': 'second'})
+                                           'source': 'second'})
     books.run('customer-type deactivate', {'customer_type': 'Q'})
     monkeypatch.setattr(batches, '_in_use', lambda s, rt, ids, made: {i: {'tables': ['notes'], 'rows': [],
                                                                           'documents': []} for i in ids})
@@ -196,7 +196,8 @@ def test_reads_keep_each_kinds_own_permission(books):
     from tests.conftest import as_user, make_actor
     books.run('customer create', {'name': 'Secret', 'notes': 'confidential note', 'credit_limit': '999.00'})
     preview = books.run('import preview', {'kind': 'customer', 'mode': 'update',
-                                           'content': 'Customer,Notes,Credit Limit\nSecret,changed,1.00\nBad,x,12x\n'})
+                                           'content': 'Customer,Notes,Credit Limit\nSecret,changed,1.00\nBad,x,12x\n',
+                                           'partial': True})
     run_id = preview['run']['id']
     books.run('import run', {'run': run_id})
     batch = books.run('import show', {'run': run_id})['run']['batch']['id']
@@ -226,7 +227,7 @@ def test_the_refused_rows_file_round_trips_to_the_same_values(books):
     """Medium 7: numbers, phones and dates are not prefixed; formula-like text is, and reads back as itself."""
     text = 'Customer,Phone,Credit Limit,Acct No\n=Formula Co,+1 415 555 0100,12x,2026-01-31\n' \
            'Neg Co,-5 555,12y,2026-02-01\n'
-    preview = books.run('import preview', {'kind': 'customer', 'content': text, 'source': 'f1'})
+    preview = books.run('import preview', {'kind': 'customer', 'content': text, 'source': 'f1', 'partial': True})
     assert preview['counts'] == {'refused': 2}
     books.run('import run', {'run': preview['run']['id']})
     content = books.run('import errors', {'run': preview['run']['id']})['content']
@@ -248,7 +249,7 @@ def test_the_refused_rows_file_round_trips_to_the_same_values(books):
 def test_a_money_cell_that_will_not_parse_refuses_its_row(books):
     """Medium 8: a code or symbol alone is refused with a message; the preview goes on."""
     text = 'Customer,Credit Limit\nA,TBD\nB,$\nC,abc\nD,10.00\n'
-    preview = books.run('import preview', {'kind': 'customer', 'content': text})
+    preview = books.run('import preview', {'kind': 'customer', 'content': text, 'partial': True})
     assert preview['counts'] == {'create': 1, 'refused': 3}
     assert {r['code'] for r in preview['refused']} == {'bad_value'}
     assert all('not an amount' in r['message'] for r in preview['refused'])
@@ -303,15 +304,17 @@ def test_a_dry_runs_fingerprint_spares_the_probe_and_later_slices_reprobe_nothin
     assert len(probed) == 10
 
 
-def test_utf16_without_a_byte_order_mark_is_read_and_a_nul_is_refused():
-    """Low 10."""
+def test_utf16_without_a_byte_order_mark_is_read_and_a_nul_is_kept_for_the_import():
+    """Low 10; since Kabe's rules (2026-10-27) a NUL in a cell no longer refuses the file: the import drops it from text
+    and reports it (tests/test_import_rules.py), and a file that is not text at all is refused."""
     for encoding in ('utf-16-le', 'utf-16-be'):
         table = tabular.read('Customer,City\nAcmé,Zürich\n'.encode(encoding))
         assert (table.headers, table.rows[0][1], table.encoding, table.encoding_guessed) == (
             ['Customer', 'City'], ['Acmé', 'Zürich'], encoding, True)
+    assert tabular.read(b'Customer\nAc\x00me\n').rows == [(2, ['Ac\x00me'])]
     with pytest.raises(BookflowError) as caught:
-        tabular.read(b'Customer\nAc\x00me\n')
-    assert caught.value.details['problem'] == 'nul' and caught.value.details['line'] == 2
+        tabular.read(b'\x00\x01\x02\x03\x04' * 100)
+    assert caught.value.details['problem'] == 'not_text'
 
 
 def test_hierarchy_rows_read_the_subtree_by_its_path_range(books):

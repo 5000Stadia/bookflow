@@ -93,8 +93,9 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # reverse/cancel, batch show/query.
     # +2 the fulfillment worksheet (R181 increment 5): report order-fulfillment, report shipments.
     # +7 flags and batches (R112 increment 3): delivery flag/unflag/queue/batch/batch-show/batch-query/batch-cancel.
+    # +8 R107 increment 2 and Kabe's rules: import check/decide, import-mapping save/show/history/query/match/deactivate.
     # +4 the bank inbox (R108 increment 1): bank-feed import/show/query, bank-line query.
-    assert len(rows) == 816
+    assert len(rows) == 824
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
@@ -393,10 +394,14 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # messages and batch, approve's and query's batch, company update's auto-flag date -- their null branches.
     # 4167 -> 4170 (R181 closing-trial fixes): sales-order invoice's expected_version, conversion_key and date
     # are optional now -- their null branches.
-    # 4170 -> 4184 (R108 inc 1, measured): the null branches of the bank inbox commands' optional inputs -- bank-feed
+    # 4170 -> 4196 (R107 inc 2, measured): null branches again -- import preview's sheet and mapping (2); import
+    # check's content, attachment, sheet, source, mapping, columns, constants, key, delimiter, decimal, date_order (11);
+    # import decide's map, create, create_input, skip (4); import-mapping show's version (1), query's kind, active,
+    # cursor (3), match's content, attachment, sheet, delimiter, source (5). No new variant kind.
+    # 4196 -> 4210 (R108 inc 1, measured): the null branches of the bank inbox commands' optional inputs -- bank-feed
     # import's content and attachment (2), show's state and cursor (2), query's account and cursor (2), bank-line
     # query's account, state, import_id, date_from, date_to, text, amount and cursor (8). No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==4184
+    assert sum(len(group["paths"]) for group in mapped)==4210
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

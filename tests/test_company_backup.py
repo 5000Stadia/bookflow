@@ -198,13 +198,19 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0107 = importlib.import_module("bookflow.storage.company_migrations.versions.0107_delivery_connections")
     co0108 = importlib.import_module("bookflow.storage.company_migrations.versions.0108_batches_imports")
     co0109 = importlib.import_module("bookflow.storage.company_migrations.versions.0109_delivery_batches")
+    co0110 = importlib.import_module("bookflow.storage.company_migrations.versions.0110_import_mappings")
     co0111 = importlib.import_module("bookflow.storage.company_migrations.versions.0111_bank_feeds")
 
     def older(conn):
-        # Newest first: co0111 (on co0109): its guards, indexes and four tables (children first).
+        # Newest first: co0111 (on co0110): its guards, indexes and four tables (children first).
         for trigger in co0111.TRIGGERS:
             conn.execute(f"DROP TRIGGER {trigger}")
         for table in co0111.TABLES:
+            conn.execute(f"DROP TABLE {table}")
+        # Then co0110 (on co0109): its guards and the saved-mapping tables.
+        for trigger in co0110.TRIGGERS:
+            conn.execute(f"DROP TRIGGER {trigger}")
+        for table in co0110.TABLES:
             conn.execute(f"DROP TABLE {table}")
         # Then co0109 (on co0108): its index and two tables. Its delivery_messages.batch_id (a foreign key,
         # which DROP COLUMN refuses) goes with co0105's delivery_messages below.

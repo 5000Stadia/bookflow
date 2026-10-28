@@ -11,7 +11,7 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_delivery_batch_catalog as previous, permission_catalog as c
+from . import permission_import_mapping_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
 SOURCE_COMMIT = '73d7bebd640414bda46984313ac503ccd66bbcfe'
@@ -41,7 +41,7 @@ ADDED_ACTIONS = tuple(
                                        key=lambda r: r.capability)), True, (_OWNER.format(planner),))
     for name, threshold, planner in _ADDED)
 CURRENT_SOURCES = (*previous.CATALOG.conditional_sources,
-    c.ResourceSource('bookflow.company.bank_feeds._require_connect', (('src/bookflow/company/bank_feeds.py', 43),),
+    c.ResourceSource('bookflow.company.bank_feeds._require_connect', (('src/bookflow/company/bank_feeds.py', 52),),
                      (c.Requirement('bank-feed.connect', 'admin'),)))
 CATALOG = replace(previous.CATALOG, version=c.BANK_FEED_POLICY_VERSION,
     commands=tuple(sorted((*previous.CATALOG.commands, *ADDED_COMMANDS), key=lambda x: x.name)),
