@@ -98,6 +98,7 @@ ACCEPTED = {
     'import-v1': (797, '0db21ee9713630abf0d4a5d81c282ee608483cd6f16b8a2aa40e3a14712dfe4a'),
     'worksheet-v1': (799, 'c59d5c63f042353fd78d4e565561f9d0f4560ad8420d56b412915b90f23a4cf4'),
     'delivery-batch-v1': (806, 'e7d68fa7de0173bbe842091419c3deed98561bc4e07c92cf981e4759e59756b5'),
+    'bank-feed-v1': (810, '107637dae780bd77ce82c0ac8034f77990e4ffffec41eefa5c73cee7d941a8f6'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -232,6 +233,7 @@ CHAIN_ADDITIONS = {
     'worksheet-v1': {'report order-fulfillment', 'report shipments'},
     'delivery-batch-v1': {'delivery batch', 'delivery batch-cancel', 'delivery batch-query', 'delivery batch-show', 'delivery flag',
                           'delivery queue', 'delivery unflag'},
+    'bank-feed-v1': {'bank-feed import', 'bank-feed query', 'bank-feed show', 'bank-line query'},
 }
 
 _ANCESTOR_EDIT = """

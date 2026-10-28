@@ -2719,3 +2719,18 @@ MATRIX['delivery batch-show'] = {'E_RECORD_NOT_FOUND': 'unknown batch'}
 MATRIX['delivery batch-query'] = {'E_VALIDATION': 'invalid state or limit'}
 MATRIX['delivery batch-cancel'] = {'E_RECORD_NOT_FOUND': 'unknown batch', 'E_VERSION_CONFLICT': 'stale expected_version',
                                    'E_REASON_REQUIRED': 'no --reason', **_DELIVERY_TAIL}
+# The bank inbox (R108 increment 1).
+MATRIX['bank-feed import'] = {
+    'E_VALIDATION': 'no file or two, not a bank or card account, a file with unreadable lines (every one listed), '
+                    'another currency, no transactions',
+    'E_RECORD_NOT_FOUND': 'unknown account or attachment',
+    'E_AMOUNT_PRECISION': 'more decimals than the currency allows (listed with the file refusal)',
+    'E_ACCOUNT_MISMATCH': "an OFX file for another account number, or a card statement into a bank account",
+    'E_ALREADY_IMPORTED': 'the same file again without --again',
+    'E_IO': 'an attachment body collected',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+for _name in ('bank-feed show', 'bank-feed query', 'bank-line query'):
+    MATRIX[_name] = {'E_VALIDATION': 'invalid input or cursor', 'E_RECORD_NOT_FOUND': 'unknown import or account'}

@@ -10,7 +10,7 @@ import bookflow
 from bookflow import BookflowError
 from bookflow.core import registry
 from bookflow.hub import permission_human_admin_catalog as layer, people_only, permission_runtime as runtime
-from bookflow.hub import permission_delivery_batch_catalog as tip_layer
+from bookflow.hub import permission_bank_feed_catalog as tip_layer
 from tests.conftest import hosted_call, make_agent
 from tests.test_row3_host import hosted  # noqa: F401 - fixture
 
@@ -62,6 +62,7 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # import-v1 adds none: an import runs each row's own command, under that command's own capability.
     # worksheet-v1 adds none: the worksheet and the shipments report are reports.
     # delivery-batch-v1 adds none: drafting is anyone's, and a batch's send gives a go only as delivery send does.
+    # bank-feed-v1 adds none: an import posts nothing; going past an account mismatch asks bank-feed.connect instead.
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {
         'journal restore', 'invoice restore', 'customer merge', 'customer unmerge', 'vendor merge', 'vendor unmerge',
