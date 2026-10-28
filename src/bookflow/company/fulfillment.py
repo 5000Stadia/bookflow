@@ -23,14 +23,14 @@ from fractions import Fraction
 
 import sqlalchemy as sa
 
-from bookflow.company import ledger_reports as ledger, placements
+from bookflow.company import ledger_reports as ledger, placements, schema as c
 from bookflow.company.fulfillment_models import (
     STATUSES, FulfillmentLine, OrderFulfillmentOutput, OrderFulfillmentRow, OrderFulfillmentTotals, ShipmentsReportBox,
     ShipmentsReportOutput, ShipmentsReportRow, ShipmentsReportTotals, SiteShippable,
 )
 from bookflow.company.ledger_reports import money
 from bookflow.core.errors import BookflowError
-from bookflow.core.exact import format_quantity_micro_units, round_ratio_half_even
+from bookflow.core.exact import format_quantity_micro_units
 
 NANO = 1_000_000_000
 UNIT = 1_000_000
@@ -40,11 +40,32 @@ def _q(micro):
     return format_quantity_micro_units(int(micro))
 
 
-def _amount(net, quantity, factor, base):
-    """``base`` units of a line ordered ``quantity`` (selected-unit microunits) for ``net``, at the order price."""
-    if not base or not quantity:
+def _length(f, base):
+    """``base`` units of a line as a length of its billing span (`billing_math.denominator` coordinates)."""
+    if not base or not f['facts'].quantity_microunits:
         return 0
-    return round_ratio_half_even(int(net) * int(base) * NANO, int(factor) * int(quantity))
+    return round(Fraction(f['d'] * int(base) * NANO, int(f['factor']) * int(f['facts'].quantity_microunits)))
+
+
+def _billed(f, skip, base):
+    """What the next invoice bills for ``base`` units of a line after the first ``skip`` units still to bill: the
+    invoice takes the line's free span from its start and prices each piece by the difference of rounded cumulative
+    endpoints (`billing_math.portion`), so these cents are the invoice's own, never a per-line rounding."""
+    from bookflow.company import billing_math as math
+    skip, take = _length(f, skip), _length(f, base)
+    amount = 0
+    for start, end in f['spans']:
+        if take <= 0:
+            break
+        width = end - start
+        if skip >= width:
+            skip -= width
+            continue
+        start, skip = start + skip, 0
+        stop = min(end, start + take)
+        amount += math.portion(int(f['facts'].net_minor_units), start, stop, f['d'])
+        take -= stop - start
+    return amount
 
 
 def _natural(text):
@@ -115,9 +136,11 @@ def _drafts(s):
             found = by_root.setdefault(root, [0, 0])
             found[0] += quantity
             found[1] += packed
-        order = by_order.setdefault(draft['sales_order_id'], dict(numbers=[], packed=False))
+        order = by_order.setdefault(draft['sales_order_id'], dict(numbers=[], packed=False, packed_numbers=[]))
         order['numbers'].append(draft['number'])
         order['packed'] = order['packed'] or whole
+        if whole:
+            order['packed_numbers'].append(draft['number'])
     return by_root, by_order
 
 
@@ -128,6 +151,14 @@ class _Stock:
     def __init__(self, s, items, as_of=None):
         from bookflow.company import commitments
         self.on_hand = commitments.on_hand(s, items, as_of) if items else {}
+        self.value = {}
+        if items:
+            m = c.inventory_movements
+            query = sa.select(m.c.item_id, sa.func.sum(m.c.value_minor_units)).where(
+                m.c.item_id.in_(sorted(items))).group_by(m.c.item_id)
+            if as_of is not None:
+                query = query.where(m.c.effective_date <= as_of)
+            self.value = {item: int(value or 0) for item, value in s.company.conn.execute(query)}
         self.deducts = commitments.deducts_documents(s)
         self.builds = commitments.for_assemblies(s) if commitments.deducts_builds(s) else {}
         self.total, self.own = {}, {}
@@ -144,7 +175,24 @@ class _Stock:
 
 
 def _ship_now(lines, order_id, site_id, stock):
-    """``{root: base}`` `shipment post` ships from the order alone at this site: `shipments._plan`'s steps."""
+    """``{root: base}`` `shipment post` ships from the order alone at this site: `shipments._plan`'s steps. Units
+    worth nothing in the books ship nothing: `shipment post` refuses a shipment with no cost to hold
+    (``shipment_without_value``), so an order whose every unit it would ship is of an item carried at no value reads
+    ``{}`` (`_worthless`)."""
+    found = _plan_now(lines, order_id, site_id, stock)
+    return {} if _worthless(found, lines, stock) else found
+
+
+def _worthless(now, lines, stock):
+    """Whether every unit ``now`` ships is of an item whose stock is carried at no value, so `shipment post` would
+    post no cost and refuse it (``shipment_without_value``)."""
+    if not now:
+        return False
+    items = {line['facts'].item_id for line in lines if line['root'] in now}
+    return all(stock.value.get(item, 0) == 0 for item in items)
+
+
+def _plan_now(lines, order_id, site_id, stock):
     from bookflow.company.shipments import _to_base
     eligible = [line for line in lines if line['left'] > 0 and line['line'].get('site_id') in (None, site_id)]
     left = stock.to(order_id, {line['facts'].item_id for line in eligible})
@@ -193,7 +241,10 @@ def worksheet(s, inp, *, principal_id=None):
 
 
 def _worksheet(s, inp, principal_id):
-    from bookflow.company import commitments, pick_lists, sales_defaults, shipments, work
+    from bookflow.company import (
+        billing_allocations as alloc, billing_math as math, commitments, pick_lists, sales_defaults, shipments,
+        tax_policy, work,
+    )
     from bookflow.company.shipments import _to_base
     statuses = None
     if inp.status is not None:
@@ -230,12 +281,15 @@ def _worksheet(s, inp, principal_id):
     found = []
     for header, rev, lines in loaded:
         figures = []
+        policy = tax_policy.effective(work.facts(rev).profile) if lines else None
         for line in lines:
             facts = line['facts']
             factor = facts.unit_factor_nanounits
             out = [p for p in parts.get(line['root'], ())]
             figures.append(dict(
                 line=line, facts=facts, factor=factor, root=line['root'],
+                spans=tuple(alloc.free_spans(s, line['root'], facts, policy=policy)),
+                d=math.denominator(facts.quantity_microunits, facts.net_minor_units),
                 ordered=_to_base(facts.quantity_microunits, factor), to_ship=_to_base(line['to_ship'], factor),
                 shipped=sum(p.out for p in out), waiting=sum(p.waiting for p in out),
                 drafted=drafted.get(line['root'], (0, 0))[0], packed=drafted.get(line['root'], (0, 0))[1],
@@ -249,9 +303,11 @@ def _worksheet(s, inp, principal_id):
             ships_here = any(f['to_ship'] > 0 and f['line']['line'].get('site_id') in (None, site_id) for f in figures)
             if not ships_here and not (waiting and site_id in shipped_from.get(header['id'], ())):
                 continue
-        now = _ship_now(lines, header['id'], here, stock)
+        planned = _plan_now(lines, header['id'], here, stock)
+        worthless = _worthless(planned, lines, stock)
+        now = {} if worthless else planned
         held = {f['root']: f['pick'] for f in figures if f['pick']}
-        refused = sorted({n for root in now if root in held for n in held[root]['lists']}, key=_natural)
+        refused = sorted({n for root in planned if root in held for n in held[root]['lists']}, key=_natural)
         if refused:
             now = {}
         if before is not None and not refused:
@@ -262,7 +318,7 @@ def _worksheet(s, inp, principal_id):
         complete = bool(to_ship) and not refused and all(
             f['to_ship'] <= 0 or (f['line']['line'].get('site_id') in (None, here)
                                   and now.get(f['root'], 0) + f['drafted'] >= f['to_ship']) for f in figures)
-        order_drafts = draft_orders.get(header['id'], dict(numbers=[], packed=False))
+        order_drafts = draft_orders.get(header['id'], dict(numbers=[], packed=False, packed_numbers=[]))
         lists = sorted({n for f in figures if f['pick'] for n in f['pick']['lists']}, key=_natural)
         if not to_ship:
             status = 'shipped'
@@ -276,8 +332,7 @@ def _worksheet(s, inp, principal_id):
             status = 'partly_shipped'
         else:
             status = 'to_pick'
-        shippable = sum(_amount(f['line']['line']['net_minor_units'], f['facts'].quantity_microunits, f['factor'],
-                                now.get(f['root'], 0)) for f in figures)
+        shippable = sum(_billed(f, f['waiting'], now.get(f['root'], 0)) for f in figures)
         if statuses is not None and status not in statuses:
             continue
         if inp.complete_only and not complete:
@@ -290,13 +345,12 @@ def _worksheet(s, inp, principal_id):
             continue
         profile = json.loads(header['order_facts']).get('profile', {})
         found.append(dict(header=header, rev=rev, figures=figures, now=now, here=here, refused=refused,
-                          complete=complete, status=status, shippable=shippable, lists=lists,
-                          drafts=sorted(order_drafts['numbers'], key=_natural), promised=profile.get('ship_date'),
-                          to_ship_amount=sum(_amount(f['line']['line']['net_minor_units'], f['facts'].quantity_microunits,
-                                                     f['factor'], f['to_ship']) for f in figures),
-                          waiting_amount=sum(_amount(f['line']['line']['net_minor_units'],
-                                                     f['facts'].quantity_microunits, f['factor'], f['waiting'])
-                                             for f in figures),
+                          worthless=worthless and not refused, complete=complete, status=status, shippable=shippable, lists=lists,
+                          drafts=sorted(order_drafts['numbers'], key=_natural),
+                          packed_drafts=sorted(order_drafts['packed_numbers'], key=_natural),
+                          promised=profile.get('ship_date'),
+                          to_ship_amount=sum(_billed(f, f['waiting'], f['to_ship']) for f in figures),
+                          waiting_amount=sum(_billed(f, 0, f['waiting']) for f in figures),
                           sites=_by_site(s, lines, header, here, site_id, stock, figures, names) if multi else []))
     if inp.sort == 'shippable_amount':
         found.sort(key=lambda o: (-o['shippable'], o['header']['order_date'], _natural(o['header']['number'])))
@@ -331,9 +385,8 @@ def _by_site(s, lines, header, here, site_id, stock, figures, names):
     out = []
     for site in sites:
         now = _ship_now(lines, header['id'], site, stock)
-        out.append(dict(site=site, lines=len(now), amount=sum(_amount(
-            f['line']['line']['net_minor_units'], f['facts'].quantity_microunits, f['factor'], now.get(f['root'], 0))
-            for f in figures), complete=all(f['to_ship'] <= 0 or (
+        out.append(dict(site=site, lines=len(now), amount=sum(_billed(f, f['waiting'], now.get(f['root'], 0))
+                                                              for f in figures), complete=all(f['to_ship'] <= 0 or (
                 f['line']['line'].get('site_id') in (None, site) and now.get(f['root'], 0) + f['drafted'] >= f['to_ship'])
                 for f in figures)))
     return out
@@ -361,21 +414,25 @@ def _row(s, order, as_of, currency, names, items):
             shipped=_q(f['shipped']), shipped_not_invoiced=_q(f['waiting']), to_ship=_q(f['to_ship']),
             can_ship_now=_q(order['now'].get(f['root'], 0)), on_picks=_q(pick.get('held', 0)),
             picked=_q(pick.get('picked', 0)), drafted=_q(f['drafted']), packed=_q(f['packed']),
-            shippable_amount=money(_amount(line['net_minor_units'], f['facts'].quantity_microunits, f['factor'],
-                                           order['now'].get(f['root'], 0)), currency)))
+            shippable_amount=money(_billed(f, f['waiting'], order['now'].get(f['root'], 0)), currency)))
     note = None
     if order['refused']:
         first = order['refused'][0]
         note = (f'Pick list {", ".join(order["refused"])} holds units of this order: ship from it '
                 f'(`shipment post --pick-list {first}`) or cancel it first.')
+    elif order['worthless']:
+        note = ('Every unit this order would ship is carried at no value in the books, so `shipment post` refuses it '
+                '(shipment_without_value): enter the bill that bought the stock, or record what it is worth with '
+                '`inventory adjust`, then ship.')
     return OrderFulfillmentRow(
-        sales_order_id=header['id'], sales_order_number=header['number'], date=header['order_date'],
+        sales_order_id=header['id'], sales_order_number=header['number'], sales_order_version=header['version'],
+        date=header['order_date'],
         customer_id=header['customer_id'], customer_name=header['customer_name'], promised_ship_date=promised,
         days_late=late, fulfillment_status=order['status'], invoice_progress=progress, site_id=order['here'],
         site_name=names.get(order['here']), can_ship_complete=order['complete'],
         to_ship_amount=money(order['to_ship_amount'], currency), shippable_amount=money(order['shippable'], currency),
         shipped_not_invoiced_amount=money(order['waiting_amount'], currency), pick_lists=order['lists'],
-        drafts=order['drafts'],
+        drafts=order['drafts'], packed_drafts=order['packed_drafts'],
         by_site=[SiteShippable(site_id=site['site'], site_name=names.get(site['site'], site['site']),
                                lines=site['lines'], shippable_amount=money(site['amount'], currency),
                                complete=site['complete']) for site in order['sites']],

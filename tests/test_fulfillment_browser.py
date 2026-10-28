@@ -161,7 +161,7 @@ def test_ship_print_and_invoice_selected_orders_from_the_worksheet(register_brow
     b.navigate(f'{base}/inventory/fulfillment')
     b.wait_for('!!document.querySelector("[data-batch-pick]")', timeout=30)
     assert b.evaluate('[...document.querySelectorAll("[data-tab]")].map(a => a.dataset.tab).join()') == \
-        'ready,to_pick,picking,to_pack,waiting,all'
+        'ready,to_pick,picking,to_pack,packed,waiting,all'
     _select(b, 'WS-3')
     b.evaluate(f'''(() => {{ const f = document.querySelector('[data-worksheet-batch]');
         f.querySelector('[name=date]').value = {DEMO_AS_OF!r}; f.querySelector('[data-batch-pick]').click(); }})()''')

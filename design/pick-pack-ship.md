@@ -820,7 +820,7 @@ For the builder, defaults standing unless review finds otherwise:
 - **`report order-fulfillment`** (`company/fulfillment.py`), the worksheet for every shipper: each open, active sales
   order with stocked units to ship or shipped and not invoiced, by line and in total, in base units: ordered, shipped,
   shipped not invoiced, to ship, **can ship now**, on picks and picked, drafted and packed; to-ship, shippable and
-  shipped-not-invoiced amounts at the order prices (exact integers, rounded per line); promised ship date (the order's
+  shipped-not-invoiced amounts at the order prices, in the invoice's own cents (below); promised ship date (the order's
   ship date) and days late against `as_of` (default today); fulfillment status beside the billing progress; the live
   pick lists and drafts holding it.
 - **Can ship now is what `shipment post --sales-order <n>` ships**, by `shipments._plan`'s own steps with no lines
@@ -831,6 +831,14 @@ For the builder, defaults standing unless review finds otherwise:
   live pick list holds (picking on) is refused by `shipment post` from the order alone, so it reads zero with a note
   naming the list and `shipment post --pick-list`. `by_site` (companies with more than one site) gives the same figure
   at the row's site, every site a line to ship names, and the default site when a line names none.
+- **Stock carried at no value ships nothing now.** `shipment post` refuses a shipment with no cost to hold
+  (`shipment_without_value`), so an order whose every unit it would ship is of an item whose stock is valued at zero
+  reads can ship now 0, with a note giving that reason and the way out (the bill, or `inventory adjust`). The check is
+  the item's whole on-hand value; a FIFO item with value but a zero-cost oldest layer is not foreseen.
+- **Amounts are the next invoice's cents.** An invoice takes a line's free billing span from its start and prices each
+  piece by the difference of rounded cumulative endpoints (`billing_math.portion`). The worksheet walks the same free
+  spans: shipped not invoiced is the first piece, to ship and can ship now the pieces after it, so 3 at 3.3333 shipped
+  one at a time reads 3.33, then 3.34 once the first is billed, as the invoices bill.
 - **Statuses (§2):** `shipped` once nothing is left to ship; else, while pick and pack is on, `packed` (a live draft
   with every unit boxed), `picking` (a live open list with units still to pick), `picked` (picked units waiting); else
   `partly_shipped` once something shipped, `to_pick` before. With the switch off only `to_pick` (shown as To ship),
@@ -841,7 +849,10 @@ For the builder, defaults standing unless review finds otherwise:
   line's to-ship covered by can-ship-now plus what drafts hold, at the row's site), `can_ship`, `shipped_not_invoiced`,
   and **`newly_shippable`** (a date): orders that can ship more of some line now than with the stock on hand at the end
   of that date, everything else as now; so a receipt dated after it makes a short order newly shippable, and a shipment
-  of another order never does. Totals cover every row; rows page through `ledger.page_of`, so report export covers it.
+  of another order never does. A receipt entered today but dated on or before the date is not new: the filter reads
+  stock by effective date, as §10 words it, and the cutoff day itself is "then". Totals cover every row; rows page
+  through `ledger.page_of`, so report export covers it. Both reports are audited reports (`AUDITED_REPORTS`): orders,
+  drafts, boxes and pick lists post nothing, so the audit sequence is what stales an old page's cursor.
 - **`report shipments`**: posted shipments (current revision shipped) by ship date, `date_to` default today,
   `date_from` optional; filters customer, site, ship method; each with order, customer, site, ship method, carrier,
   tracking numbers (the shipment's and its boxes'), quantity, boxes with type, weight and tracking, total weight and
@@ -849,13 +860,24 @@ For the builder, defaults standing unless review finds otherwise:
 - **Permission layer `worksheet-v1`** on `packing-v1`: both reports `reports` member (776 commands, descriptor
   daba86b3). No migration: the worksheet stores nothing.
 - **Browser.** Items > Fulfillment (`/inventory/fulfillment`), opening on Can ship now, with tabs To pick, Picking, To
-  pack (picked), Shipped not invoiced and All while pick and pack is on, and To ship instead of the three without it;
+  pack (picked), Packed, Shipped not invoiced and All while pick and pack is on, and To ship instead of the four without it;
   sort, site, customer, shippable-since and complete-only filters; per order its lines in a disclosure. Selected orders
   take **Ship** (`shipment post` per order) and **Create invoices** (`sales-order invoice` per order), each through htmx,
   each order its own command so a refusal of one leaves the rest standing and the result lists each; **Print packing
   slips** (one PDF from a real click, a slip per order: its live draft, else its latest shipment); while the switch
   is on, **Create pick list** (one list for the selected orders) and **Print pick lists** (each live list holding them,
   one per page). Items also lists Shipments by date (`report shipments`).
+- **A batch acts on what the page showed** (review fixes). Each row carries its order's version
+  (`sales_order_version`): Create invoices checks it and sends it as `expected_version`, and Ship checks it, so a submit
+  from a stale page is refused for that order (E_VERSION_CONFLICT, said in the results) instead of billing units the
+  page never showed. Each page carries a batch key that Ship sends as the idempotency key, so a second submit of the
+  same page replays its shipments; the buttons also disable while a batch runs (`hx-disabled-elt`). Ship ships at the
+  Site filter in effect, so what ships is what the row showed. An order whose draft is wholly boxed (`packed_drafts`)
+  ships that draft (`shipment post --shipment`); packing slips print every live draft of an order, else its latest
+  shipment. The worksheet pages by the report's cursor, 200 orders a page, with More orders and First orders links and
+  the summary saying how many of the total are on the page; a cursor gone stale starts again from the first page with a
+  notice. A report that fails after a batch still shows the batch's results beside the refusal. The date is the
+  company's own day (`company_today`), not the server's.
 - **Measured** (this machine, under the other builders' load): worksheet on the demo 0.26 s (one open order with
   stock to ship); on 1,000 open order lines (200 orders of five lines over 20 stocked items) 2.5 s for all 200 rows
   (`test_fulfillment_worksheet`, which keeps a 30 s bound against a regression).
@@ -865,7 +887,9 @@ For the builder, defaults standing unless review finds otherwise:
   already one `pick-list cancel`) are recorded as R186 candidates to record their documents as one batch and void it
   whole. Printing writes nothing.
 - **Not in this increment:** a fulfillment column on `sales-order show` (the worksheet gives it); a per-line
-  selection in the batch (whole orders only, as the anchor's worksheet ships them).
+  selection in the batch (whole orders only, as the anchor's worksheet ships them); names instead of raw ids in the
+  CSV export's Sales order, Customer and Site id columns (the export prints every row field and has no per-report
+  display columns; deferred to the export framework).
 
 ## Decided (2026-10-26)
 

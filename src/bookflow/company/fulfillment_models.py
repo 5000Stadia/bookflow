@@ -72,6 +72,8 @@ class SiteShippable(StrictModel):
 class OrderFulfillmentRow(StrictModel):
     sales_order_id: str
     sales_order_number: str
+    sales_order_version: int = Field(description="The order's version when read: pass it as `expected_version` to "
+                                                 "`sales-order invoice` so a stale reading bills nothing.")
     date: str
     customer_id: str
     customer_name: str
@@ -87,6 +89,8 @@ class OrderFulfillmentRow(StrictModel):
     shipped_not_invoiced_amount: MoneyOutput = Field(description='At the order prices.')
     pick_lists: list[str] = Field(default_factory=list, description='Live pick lists holding it (picking on).')
     drafts: list[str] = Field(default_factory=list, description='Its draft shipments (packing on).')
+    packed_drafts: list[str] = Field(default_factory=list, description=(
+        'Its drafts with every unit in a box: ship each with `shipment post --shipment`.'))
     by_site: list[SiteShippable] = Field(default_factory=list)
     lines: list[FulfillmentLine]
     note: str | None = Field(None, description='Why nothing ships from the order alone, and what to do instead.')
