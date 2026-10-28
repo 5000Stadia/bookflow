@@ -297,6 +297,7 @@ SOFT_REFERENCES: dict[tuple[str, str], tuple[str, ...] | None] = {
     ('list_merges', 'survivor_id'): None,
     ('list_merge_references', 'record_id'): None,
     ('list_merge_references', 'owner_id'): None,
+    ('delivery_message_documents', 'source_id'): ('customers',),  # a statement's customer
 }
 _PEOPLE = 'a person or principal of the hub, never a list record'
 _INTERNAL = "a document's own row or line, never a list record"
@@ -342,6 +343,13 @@ NOT_REFERENCES: dict[tuple[str, str], str] = {
     ('batches', 'source_id'): _LEDGER, ('batches', 'actor_id'): _PEOPLE, ('batch_effects', 'record_id'): _LEDGER,
     ('import_runs', 'attachment_id'): _LEDGER, ('import_rows', 'record_id'): _LEDGER,
     ('import_keys', 'record_id'): _LEDGER,
+    ('delivery_events', 'actor_id'): _PEOPLE,
+    ('delivery_message_documents', 'attachment_id'): 'a stored file, never a list record',
+    ('delivery_messages', 'connection_id'): 'a delivery connection, which no import or batch makes',
+    ('delivery_messages', 'message_id'): 'an e-mail Message-ID (text), not a record id',
+    ('shipment_draft_lines', 'root_document_id'): _INTERNAL, ('shipment_draft_lines', 'root_line_id'): _INTERNAL,
+    ('shipment_package_contents', 'revision_id'): _INTERNAL, ('shipment_packages', 'revision_id'): _INTERNAL,
+    ('shipment_packages', 'shipment_id'): _INTERNAL,
 }
 
 

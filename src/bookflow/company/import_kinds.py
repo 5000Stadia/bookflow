@@ -151,6 +151,7 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
         'payment void', 'purchase-order void', 'sales-order void', 'sales-receipt void', 'sales-tax adjustment void',
         'sales-tax payment void', 'shipment void', 'shipment-return void', 'statement-charge void',
         'time-activity void', 'transfer void', 'trip void', 'vendor-credit void',
+        'delivery cancel', 'shipment cancel',
     )),
     'merge': frozenset((
         'account merge', 'account unmerge', 'customer merge', 'customer unmerge', 'item merge', 'item unmerge',
@@ -172,12 +173,16 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
         'purchase-order close-lines', 'reconcile discard', 'sales-rep deactivate', 'sales-tax-code deactivate',
         'schedule cancel', 'ship-method deactivate', 'term deactivate', 'unit-of-measure deactivate',
         'vendor deactivate', 'vendor-credit unapply', 'vendor-type deactivate',
+        'delivery-template deactivate', 'delivery-connection disable', 'delivery-connection remove',
     )),
     'needs-a-person': frozenset((
         'accountant mark-entry', 'accountant reviewed-through', 'accountant-copy export', 'assembly finalize',
         'check print', 'check print-confirm', 'check print-setup', 'check reprint', 'company backup',
         'payment recovery apply', 'payment recovery begin', 'payment recovery replace', 'payment recovery seal',
         'payment recovery upload', 'price-rule set-preferences', 'timesheet set-preferences',
+        'delivery approve', 'delivery send', 'delivery mark-sent', 'delivery export', 'delivery retry', 'delivery run',
+        'delivery-connection add', 'delivery-connection update', 'delivery-connection enable',
+        'delivery-connection check',
     )),
     'not-yet': frozenset((
         'attachment add', 'batch-invoice post', 'billing-group add', 'billing-group create', 'bin create',
@@ -191,6 +196,7 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
         'sales-tax pay', 'sales-tax-code create', 'schedule create', 'shipment post', 'statement-charge post',
         'time-activity create', 'todo create', 'transfer post', 'trip create', 'unit-of-measure create',
         'vehicle create', 'work-order create',
+        'delivery draft', 'delivery-template create', 'shipment create',
     )),
     'not-a-record': frozenset((
         'import preview', 'import run', 'import cancel', 'import reverse',
@@ -223,6 +229,7 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
         'vendor 1099-opening', 'vendor activate', 'vendor-credit apply', 'vendor-credit refund',
         'vendor-credit update', 'vendor-type activate', 'work-order complete', 'work-order copy',
         'work-order invoice', 'work-order purchase-order', 'work-order sales-receipt', 'work-order update',
+        'delivery update', 'delivery-template update', 'shipment pack',
     )),
 }
 
