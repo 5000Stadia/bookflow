@@ -307,9 +307,13 @@ DELIVERY_COMMANDS = frozenset(('delivery draft', 'delivery update', 'delivery se
     'delivery-connection enable', 'delivery-connection disable', 'delivery-connection remove',
     'delivery-connection check', 'delivery-connection show', 'delivery-connection query'))
 
-# R107 increments 0 and 1: a file previewed, run, read back, its batch read and reversed; another cancelled.
+# R107 increments 0 to 2: a file checked, previewed, decided, run, read back, its batch read and reversed; its mapping
+# saved and next month's file run from it; another cancelled.
 IMPORT_COMMANDS = frozenset(('import kinds', 'import template', 'import preview', 'import run', 'import show',
-    'import query', 'import rows', 'import errors', 'import reverse', 'import cancel', 'batch show', 'batch query'))
+    'import query', 'import rows', 'import errors', 'import reverse', 'import cancel', 'batch show', 'batch query',
+    # R107 increment 2 and Kabe's rules: a file checked, a reference decided, a mapping saved and used next month.
+    'import check', 'import decide', 'import-mapping save', 'import-mapping show', 'import-mapping history',
+    'import-mapping query', 'import-mapping match', 'import-mapping deactivate'))
 
 LANDED_COST_COMMANDS = frozenset(('landed-cost setup', 'landed-cost charges', 'landed-cost post', 'landed-cost void',
     'landed-cost show', 'landed-cost query'))

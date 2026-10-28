@@ -78,6 +78,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `refused` | array[object[string, any]] | yes | no | — | The first refused rows: row, line, column, code, message. |
 | `sample` | array[object[string, any]] | yes | no | — | A sample of the exact command inputs the rows become. |
 | `notes` | array[string] | yes | no | — | Things worth knowing: a guessed encoding, rows keyed by content. |
+| `matched` | object[string, any] \| null | no | yes | null | The saved mapping used or offered, with its diff. |
+| `dropped` | array[object[string, any]] | no | no | [] | Characters no text field holds, dropped from the file: row, line, column, position, character. |
+| `dropped_total` | integer | no | no | 0 | Characters dropped in all. |
 | `done_now` | integer | no | no | 0 | Rows this call ran. |
 | `next` | string \| null | yes | yes | — | The command to run next, or null when the run is finished. |
 
@@ -88,7 +91,289 @@ Example JSON output:
   "counts": {},
   "decisions": [],
   "done_now": 0,
+  "dropped": [],
+  "dropped_total": 0,
   "mapping": {},
+  "matched": null,
+  "next": null,
+  "notes": [],
+  "refused": [],
+  "run": {},
+  "sample": [],
+  "unknown_references": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
+## `import check`
+
+Check a file before importing it, running no command: is every required field mapped, does each cell fit its field (type, length, pattern), is any key repeated, does every reference exist. Returns every problem at once, by column, with row numbers and the cell text, and each character text cannot hold (dropped, by position). `import preview` starts with it. Takes the same input as `import preview`. Example: {"kind": "customer", "content": "Name\nAcme\n"}.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | import |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/import.check` |
+| External binary body | none |
+
+### CLI
+
+`bookflow import check --kind customer --content "$(cat customers.csv)" --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "import check", "input": {"kind": "customer", "content": "Name,Credit Limit\nAcme,12.50\n"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `kind` | `--kind` | string | yes | no | — | What each row is: customer, vendor, item, account, term, class, customer-type, vendor-type, job-type, payment-method, ship-method, sales-rep, price-level, item-category, customer-message, employee, other-name.; minimum length 1; maximum length 32 |
+| `content` | `--content` | string \| null | no | yes | null | The file as text: a CSV, or cells pasted from a spreadsheet (tab text). Give this or `attachment`. |
+| `attachment` | `--attachment` | string \| null | no | yes | null | An attachment holding the file, a CSV or an .xlsx workbook (`attachment add company_info <company id> FILE`); read as bytes, so its encoding is detected. Give this or `content`. |
+| `sheet` | `--sheet` | string \| null | no | yes | null | The worksheet of an .xlsx file to read (default: the first). Values as last saved; no formula is run. |
+| `source` | `--source` | string \| null | no | yes | null | The named origin of files like this one ("Square customer export"); row keys are unique within it, so a re-run of the same source never duplicates. Defaults to the saved mapping's source, else "<kind> import". |
+| `mapping` | `--mapping` | string \| null | no | yes | null | Use this source's saved mapping (`import-mapping query`), as after reading a probable match's diff. A file lacking a column it maps is refused. Without it, a saved mapping whose headers equal the file's is used. |
+| `mode` | `--mode` | literal["create", "update", "upsert"] | no | no | "create" | create: make records the books lack (a match is `unchanged` or `differs`, never changed); update: change only matching records; upsert: both. |
+| `columns` | `--columns` | object[string, string \| null] \| null | no | yes | null | File header to input path (`{"Cust Name": "name", "Town": "billing_address.city", "Fax": null}`), over the guessed or saved mapping; null ignores a column. Paths are the kind's create-command fields. |
+| `constants` | `--constants` | object[string, any] \| null | no | yes | null | Input path to a value given to every row that has none (`{"type": "service"}`). |
+| `key` | `--key` | array[string] \| null | no | yes | null | Input paths that identify a row's record (default: name, with parent_id for jobs and sub-items; an account's number when mapped). |
+| `delimiter` | `--delimiter` | literal[",", ";", "\t", "\|"] \| null | no | yes | null | Cell delimiter; sniffed when omitted. |
+| `header_row` | `--header-row` | boolean | no | no | true | False when the first row is data (columns become Column A, B...). |
+| `skip_rows` | `--skip-rows` | integer | no | no | 0 | Title rows above the header to pass over.; minimum 0; maximum 50 |
+| `decimal` | `--decimal` | literal[".", ","] \| null | no | yes | null | Decimal mark of money columns; read when omitted. |
+| `date_order` | `--date-order` | literal["MDY", "DMY", "YMD"] \| null | no | yes | null | Day and month order of date columns; read from every value when omitted, and asked when all are ambiguous. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/import.check`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `ok` | boolean | yes | no | — | True when no cell has a problem (unknown references ask, they do not fail). |
+| `kind` | string | yes | no | — | The kind. |
+| `source` | string | yes | no | — | The source the rows would be keyed in. |
+| `rows` | integer | yes | no | — | Data rows read. |
+| `rows_with_problems` | integer | yes | no | — | Rows with at least one problem. |
+| `problems_total` | integer | yes | no | — | Problems found, every cell counted. |
+| `problems` | array[object[string, any]] | yes | no | — | Grouped by column, then cell text: column, code, value (the exact cell text), message and rows. |
+| `summary` | array[string] | yes | no | — | Each group as a line: "Credit Limit, rows 14, 92: not an amount: ..." |
+| `dropped` | array[object[string, any]] | yes | no | — | Characters a text field cannot hold (NUL, control codes), dropped: row, line, column, position, character. |
+| `dropped_total` | integer | yes | no | — | Characters dropped in all. |
+| `unknown_references` | array[object[string, any]] | yes | no | — | References the books lack, by field and value, with rows, suggestions, look-alikes and whether an import may create them; a preview waits for `import decide` on each. |
+| `matched` | object[string, any] \| null | yes | yes | — | The saved mapping used or offered, with its diff. |
+| `mapping` | object[string, any] | yes | no | — | Columns to input paths, key, formats, value maps. |
+| `decisions` | array[object[string, any]] | yes | no | — | What must be decided before a preview can run. |
+| `notes` | array[string] | yes | no | — | Things worth knowing: a guessed encoding, rows keyed by content. |
+| `next` | string \| null | yes | yes | — | What to do next. |
+
+Example JSON output:
+
+```json
+{
+  "decisions": [],
+  "dropped": [],
+  "dropped_total": 1,
+  "kind": "human",
+  "mapping": {},
+  "matched": null,
+  "next": null,
+  "notes": [],
+  "ok": false,
+  "problems": [],
+  "problems_total": 1,
+  "rows": 1,
+  "rows_with_problems": 1,
+  "source": "value",
+  "summary": [],
+  "unknown_references": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
+## `import decide`
+
+Decide the unknown references a previewed run waits on: map text to an existing record, create it when the run reaches it, or skip its rows; `remember` keeps the maps in the source's saved mapping. Example: {"run": "01J...", "map": ["Net 30 days=Net 30"], "remember": true}.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | import |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/import.decide` |
+| External binary body | none |
+
+### CLI
+
+`bookflow import decide 01J9ZK4QF8T7E2V5N3B6C1D0AR --map '["Net 30 days=Net 30"]' --remember --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "import decide", "input": {"run": "01J9ZK4QF8T7E2V5N3B6C1D0AR", "map": ["Net 30 days=Net 30"], "remember": true}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `run` | `RUN` | string | yes | no | — | The previewed run waiting on decisions.; minimum length 26; maximum length 26 |
+| `map` | `--map` | array[string] \| null | no | yes | null | Map file text to an existing record: "Net 30 days=Net 30", or "Terms:Net 30 days=Net 30" when two columns share the text. |
+| `create` | `--create` | array[string] \| null | no | yes | null | Create these when the run reaches them, through their own create command (never an account or item; a customer or vendor only when nothing looks like it): "Net 45". |
+| `create_input` | `--create-input` | object[string, object[string, any]] \| null | no | yes | null | For a create needing more than a name, the rest of its command's input by file text: {"Net 45": {"kind": "standard", "due_days": 45}}. |
+| `skip` | `--skip` | array[string] \| null | no | yes | null | Leave the rows with this text out. |
+| `remember` | `--remember` | boolean | no | no | false | Also keep the maps in the source's saved mapping (a new version), so the next file does not ask. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/import.decide`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `run` | object[string, any] | yes | no | — | The run: id, kind, mode, state, source, file digest, encoding, delimiter, rows, batch, who, why. |
+| `counts` | object[string, integer] | yes | no | — | Rows by outcome (create, created, already_in, refused...). |
+| `mapping` | object[string, any] | yes | no | — | Columns to input paths (with how each was found), key, formats. |
+| `unknown_references` | array[object[string, any]] | yes | no | — | Unknown references grouped by field and value, with the rows they touch and up to three suggestions. |
+| `decisions` | array[object[string, any]] | yes | no | — | What the preview needs decided before the rows can run. |
+| `refused` | array[object[string, any]] | yes | no | — | The first refused rows: row, line, column, code, message. |
+| `sample` | array[object[string, any]] | yes | no | — | A sample of the exact command inputs the rows become. |
+| `notes` | array[string] | yes | no | — | Things worth knowing: a guessed encoding, rows keyed by content. |
+| `matched` | object[string, any] \| null | no | yes | null | The saved mapping used or offered, with its diff. |
+| `dropped` | array[object[string, any]] | no | no | [] | Characters no text field holds, dropped from the file: row, line, column, position, character. |
+| `dropped_total` | integer | no | no | 0 | Characters dropped in all. |
+| `done_now` | integer | no | no | 0 | Rows this call ran. |
+| `next` | string \| null | yes | yes | — | The command to run next, or null when the run is finished. |
+
+Example JSON output:
+
+```json
+{
+  "counts": {},
+  "decisions": [],
+  "done_now": 0,
+  "dropped": [],
+  "dropped_total": 0,
+  "mapping": {},
+  "matched": null,
   "next": null,
   "notes": [],
   "refused": [],
@@ -362,11 +647,12 @@ The same example as complete `bookflow_run` arguments:
 |---|---|---|---|---|---|---|
 | `kind` | `--kind` | string | yes | no | — | What each row is: customer, vendor, item, account, term, class, customer-type, vendor-type, job-type, payment-method, ship-method, sales-rep, price-level, item-category, customer-message, employee, other-name.; minimum length 1; maximum length 32 |
 | `content` | `--content` | string \| null | no | yes | null | The file as text: a CSV, or cells pasted from a spreadsheet (tab text). Give this or `attachment`. |
-| `attachment` | `--attachment` | string \| null | no | yes | null | An attachment holding the file (`attachment add company_info <company id> FILE`); read as bytes, so its encoding is detected. Give this or `content`. |
-| `file_name` | `--file-name` | string \| null | no | yes | null | A label for the file in results. |
-| `source` | `--source` | string \| null | no | yes | null | The named origin of files like this one ("Square customer export"); row keys are unique within it, so a re-run of the same source never duplicates. Defaults to "<kind> import". |
+| `attachment` | `--attachment` | string \| null | no | yes | null | An attachment holding the file, a CSV or an .xlsx workbook (`attachment add company_info <company id> FILE`); read as bytes, so its encoding is detected. Give this or `content`. |
+| `sheet` | `--sheet` | string \| null | no | yes | null | The worksheet of an .xlsx file to read (default: the first). Values as last saved; no formula is run. |
+| `source` | `--source` | string \| null | no | yes | null | The named origin of files like this one ("Square customer export"); row keys are unique within it, so a re-run of the same source never duplicates. Defaults to the saved mapping's source, else "<kind> import". |
+| `mapping` | `--mapping` | string \| null | no | yes | null | Use this source's saved mapping (`import-mapping query`), as after reading a probable match's diff. A file lacking a column it maps is refused. Without it, a saved mapping whose headers equal the file's is used. |
 | `mode` | `--mode` | literal["create", "update", "upsert"] | no | no | "create" | create: make records the books lack (a match is `unchanged` or `differs`, never changed); update: change only matching records; upsert: both. |
-| `columns` | `--columns` | object[string, string \| null] \| null | no | yes | null | File header to input path (`{"Cust Name": "name", "Town": "billing_address.city", "Fax": null}`), over the guessed mapping; null ignores a column. Paths are the kind's create-command fields. |
+| `columns` | `--columns` | object[string, string \| null] \| null | no | yes | null | File header to input path (`{"Cust Name": "name", "Town": "billing_address.city", "Fax": null}`), over the guessed or saved mapping; null ignores a column. Paths are the kind's create-command fields. |
 | `constants` | `--constants` | object[string, any] \| null | no | yes | null | Input path to a value given to every row that has none (`{"type": "service"}`). |
 | `key` | `--key` | array[string] \| null | no | yes | null | Input paths that identify a row's record (default: name, with parent_id for jobs and sub-items; an account's number when mapped). |
 | `delimiter` | `--delimiter` | literal[",", ";", "\t", "\|"] \| null | no | yes | null | Cell delimiter; sniffed when omitted. |
@@ -374,8 +660,9 @@ The same example as complete `bookflow_run` arguments:
 | `skip_rows` | `--skip-rows` | integer | no | no | 0 | Title rows above the header to pass over.; minimum 0; maximum 50 |
 | `decimal` | `--decimal` | literal[".", ","] \| null | no | yes | null | Decimal mark of money columns; read when omitted. |
 | `date_order` | `--date-order` | literal["MDY", "DMY", "YMD"] \| null | no | yes | null | Day and month order of date columns; read from every value when omitted, and asked when all are ambiguous. |
-| `atomic` | `--atomic` | boolean | no | no | false | True: the first refusal while running undoes everything the run made (through the batch ledger), and a run whose preview refused rows does not start. |
-| `stop_after_refusals` | `--stop-after-refusals` | integer | no | no | 100 | Refusals in one `import run` call after which the run stops itself, keeping what it did.; minimum 1; maximum 100000 |
+| `file_name` | `--file-name` | string \| null | no | yes | null | A label for the file in results. |
+| `partial` | `--partial` | boolean | no | no | false | False (the default): all or nothing. A file the check finds any problem in is refused whole, a run starts only when its preview refused no row, and a row refused while running undoes the run. True: each bad row is refused alone and the others import. |
+| `stop_after_refusals` | `--stop-after-refusals` | integer | no | no | 100 | Refusals in one `import run` call after which a partial run stops itself, keeping what it did.; minimum 1; maximum 100000 |
 
 ### Command and context options
 
@@ -419,6 +706,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `refused` | array[object[string, any]] | yes | no | — | The first refused rows: row, line, column, code, message. |
 | `sample` | array[object[string, any]] | yes | no | — | A sample of the exact command inputs the rows become. |
 | `notes` | array[string] | yes | no | — | Things worth knowing: a guessed encoding, rows keyed by content. |
+| `matched` | object[string, any] \| null | no | yes | null | The saved mapping used or offered, with its diff. |
+| `dropped` | array[object[string, any]] | no | no | [] | Characters no text field holds, dropped from the file: row, line, column, position, character. |
+| `dropped_total` | integer | no | no | 0 | Characters dropped in all. |
 | `done_now` | integer | no | no | 0 | Rows this call ran. |
 | `next` | string \| null | yes | yes | — | The command to run next, or null when the run is finished. |
 
@@ -429,7 +719,10 @@ Example JSON output:
   "counts": {},
   "decisions": [],
   "done_now": 0,
+  "dropped": [],
+  "dropped_total": 0,
   "mapping": {},
+  "matched": null,
   "next": null,
   "notes": [],
   "refused": [],
@@ -889,6 +1182,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `refused` | array[object[string, any]] | yes | no | — | The first refused rows: row, line, column, code, message. |
 | `sample` | array[object[string, any]] | yes | no | — | A sample of the exact command inputs the rows become. |
 | `notes` | array[string] | yes | no | — | Things worth knowing: a guessed encoding, rows keyed by content. |
+| `matched` | object[string, any] \| null | no | yes | null | The saved mapping used or offered, with its diff. |
+| `dropped` | array[object[string, any]] | no | no | [] | Characters no text field holds, dropped from the file: row, line, column, position, character. |
+| `dropped_total` | integer | no | no | 0 | Characters dropped in all. |
 | `done_now` | integer | no | no | 0 | Rows this call ran. |
 | `next` | string \| null | yes | yes | — | The command to run next, or null when the run is finished. |
 
@@ -899,7 +1195,10 @@ Example JSON output:
   "counts": {},
   "decisions": [],
   "done_now": 0,
+  "dropped": [],
+  "dropped_total": 0,
   "mapping": {},
+  "matched": null,
   "next": null,
   "notes": [],
   "refused": [],
@@ -1006,6 +1305,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `refused` | array[object[string, any]] | yes | no | — | The first refused rows: row, line, column, code, message. |
 | `sample` | array[object[string, any]] | yes | no | — | A sample of the exact command inputs the rows become. |
 | `notes` | array[string] | yes | no | — | Things worth knowing: a guessed encoding, rows keyed by content. |
+| `matched` | object[string, any] \| null | no | yes | null | The saved mapping used or offered, with its diff. |
+| `dropped` | array[object[string, any]] | no | no | [] | Characters no text field holds, dropped from the file: row, line, column, position, character. |
+| `dropped_total` | integer | no | no | 0 | Characters dropped in all. |
 | `done_now` | integer | no | no | 0 | Rows this call ran. |
 | `next` | string \| null | yes | yes | — | The command to run next, or null when the run is finished. |
 
@@ -1016,7 +1318,10 @@ Example JSON output:
   "counts": {},
   "decisions": [],
   "done_now": 0,
+  "dropped": [],
+  "dropped_total": 0,
   "mapping": {},
+  "matched": null,
   "next": null,
   "notes": [],
   "refused": [],

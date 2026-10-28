@@ -5,7 +5,7 @@ Capability `import` (reads at member, writes at standard), checked beside each r
 importer grants nothing, and every row is its command's ordinary input, validated, permission-checked and audited as
 a typed one. A reversal runs the ordinary inverse commands under the caller's own grants.
 """
-from bookflow.company import batches, imports
+from bookflow.company import batches, import_mappings, imports
 from bookflow.company import import_models as m
 from bookflow.core.registry import Applied, Plan, Touched, command
 
@@ -57,10 +57,13 @@ def _preview_output(s, prepared) -> m.ImportRunOutput:
     table, mapping = prepared['table'], prepared['mapping']
     return m.ImportRunOutput(
         run={'id': prepared['run_id'], 'kind': prepared['kind'].name, 'mode': prepared['input'].mode,
-             'state': 'previewed', 'source': prepared['source'], 'file_sha256': table.sha256,
-             'encoding': table.encoding, 'rows': len(rows)},
-        counts=counts, mapping=mapping.as_dict(table.headers), unknown_references=[], decisions=mapping.decisions,
-        refused=refused, sample=sample, notes=prepared['notes'], next=None)
+             'state': 'waiting' if prepared['references'] else 'previewed', 'source': prepared['source'],
+             'file_sha256': table.sha256, 'encoding': table.encoding, 'rows': len(rows),
+             'atomic': not prepared['input'].partial},
+        counts=counts, mapping=mapping.as_dict(table.headers), unknown_references=prepared['references'],
+        decisions=mapping.decisions + [dict(r, decision='reference') for r in prepared['references']],
+        refused=refused, sample=sample, notes=prepared['notes'], matched=prepared['matched'],
+        dropped=prepared['dropped'], dropped_total=prepared['dropped_total'], next=None)
 
 
 def apply_import_preview(plan: Plan, ctx, s) -> Applied:
@@ -71,6 +74,83 @@ def apply_import_preview(plan: Plan, ctx, s) -> Applied:
     counts = ', '.join(f'{k} {v}' for k, v in sorted(out['counts'].items()))
     return Applied(m.ImportRunOutput(**out), touched, f"previewed an import of {len(prepared['rows'])} "
                                                        f"{prepared['kind'].name} rows: {counts}")
+
+
+def plan_import_check(inp, ctx, s) -> Plan:
+    return Plan(m.ImportCheckOutput(**imports.check(s, ctx, inp)))
+
+
+def plan_import_decide(inp, ctx, s) -> Plan:
+    plan = import_mappings.plan_decide(s, ctx, inp)
+    out = imports.show(s, ctx, inp.run)
+    return Plan(m.ImportRunOutput(**out), {'plan': plan})
+
+
+def apply_import_decide(plan: Plan, ctx, s) -> Applied:
+    p = plan.data['plan']
+    out = import_mappings.apply_decide(s, ctx, p)
+    run = p['run']
+    told = ', '.join(f"{d['action']} {d['ref']['value']!r}" for d in p['decisions'])
+    touched = [Touched('import_run', run['id'], 'update', run['version'], run['version'] + (p['left'] == 0),
+                       {'decisions': [{'field': d['ref']['field'], 'value': d['ref']['value'], 'action': d['action'],
+                                       'target': d['target']} for d in p['decisions']]}, db='company')]
+    return Applied(m.ImportRunOutput(**out), touched, f'decided for import {run["id"]}: {told}')
+
+
+def plan_mapping_save(inp, ctx, s) -> Plan:
+    run = imports._run_read(s, inp.from_run)
+    recipe = import_mappings.recipe_from_run(s, run, inp.source)
+    plan = import_mappings.plan_save(s, ctx, inp.source, recipe, run['kind'])
+    preview = (import_mappings.show(s, inp.source) if plan['action'] == 'unchanged' else
+               {'source': {'name': inp.source, 'kind': run['kind']}, 'mapping': {**recipe, 'version': plan['version']},
+                'saved': True})
+    return Plan(m.ImportMappingOutput(**preview), {'plan': plan, 'recipe': recipe, 'run': run, 'source': inp.source})
+
+
+def apply_mapping_save(plan: Plan, ctx, s) -> Applied:
+    d = plan.data
+    out = import_mappings.apply_save(s, ctx, d['source'], d['recipe'], d['run']['kind'], d['plan'], d['run']['id'])
+    mapping = out['mapping']
+    touched = [] if not out['saved'] else [
+        Touched('import_mapping', mapping['id'], 'create', None, mapping['version'],
+                {'source': out['source']['name'], 'version': mapping['version']}, db='company')]
+    what = (f"saved import mapping {out['source']['name']!r} version {mapping['version']}" if out['saved']
+            else f"import mapping {out['source']['name']!r} unchanged")
+    return Applied(m.ImportMappingOutput(**out), touched, what)
+
+
+def plan_mapping_show(inp, ctx, s) -> Plan:
+    return Plan(m.ImportMappingOutput(**import_mappings.show(s, inp.source, inp.version)))
+
+
+def plan_mapping_history(inp, ctx, s) -> Plan:
+    return Plan(m.ImportMappingHistoryOutput(**import_mappings.history(s, inp.source)))
+
+
+def plan_mapping_query(inp, ctx, s) -> Plan:
+    return Plan(m.ImportMappingQueryOutput(**import_mappings.query(s, inp.kind, inp.active, inp.limit, inp.cursor)))
+
+
+def plan_mapping_match(inp, ctx, s) -> Plan:
+    from bookflow.company import import_kinds
+    kind = import_kinds.kind(inp.kind)
+    batches.require_read(s, f'{kind.noun} show')
+    table, _ = imports.read_table(s, inp)
+    return Plan(m.ImportMappingMatchOutput(
+        kind=kind.name, fingerprint=import_mappings.fingerprint(table.headers), headers=table.headers,
+        candidates=import_mappings.match(s, kind.name, table.headers, inp.source)))
+
+
+def plan_mapping_deactivate(inp, ctx, s) -> Plan:
+    source = import_mappings.plan_deactivate(s, inp.source)
+    return Plan(m.ImportMappingOutput(**import_mappings.show(s, inp.source)), {'source': source})
+
+
+def apply_mapping_deactivate(plan: Plan, ctx, s) -> Applied:
+    out = import_mappings.apply_deactivate(s, plan.data['source'])
+    touched = [Touched('import_source', out['source']['id'], 'update', None, out['source']['version'],
+                       {'active': False}, db='company')]
+    return Applied(m.ImportMappingOutput(**out), touched, f"deactivated import source {out['source']['name']!r}")
 
 
 def plan_import_run(inp, ctx, s) -> Plan:
@@ -200,3 +280,37 @@ batch_show = _read('batch show', 'Show a batch (an import run\'s writes, a rever
                    plan_batch_show, positional=('batch',))
 batch_query = _read('batch query', 'List batches, newest first, each with `reversible` and its first blocker.',
                     m.BatchQueryInput, m.BatchQueryOutput, plan_batch_query)
+import_check = _read('import check', 'Check a file before importing it, running no command: is every required field '
+                     'mapped, does each cell fit its field (type, length, pattern), is any key repeated, does every '
+                     'reference exist. Returns every problem at once, by column, with row numbers and the cell text, '
+                     'and each character text cannot hold (dropped, by position). `import preview` starts with it. '
+                     'Takes the same input as `import preview`. Example: {"kind": "customer", "content": "Name\\nAcme\\n"}.',
+                     m.ImportCheckInput, m.ImportCheckOutput, plan_import_check,
+                     errors=('E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_IO'))
+import_decide = _write('import decide', 'Decide the unknown references a previewed run waits on: map text to an '
+                       'existing record, create it when the run reaches it, or skip its rows; `remember` keeps the maps '
+                       'in the source\'s saved mapping. Example: {"run": "01J...", "map": ["Net 30 days=Net 30"], '
+                       '"remember": true}.', m.ImportDecideInput, m.ImportRunOutput, plan_import_decide,
+                       apply_import_decide, positional=('run',))
+import_mapping_save = _write('import-mapping save', 'Save a run\'s mapping (columns, key, formats, constants, value '
+                             'maps) under a source name, as a new version; a file with the same headers then maps '
+                             'without asking. Example: {"source": "Acme export", "from_run": "01J..."}.',
+                             m.ImportMappingSaveInput, m.ImportMappingOutput, plan_mapping_save, apply_mapping_save,
+                             positional=('source',), errors=('E_VALIDATION', 'E_RECORD_NOT_FOUND',
+                                                             'E_VERSION_CONFLICT'))
+import_mapping_show = _read('import-mapping show', 'Show a saved source and its mapping (latest, or a version).',
+                            m.ImportMappingShowInput, m.ImportMappingOutput, plan_mapping_show,
+                            positional=('source',))
+import_mapping_history = _read('import-mapping history', 'Every version of a source\'s mapping, newest first.',
+                               m.ImportMappingSelector, m.ImportMappingHistoryOutput, plan_mapping_history,
+                               positional=('source',))
+import_mapping_query = _read('import-mapping query', 'List saved import sources by name.', m.ImportMappingQueryInput,
+                             m.ImportMappingQueryOutput, plan_mapping_query, errors=())
+import_mapping_match = _read('import-mapping match', 'How a file\'s headers match each saved mapping of its kind: '
+                             'exact, probable (with the new and missing columns) or none.',
+                             m.ImportMappingMatchInput, m.ImportMappingMatchOutput, plan_mapping_match,
+                             errors=('E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_IO'))
+import_mapping_deactivate = _write('import-mapping deactivate', 'Stop a source\'s mapping matching files; its '
+                                   'versions stay readable.', m.ImportMappingSelector, m.ImportMappingOutput,
+                                   plan_mapping_deactivate, apply_mapping_deactivate, positional=('source',),
+                                   errors=('E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT'))

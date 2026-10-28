@@ -199,7 +199,8 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
         'delivery draft', 'delivery-template create', 'shipment create',
     )),
     'not-a-record': frozenset((
-        'import preview', 'import run', 'import cancel', 'import reverse',
+        'import preview', 'import run', 'import cancel', 'import reverse', 'import decide', 'import-mapping save',
+        'import-mapping deactivate',
         'account activate', 'accountant reclassify', 'accountant-copy changes', 'accountant-copy import',
         'assembly build', 'assembly update', 'attachment link', 'barcode generate', 'batch-invoice retry',
         'bill payment apply', 'bill update', 'billing-group rename', 'bin activate', 'bin update', 'budget fill',
@@ -253,6 +254,16 @@ class FieldSpec:
     enum: tuple[str, ...] = ()
     target: str | None = None  # the list a reference resolves in
     description: str = ''
+    max_length: int | None = None
+    min_length: int | None = None
+    pattern: str | None = None
+    minimum: float | None = None
+    maximum: float | None = None
+
+    @property
+    def multiline(self) -> bool:
+        """Long text (notes, descriptions: no length limit, or 1,000 characters or more) keeps tabs and line breaks."""
+        return self.type in ('string', 'any') and (self.max_length is None or self.max_length >= 1000)
 
 
 def _resolve_ref(schema: dict, node: dict) -> dict:
@@ -312,12 +323,25 @@ def fields(kind_name: str) -> dict[str, FieldSpec]:
             kind_ = 'any'
         target = refs.get(path) if kind_ == 'reference' else None
         out[path] = FieldSpec(path, kind_, is_required, tuple(branch.get('enum', ())), target,
-                              (node.get('description') or '')[:200])
+                              (node.get('description') or '')[:200], branch.get('maxLength'), branch.get('minLength'),
+                              branch.get('pattern'), branch.get('minimum'), branch.get('maximum'))
         del leaf
 
     for name, node in schema['properties'].items():
         add(name, node, name in required)
     return out
+
+
+@lru_cache(maxsize=None)
+def required(kind_name: str, mode: str = 'create') -> tuple[str, ...]:
+    """What a row cannot go without: exactly the fields the single command requires, read from its input model (never a
+    separate list), so the import is never stricter than typing. An update needs only what selects its record."""
+    from bookflow.core import registry
+    k = kind(kind_name)
+    if mode == 'update':
+        return ()
+    model = registry.get(k.create).input_model
+    return tuple(name for name, info in model.model_fields.items() if info.is_required())
 
 
 def path_ok(kind_name: str, path: str) -> bool:

@@ -91,7 +91,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
 
     # +12 imports and batches (R107 increments 0 and 1): import kinds/template/preview/run/show/query/rows/errors/
     # reverse/cancel, batch show/query.
-    assert len(rows) == 803
+    # +8 R107 increment 2 and Kabe's rules: import check/decide, import-mapping save/show/history/query/match/deactivate.
+    assert len(rows) == 811
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
@@ -384,7 +385,11 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # import preview's content, attachment, file_name, source, columns, constants, key, delimiter, decimal and
     # date_order (10); import query's kind, state, cursor (3); import rows' phase, status, cursor (3); import reverse's
     # fingerprint (1); batch query's kind, state, scope, cursor (4). No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==4136
+    # 4136 -> 4162 (R107 inc 2, measured): null branches again -- import preview's sheet and mapping (2); import
+    # check's content, attachment, sheet, source, mapping, columns, constants, key, delimiter, decimal, date_order (11);
+    # import decide's map, create, create_input, skip (4); import-mapping show's version (1), query's kind, active,
+    # cursor (3), match's content, attachment, sheet, delimiter, source (5). No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==4162
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.
