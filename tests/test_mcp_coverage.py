@@ -85,7 +85,9 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +6 pick lists (R181 increment 3): pick-list create/enter/close/cancel/show/query.
     # +16 document delivery (R112 increment 1): delivery draft/update/send/cancel/mark-sent/export/show/query/history,
     # delivery-template create/update/deactivate/show/query/fields/preview.
-    assert len(rows) == 777
+    # +11 the delivery queue (R112 increment 2): delivery approve/retry/run, delivery-connection
+    # add/update/enable/disable/remove/check/show/query.
+    assert len(rows) == 788
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
@@ -369,7 +371,9 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # null branches. No new variant kind. 3965 -> 3966: report shipped-not-invoiced pages, its cursor's null branch.
     # 3966 -> 3991 (R181 inc 3, measured): six pick-list commands and shipment post's pick_list and optional sales_order.
     # 3991 -> 4033 (R112 inc 1, measured): sixteen delivery commands, company update's reply-to and copy-to.
-    assert sum(len(group["paths"]) for group in mapped)==4033
+    # 4033 -> 4045 (R112 inc 2, measured): the queue's optional inputs (approve's messages, retry's and the connection
+    # writes' expected_version, a connection's secret_ref, daily_limit and settings) -- their null branches.
+    assert sum(len(group["paths"]) for group in mapped)==4045
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

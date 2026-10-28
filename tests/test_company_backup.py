@@ -194,9 +194,15 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0103 = importlib.import_module("bookflow.storage.company_migrations.versions.0103_shipment_returns")
     co0104 = importlib.import_module("bookflow.storage.company_migrations.versions.0104_pick_lists")
     co0105 = importlib.import_module("bookflow.storage.company_migrations.versions.0105_delivery_messages")
+    co0106 = importlib.import_module("bookflow.storage.company_migrations.versions.0106_delivery_connections")
 
     def older(conn):
-        # Newest first: co0105 (on co0104): its guards and five tables, company_info's three delivery columns.
+        # Newest first: co0106 (on co0105): its guard and the connections table.
+        for trigger in co0106.TRIGGERS:
+            conn.execute(f"DROP TRIGGER {trigger}")
+        for table in co0106.TABLES:
+            conn.execute(f"DROP TABLE {table}")
+        # Then co0105 (on co0104): its guards and five tables, company_info's three delivery columns.
         for trigger in co0105.TRIGGERS:
             conn.execute(f"DROP TRIGGER {trigger}")
         for table in co0105.TABLES:
@@ -401,7 +407,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))
     restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older",
                                               "organization": "Older Books Organization"})
-    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0105"
+    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0106"
     folder = _folder(client, restored["company_id"])
     # The migration took its verified backup of the restored database first, as every migration does.
     assert list((folder / "backups").glob("*-from-co0062.db"))
