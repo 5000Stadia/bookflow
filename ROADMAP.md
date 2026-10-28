@@ -13,7 +13,7 @@ Every finished milestone keeps these:
 - **One set of books, many hands.** The browser, an AI agent, the command line and code all do the same things the same way, and each can see and continue the others' work.
 - **An agent gets it right the first time.** A fresh agent with only Bookflow's own help does ordinary business work correctly, without reading code or guessing.
 - **The books can be trusted.** Money is exact, the books always balance, history is never erased, closed periods stay closed, and every change says who made it, how, for whom and why.
-- **Plain to use.** It reads in a bookkeeper's words, on a desk or a phone, and stays quick on real-sized books. It shows what this business uses: deeper layers (pick and pack, sites, time) stay out of the way until the owner turns them on, and the home screen draws the business's flow as a clear, good-looking picture, on desk and phone, that each person can tailor.
+- **Plain to use.** It reads in a bookkeeper's words, on a desk or a phone, and stays quick on real-sized books. It shows what this business uses: deeper layers (pick and pack, sites, time) stay out of the way until the owner turns them on, and the Overview page draws the business's flow as a clear, good-looking picture, on desk and phone, that each person can tailor.
 
 Further out, and open for now: the same core grows into the rest of a small business's system (customers and follow-ups, inventory and assembly, shipping, letters, marketing), each part built the same way.
 
