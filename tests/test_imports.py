@@ -265,7 +265,7 @@ def test_other_list_kinds_update_mode_and_its_reversal(books):
     assert books.run('item show', {'item': 'Part A'})['price']['amount'] == '12.125'
     # Update mode changes only matches, merging as a typed update does; its reversal puts the prior values back.
     before = books.run('customer create', {'name': 'Acme', 'phone': '555-0100', 'email': 'old@acme.test'})
-    update = books.run('import preview', {'kind': 'customer', 'mode': 'update', 'content': (
+    update = books.run('import preview', {'kind': 'customer', 'mode': 'update', 'allow': ['skipped'], 'content': (
         'Name,Phone\nAcme,555-0199\nNobody,1\n')})
     assert update['counts'] == {'update': 1, 'skipped': 1}
     run_all(books, update['run']['id'])

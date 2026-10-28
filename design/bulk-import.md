@@ -854,3 +854,55 @@ linear too (20 ms per record; it was 21 to 41), its subtree reads now a range on
 2026-10-27): 1,000 rows 0.18 (a file with a junk amount in every tenth row: 0.12, 100 problems); 10,000 rows 1.35
 (junk: 0.87, 1,000 problems). Against the preview's 7.7 s and 85 s, the check is about 1/50 of it; the target was a
 few seconds at 10,000.
+
+### As built: the review of increment 2 (`notes/reviews/r107-inc2-review.md`)
+
+Each finding has a test that failed before its fix (`test_import_rules.py`, `test_import_mappings.py`,
+`test_tabular.py`, from the review's probes).
+
+- **Amounts are exact or refused** (High 1). `tabular._number_parts` reads money and plain numbers alike: a sign,
+  parentheses, one currency symbol or three-letter code (money) and `%` (numbers) only at the edges; inside, digits,
+  one decimal mark and thousands marks only in groups of three. `12,50` and `1,5` with `.` the decimal mark, `1$5`,
+  `1 234` (unless the thousands mark is a space) and `$5$` are `bad_value`, never 1250, 15 or 1234. Decided: the
+  older readers (`statement_files`, `cutover_sources`) keep reading `12,50` as 1250; they read report exports a
+  program grouped, and the agreement test still holds on every amount all three accept.
+- **Only words lose characters** (High 2). `imports.free_text` decides: a name, address, note or description is words
+  (a name even as the key: Kabe's own example is a name); a number, date, choice, reference, `_id`, a patterned field,
+  an email, phone, fax, postal code, currency, initials, barcode, `*_number`, and any mapped key other than the name are
+  identifiers, where any control character (a tab or line break inside too) refuses the row (`bad_value`). In a
+  single-line text field a tab or line break becomes one space (CR LF is one break), reported with
+  `replaced_with: SPACE`; long text keeps them.
+- **The check refuses what the run would** (High 3). `check_rows` runs each row's input through its command's own
+  `input_model` (`validate_input`), references replaced by a placeholder id, so model validators and requirements
+  that depend on another field are met in the check (standard terms need `due_days`, `fixed_percent` needs `percent`,
+  `discount_percent` 0 to 100); then what the create command refuses from its input alone (`_input_rules`: a list name
+  with a colon; an item's fields by type, through `items._determined_accounts`, `_service_defaults` and
+  `_validate_profile`). A row that will update is checked as the update's input; in upsert, a row that would create
+  as the create's, so its required fields are enforced. An amount beyond signed 64-bit minor units is
+  `E_VALUE_RANGE`. A reference to an inactive record is `E_INACTIVE_REFERENCE` unless the update leaves it as it is.
+  A parent named later in the file is the file's own (`file_names`): the preview shows the row `create`, and the run
+  makes the parent's row first, then the child (`run_slice`'s `process`, depth-bounded); a row naming itself as its
+  parent is refused. `ok` is true only when the file can run as it is: `clean` (no cell problem) and nothing in
+  `to_decide` (a decimal mark, a date order, a saved mapping, each unknown reference). The preview still refuses only
+  on problems; decisions make it wait. A property test feeds generated rows of tricky cells: whenever the check is
+  clean, the preview refuses no row and the run lands it.
+- **.xlsx read once, bounded** (High 4). openpyxl's reader runs without its worksheet step (which scans each sheet
+  whole for a `<dimension>`); the chosen sheet is parsed once by openpyxl's own `WorkSheetParser` on saved values,
+  from the cells it holds: the declared dimension is ignored, empty rows are not padded, a value past column 1,024
+  refuses (`too_wide`), and rows are capped at `tabular.MAX_ROWS` (20,000, §5's starting per-run cap), which now caps
+  a text file too (`too_many_rows`). A formula with no saved value (array formulas too) refuses (`unsaved_formula`),
+  and so does a saved error such as `#REF!` (`error_value`); damaged XML and a refused entity are "the workbook is
+  damaged" (`not_xlsx`). Merged cells read as their first cell; the rest of the merge is blank (read-only mode).
+- **All or nothing is total** (Medium 5). In an atomic run a `differs` row (create mode) and a `skipped` row (update
+  mode, no match) are refused unless the caller named the outcome in `allow` (`["differs"]`, `["skipped"]`); the
+  preview shows them refused and the run will not start. `import cancel` of an atomic run with a live batch reverses
+  what it made, any reference a decision created included, then ends `cancelled`.
+- **`remember` needs a named source** (Medium 6). A run keyed under the shared default (`customer import`) refuses
+  `remember`, and `import-mapping save` refuses that name.
+- **`PK` is a header, not an archive** (Medium 7): only `PK\x03\x04` (read as a workbook, which refuses a zip without a
+  zip's structure) and the empty or spanned zip signatures are archives.
+- **Lows.** `import-mapping show`, `history` and `deactivate` need the source's kind's read permission, and `query`
+  lists only sources of readable kinds; `import check` offers suggestions and look-alikes only from lists the caller
+  may read. Constants and a saved mapping's defaults are read and checked as cells are (a problem of the mapping, said
+  once). A remembered decision keys on the file's own text (`file_value`), before any value map changed it.
+- **Permissions**: the eight commands of increment 2 move from `import-v1` (restored as merged) to a new layer.

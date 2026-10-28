@@ -188,3 +188,62 @@ def test_a_look_alike_customer_is_never_created_by_a_decision(books):
     books.run('import decide', {'run': preview['run']['id'], 'map': ['Acme Plumbng=Acme Plumbing']})
     run_all(books, preview['run']['id'])
     assert 'Acme Plumbing:Job 1' in active_customers(books)
+
+
+# ------------------------------------------------------------------ the review of increment 2 (r107-inc2-review.md)
+
+def test_remember_needs_a_named_source_and_nothing_saves_onto_the_shared_default(books):
+    """Medium 6: `remember` on a run with no source once saved the maps onto `customer import`, which any customer
+    file with the same headers then matched."""
+    preview = books.run('import preview', {'kind': 'customer', 'content': 'Name,Terms\nAcme,Net 30 days\n'})
+    assert preview['run']['source'] == 'customer import'
+    error = refusal(lambda: books.run('import decide', {'run': preview['run']['id'], 'map': ['Net 30 days=Net 30'],
+                                                        'remember': True}))
+    assert error.details['field'] == 'remember' and 'source' in error.message
+    error = refusal(lambda: books.run('import-mapping save', {'source': 'Customer Import',
+                                                              'from_run': preview['run']['id']}))
+    assert error.details['field'] == 'source'
+    assert books.run('import-mapping query', {})['items'] == []
+    books.run('import decide', {'run': preview['run']['id'], 'map': ['Net 30 days=Net 30']})  # without: fine
+
+
+def test_a_remembered_decision_keys_on_the_files_own_text(books):
+    """Low 11: after a value map, the decision once stored the mapped text, so next month asked again."""
+    books.run('term create', {'name': 'Net 31', 'kind': 'standard', 'due_days': 31})
+    text = 'Name,Terms\n{name},Net 31 days\n'
+    first = books.run('import preview', {'kind': 'customer', 'content': text.format(name='A'), 'source': 'S1'})
+    books.run('import decide', {'run': first['run']['id'], 'map': ['Net 31 days=Net 31'], 'remember': True})
+    run_all(books, first['run']['id'])
+    books.run('term update', {'term': 'Net 31', 'name': 'Net 31 old'})
+    second = books.run('import preview', {'kind': 'customer', 'content': text.format(name='B')})
+    [asked] = [d for d in second['decisions'] if d['decision'] == 'reference']
+    assert (asked['value'], asked['file_value']) == ('Net 31', 'Net 31 days')
+    books.run('import decide', {'run': second['run']['id'], 'map': ['Net 31=Net 30'], 'remember': True})
+    third = books.run('import check', {'kind': 'customer', 'content': text.format(name='C')})
+    assert third['ok'] is True and third['mapping']['value_maps'] == {'terms_id': {'net 31 days': 'Net 30'}}
+
+
+def test_saved_mappings_and_suggestions_need_the_kinds_read_permission(books):
+    """Low 9: a source's headers and value maps come from its kind's records; suggestions name another list's."""
+    from pathlib import Path
+
+    from tests.conftest import as_user, make_actor
+    first_month(books)
+    make_actor(Path(books.root), 'viewer')
+    books.client.run('membership grant', {'user': 'viewer', 'company': books.company, 'role': 'readonly',
+                                          'expected_version': 0, 'denies': ['customer']})
+    viewer = as_user(Path(books.root), 'viewer')
+    for name in ('import-mapping show', 'import-mapping history'):
+        error = refusal(lambda: viewer.run(name, {'source': 'Acme export'}, company=books.company))
+        assert error.code == 'E_PERMISSION'
+    assert viewer.run('import-mapping query', {}, company=books.company)['items'] == []
+    assert books.run('import-mapping query', {})['items']  # the owner reads them
+    make_actor(Path(books.root), 'clerk')
+    books.client.run('membership grant', {'user': 'clerk', 'company': books.company, 'role': 'standard',
+                                          'expected_version': 0, 'denies': ['term']})
+    clerk = as_user(Path(books.root), 'clerk')
+    out = clerk.run('import check', {'kind': 'customer', 'content': 'Name,Terms\nZed,Net 3O\n', 'source': 'Other'},
+                    company=books.company)
+    assert [(u['value'], u['suggestions'], u['look_alikes']) for u in out['unknown_references']] == [('Net 3O', [], [])]
+    assert books.run('import check', {'kind': 'customer', 'content': 'Name,Terms\nZed,Net 3O\n',
+                                      'source': 'Other'})['unknown_references'][0]['suggestions']

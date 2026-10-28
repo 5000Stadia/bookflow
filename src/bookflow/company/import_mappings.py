@@ -165,8 +165,18 @@ def _from_run(run: dict) -> dict:
 _SAME = ('headers', 'columns', 'formats', 'key', 'mode', 'value_maps', 'defaults')
 
 
+def default_source(kind: str) -> str:
+    """The source a file is keyed under when none is named: shared by every such file of the kind."""
+    return f'{kind} import'
+
+
 def plan_save(s, ctx, source_name: str, recipe: dict, kind: str) -> dict:
     """What saving would do: a new source, a new version, or nothing when the recipe is the latest one."""
+    if _norm(source_name) == _norm(default_source(kind)):
+        raise BookflowError('E_VALIDATION', message=(
+            f"{source_name!r} is the name every {kind} file without a source is keyed under, so a mapping saved there "
+            "would match any file with these headers; save it under the name of where the file comes from "
+            '("Acme export").'), details={'field': 'source', 'value': source_name})
     source = _source_row(s, source_name, required=False)
     if source is not None:
         if source['kind'] != kind:
@@ -224,8 +234,15 @@ def recipe_from_run(s, run: dict, source_name: str) -> dict:
     return recipe
 
 
-def show(s, name: str, version: int | None = None) -> dict:
+def _readable_source(s, name: str) -> dict:
+    """A saved source, if the caller may read its kind's records: its value maps and headers are drawn from them."""
     source = _source_row(s, name)
+    batches.require_read(s, f"{kinds.kind(source['kind']).noun} show")
+    return source
+
+
+def show(s, name: str, version: int | None = None) -> dict:
+    source = _readable_source(s, name)
     if version is None:
         mapping = latest(s, source)
     else:
@@ -239,14 +256,22 @@ def show(s, name: str, version: int | None = None) -> dict:
 
 
 def history(s, name: str) -> dict:
-    source = _source_row(s, name)
+    source = _readable_source(s, name)
     rows = s.company.conn.execute(sa.select(c.import_mappings).where(
         c.import_mappings.c.source_id == source['id']).order_by(c.import_mappings.c.version.desc())).mappings()
     return {'source': _source_out(source), 'versions': [_mapping_out(r, source) for r in rows]}
 
 
 def query(s, kind: str | None, active: bool | None, limit: int, cursor: str | None) -> dict:
-    q = sa.select(c.import_sources).order_by(c.import_sources.c.name_key)
+    readable = []
+    for name, k in kinds.KINDS.items():  # only sources of kinds whose records the caller may read
+        try:
+            batches.require_read(s, f'{k.noun} show')
+        except BookflowError:
+            continue
+        readable.append(name)
+    q = sa.select(c.import_sources).where(c.import_sources.c.kind.in_(readable)).order_by(
+        c.import_sources.c.name_key)
     if kind:
         q = q.where(c.import_sources.c.kind == kind)
     if active is not None:
@@ -260,7 +285,7 @@ def query(s, kind: str | None, active: bool | None, limit: int, cursor: str | No
 
 
 def plan_deactivate(s, name: str) -> dict:
-    source = _source_row(s, name)
+    source = _readable_source(s, name)
     if not source['active']:
         raise BookflowError('E_VALIDATION', message=f"Source {source['name']!r} is already deactivated.",
                             details={'field': 'source'})
@@ -370,6 +395,12 @@ def plan_decide(s, ctx, inp) -> dict:
         raise BookflowError('E_VALIDATION', message='`remember` keeps maps (in the source\'s value maps); this call '
                             'maps nothing.', details={'field': 'remember'})
     remember = None
+    if inp.remember and _norm(run['source']) == _norm(default_source(run['kind'])):
+        raise BookflowError('E_VALIDATION', message=(
+            f"`remember` saves the maps in the run's source, and this run names none (it is keyed under the shared "
+            f"{run['source']!r}, which any {run['kind']} file would match). Preview the file with `source` naming where "
+            'it comes from, then decide with `remember`; or decide without it.'),
+            details={'field': 'remember', 'source': run['source']})
     if inp.remember:
         source = _source_row(s, run['source'], required=False)
         recipe = latest(s, source) if source is not None and source['active'] else _from_run(run)
@@ -377,7 +408,9 @@ def plan_decide(s, ctx, inp) -> dict:
         maps = {p: dict(m) for p, m in recipe['value_maps'].items()}
         for d in out:
             if d['action'] == 'map':
-                maps.setdefault(d['ref']['field'], {})[norm_key(d['ref']['value'])] = d['target']
+                # keyed on the file's own text, before any value map changed it, so next month's file matches it
+                text = d['ref'].get('file_value') or d['ref']['value']
+                maps.setdefault(d['ref']['field'], {})[norm_key(text)] = d['target']
         recipe['value_maps'] = maps
         if source is None:
             recipe['headers'] = json.loads(run['mapping']).get('headers') or recipe['headers']

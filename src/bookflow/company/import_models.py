@@ -60,6 +60,9 @@ class ImportPreviewInput(ImportCheckInput):
         'refused alone and the others import.'))
     stop_after_refusals: int = Field(100, ge=1, le=100_000, description=(
         'Refusals in one `import run` call after which a partial run stops itself, keeping what it did.'))
+    allow: list[Literal['differs', 'skipped']] = Field(default_factory=list, description=(
+        'All or nothing refuses a row that would change nothing because a record with its name differs (`differs`) '
+        'or, in update mode, matches none (`skipped`); name the outcomes to accept instead.'))
 
 
 class ImportDecideInput(_Input):
@@ -113,7 +116,13 @@ class ImportMappingMatchInput(_Input):
 
 
 class ImportCheckOutput(BaseModel):
-    ok: bool = Field(description='True when no cell has a problem (unknown references ask, they do not fail).')
+    ok: bool = Field(description=(
+        'True only when the file can be previewed and run as it is: no cell has a problem and nothing waits on a '
+        'decision (`to_decide`).'))
+    clean: bool = Field(description='True when no cell has a problem; decisions may still be pending.')
+    to_decide: list[dict[str, Any]] = Field(description=(
+        'Decisions to make before the run: a decimal mark, a date order, which saved mapping, each unknown '
+        'reference (map, create or skip).'))
     kind: str = Field(description='The kind.')
     source: str = Field(description='The source the rows would be keyed in.')
     rows: int = Field(description='Data rows read.')

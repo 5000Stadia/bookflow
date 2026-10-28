@@ -258,7 +258,8 @@ import_preview = _write('import preview', _PREVIEW, m.ImportPreviewInput, m.Impo
                                                       'E_AMOUNT_PRECISION'))
 import_run = _write('import run', _RUN, m.ImportRunInput, m.ImportRunOutput, plan_import_run, apply_import_run,
                     positional=('run',))
-import_cancel = _write('import cancel', 'Stop an import run; what it made stays (reverse it with `import reverse`).',
+import_cancel = _write('import cancel', 'Stop an import run. All or nothing undoes what it made; a partial run keeps it '
+                       '(`import reverse` undoes it).',
                        m.ImportRunSelector, m.ImportRunOutput, plan_import_cancel, apply_import_cancel,
                        positional=('run',))
 import_reverse = _write('import reverse', _REVERSE, m.ImportReverseInput, m.BatchReverseOutput, plan_import_reverse,

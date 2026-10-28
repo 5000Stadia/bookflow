@@ -31,6 +31,7 @@ from bookflow import BookflowError
 DELIMITERS = (',', ';', '\t', '|')
 DELIMITER_NAMES = {',': 'comma', ';': 'semicolon', '\t': 'tab', '|': 'pipe', 'xlsx': 'worksheet'}
 SNIFF_LINES = 50
+MAX_ROWS = 20_000  # data rows one file may hold, text or .xlsx (design §5's starting per-run cap)
 _CP1252_UNDEFINED = frozenset((0x81, 0x8D, 0x8F, 0x90, 0x9D))
 TRUE_WORDS = frozenset(('yes', 'true', '1', 'y', 't', 'on'))
 FALSE_WORDS = frozenset(('no', 'false', '0', 'n', 'f', 'off'))
@@ -129,7 +130,7 @@ def read(raw: bytes | str, *, delimiter: str | None = None, header_row: bool = T
     kept here for the import to drop and report; a file that is not text at all is refused.
     """
     if isinstance(raw, bytes):
-        if raw.startswith(ZIP_SIGNATURE):
+        if raw.startswith(ZIP_SIGNATURE):  # a zip by its signature; xlsx.py refuses one without a zip's structure
             from bookflow.company import xlsx
             return xlsx.read(raw, sheet=sheet, header_row=header_row, skip_rows=skip_rows)
         _refuse_binary(raw)
@@ -154,6 +155,10 @@ def read(raw: bytes | str, *, delimiter: str | None = None, header_row: bool = T
         for cells in reader:
             start, line = line, reader.line_num + 1
             if any(cell.strip() for cell in cells):
+                if len(records) >= MAX_ROWS + skip_rows + (1 if header_row else 0):
+                    raise BookflowError('E_VALIDATION', message=(
+                        f'The file has more than {MAX_ROWS:,} rows, beyond what one import reads; split it into '
+                        'smaller files.'), details={'field': 'content', 'problem': 'too_many_rows'})
                 records.append((start, [unguard(cell) for cell in cells]))
     except csv.Error as exc:
         raise BookflowError('E_VALIDATION', message=f'The file cannot be read as delimited text near line {line}: {exc}',
@@ -185,7 +190,7 @@ def read(raw: bytes | str, *, delimiter: str | None = None, header_row: bool = T
 ZIP_SIGNATURE = b'PK\x03\x04'
 _BINARY = ((b'\xd0\xcf\x11\xe0', 'an Excel 97-2003 (.xls) or other Office binary file; save it as .xlsx or CSV'),
            (b'%PDF', 'a PDF'), (b'\x89PNG', 'an image'), (b'\xff\xd8\xff', 'an image'), (b'GIF8', 'an image'),
-           (b'PK', 'an archive'))
+           (b'PK\x05\x06', 'an empty archive'), (b'PK\x07\x08', 'an archive'))  # a header starting `PK,` is text
 NOT_TEXT_SHARE = 0.10  # control characters (other than tab and line breaks) above this share: not a text file
 KEPT_CONTROLS = frozenset('\t\n\r')
 
@@ -217,13 +222,18 @@ def unholdable(ch: str, multiline: bool) -> bool:
 
 
 def clean_text(cell: str, multiline: bool = False) -> tuple[str, list[tuple[int, str]]]:
-    """The cell without the characters a text field cannot hold, and each dropped one as (1-based position, char)."""
+    """The cell without the characters a text field cannot hold, and each changed one as (1-based position, char).
+
+    In a single-line field a tab or line break becomes one space (a CR LF pair is one break), so words stay apart;
+    every other unholdable character is dropped."""
     if all(' ' <= ch < '\x7f' for ch in cell):  # the common case, at once
         return cell, []
     kept, dropped = [], []
     for position, ch in enumerate(cell, start=1):
         if unholdable(ch, multiline):
             dropped.append((position, ch))
+            if ch in KEPT_CONTROLS and not (ch == '\n' and position > 1 and cell[position - 2] == '\r'):
+                kept.append(' ')
         else:
             kept.append(ch)
     return (''.join(kept), dropped) if dropped else (cell, [])
@@ -250,7 +260,6 @@ def normalize_header(text: str) -> str:
 
 # ------------------------------------------------------------------ money
 
-_NUMBER = re.compile(r'^(\d*)(?:\.(\d*))?$')
 
 
 def number_format(values: list[str]) -> tuple[str, str] | None:
@@ -296,38 +305,74 @@ def _bare(text: str) -> str:
     return value.strip('()+-')
 
 
+_CURRENCY = '$€£¥'
+_SPACES = ' \u00a0\u202f\u2009'
+_LEAD = frozenset(_CURRENCY + _SPACES + '(+-')
+_TRAIL = frozenset(_CURRENCY + _SPACES + ')-')
+
+
+def _number_parts(text: str, *, decimal: str, thousands: str, money: bool, what: str) -> tuple[bool, str, str | None]:
+    """(negative, whole digits, fraction digits or None) of a number written with these marks, or a CellError.
+
+    Signs, parentheses, currency symbols or a three-letter code (money), ``%`` (a plain number) and spaces may stand
+    only at the edges, before or after the digits; inside the number only digits, one decimal mark and thousands marks
+    in groups of three are allowed. Nothing is repaired: ``1$5``, ``12,50`` and ``1,5`` (with ``.`` the decimal mark)
+    are refused, never read as 15 or 1250.
+    """
+    value = text.strip()
+    lead_set = _LEAD if money else frozenset(_SPACES + '+-')
+    trail_set = _TRAIL if money else frozenset(_SPACES + '%')
+    i, j = 0, len(value)
+    while i < j and (value[i] in lead_set or (money and value[i].isascii() and value[i].isalpha())):
+        i += 1
+    while j > i and (value[j - 1] in trail_set or (money and value[j - 1].isascii() and value[j - 1].isalpha())):
+        j -= 1
+    lead, body, trail = value[:i], value[i:j], value[j:]
+    bad = CellError('bad_value', f'not {what}: {text!r}')
+    for edge in (lead, trail):
+        letters = ''.join(ch for ch in edge if ch.isalpha())
+        if letters and (len(letters) != 3 or letters not in edge):
+            raise bad  # one currency code at most, written whole (USD 12, 12 EUR)
+    if sum((lead + trail).count(ch) for ch in _CURRENCY) + sum(
+            1 for edge in (lead, trail) if any(ch.isalpha() for ch in edge)) > 1:
+        raise bad  # one currency mark, symbol or code, on one side
+    signs = lead.count('-') + lead.count('+') + trail.count('-')
+    parens = lead.count('(')
+    if signs > 1 or parens != trail.count(')') or parens > 1 or trail.count('%') > 1:
+        raise bad
+    negative = ('-' in lead or '-' in trail) != bool(parens)
+    if not body:
+        if money and not any(ch.isdigit() for ch in value):
+            return False, '', None  # a currency code or symbol alone: no number
+        raise bad
+    marks = _SPACES if thousands == ' ' else thousands
+    group = f'[{re.escape(marks)}]' if marks else None
+    whole_pattern = rf'\d{{1,3}}(?:{group}\d{{3}})+|\d*' if group else r'\d*'
+    found = re.fullmatch(rf'({whole_pattern})(?:{re.escape(decimal)}(\d*))?', body)
+    if not found or not (found.group(1) or found.group(2)):
+        other = {'.': ',', ',': '.'}.get(decimal)
+        if other and re.fullmatch(rf'\d+{re.escape(other)}\d+', body):
+            raise CellError('bad_value', f'not {what}: {text!r} (the decimal mark is {decimal!r}, and a {other!r} '
+                                         'here does not separate groups of three digits)')
+        raise bad
+    whole = re.sub(r'\D', '', found.group(1))
+    return negative, whole, found.group(2)
+
+
 def parse_money(text: str, places: int = 2, *, decimal: str = '.', thousands: str = ',') -> int | None:
     """Exact minor units; blank is None. ``(1,234.56)``, ``1234.56-``, ``-$5``, ``1 234,56`` with ``decimal=','``."""
-    value = (text or '').strip()
-    for strip in ('$', '€', '£', '¥', ' ', ' ', ' '):
-        value = value.replace(strip, '')
-    value = re.sub(r'^[A-Za-z]{3}|[A-Za-z]{3}$', '', value)
-    if not value:
+    if not (text or '').strip():
         return None
-    negative = False
-    if value.startswith('(') and value.endswith(')'):
-        negative, value = True, value[1:-1]
-    if value.endswith('-'):
-        negative, value = not negative, value[:-1]
-    if value.startswith('-'):
-        negative, value = not negative, value[1:]
-    elif value.startswith('+'):
-        value = value[1:]
-    if thousands:
-        value = value.replace(thousands, '')
-    if decimal != '.':
-        if '.' in value:
-            raise CellError('bad_value', f'not an amount: {text!r}')
-        value = value.replace(decimal, '.')
-    found = _NUMBER.match(value)
-    if not found or not (found.group(1) or found.group(2)):
-        raise CellError('bad_value', f'not an amount: {text!r}')
-    whole, fraction = found.group(1) or '0', found.group(2) or ''
+    negative, whole, fraction = _number_parts(text, decimal=decimal, thousands=thousands, money=True,
+                                              what='an amount')
+    if not whole and fraction is None:
+        return None
+    fraction = fraction or ''
     if len(fraction) > places:
         if fraction[places:].strip('0'):
             raise CellError('E_AMOUNT_PRECISION', f'{text!r} has more than {places} decimal places')
         fraction = fraction[:places]
-    minor = int(whole) * 10 ** places + int(fraction.ljust(places, '0') or '0')
+    minor = int(whole or '0') * 10 ** places + int(fraction.ljust(places, '0') or '0')
     return -minor if negative else minor
 
 
@@ -339,18 +384,11 @@ def money_text(minor: int, places: int = 2) -> str:
 
 def parse_decimal(text: str, *, decimal: str = '.', thousands: str = ',') -> str | None:
     """A plain decimal number as canonical text (quantities, percents), never rounded; blank is None."""
-    value = (text or '').strip().replace('%', '').replace(' ', '')
-    if not value:
+    if not (text or '').strip():
         return None
-    negative = value.startswith('-')
-    value = value.lstrip('+-')
-    if thousands:
-        value = value.replace(thousands, '')
-    if decimal != '.':
-        value = value.replace(decimal, '.')
-    if not _NUMBER.match(value) or value in ('', '.'):
-        raise CellError('bad_value', f'not a number: {text!r}')
-    return ('-' if negative else '') + value
+    negative, whole, fraction = _number_parts(text, decimal=decimal, thousands=thousands, money=False,
+                                              what='a number')
+    return ('-' if negative else '') + (whole or '0') + (f'.{fraction}' if fraction else '')
 
 
 # ------------------------------------------------------------------ dates

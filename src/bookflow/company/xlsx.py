@@ -4,7 +4,10 @@ Through openpyxl in read-only mode with ``data_only`` (each cell's saved value, 
 (macros are not even copied) and ``keep_links`` off (external links are not read); openpyxl parses its XML through
 defusedxml, so entity expansion and external entities are refused. Nothing in the file is executed or evaluated. The
 zip is measured before parsing, so a small file that unpacks to gigabytes is refused. A formula whose result was never
-saved (a file a program wrote without calculating it) refuses the file, naming its cells, rather than reading blank.
+saved (a file a program wrote without calculating it, an array formula too) and a saved error value (``#REF!``) refuse
+the file, naming their cells, rather than reading blank or as text. The sheet is read once, from the cells it holds:
+its declared dimension is ignored and rows are capped as a text file's are. Merged cells read as their first cell
+only (read-only mode does not repeat the value across the merge); the rest of the merge is blank.
 
 Cells become the text the CSV reader would have seen: numbers in plain decimal notation (``599.56``, never ``5.9956E2``),
 whole numbers without ``.0``, dates as ISO (``2026-01-31``), true and false as ``true``/``false``. A number typed into a
@@ -22,6 +25,7 @@ from bookflow import BookflowError
 MAX_UNPACKED = 256 * 1024 * 1024  # bytes the workbook may unpack to
 MAX_RATIO = 200  # unpacked over packed, per member above 1 MB
 FORMULA_CELLS_SHOWN = 10
+MAX_COLUMNS = 1024  # columns a sheet may use; a value further right refuses the file
 
 
 def _refuse(message: str, **details) -> BookflowError:
@@ -68,7 +72,25 @@ def cell_text(value) -> str:
     return str(value)
 
 
+def _parser_class():
+    from openpyxl.worksheet._reader import FORMULA_TAG, WorkSheetParser
+
+    class Parser(WorkSheetParser):
+        """openpyxl's own sheet parser on saved values, which also notes a formula with no saved value (an array
+        formula too) and a saved error (``#REF!``, ``#N/A``) instead of reading either as a blank or as text."""
+
+        def parse_cell(self, element):
+            cell = super().parse_cell(element)
+            if cell['value'] is None and element.find(FORMULA_TAG) is not None:
+                cell['data_type'] = 'unsaved'
+            return cell
+    return Parser
+
+
 def read(raw: bytes, *, sheet: str | None = None, header_row: bool = True, skip_rows: int = 0):
+    """The sheet's rows as text, read once from the cells the file actually holds: the declared ``<dimension>`` is
+    ignored (a wrong one neither hides rows nor pads millions of empty cells), empty rows are not padded, and the
+    rows are capped at ``tabular.MAX_ROWS`` and the columns at ``MAX_COLUMNS``, as a text file is."""
     from bookflow.company import tabular
     _check_zip(raw)
     import openpyxl
@@ -77,17 +99,31 @@ def read(raw: bytes, *, sheet: str | None = None, header_row: bool = True, skip_
         raise BookflowError('E_IO', message='Reading .xlsx needs defusedxml installed beside openpyxl.',
                             details={'check': 'defusedxml'})
     try:
-        values = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True, keep_vba=False,
-                                        keep_links=False)
-        formulas = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=False, keep_vba=False,
-                                          keep_links=False)
+        # openpyxl's reader without its worksheet step: that step scans every sheet whole for a `<dimension>` (all
+        # 50 MB of a sheet that has none) before a row is read; here only the chosen sheet is read, once.
+        from openpyxl.reader.excel import ExcelReader
+        from openpyxl.styles.stylesheet import apply_stylesheet
+        reader = ExcelReader(io.BytesIO(raw), read_only=True, keep_vba=False, data_only=True, keep_links=False)
+        reader.read_manifest()
+        reader.read_strings()
+        reader.read_workbook()
+        apply_stylesheet(reader.archive, reader.wb)
+        book = reader.wb
+        paths = {sheet_.name: rel.target for sheet_, rel in reader.parser.find_sheets()
+                 if rel.target in reader.valid_files and 'chartsheet' not in rel.Type}
     except BookflowError:
         raise
     except Exception as exc:  # a malformed workbook: openpyxl raises many kinds
-        raise _refuse(f'The workbook cannot be read: {type(exc).__name__}; save it again as .xlsx or CSV.',
-                      problem='not_xlsx') from None
+        raise _refuse(f'The workbook is damaged and cannot be read ({type(exc).__name__}); save it again as .xlsx or '
+                      'CSV.', problem='not_xlsx') from None
+    records: list[tuple[int, list[str]]] = []
+    unsaved: list[str] = []
+    errors: list[str] = []
+    limit = tabular.MAX_ROWS + skip_rows + (1 if header_row else 0)
     try:
-        names = values.sheetnames
+        names = list(paths)
+        if not names:
+            raise _refuse('The workbook has no worksheet.', problem='not_xlsx')
         if sheet is None:
             name = names[0]
         elif sheet in names:
@@ -95,23 +131,46 @@ def read(raw: bytes, *, sheet: str | None = None, header_row: bool = True, skip_
         else:
             raise BookflowError('E_VALIDATION', message=f'The workbook has no sheet {sheet!r}; it has: '
                                 + ', '.join(names) + '.', details={'field': 'sheet', 'sheets': names})
-        records: list[tuple[int, list[str]]] = []
-        unsaved: list[str] = []
-        pairs = zip(values[name].iter_rows(values_only=True), formulas[name].iter_rows(values_only=True))
-        for line, (row, raw_row) in enumerate(pairs, start=1):
-            cells = [cell_text(v) for v in row]
-            for i, (v, f) in enumerate(zip(row, raw_row)):
-                if v is None and isinstance(f, str) and f.startswith('='):
-                    unsaved.append(f'{tabular.column_letter(i)}{line}')
-            if any(c.strip() for c in cells):
-                records.append((line, cells))
+        with reader.archive.open(paths[name]) as source:
+            parser = _parser_class()(source, reader.shared_strings, data_only=True, epoch=book.epoch,
+                                     date_formats=book._date_formats, timedelta_formats=book._timedelta_formats)
+            for line, cells in parser.parse():
+                held: dict[int, str] = {}
+                for cell in cells:
+                    where = f"{tabular.column_letter(cell['column'] - 1)}{line}"
+                    if cell['data_type'] == 'unsaved':
+                        unsaved.append(where)
+                        continue
+                    if cell['data_type'] == 'e':
+                        errors.append(f"{where} ({cell['value']})")
+                        continue
+                    text = cell_text(cell['value'])
+                    if text.strip():
+                        if cell['column'] > MAX_COLUMNS:
+                            raise _refuse(f'The sheet has a value in {where}, beyond the {MAX_COLUMNS} columns an '
+                                          'import reads.', problem='too_wide', sheet=name)
+                        held[cell['column']] = text
+                if held:
+                    if len(records) >= limit:
+                        raise _refuse(f'The sheet has more than {tabular.MAX_ROWS:,} rows, beyond what one import '
+                                      'reads; split it into smaller files.', problem='too_many_rows', sheet=name)
+                    width = max(held)
+                    records.append((line, [held.get(i, '') for i in range(1, width + 1)]))
+    except BookflowError:
+        raise
+    except Exception as exc:  # damaged sheet XML (ParseError), an entity defusedxml refuses, a bad row number...
+        raise _refuse(f'The workbook is damaged and cannot be read ({type(exc).__name__}); save it again as .xlsx or '
+                      'CSV.', problem='not_xlsx') from None
     finally:
-        values.close()
-        formulas.close()
+        reader.archive.close()
     if unsaved:
         raise _refuse(f'{len(unsaved)} cell(s) hold a formula whose result was never saved ('
                       + ', '.join(unsaved[:FORMULA_CELLS_SHOWN]) + '); open the file in a spreadsheet program and save '
                       'it, or export it as CSV.', problem='unsaved_formula', cells=unsaved[:FORMULA_CELLS_SHOWN])
+    if errors:
+        raise _refuse(f'{len(errors)} cell(s) hold a spreadsheet error, not a value ('
+                      + ', '.join(errors[:FORMULA_CELLS_SHOWN]) + '); correct them in the spreadsheet and save it.',
+                      problem='error_value', cells=errors[:FORMULA_CELLS_SHOWN])
     records = records[skip_rows:]
     if not records:
         raise _refuse('The sheet has no rows.', sheet=name)

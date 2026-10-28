@@ -73,7 +73,8 @@ def test_the_same_import_through_python_cli_http_and_mcp(root, tmp_path):
     shapes = set()
     for surface, r in results.items():
         assert 'customer' in {k['kind'] for k in r['kinds']['kinds']} and r['template']['header'][0] == 'name'
-        assert r['checked']['ok'] is True and [u['value'] for u in r['checked']['unknown_references']] == ['Net 99']
+        assert (r['checked']['ok'], r['checked']['clean']) == (False, True)  # clean, but Net 99 is to decide
+        assert [u['value'] for u in r['checked']['unknown_references']] == ['Net 99']
         assert r['preview']['counts'] == {'create': 2, 'waiting': 1}, surface
         assert r['preview']['mapping']['formats']['decimal'] == ',' and r['preview']['run']['state'] == 'waiting'
         assert r['decided']['run']['state'] == 'previewed' and r['decided']['decisions'] == []
