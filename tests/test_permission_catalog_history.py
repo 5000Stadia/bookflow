@@ -95,7 +95,7 @@ ACCEPTED = {
     'delivery-v1': (771, '085b7a93194e439557234ed8d88a7d7bdfd39ed06f8b2cbdddb732daca07561b'),
     'packing-v1': (774, '10872774b49e7497c34eccde2882c74e49c36ead5d7d2ff765399dd31fae79c8'),
     'delivery-queue-v1': (785, '2e19e20f01b2cdc3110be9f381a9ec54fa4f7f0ba5ef6880b49189576076554c'),
-    'import-v1': (797, '0db21ee9713630abf0d4a5d81c282ee608483cd6f16b8a2aa40e3a14712dfe4a'),
+    'import-v1': (805, '1616509eb680a5fa68c15ecc5baff0c38b0c601dce487eb9c3e3c968c0c6ebcc'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -226,7 +226,9 @@ CHAIN_ADDITIONS = {
                           'delivery-connection query', 'delivery-connection remove', 'delivery-connection show',
                           'delivery-connection update'},
     'import-v1': {'batch query', 'batch show', 'import cancel', 'import errors', 'import kinds', 'import preview',
-                  'import query', 'import reverse', 'import rows', 'import run', 'import show', 'import template'},
+                  'import query', 'import reverse', 'import rows', 'import run', 'import show', 'import template',
+                  'import check', 'import decide', 'import-mapping deactivate', 'import-mapping history',
+                  'import-mapping match', 'import-mapping query', 'import-mapping save', 'import-mapping show'},
 }
 
 _ANCESTOR_EDIT = """
