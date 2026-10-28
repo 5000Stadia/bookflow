@@ -422,19 +422,50 @@ def project(s, row, docs=None, *, names=None, numbers=None, stale=None, warnings
         resend_of=resend, released_by=row['released_by'], released_at=row['released_at'], go_by=row['go_by'],
         go_at=row['go_at'], waiting_for_go=row['status'] == 'ready' and row['go_by'] is None,
         sent_at=row['sent_at'], sent_via=row['sent_via'], sent_method=row['sent_method'],
-        delivery='unknown' if row['status'] == 'sent' else None, cancelled_reason=row['cancelled_reason'],
+        delivery=tracking(s, row), cancelled_reason=row['cancelled_reason'],
         stale=bool(stale), stale_reason=stale, documents=attached,
         created_at=localize(s, row['created_at']), created_by=row['created_by'],
         updated_at=localize(s, row['updated_at']), updated_by=row['updated_by'], existing=existing,
+        connection=_connection_name(s, row), attempts=row['attempts'], next_attempt_at=row['next_attempt_at'],
+        failure_code=row['failure_code'], failure_text=row['failure_text'], provider_ref=row['provider_ref'],
         warnings=list(warnings), next_commands=next_commands)
+
+
+def _connection_name(s, row) -> str:
+    """The connection a message went through, or the one it would go through now; ``none`` when there is none."""
+    from bookflow.company import delivery_connections as conns
+    if row['connection_id']:
+        name = s.company.conn.execute(sa.select(c.delivery_connections.c.name).where(
+            c.delivery_connections.c.id == row['connection_id'])).scalar()
+        if name:
+            return name
+    return conns.label(s) if row['status'] in LIVE else 'none'
+
+
+def tracking(s, row) -> str | None:
+    """A sent message's delivery, derived from its newest tracking event: unknown (hand-sent, or nothing said),
+    accepted, delivered or bounced. Never 'opened'."""
+    if row['status'] != 'sent':
+        return None
+    if row['sent_via'] != 'connection':
+        return 'unknown'
+    e = c.delivery_events
+    newest = s.company.conn.execute(sa.select(e.c.event).where(
+        e.c.message_id == row['id'], e.c.event.in_(('accepted', 'delivered', 'bounced')))
+        .order_by(e.c.ordinal.desc()).limit(1)).scalar()
+    return newest or 'unknown'
 
 
 def _next(row) -> list[str]:
     n = row['number']
+    if row['status'] == 'held' and row['hold_reason'] == 'outcome_unknown' or row['status'] == 'failed':
+        return [f'delivery mark-sent {n}', f'delivery retry {n}', f'delivery cancel {n}']
     if row['status'] in ('draft', 'held'):
         return [f'delivery update {n}', f'delivery send {n}' if row['status'] == 'draft' else
                 f'delivery update {n} --refresh', f'delivery cancel {n}']
-    if row['status'] in ('ready', 'failed'):
+    if row['status'] == 'ready' and row['go_by'] is None:
+        return [f'delivery approve --messages \'["{n}"]\'', f'delivery export {n}', f'delivery cancel {n}']
+    if row['status'] == 'ready':
         return [f'delivery export {n}', f'delivery mark-sent {n}', f'delivery cancel {n}']
     return [f'delivery history {n}']
 
@@ -891,8 +922,13 @@ def prepare_send(s, ctx, inp) -> Plan:
             details.update(go_by=s.actor.id, go_at=at)
         plans.append((before, after, 'released', details))
     if any(a['status'] == 'ready' for _, a, _, _ in plans):
-        warnings.append(NO_CONNECTION if person else NO_CONNECTION + " An agent's release also waits for a "
-                        "person's go before anything could leave.")
+        from bookflow.company import delivery_connections as conns
+        connected = conns.label(s) != 'none'
+        if not person:  # R187: an actor holding delivery.send releases with a go
+            warnings.append(("" if connected else NO_CONNECTION + ' ') + "An agent's release waits for a person's go "
+                            '(delivery approve) before anything could leave.')
+        elif not connected:
+            warnings.append(NO_CONNECTION)
     outs = [project(s, after) for _, after, _, _ in plans]
     return Plan(m.MessagesOutput(messages=outs, count=len(outs), warnings=warnings), dict(plans=plans))
 
@@ -1098,7 +1134,9 @@ def query(s, inp) -> m.MessagePageOutput:
             waiting_for_go=row['status'] == 'ready' and row['go_by'] is None,
             updated_at=localize(s, row['updated_at']), updated_by=names.get(row['updated_by']) or row['updated_by'],
             sent_at=localize(s, row['sent_at']) if row['sent_at'] else None))
-    return m.MessagePageOutput(rows=out, count=len(out), truncated=truncated, counts=counts(s))
+    from bookflow.company import delivery_connections as conns
+    return m.MessagePageOutput(rows=out, count=len(out), truncated=truncated, counts=counts(s),
+                               connection=conns.label(s))
 
 
 def live_for_notice(s, notice_id) -> dict | None:

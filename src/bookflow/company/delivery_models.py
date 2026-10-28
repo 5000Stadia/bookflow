@@ -191,8 +191,13 @@ class MessageOutput(BaseModel):
     updated_at: str
     updated_by: str
     existing: bool = Field(default=False, description='Draft: the message already in the outbox for this document.')
-    connection: str = Field(default='none', description="The sending connection: none in this build, so nothing "
-                            "leaves this machine.")
+    connection: str = Field(default='none', description="The sending connection it went or would go through; none "
+                            "when no usable connection exists here, so nothing leaves this machine.")
+    attempts: int = Field(default=0, description='Transport attempts made.')
+    next_attempt_at: str | None = Field(default=None, description='A temporary failure: when it is tried again.')
+    failure_code: str | None = None
+    failure_text: str | None = Field(default=None, description="The transport's words.")
+    provider_ref: str | None = Field(default=None, description="The transport's reference for an accepted message.")
     warnings: list[str] = Field(default_factory=list)
     next_commands: list[str] = Field(default_factory=list)
 

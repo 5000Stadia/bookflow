@@ -1817,3 +1817,30 @@ EXAMPLES.update({
     'delivery-template preview': Example('bookflow delivery-template preview invoice DEMO-SALE-INV-ACTIVE' + _C
                                          + ' --json', {'kind': 'invoice', 'document': 'DEMO-SALE-INV-ACTIVE'}),
 })
+
+# Document delivery (R112 increment 2): the queue and the transport seam. No transport is registered in this build.
+EXAMPLES.update({
+    'delivery approve': Example('bookflow delivery approve --all-waiting' + _C + ' --reason "Checked them" --json',
+                                {'all_waiting': True}),
+    'delivery retry': Example('bookflow delivery retry M-1001' + _C + ' --reason "Not in the sent mail" --json',
+                              {'message': 'M-1001'}),
+    'delivery run': Example('bookflow delivery run' + _C + ' --reason "Send what is due" --json', {}),
+    'delivery-connection add': Example(
+        'bookflow delivery-connection add --name Office --kind mcp-mail --secret-ref env:OFFICE_MAIL_TOKEN' + _C
+        + ' --reason "Our mail server" --json', {'name': 'Office', 'kind': 'mcp-mail',
+                                                  'secret_ref': 'env:OFFICE_MAIL_TOKEN'}),
+    'delivery-connection update': Example('bookflow delivery-connection update Office --daily-limit 200' + _C
+                                          + ' --reason "Provider limit" --json',
+                                          {'connection': 'Office', 'daily_limit': 200}),
+    'delivery-connection enable': Example('bookflow delivery-connection enable Office' + _C
+                                          + ' --reason "Send from this machine" --json', {'connection': 'Office'}),
+    'delivery-connection disable': Example('bookflow delivery-connection disable Office' + _C
+                                           + ' --reason "Pause sending" --json', {'connection': 'Office'}),
+    'delivery-connection remove': Example('bookflow delivery-connection remove Office' + _C
+                                          + ' --reason "Changed provider" --json', {'connection': 'Office'}),
+    'delivery-connection check': Example('bookflow delivery-connection check Office' + _C
+                                         + ' --reason "Test the key" --json', {'connection': 'Office'}),
+    'delivery-connection show': Example('bookflow delivery-connection show Office' + _C + ' --json',
+                                        {'connection': 'Office'}),
+    'delivery-connection query': Example('bookflow delivery-connection query' + _C + ' --json', {}),
+})

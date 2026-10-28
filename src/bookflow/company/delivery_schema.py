@@ -195,6 +195,45 @@ def company_info_columns(C):
 
 TABLES = ('delivery_events', 'delivery_message_documents', 'delivery_messages', 'delivery_files',
           'delivery_templates')
+
+
+def define_queue_tables(metadata, C, T, common):
+    """Increment 2 (co0106): the sending connections a person sets up. A row never holds a secret."""
+    connections = T('delivery_connections', *common(),
+        C('name', sa.String(100), 'Connection name as entered.', nullable=False),
+        C('name_key', sa.String(100), 'Case-folded name, unique among connections not removed.', nullable=False),
+        C('kind', sa.String(64), 'Transport kind (mcp-mail, smtp, ...): free text, checked against the kinds this '
+          'build registers when the connection is added.', nullable=False),
+        C('settings', sa.Text, "Non-secret settings, a JSON object the kind validates (server command pinned to a "
+          "version, From address).", nullable=False),
+        C('secret_ref', sa.String(200), "Where the secret is: env:NAME or keyring:service/name. Never the secret.",
+          nullable=True),
+        C('enabled', sa.Boolean, 'Whether the dispatcher may send through it.', nullable=False),
+        C('enabled_host', sa.String(64), 'The machine (and company file) it was enabled on; a copy or restore '
+          'clears it, and a connection sends only where it was enabled.', nullable=True),
+        C('daily_limit', sa.Integer, 'Most attempts in any 24 hours; null for no limit.', nullable=True),
+        C('last_check_at', sa.String(32), 'When it was last checked.', nullable=True),
+        C('last_check_ok', sa.Boolean, 'Whether the last check could connect.', nullable=True),
+        C('last_check_text', sa.String(500), 'What the last check said.', nullable=True),
+        C('removed_at', sa.String(32), 'When it was removed; a removed connection is kept for the history.',
+          nullable=True),
+        sa.CheckConstraint('length(trim(name)) BETWEEN 1 AND 100', name='ck_delivery_connection_name'),
+        sa.CheckConstraint('length(kind) BETWEEN 1 AND 64', name='ck_delivery_connection_kind'),
+        sa.CheckConstraint("json_valid(settings) AND json_type(settings) = 'object'",
+                           name='ck_delivery_connection_settings'),
+        sa.CheckConstraint("secret_ref IS NULL OR secret_ref GLOB 'env:?*' OR secret_ref GLOB 'keyring:?*/?*'",
+                           name='ck_delivery_connection_secret_ref'),
+        sa.CheckConstraint('(enabled = 1) = (enabled_host IS NOT NULL) AND (removed_at IS NULL OR enabled = 0)',
+                           name='ck_delivery_connection_enabled'),
+        sa.CheckConstraint('daily_limit IS NULL OR daily_limit > 0', name='ck_delivery_connection_limit'),
+        description='Sending connections: where mail goes and under whose keys (held in the keyring or the '
+                    'environment, never here). None exist until a person sets one up.')
+    sa.Index('uq_delivery_connection_name', connections.c.name_key, unique=True,
+             sqlite_where=sa.text('removed_at IS NULL'))
+    return dict(delivery_connections=connections)
+
+
+QUEUE_TABLES = ('delivery_connections',)
 GUARDED = (
     ('delivery_events', ('UPDATE', 'DELETE'), 'delivery events are append-only'),
     ('delivery_message_documents', ('UPDATE', 'DELETE'), 'attached files are frozen (a refresh of a draft or held '
@@ -203,4 +242,5 @@ GUARDED = (
      'carries them)'),
     ('delivery_messages', ('DELETE',), 'messages are never deleted'),
     ('delivery_templates', ('DELETE',), 'templates are deactivated, never deleted'),
+    ('delivery_connections', ('DELETE',), 'connections are removed, never deleted'),
 )

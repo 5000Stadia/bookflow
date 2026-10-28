@@ -60,6 +60,8 @@ OWNERS = {
     "memorized.enter": Impact.CONSERVATIVE,
     "scheduler.run": Impact.CONSERVATIVE,
     "scheduler.write": Impact.CONSERVATIVE,
+    "delivery.run": Impact.CONSERVATIVE,
+    "delivery.tick": Impact.CONSERVATIVE,
     "cutover.apply": Impact.CONSERVATIVE,
     "config.flush": Impact.PROJECTION,
 }

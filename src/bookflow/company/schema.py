@@ -1277,3 +1277,4 @@ from bookflow.company import delivery_schema as _delivery_schema
 globals().update(_delivery_schema.define_tables(metadata, _column, _table, _common))
 for _delivery_column in _delivery_schema.company_info_columns(_column):
     company_info.append_column(_delivery_column)
+globals().update(_delivery_schema.define_queue_tables(metadata, _column, _table, _common))
