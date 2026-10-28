@@ -187,22 +187,31 @@ def touched_effects(applied, record_types: set[str]) -> list[tuple[str, str, str
 
 
 def run_nested(s, ctx, name: str, payload: dict, *, source_ref: str, dry_run: bool = False,
-               recorder: Callable | None = None, recovery: bool = True) -> dict:
+               recorder: Callable | None = None, recovery: bool = True, before: Callable | None = None) -> dict:
     """Run one registry command inside this session, as `cutover` nests its steps: the caller's own authority,
     validation and audit, with ``source_ref`` naming where the write came from. ``recovery=False`` skips a command's
     permanent-recovery lookup (a replay by operation key), which closes and reopens the session's company: a nested
-    step that carries no operation key has nothing to replay."""
+    step that carries no operation key has nothing to replay. ``before(s)`` writes inside the command's transaction
+    just before the command's own write (once)."""
     from bookflow.core import registry
     from bookflow.core.dispatch import run_in_session, validate_input
     command = registry.get(name)
     nested = ctx.model_copy(update={'idempotency_key': None, 'source_ref': source_ref[:512]})
-    saved = (s.company_touched, s.hub_touched, list(s.warnings), s.dry_run, getattr(s, 'batch_recorder', None))
+    saved = (s.company_touched, s.hub_touched, list(s.warnings), s.dry_run, getattr(s, 'batch_recorder', None),
+             getattr(s, 'batch_before', None))
     s.batch_recorder = recorder
+    if before is not None:
+        def once(session):
+            session.batch_before = None
+            before(session)
+        s.batch_before = once
+    else:
+        s.batch_before = None
     try:
         return run_in_session(command, validate_input(command, payload), nested, s, dry_run=dry_run,
                               _recovery_checked=not recovery)
     finally:
-        s.company_touched, s.hub_touched, s.warnings, s.dry_run, s.batch_recorder = saved
+        s.company_touched, s.hub_touched, s.warnings, s.dry_run, s.batch_recorder, s.batch_before = saved
         if s.company is not None and s.company.write_transaction:
             s.company.raw.rollback()
 
@@ -441,8 +450,22 @@ def _document_steps(s, group: dict, rec: DocumentRecord) -> list[tuple[str, dict
             (group['record_id'],)).fetchone()
         if standing:
             steps.append(('bill payment unapply', {'payment': group['record_id']}))
+    if renumbers(rec) and not _retired_here(s, rec, group):
+        steps.append(('renumber', {}))
     steps.append((rec.inverse, {rec.selector: group['record_id']}))
     return steps
+
+
+def renumbers(rec) -> bool:
+    """Whether this family gives its number up through its own update (a revision and audit event of their own);
+    else the retiring command's transaction renumbers the header first (`_retire`)."""
+    return 'number' in registry_fields(f'{rec.noun} update')
+
+
+def _retired_here(s, rec, group: dict) -> bool:
+    """The document already carries this batch's retired number (a reversal that stopped after renumbering)."""
+    from bookflow.company import document_numbers
+    return document_numbers.retired_by(_file_number(s, rec, group['record_id']), group['batch_id'])
 
 
 # A document table's revisions (else transaction_revisions): (table, column naming the document).
@@ -701,6 +724,8 @@ def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
             continue
         expected = last['version_after'] if last is not None else None
         edit = _document_edit(s, rec, g['record_id']) if getattr(rec, 'document', False) else None
+        if edit is not None and edit['revisions'] == 2 and _retired_here(s, rec, g):
+            edit = None  # the revision is this reversal's own renumbering
         if edit is not None:
             blockers.append(_blocker(g, rec, 'edited_again', f"{label} was edited since the batch (revision "
                                      f"{edit['revisions']}), by {edit['by']} at {edit['at']}.",
@@ -725,7 +750,8 @@ def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
         steps = _steps_for(g, rec, row['version'], s)[len(steps_done):]
         steps_out.append({'seq': g['seq'], 'record_type': g['record_type'], 'record_id': g['record_id'],
                           'name': row[rec.name_field], 'action': g['action'], 'version': row['version'],
-                          'steps': [name if name != 'rename' else f'{rec.noun} update' for name, _ in steps]})
+                          'steps': [name if name not in ('rename', 'renumber') else f'{rec.noun} update'
+                                    for name, _ in steps]})
         work.append((g, rec, row, steps, len(steps_done)))
         if probe:
             refusal = _probe(s, ctx, batch, g, rec, row, steps, made)
@@ -744,7 +770,30 @@ def _payload(s, rec: ListRecord, batch: dict, row: dict, name: str, payload: dic
         if rec.noun == 'sales-rep':
             out['initials'] = _free_initials(s, row['id'])
         return out
+    if name == 'renumber':
+        from bookflow.company import document_numbers
+        number = _file_number(s, rec, row['id'])
+        out = {rec.selector: row['id'], 'expected_version': version,
+               'number': document_numbers.retired_cheque(s, row['id'], number, batch['id']) if rec.noun == 'check'
+               else document_numbers.retired(s, rec.table, row['id'], number, batch['id'])}
+        if 'operation_key' in registry_fields(f'{rec.noun} update'):
+            out['operation_key'] = f"retire-{row['id']}"
+        return out
     return dict(payload, expected_version=version)
+
+
+def _file_number(s, rec, record_id: str) -> str:
+    """The number `<noun> update` changes: a check's is its cheque number, every other document's its own."""
+    if rec.noun == 'check':
+        from bookflow.company import document_numbers
+        return document_numbers.cheque(s, record_id)
+    return s.company.conn.execute(sa.select(rec.table.c.number).where(rec.table.c.id == record_id)).scalar()
+
+
+def registry_fields(name: str) -> dict:
+    from bookflow.core import registry
+    command = registry.get(name)
+    return command.input_model.model_fields if command is not None else {}
 
 
 def _free_initials(s, record_id: str) -> str:
@@ -761,18 +810,21 @@ def _free_initials(s, record_id: str) -> str:
 def _probe(s, ctx, batch, g, rec, row, steps, made) -> dict | None:
     """Dry-run the inverse commands still to run: their own refusals, permission included, name the blocker. A
     deactivate refused only for children this same batch made (and reverses first) is not a blocker."""
+    waits = False
     for i, (name, payload) in enumerate(steps):
-        if i and getattr(rec, 'document', False):
+        if i and getattr(rec, 'document', False) and waits:
             try:  # a later step waits on the first (a payment is deleted once unapplied): its own grant, here
                 from bookflow.core import registry
                 from bookflow.hub import access
-                access.require_explicit_grant(s, registry.get(name).capability)
+                access.require_explicit_grant(s, registry.get(
+                    f'{rec.noun} update' if name == 'renumber' else name).capability)
             except BookflowError as error:
                 return _blocker(g, rec, error.code, f"{rec.noun} {row[rec.name_field]}: {error.message}",
                                 clears=_clears_for(error, rec), details=error.details)
             continue
-        command = f'{rec.noun} update' if name == 'rename' else name
+        command = f'{rec.noun} update' if name in ('rename', 'renumber') else name
         body = _payload(s, rec, batch, row, name, payload, row['version'])
+        waits = waits or name.endswith(' unapply')
         if name.endswith(' deactivate'):
             body.pop('expected_version', None)
         try:
@@ -874,13 +926,19 @@ def reverse(s, ctx, batch_id: str, *, reason: str | None, dry_run: bool = False,
         version = row['version']
         for i, (name, payload) in enumerate(steps):
             index = offset + i
-            command = f'{rec.noun} update' if name == 'rename' else name
+            command = f'{rec.noun} update' if name in ('rename', 'renumber') else name
+            retire = _retire(rec, g, batch_id) if getattr(rec, 'document', False) and name == rec.inverse \
+                and not renumbers(rec) else None
+            numbers = retire.done if retire else None
+            body = _payload(s, rec, batch, row, name, payload, version)
+            if name == 'renumber':
+                numbers = {'number': _file_number(s, rec, row['id']), 'retired_as': body['number']}
             try:
-                output = run_nested(s, ctx, command, _payload(s, rec, batch, row, name, payload, version),
-                                    source_ref=f'reverse:{batch_id}',
+                output = run_nested(s, ctx, command, body, source_ref=f'reverse:{batch_id}',
                                     recorder=_reversal_recorder(reversal_id, g, index,
-                                                                adapter if index == total - 1 else None),
-                                    recovery=not getattr(rec, 'document', False))
+                                                                adapter if index == total - 1 else None, numbers),
+                                    recovery=not getattr(rec, 'document', False),
+                                    before=retire)
             except BookflowError as error:
                 raise _stopped(found, g, rec, row, error, reversed_now) from None
             version = output.get('version') if isinstance(output, dict) else None
@@ -945,12 +1003,27 @@ def _result(s, found: dict, *, state: str, reversed_now: int, dry_run: bool = Fa
             'reversal_batch': batch['reversed_by'], 'event_id': None, 'dry_run': dry_run}
 
 
-def _reversal_recorder(reversal_id: str, group: dict, index: int, adapter: Adapter | None):
+class _retire:
+    """An import reversal's retiring step gives the document's number up first, while it still stands
+    (`document_numbers`): the corrected file may use it again. ``done`` holds (original, retired) once it ran."""
+
+    def __init__(self, rec, group: dict, batch_id: str):
+        self.rec, self.group, self.batch_id, self.done = rec, group, batch_id, {}
+
+    def __call__(self, s):
+        from bookflow.company import document_numbers
+        changed = document_numbers.renumber(s, self.rec.table, self.group['record_id'], self.batch_id)
+        if changed:
+            self.done['number'], self.done['retired_as'] = changed
+
+
+def _reversal_recorder(reversal_id: str, group: dict, index: int, adapter: Adapter | None,
+                       numbers: dict | None = None):
     def record(s, cmd, applied, output):
         version = output.get('version') if isinstance(output, dict) else None
         record_effect(s, reversal_id, record_type=group['record_type'], record_id=group['record_id'],
                       action='reversed', version_after=version,
-                      before={'of_seq': group['seq'], 'step': index, 'command': cmd.name},
+                      before={'of_seq': group['seq'], 'step': index, 'command': cmd.name, **(numbers or {})},
                       event_id=last_event_id(s))
         if adapter is not None and adapter.on_reversed is not None:
             adapter.on_reversed(s, group, reversal_id)
