@@ -12,8 +12,9 @@ from bookflow.company.shipment_models import Selector, _Strict
 class ApproveInput(_Strict):
     messages: list[Selector] | None = Field(default=None, min_length=1, max_length=100, description=(
         'Ready messages waiting for a go, by number or id.'))
-    all_waiting: bool = Field(default=False, description='Every message waiting for a go (at most 100).')
-    batch: Selector | None = Field(default=None, description="A batch's messages waiting for a go (at most 100).")
+    all_waiting: bool = Field(default=False, description='Every message waiting for a go (100 per call; it says when more wait).')
+    batch: Selector | None = Field(default=None, description=(
+        "A batch's messages waiting for a go, only those still as the batch drafted them (100 per call)."))
 
 
 class RetryInput(_Strict):

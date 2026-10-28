@@ -2625,8 +2625,9 @@ MATRIX['delivery draft'] = {
 MATRIX['delivery update'] = {'E_VALIDATION': 'a bad address or nothing to change', 'E_RECORD_NOT_FOUND': 'unknown message',
                              'E_WORK_DEPENDENCY': 'the message is not a draft or held',
                              'E_VERSION_CONFLICT': 'stale expected_version', **_DELIVERY_TAIL}
-MATRIX['delivery send'] = {'E_VALIDATION': 'a message with no To address', 'E_RECORD_NOT_FOUND': 'unknown message',
-                           'E_WORK_DEPENDENCY': 'the message is not a draft',
+MATRIX['delivery send'] = {'E_VALIDATION': 'a message with no To address, or batch with messages',
+                           'E_RECORD_NOT_FOUND': 'unknown message',
+                           'E_WORK_DEPENDENCY': 'the message is not a draft, or the batch is cancelled',
                            'E_VERSION_CONFLICT': 'changed while releasing', **_DELIVERY_TAIL}
 MATRIX['delivery cancel'] = {'E_RECORD_NOT_FOUND': 'unknown message', 'E_WORK_DEPENDENCY': 'already sent or cancelled',
                              'E_VERSION_CONFLICT': 'stale expected_version', 'E_REASON_REQUIRED': 'no --reason',
@@ -2656,8 +2657,9 @@ MATRIX['delivery-template preview'] = {'E_VALIDATION': 'a voided document or mis
                                        'E_RECORD_NOT_FOUND': 'unknown document or template',
                                        'E_INACTIVE_REFERENCE': 'an inactive template'}
 # Document delivery (R112 increment 2): the queue and the transport seam.
-MATRIX['delivery approve'] = {'E_VALIDATION': 'no messages and not all_waiting', 'E_RECORD_NOT_FOUND': 'unknown message',
-                              'E_WORK_DEPENDENCY': 'the message is not ready', 'E_VERSION_CONFLICT': 'changed while approving',
+MATRIX['delivery approve'] = {'E_VALIDATION': 'no messages and not all_waiting, or more than one of them',
+                              'E_RECORD_NOT_FOUND': 'unknown message',
+                              'E_WORK_DEPENDENCY': 'the message is not ready, or the batch is cancelled', 'E_VERSION_CONFLICT': 'changed while approving',
                               'E_PERMISSION': "an agent: a go is a person's act", **_DELIVERY_TAIL}
 MATRIX['delivery retry'] = {'E_VALIDATION': 'no To address', 'E_RECORD_NOT_FOUND': 'unknown message',
                             'E_WORK_DEPENDENCY': 'not held or failed, or held because the document changed',
@@ -2689,8 +2691,9 @@ MATRIX['delivery queue'] = {'E_RECORD_NOT_FOUND': 'unknown customer', 'E_VALIDAT
 MATRIX['delivery batch'] = {'E_VALIDATION': 'no selection, or a missing kind, period or ready; a filter for another kind',
                             'E_RECORD_NOT_FOUND': 'unknown batch, customer or customer type',
                             'E_VERSION_CONFLICT': 'the batch moved meanwhile',
-                            'E_WORK_DEPENDENCY': 'a document refused while drafting (recorded as a skip)',
+                            'E_WORK_DEPENDENCY': 'the set changed since the preview, or another batch fingerprint',
                             **_DELIVERY_TAIL}
 MATRIX['delivery batch-show'] = {'E_RECORD_NOT_FOUND': 'unknown batch'}
+MATRIX['delivery batch-query'] = {'E_VALIDATION': 'invalid state or limit'}
 MATRIX['delivery batch-cancel'] = {'E_RECORD_NOT_FOUND': 'unknown batch', 'E_VERSION_CONFLICT': 'stale expected_version',
                                    'E_REASON_REQUIRED': 'no --reason', **_DELIVERY_TAIL}

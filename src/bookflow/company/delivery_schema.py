@@ -278,10 +278,17 @@ def define_batch_tables(metadata, C, T, common, messages):
         C('schedule_run_id', sa.String(26), 'The schedule run that started it (increment 4); null for a person or '
           'agent.', nullable=True),
         C('cancelled_reason', sa.String(500), 'Why it was cancelled.', nullable=True),
+        C('go_by', sa.String(26), "The person whose go the batch's releases carry, decided once when it began (a "
+          'person who asked to send); null otherwise, so a later continue never adds a go.', nullable=True),
+        C('fingerprint', sa.String(64), 'SHA-256 of the exact set when it began (documents, versions, recipients); '
+          'a run or continue carrying another is refused.', nullable=False),
+        C('drafted', sa.Text, 'Each message as the batch left it (version, recipients hash, content hash), a JSON '
+          'object by message id: approve and send by batch act only on messages still so.', nullable=False),
         sa.CheckConstraint("state IN ('drafting', 'done', 'cancelled')", name='ck_delivery_batch_state'),
         sa.CheckConstraint("(state = 'cancelled') = (cancelled_reason IS NOT NULL)", name='ck_delivery_batch_cancelled'),
         sa.CheckConstraint("json_valid(selection) AND json_type(selection) = 'object' AND json_valid(targets) AND "
-                           "json_type(targets) = 'array' AND json_valid(skipped) AND json_type(skipped) = 'array'",
+                           "json_type(targets) = 'array' AND json_valid(skipped) AND json_type(skipped) = 'array' AND "
+                           "json_valid(drafted) AND json_type(drafted) = 'object'",
                            name='ck_delivery_batch_json'),
         sa.CheckConstraint('planned >= 0 AND position BETWEEN 0 AND planned', name='ck_delivery_batch_position'),
         sa.UniqueConstraint('number', name='uq_delivery_batch_number'),

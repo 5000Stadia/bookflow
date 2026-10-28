@@ -16,6 +16,12 @@ class FlagInput(_Strict):
     document: Selector = Field(description='The document, by number or id.')
 
 
+class UnflagInput(FlagInput):
+    clear: bool = Field(default=False, description=(
+        'Remove the flag instead: back to neutral, where the auto-flag date decides. Without it, an explicit '
+        'opt-out (never email this).'))
+
+
 class FlagOutput(BaseModel):
     kind: str
     document_id: str
@@ -65,6 +71,8 @@ class QueueOutput(BaseModel):
     count: int
     truncated: bool = False
     auto_flag_from: str | None = Field(default=None, description="The company's auto-flag date; null is off.")
+    flag: Literal['email-later', 'not-to-email'] | None = Field(default=None, description=(
+        "With document: that document's flag (null: neutral, the auto-flag date decides)."))
 
 
 class BatchInput(_Strict):
@@ -86,21 +94,28 @@ class BatchInput(_Strict):
     send: bool = Field(default=False, description='Release each draft too.')
     template: Selector | None = Field(default=None, description="Template; default the kind's default.")
     exclude: list[Selector] = Field(default_factory=list, max_length=5000, description=(
-        'Leave these out: document ids (statements: customer ids), from the dry run.'))
+        "Leave these out: the dry run's keys (a combined row's key covers its whole group), or document ids."))
+    fingerprint: str | None = Field(default=None, max_length=64, description=(
+        "The dry run's fingerprint: the run is refused if the set changed since. Continuing: the batch's."))
+    seen: list[str] = Field(default_factory=list, max_length=5000, description=(
+        "Optional: the dry run's row fingerprints, so a refusal names what changed."))
 
 
 class BatchItem(BaseModel):
-    key: str = Field(description='What exclude takes: the document id, or the customer id for a statement.')
+    key: str = Field(description='What exclude takes: the document id, a combined row\'s group key, or the customer '
+                     'id for a statement.')
     kind: str
     customer_id: str
     customer_name: str
     documents: list[str] = Field(default_factory=list, description='Invoice 1007, Statement 2026-09-01 to ...')
     to: list[str] = Field(default_factory=list)
     reason: str | None = Field(default=None, description=(
-        'Skipped: no_address, prefers_mail, not_email, opted_out, in_outbox, sent, excluded or refused.'))
+        'Skipped: no_address, prefers_mail, not_email, opted_out, in_outbox, sent, excluded, refused, not_queued or '
+        'changed (since the preview).'))
     reason_text: str | None = None
     message: str | None = Field(default=None, description='The message drafted for it, or the one already there.')
     status: str | None = None
+    fingerprint: str | None = Field(default=None, description='This row: documents, versions and recipients.')
 
 
 class BatchOutput(BaseModel):
@@ -121,6 +136,11 @@ class BatchOutput(BaseModel):
     kept: list[BatchItem] = Field(default_factory=list, description=(
         'Cancel: the messages that block (released, exported or sent), each with why.'))
     next: dict | None = Field(default=None, description='Input for the next chunk (delivery batch), while drafting.')
+    fingerprint: str | None = Field(default=None, description=(
+        'The exact set (documents, versions, recipients); pass it to the run so a changed set is refused.'))
+    go: bool = Field(default=False, description="Whether its releases carry a person's go (decided when it began).")
+    open_batches: list[str] = Field(default_factory=list, description=(
+        'Dry run: unfinished batches over this same selection; continue one instead of starting another.'))
     version: int | None = None
     warnings: list[str] = Field(default_factory=list)
     next_commands: list[str] = Field(default_factory=list)
@@ -132,3 +152,28 @@ class BatchSelector(_Strict):
 
 class BatchCancelInput(BatchSelector):
     expected_version: int | None = Field(default=None, ge=1)
+
+
+class BatchQueryInput(_Strict):
+    state: Literal['unfinished', 'all'] = Field(default='unfinished', description=(
+        'unfinished: still drafting, or with drafts to send or messages waiting for a go; all: every batch.'))
+    limit: int = Field(default=50, ge=1, le=500)
+
+
+class BatchRow(BaseModel):
+    batch_id: str
+    number: str
+    kind: str
+    state: str
+    planned: int
+    position: int
+    drafts: int = Field(description='Messages still drafts.')
+    waiting: int = Field(description="Ready messages waiting for a person's go.")
+    created_at: str
+    next_commands: list[str] = Field(default_factory=list)
+
+
+class BatchQueryOutput(BaseModel):
+    rows: list[BatchRow] = Field(default_factory=list)
+    count: int
+    truncated: bool = False

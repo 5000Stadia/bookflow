@@ -174,6 +174,7 @@ def mount(app, *, render, run, credential, page_error, role_allows):
             if request.query_params.get(key):
                 query[key] = request.query_params[key]
         listing = run(request, 'delivery query', query, company_id)
+        batches = run(request, 'delivery batch-query', {'state': 'unfinished', 'limit': 20}, company_id)['rows']
         states = {}
         for row in listing['rows']:
             if row['kind'] == 'invoice' and row['source_ids']:
@@ -185,6 +186,7 @@ def mount(app, *, render, run, credential, page_error, role_allows):
         return render('delivery_outbox.html', request, status_code=status_code, company=shown,
                       company_id=shown['company_id'], listing=listing, tabs=TABS, tab=query['status'],
                       filters=query, kinds=KINDS, kind_label=KIND_LABEL, states=states, error=error, result=result,
+                      batches=batches,
                       export=export,
                       connection=_connection_note(listing.get('connection', 'none')),
                       can_write=allowed(request, shown, 'delivery send'),
@@ -258,7 +260,7 @@ def mount(app, *, render, run, credential, page_error, role_allows):
             queue = run(request, 'delivery queue', {'kind': kind, 'document': document}, company_id)
             queued = next((r for r in queue['rows'] if r['document_id'] == document), None)
             state = {'checked': queued is not None, 'why': queued['why'] if queued else None,
-                     'problem': queued['problem'] if queued else None}
+                     'problem': queued['problem'] if queued else None, 'flag': queue.get('flag')}
         except BookflowError as e:
             if e.code in _PASS:
                 raise
@@ -283,9 +285,16 @@ def mount(app, *, render, run, credential, page_error, role_allows):
         kind, document = form.get('kind') or '', form.get('document') or ''
         error = None
         try:
-            command = 'delivery flag' if form.get('email_later') == 'on' else 'delivery unflag'
-            run(request, command, {'kind': kind, 'document': document}, company_id,
-                headers=headers(form, 'Email later' if command == 'delivery flag' else 'Not to email'))
+            # Unticking clears the flag back to neutral; only "Never email this" writes a lasting opt-out.
+            raw = {'kind': kind, 'document': document}
+            if form.get('never') == '1':
+                command, reason = 'delivery unflag', 'Never email this'
+            elif form.get('email_later') == 'on':
+                command, reason = 'delivery flag', 'Email later'
+            else:
+                command, reason = 'delivery unflag', 'Email later cleared'
+                raw['clear'] = True
+            run(request, command, raw, company_id, headers=headers(form, reason))
         except BookflowError as e:
             if e.code in _PASS:
                 raise
@@ -328,7 +337,10 @@ def mount(app, *, render, run, credential, page_error, role_allows):
                 raw[key] = source[key].strip()
         return selection, raw
 
-    def batch_page(request, company_id, source, *, error=None, result=None, batch=None, status_code=200):
+    def batch_page(request, company_id, source, *, error=None, result=None, batch=None, status_code=200,
+                   stopped=False):
+        """The selection with its preview, or one batch's view (``batch``): a refusal on a batch's continue, send or
+        cancel keeps that view with the refusal in place (``stopped`` halts the automatic loop, leaving Continue)."""
         shown = company(request, company_id)
         selection, raw = batch_input(source)
         preview = None
@@ -346,12 +358,17 @@ def mount(app, *, render, run, credential, page_error, role_allows):
         return render('delivery_batch.html', request, status_code=status_code, company=shown,
                       company_id=shown['company_id'], selection=selection, values=source, preview=preview,
                       batch=batch, listing=listing, error=error, result=result, kind_label=KIND_LABEL,
+                      stopped=stopped or error is not None,
                       can_write=allowed(request, shown, 'delivery batch'), is_person=credential(request) is not None)
 
     @app.get('/c/{company_id}/delivery/batch')
     def delivery_batch(request: Request, company_id: str):
         try:
-            return batch_page(request, company_id, dict(request.query_params))
+            source = dict(request.query_params)
+            if source.get('batch'):  # back to a batch: from the Outbox, or a closed tab
+                batch = run(request, 'delivery batch-show', {'batch': source['batch']}, company_id)
+                return batch_page(request, company_id, source, batch=batch, stopped=True)
+            return batch_page(request, company_id, source)
         except BookflowError as e:
             return page_error(request, e)
 
@@ -360,8 +377,10 @@ def mount(app, *, render, run, credential, page_error, role_allows):
         action = form.get('action') or 'draft'
         try:
             if action == 'continue':
-                batch = run(request, 'delivery batch', {'batch': form['batch']}, company_id,
-                            headers=headers(form, 'Batch of emails'))
+                raw = {'batch': form['batch']}
+                if form.get('fingerprint'):
+                    raw['fingerprint'] = form['fingerprint']
+                batch = run(request, 'delivery batch', raw, company_id, headers=headers(form, 'Batch of emails'))
             elif action == 'send':
                 out = run(request, 'delivery send', {'batch': form['batch']}, company_id,
                           headers=headers(form, 'Send the batch'))
@@ -378,14 +397,25 @@ def mount(app, *, render, run, credential, page_error, role_allows):
                 _, raw = batch_input(form)
                 keep = set(data.getlist('keep'))
                 raw['exclude'] = [key for key in data.getlist('key') if key not in keep]
+                if form.get('fingerprint'):
+                    raw['fingerprint'] = form['fingerprint']
+                    raw['seen'] = list(data.getlist('seen'))
                 if form.get('send') == 'on':
                     raw['send'] = True
                 batch = run(request, 'delivery batch', raw, company_id, headers=headers(form, 'Batch of emails'))
         except BookflowError as e:
             if e.code in _PASS:
                 raise
-            return batch_page(request, company_id, form, error=e.to_dict(),
-                              status_code=200 if request.headers.get('HX-Request') else 400)
+            status = 200 if request.headers.get('HX-Request') else 400
+            if action in ('continue', 'send', 'cancel') and form.get('batch'):
+                try:
+                    batch = run(request, 'delivery batch-show', {'batch': form['batch']}, company_id)
+                except BookflowError:
+                    batch = None
+                if batch is not None:
+                    return batch_page(request, company_id, form, batch=batch, error=e.to_dict(),
+                                      status_code=status)
+            return batch_page(request, company_id, form, error=e.to_dict(), status_code=status)
         if batch['state'] == 'nothing':
             return batch_page(request, company_id, form, result=' '.join(batch.get('warnings') or []))
         return batch_page(request, company_id, form, batch=batch)

@@ -88,8 +88,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +3 drafts and packing (R181 increment 4): shipment create, pack, cancel.
     # +11 the delivery queue (R112 increment 2): delivery approve/retry/run, delivery-connection
     # add/update/enable/disable/remove/check/show/query.
-    # +6 flags and batches (R112 increment 3): delivery flag/unflag/queue/batch/batch-show/batch-cancel.
-    assert len(rows) == 797
+    # +7 flags and batches (R112 increment 3): delivery flag/unflag/queue/batch/batch-show/batch-query/batch-cancel.
+    assert len(rows) == 798
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).

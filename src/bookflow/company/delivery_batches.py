@@ -20,6 +20,7 @@ one entry there, its reversal this cancel, and nothing later depends on a delive
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from decimal import Decimal, InvalidOperation
 from types import SimpleNamespace
@@ -52,6 +53,8 @@ SKIP_TEXT = {
     'sent': 'already sent',
     'excluded': 'left out of this batch',
     'refused': 'could not be drafted',
+    'not_queued': 'no longer to be emailed',
+    'changed': 'changed since the preview',
 }
 
 
@@ -96,7 +99,7 @@ def documents(s, kinds, *, ids=None, date_from=None, date_to=None) -> list[dict]
     txn = [_TXN[k] for k in kinds if k in _TXN]
     if txn:
         t, r, p = c.transactions, c.transaction_revisions, c.sales_profiles
-        q = (sa.select(t.c.id, t.c.type, t.c.number, r.c.date, p.c.customer_id)
+        q = (sa.select(t.c.id, t.c.type, t.c.number, r.c.date, p.c.customer_id, r.c.id.label('rev'))
              .select_from(t.join(r, r.c.id == t.c.current_revision_id).join(p, p.c.revision_id == r.c.id))
              .where(t.c.type.in_(txn), t.c.status == 'posted'))
         if ids is not None:
@@ -107,10 +110,10 @@ def documents(s, kinds, *, ids=None, date_from=None, date_to=None) -> list[dict]
             q = q.where(r.c.date <= date_to)
         for row in s.company.conn.execute(q).mappings():
             out.append(dict(kind='invoice' if row['type'] == 'invoice' else 'sales-receipt', id=row['id'],
-                            number=row['number'], date=row['date'], customer_id=row['customer_id']))
+                            number=row['number'], date=row['date'], customer_id=row['customer_id'], rev=row['rev']))
     if 'estimate' in kinds:
         w, r = c.work_documents, c.work_revisions
-        q = (sa.select(w.c.id, w.c.number, r.c.date, r.c.customer_id)
+        q = (sa.select(w.c.id, w.c.number, r.c.date, r.c.customer_id, r.c.id.label('rev'))
              .select_from(w.join(r, r.c.id == w.c.current_revision_id))
              .where(w.c.kind == 'estimate', w.c.status.in_(('open', 'accepted'))))
         if ids is not None:
@@ -121,7 +124,7 @@ def documents(s, kinds, *, ids=None, date_from=None, date_to=None) -> list[dict]
             q = q.where(r.c.date <= date_to)
         for row in s.company.conn.execute(q).mappings():
             out.append(dict(kind='estimate', id=row['id'], number=row['number'], date=row['date'],
-                            customer_id=row['customer_id']))
+                            customer_id=row['customer_id'], rev=row['rev']))
     return out
 
 
@@ -225,7 +228,8 @@ def _flag_out(s, ctx, kind, src, flag, version=None, warnings=()):
                          warnings=list(warnings))
 
 
-def prepare_flag(s, ctx, inp, wanted: bool) -> Plan:
+def prepare_flag(s, ctx, inp, wanted: bool | None) -> Plan:
+    """``wanted`` True flags Email later, False opts out (never email this), None clears the flag back to neutral."""
     read = d.reader(s, ctx)
     src = d.resolve_source(read, s.company_row['id'], SimpleNamespace(kind=inp.kind, document=inp.document,
                                                                       customer=None, date_from=None, date_to=None))
@@ -234,6 +238,13 @@ def prepare_flag(s, ctx, inp, wanted: bool) -> Plan:
                                     ).mappings().first()
     before = dict(before) if before else None
     at = clock.now_iso()
+    if wanted is None:
+        if before is None:
+            return Plan(_flag_out(s, ctx, inp.kind, src, None), dict(src=src, unchanged=True))
+        out = _flag_out(s, ctx, inp.kind, src, before['wanted'], before['version'])
+        if s.dry_run:
+            out = out.model_copy(update={'flag': None})
+        return Plan(out, dict(src=src, before=before, after=None, delete=True))
     if before is not None and bool(before['wanted']) == wanted:
         return Plan(_flag_out(s, ctx, inp.kind, src, wanted, before['version']), dict(src=src, unchanged=True))
     if before is None:
@@ -261,6 +272,13 @@ def apply_flag(plan, ctx, s) -> Applied:
     if plan.data.get('unchanged'):
         return Applied(plan.preview, [], f'{src.label}: unchanged')
     f, before, after = c.delivery_flags, plan.data['before'], plan.data['after']
+    if plan.data.get('delete'):
+        done = s.company.conn.execute(f.delete().where(f.c.id == before['id'], f.c.version == before['version']))
+        if done.rowcount != 1:
+            raise BookflowError('E_VERSION_CONFLICT', details={'record_type': FLAG_RECORD, 'record_id': before['id']})
+        out = _flag_out(s, ctx, src.kind, src, None)
+        return Applied(out, [Touched(FLAG_RECORD, before['id'], 'delete', before['version'], None, None, before,
+                                     db='company')], f'{src.label}: Email later cleared')
     if before is None:
         s.company.conn.execute(f.insert().values(**after))
         touched = Touched(FLAG_RECORD, after['id'], 'create', None, 1, after, db='company')
@@ -313,7 +331,12 @@ def queue(s, ctx, inp) -> bm.QueueOutput:
                                 customer_id=doc['customer_id'], customer_name=person.get('full_name') or '',
                                 method=person.get('method') or 'none', why=why, to=to,
                                 problem=None if to else 'no address'))
-    return bm.QueueOutput(rows=rows, count=len(rows), truncated=len(found) > inp.limit, auto_flag_from=auto_from)
+    flag = None
+    if inp.document:
+        flag = next((('email-later' if w else 'not-to-email') for (k, i), w in flags(s, [inp.document]).items()
+                     if i == inp.document and (inp.kind is None or k == inp.kind)), None)
+    return bm.QueueOutput(rows=rows, count=len(rows), truncated=len(found) > inp.limit, auto_flag_from=auto_from,
+                          flag=flag)
 
 
 # ---------------------------------------------------------------- the selection
@@ -393,8 +416,32 @@ def _type_ids(s, selector) -> set[str]:
     return out
 
 
-def resolve(s, ctx, inp) -> tuple[str, list[dict], list[dict]]:
-    """(kind, targets, skipped) for a selection: every message to draft, and who is left out with why."""
+def _sha(value) -> str:
+    return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def row_fingerprint(entry) -> str:
+    """One row as previewed: its kind, customer, documents and their versions, recipients, period and balance."""
+    return _sha([entry['kind'], entry['customer_id'], entry['ids'], entry.get('revs') or [],
+                 sorted(entry.get('to') or []), entry.get('date_from'), entry.get('date_to'),
+                 entry.get('balance')])[:16]
+
+
+def set_fingerprint(rows) -> str:
+    return _sha(sorted(rows))
+
+
+def group_key(docs) -> str:
+    """A row's key: the document's id, or for a combined row one key covering its whole group."""
+    if len(docs) == 1:
+        return docs[0]['id']
+    return 'G-' + _sha([x['id'] for x in docs])[:24]
+
+
+def resolve(s, ctx, inp) -> tuple[str, list[dict], list[dict], list[str]]:
+    """(kind, targets, skipped, row fingerprints) for a selection: every message to draft, and who is left out with
+    why. The fingerprints cover every row the preview would draft, excluded ones too, so a preview and the run it
+    leads to share one fingerprint while the books stand still."""
     check_selection(inp)
     people = customers(s)
     within = types = None
@@ -406,7 +453,7 @@ def resolve(s, ctx, inp) -> tuple[str, list[dict], list[dict]]:
         types = _type_ids(s, inp.customer_type)
     excluded = set(inp.exclude or ())
     recipients = Recipients(s, ctx)
-    targets, skipped = [], []
+    targets, skipped, prints = [], [], []
 
     def name(cid):
         return (people.get(cid) or {}).get('full_name') or cid
@@ -422,6 +469,21 @@ def resolve(s, ctx, inp) -> tuple[str, list[dict], list[dict]]:
         if reason:
             out.update(reason=reason, message=message)
         return out
+
+    def place(entry, to, *, keyed):
+        """A would-be row: no address skips it; otherwise it is fingerprinted, then left out if excluded."""
+        if not to:
+            entry.update(reason='no_address')
+            skipped.append(entry)
+            return
+        entry['to'] = to
+        entry['fp'] = row_fingerprint(entry)
+        prints.append(entry['fp'])
+        if keyed in excluded:
+            entry.update(reason='excluded')
+            skipped.append(entry)
+        else:
+            targets.append(entry)
 
     if inp.kind == 'statement':
         date_from, date_to = _period(inp)
@@ -444,9 +506,7 @@ def resolve(s, ctx, inp) -> tuple[str, list[dict], list[dict]]:
             reason = message = None
             method = (people.get(cid) or {}).get('method')
             state = states.get(('statement', cid, date_from, date_to))
-            if cid in excluded:
-                reason = 'excluded'
-            elif state:
+            if state:
                 reason, message = state
             elif method == 'mail':
                 reason = 'prefers_mail'
@@ -454,12 +514,12 @@ def resolve(s, ctx, inp) -> tuple[str, list[dict], list[dict]]:
                 reason = 'not_email'
             entry = item('statement', cid, [], key=cid, date_from=date_from, date_to=date_to, reason=reason,
                          message=message)
-            if not reason:
-                entry['to'] = recipients(cid)
-                if not entry['to']:
-                    entry.update(reason='no_address')
-            (skipped if entry.get('reason') else targets).append(entry)
-        return 'statement', targets, skipped
+            if reason:
+                skipped.append(entry)
+                continue
+            entry['balance'] = str(amount)
+            place(entry, recipients(cid), keyed=cid)
+        return 'statement', targets, skipped, prints
 
     if inp.kind == 'notice':
         n = c.overdue_notices
@@ -472,18 +532,16 @@ def resolve(s, ctx, inp) -> tuple[str, list[dict], list[dict]]:
                 continue
             state = states.get(('notice', row['id']))
             reason, message = (state if state else (None, None))
-            if row['id'] in excluded:
-                reason = 'excluded'
-            elif not reason and (people.get(cid) or {}).get('method') == 'mail':
+            if not reason and (people.get(cid) or {}).get('method') == 'mail':
                 reason = 'prefers_mail'
             entry = item('notice', cid, [{'id': row['id'], 'number': None}], key=row['id'], reason=reason,
                          message=message)
-            if not reason:
-                entry['to'] = recipients(cid)
-                if not entry['to']:
-                    entry.update(reason='no_address')
-            (skipped if entry.get('reason') else targets).append(entry)
-        return 'notice', targets, skipped
+            if reason:
+                skipped.append(entry)
+                continue
+            entry['revs'] = [row['as_of']]
+            place(entry, recipients(cid), keyed=row['id'])
+        return 'notice', targets, skipped, prints
 
     kinds = [inp.kind] if inp.kind else list(DOCUMENT_KINDS)
     wanted, states, auto_from = flags(s), message_states(s, kinds), _auto_from(s)
@@ -503,10 +561,6 @@ def resolve(s, ctx, inp) -> tuple[str, list[dict], list[dict]]:
         elif (people.get(doc['customer_id']) or {}).get('method') == 'mail' and not wanted.get(
                 (doc['kind'], doc['id'])):
             reason = 'prefers_mail'
-        if not reason and doc['id'] in excluded:
-            reason = 'excluded'
-        if not reason and not recipients(doc['customer_id']):
-            reason = 'no_address'
         if reason:
             skipped.append(item(doc['kind'], doc['customer_id'], [doc], key=doc['id'], reason=reason,
                                 message=message))
@@ -515,10 +569,24 @@ def resolve(s, ctx, inp) -> tuple[str, list[dict], list[dict]]:
         groups.setdefault(group, []).append(doc)
     for group in groups.values():
         first = group[0]
-        entry = item(first['kind'], first['customer_id'], group, key=first['id'])
-        entry['to'] = recipients(first['customer_id'])
-        targets.append(entry)
-    return inp.kind or 'mixed', targets, skipped
+        key = group_key(group)
+        entry = item(first['kind'], first['customer_id'], group, key=key)
+        entry['revs'] = [x['rev'] for x in group]
+        # A document id left out of a combined row leaves out that document alone; the row's key leaves out all.
+        out = [x for x in group if x['id'] in excluded] if len(group) > 1 and key not in excluded else []
+        to = recipients(first['customer_id'])
+        place(entry, to, keyed=key)
+        if out and targets and targets[-1] is entry:
+            targets.pop()
+            for x in out:
+                skipped.append(dict(item(x['kind'], x['customer_id'], [x], key=x['id'], reason='excluded'), to=to))
+            rest = [x for x in group if x['id'] not in excluded]
+            if rest:
+                kept = dict(item(first['kind'], first['customer_id'], rest, key=group_key(rest)), to=to,
+                            revs=[x['rev'] for x in rest])
+                kept['fp'] = row_fingerprint(kept)
+                targets.append(kept)
+    return inp.kind or 'mixed', targets, skipped, prints
 
 
 def _item(entry, numbers=None) -> bm.BatchItem:
@@ -532,7 +600,7 @@ def _item(entry, numbers=None) -> bm.BatchItem:
             text += f": {entry['text']}"
     return bm.BatchItem(key=entry['key'], kind=entry['kind'], customer_id=entry['customer_id'],
                         customer_name=entry['customer_name'], documents=entry['documents'], to=entry.get('to') or [],
-                        reason=reason, reason_text=text, message=message)
+                        reason=reason, reason_text=text, message=message, fingerprint=entry.get('fp'))
 
 
 # ---------------------------------------------------------------- batch rows
@@ -561,14 +629,6 @@ def _messages(s, batch_id) -> list[dict]:
                                                     .order_by(t.c.created_at, t.c.id)).mappings()]
 
 
-def drafts_to_release(s, selector) -> tuple[list[str], int]:
-    """A batch's drafts for ``delivery send --batch``: one chunk, and how many more wait."""
-    t = c.delivery_messages
-    ids = [r[0] for r in s.company.conn.execute(sa.select(t.c.id).where(
-        t.c.batch_id == row(s, selector)['id'], t.c.status == 'draft').order_by(t.c.created_at, t.c.id))]
-    return ids[:CHUNK], max(0, len(ids) - CHUNK)
-
-
 def _output(s, batch, *, messages=(), cancelled=(), kept=(), warnings=(), with_targets=False) -> bm.BatchOutput:
     targets = json.loads(batch['targets'])
     skipped = json.loads(batch['skipped'])
@@ -594,7 +654,8 @@ def _output(s, batch, *, messages=(), cancelled=(), kept=(), warnings=(), with_t
             would.append(out.model_copy(update={'message': number, 'status': statuses.get(number)}))
     remaining = batch['planned'] - batch['position'] if batch['state'] == 'drafting' else 0
     state = batch['state']
-    nxt = {'batch': batch['number']} if state == 'drafting' and batch.get('id') else None
+    nxt = ({'batch': batch['number'], 'fingerprint': batch['fingerprint']} if state == 'drafting' and batch.get('id')
+           else None)
     commands = []
     if nxt:
         commands.append(f"delivery batch --batch {batch['number']}")
@@ -606,17 +667,59 @@ def _output(s, batch, *, messages=(), cancelled=(), kept=(), warnings=(), with_t
         selection=json.loads(batch['selection']), planned=batch['planned'], drafted=drafted, released=released,
         remaining=remaining, would_draft=would, skipped=[_item(x) for x in skipped], messages=list(messages),
         cancelled=list(cancelled), kept=list(kept), next=nxt, version=batch.get('version'),
-        warnings=list(warnings), next_commands=commands)
+        warnings=list(warnings), next_commands=commands, fingerprint=batch.get('fingerprint'),
+        go=bool(batch.get('go_by')))
 
 
 # ---------------------------------------------------------------- batch
 
+_SAME = ('exclude', 'send', 'fingerprint', 'seen', 'template')
+
+
+def _selection(inp) -> dict:
+    return inp.model_dump(exclude_none=True, exclude_defaults=True, exclude={'batch', 'fingerprint', 'seen'})
+
+
+def _changed(batch_number, *, what, given=None, seen=(), targets=(), skipped=(), prints=()):
+    """A run whose set is not the one previewed: refused, naming what changed when the preview's rows are given."""
+    lines = []
+    if seen:
+        now = {e['fp']: e for e in list(targets) + [x for x in skipped if x.get('fp')]}
+        new = [e for fp, e in now.items() if fp not in set(seen)]
+        gone = len(set(seen) - set(now))
+        lines += [f"{e['customer_name']}: {', '.join(e['documents'])} is new or changed" for e in new[:20]]
+        if len(new) > 20:
+            lines.append(f'{len(new) - 20} more new or changed')
+        if gone:
+            lines.append(f'{gone} previewed row(s) no longer match (changed, posted elsewhere, or no longer to send)')
+    text = f"The set changed since the {what}" + (': ' + '; '.join(lines) if lines else '') + '. Preview again.'
+    return BookflowError('E_WORK_DEPENDENCY', message=text, details={
+        'record_type': RECORD, 'record_id': batch_number, 'problem': text, 'changes': lines,
+        'next': 'delivery batch with dry_run, then the run with its fingerprint'})
+
+
+def unfinished_over(s, selection) -> list[str]:
+    """Batches still drafting over this same selection (what is left out or sent aside)."""
+    t = c.delivery_batches
+    same = {k: v for k, v in selection.items() if k not in _SAME}
+    out = []
+    for number, text in s.company.conn.execute(sa.select(t.c.number, t.c.selection).where(
+            t.c.state == 'drafting').order_by(t.c.created_at)):
+        if {k: v for k, v in json.loads(text).items() if k not in _SAME} == same:
+            out.append(number)
+    return out
+
+
 def prepare_batch(s, ctx, inp) -> Plan:
     if inp.batch:
-        given = [k for k in inp.model_fields_set if k not in ('batch',)]
+        fields = type(inp).model_fields
+        given = [k for k in inp.model_fields_set if k not in ('batch', 'fingerprint')
+                 and getattr(inp, k) != fields[k].get_default(call_default_factory=True)]
         if given:
             raise _invalid(given[0], 'continue a batch with batch alone; its selection is fixed')
         batch = row(s, inp.batch)
+        if inp.fingerprint and inp.fingerprint != batch['fingerprint']:
+            raise _changed(batch['number'], what=f"batch {batch['number']} was shown")
         if batch['state'] != 'drafting':
             return Plan(_output(s, batch, warnings=[f"Batch {batch['number']} is {batch['state']}; nothing to "
                                                     'draft.']), dict(batch=batch, idle=True))
@@ -625,22 +728,32 @@ def prepare_batch(s, ctx, inp) -> Plan:
             out = _output(s, batch).model_copy(update={'would_draft': [_item(x) for x in targets]})
             return Plan(out, dict(batch=batch, idle=True))
         return Plan(_output(s, batch), dict(batch=batch))
-    kind, targets, skipped = resolve(s, ctx, inp)
-    selection = inp.model_dump(exclude_none=True, exclude_defaults=True, exclude={'batch'})
+    kind, targets, skipped, prints = resolve(s, ctx, inp)
+    fingerprint = set_fingerprint(prints)
+    if inp.fingerprint and inp.fingerprint != fingerprint and not s.dry_run:
+        raise _changed(None, what='preview', seen=inp.seen, targets=targets, skipped=skipped)
+    selection = _selection(inp)
+    person = s.actor.kind == 'human'
     preview = dict(id=None, number=None, kind=kind, selection=json.dumps(selection, sort_keys=True),
                    targets=json.dumps(targets), skipped=json.dumps(skipped), planned=len(targets), position=0,
                    send=inp.send, state='preview' if s.dry_run else ('drafting' if targets else 'nothing'),
-                   version=None)
+                   version=None, fingerprint=fingerprint, drafted='{}',
+                   go_by=s.actor.id if inp.send and person else None)
     warnings = []
     if not targets:
         warnings.append('Nothing to draft: ' + ('every match is skipped, each with why.' if skipped else
                                                 'nothing matches this selection.'))
     if s.dry_run:
+        open_batches = unfinished_over(s, selection)
+        if open_batches:
+            warnings.append(f"Batch {', '.join(open_batches)} over this selection is still drafting: continue it "
+                            f"(delivery batch --batch {open_batches[0]}) rather than start another.")
         out = _output(s, preview, warnings=warnings).model_copy(update={
-            'would_draft': [_item(x) for x in targets], 'state': 'preview', 'remaining': len(targets)})
+            'would_draft': [_item(x) for x in targets], 'state': 'preview', 'remaining': len(targets),
+            'open_batches': open_batches, 'go': False})
         if targets:
-            out.next_commands.insert(0, 'the same delivery batch without dry_run drafts them, '
-                                        f'{CHUNK} per call')
+            out.next_commands.insert(0, 'the same delivery batch without dry_run, with this fingerprint, drafts '
+                                        f'them, {CHUNK} per call')
         return Plan(out, dict(idle=True))
     if not targets:
         return Plan(_output(s, preview, warnings=warnings), dict(idle=True))
@@ -672,18 +785,91 @@ def apply_batch(plan, ctx, s) -> Applied:
     return Applied(out, touched, f"batch {batch['number']}: drafted {len(drafted)}{left}")
 
 
+def stamp(s, message) -> dict:
+    """A message as the batch left it: approve and send by batch act only on messages still so."""
+    docs = d._docs(s, [message['id']]).get(message['id'], [])
+    return dict(number=message['number'], version=message['version'],
+                recipients=_sha([message[k] for k in ('to_addresses', 'cc_addresses', 'bcc_addresses')]),
+                content=_sha([message[k] for k in ('subject', 'body', 'reply_to', 'from_name', 'from_address')]
+                             + [x['sha256'] for x in docs]))
+
+
+def drift(s, message, stamped) -> str | None:
+    """Why a message is no longer as its batch drafted it, or None."""
+    if stamped is None:
+        return 'not as this batch drafted it'
+    now = stamp(s, message)
+    if now['recipients'] != stamped['recipients']:
+        return 'its recipients changed since the batch drafted it'
+    if now['content'] != stamped['content']:
+        return 'its content changed since the batch drafted it'
+    if now['version'] != stamped['version']:
+        return 'it changed since the batch drafted it'
+    return None
+
+
+def _recheck(s, batch, chunk, selection):
+    """The opt-outs that win mid-batch: an unflag, a customer switched to mail, a document changed since the
+    preview, or one member of a combined row that gained a message. Yields (entry to draft or None, skips)."""
+    kinds = sorted({e['kind'] for e in chunk if e['kind'] in DOCUMENT_KINDS})
+    ids = [i for e in chunk if e['kind'] in DOCUMENT_KINDS for i in e['ids']]
+    people = customers(s)
+    wanted = flags(s, ids) if ids else {}
+    states = message_states(s, kinds) if kinds else {}
+    now = {x['id']: x for x in documents(s, kinds, ids=ids)} if ids else {}
+    auto_from = _auto_from(s)
+    for entry in chunk:
+        method = (people.get(entry['customer_id']) or {}).get('method')
+        if entry['kind'] not in DOCUMENT_KINDS:
+            if method == 'mail':
+                yield None, [dict(entry, reason='prefers_mail', text='switched to mail after the batch began')]
+            elif entry['kind'] == 'statement' and selection.get('method') == 'email' and method != 'email':
+                yield None, [dict(entry, reason='not_email')]
+            else:
+                yield entry, []
+            continue
+        keep, skips = [], []
+        revs = entry.get('revs') or [None] * len(entry['ids'])
+        for i, (doc_id, label, rev) in enumerate(zip(entry['ids'], entry['documents'], revs)):
+            one = dict(entry, ids=[doc_id], documents=[label], key=doc_id, revs=[rev])
+            flag, state, doc = wanted.get((entry['kind'], doc_id)), states.get((entry['kind'], doc_id)), now.get(doc_id)
+            if state:
+                skips.append(dict(one, reason=state[0], message=state[1]))
+            elif flag is False:
+                skips.append(dict(one, reason='opted_out', text='marked not to email after the batch began'))
+            elif not flag and method == 'mail':
+                skips.append(dict(one, reason='prefers_mail', text='switched to mail after the batch began'))
+            elif doc is not None and selection.get('queued') and not to_be_emailed(doc, people, wanted, auto_from):
+                skips.append(dict(one, reason='not_queued'))
+            elif doc is not None and rev is not None and doc['rev'] != rev:
+                skips.append(dict(one, reason='changed', text='the document was changed after the preview'))
+            else:
+                keep.append(i)
+        if not keep:
+            yield None, skips
+        elif len(keep) == len(entry['ids']):
+            yield entry, skips
+        else:
+            yield dict(entry, ids=[entry['ids'][i] for i in keep], documents=[entry['documents'][i] for i in keep],
+                       revs=[revs[i] for i in keep]), skips
+
+
 def draft_chunk(s, ctx, batch):
-    """Draft the next ``CHUNK`` targets through ``delivery draft``'s planner; a target that gained a message or can
-    no longer be drafted is skipped, naming why. With ``send``, each draft is released too."""
+    """Draft the next ``CHUNK`` targets through ``delivery draft``'s planner; a target that gained a message, was opted
+    out, changed since the preview or can no longer be drafted is skipped, naming why. With ``send``, each draft is
+    released too, carrying the go decided when the batch began (``go_by``), never the continuing actor's."""
     from bookflow.company import delivery_models as m  # noqa: F401
     conn, t = s.company.conn, c.delivery_batches
     targets, skipped = json.loads(batch['targets']), json.loads(batch['skipped'])
-    selection = json.loads(batch['selection'])
+    selection, stamps = json.loads(batch['selection']), json.loads(batch.get('drafted') or '{}')
     start, end = batch['position'], min(batch['position'] + CHUNK, batch['planned'])
     read = d.reader(s, ctx)
     drafted, warnings, touched = [], [], []
-    person = s.actor.kind == 'human'
-    for entry in targets[start:end]:
+    go_by = batch.get('go_by')
+    for entry, skips in _recheck(s, batch, targets[start:end], selection):
+        skipped += skips
+        if entry is None:
+            continue
         ids = entry['ids']
         inp = SimpleNamespace(kind=entry['kind'], document=ids[0] if ids else None, documents=ids[1:] or None,
                               combine=len(ids) > 1, customer=entry['customer_id'] if entry['kind'] == 'statement'
@@ -701,42 +887,120 @@ def draft_chunk(s, ctx, batch):
         if plan.data.get('existing'):
             skipped.append(dict(entry, reason='in_outbox', message=plan.data['row']['number']))
             continue
-        if plan.data['row']['to_addresses'] == '[]':
+        to = json.loads(plan.data['row']['to_addresses'])
+        if not to:
             skipped.append(dict(entry, reason='no_address'))
+            continue
+        if entry.get('fp') and sorted(to) != sorted(entry.get('to') or []):
+            skipped.append(dict(entry, reason='changed', text='the recipients changed after the preview (now '
+                                + ', '.join(to) + ')'))
             continue
         applied = d.apply_draft(plan, ctx, s)
         touched += applied.touched
         message = plan.data['row']
         drafted.append(message['number'])
         if batch['send']:
-            # Freshly drafted in this write, so not stale. R187: an actor holding delivery.send releases with a go;
-            # until then a person's release is their go and an agent's waits for one.
+            # Freshly drafted in this write, so not stale. R187: the go is the one decided when the batch began: a
+            # person who asked to send gave it; an agent's batch waits for a person's approval of these messages.
             at = message['updated_at']
             after = dict(d._touch(s, ctx, message, at), status='ready', released_by=s.actor.id, released_at=at)
             details = {'released_by': s.actor.id, 'batch': batch['id']}
-            if person:
-                after.update(go_by=s.actor.id, go_at=at)
-                details.update(go_by=s.actor.id, go_at=at)
+            if go_by:
+                after.update(go_by=go_by, go_at=at)
+                details.update(go_by=go_by, go_at=at)
             d._write_row(s, message, after)
             event = d._event(s, ctx, after['id'], 'released', 'ready', details, at=at)
             touched += [Touched(d.RECORD, after['id'], 'update', message['version'], after['version'], after,
                                 message, db='company'),
                         Touched('delivery_event', event['id'], 'create', None, None, event, db='company')]
-    if batch['send'] and drafted and not person:
+            message = after
+        stamps[message['id']] = stamp(s, message)
+    if batch['send'] and drafted and not go_by:
         warnings.append("An agent's release waits for a person's go (delivery approve --batch).")
     before = dict(batch)
     at = clock.now_iso()
-    batch = dict(batch, position=end, skipped=json.dumps(skipped), state='done' if end >= batch['planned'] else
-                 'drafting', version=batch['version'] + 1, updated_at=at, updated_by=s.actor.id,
-                 updated_via=ctx.interface.value)
+    batch = dict(batch, position=end, skipped=json.dumps(skipped), drafted=json.dumps(stamps, sort_keys=True),
+                 state='done' if end >= batch['planned'] else 'drafting', version=batch['version'] + 1,
+                 updated_at=at, updated_by=s.actor.id, updated_via=ctx.interface.value)
     done = conn.execute(t.update().where(t.c.id == batch['id'], t.c.version == before['version']).values(
-        **{k: batch[k] for k in ('position', 'skipped', 'state', 'version', 'updated_at', 'updated_by',
+        **{k: batch[k] for k in ('position', 'skipped', 'drafted', 'state', 'version', 'updated_at', 'updated_by',
                                  'updated_via')}))
     if done.rowcount != 1:
         raise BookflowError('E_VERSION_CONFLICT', details={'record_type': RECORD, 'record_id': batch['id']})
     touched.append(Touched(RECORD, batch['id'], 'update', before['version'], batch['version'], batch, before,
                            db='company'))
     return drafted, warnings, touched, batch
+
+
+def bound(s, selector, want, limit) -> tuple[dict, list[dict], int, list[str]]:
+    """``approve --batch`` (want ``waiting``) and ``send --batch`` (want ``draft``) act only on messages still in the
+    batch and as it drafted them (version, recipients, content): (batch, rows, how many more wait, skips named)."""
+    batch = row(s, selector)
+    if batch['state'] == 'cancelled':
+        text = f"Batch {batch['number']} is cancelled: nothing in it is approved or sent by its name."
+        raise BookflowError('E_WORK_DEPENDENCY', message=text, details={
+            'record_type': RECORD, 'record_id': batch['id'], 'number': batch['number'], 'status': 'cancelled',
+            'problem': text})
+    stamps = json.loads(batch['drafted'])
+    act, skips = [], []
+    for message in _messages(s, batch['id']):
+        if want == 'draft' and message['status'] != 'draft':
+            continue
+        if want == 'waiting' and (message['status'] != 'ready' or message['go_by'] is not None):
+            continue
+        why = drift(s, message, stamps.get(message['id']))
+        if why:
+            skips.append(f"{message['number']} ({why}; act on it by its number after checking it)")
+        else:
+            act.append(message)
+    return batch, act[:limit], max(0, len(act) - limit), skips
+
+
+def restamp(s, ctx, batch_id, messages) -> Touched:
+    """After ``send`` or ``approve`` by batch, the batch records the messages as they now stand."""
+    t = c.delivery_batches
+    before = dict(s.company.conn.execute(sa.select(t).where(t.c.id == batch_id)).mappings().one())
+    stamps = json.loads(before['drafted'])
+    for message in messages:
+        if message['id'] in stamps:
+            stamps[message['id']] = stamp(s, message)
+    at = clock.now_iso()
+    after = dict(before, drafted=json.dumps(stamps, sort_keys=True), version=before['version'] + 1, updated_at=at,
+                 updated_by=s.actor.id, updated_via=ctx.interface.value)
+    done = s.company.conn.execute(t.update().where(t.c.id == batch_id, t.c.version == before['version']).values(
+        **{k: after[k] for k in ('drafted', 'version', 'updated_at', 'updated_by', 'updated_via')}))
+    if done.rowcount != 1:
+        raise BookflowError('E_VERSION_CONFLICT', details={'record_type': RECORD, 'record_id': batch_id})
+    return Touched(RECORD, batch_id, 'update', before['version'], after['version'], after, before, db='company')
+
+
+def query(s, inp) -> bm.BatchQueryOutput:
+    t, m = c.delivery_batches, c.delivery_messages
+    rows = []
+    for batch in s.company.conn.execute(sa.select(t).order_by(t.c.created_at.desc(), t.c.id)).mappings():
+        counts = dict(s.company.conn.execute(sa.select(
+            sa.func.sum(sa.case((m.c.status == 'draft', 1), else_=0)),
+            sa.func.sum(sa.case((sa.and_(m.c.status == 'ready', m.c.go_by.is_(None)), 1), else_=0)),
+        ).where(m.c.batch_id == batch['id'])).one()._mapping)
+        drafts, waiting = (int(v or 0) for v in counts.values())
+        unfinished = batch['state'] == 'drafting' or (batch['state'] == 'done' and (drafts or waiting))
+        if inp.state == 'unfinished' and not unfinished:
+            continue
+        commands = []
+        if batch['state'] == 'drafting':
+            commands.append(f"delivery batch --batch {batch['number']}")
+        elif drafts:
+            commands.append(f"delivery send --batch {batch['number']}")
+        if waiting and batch['state'] != 'cancelled':
+            commands.append(f"delivery approve --batch {batch['number']}")
+        if batch['state'] != 'cancelled':
+            commands.append(f"delivery batch-cancel {batch['number']} --reason ...")
+        rows.append(bm.BatchRow(batch_id=batch['id'], number=batch['number'], kind=batch['kind'],
+                                state=batch['state'], planned=batch['planned'], position=batch['position'],
+                                drafts=drafts, waiting=waiting, created_at=batch['created_at'],
+                                next_commands=commands))
+    listed = rows[:inp.limit]
+    return bm.BatchQueryOutput(rows=listed, count=len(listed), truncated=len(rows) > inp.limit)
 
 
 def show(s, inp) -> bm.BatchOutput:

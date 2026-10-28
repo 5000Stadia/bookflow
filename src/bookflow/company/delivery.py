@@ -980,12 +980,19 @@ def prepare_send(s, ctx, inp) -> Plan:
     read = reader(s, ctx)
     at = clock.now_iso()
     selectors = list(inp.messages or [])
+    batch = None
     if getattr(inp, 'batch', None):
         from bookflow.company import delivery_batches as batches
-        selectors, more = batches.drafts_to_release(s, inp.batch)
+        if selectors:
+            raise _invalid('batch', 'give batch or messages, not both')
+        batch, rows, more, skips = batches.bound(s, inp.batch, 'draft', batches.CHUNK)
+        selectors = [r['id'] for r in rows]
+        if skips:
+            warnings.append(f"Not released, no longer as batch {batch['number']} drafted them: " + '; '.join(skips)
+                            + '.')
         if more:
-            warnings.append(f'{more} more draft(s) in batch {inp.batch} wait: run `delivery send --batch '
-                            f'{inp.batch}` again.')
+            warnings.append(f"{more} more draft(s) in batch {batch['number']} wait: run `delivery send --batch "
+                            f"{batch['number']}` again.")
     elif not selectors:
         raise _invalid('messages', 'name the drafts to release, or give batch')
     for selector in selectors:
@@ -1025,7 +1032,8 @@ def prepare_send(s, ctx, inp) -> Plan:
         elif not connected:
             warnings.append(NO_CONNECTION)
     outs = [project(s, after) for _, after, _, _ in plans]
-    return Plan(m.MessagesOutput(messages=outs, count=len(outs), warnings=warnings), dict(plans=plans))
+    return Plan(m.MessagesOutput(messages=outs, count=len(outs), warnings=warnings), dict(
+        plans=plans, batch_id=batch['id'] if batch else None))
 
 
 def apply_send(plan, ctx, s) -> Applied:
@@ -1037,6 +1045,9 @@ def apply_send(plan, ctx, s) -> Applied:
                             db='company'),
                     Touched('delivery_event', event['id'], 'create', None, None, event, db='company')]
         outs.append(project(s, after))
+    if plan.data.get('batch_id') and plan.data['plans']:
+        from bookflow.company import delivery_batches as batches
+        touched.append(batches.restamp(s, ctx, plan.data['batch_id'], [a for _, a, _, _ in plan.data['plans']]))
     numbers = ', '.join(a['number'] for _, a, _, _ in plan.data['plans'])
     return Applied(m.MessagesOutput(messages=outs, count=len(outs), warnings=plan.preview.warnings), touched,
                    f'released message(s) {numbers}')

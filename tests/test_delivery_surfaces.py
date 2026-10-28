@@ -22,7 +22,7 @@ COMMANDS = frozenset(('delivery draft', 'delivery update', 'delivery send', 'del
                       'delivery-connection remove', 'delivery-connection check', 'delivery-connection show',
                       'delivery-connection query',
                       # Increment 3: flags, the queue and batches.
-                      'delivery flag', 'delivery unflag', 'delivery queue', 'delivery batch', 'delivery batch-show',
+                      'delivery flag', 'delivery unflag', 'delivery queue', 'delivery batch', 'delivery batch-show', 'delivery batch-query',
                       'delivery batch-cancel'))
 
 

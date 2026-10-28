@@ -683,9 +683,9 @@ five seeds of 30 steps: 20 messages reached the fake server, none twice; 20 cras
 
 ## As built: increment 3 (2026-10-27)
 
-**What exists.** co0108 (`delivery_flags`, `delivery_batches`, `delivery_messages.batch_id` with its index), six
+**What exists.** co0108 (`delivery_flags`, `delivery_batches`, `delivery_messages.batch_id` with its index), seven
 commands under the `delivery-batch-v1` layer (on `delivery-queue-v1`): `delivery flag`, `unflag`, `queue`, `batch`,
-`batch-show`, `batch-cancel`; `delivery draft` gains `combine` with `documents`; `delivery send` and `approve` take a
+`batch-show`, `batch-query`, `batch-cancel`; `delivery draft` gains `combine` with `documents`; `delivery send` and `approve` take a
 `batch`; `delivery query` filters by `batch` and a message shows its batch; `company update` gains
 `delivery_auto_flag_from`. Code: `company/delivery_batches.py`, `company/delivery_batch_models.py`. The browser has the
 *Email later* checkbox beside Email… on invoices, sales receipts and estimates (an htmx fragment that posts on change),
@@ -724,6 +724,37 @@ the batch), the Outbox's batch filter, and the auto-flag date in Email and sendi
   shared batch ledger as one entry whose reversal is this cancel; nothing later depends on a batch's drafts (a later
   batch only skipped what this one held, and cancelling puts those documents back in the queue), so newest-first holds.
   `delivery send --batch` releases the drafts a chunk per call, naming how many wait.
+
+**After the review (notes/reviews/r112-inc3-review.md), 2026-10-27.** Two rules govern: *a go covers exactly what was
+reviewed* (increment 2), and *the person confirms a broad batch's exact details once, from the preview, and the run
+does exactly what the preview showed* (Kabe).
+
+- **A row's key covers its whole group.** A combined row's key is `G-` and a hash of its documents; excluding it leaves
+  out every document in it. A document id still leaves out that document alone.
+- **The go is decided once, when the batch begins** (`delivery_batches.go_by`): a person who asks to `send` gives it;
+  an agent's batch has none, and a later continue by anyone never adds one (`BatchOutput.go`).
+- **Approve and send by batch act only on messages as the batch left them.** The batch records each message's
+  version, a hash of its recipients and a hash of its content (`drafted`), and re-records it after its own release or
+  approval; anything else is skipped and named with why. A cancelled batch is refused by name. `approve` takes 100 per
+  call and says when more wait; `batch` with `messages` is refused.
+- **Opt-outs win mid-batch.** Each chunk rechecks its targets: an unflag (`opted_out`), a customer switched to mail
+  (`prefers_mail`), a queued document no longer to be emailed (`not_queued`), a document revised or recipients changed
+  since the batch began (`changed`), and a member of a combined row that gained a message meanwhile (only that member
+  is skipped, with its message).
+- **The run is tied to the preview.** The dry run returns a `fingerprint` of the exact set (each row's documents,
+  revisions, recipients, period and balance; excluded rows included) and one per row; a run carrying it is refused
+  (`E_WORK_DEPENDENCY`) when the set changed, naming the new or changed rows when `seen` gives the preview's rows. The
+  batch keeps its fingerprint, and a continue carrying another is refused. The agent guide says to show the preview
+  and run with its fingerprint.
+- **Getting back to a batch.** `delivery batch-query` (a read, in `delivery-batch-v1`) lists unfinished batches
+  (drafting, or with drafts to send or messages waiting for a go) with the commands that continue or cancel them; the
+  Outbox lists them with Continue and Cancel; `/delivery/batch?batch=B-1001` opens one; a dry run over the selection
+  of a batch still drafting names it (`open_batches`) and the page offers to continue it. The batch view always has
+  Continue drafting and Cancel while drafting; a refusal on continue, send or cancel keeps the batch view with the
+  refusal in place and stops the automatic loop; a network failure shows a note and leaves Continue.
+- **Email later in the browser:** unticking clears the flag (`delivery unflag --clear`, back to neutral); *Never
+  email this* is the lasting opt-out. `delivery queue` with `document` returns that document's `flag`.
+- A continue that echoes default fields (`send: false`, `exclude: []`) is accepted.
 
 **Measured** (in process, a fresh company, `tests/test_delivery_batch.py` with `BF_DELIVERY_LARGE=1000`, printed with
 `-s`): 1,000 unsent invoices for 200 customers: selection (dry run) 1.2 s; the whole batch 92 s in 100 calls, a chunk

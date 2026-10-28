@@ -13,6 +13,7 @@ import pytest
 
 from bookflow import BookflowError
 from tests.test_bill_item_lines import books  # noqa: F401
+from tests.test_row3_host import hosted  # noqa: F401
 
 
 def _names(items):
@@ -173,7 +174,7 @@ def test_a_batch_goes_in_chunks_resumes_and_cancels_as_one_unit(shop, monkeypatc
     run = shop['run']
     first = run('delivery batch', {'kind': 'invoice', 'unsent': True, 'send': False}, reason='All unsent')
     assert first['planned'] == 4 and len(first['messages']) == 2 and first['state'] == 'drafting'
-    assert first['next'] == {'batch': first['number']} and first['remaining'] == 2
+    assert first['next'] == {'batch': first['number'], 'fingerprint': first['fingerprint']} and first['remaining'] == 2
     # Something drafted by hand meanwhile is skipped then, naming its message.
     by_hand = run('delivery draft', {'kind': 'invoice', 'document': 'I-6'})
     second = run('delivery batch', first['next'], reason='Go on')
@@ -286,3 +287,170 @@ def test_measure_a_batch_of_a_thousand_invoices_and_two_hundred_statements(books
     timings['cancel_statement_batch_s'] = round(time.perf_counter() - started, 2)
     assert len(cancel['cancelled']) == len(customers)
     print('batch measurements', json.dumps(timings))
+
+
+# ---------------------------------------------------------------- the review's findings (r112-inc3-review.md)
+
+def test_unticking_a_combined_row_leaves_out_every_document_in_it(shop):
+    run = shop['run']
+    selection = {'kind': 'invoice', 'unsent': True, 'combine': True, 'customer': 'Adams Plumbing'}
+    preview = run('delivery batch', selection, dry_run=True)
+    adams = next(i for i in preview['would_draft'] if i['customer_name'] == 'Adams Plumbing')
+    assert adams['documents'] == ['Invoice I-1', 'Invoice I-2'] and adams['key'] not in shop['posted'].values()
+    out = run('delivery batch', {**selection, 'exclude': [adams['key']], 'fingerprint': preview['fingerprint']},
+              reason='Not Adams')
+    drafted = run('delivery query', {'batch': out['number']})['rows']
+    assert all(r['customer_name'] != 'Adams Plumbing' for r in drafted) and len(drafted) == 1
+    left = next(s for s in out['skipped'] if s['reason'] == 'excluded')
+    assert left['documents'] == ['Invoice I-1', 'Invoice I-2']
+    # A document id leaves out that document alone; the rest of its row is still one message.
+    one = run('delivery batch', {**selection, 'exclude': [shop['posted']['I-1']]}, dry_run=True)
+    assert [i['documents'] for i in one['would_draft'] if i['customer_name'] == 'Adams Plumbing'] == [['Invoice I-2']]
+
+
+def test_send_and_approve_by_batch_act_only_on_messages_as_the_batch_drafted_them(shop, monkeypatch):
+    run = shop['run']
+    out = run('delivery batch', {'kind': 'invoice', 'unsent': True}, reason='Drafts')
+    edited, plain = out['messages'][0], out['messages'][1]
+    run('delivery update', {'message': edited, 'to': ['someone-else@elsewhere.example']}, reason='Edit')
+    with pytest.raises(BookflowError) as both:
+        run('delivery send', {'batch': out['number'], 'messages': [plain]}, reason='Both')
+    assert both.value.code == 'E_VALIDATION'
+    sent = run('delivery send', {'batch': out['number']}, reason='Send the batch')
+    assert edited not in {m['number'] for m in sent['messages']} and plain in {m['number'] for m in sent['messages']}
+    assert any(edited in w and 'recipients changed' in w for w in sent['warnings'])
+    assert run('delivery show', {'message': edited})['status'] == 'draft'
+    # The cap is a chunk with the rest named, never a silent stop.
+    from bookflow.company import delivery_dispatch
+    monkeypatch.setattr(delivery_dispatch, 'APPROVE_LIMIT', 1)
+    with pytest.raises(BookflowError) as two:
+        run('delivery approve', {'batch': out['number'], 'messages': [plain]}, reason='Both')
+    assert two.value.code == 'E_VALIDATION'
+    # A cancelled batch is neither sent nor approved by its name.
+    run('delivery batch-cancel', {'batch': out['number']}, reason='Wrong')
+    for name in ('delivery send', 'delivery approve'):
+        with pytest.raises(BookflowError) as cancelled:
+            run(name, {'batch': out['number']}, reason='After cancel')
+        assert cancelled.value.code == 'E_WORK_DEPENDENCY' and 'cancelled' in cancelled.value.message
+
+
+def test_an_opt_out_or_a_switch_to_mail_after_a_batch_starts_wins(shop, monkeypatch):
+    from bookflow.company import delivery_batches
+    monkeypatch.setattr(delivery_batches, 'CHUNK', 2)
+    run = shop['run']
+    run('company update', {'delivery_auto_flag_from': '2026-01-01'})
+    run('delivery flag', {'kind': 'invoice', 'document': 'I-6'})
+    first = run('delivery batch', {'queued': True}, reason='The queue')
+    assert first['planned'] == 4 and len(first['messages']) == 2
+    run('delivery unflag', {'kind': 'invoice', 'document': 'I-6'}, reason='Never')
+    run('customer update', {'customer': shop['kitchen'], 'preferred_delivery_method': 'mail'})
+    second = run('delivery batch', first['next'], reason='Go on')
+    assert second['messages'] == []
+    reasons = {tuple(s['documents']): s['reason'] for s in second['skipped']}
+    assert reasons[('Invoice I-6',)] == 'opted_out' and reasons[('Invoice I-3',)] == 'prefers_mail'
+    numbers = {r['documents'][0] for r in run('delivery query', {'batch': first['number'], 'status': 'all'})['rows']}
+    assert numbers == {'Invoice I-1', 'Invoice I-2'}
+
+
+def test_unfinished_batches_are_listed_and_a_rerun_offers_the_one_still_drafting(shop, monkeypatch):
+    from bookflow.company import delivery_batches
+    monkeypatch.setattr(delivery_batches, 'CHUNK', 1)
+    run = shop['run']
+    first = run('delivery batch', {'kind': 'invoice', 'unsent': True}, reason='Start')
+    listed = run('delivery batch-query', {})['rows']
+    assert [r['number'] for r in listed] == [first['number']] and listed[0]['state'] == 'drafting'
+    assert f"delivery batch --batch {first['number']}" in listed[0]['next_commands']
+    again = run('delivery batch', {'kind': 'invoice', 'unsent': True}, dry_run=True)
+    assert again['open_batches'] == [first['number']]
+    run('delivery batch-cancel', {'batch': first['number']}, reason='Stop')
+    assert run('delivery batch-query', {})['rows'] == []
+
+
+def test_the_run_is_tied_to_the_preview_by_its_fingerprint(shop):
+    run = shop['run']
+    run('company update', {'delivery_auto_flag_from': '2026-04-01'})
+    preview = run('delivery batch', {'queued': True}, dry_run=True)
+    assert preview['fingerprint'] and all(i['fingerprint'] for i in preview['would_draft'])
+    # Something flagged between the preview and the run: the run is refused, naming it.
+    run('delivery flag', {'kind': 'invoice', 'document': 'I-6'})
+    with pytest.raises(BookflowError) as changed:
+        run('delivery batch', {'queued': True, 'fingerprint': preview['fingerprint'],
+                               'seen': [i['fingerprint'] for i in preview['would_draft']]}, reason='Run')
+    assert changed.value.code == 'E_WORK_DEPENDENCY' and 'Dunn Ltd: Invoice I-6' in changed.value.message
+    assert run('delivery batch-query', {'state': 'all'})['rows'] == []
+    fresh = run('delivery batch', {'queued': True}, dry_run=True)
+    done = run('delivery batch', {'queued': True, 'fingerprint': fresh['fingerprint']}, reason='Run')
+    assert done['fingerprint'] == fresh['fingerprint'] and len(done['messages']) == fresh['planned']
+
+
+def test_continue_accepts_echoed_defaults_and_refuses_another_fingerprint(shop, monkeypatch):
+    from bookflow.company import delivery_batches
+    monkeypatch.setattr(delivery_batches, 'CHUNK', 1)
+    run = shop['run']
+    first = run('delivery batch', {'kind': 'invoice', 'unsent': True}, reason='Start')
+    echoed = run('delivery batch', {'batch': first['number'], 'send': False, 'combine': False, 'exclude': [],
+                                    'queued': False}, reason='Echo')
+    assert len(echoed['messages']) == 1
+    with pytest.raises(BookflowError) as changed:
+        run('delivery batch', {'batch': first['number'], 'send': True}, reason='Change')
+    assert changed.value.code == 'E_VALIDATION'
+    with pytest.raises(BookflowError) as other:
+        run('delivery batch', {'batch': first['number'], 'fingerprint': '0' * 64}, reason='Other')
+    assert other.value.code == 'E_WORK_DEPENDENCY'
+
+
+def test_a_combined_row_skips_only_the_member_that_gained_a_message(shop, monkeypatch):
+    from bookflow.company import delivery_batches
+    monkeypatch.setattr(delivery_batches, 'CHUNK', 2)  # Adams, then his job; Dunn's row is the next chunk
+    run = shop['run']
+    run('invoice post', {'number': 'I-7', 'date': '2026-04-06', 'customer': shop['dunn'],
+                         'lines': [{'item': shop['visit'], 'quantity': '1'}]}, reason='Seed')
+    first = run('delivery batch', {'kind': 'invoice', 'unsent': True, 'combine': True}, reason='Combined')
+    assert first['state'] == 'drafting' and len(first['messages']) == 2
+    by_hand = run('delivery draft', {'kind': 'invoice', 'document': 'I-7'})
+    second = run('delivery batch', first['next'], reason='Go on')
+    assert [r['documents'] for r in run('delivery query', {'batch': first['number']})['rows']
+            if r['customer_name'] == 'Dunn Ltd'] == [['Invoice I-6']]
+    skip = next(s for s in second['skipped'] if s['documents'] == ['Invoice I-7'])
+    assert skip['reason'] == 'in_outbox' and skip['message'] == by_hand['number']
+
+
+def test_clearing_email_later_returns_to_neutral_and_never_email_is_an_opt_out(shop):
+    run = shop['run']
+    run('company update', {'delivery_auto_flag_from': '2026-04-01'})
+    run('delivery flag', {'kind': 'invoice', 'document': 'I-2'})
+    cleared = run('delivery unflag', {'kind': 'invoice', 'document': 'I-2', 'clear': True}, reason='Untick')
+    assert cleared['flag'] is None and cleared['queued'] is True  # the date decides again
+    assert run('delivery queue', {'kind': 'invoice', 'document': shop['posted']['I-2']})['flag'] is None
+    never = run('delivery unflag', {'kind': 'invoice', 'document': 'I-2'}, reason='Never')
+    assert never['flag'] == 'not-to-email' and never['queued'] is False
+    assert run('delivery queue', {'kind': 'invoice', 'document': shop['posted']['I-2']})['flag'] == 'not-to-email'
+
+
+@pytest.mark.timeout(900)
+def test_an_agents_batch_gets_no_go_from_a_persons_continue_and_a_cancelled_batch_is_not_approved(hosted,
+                                                                                                    monkeypatch):
+    from tests.delivery_fake_transport import SETTINGS, FakeBackend, registered
+    from tests.test_delivery_queue import _hosted_mail
+    from tests.test_people_only import REASON as PERSON, _agent
+    from bookflow.company import delivery_batches
+    monkeypatch.setattr(delivery_batches, 'CHUNK', 1)
+    with registered(FakeBackend()):
+        cid = hosted.company_id
+        _hosted_mail(hosted)
+        person = {**hosted.bearer, **PERSON}
+        _, as_agent = _agent(hosted)
+        hosted.ok('delivery-connection.add', {'name': 'Office', 'kind': 'fake', 'settings': SETTINGS}, company=cid,
+                  headers=person)
+        hosted.ok('delivery-connection.enable', {'connection': 'Office'}, company=cid, headers=person)
+        out = hosted.ok('delivery.batch', {'kind': 'invoice', 'unsent': True, 'send': True}, company=cid,
+                        headers=as_agent)
+        assert out['go'] is False and out['next']
+        more = hosted.ok('delivery.batch', {'batch': out['number']}, company=cid, headers=person)
+        assert more['messages'] and more['go'] is False
+        rows = hosted.ok('delivery.query', {'batch': out['number'], 'status': 'all'}, company=cid)['rows']
+        assert len(rows) >= 2 and all(r['waiting_for_go'] for r in rows)
+        hosted.ok('delivery.batch-cancel', {'batch': out['number']}, company=cid, headers=person)
+        refused = hosted.call('delivery.approve', {'batch': out['number']}, company=cid, headers=person)
+        assert refused.status_code >= 400 and refused.json()['code'] == 'E_WORK_DEPENDENCY'
+        assert hosted.ok('delivery.run', {}, company=cid, headers=person)['sent'] == 0

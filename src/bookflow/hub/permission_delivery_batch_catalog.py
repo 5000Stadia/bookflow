@@ -2,7 +2,7 @@
 
 `delivery flag`, `unflag`, `batch` and `batch-cancel` are message writes, admitted as increment 1's are: `customer` at
 `standard`, with `ledger.read` and `customer-work` at `member` so a principal who may not read a document may not flag
-or batch it. `delivery queue` and `batch-show` read at `customer` `member` with the same resources. A batch's `send`
+or batch it. `delivery queue`, `batch-show` and `batch-query` read at `customer` `member` with the same resources. A batch's `send`
 releases as `delivery send` does: a person's release is their go and an agent's waits for one (R187: `delivery.send`),
 so no people-only action is added. No capability, role default or existing threshold changes, so a root replacing its
 catalog with this one suspends no agent and revokes no token.
@@ -22,6 +22,7 @@ _MESSAGES = (c.Requirement(capability='customer-work', threshold='member'),
 _ADDED = (
     ('delivery batch', 'customer', 'standard', 'plan_delivery_batch', _MESSAGES),
     ('delivery batch-cancel', 'customer', 'standard', 'plan_delivery_batch_cancel', _MESSAGES),
+    ('delivery batch-query', 'customer', 'member', 'plan_delivery_batch_query', _MESSAGES),
     ('delivery batch-show', 'customer', 'member', 'plan_delivery_batch_show', _MESSAGES),
     ('delivery flag', 'customer', 'standard', 'plan_delivery_flag', _MESSAGES),
     ('delivery queue', 'customer', 'member', 'plan_delivery_queue', _MESSAGES),

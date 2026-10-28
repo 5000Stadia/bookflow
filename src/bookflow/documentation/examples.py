@@ -1867,6 +1867,7 @@ EXAMPLES.update({
                               + _C + ' --dry-run --json',
                               {'kind': 'statement', 'period': '2026-11', 'balance_over': '0', 'method': 'email'}),
     'delivery batch-show': Example('bookflow delivery batch-show B-1001' + _C + ' --json', {'batch': 'B-1001'}),
+    'delivery batch-query': Example('bookflow delivery batch-query' + _C + ' --json', {}),
     'delivery batch-cancel': Example('bookflow delivery batch-cancel B-1001' + _C + ' --reason "Wrong month" --json',
                                      {'batch': 'B-1001'}),
 })

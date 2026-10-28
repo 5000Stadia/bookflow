@@ -1131,11 +1131,14 @@ Nothing leaves this machine until the owner sets up a sending connection; messag
 For "send statements to everyone who owes us", run `delivery batch --kind statement --period 2026-09
 --balance-over 0 --method email --dry-run` and show the person exactly who would get what and who is
 skipped and why (no address, prefers mail, already in the outbox or sent) before running it without
-`--dry-run`: a batch is a broad change, so confirm its details once. If the period, kind or customers
-are not given, ask; never guess them. A batch drafts 10 messages per call and returns `next`; call
-`delivery batch` with it until `state` is `done`. `delivery queue` lists what is to be emailed;
-`delivery batch-cancel B-1001 --reason "..."` cancels a whole batch, naming any message that was
-already released or exported.
+`--dry-run`: a batch is a broad change, so the person confirms its exact details once, from that
+preview. Run it with the preview's `fingerprint`, so it does exactly what was shown: if the set changed
+since, it is refused, and you preview again. If the period, kind or customers are not given, ask; never
+guess them. A batch drafts 10 messages per call and returns `next`; call `delivery batch` with it until
+`state` is `done`. An agent's batch with `send` waits for a person's go; `delivery approve --batch`
+approves only messages still exactly as the batch drafted them, and names the rest. `delivery
+batch-query` lists unfinished batches; `delivery batch-cancel B-1001 --reason "..."` cancels a whole
+batch, naming any message that was already released or exported.
 
 ## A scanned barcode
 
