@@ -2,6 +2,187 @@
 
 # `delivery` commands
 
+## `delivery approve`
+
+A person's go for ready messages waiting for one (an agent's release): by number, or all_waiting. A message leaves only with a go, and only through a sending connection. A person's act. Example: {"messages": ["M-1001"]}.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | customer |
+| Additional resources | ledger.read: member, customer-work: member |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/delivery.approve` |
+| External binary body | none |
+
+### CLI
+
+`bookflow delivery approve --all-waiting --company "Demo Plumbing Co" --reason "Checked them" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "delivery approve", "input": {"all_waiting": true}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `messages` | `--messages` | array[string] \| null | no | yes | null | Ready messages waiting for a go, by number or id. |
+| `all_waiting` | `--all-waiting` | boolean | no | no | false | Every message waiting for a go (at most 100). |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/delivery.approve`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `messages` | array[object] | yes | no | — | — |
+| `messages[].id` | string \| null | yes | yes | — | — |
+| `messages[].version` | integer | yes | no | — | — |
+| `messages[].number` | string | yes | no | — | — |
+| `messages[].kind` | string | yes | no | — | — |
+| `messages[].customer_id` | string | yes | no | — | — |
+| `messages[].customer_name` | string | yes | no | — | — |
+| `messages[].status` | string | yes | no | — | — |
+| `messages[].status_label` | string | yes | no | — | The state in words: Draft, Waiting for your go, Sent by hand, ... |
+| `messages[].hold_reason` | string \| null | no | yes | null | — |
+| `messages[].from_name` | string \| null | no | yes | null | — |
+| `messages[].from_address` | string \| null | no | yes | null | — |
+| `messages[].reply_to` | string \| null | no | yes | null | — |
+| `messages[].to` | array[string] | yes | no | — | — |
+| `messages[].cc` | array[string] | yes | no | — | — |
+| `messages[].bcc` | array[string] | yes | no | — | — |
+| `messages[].subject` | string | yes | no | — | — |
+| `messages[].body` | string | yes | no | — | — |
+| `messages[].message_id` | string | yes | no | — | — |
+| `messages[].template_id` | string \| null | no | yes | null | — |
+| `messages[].template_name` | string \| null | no | yes | null | — |
+| `messages[].resend_of` | string \| null | no | yes | null | Number of the earlier message this sends again. |
+| `messages[].released_by` | string \| null | no | yes | null | — |
+| `messages[].released_at` | string \| null | no | yes | null | — |
+| `messages[].go_by` | string \| null | no | yes | null | — |
+| `messages[].go_at` | string \| null | no | yes | null | — |
+| `messages[].waiting_for_go` | boolean | no | no | false | — |
+| `messages[].sent_at` | string \| null | no | yes | null | — |
+| `messages[].sent_via` | string \| null | no | yes | null | — |
+| `messages[].sent_method` | string \| null | no | yes | null | — |
+| `messages[].delivery` | string \| null | no | yes | null | For a sent message: unknown (nothing has said it arrived), accepted, delivered or bounced. Never 'opened'. |
+| `messages[].cancelled_reason` | string \| null | no | yes | null | — |
+| `messages[].stale` | boolean | no | no | false | A source changed or was voided since it was drafted. |
+| `messages[].stale_reason` | string \| null | no | yes | null | — |
+| `messages[].documents` | array[object] | no | no | [] | — |
+| `messages[].documents[].position` | integer | yes | no | — | — |
+| `messages[].documents[].role` | string | yes | no | — | — |
+| `messages[].documents[].source_kind` | string | yes | no | — | — |
+| `messages[].documents[].source_id` | string | yes | no | — | — |
+| `messages[].documents[].source_number` | string \| null | no | yes | null | — |
+| `messages[].documents[].source_revision` | string \| null | no | yes | null | — |
+| `messages[].documents[].statement_from` | string \| null | no | yes | null | — |
+| `messages[].documents[].statement_to` | string \| null | no | yes | null | — |
+| `messages[].documents[].file_name` | string | yes | no | — | — |
+| `messages[].documents[].media_type` | string | yes | no | — | — |
+| `messages[].documents[].size_bytes` | integer | yes | no | — | — |
+| `messages[].documents[].sha256` | string | yes | no | — | — |
+| `messages[].documents[].pdf_path` | string \| null | no | yes | null | Browser path of the frozen PDF. |
+| `messages[].documents[].content_base64` | string \| null | no | yes | null | The frozen bytes (show --include-files). |
+| `messages[].created_at` | string | yes | no | — | — |
+| `messages[].created_by` | string | yes | no | — | — |
+| `messages[].updated_at` | string | yes | no | — | — |
+| `messages[].updated_by` | string | yes | no | — | — |
+| `messages[].existing` | boolean | no | no | false | Draft: the message already in the outbox for this document. |
+| `messages[].connection` | string | no | no | "none" | The sending connection it went or would go through; none when no usable connection exists here, so nothing leaves this machine. |
+| `messages[].attempts` | integer | no | no | 0 | Transport attempts made. |
+| `messages[].next_attempt_at` | string \| null | no | yes | null | A temporary failure: when it is tried again. |
+| `messages[].failure_code` | string \| null | no | yes | null | — |
+| `messages[].failure_text` | string \| null | no | yes | null | The transport's words. |
+| `messages[].provider_ref` | string \| null | no | yes | null | The transport's reference for an accepted message. |
+| `messages[].warnings` | array[string] | no | no | [] | — |
+| `messages[].next_commands` | array[string] | no | no | [] | — |
+| `count` | integer | yes | no | — | — |
+| `warnings` | array[string] | no | no | [] | — |
+
+Example JSON output:
+
+```json
+{
+  "count": 0,
+  "messages": [],
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+| `E_WORK_DEPENDENCY` | The accepted or linked work prevents this change; inspect the related document. |
+
 ## `delivery cancel`
 
 Set an unsent message aside, with --reason. Final; draft again for a new one.
@@ -127,7 +308,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `existing` | boolean | no | no | false | Draft: the message already in the outbox for this document. |
-| `connection` | string | no | no | "none" | The sending connection: none in this build, so nothing leaves this machine. |
+| `connection` | string | no | no | "none" | The sending connection it went or would go through; none when no usable connection exists here, so nothing leaves this machine. |
+| `attempts` | integer | no | no | 0 | Transport attempts made. |
+| `next_attempt_at` | string \| null | no | yes | null | A temporary failure: when it is tried again. |
+| `failure_code` | string \| null | no | yes | null | — |
+| `failure_text` | string \| null | no | yes | null | The transport's words. |
+| `provider_ref` | string \| null | no | yes | null | The transport's reference for an accepted message. |
 | `warnings` | array[string] | no | no | [] | — |
 | `next_commands` | array[string] | no | no | [] | — |
 
@@ -135,6 +321,7 @@ Example JSON output:
 
 ```json
 {
+  "attempts": 0,
   "bcc": [],
   "body": "value",
   "cancelled_reason": null,
@@ -147,6 +334,8 @@ Example JSON output:
   "delivery": null,
   "documents": [],
   "existing": false,
+  "failure_code": null,
+  "failure_text": null,
   "from_address": null,
   "from_name": null,
   "go_at": null,
@@ -155,8 +344,10 @@ Example JSON output:
   "id": null,
   "kind": "human",
   "message_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "next_attempt_at": null,
   "next_commands": [],
   "number": "value",
+  "provider_ref": null,
   "released_at": null,
   "released_by": null,
   "reply_to": null,
@@ -349,7 +540,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `existing` | boolean | no | no | false | Draft: the message already in the outbox for this document. |
-| `connection` | string | no | no | "none" | The sending connection: none in this build, so nothing leaves this machine. |
+| `connection` | string | no | no | "none" | The sending connection it went or would go through; none when no usable connection exists here, so nothing leaves this machine. |
+| `attempts` | integer | no | no | 0 | Transport attempts made. |
+| `next_attempt_at` | string \| null | no | yes | null | A temporary failure: when it is tried again. |
+| `failure_code` | string \| null | no | yes | null | — |
+| `failure_text` | string \| null | no | yes | null | The transport's words. |
+| `provider_ref` | string \| null | no | yes | null | The transport's reference for an accepted message. |
 | `warnings` | array[string] | no | no | [] | — |
 | `next_commands` | array[string] | no | no | [] | — |
 
@@ -357,6 +553,7 @@ Example JSON output:
 
 ```json
 {
+  "attempts": 0,
   "bcc": [],
   "body": "value",
   "cancelled_reason": null,
@@ -369,6 +566,8 @@ Example JSON output:
   "delivery": null,
   "documents": [],
   "existing": false,
+  "failure_code": null,
+  "failure_text": null,
   "from_address": null,
   "from_name": null,
   "go_at": null,
@@ -377,8 +576,10 @@ Example JSON output:
   "id": null,
   "kind": "human",
   "message_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "next_attempt_at": null,
   "next_commands": [],
   "number": "value",
+  "provider_ref": null,
   "released_at": null,
   "released_by": null,
   "reply_to": null,
@@ -803,7 +1004,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `existing` | boolean | no | no | false | Draft: the message already in the outbox for this document. |
-| `connection` | string | no | no | "none" | The sending connection: none in this build, so nothing leaves this machine. |
+| `connection` | string | no | no | "none" | The sending connection it went or would go through; none when no usable connection exists here, so nothing leaves this machine. |
+| `attempts` | integer | no | no | 0 | Transport attempts made. |
+| `next_attempt_at` | string \| null | no | yes | null | A temporary failure: when it is tried again. |
+| `failure_code` | string \| null | no | yes | null | — |
+| `failure_text` | string \| null | no | yes | null | The transport's words. |
+| `provider_ref` | string \| null | no | yes | null | The transport's reference for an accepted message. |
 | `warnings` | array[string] | no | no | [] | — |
 | `next_commands` | array[string] | no | no | [] | — |
 
@@ -811,6 +1017,7 @@ Example JSON output:
 
 ```json
 {
+  "attempts": 0,
   "bcc": [],
   "body": "value",
   "cancelled_reason": null,
@@ -823,6 +1030,8 @@ Example JSON output:
   "delivery": null,
   "documents": [],
   "existing": false,
+  "failure_code": null,
+  "failure_text": null,
   "from_address": null,
   "from_name": null,
   "go_at": null,
@@ -831,8 +1040,10 @@ Example JSON output:
   "id": null,
   "kind": "human",
   "message_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "next_attempt_at": null,
   "next_commands": [],
   "number": "value",
+  "provider_ref": null,
   "released_at": null,
   "released_by": null,
   "reply_to": null,
@@ -1019,6 +1230,368 @@ Example JSON output:
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
 
+## `delivery retry`
+
+Put a failed message, or one held because an attempt ended without an answer, back in the outbox. Check the sent mail first: if it went, mark it sent instead. A person's retry is their go; an agent's waits.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | customer |
+| Additional resources | ledger.read: member, customer-work: member |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/delivery.retry` |
+| External binary body | none |
+
+### CLI
+
+`bookflow delivery retry M-1001 --company "Demo Plumbing Co" --reason "Not in the sent mail" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "delivery retry", "input": {"message": "M-1001"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `message` | `MESSAGE` | string | yes | no | — | Message number (M-1001) or id.; minimum length 1; maximum length 1004 |
+| `expected_version` | `--expected-version` | integer \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/delivery.retry`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `id` | string \| null | yes | yes | — | — |
+| `version` | integer | yes | no | — | — |
+| `number` | string | yes | no | — | — |
+| `kind` | string | yes | no | — | — |
+| `customer_id` | string | yes | no | — | — |
+| `customer_name` | string | yes | no | — | — |
+| `status` | string | yes | no | — | — |
+| `status_label` | string | yes | no | — | The state in words: Draft, Waiting for your go, Sent by hand, ... |
+| `hold_reason` | string \| null | no | yes | null | — |
+| `from_name` | string \| null | no | yes | null | — |
+| `from_address` | string \| null | no | yes | null | — |
+| `reply_to` | string \| null | no | yes | null | — |
+| `to` | array[string] | yes | no | — | — |
+| `cc` | array[string] | yes | no | — | — |
+| `bcc` | array[string] | yes | no | — | — |
+| `subject` | string | yes | no | — | — |
+| `body` | string | yes | no | — | — |
+| `message_id` | string | yes | no | — | — |
+| `template_id` | string \| null | no | yes | null | — |
+| `template_name` | string \| null | no | yes | null | — |
+| `resend_of` | string \| null | no | yes | null | Number of the earlier message this sends again. |
+| `released_by` | string \| null | no | yes | null | — |
+| `released_at` | string \| null | no | yes | null | — |
+| `go_by` | string \| null | no | yes | null | — |
+| `go_at` | string \| null | no | yes | null | — |
+| `waiting_for_go` | boolean | no | no | false | — |
+| `sent_at` | string \| null | no | yes | null | — |
+| `sent_via` | string \| null | no | yes | null | — |
+| `sent_method` | string \| null | no | yes | null | — |
+| `delivery` | string \| null | no | yes | null | For a sent message: unknown (nothing has said it arrived), accepted, delivered or bounced. Never 'opened'. |
+| `cancelled_reason` | string \| null | no | yes | null | — |
+| `stale` | boolean | no | no | false | A source changed or was voided since it was drafted. |
+| `stale_reason` | string \| null | no | yes | null | — |
+| `documents` | array[object] | no | no | [] | — |
+| `documents[].position` | integer | yes | no | — | — |
+| `documents[].role` | string | yes | no | — | — |
+| `documents[].source_kind` | string | yes | no | — | — |
+| `documents[].source_id` | string | yes | no | — | — |
+| `documents[].source_number` | string \| null | no | yes | null | — |
+| `documents[].source_revision` | string \| null | no | yes | null | — |
+| `documents[].statement_from` | string \| null | no | yes | null | — |
+| `documents[].statement_to` | string \| null | no | yes | null | — |
+| `documents[].file_name` | string | yes | no | — | — |
+| `documents[].media_type` | string | yes | no | — | — |
+| `documents[].size_bytes` | integer | yes | no | — | — |
+| `documents[].sha256` | string | yes | no | — | — |
+| `documents[].pdf_path` | string \| null | no | yes | null | Browser path of the frozen PDF. |
+| `documents[].content_base64` | string \| null | no | yes | null | The frozen bytes (show --include-files). |
+| `created_at` | string | yes | no | — | — |
+| `created_by` | string | yes | no | — | — |
+| `updated_at` | string | yes | no | — | — |
+| `updated_by` | string | yes | no | — | — |
+| `existing` | boolean | no | no | false | Draft: the message already in the outbox for this document. |
+| `connection` | string | no | no | "none" | The sending connection it went or would go through; none when no usable connection exists here, so nothing leaves this machine. |
+| `attempts` | integer | no | no | 0 | Transport attempts made. |
+| `next_attempt_at` | string \| null | no | yes | null | A temporary failure: when it is tried again. |
+| `failure_code` | string \| null | no | yes | null | — |
+| `failure_text` | string \| null | no | yes | null | The transport's words. |
+| `provider_ref` | string \| null | no | yes | null | The transport's reference for an accepted message. |
+| `warnings` | array[string] | no | no | [] | — |
+| `next_commands` | array[string] | no | no | [] | — |
+
+Example JSON output:
+
+```json
+{
+  "attempts": 0,
+  "bcc": [],
+  "body": "value",
+  "cancelled_reason": null,
+  "cc": [],
+  "connection": "none",
+  "created_at": "2026-01-01T00:00:00Z",
+  "created_by": "value",
+  "customer_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "customer_name": "value",
+  "delivery": null,
+  "documents": [],
+  "existing": false,
+  "failure_code": null,
+  "failure_text": null,
+  "from_address": null,
+  "from_name": null,
+  "go_at": null,
+  "go_by": null,
+  "hold_reason": null,
+  "id": null,
+  "kind": "human",
+  "message_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "next_attempt_at": null,
+  "next_commands": [],
+  "number": "value",
+  "provider_ref": null,
+  "released_at": null,
+  "released_by": null,
+  "reply_to": null,
+  "resend_of": null,
+  "sent_at": null,
+  "sent_method": null,
+  "sent_via": null,
+  "stale": false,
+  "stale_reason": null,
+  "status": "value",
+  "status_label": "value",
+  "subject": "value",
+  "template_id": null,
+  "template_name": null,
+  "to": [],
+  "updated_at": "2026-01-01T00:00:00Z",
+  "updated_by": "value",
+  "version": 1,
+  "waiting_for_go": false,
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+| `E_WORK_DEPENDENCY` | The accepted or linked work prevents this change; inspect the related document. |
+
+## `delivery run`
+
+One dispatch pass now: claim due messages with a go, send each through the sending connection, record what it said (sent, try again later, failed, or held when the answer is unknown). With no connection it claims nothing. The host does this on its own about once a minute.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | customer |
+| Additional resources | ledger.read: member, customer-work: member |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/delivery.run` |
+| External binary body | none |
+
+### CLI
+
+`bookflow delivery run --company "Demo Plumbing Co" --reason "Send what is due" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "delivery run", "input": {}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `limit` | `--limit` | integer | no | no | 10 | Most messages to claim in this pass.; minimum 1; maximum 50 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/delivery.run`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `connection` | string | yes | no | — | The sending connection used, or none. |
+| `claimed` | integer | yes | no | — | — |
+| `sent` | integer | no | no | 0 | — |
+| `retrying` | integer | no | no | 0 | — |
+| `failed` | integer | no | no | 0 | — |
+| `held` | integer | no | no | 0 | — |
+| `go_withdrawn` | integer | no | no | 0 | — |
+| `expired` | integer | no | no | 0 | — |
+| `tracking_events` | integer | no | no | 0 | delivered or bounced reports recorded from the transport. |
+| `messages` | array[object] | no | no | [] | — |
+| `messages[].number` | string | yes | no | — | — |
+| `messages[].act` | string | yes | no | — | claimed, expired (its lease ran out), held, or go withdrawn. |
+| `messages[].status` | string | yes | no | — | — |
+| `messages[].attempt` | integer \| null | no | yes | null | — |
+| `messages[].outcome` | string \| null | no | yes | null | accepted, temporary, permanent or unknown. |
+| `messages[].code` | string \| null | no | yes | null | — |
+| `messages[].text` | string \| null | no | yes | null | — |
+| `messages[].next_attempt_at` | string \| null | no | yes | null | — |
+| `warnings` | array[string] | no | no | [] | — |
+
+Example JSON output:
+
+```json
+{
+  "claimed": 1,
+  "connection": "value",
+  "expired": 0,
+  "failed": 0,
+  "go_withdrawn": 0,
+  "held": 0,
+  "messages": [],
+  "retrying": 0,
+  "sent": 0,
+  "tracking_events": 0,
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
 ## `delivery send`
 
 Release drafts to the outbox (ready). A person's release is also their go; an agent's waits for one. No sending connection exists yet, so a ready message waits there; export it to send it yourself. A message whose document changed or was voided is held instead.
@@ -1144,7 +1717,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `messages[].updated_at` | string | yes | no | — | — |
 | `messages[].updated_by` | string | yes | no | — | — |
 | `messages[].existing` | boolean | no | no | false | Draft: the message already in the outbox for this document. |
-| `messages[].connection` | string | no | no | "none" | The sending connection: none in this build, so nothing leaves this machine. |
+| `messages[].connection` | string | no | no | "none" | The sending connection it went or would go through; none when no usable connection exists here, so nothing leaves this machine. |
+| `messages[].attempts` | integer | no | no | 0 | Transport attempts made. |
+| `messages[].next_attempt_at` | string \| null | no | yes | null | A temporary failure: when it is tried again. |
+| `messages[].failure_code` | string \| null | no | yes | null | — |
+| `messages[].failure_text` | string \| null | no | yes | null | The transport's words. |
+| `messages[].provider_ref` | string \| null | no | yes | null | The transport's reference for an accepted message. |
 | `messages[].warnings` | array[string] | no | no | [] | — |
 | `messages[].next_commands` | array[string] | no | no | [] | — |
 | `count` | integer | yes | no | — | — |
@@ -1307,7 +1885,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `existing` | boolean | no | no | false | Draft: the message already in the outbox for this document. |
-| `connection` | string | no | no | "none" | The sending connection: none in this build, so nothing leaves this machine. |
+| `connection` | string | no | no | "none" | The sending connection it went or would go through; none when no usable connection exists here, so nothing leaves this machine. |
+| `attempts` | integer | no | no | 0 | Transport attempts made. |
+| `next_attempt_at` | string \| null | no | yes | null | A temporary failure: when it is tried again. |
+| `failure_code` | string \| null | no | yes | null | — |
+| `failure_text` | string \| null | no | yes | null | The transport's words. |
+| `provider_ref` | string \| null | no | yes | null | The transport's reference for an accepted message. |
 | `warnings` | array[string] | no | no | [] | — |
 | `next_commands` | array[string] | no | no | [] | — |
 
@@ -1315,6 +1898,7 @@ Example JSON output:
 
 ```json
 {
+  "attempts": 0,
   "bcc": [],
   "body": "value",
   "cancelled_reason": null,
@@ -1327,6 +1911,8 @@ Example JSON output:
   "delivery": null,
   "documents": [],
   "existing": false,
+  "failure_code": null,
+  "failure_text": null,
   "from_address": null,
   "from_name": null,
   "go_at": null,
@@ -1335,8 +1921,10 @@ Example JSON output:
   "id": null,
   "kind": "human",
   "message_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "next_attempt_at": null,
   "next_commands": [],
   "number": "value",
+  "provider_ref": null,
   "released_at": null,
   "released_by": null,
   "reply_to": null,
@@ -1520,7 +2108,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `existing` | boolean | no | no | false | Draft: the message already in the outbox for this document. |
-| `connection` | string | no | no | "none" | The sending connection: none in this build, so nothing leaves this machine. |
+| `connection` | string | no | no | "none" | The sending connection it went or would go through; none when no usable connection exists here, so nothing leaves this machine. |
+| `attempts` | integer | no | no | 0 | Transport attempts made. |
+| `next_attempt_at` | string \| null | no | yes | null | A temporary failure: when it is tried again. |
+| `failure_code` | string \| null | no | yes | null | — |
+| `failure_text` | string \| null | no | yes | null | The transport's words. |
+| `provider_ref` | string \| null | no | yes | null | The transport's reference for an accepted message. |
 | `warnings` | array[string] | no | no | [] | — |
 | `next_commands` | array[string] | no | no | [] | — |
 
@@ -1528,6 +2121,7 @@ Example JSON output:
 
 ```json
 {
+  "attempts": 0,
   "bcc": [],
   "body": "value",
   "cancelled_reason": null,
@@ -1540,6 +2134,8 @@ Example JSON output:
   "delivery": null,
   "documents": [],
   "existing": false,
+  "failure_code": null,
+  "failure_text": null,
   "from_address": null,
   "from_name": null,
   "go_at": null,
@@ -1548,8 +2144,10 @@ Example JSON output:
   "id": null,
   "kind": "human",
   "message_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "next_attempt_at": null,
   "next_commands": [],
   "number": "value",
+  "provider_ref": null,
   "released_at": null,
   "released_by": null,
   "reply_to": null,

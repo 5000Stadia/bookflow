@@ -582,3 +582,64 @@ random acts), `tests/test_delivery_surfaces.py` (Python, CLI, HTTP and MCP agree
 with the downloaded file parsed). Review fixes (2026-10-27) are tested in `tests/test_delivery.py`: payment
 staleness and refresh, the draft refusal naming refresh, held export idempotent, blank template names, export's
 role, pruning on cancel, and the panel's again, export and hold answers.
+
+## As built: increment 2 (2026-10-27)
+
+**What exists.** co0106 (`delivery_connections`, removed and never deleted), the seam in
+`bookflow/delivery/transport.py` (`Transport`, `OutgoingMessage`, `TransportResult`, `TransportEvent`, `TransportKind`, the
+registry, `resolve_secret`), the dispatcher in `company/delivery_dispatch.py`, connections in
+`company/delivery_connections.py`, and eleven commands under the `delivery-queue-v1` layer (on `delivery-v1`): `delivery
+approve`, `retry`, `run`, and `delivery-connection add`, `update`, `enable`, `disable`, `remove`, `check`, `show`,
+`query`. **The registry is empty in production**: `add` refuses every kind, naming the kinds available (none), and a
+test asserts no module registers one. The browser gains Approve (a person, on a message waiting for a go, and in the
+Outbox), Retry (a failed message or an unknown outcome), the failure and hold explained on the message page, and the
+connections listed in Email and sending.
+
+**Decisions taken in the build, each reversible:**
+
+- **Interim permissions, marked for R187.** `approve` and every connection write and `check` are people-only admin
+  actions (approve at `customer` standard, connections at `company` admin; reads at `company` member), as `mark-sent`
+  is. A go counts at the claim while its giver is an active person with a standing membership of the company or its
+  organization at standard or above (or an installation administrator). `delivery send` and `retry` by a person give
+  the go; an agent's leave the message waiting. Each place carries a comment naming `delivery.send` or
+  `delivery.connect`. No hub migration.
+- **A withdrawn go is an `edited` event** (`changed: ['go']`, `go_withdrawn`, why): the event list is fixed by co0105's
+  CHECK, and the message stays `ready`, waiting for a new go.
+- **Three steps, no transaction open across a send.** `decide` reads, `claim` writes in one write (lease 10 minutes, one
+  more attempt, the `claimed` event with `attempt_key` `<id>:<n>`), the transports are called with nothing open, and
+  `record` writes every outcome in one write. Every update is guarded by the version read, so a message changed
+  meanwhile is left for the next pass. `delivery run` owns its transactions as `memorized process` does. On the host,
+  the scheduler tick claims on the writer, calls the transports from the timer thread, and submits the record as one
+  more writer job; a `delivery run` through the host occupies the writer thread for its chunk's calls (at most 10),
+  which a person asked for.
+- **Retries:** 5 min, 30 min, 2 h, then `failed`: four attempts counted since the last `retry` (the `retried` event
+  keeps `attempts_before`; `attempts` never resets, so attempt keys never repeat). An unknown outcome, a transport that
+  raises, and a lease that runs out are held `outcome_unknown`; a late answer after the lease is kept in the history
+  (`late: true`) and moves nothing. A transport that cannot be opened is a temporary failure (nothing left).
+- **The claim precheck** draws each document as the go's giver where the host allows acting for someone (its writer
+  thread); an in-process `delivery run` reads as the actor running it, who holds the same reads.
+- **The daily limit** counts `claimed` events through the connection in the last 24 hours (a rolling day).
+- **Copies are inert twice over.** `company restore` clears every connection (`enabled`, `enabled_host`), and a
+  connection sends only where `enabled_host` matches this machine: a fingerprint of the host name, the data folder and
+  the company id, so a copy with a new id or on another machine does not match.
+- **Tracking** polls a transport that defines `events` for messages it accepted in the last 14 days (at most 50 refs,
+  every 15 minutes on the tick); `delivered` and `bounced` are events, `delivery` on the message is derived from the
+  newest, and a bounce raises one to-do (`delivery-bounce:<id>`) for the person who drafted it (or who gave the go).
+- **The conformance suite** (`tests/delivery_transport_contract.py`) runs through the dispatcher against a company: a
+  harness scripts the far side (`plan`) and reports what arrived (`delivered`, `deliveries_of`). The fake
+  (`tests/delivery_fake_transport.py`) is its first harness; a real adapter's wraps a local test server.
+- `delivery-connection check` calls the transport inside the command (a person's explicit act); a real sender may
+  move it off the writer if its checks are slow.
+
+**Not in this increment:** a sender; flags, batches (increment 3); schedules (increment 4).
+
+**Measured:** the idle scheduler tick for a company with no connection and nothing in flight, through the host
+(median of 25): 9.56 ms with the delivery hook, 9.43 ms without; the hook's one statement on the writer, 44.5 µs
+(`tests/test_delivery_queue.py`, printed with `-s`). Within the run-to-run noise: nothing measurable.
+
+**Tests:** `tests/test_delivery_queue.py` (the empty production registry; connections never holding a secret; the
+conformance suite against the fake; backoff; a crash between claim and record and the lease; unknown outcomes and a
+raise; the claim precheck and retry pointing at refresh; the daily limit; tracking and the bounce to-do; a restored
+copy disabled; a full pass with sockets and processes blocked; the go for a person, an agent and a person deactivated
+before the claim, through the host's tick; the idle-tick measurement), `tests/test_delivery_seeded.py` (the queue,
+five seeds of 30 steps: 20 messages reached the fake server, none twice; 20 crashes between send and record, 4 leases expired, 6 held unknown outcomes, 4 failed, 11 retry waits, 11 sent), and `tests/test_delivery_surfaces.py` (the new commands on all four surfaces).
