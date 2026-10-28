@@ -13,6 +13,9 @@ asserts they agree.
   Two-digit years up to the current year's are this century, later ones the last. Bare 5-digit spreadsheet serials
   are refused.
 - Strings stay strings: leading zeros are kept and no cell is evaluated.
+- Control characters inside cells (a NUL) are kept for the import to drop from text fields and report by position, or to
+  refuse in numbers and references (Kabe 2026-10-27); a file that is not text at all (mostly control codes, a PDF, an
+  image, an old .xls) is refused. An .xlsx workbook is read by ``xlsx.py``.
 """
 from __future__ import annotations
 
@@ -26,7 +29,7 @@ from datetime import date
 from bookflow import BookflowError
 
 DELIMITERS = (',', ';', '\t', '|')
-DELIMITER_NAMES = {',': 'comma', ';': 'semicolon', '\t': 'tab', '|': 'pipe'}
+DELIMITER_NAMES = {',': 'comma', ';': 'semicolon', '\t': 'tab', '|': 'pipe', 'xlsx': 'worksheet'}
 SNIFF_LINES = 50
 _CP1252_UNDEFINED = frozenset((0x81, 0x8D, 0x8F, 0x90, 0x9D))
 TRUE_WORDS = frozenset(('yes', 'true', '1', 'y', 't', 'on'))
@@ -50,6 +53,7 @@ class Table:
     delimiter: str
     sha256: str
     width_errors: dict[int, int] = field(default_factory=dict)  # row position -> cell count, where it differs
+    sheet: str | None = None  # the worksheet an .xlsx file was read from
 
 
 def decode(raw: bytes) -> tuple[str, str, bool]:
@@ -117,20 +121,27 @@ def sniff_delimiter(text: str) -> str:
     return best
 
 
-def read(raw: bytes | str, *, delimiter: str | None = None, header_row: bool = True, skip_rows: int = 0) -> Table:
-    """Read a whole file. Blank rows are dropped; a row of another width than the header is noted, not dropped."""
+def read(raw: bytes | str, *, delimiter: str | None = None, header_row: bool = True, skip_rows: int = 0,
+         sheet: str | None = None) -> Table:
+    """Read a whole file. Blank rows are dropped; a row of another width than the header is noted, not dropped.
+
+    An ``.xlsx`` workbook (a zip) is read by ``xlsx.py``, values only. A control character inside a cell (a NUL) is
+    kept here for the import to drop and report; a file that is not text at all is refused.
+    """
     if isinstance(raw, bytes):
+        if raw.startswith(ZIP_SIGNATURE):
+            from bookflow.company import xlsx
+            return xlsx.read(raw, sheet=sheet, header_row=header_row, skip_rows=skip_rows)
+        _refuse_binary(raw)
         text, encoding, guessed = decode(raw)
         sha = digest(raw)
     else:
-        text, encoding, guessed = (raw[1:] if raw.startswith('﻿') else raw), 'text', False
+        text, encoding, guessed = (raw[1:] if raw.startswith('\ufeff') else raw), 'text', False
         sha = digest(raw)
-    if '\x00' in text:
-        at = text.index('\x00')
-        line = text.count('\n', 0, at) + 1
-        raise BookflowError('E_VALIDATION', message=(
-            f'The file has a NUL character on line {line}, which no text holds; save it again as UTF-8 CSV.'),
-            details={'field': 'content', 'problem': 'nul', 'line': line})
+    if sheet is not None:
+        raise BookflowError('E_VALIDATION', message='`sheet` names a worksheet of an .xlsx file; this file is text.',
+                            details={'field': 'sheet'})
+    _refuse_not_text(text)
     if delimiter is None:
         delimiter = sniff_delimiter(text)
     if delimiter not in DELIMITERS:
@@ -151,7 +162,7 @@ def read(raw: bytes | str, *, delimiter: str | None = None, header_row: bool = T
     if not records:
         raise BookflowError('E_VALIDATION', message='The file has no rows.', details={'field': 'content'})
     if header_row:
-        headers = [cell.strip() for cell in records[0][1]]
+        headers = [clean_text(cell)[0].strip() for cell in records[0][1]]
         body = records[1:]
     else:
         width = max(len(cells) for _, cells in records)
@@ -169,6 +180,59 @@ def read(raw: bytes | str, *, delimiter: str | None = None, header_row: bool = T
             seen.add(key)
     widths = {position: len(cells) for position, (_, cells) in enumerate(body, start=1) if len(cells) != len(headers)}
     return Table(headers, body, encoding, guessed, delimiter, sha, widths)
+
+
+ZIP_SIGNATURE = b'PK\x03\x04'
+_BINARY = ((b'\xd0\xcf\x11\xe0', 'an Excel 97-2003 (.xls) or other Office binary file; save it as .xlsx or CSV'),
+           (b'%PDF', 'a PDF'), (b'\x89PNG', 'an image'), (b'\xff\xd8\xff', 'an image'), (b'GIF8', 'an image'),
+           (b'PK', 'an archive'))
+NOT_TEXT_SHARE = 0.10  # control characters (other than tab and line breaks) above this share: not a text file
+KEPT_CONTROLS = frozenset('\t\n\r')
+
+
+def _refuse_binary(raw: bytes) -> None:
+    for signature, what in _BINARY:
+        if raw.startswith(signature):
+            raise BookflowError('E_VALIDATION', message=f'The file is {what}, not a table of text; save it as CSV.',
+                                details={'field': 'content', 'problem': 'not_text'})
+
+
+def _refuse_not_text(text: str) -> None:
+    """A file whose characters are mostly control codes is binary data read as text, not a table with a stray NUL."""
+    sample = text[:65536]
+    controls = sum(1 for ch in sample if ch < ' ' and ch not in KEPT_CONTROLS) + sample.count('\x7f')
+    if controls > 8 and controls > len(sample) * NOT_TEXT_SHARE:
+        raise BookflowError('E_VALIDATION', message=(
+            f'The file is not text ({controls} of its first {len(sample)} characters are control codes); save it as '
+            'UTF-8 CSV.'), details={'field': 'content', 'problem': 'not_text'})
+
+
+def unholdable(ch: str, multiline: bool) -> bool:
+    """A character no text field holds: control codes (NUL, escape...) and lone surrogates; tab and line breaks only
+    where the field takes long text. Accents, other scripts, symbols and emoji are all holdable."""
+    if ch in KEPT_CONTROLS:
+        return not multiline
+    code = ord(ch)
+    return code < 0x20 or 0x7f <= code < 0xa0 or 0xd800 <= code < 0xe000 or code in (0xfffe, 0xffff)
+
+
+def clean_text(cell: str, multiline: bool = False) -> tuple[str, list[tuple[int, str]]]:
+    """The cell without the characters a text field cannot hold, and each dropped one as (1-based position, char)."""
+    if all(' ' <= ch < '\x7f' for ch in cell):  # the common case, at once
+        return cell, []
+    kept, dropped = [], []
+    for position, ch in enumerate(cell, start=1):
+        if unholdable(ch, multiline):
+            dropped.append((position, ch))
+        else:
+            kept.append(ch)
+    return (''.join(kept), dropped) if dropped else (cell, [])
+
+
+def char_name(ch: str) -> str:
+    import unicodedata
+    names = {'\x00': 'NUL', '\x07': 'BEL', '\t': 'TAB', '\n': 'LINE FEED', '\r': 'CARRIAGE RETURN', '\x1b': 'ESCAPE', '\x7f': 'DELETE'}
+    return names.get(ch) or unicodedata.name(ch, f'U+{ord(ch):04X}')
 
 
 def column_letter(index: int) -> str:
@@ -199,8 +263,8 @@ def number_format(values: list[str]) -> tuple[str, str] | None:
     open_question = False
     for raw in values:
         text = _bare(raw)
-        if not text:
-            continue
+        if not text or not re.fullmatch(r'[0-9.,]+', text):
+            continue  # junk is the check's to refuse; it says nothing about the column's format
         points, commas = text.count('.'), text.count(',')
         guess = None
         if points and commas:
