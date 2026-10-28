@@ -1286,9 +1286,9 @@ for _col in _shipment_packing_schema.company_info_columns(_column):
 for _col in _shipment_packing_schema.revision_columns(_column):
     shipment_revisions.append_column(_col)
 globals().update(_delivery_schema.define_queue_tables(metadata, _column, _table, _common))
-# Reversible batches and list imports (co0108, R107 increments 0 and 1).
+# Reversible batches and list imports (co0108, R107 increments 0 and 1); saved mappings and decisions (co0110).
 from bookflow.company import import_schema as _import_schema
 globals().update(_import_schema.define_tables(metadata, _column, _table))
 globals().update(_delivery_schema.define_batch_tables(metadata, _column, _table, _common, delivery_messages))
-# Document delivery, increment 4 (co0110, R112): recurring sends and their runs.
+# Document delivery, increment 4 (co0111, R112): recurring sends and their runs.
 globals().update(_delivery_schema.define_schedule_tables(metadata, _column, _table, _common))

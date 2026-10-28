@@ -172,7 +172,8 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.IMPORT_POLICY_VERSION: '0db21ee9713630abf0d4a5d81c282ee608483cd6f16b8a2aa40e3a14712dfe4a',
     c.WORKSHEET_POLICY_VERSION: 'c59d5c63f042353fd78d4e565561f9d0f4560ad8420d56b412915b90f23a4cf4',
     c.DELIVERY_BATCH_POLICY_VERSION: 'e7d68fa7de0173bbe842091419c3deed98561bc4e07c92cf981e4759e59756b5',
-    c.DELIVERY_SCHEDULE_POLICY_VERSION: '48ecbba3fbdd742594779a3e054b761788fc2db5efb320f934b1704d64b9fd5e',
+    c.IMPORT_MAPPING_POLICY_VERSION: '66a2d6a6c90f23b6f547ec27aa823a1440b892c22a7bd0b50ce8c142c5dc7b5f',
+    c.DELIVERY_SCHEDULE_POLICY_VERSION: '66aed81b62dd65713f27e55f39cea8ba2aa393d8584b08013a4a0298ec50dd59',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -320,6 +321,7 @@ def _full_known():
     from . import permission_import_catalog
     from . import permission_worksheet_catalog
     from . import permission_delivery_batch_catalog
+    from . import permission_import_mapping_catalog
     from . import permission_delivery_schedule_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
@@ -394,6 +396,7 @@ def _full_known():
         c.IMPORT_POLICY_VERSION: permission_import_catalog,
         c.WORKSHEET_POLICY_VERSION: permission_worksheet_catalog,
         c.DELIVERY_BATCH_POLICY_VERSION: permission_delivery_batch_catalog,
+        c.IMPORT_MAPPING_POLICY_VERSION: permission_import_mapping_catalog,
         c.DELIVERY_SCHEDULE_POLICY_VERSION: permission_delivery_schedule_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is

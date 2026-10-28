@@ -62,6 +62,7 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # import-v1 adds none: an import runs each row's own command, under that command's own capability.
     # worksheet-v1 adds none: the worksheet and the shipments report are reports.
     # delivery-batch-v1 adds none: drafting is anyone's, and a batch's send gives a go only as delivery send does.
+    # import-mapping-v1 adds none: a decision's create runs its own command; a saved mapping is the import's own record.
     # delivery-schedule-v1 adds `delivery-schedule live`: a send schedule made live sends unattended under its
     # establisher; R187 converts it to automate.delivery.
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)

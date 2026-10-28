@@ -72,12 +72,16 @@ def run_all(books, run_id, **context):
 
 def test_two_hundred_rows_five_bad_rerun_fix_and_reverse(books):
     text = rows_file(bad=BAD)
-    preview = books.run('import preview', {'kind': 'customer', 'content': text, 'file_name': 'old.csv'},
-                        reason='Customer list from the old system')
-    assert preview['counts'] == {'create': 195, 'refused': 5}
+    # All or nothing is the default (Kabe 2026-10-27): the file is refused whole, every problem named at once.
+    with pytest.raises(BookflowError) as caught:
+        books.run('import preview', {'kind': 'customer', 'content': text})
+    assert caught.value.code == 'E_VALIDATION' and caught.value.details['check']['rows_with_problems'] == 4
+    preview = books.run('import preview', {'kind': 'customer', 'content': text, 'file_name': 'old.csv',
+                                           'partial': True}, reason='Customer list from the old system')
+    assert preview['counts'] == {'create': 195, 'refused': 4, 'waiting': 1} and preview['run']['state'] == 'waiting'
     refused = {r['row']: (r['line'], r['column'], r['code']) for r in preview['refused']}
     assert refused == {row: (row + 1, column, code) for row, (column, _, code) in BAD.items()
-                       if code not in ('no_key', 'duplicate_in_file')} | {
+                       if code not in ('no_key', 'duplicate_in_file', 'unknown_reference')} | {
         133: (134, None, 'no_key'), 171: (172, None, 'duplicate_in_file')}
     assert preview['mapping']['columns']['E-mail'] == 'email' and preview['mapping']['columns']['Zip'] == \
         'billing_address.postal_code'
@@ -88,8 +92,15 @@ def test_two_hundred_rows_five_bad_rerun_fix_and_reverse(books):
         'credit_limit': '10.50', 'billing_address': {'city': 'Springfield', 'postal_code': '00001'}}}
     assert active_customers(books) == set()  # a preview writes nothing to the books
     run_id = preview['run']['id']
+    # The unknown term asks; the run waits until it is decided.
+    assert books.run('import show', {'run': run_id})['decisions'][0]['value'] == 'Net 99'
+    with pytest.raises(BookflowError) as caught:
+        books.run('import run', {'run': run_id})
+    assert caught.value.code == 'E_VALIDATION' and 'Net 99' in caught.value.message
+    books.run('import decide', {'run': run_id, 'skip': ['Net 99']})
     done = run_all(books, run_id, reason='Customer list')
-    assert done['counts'] == {'created': 195, 'refused': 5, 'not_run': 0} and done['run']['state'] == 'done'
+    assert done['counts'] == {'created': 195, 'refused': 4, 'skipped': 1, 'not_run': 0}
+    assert done['run']['state'] == 'done'
     assert len(active_customers(books)) == 195
     acme = books.run('customer show', {'customer': 'Customer 001'})
     assert acme['phone'] == '00001' and acme['billing_address']['postal_code'] == '00001'  # leading zeros kept
@@ -98,9 +109,11 @@ def test_two_hundred_rows_five_bad_rerun_fix_and_reverse(books):
                                                     "'customer create'")}
     assert len(source_refs) == 195 and all(ref.startswith(f'import:{run_id}:') for ref in source_refs)
     # A rerun of the same source creates nothing.
-    again = books.run('import preview', {'kind': 'customer', 'content': text})
-    assert again['counts'] == {'already_in': 195, 'refused': 5}
-    assert run_all(books, again['run']['id'])['counts'] == {'already_in': 195, 'refused': 5, 'not_run': 0}
+    again = books.run('import preview', {'kind': 'customer', 'content': text, 'partial': True})
+    assert again['counts'] == {'already_in': 195, 'refused': 4, 'waiting': 1}
+    books.run('import decide', {'run': again['run']['id'], 'skip': ['Terms:Net 99']})
+    assert run_all(books, again['run']['id'])['counts'] == {'already_in': 195, 'refused': 4, 'skipped': 1,
+                                                            'not_run': 0}
     # The error file, corrected, imports those 5 and only them.
     errors = books.run('import errors', {'run': run_id})
     assert errors['rows'] == 5 and errors['file_name'] == 'old - refused rows.csv'
@@ -195,7 +208,10 @@ def test_import_is_the_same_as_typing_and_permission_parity(books):
     # The same refusal as typing: a phone longer than the field allows.
     with pytest.raises(BookflowError) as typed_error:
         books.run('customer create', {'name': 'Long', 'phone': '9' * 80})
-    preview = books.run('import preview', {'kind': 'customer', 'content': 'Name,Phone\nLong,' + '9' * 80 + '\n'})
+    checked = books.run('import check', {'kind': 'customer', 'content': 'Name,Phone\nLong,' + '9' * 80 + '\n'})
+    assert [(g['code'], g['column'], g['rows']) for g in checked['problems']] == [(typed_error.value.code, 'Phone', [1])]
+    preview = books.run('import preview', {'kind': 'customer', 'content': 'Name,Phone\nLong,' + '9' * 80 + '\n',
+                                           'partial': True})
     assert preview['refused'][0]['code'] == typed_error.value.code and preview['refused'][0]['column'] == 'Phone'
     # A caller who may import but not read or make customers is refused the preview itself (its rows would show
     # which customers exist and how they differ), as typing is refused the create.
@@ -240,7 +256,7 @@ def test_other_list_kinds_update_mode_and_its_reversal(books):
     run_all(books, accounts['run']['id'])
     items = books.run('import preview', {'kind': 'item', 'content': (
         'Item,Type,Description,Sales Price,Income Account\nService call,Service,Call out,"$1,250.00",Sales Income\n'
-        'Part A,non-inventory part,A part,12.125,Service Income\nPart B,service,,1,Postage\n')})
+        'Part A,non-inventory part,A part,12.125,Service Income\nPart B,service,,1,Postage\n'), 'partial': True})
     assert items['counts'] == {'create': 2, 'refused': 1}, items['refused']
     assert items['refused'][0]['message'] == ('Invalid input (income_account_id: must reference an account of type '
                                               'income, other_income).')
@@ -249,7 +265,7 @@ def test_other_list_kinds_update_mode_and_its_reversal(books):
     assert books.run('item show', {'item': 'Part A'})['price']['amount'] == '12.125'
     # Update mode changes only matches, merging as a typed update does; its reversal puts the prior values back.
     before = books.run('customer create', {'name': 'Acme', 'phone': '555-0100', 'email': 'old@acme.test'})
-    update = books.run('import preview', {'kind': 'customer', 'mode': 'update', 'content': (
+    update = books.run('import preview', {'kind': 'customer', 'mode': 'update', 'allow': ['skipped'], 'content': (
         'Name,Phone\nAcme,555-0199\nNobody,1\n')})
     assert update['counts'] == {'update': 1, 'skipped': 1}
     run_all(books, update['run']['id'])

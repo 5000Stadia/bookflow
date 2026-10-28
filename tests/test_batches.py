@@ -141,7 +141,7 @@ def test_no_effect_without_its_write_and_the_reverse(books, monkeypatch):
 def test_an_atomic_run_undoes_itself_at_the_first_refusal(books):
     books.run('term create', {'name': 'Net 7', 'kind': 'standard', 'due_days': 7})
     text = 'Name,Terms\nAlpha,Net 30\nBravo,Net 30\nCharlie,Net 7\nDelta,Net 30\n'
-    preview = books.run('import preview', {'kind': 'customer', 'content': text, 'atomic': True})
+    preview = books.run('import preview', {'kind': 'customer', 'content': text})
     assert preview['counts'] == {'create': 4}
     books.run('term deactivate', {'term': 'Net 7'})  # the books change between preview and run
     out = books.run('import run', {'run': preview['run']['id']})
@@ -177,6 +177,18 @@ def test_co0108_ddl_is_the_metadata():
     paths = {str(CreateIndex(i).compile(dialect=dialect())) for t in c.metadata.tables.values()
              for i in t.indexes if i.name.endswith('_path')}
     assert set(m.PATH_INDEXES) == paths and len(paths) == 8
+
+
+def test_co0110_ddl_is_the_metadata():
+    import importlib
+    from sqlalchemy.dialects.sqlite import dialect
+    from sqlalchemy.schema import CreateIndex, CreateTable
+    from bookflow.company import schema as c
+    m = importlib.import_module('bookflow.storage.company_migrations.versions.0110_import_mappings')
+    assert m.DDL == tuple(str(CreateTable(c.metadata.tables[t]).compile(dialect=dialect()))
+                          for t in reversed(m.TABLES))
+    assert set(m.INDEXES) == {str(CreateIndex(i).compile(dialect=dialect())) for t in m.TABLES
+                              for i in c.metadata.tables[t].indexes}
 
 
 def test_a_run_stopped_part_way_and_reversed_is_never_continued(books):

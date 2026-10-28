@@ -98,7 +98,8 @@ ACCEPTED = {
     'import-v1': (797, '0db21ee9713630abf0d4a5d81c282ee608483cd6f16b8a2aa40e3a14712dfe4a'),
     'worksheet-v1': (799, 'c59d5c63f042353fd78d4e565561f9d0f4560ad8420d56b412915b90f23a4cf4'),
     'delivery-batch-v1': (806, 'e7d68fa7de0173bbe842091419c3deed98561bc4e07c92cf981e4759e59756b5'),
-    'delivery-schedule-v1': (814, '48ecbba3fbdd742594779a3e054b761788fc2db5efb320f934b1704d64b9fd5e'),
+    'import-mapping-v1': (814, '66a2d6a6c90f23b6f547ec27aa823a1440b892c22a7bd0b50ce8c142c5dc7b5f'),
+    'delivery-schedule-v1': (822, '66aed81b62dd65713f27e55f39cea8ba2aa393d8584b08013a4a0298ec50dd59'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -233,6 +234,8 @@ CHAIN_ADDITIONS = {
     'worksheet-v1': {'report order-fulfillment', 'report shipments'},
     'delivery-batch-v1': {'delivery batch', 'delivery batch-cancel', 'delivery batch-query', 'delivery batch-show', 'delivery flag',
                           'delivery queue', 'delivery unflag'},
+    'import-mapping-v1': {'import check', 'import decide', 'import-mapping deactivate', 'import-mapping history',
+                          'import-mapping match', 'import-mapping query', 'import-mapping save', 'import-mapping show'},
     'delivery-schedule-v1': {'delivery-schedule create', 'delivery-schedule live', 'delivery-schedule pause',
                              'delivery-schedule query', 'delivery-schedule resume', 'delivery-schedule run',
                              'delivery-schedule show', 'delivery-schedule update'},
