@@ -631,3 +631,67 @@ For the builder, defaults standing unless review finds otherwise:
    opening balances come first and only later documents after them, and the opening page says so.
 7. **Opening stock via the `item` kind.** *Default:* it creates the item with no quantity; stock comes through the
    opening step or an `inventory adjust` import.
+
+## As built: increments 0–1
+
+- **Migration co0105** (on co0104) adds the batch ledger and the list-import tables in one step: `batches`,
+  `batch_effects`, `import_runs`, `import_rows`, `import_keys`. Guards: effects and row outcomes are immutable; nothing
+  is ever deleted; a batch changes only `state` and its reversal columns, and never once `reversed`; a run only its
+  state (and batch, version); a key only its release, once. A partial unique index keeps one standing key per
+  `(source, key hash)`. One migration for both increments (not one each): fewer shared files to re-chain.
+- **One write path, no second engine.** `dispatch._apply` calls `s.batch_recorder` (when a batch set one, and only
+  with a company open) just before the company commit, after the command's audit event: an import row's key, its
+  batch effect and its `run` outcome commit with the record or not at all (tested by failing the ledger write: the
+  record, its audit event and its key all roll back). Rows run through the registry command nested in the session as
+  `cutover` nests its steps, with source reference `import:<run>:<row>`; the importer grants nothing.
+- **Reversal** (`company/batches.py`) plans first, whole (`--dry-run` returns the plan and a fingerprint the real
+  call can carry). Blockers: a later live batch in the scope (`strict` ordering); a record **edited again** (its
+  version is not the one the batch left; who and when named); a created record **in use**, found by the database's
+  own foreign keys (other than its own detail rows and records the same batch made), naming the document where the
+  referring row carries one (`invoice 1`); and the inverse command's own refusal from a dry run, permission included.
+  `E_BATCH_BLOCKED` carries up to 50 blockers, the total and what clears each; a blocked reversal changes nothing.
+  Inverses: an updated record gets its prior values back through its ordinary update, carrying the version the batch
+  left; a **created list record is renamed `<name> (reversed <batch>)` and deactivated** (lists have no delete, and
+  names are unique among inactive records too, so the rename is what frees the name for the corrected file); its keys
+  are released in the deactivate's transaction. Each inverse command is an effect of a `reversal` batch, so a
+  reversal killed anywhere (between slices, or between a record's rename and deactivate) resumes from the recorded
+  steps (`state reversing`); tested at both points.
+- **Atomic, decided:** commands commit one by one, so `--atomic` is kept by compensation: an atomic run starts only
+  when its preview refused nothing, and the first refusal while running reverses what the run made through its batch
+  (`rolled_back`). Slices of a reversal are likewise plan-checked whole, then run record by record.
+- **Reader** `company/tabular.py`: every §3 fixture is a test (BOM, cp1252 flagged as guessed, UTF-16, semicolons,
+  pasted tab text, quoted newlines, parentheses, trailing minus, decimal commas, ambiguous dates asked, leading zeros,
+  spreadsheet serials refused, formula-safe error files), and it agrees with `statement_files` and `cutover_sources`
+  on the shared money and date strings. Two-digit years pivot at the company's current year, as §3 says.
+- **Kinds:** 17 list kinds (the §2 list plus job-type, item-category, customer-message, employee, other-name), each a
+  declaration over its create and update commands; fields come from the command's own input model. References
+  (`terms_id`, `parent_id`, an item's `*_account_id`...) are resolved from the file's text by the list's own selector
+  keys (id, name, code, an account's number), because those inputs take ids; no fuzzy match, suggestions only.
+  `NOT_IMPORTABLE` names every other company-only write with a reason (and `PLANNED` the §2 document kinds); a test
+  fails on any command that is none of these. Modes `create`, `update` and `upsert` (update effects keep the prior
+  values, input-shaped, so the update's reversal restores them exactly).
+- **Permissions:** layer `import-v1` on `picking-v1` adds the capability `import` (member reads, standard writes; held
+  by every role at member and by standard, admin and owner at standard). No existing default changes. `import.approve`
+  (R187) is not needed yet: list imports never wait; it arrives with document imports (increment 4). Decided: `batch
+  show` and `query` sit under `import` too, until bank feeds adds its own door.
+- **Not built here** (later increments): saved mappings and `decide` (unknown references are listed with
+  suggestions; a run refuses them row by row), the browser pages, documents, the scale caps.
+
+**Baseline measurements** (`tools/measure_imports.py`, one process per size, the root NVMe, a fresh company on the
+general chart, `customer` rows with email, phone, terms, credit limit, city and postal code; seconds, measured
+2026-10-27 on this branch):
+
+| Rows | Parse and guess | Preview | Run | Reverse dry run | Reverse | Loop of `customer create` | Peak RSS |
+|---|---|---|---|---|---|---|---|
+| 1,000 | 0.016 | 7.42 (7.4 ms/row) | 18.63 (18.6 ms/row) | 21.09 | 79.18 (79.2 ms/row) | 57.72 (57.7 ms/row) | 293 MB |
+| 10,000 | 0.042 | 74.01 (7.4 ms/row) | 256.18 (25.6 ms/row) | 405.85 | 1,177.21 (117.7 ms/row) | 861.03 (86.1 ms/row) | 340 MB |
+
+The single-command baseline is `client.run('customer create', ...)` looped in one process, which opens a session per
+call; the import's run nests the same command in one session, so it runs at about a third of the loop's time per row
+(run over loop: 0.32 at 1,000 rows, 0.30 at 10,000). Per-row cost grows with the list for the run, the loop and the
+reversal alike (the commands' own name checks on a larger table); the reversal's dry-run probes grow fastest (21 s to
+406 s, 1,000 to 10,000), the first thing for increment 5 to look at. Peak memory rose 16 percent from 1,000 to 10,000
+rows in a process that also holds the baseline loop; criterion 8's 10 percent is increment 5's to measure alone. A
+reversal costs about four commands per created record (two dry-run probes in
+the plan, then the rename and the deactivate) plus the whole-plan check. `invoice post` is measured with the
+document kinds (increment 4); slice, refusal-stop and row-cap defaults stay as §5 gives them until increment 5.
