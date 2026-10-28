@@ -222,6 +222,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `combined_percent` | string \| null | yes | yes | — | — |
 | `child_count` | integer | yes | no | — | — |
 | `has_children` | boolean | yes | no | — | — |
+| `picture` | object \| null | no | yes | null | — |
+| `picture.attachment_id` | string | yes | no | — | — |
+| `picture.sha256` | string | yes | no | — | — |
+| `picture.media_type` | string | yes | no | — | The stored media type of the attachment. |
+| `picture.size_bytes` | integer | yes | no | — | — |
+| `picture.chosen` | boolean | yes | no | — | True when set with `item picture set` or `use`; false when it is the item's newest linked image, shown because none was chosen. |
+| `picture.url` | string | yes | no | — | Where the workbench serves it, content-addressed and cached for good. |
+| `thumbnail` | object \| null | no | yes | null | — |
+| `thumbnail.attachment_id` | string | yes | no | — | — |
+| `thumbnail.sha256` | string | yes | no | — | — |
+| `thumbnail.media_type` | string | yes | no | — | The stored media type of the attachment. |
+| `thumbnail.size_bytes` | integer | yes | no | — | — |
+| `thumbnail.chosen` | boolean | yes | no | — | True when set with `item picture set` or `use`; false when it is the item's newest linked image, shown because none was chosen. |
+| `thumbnail.url` | string | yes | no | — | Where the workbench serves it, content-addressed and cached for good. |
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
 | `changed` | boolean | yes | no | — | — |
@@ -293,6 +307,7 @@ Example JSON output:
   "original_cost": null,
   "parent_id": null,
   "payment_method_id": null,
+  "picture": null,
   "preferred_vendor": null,
   "preferred_vendor_id": null,
   "price": null,
@@ -315,6 +330,7 @@ Example JSON output:
   "tax_agency_vendor_id": null,
   "tax_basis": null,
   "tax_percent": null,
+  "thumbnail": null,
   "tracking": "none",
   "type": "service",
   "unit_of_measure_set": null,
@@ -821,6 +837,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `combined_percent` | string \| null | yes | yes | — | — |
 | `child_count` | integer | yes | no | — | — |
 | `has_children` | boolean | yes | no | — | — |
+| `picture` | object \| null | no | yes | null | — |
+| `picture.attachment_id` | string | yes | no | — | — |
+| `picture.sha256` | string | yes | no | — | — |
+| `picture.media_type` | string | yes | no | — | The stored media type of the attachment. |
+| `picture.size_bytes` | integer | yes | no | — | — |
+| `picture.chosen` | boolean | yes | no | — | True when set with `item picture set` or `use`; false when it is the item's newest linked image, shown because none was chosen. |
+| `picture.url` | string | yes | no | — | Where the workbench serves it, content-addressed and cached for good. |
+| `thumbnail` | object \| null | no | yes | null | — |
+| `thumbnail.attachment_id` | string | yes | no | — | — |
+| `thumbnail.sha256` | string | yes | no | — | — |
+| `thumbnail.media_type` | string | yes | no | — | The stored media type of the attachment. |
+| `thumbnail.size_bytes` | integer | yes | no | — | — |
+| `thumbnail.chosen` | boolean | yes | no | — | True when set with `item picture set` or `use`; false when it is the item's newest linked image, shown because none was chosen. |
+| `thumbnail.url` | string | yes | no | — | Where the workbench serves it, content-addressed and cached for good. |
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
 
@@ -888,6 +918,7 @@ Example JSON output:
   "original_cost": null,
   "parent_id": null,
   "payment_method_id": null,
+  "picture": null,
   "preferred_vendor": null,
   "preferred_vendor_id": null,
   "price": null,
@@ -910,6 +941,7 @@ Example JSON output:
   "tax_agency_vendor_id": null,
   "tax_basis": null,
   "tax_percent": null,
+  "thumbnail": null,
   "tracking": "none",
   "type": "service",
   "unit_of_measure_set": null,
@@ -1188,6 +1220,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `combined_percent` | string \| null | yes | yes | — | — |
 | `child_count` | integer | yes | no | — | — |
 | `has_children` | boolean | yes | no | — | — |
+| `picture` | object \| null | no | yes | null | — |
+| `picture.attachment_id` | string | yes | no | — | — |
+| `picture.sha256` | string | yes | no | — | — |
+| `picture.media_type` | string | yes | no | — | The stored media type of the attachment. |
+| `picture.size_bytes` | integer | yes | no | — | — |
+| `picture.chosen` | boolean | yes | no | — | True when set with `item picture set` or `use`; false when it is the item's newest linked image, shown because none was chosen. |
+| `picture.url` | string | yes | no | — | Where the workbench serves it, content-addressed and cached for good. |
+| `thumbnail` | object \| null | no | yes | null | — |
+| `thumbnail.attachment_id` | string | yes | no | — | — |
+| `thumbnail.sha256` | string | yes | no | — | — |
+| `thumbnail.media_type` | string | yes | no | — | The stored media type of the attachment. |
+| `thumbnail.size_bytes` | integer | yes | no | — | — |
+| `thumbnail.chosen` | boolean | yes | no | — | True when set with `item picture set` or `use`; false when it is the item's newest linked image, shown because none was chosen. |
+| `thumbnail.url` | string | yes | no | — | Where the workbench serves it, content-addressed and cached for good. |
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
 | `changed` | boolean | yes | no | — | — |
@@ -1259,6 +1305,7 @@ Example JSON output:
   "original_cost": null,
   "parent_id": null,
   "payment_method_id": null,
+  "picture": null,
   "preferred_vendor": null,
   "preferred_vendor_id": null,
   "price": null,
@@ -1281,6 +1328,7 @@ Example JSON output:
   "tax_agency_vendor_id": null,
   "tax_basis": null,
   "tax_percent": null,
+  "thumbnail": null,
   "tracking": "none",
   "type": "service",
   "unit_of_measure_set": null,
@@ -1550,6 +1598,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].combined_percent` | string \| null | yes | yes | — | — |
 | `items[].child_count` | integer | yes | no | — | — |
 | `items[].has_children` | boolean | yes | no | — | — |
+| `items[].picture` | object \| null | no | yes | null | — |
+| `items[].picture.attachment_id` | string | yes | no | — | — |
+| `items[].picture.sha256` | string | yes | no | — | — |
+| `items[].picture.media_type` | string | yes | no | — | The stored media type of the attachment. |
+| `items[].picture.size_bytes` | integer | yes | no | — | — |
+| `items[].picture.chosen` | boolean | yes | no | — | True when set with `item picture set` or `use`; false when it is the item's newest linked image, shown because none was chosen. |
+| `items[].picture.url` | string | yes | no | — | Where the workbench serves it, content-addressed and cached for good. |
+| `items[].thumbnail` | object \| null | no | yes | null | — |
+| `items[].thumbnail.attachment_id` | string | yes | no | — | — |
+| `items[].thumbnail.sha256` | string | yes | no | — | — |
+| `items[].thumbnail.media_type` | string | yes | no | — | The stored media type of the attachment. |
+| `items[].thumbnail.size_bytes` | integer | yes | no | — | — |
+| `items[].thumbnail.chosen` | boolean | yes | no | — | True when set with `item picture set` or `use`; false when it is the item's newest linked image, shown because none was chosen. |
+| `items[].thumbnail.url` | string | yes | no | — | Where the workbench serves it, content-addressed and cached for good. |
 | `count` | integer | yes | no | — | — |
 
 Example JSON output:
@@ -2110,6 +2172,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `combined_percent` | string \| null | yes | yes | — | — |
 | `child_count` | integer | yes | no | — | — |
 | `has_children` | boolean | yes | no | — | — |
+| `picture` | object \| null | no | yes | null | — |
+| `picture.attachment_id` | string | yes | no | — | — |
+| `picture.sha256` | string | yes | no | — | — |
+| `picture.media_type` | string | yes | no | — | The stored media type of the attachment. |
+| `picture.size_bytes` | integer | yes | no | — | — |
+| `picture.chosen` | boolean | yes | no | — | True when set with `item picture set` or `use`; false when it is the item's newest linked image, shown because none was chosen. |
+| `picture.url` | string | yes | no | — | Where the workbench serves it, content-addressed and cached for good. |
+| `thumbnail` | object \| null | no | yes | null | — |
+| `thumbnail.attachment_id` | string | yes | no | — | — |
+| `thumbnail.sha256` | string | yes | no | — | — |
+| `thumbnail.media_type` | string | yes | no | — | The stored media type of the attachment. |
+| `thumbnail.size_bytes` | integer | yes | no | — | — |
+| `thumbnail.chosen` | boolean | yes | no | — | True when set with `item picture set` or `use`; false when it is the item's newest linked image, shown because none was chosen. |
+| `thumbnail.url` | string | yes | no | — | Where the workbench serves it, content-addressed and cached for good. |
 
 Example JSON output:
 
@@ -2174,6 +2250,7 @@ Example JSON output:
   "original_cost": null,
   "parent_id": null,
   "payment_method_id": null,
+  "picture": null,
   "preferred_vendor": null,
   "preferred_vendor_id": null,
   "price": null,
@@ -2196,6 +2273,7 @@ Example JSON output:
   "tax_agency_vendor_id": null,
   "tax_basis": null,
   "tax_percent": null,
+  "thumbnail": null,
   "tracking": "none",
   "type": "service",
   "unit_of_measure_set": null,
@@ -2663,6 +2741,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `combined_percent` | string \| null | yes | yes | — | — |
 | `child_count` | integer | yes | no | — | — |
 | `has_children` | boolean | yes | no | — | — |
+| `picture` | object \| null | no | yes | null | — |
+| `picture.attachment_id` | string | yes | no | — | — |
+| `picture.sha256` | string | yes | no | — | — |
+| `picture.media_type` | string | yes | no | — | The stored media type of the attachment. |
+| `picture.size_bytes` | integer | yes | no | — | — |
+| `picture.chosen` | boolean | yes | no | — | True when set with `item picture set` or `use`; false when it is the item's newest linked image, shown because none was chosen. |
+| `picture.url` | string | yes | no | — | Where the workbench serves it, content-addressed and cached for good. |
+| `thumbnail` | object \| null | no | yes | null | — |
+| `thumbnail.attachment_id` | string | yes | no | — | — |
+| `thumbnail.sha256` | string | yes | no | — | — |
+| `thumbnail.media_type` | string | yes | no | — | The stored media type of the attachment. |
+| `thumbnail.size_bytes` | integer | yes | no | — | — |
+| `thumbnail.chosen` | boolean | yes | no | — | True when set with `item picture set` or `use`; false when it is the item's newest linked image, shown because none was chosen. |
+| `thumbnail.url` | string | yes | no | — | Where the workbench serves it, content-addressed and cached for good. |
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
 | `changed_fields` | array[string] | no | no | [] | — |
@@ -2736,6 +2828,7 @@ Example JSON output:
   "original_cost": null,
   "parent_id": null,
   "payment_method_id": null,
+  "picture": null,
   "preferred_vendor": null,
   "preferred_vendor_id": null,
   "price": null,
@@ -2758,6 +2851,7 @@ Example JSON output:
   "tax_agency_vendor_id": null,
   "tax_basis": null,
   "tax_percent": null,
+  "thumbnail": null,
   "tracking": "none",
   "type": "service",
   "unit_of_measure_set": null,

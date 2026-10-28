@@ -465,6 +465,46 @@ photos, builds a two-level layout, rings up ten sales (walk-in and named, cash w
 resumed), refunds one, closes the day and makes the deposit; a clerk signs in and sees only the POS; an agent arranges a
 group and answers "what should be in the drawer?". Checked afterwards: criteria 1–9, against the twin company.
 
+### As built: increment 1 (item pictures)
+
+- **Storage.** co0116 (numbered after R107 bulk edit's co0115 on its branch; `down_revision` is co0114 here and is
+  re-chained at merge): `items.picture_attachment_id` and `items.picture_thumbnail_attachment_id`, each a foreign key to
+  `attachments` with RESTRICT, and an index on each. Neither demo seed carries a picture (a seed has no image files).
+- **Commands.** `item picture set <item> PATH [--thumbnail-attachment ID]` (a binary transfer, as `attachment add`),
+  `item picture use <item> <attachment> [--thumbnail-attachment ID]` (an image already uploaded; linked to the item if
+  it is not), `item picture clear <item> [--keep-file]`. The contract's `set --attachment` is `use`, because a transfer
+  command always takes a body. Capability `item` (standard) with `attachment` (standard) beside it; layer
+  `item-picture-v1` on `bank-line-v1` (837 commands). The bytes decide: JPEG, PNG or WebP by their first bytes, stored
+  under that type; HEIC (and AVIF) refused with the camera-settings message; a picture is at most 20,000,000 bytes, a
+  thumbnail 1,000,000. `clear` unlinks the picture and its thumbnail from the item (bytes and history kept, as
+  `attachment unlink`), so Remove removes; the item then shows its newest remaining image. `attachment unlink` refuses
+  the link of a chosen picture or thumbnail ("remove it with `item picture clear`"), so a picture never dangles.
+- **Reading.** `item show`, `item list` and every item output carry `picture` and `thumbnail` (attachment id, sha256,
+  media type, size, `chosen`, and `url` `/c/<company>/picture/<id>/<sha256>`); `item query` offers both as columns.
+  With nothing chosen, `picture` is the newest active linked attachment whose stored type is JPEG, PNG or WebP and that
+  is no item's thumbnail (`chosen: false`); the thumbnail shows only beside a chosen picture.
+- **Browser.** The item page shows the picture beside the name with Take photo (`accept="image/*"
+  capture="environment"`), Choose picture and Remove, posted through htmx. `static/item-picture.js` decodes with
+  `createImageBitmap` (EXIF orientation applied), sends a 1600 px JPEG and a 320 px JPEG thumbnail; a file the browser
+  cannot decode goes up as it is so the server's refusal shows. The thumbnail goes up first as an ordinary file
+  (`attachment add`, caption "Item picture thumbnail"), then the picture (`item picture set`); if the picture is refused
+  the thumbnail is unlinked again. Images are served at `/c/<company>/picture/<attachment>/<sha256>` through
+  `attachment get`, only when the bytes are an image and the hash matches, with the sniffed type,
+  `Cache-Control: private, max-age=31536000, immutable`, `nosniff` and `Content-Security-Policy: default-src 'none';
+  sandbox`. Thumbnails (else the picture, scaled) show in the item list (a Picture column, present when any item on
+  the page has one; on phone cards too), the pick screen, the pack screen and the fulfillment worksheet. The item
+  reference picker is a datalist, which cannot draw images: each item option carries `data-picture` for the POS picker.
+- **Imports and bulk edit.** Not importable: `item picture set` and `use` are listed "not-a-record" and `clear`
+  "destructive" in `import_kinds.NOT_IMPORTABLE`; a picture is a file, never a cell of a row. Not bulk-editable for
+  the same reason (R107 bulk edit takes item fields from the `item update` input, which has no picture).
+- **Known limits.** The fallback reads the stored media type, so a non-image uploaded under an image name can be the
+  fallback; the workbench refuses to serve it (404) and the page hides the broken image. A reader without the
+  `attachment` capability sees no pictures in the workbench (the bytes come through `attachment get`).
+- **Tests.** `tests/test_item_pictures.py` (set, replace, clear and fall back; a CLI picture with no thumbnail;
+  refusals; `item query`), `tests/test_item_pictures_surfaces.py` (four transports), and
+  `tests/test_item_pictures_browser.py` (real Chrome at 1440 and 390: Take photo, the HEIC message, scaling to
+  1600x1200 and 320x240, headers, the item list, the pick screen, Remove; nothing scrolls sideways).
+
 ## 16. Open questions
 
 Each default stands if nobody decides. K1 and K2 are Kabe's.

@@ -1979,3 +1979,14 @@ EXAMPLES.update({
     'bank-line undo': Example('bookflow bank-line undo ' + _BANK_SORT + ' --company "Demo Plumbing Co"'
                               ' --reason "Wrong account on the batch" --dry-run --json', {'batch': _BANK_SORT}),
 })
+# R114 increment 1: the item's picture -- a photo uploaded, an image already attached chosen, or the picture removed.
+EXAMPLES.update({
+    'item picture set': Example('bookflow item picture set "Pipe Sealant" sealant.jpg --company "Demo Plumbing Co"'
+                                ' --reason "Shelf photo" --json',
+                                {'item': 'Pipe Sealant', 'original_filename': 'sealant.jpg', 'media_type': 'image/jpeg'}),
+    'item picture use': Example(f'bookflow item picture use "Pipe Sealant" {ID} --company "Demo Plumbing Co"'
+                                ' --reason "Use the photo already attached" --json',
+                                {'item': 'Pipe Sealant', 'attachment': ID}),
+    'item picture clear': Example('bookflow item picture clear "Pipe Sealant" --company "Demo Plumbing Co"'
+                                  ' --reason "Wrong photo" --json', {'item': 'Pipe Sealant'}),
+})
