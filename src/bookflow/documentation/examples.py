@@ -1753,6 +1753,16 @@ EXAMPLES.update({
                                            {'as_of': '2026-12-12'}),
 })
 
+# Draft shipments and packing (R181 increment 4).
+EXAMPLES.update({
+    'shipment create': Example('bookflow shipment create --sales-order 1001' + _C
+                               + ' --reason "Pack before the truck" --dry-run --json', {'sales_order': '1001'}),
+    'shipment pack': Example('bookflow shipment pack 1004 --unit WH-1001 --box 2' + _C
+                             + ' --reason "Heater in box 2" --json', {'shipment': '1004', 'unit': 'WH-1001', 'box': 2}),
+    'shipment cancel': Example('bookflow shipment cancel 1004' + _C + ' --reason "Not going today" --json',
+                               {'shipment': '1004'}),
+})
+
 # Pick lists (R181 increment 3).
 EXAMPLES.update({
     'pick-list create': Example('bookflow pick-list create --site Warehouse --ready' + _C

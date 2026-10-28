@@ -56,6 +56,7 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # shipments-returns-v1 adds none: shipment returns are ledger writes.
     # picking-v1 adds none: pick lists are stock records that post nothing.
     # delivery-v1 adds `delivery mark-sent`: what happened in the owner's own mail program is known to the owner.
+    # packing-v1 adds none: drafts and boxes are stock records that post nothing.
     # delivery-queue-v1 adds `delivery approve` (a go) and every `delivery-connection` write and check (where mail goes
     # under whose keys); R187 converts them to delivery.send and delivery.connect.
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)

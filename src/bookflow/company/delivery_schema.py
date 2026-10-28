@@ -198,7 +198,7 @@ TABLES = ('delivery_events', 'delivery_message_documents', 'delivery_messages', 
 
 
 def define_queue_tables(metadata, C, T, common):
-    """Increment 2 (co0106): the sending connections a person sets up. A row never holds a secret."""
+    """Increment 2 (co0107): the sending connections a person sets up. A row never holds a secret."""
     connections = T('delivery_connections', *common(),
         C('name', sa.String(100), 'Connection name as entered.', nullable=False),
         C('name_key', sa.String(100), 'Case-folded name, unique among connections not removed.', nullable=False),

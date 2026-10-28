@@ -12,7 +12,7 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_delivery_catalog as previous, permission_catalog as c
+from . import permission_packing_catalog as previous, permission_catalog as c
 from . import permission_human_admin_catalog as human_admin
 from .permission_snapshot import CatalogBundle
 

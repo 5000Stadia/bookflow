@@ -100,3 +100,5 @@ Database: `company`.
 | `delivery_reply_to` | VARCHAR(254) | yes | — | — | — | — | Email: Reply-To on every message; null for none. |
 | `delivery_copy_to` | VARCHAR(254) | yes | — | — | — | — | Email: Bcc on every message (a copy to the company); null for none. |
 | `delivery_auto_flag_from` | VARCHAR(10) | yes | — | — | — | — | Email: documents dated on or after this day are flagged to email when the customer prefers email (document delivery's queue); null is off. |
+| `weight_unit` | VARCHAR(16) | no | — | — | — | — | The company's one weight unit, a label never converted (lb, kg, oz). |
+| `shipping_item_id` | VARCHAR(26) | yes | — | — | — | items.id | Item freight to bill is billed as by default; null: name it. |

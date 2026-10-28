@@ -1305,7 +1305,9 @@ The same example as complete `bookflow_run` arguments:
 | `invoice_when_shipping` | `--invoice-when-shipping` | literal["ask", "always", "never"] \| null | no | yes | null | Shipments: after a shipment posts, ask (the default) whether to invoice it now, always offer to, or never; it drives the browser's prompt and the agent's next-command hint. `shipment post` itself does only what it is told. |
 | `delivery_reply_to` | `--delivery-reply-to` | string \| null | no | yes | null | Email: the Reply-To address on every message (e.g. accounts@example.com); null for none. |
 | `delivery_copy_to` | `--delivery-copy-to` | string \| null | no | yes | null | Email: a Bcc copy of every message to this address; null for none. |
-| `pick_and_pack_enabled` | `--pick-and-pack-enabled` | boolean | no | no | null | Pick lists (and, later, packing) as optional layers on shipping: off by default, when `shipment post` ships straight from the order. Turning it off is refused while a pick list is open. |
+| `pick_and_pack_enabled` | `--pick-and-pack-enabled` | boolean | no | no | null | Pick lists, draft shipments and boxes as optional layers on shipping: off by default, when `shipment post` ships straight from the order. Turning it off is refused while a pick list or draft shipment is open. |
+| `weight_unit` | `--weight-unit` | string \| null | no | yes | null | The one weight unit of item weights and boxes (lb, kg, oz): a label, never converted. |
+| `shipping_item_id` | `--shipping-item-id` | string \| null | no | yes | null | Other-charge or service item a shipment's freight to bill is billed as, by default. |
 
 ### Command and context options
 

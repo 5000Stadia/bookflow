@@ -1,0 +1,37 @@
+{% extends "base.html" %}{% block title %}Pack shipment {{ shipment.number }}{% endblock %}{% block body %}<link rel="stylesheet" href="{{ static_urls['picks.css'] }}"><section id="pack-screen" data-pack="{{ shipment.number }}" data-pack-status="{{ shipment.status }}">
+{% set url = '/c/' ~ company_id ~ '/shipments/' ~ quote(shipment.number) %}
+<nav class="crumbs"><a href="/c/{{ company_id }}/shipments">Shipments</a> / <a href="{{ url }}">{{ shipment.number }}</a> / Pack</nav>
+<h1>Pack shipment {{ shipment.number }}</h1>
+<p>{{ shipment.status|capitalize }} · Sales order {{ shipment.sales_order_number }} · {{ shipment.customer_name }} · {{ packing.total_weight }} {{ packing.weight_unit }}{% if packing.unweighed != '0' %} ({{ packing.unweighed }} unweighed){% endif %} · <strong data-pack-state>{{ 'Packed' if packing.packed else 'Not all packed' }}</strong></p>
+{% if result %}<div role="status" class="notice" data-pack-result><strong>{{ result }}</strong></div>{% endif %}
+{% if error %}<div role="alert" class="error" data-pack-error><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
+{% if can_pack %}
+<form method="post" action="{{ url }}/pack" hx-post="{{ url }}/pack" hx-target="body" hx-swap="outerHTML" class="pick-entry pack-entry" data-pack-scan>
+<label class="scan">Scan a serial number, lot or item <input name="code" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go" placeholder="WH-1001" autofocus data-pack-code></label>
+<label class="qty">Box <input name="box" inputmode="numeric" autocomplete="off" value="{{ values.box }}" data-pack-box></label>
+<label class="qty">Quantity <input name="quantity" inputmode="decimal" autocomplete="off" placeholder="1"></label>
+<input type="hidden" name="action" value="scan"><button type="submit" data-pack-put>Put in box</button>
+</form>
+<p class="muted">Box 0 takes a unit out of its box. A new box number makes a new box (next: {{ next_box }}).</p>
+{% endif %}
+<section class="workspace-card" aria-label="Lines">
+<h2>Lines</h2>
+<div class="table-wrap"><table class="list-table pick-lines" data-pack-lines><thead><tr><th>Item</th><th class="num">Ships</th><th>Box</th><th class="num">Not boxed</th>{% if can_pack %}<th></th>{% endif %}</tr></thead><tbody>
+{% for line in shipment.lines %}{% set loose = (packing.unboxed|selectattr('line_identity', 'eq', line.line_identity)|list) %}<tr class="{{ 'done' if not loose else '' }}" data-line="{{ line.position }}"><td data-label="Item">{{ line.item_name }}{% if line.serial_numbers %}<br><small>{{ line.serial_numbers|join(', ') }}</small>{% endif %}{% if line.lot %} <small>lot {{ line.lot }}</small>{% endif %}</td><td class="num" data-label="Ships">{{ line.quantity }}</td><td data-label="Box">{{ (where.get(line.line_identity) or [])|join(' · ') }}</td><td class="num" data-label="Not boxed">{{ loose[0].quantity if loose else '0' }}</td>{% if can_pack %}<td data-label="">{% if loose %}<form method="post" action="{{ url }}/pack" hx-post="{{ url }}/pack" hx-target="body" hx-swap="outerHTML" class="inline"><input type="hidden" name="action" value="all"><input type="hidden" name="line" value="{{ line.position }}"><input type="hidden" name="quantity" value="{{ loose[0].quantity }}"><input type="hidden" name="box" value="{{ values.box }}"><button type="submit" class="secondary" data-pack-all>All in box {{ values.box }}</button></form>{% endif %}</td>{% endif %}</tr>{% endfor %}
+</tbody></table></div>
+</section>
+<section class="pack-boxes" aria-label="Boxes" data-pack-boxes>
+{% for box in packing.packages %}<article class="workspace-card pack-box" data-box="{{ box.box }}">
+<h2>Box {{ box.box }}{% if box.package_type %} · {{ box.package_type }}{% endif %}</h2>
+<p><strong data-box-weight>{{ box.weight }} {{ packing.weight_unit }}</strong>{% if box.measured_weight %} measured (computed {{ box.computed_weight }}){% else %} computed{% endif %}{% if box.unweighed != '0' and not box.measured_weight %} · {{ box.unweighed }} unweighed{% endif %}{% if box.tracking_number %} · Tracking {{ box.tracking_number }}{% endif %}</p>
+<ul>{% for c in box.contents %}<li>{{ c.quantity }} {{ c.item_name }}{% if c.serial_numbers %}: {{ c.serial_numbers|join(', ') }}{% endif %}</li>{% else %}<li class="muted">Empty</li>{% endfor %}</ul>
+{% if can_pack %}<form method="post" action="{{ url }}/pack" hx-post="{{ url }}/pack" hx-target="body" hx-swap="outerHTML" class="inline pack-facts"><input type="hidden" name="action" value="box"><input type="hidden" name="box" value="{{ box.box }}">
+<label>Weight <input name="weight" inputmode="decimal" size="6" value="{{ box.measured_weight or '' }}"></label>
+<label>Tracking <input name="tracking_number" size="14" value="{{ box.tracking_number or '' }}"></label>
+<label>Type <input name="package_type" size="10" value="{{ box.package_type or '' }}"></label>
+<button type="submit" class="secondary" data-box-save>Save box</button></form>{% endif %}
+</article>{% else %}<p class="muted">No boxes yet: scan a unit to put it in box {{ values.box }}.</p>{% endfor %}
+</section>
+<p class="pack-foot"><a href="{{ url }}/packing-slip" target="_blank" rel="noopener" data-pack-slip>Print packing slip</a>{% if packing.packages|length > 1 %} · <a href="{{ url }}/packing-slip?per_box=1" target="_blank" rel="noopener">A page per box</a>{% endif %}</p>
+{% if can_ship %}<form method="post" action="{{ url }}/pack" hx-post="{{ url }}/pack" hx-target="body" hx-swap="outerHTML" class="pick-foot"><input type="hidden" name="action" value="ship"><button type="submit" class="primary-action" data-pack-ship>Ship</button></form>{% endif %}
+</section>{% endblock %}

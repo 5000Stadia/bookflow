@@ -93,7 +93,8 @@ ACCEPTED = {
     'shipments-returns-v1': (749, 'f2c9af3e35a8f1708cf051173e262624f264d266576a028990579e07d4323883'),
     'picking-v1': (755, '34c39c80a09a3d5ef8b10808cb187830a236f340946a45cbc9e2b9ca817e71af'),
     'delivery-v1': (771, '085b7a93194e439557234ed8d88a7d7bdfd39ed06f8b2cbdddb732daca07561b'),
-    'delivery-queue-v1': (782, 'ca5d5135aee95d8887163f85fa9c61291b8331033c1033db55068c39cac22de4'),
+    'packing-v1': (774, '10872774b49e7497c34eccde2882c74e49c36ead5d7d2ff765399dd31fae79c8'),
+    'delivery-queue-v1': (785, '2e19e20f01b2cdc3110be9f381a9ec54fa4f7f0ba5ef6880b49189576076554c'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -218,6 +219,7 @@ CHAIN_ADDITIONS = {
                     'delivery query', 'delivery send', 'delivery show', 'delivery update', 'delivery-template create',
                     'delivery-template deactivate', 'delivery-template fields', 'delivery-template preview',
                     'delivery-template query', 'delivery-template show', 'delivery-template update'},
+    'packing-v1': {'shipment cancel', 'shipment create', 'shipment pack'},
     'delivery-queue-v1': {'delivery approve', 'delivery retry', 'delivery run', 'delivery-connection add',
                           'delivery-connection check', 'delivery-connection disable', 'delivery-connection enable',
                           'delivery-connection query', 'delivery-connection remove', 'delivery-connection show',

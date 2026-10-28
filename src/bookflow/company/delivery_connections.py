@@ -1,4 +1,4 @@
-"""Sending connections (R112 increment 2, co0106; design/document-delivery.md §4, §7).
+"""Sending connections (R112 increment 2, co0107; design/document-delivery.md §4, §7).
 
 A connection says where mail goes and under whose keys: a ``kind`` this build registers (none in production, so
 ``add`` refuses every kind and names the available ones: none), non-secret ``settings`` the kind validates, and a

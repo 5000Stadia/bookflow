@@ -585,7 +585,7 @@ role, pruning on cancel, and the panel's again, export and hold answers.
 
 ## As built: increment 2 (2026-10-27)
 
-**What exists.** co0106 (`delivery_connections`, removed and never deleted), the seam in
+**What exists.** co0107 (`delivery_connections`, removed and never deleted), the seam in
 `bookflow/delivery/transport.py` (`Transport`, `OutgoingMessage`, `TransportResult`, `TransportEvent`, `TransportKind`, the
 registry, `resolve_secret`), the dispatcher in `company/delivery_dispatch.py`, connections in
 `company/delivery_connections.py`, and eleven commands under the `delivery-queue-v1` layer (on `delivery-v1`): `delivery
@@ -600,36 +600,67 @@ connections listed in Email and sending.
 - **Interim permissions, marked for R187.** `approve` and every connection write and `check` are people-only admin
   actions (approve at `customer` standard, connections at `company` admin; reads at `company` member), as `mark-sent`
   is. A go counts at the claim while its giver is an active person with a standing membership of the company or its
-  organization at standard or above (or an installation administrator). `delivery send` and `retry` by a person give
-  the go; an agent's leave the message waiting. Each place carries a comment naming `delivery.send` or
+  organization at standard or above whose `denies` do not name `customer`, and, where permissions are activated,
+  while the policy in force still admits them for `customer` at standard; an installation administrator counts only
+  through such a membership. `delivery send` and `retry` by a person give the go; an agent's leave the message
+  waiting.
+- **A go is for the exact content and recipients it saw.** Holding a message (at release, export, the claim, an
+  unknown outcome or a lease that ran out), editing it, refreshing it and an agent's release each clear `go_by` and
+  `go_at`, and the event records `go_withdrawn` (whose go ended). A changed document therefore always needs a new go
+  after its refresh. Each place carries a comment naming `delivery.send` or
   `delivery.connect`. No hub migration.
 - **A withdrawn go is an `edited` event** (`changed: ['go']`, `go_withdrawn`, why): the event list is fixed by co0105's
   CHECK, and the message stays `ready`, waiting for a new go.
 - **Three steps, no transaction open across a send.** `decide` reads, `claim` writes in one write (lease 10 minutes, one
   more attempt, the `claimed` event with `attempt_key` `<id>:<n>`), the transports are called with nothing open, and
   `record` writes every outcome in one write. Every update is guarded by the version read, so a message changed
-  meanwhile is left for the next pass. `delivery run` owns its transactions as `memorized process` does. On the host,
-  the scheduler tick claims on the writer, calls the transports from the timer thread, and submits the record as one
-  more writer job; a `delivery run` through the host occupies the writer thread for its chunk's calls (at most 10),
-  which a person asked for.
+  meanwhile is left for the next pass. `delivery run` owns its transactions as `memorized process` does, and reopens
+  the commit barrier (`CommitHooks.reopen`) once its claim is committed, so readers go on while the transports talk;
+  through the host it still occupies the writer thread for its chunk's calls (at most 10), which a person asked for.
+  On the host, the scheduler tick claims on the writer and hands the calls to the host's own `bookflow-delivery`
+  thread (never the writer or the timer thread), which submits the record as one more writer job; the timer does not
+  wait for it, and a tick claims nothing more for any company while that thread is still busy.
+- **Each claim is read again just before its send** (on the writer, through the host): it is sent only while still
+  `sending` under this attempt and connection with at least one bounded send's time (`SEND_TIMEOUT`) left on its
+  lease. A claim that fails the check is skipped: nothing leaves, and a still-live one goes back to `ready` with its go
+  (an `attempt_failed` event, code `not_sent`, not counted as a failure).
+- **Every transport call is bounded:** `send` by `transport.SEND_TIMEOUT` (120 s; an answer that does not come is an
+  unknown outcome, held), `open`, `check` and `events` by `CALL_TIMEOUT` (30 s), each on its own daemon thread that is
+  abandoned if it hangs. Host shutdown waits `delivery_stop_seconds` (10 s) for the delivery thread, then records what
+  it could not: a send in flight is held `outcome_unknown` ("the host stopped before the transport answered"), a claim
+  never handed over goes back to ready.
 - **Retries:** 5 min, 30 min, 2 h, then `failed`: four attempts counted since the last `retry` (the `retried` event
   keeps `attempts_before`; `attempts` never resets, so attempt keys never repeat). An unknown outcome, a transport that
   raises, and a lease that runs out are held `outcome_unknown`; a late answer after the lease is kept in the history
-  (`late: true`) and moves nothing. A transport that cannot be opened is a temporary failure (nothing left).
+  (`late: true`) and moves nothing, except a late `accepted` for a message now `held` or `ready` (retried, not yet
+  claimed), which resolves it to `sent`. `retry` refuses once any `accepted` is on record for the message (its next
+  step is `mark-sent`), so a late acceptance can never be duplicated. A transport that cannot be opened is a temporary
+  failure (nothing left). The backoff counts from the time of the record (on the host, the tick's time plus the
+  send's duration), not the claim.
 - **The claim precheck** draws each document as the go's giver where the host allows acting for someone (its writer
   thread); an in-process `delivery run` reads as the actor running it, who holds the same reads.
 - **The daily limit** counts `claimed` events through the connection in the last 24 hours (a rolling day).
-- **Copies are inert twice over.** `company restore` clears every connection (`enabled`, `enabled_host`), and a
-  connection sends only where `enabled_host` matches this machine: a fingerprint of the host name, the data folder and
-  the company id, so a copy with a new id or on another machine does not match.
-- **Tracking** polls a transport that defines `events` for messages it accepted in the last 14 days (at most 50 refs,
-  every 15 minutes on the tick); `delivered` and `bounced` are events, `delivery` on the message is derived from the
-  newest, and a bounce raises one to-do (`delivery-bounce:<id>`) for the person who drafted it (or who gave the go).
+- **Copies are inert three times over.** `company restore` and `company attach` clear every connection (`enabled`,
+  `enabled_host`); a connection sends only where `enabled_host` matches this installation: a fingerprint of a random
+  install id (`<data root>/install-id`, created once, never inside a company file), the host name, the data folder and
+  the company id, so a hand copy onto a replacement machine with the same name and path does not match; and the next
+  pass (`delivery run` or the tick) disables any connection enabled elsewhere (`connection disabled`). Backups keep
+  `secret_ref` (a name, never a secret) and the restore side disables every connection, as §4 asks ("arrives with
+  every connection disabled").
+- **Tracking** polls a transport that defines `events` for messages it accepted in the last 14 days until one bounces
+  (a relay's `delivered` is often followed by the far end's bounce; at most 50 refs, every 15 minutes on the tick);
+  `delivered` and `bounced` are events, `delivery` on the message is derived from the newest, and a bounce raises one
+  to-do (`delivery-bounce:<id>`) for the person who drafted it (or who gave the go). A tick with only tracking to ask
+  takes no write (and so no commit barrier) unless an answer came back.
+- **A transport's own words are redacted and capped** (`transport.clean_text`): addresses, `password=`/`token:`-style
+  pairs, `Bearer` values and long token-like strings are replaced, then the text is cut at 500 characters, before it
+  lands in `failure_text`, `last_check_text`, an event, the audit, a backup or a member's view. `secret_ref` must match
+  `env:NAME` or `keyring:service/name` exactly (no trailing newline).
 - **The conformance suite** (`tests/delivery_transport_contract.py`) runs through the dispatcher against a company: a
   harness scripts the far side (`plan`) and reports what arrived (`delivered`, `deliveries_of`). The fake
   (`tests/delivery_fake_transport.py`) is its first harness; a real adapter's wraps a local test server.
-- `delivery-connection check` calls the transport inside the command (a person's explicit act); a real sender may
-  move it off the writer if its checks are slow.
+- `delivery-connection check` calls the transport when applied (a person's explicit act, bounded by `CALL_TIMEOUT`);
+  `--dry-run` asks the transport nothing.
 
 **Not in this increment:** a sender; flags, batches (increment 3); schedules (increment 4).
 
@@ -641,5 +672,11 @@ connections listed in Email and sending.
 conformance suite against the fake; backoff; a crash between claim and record and the lease; unknown outcomes and a
 raise; the claim precheck and retry pointing at refresh; the daily limit; tracking and the bounce to-do; a restored
 copy disabled; a full pass with sockets and processes blocked; the go for a person, an agent and a person deactivated
-before the claim, through the host's tick; the idle-tick measurement), `tests/test_delivery_seeded.py` (the queue,
+before the claim, through the host's tick; the idle-tick measurement; and the review fixes: a go ended by the hold,
+the refresh and an agent's release (nothing sends), a giver denied `customer` or an installation administrator
+without a membership, the commit barrier open during a host `delivery run`'s send, a claim skipped when its lease ran
+short or a concurrent pass held it, a late acceptance resolved to sent and a retry refused after one, a hung send
+bounded in process and on the host's delivery thread with checkpoints going on and shutdown holding it, a connection
+from another installation and an attached file disabled, tracking after delivered, the backoff from the answer, a
+poll-only tick without the barrier, a dry-run check and redacted text), `tests/test_delivery_seeded.py` (the queue,
 five seeds of 30 steps: 20 messages reached the fake server, none twice; 20 crashes between send and record, 4 leases expired, 6 held unknown outcomes, 4 failed, 11 retry waits, 11 sent), and `tests/test_delivery_surfaces.py` (the new commands on all four surfaces).

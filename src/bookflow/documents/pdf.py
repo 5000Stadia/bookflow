@@ -21,7 +21,7 @@ from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.pdfgen import canvas as pdfcanvas
-from reportlab.platypus import (KeepTogether, Paragraph, SimpleDocTemplate, Spacer,
+from reportlab.platypus import (KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer,
                                 Table, TableStyle)
 
 from bookflow.documents.model import PrintedDocument
@@ -254,5 +254,11 @@ def to_pdf(document: PrintedDocument) -> bytes:
         invariant=1,
     )
     stamped = type("_Stamped", (_Numbered,), {"footer": document.footer})
-    template.build(story(document), canvasmaker=stamped)
+    flow = story(document)
+    if document.parts:
+        # One page (or more) per part, each a whole document of its own: a packing slip per box.
+        flow = []
+        for index, part in enumerate(document.parts):
+            flow += ([PageBreak()] if index else []) + story(part)
+    template.build(flow, canvasmaker=stamped)
     return buffer.getvalue()

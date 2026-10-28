@@ -257,7 +257,9 @@ class CompanyUpdateInput(BaseModel):
     invoice_when_shipping: Literal["ask", "always", "never"] | None = Field(None, description="Shipments: after a shipment posts, ask (the default) whether to invoice it now, always offer to, or never; it drives the browser's prompt and the agent's next-command hint. `shipment post` itself does only what it is told.")
     delivery_reply_to: str | None = Field(None, max_length=254, description="Email: the Reply-To address on every message (e.g. accounts@example.com); null for none.")
     delivery_copy_to: str | None = Field(None, max_length=254, description="Email: a Bcc copy of every message to this address; null for none.")
-    pick_and_pack_enabled: bool = Field(None, strict=True, description="Pick lists (and, later, packing) as optional layers on shipping: off by default, when `shipment post` ships straight from the order. Turning it off is refused while a pick list is open.")
+    pick_and_pack_enabled: bool = Field(None, strict=True, description="Pick lists, draft shipments and boxes as optional layers on shipping: off by default, when `shipment post` ships straight from the order. Turning it off is refused while a pick list or draft shipment is open.")
+    weight_unit: str | None = Field(None, min_length=1, max_length=16, description="The one weight unit of item weights and boxes (lb, kg, oz): a label, never converted.")
+    shipping_item_id: str | None = Field(None, description="Other-charge or service item a shipment's freight to bill is billed as, by default.")
 
     @field_validator("legal_name", "tax_id", "industry", "contact_name", "phone", "fax", "email", "website", "timezone", "closing_date", "free_on_board", "finance_charge_annual_rate", "finance_charge_minimum", "finance_charge_account_id", "overdue_notice_minimum", "delivery_reply_to", "delivery_copy_to", mode="before")
     @classmethod
@@ -277,7 +279,7 @@ NOT_NULLABLE = {
     "sales_tax_enabled", "sales_tax_liability_basis", "sales_tax_remittance_frequency",
     "order_printable_checks", "attachment_max_bytes", "negative_number_style",
     "finance_charge_grace_days", "finance_charge_on_overdue_charges", "finance_charge_from", "finance_charge_mark_to_print",
-    "overdue_notice_frequency", "overdue_notice_template", "invoice_when_shipping", "pick_and_pack_enabled",
+    "overdue_notice_frequency", "overdue_notice_template", "invoice_when_shipping", "pick_and_pack_enabled", "weight_unit",
 }
 
 
@@ -331,8 +333,26 @@ def _validate_merged(new: dict[str, Any], s: Session, changed: set[str]) -> None
             if not EMAIL.match(new[name]):
                 raise BookflowError("E_VALIDATION", details={"fields": [{"field": name, "problem": "not an email address"}]})
     if "pick_and_pack_enabled" in changed and not new["pick_and_pack_enabled"]:
-        from bookflow.company import pick_lists
+        from bookflow.company import pick_lists, shipment_packing
         pick_lists.check_turning_off(s)
+        drafts = shipment_packing.open_drafts(s)
+        if drafts:
+            raise BookflowError("E_WORK_DEPENDENCY", message=(
+                f"Draft shipment {', '.join(drafts[:10])} is still open. Ship it (`shipment post --shipment {drafts[0]}`) "
+                f"or cancel it (`shipment cancel {drafts[0]}`) before turning pick and pack off."),
+                details=dict(problem="an open draft shipment exists", shipments=drafts, reason="draft_shipment_open"))
+    if "weight_unit" in changed:
+        new["weight_unit"] = (new["weight_unit"] or "").strip()
+        if not new["weight_unit"]:
+            raise BookflowError("E_VALIDATION", details={"fields": [{"field": "weight_unit", "problem": "must not be empty"}]})
+    if "shipping_item_id" in changed and new.get("shipping_item_id") is not None:
+        from bookflow.company import shipments as _shipments
+        try:
+            new["shipping_item_id"] = _shipments.freight_item(s, new["shipping_item_id"])["id"]
+        except BookflowError as error:
+            if error.code != "E_VALIDATION":
+                raise
+            raise BookflowError("E_VALIDATION", details={"fields": [{"field": "shipping_item_id", "problem": "must name an other-charge or service item that is sold"}]}) from None
     if not new["sales_tax_enabled"] and new.get("default_sales_tax_item_id") is not None:
         raise BookflowError("E_VALIDATION", details={"fields": [{"field": "sales_tax_enabled", "problem": "clear default_sales_tax_item_id before disabling sales tax"}]})
 

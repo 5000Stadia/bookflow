@@ -134,6 +134,8 @@ class PrintedDocument:
     name: str = ""
     subject: str = ""
     contact: tuple[str, ...] = field(default_factory=tuple)
+    # Pages of their own, printed one after the other (a packing slip per box); empty for one document.
+    parts: tuple["PrintedDocument", ...] = ()
 
 
 Read = Callable[[str, dict[str, Any], str | None], dict[str, Any]]
@@ -573,7 +575,13 @@ BUILDERS = {
     "credit-memo": lambda read, company_id, identity: _credit_memo(read, company_id, identity["document"]),
     "statement": _statement,
     "notice": lambda read, company_id, identity: _notice(read, company_id, identity["document"]),
+    "packing-slip": lambda read, company_id, identity: _packing_slip(read, company_id, identity),
 }
+
+
+def _packing_slip(read: Read, company_id: str, identity: Mapping[str, Any]) -> PrintedDocument:
+    from bookflow.documents.packing_slip import packing_slip   # it builds on this module's parts
+    return packing_slip(read, company_id, identity)
 
 
 def build(read: Read, company_id: str, kind: str, identity: Mapping[str, Any]) -> PrintedDocument:

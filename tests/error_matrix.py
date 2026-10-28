@@ -2538,7 +2538,10 @@ _SHIPMENT_WRITE = {
     'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
     'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
 }
-MATRIX['shipment post'] = dict(_SHIPMENT_WRITE, E_FEATURE_DISABLED='--pick-list while picking is off')
+MATRIX['shipment post'] = dict(_SHIPMENT_WRITE, E_FEATURE_DISABLED='--pick-list, --shipment or --packages while pick and pack is off',
+                               E_CONVERSION_KEY_REUSED='--invoice: the derived invoice key reused for other input',
+                               E_AMOUNT_PRECISION='freight amount with too many decimals',
+                               E_DUPLICATE_NUMBER='--invoice: the invoice number taken')
 MATRIX['shipment update'] = dict(_SHIPMENT_WRITE)
 MATRIX['shipment void'] = dict(_SHIPMENT_WRITE, E_REASON_REQUIRED='a void without --reason')
 # Shipment returns (R181 increment 2).
@@ -2562,6 +2565,19 @@ MATRIX['shipment-return query'] = {'E_RECORD_NOT_FOUND': 'unknown shipment or cu
 MATRIX['shipment show'] = {'E_RECORD_NOT_FOUND': 'unknown shipment'}
 MATRIX['shipment history'] = {'E_RECORD_NOT_FOUND': 'unknown shipment'}
 MATRIX['shipment query'] = {'E_RECORD_NOT_FOUND': 'unknown order or customer', 'E_VALIDATION': 'invalid input'}
+# Draft shipments and packing (R181 increment 4): an optional layer, off until the company turns it on.
+_PACK_WRITE = {
+    'E_VALIDATION': 'nothing to ship, a draft not open, more in boxes than a line ships, a serial number the line does not ship',
+    'E_RECORD_NOT_FOUND': 'unknown shipment, order, item or site',
+    'E_FEATURE_DISABLED': 'pick and pack is off for the company (company update --pick-and-pack-enabled true)',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+MATRIX['shipment create'] = dict(_PACK_WRITE, E_INACTIVE_REFERENCE='an inactive site or item',
+                                 E_VALUE_RANGE='a quantity out of range', E_WORK_DEPENDENCY='a closed order, a pick list holding it')
+MATRIX['shipment pack'] = dict(_PACK_WRITE, E_VERSION_CONFLICT='a stale expected_version')
+MATRIX['shipment cancel'] = dict(_PACK_WRITE, E_VERSION_CONFLICT='a stale expected_version')
 # Pick lists (R181 increment 3): an optional layer, off until the company turns it on.
 _PICK_WRITE = {
     'E_VALIDATION': 'nothing to pick, an order not open, an item not on the list, a serial number held elsewhere or picked on another list, a list not open',

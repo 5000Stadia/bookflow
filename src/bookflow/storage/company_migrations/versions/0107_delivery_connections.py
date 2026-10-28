@@ -9,8 +9,8 @@ never imports current application metadata.
 """
 from alembic import op
 
-revision = 'co0106'
-down_revision = 'co0105'
+revision = 'co0107'
+down_revision = 'co0106'
 branch_labels = depends_on = None
 
 DDL = ("\nCREATE TABLE delivery_connections (\n\tid VARCHAR(26) NOT NULL, \n\tversion INTEGER NOT NULL, \n\tcreated_at VARCHAR(32) NOT NULL, \n\tcreated_by VARCHAR(26) NOT NULL, \n\tcreated_via VARCHAR(16) NOT NULL, \n\tupdated_at VARCHAR(32) NOT NULL, \n\tupdated_by VARCHAR(26) NOT NULL, \n\tupdated_via VARCHAR(16) NOT NULL, \n\tname VARCHAR(100) NOT NULL, \n\tname_key VARCHAR(100) NOT NULL, \n\tkind VARCHAR(64) NOT NULL, \n\tsettings TEXT NOT NULL, \n\tsecret_ref VARCHAR(200), \n\tenabled BOOLEAN NOT NULL, \n\tenabled_host VARCHAR(64), \n\tdaily_limit INTEGER, \n\tlast_check_at VARCHAR(32), \n\tlast_check_ok BOOLEAN, \n\tlast_check_text VARCHAR(500), \n\tremoved_at VARCHAR(32), \n\tPRIMARY KEY (id), \n\tCONSTRAINT ck_delivery_connection_name CHECK (length(trim(name)) BETWEEN 1 AND 100), \n\tCONSTRAINT ck_delivery_connection_kind CHECK (length(kind) BETWEEN 1 AND 64), \n\tCONSTRAINT ck_delivery_connection_settings CHECK (json_valid(settings) AND json_type(settings) = 'object'), \n\tCONSTRAINT ck_delivery_connection_secret_ref CHECK (secret_ref IS NULL OR secret_ref GLOB 'env:?*' OR secret_ref GLOB 'keyring:?*/?*'), \n\tCONSTRAINT ck_delivery_connection_enabled CHECK ((enabled = 1) = (enabled_host IS NOT NULL) AND (removed_at IS NULL OR enabled = 0)), \n\tCONSTRAINT ck_delivery_connection_limit CHECK (daily_limit IS NULL OR daily_limit > 0)\n)\n\n",)

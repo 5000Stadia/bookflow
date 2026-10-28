@@ -25,7 +25,9 @@ _POST = (
     'optionally `bin`, `lot` and `serial_numbers`; shipping past what is on hand is allowed with a warning, costed '
     'provisionally until the receipt arrives. Carrier and tracking numbers are recorded as text. The dry run shows '
     'each line\'s cost and what stays to ship. The result gives the next command, `shipment invoice <number>`. '
-    '`pick_list` ships what was picked on it instead. Example: {"sales_order": "1001"}.'
+    '`pick_list` ships what was picked on it instead; `shipment` posts a draft. `invoice: true` also invoices it in '
+    'the same transaction. `freight_amount` (and `freight_item`) is billed once, by its first invoice. Example: {"sales_order": '
+    '"1001"}.'
 )
 _UPDATE = (
     'Correct a shipment: its date, count position, lines (replacing them), ship method, carrier, tracking numbers or '
@@ -67,10 +69,18 @@ def _planner(operation):
     return planner
 
 
+def plan_shipment_post(inp, ctx, s):
+    plan = shipments.prepare(s, ctx, inp, 'post')
+    if inp.invoice:
+        plan.preview.warnings.append('Posting it also makes its invoice, dated the ship date, in the same transaction.')
+    return plan
+
+
 plan_shipment_post = command(
     'shipment post', scope='company', description=_POST, input_model=ShipmentPostInput, output_model=ShipmentOutput,
     writes={'company'}, required_role='standard', capability='ledger.post', accepts_idempotency_key=True,
-    error_codes=_WRITE_ERRORS[:-1] + ['E_FEATURE_DISABLED'])(_planner('post'))
+    error_codes=_WRITE_ERRORS[:-1] + ['E_FEATURE_DISABLED', 'E_CONVERSION_KEY_REUSED', 'E_AMOUNT_PRECISION',
+                                      'E_DUPLICATE_NUMBER'])(plan_shipment_post)
 plan_shipment_update = command(
     'shipment update', scope='company', description=_UPDATE, input_model=ShipmentUpdateInput,
     output_model=ShipmentOutput, writes={'company'}, required_role='standard', capability='ledger.post',
@@ -108,6 +118,15 @@ def _order_input(s, inp):
     from bookflow.company import billing_models, work
     from bookflow.core import clock
     header = shipments.resolve(s, inp.shipment)
+    if header['revision']['status'] == 'shipped':
+        waiting, invoices = shipments.billing_state(s, header['id'])
+        if not waiting:
+            from bookflow.core.errors import BookflowError
+            names = ', '.join(invoices)
+            raise BookflowError('E_WORK_DEPENDENCY', message=(
+                f'Shipment {header["number"]} has nothing left to invoice'
+                + (f': invoice {names} billed its units.' if invoices else ': its units came back on a return.')),
+                details=dict(problem='nothing left to invoice', invoices=invoices, reason='nothing_to_invoice'))
     order = work.resolve(s, header['sales_order_id'], 'sales_order')
     billed = len({row['transaction_id'] for row in s.company.conn.execute(
         shipments.sa.select(shipments.c.shipment_billings.c.transaction_id).where(
@@ -118,7 +137,8 @@ def _order_input(s, inp):
     for name in ('number', 'memo', 'ar_account', 'terms'):
         if getattr(inp, name) is not None:
             body[name] = getattr(inp, name)
-    return billing_models.SalesOrderInvoiceInput.model_validate(body)
+    made = billing_models.SalesOrderInvoiceInput.model_validate(body)
+    return made
 
 
 def _inner():
@@ -159,6 +179,30 @@ for _write in (plan_shipment_post, plan_shipment_update, plan_shipment_void):
     _write.ledger = True
     _write.resource_requirements = (('customer-work', 'standard'),)
     _write.applier(shipments.apply)
+
+
+@plan_shipment_post.applier
+def _apply_shipment_post(plan, ctx, s):
+    """`shipment post --invoice` (R181 increment 4): the shipment and its invoice in one transaction, the invoice
+    dated the ship date. A retry under the same idempotency key replays both; the invoice's conversion key derives
+    from the shipment, so it is never made twice."""
+    from bookflow.company.shipment_models import ShipmentInvoiceRef
+    from bookflow.core.registry import Applied
+    applied = shipments.apply(plan, ctx, s)
+    if not plan.data['input'].invoice:
+        return applied
+    shown = applied.output
+    order_input = _order_input(s, ShipmentInvoiceInput(shipment=shown.id, date=shown.date))
+    inner = _inner()
+    invoiced = inner.apply(inner.plan(order_input, ctx, s), ctx, s)
+    made = invoiced.output
+    # The first shipment of a company makes Shipped Not Invoiced inside this command, after dispatch took its
+    # watermark: the cost the invoice moves is settled here (settling again after is a no-op).
+    shipments.settle(s, ctx, [line.line_identity for line in shown.lines])
+    output = shipments.show_output(s, shown.id, warnings=shown.warnings).model_copy(update=dict(
+        invoice=ShipmentInvoiceRef(id=made.id, number=made.number, total=made.total)))
+    return Applied(output, list(applied.touched) + list(invoiced.touched),
+                   f'{applied.summary}; invoice {made.number or made.id}', audited=True)
 
 
 # ---------------------------------------------------------------- returns (R181 increment 2)

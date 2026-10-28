@@ -188,6 +188,9 @@ def _validate(plan, s, ctx):
     require(not work.rows(s, c.work_links, c.work_links.c.conversion_key_hash == key) and
         not work.rows(s, c.work_billing_conversions, c.work_billing_conversions.c.conversion_key_hash == key), 'duplicate durable key')
     allocs, envelopes = data['billing_allocations'], data['pending']['document_lines']
+    # A shipment's freight line (R181 increment 4) is billed from no quoted line: the quote's checks pass it by.
+    freight = {row['line_id'] for row in data.get('shipment_freight_billings', ())}
+    envelopes = [envelope for envelope in envelopes if envelope['line_id'] not in freight]
     # Reconstruct required closure from all current roots and pending amounts.
     # The resolver's closure flag and output are not evidence for this check.
     remaining = sum(alloc.remaining(s, (identities[line['line_id']]['root_document_id'],

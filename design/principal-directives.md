@@ -165,3 +165,32 @@ Each default stands if nobody decides. Q1 is Kabe's.
 - **Q5. Who may reverse a batch.** *Default:* a holder of the capability that made the writes, or any admin; [bulk-import](bulk-import.md) §8a settles it.
 - **Q6. A non-human principal.** *Default:* not built. `_is_person` remains the one seam for the five (b) commands.
 - **Q7. Renaming identifiers** (`people_only.py`, catalog keys). *Default:* never; words only.
+
+## Addendum (2026-10-27): impact, not quantity
+
+Kabe: "I really don't think the quantity of items is what identifies something sensitive or not. If the agent has the
+permission to do so and the directive, it should do it ... generalize overall impact to simply behaviorally confirm
+before damaging: 'just to be clear you want XYZ'." So no size thresholds anywhere (R107's are dropped). Commands whose
+effect could damage carry a `confirm_first` mark in the registry (deletes, voids, reversals of batches, sends and
+mark-sent, permission and capability changes, broad bulk edits); `help` and the MCP tool list show it. The agent guide
+says: before running a confirm-first command, say in plain words what it will do and get the principal's yes in the
+conversation, unless the principal's directive already names that act; use `--dry-run` to show exactly what would
+change. Bookflow does not enforce the conversation; permissions and reversible batches remain the hard guarantees.
+
+Kabe, same day: no "are you sure?" on every little thing. "Wonderful, post that invoice to John and send it to him" is
+itself the confirmation: the principal named the act, so the agent posts and sends with no question. The agent asks
+only when it would do a damaging act the principal did not plainly name: it is inferring the act ("tidy up the
+customer list" read as deleting 40 customers), the act reaches wider than what was said, or the request is ambiguous
+about which records. The confirm-first mark tells the agent which acts need that care; it is never a prompt by itself.
+
+Kabe, sharpened: "We DON'T want over-paranoia on straightforward tasks. Pulling off a one-time change import to all
+customers which impacts how we work forever deserves a double check our details are exactly as we want to live with."
+So there are two cases. Straightforward work, even a send or a void the principal named, just runs. A broad change
+that sets how the business works from then on (new terms or price levels on every customer, a chart restructure, a
+bulk import that rewrites records) gets one double-check even when named: the agent shows the dry run's exact details
+("212 customers, terms Net 30 to Net 15, from today") and runs it on the principal's yes. One check, of the details,
+never a repeated "are you sure".
+
+And ambiguity always gets a question, on any task: "When the guys are done send the invoice and take the payment over
+email!" leaves out which job, which customer, the amount, when "done" is and how the payment is taken, so the agent
+asks for those specifics and never fills them in by guessing. The agent guide says so plainly, with this example.

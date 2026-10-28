@@ -188,8 +188,8 @@ def test_seeded_queue_never_sends_twice_records_every_attempt_and_holds_unknowns
     tally = {}
     real_send = delivery_dispatch.send
 
-    def crash(claims, polls):
-        real_send(claims, polls)
+    def crash(claims, polls, **hooks):
+        real_send(claims, polls, **hooks)
         raise RuntimeError('host killed between the send and the record')
 
     with registered(FakeBackend()) as backend:
