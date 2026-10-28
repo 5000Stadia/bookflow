@@ -772,3 +772,75 @@ later ticked on a demo invoice; the batch preview, one left out, drafted through
 390), `tests/test_delivery_seeded.py` (batches: five seeds of 30 steps of flags, dates, methods, batches, reruns and
 cancels; after every step the queue equals the hand-worked rule, no document has two live messages, every skip is named,
 and a cancelled batch keeps only drafts exported before it).
+
+## As built: increment 4 (2026-10-27)
+
+**What exists.** co0110 (on co0109; `delivery_schedules`, `delivery_schedule_runs` unique on `(schedule_id,
+slot_date)`, both guarded against delete), eight commands under the `delivery-schedule-v1` layer (on
+`delivery-batch-v1`): `delivery-schedule create`, `update`, `live`, `pause`, `resume`, `run`, `show`, `query`. Code:
+`company/delivery_schedules.py`, `company/delivery_schedule_models.py`; the host's tick calls
+`delivery_schedules.tick` before the delivery claim (`core/host.py`), so a live run's releases can leave on the same
+tick. The browser has Email schedules (from Email and sending): each schedule with its state, cadence, next slot and
+last run, Run now, Stop / Resume, Edit, a New schedule form, and *Turn on…*, the make-live check page.
+
+**Decisions taken in the build, each reversible:**
+
+- **Making live is its own command, `delivery-schedule live`,** people-only until R187 (an admin action like
+  `delivery approve`; the refusal names `automate.delivery` in `details.needs`). `update --mode send` by anyone sets the
+  mode and leaves the schedule a draft. Each R187 place says `automate.delivery` in a comment: the catalog layer, the
+  live and update planners, `authority_lost`, and `people_only.R187_CAPABILITY`.
+- **One check of the exact details (Kabe's rule for broad changes).** `live` with `dry_run` returns `check`: the
+  selection and cadence in words, the first run, the period, the template, whose authority it runs under, who it would
+  reach if it ran today (and who is left out, why), and a fingerprint of the operative fields and that exact set. The
+  act needs `confirm` equal to it (`E_VALIDATION` without, `E_WORK_DEPENDENCY` when anything changed). `show --check`
+  gives an agent the same check to put to its principal. No second "are you sure".
+- **An operative change** (kind, selection, template, combine, frequency, start, stop, runs, mode, catch-up window)
+  returns a live or paused schedule to draft, unless a person passes the changed schedule's check as `confirm` (then it
+  stays live and the editor becomes the establisher). An agent passing `confirm` is refused like `live`. A name change
+  is not operative.
+- **Whose authority.** A run drafts as `run_as`, the last actor to make an operative change (an agent with its
+  principal and epoch, checked as R111's entries are), through `delivery-schedule run` under the tick's day
+  (`clock.as_of_day`); interface `system`, client `scheduler`, reason "On schedule: <name> for <slot>". A live run's
+  go is the establisher's, decided once when its batch begins: the establisher must still pass `go_lost` (the interim
+  `delivery.send`/`automate.delivery` rule: an active person with a standing membership at standard not denied
+  `customer`); otherwise the schedule is paused with the reason, one to-do is raised (per pause), and the run drafts
+  and releases with no go, so its messages wait. The dispatcher's own check at the claim still applies.
+- **An actor who can no longer lend authority** (deactivated, an agent unassigned, suspended or re-epoched), or any
+  refusal of the step, pauses the schedule as the host, skips the due slots (`no_authority`), fails an open run, and
+  raises the one to-do, so a failing schedule never retries every minute.
+- **A send schedule that is not live** still runs: it releases what it drafts with no go, and one to-do per run
+  ("N email(s) from <schedule> wait for your go") goes to the establisher, else `run_as` if a person, else the agent's
+  principal, else an active administrator.
+- **Slots.** A step claims the latest due slot as a run if it is no older than `catch_up_days` (default 7, at most 31)
+  and records every other due slot `skipped` (`superseded` inside the window, `outside_window` beyond it; at most 200
+  per step). The claim and the first chunk are one write; later steps draft one chunk each (the batch's `CHUNK`). The
+  run is the batch's `schedule_run_id`. `remaining_runs` counts runs, not skips. A month-end start keeps month end
+  (anchor 31: 31 Jan, 28 Feb, 31 Mar; 29 Feb 2028 to 31 Mar); a 30th is clamped in February and returns to the 30th.
+- **Statement periods** for a slot: `previous-month`, `month-to-date` (the 1st to the slot) and `since-last-run` (the
+  day after the last done run's period end, else the previous month).
+- **`pause` stops** (`active` false; nothing runs); `resume` restarts from today, recording slots that passed while
+  stopped as `skipped` (`stopped`), and brings a paused schedule back as a draft.
+- **The idle cost** is one statement (`has_due`: an active schedule due by today, or a drafting run of an active one).
+- The hook is not an after-apply dispatch hook (none was added), and no guard trigger counts rows.
+
+**Not in this increment:** `automation list/show/pause` and R187's capabilities; the shared batch ledger entry for a
+run (R186); the demo seed's schedules and the closing trial (increment 5).
+
+**Measured:** the idle scheduler tick for a company with no schedules, through the host (median of 25): 8.92 ms with
+the schedules hook, 9.20 ms without; the hook's one statement on the writer, 40.0 µs (`tests/test_delivery_schedules.py`,
+printed with `-s`). Within the run-to-run noise: nothing measurable.
+
+**Tests:** `tests/test_delivery_schedules.py` (month-end slots across February and a leap year, missing details
+refused, a month-end statement schedule once per slot with a second run the same day finding it; the catch-up rule
+for a daily schedule off nineteen days (only the 20th runs; seven superseded, twelve outside the window), a weekly one
+whose latest slot is outside its window (nothing runs), two days off inside it, and a stop and resume skipping what
+passed; a restart mid-run continuing from its batch with no duplicate; on the host: an agent's send schedule leaving
+every message waiting with one to-do and nothing sent, the agent refused `live` naming `automate.delivery`, a
+person's check and confirm, an agent's edit returning it to draft, a person's confirmed change keeping it live, and a
+live run's message sent on the same tick; an establisher deactivated and one without the authority each pausing it
+with one to-do and nothing with a go; the idle-tick measurement), `tests/test_delivery_schedule_browser.py` (the form
+saved by a real htmx submit, Turn on's check read and confirmed, at 1440 and 390), `tests/test_delivery_seeded.py`
+(schedules: five seeds of 30 steps on a test clock with runs, stops, resumes, re-establishing and the establisher
+losing and regaining authority; after every step one run per slot, no run claimed past its window, and no go on a run
+begun without authority or its messages), and `tests/test_delivery_surfaces.py` (the eight commands on all four
+surfaces).
