@@ -23,7 +23,7 @@ def prepared(root, client):
     item=client.company.list()['items'][0]
     uid=Config.load(root/'config.toml').user_table(os_login())['user_id']
     with open_database(root/'hub.db',writable=True) as db:
-        install_fixture_policy(db.raw,runtime.catalog_bundle())
+        install_fixture_policy(db.raw,runtime.current_catalog().catalog_bundle())
     return root,uid,item['company_id']
 
 
@@ -77,9 +77,11 @@ def test_host_actual_apply_commit_and_noop(prepared):
         def job(session):
             with session.commits.operation('dispatch.apply',session.hub):
                 with producer.hosted_operation(host,admitted,request_id=REQUEST,purpose='apply') as operation:
-                    result=operation.apply(intent(uid,cid),audit=AUDIT)
+                    # Under scoped administration a person who lowered themself to readonly no longer
+                    # administers the company, so the no-op repeat keeps them an admin.
+                    result=operation.apply(b.PutMembership(uid,c.ScopeKey('company',cid),b.Version(1),'admin'),audit=AUDIT)
                     event=result.event_id
-                    repeated=b.PutMembership(uid,c.ScopeKey('company',cid),b.Version(2),'readonly',None,())
+                    repeated=b.PutMembership(uid,c.ScopeKey('company',cid),b.Version(2),'admin',None,())
                     before=snapshot(session.hub.raw)
                     assert not operation.apply(repeated,audit=AUDIT).visible.changed
                     assert snapshot(session.hub.raw)==before
@@ -89,7 +91,7 @@ def test_host_actual_apply_commit_and_noop(prepared):
         event=host.run_write(uid,os_login(),job)
         with open_database(root/'hub.db',writable=False) as db:
             assert db.raw.execute('SELECT count(*) FROM audit_events WHERE id=?',(event,)).fetchone()==(1,)
-            assert db.raw.execute("SELECT role,version,granted_by FROM memberships WHERE user_id=? AND scope_type='company' AND scope_id=?",(uid,cid)).fetchone()==('readonly',2,uid)
+            assert db.raw.execute("SELECT role,version,granted_by FROM memberships WHERE user_id=? AND scope_type='company' AND scope_id=?",(uid,cid)).fetchone()==('admin',2,uid)
     finally:host.stop()
 
 

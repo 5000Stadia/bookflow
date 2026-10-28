@@ -890,7 +890,7 @@ membership_grant = command("membership grant", scope="hub",
                            positional=["user"],
                            error_codes=["E_USER_NOT_FOUND", "E_VALIDATION", "E_PERMISSION", "E_VERSION_CONFLICT",
                                         "E_COMPANY_NOT_FOUND", "E_COMPANY_AMBIGUOUS", "E_ORGANIZATION_NOT_FOUND"],
-                           authorization="administrator of that company or organization (an agent: granted membership.grant, never its own membership, no role or capability above its own); owner to grant or move an owner; installation shortcut only before permission activation")
+                           authorization="administrator of that company or organization (an agent: granted membership.grant, never its own, a principal's or a hub administrator's membership, no role or capability above its own or its principal's); owner to grant or move an owner; installation shortcut only before permission activation")
 
 
 def authorize_membership_grant(inp: MembershipGrantInput, ctx: Context, s: Session):
@@ -921,7 +921,7 @@ def plan_membership_grant(inp: MembershipGrantInput, ctx: Context, s: Session) -
         prepared = setup.edit(s,ctx,intent,preview=True)
         row = _prepared_membership_row(prepared, user, scope)
         out = _membership_out(row,user,scope,changed=prepared.visible.changed)
-        return Plan(MembershipOutput(**out.model_dump(),message=_grant_message(user,scope,inp.role,out.changed)),
+        return Plan(MembershipOutput(**out.model_dump(),message=_grant_message(user,scope,inp.role,out.changed,out.denies)),
                     data={'input':inp,'intent':intent,'user':user,'scope':scope})
     if inp.grants is not None or inp.denies is not None:
         raise BookflowError('E_VALIDATION',message='Activate permissions before configuring grants or denies.')
@@ -934,10 +934,22 @@ def plan_membership_grant(inp: MembershipGrantInput, ctx: Context, s: Session) -
                 data={"user": user, "scope": scope, "existing": existing, "role": inp.role})
 
 
-def _grant_message(user: dict[str, Any], scope: Scope, role: str, changed: bool) -> str:
+def _grant_message(user: dict[str, Any], scope: Scope, role: str, changed: bool, denies=()) -> str:
     if not changed:
-        return f"{user['username']} already had {role} access to {scope.scope_name}."
-    return f"{user['username']} has {role} access to {scope.scope_name}."
+        message = f"{user['username']} already had {role} access to {scope.scope_name}."
+    else:
+        message = f"{user['username']} has {role} access to {scope.scope_name}."
+    return message + _person_deny_note(user, denies)
+
+
+def _person_deny_note(user: dict[str, Any], denies) -> str:
+    """A person holds the capabilities-v1 acts at their role; denying one binds only the agents acting for them."""
+    from bookflow.hub.permission_capabilities_catalog import CAPABILITIES
+    named = sorted(x for x in (denies or ()) if x in CAPABILITIES)
+    if user.get("kind") != "human" or not named:
+        return ""
+    return (f" The deny of {', '.join(named)} binds only the agents acting for {user['username']}: as a person, "
+            f"{user['username']} still holds {'it' if len(named) == 1 else 'them'} at their role.")
 
 
 @membership_grant.applier
@@ -948,7 +960,7 @@ def apply_membership_grant(plan: Plan, ctx: Context, s: Session) -> Applied:
         user,scope = plan.data['user'],plan.data['scope']
         row = _prepared_membership_row(prepared, user, scope)
         out = _membership_out(row,user,scope,changed=prepared.visible.changed)
-        return Applied(MembershipOutput(**out.model_dump(),message=_grant_message(user,scope,row['role'],out.changed)),
+        return Applied(MembershipOutput(**out.model_dump(),message=_grant_message(user,scope,row['role'],out.changed,out.denies)),
                        [],'Updated company permissions.',audited=out.changed)
     user, scope, existing = plan.data["user"], plan.data["scope"], plan.data["existing"]
     role = plan.data["role"]
@@ -966,7 +978,7 @@ membership_revoke = command("membership revoke", scope="hub",
                             positional=["user"],
                             error_codes=["E_USER_NOT_FOUND", "E_RECORD_NOT_FOUND", "E_VALIDATION", "E_PERMISSION", "E_VERSION_CONFLICT",
                                          "E_COMPANY_NOT_FOUND", "E_COMPANY_AMBIGUOUS", "E_ORGANIZATION_NOT_FOUND"],
-                            authorization="administrator of that company or organization (an agent: granted membership.grant, never its own membership); owner to revoke an owner; installation shortcut only before permission activation")
+                            authorization="administrator of that company or organization (an agent: granted membership.grant, never its own, a principal's or a hub administrator's membership, nor one carrying a deny it could not lift); owner to revoke an owner; installation shortcut only before permission activation")
 
 
 def authorize_membership_revoke(inp: MembershipSelector, ctx: Context, s: Session):

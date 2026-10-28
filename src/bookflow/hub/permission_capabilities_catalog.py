@@ -63,7 +63,7 @@ ADDED_DEFAULTS = tuple(
 _ADMIN = 'installation administrator, or an agent its principal granted {}'
 CHANGED_AUTHORIZATION = {
     'company update': 'company admin; changing the closing date needs company.closing-date',
-    'demo reset': 'hub administrator, or an agent granted demo.reset; a root holding real books needs force naming it',
+    'demo reset': 'hub administrator, or an agent granted demo.reset; never while the demo organization holds a company the demo did not create; a root holding real books elsewhere needs force naming it',
     'user add': 'hub administrator, or an agent granted user.manage (no hub administrator, no password, no role above '
                 'its own); the grant also needs administration of that scope',
     'user activate': _ADMIN.format('user.manage') + ', on an activated installation',
@@ -73,11 +73,12 @@ CHANGED_AUTHORIZATION = {
     'agent deactivate': _ADMIN.format('agent.manage') + ', on an activated installation',
     'agent unassign': _ADMIN.format('agent.manage') + ', on an activated installation',
     'membership grant': 'administrator of that company or organization (an agent: granted membership.grant, never its '
-                        'own membership, no role or capability above its own); owner to grant or move an owner; '
-                        'installation shortcut only before permission activation',
+                        "own, a principal's or a hub administrator's membership, no role or capability above its own "
+                        "or its principal's); owner to grant or move an owner; installation shortcut only before "
+                        'permission activation',
     'membership revoke': 'administrator of that company or organization (an agent: granted membership.grant, never its '
-                         'own membership); owner to revoke an owner; installation shortcut only before permission '
-                         'activation',
+                         "own, a principal's or a hub administrator's membership, nor one carrying a deny it could not "
+                         'lift); owner to revoke an owner; installation shortcut only before permission activation',
 }
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import logging
 import sqlite3
 from datetime import datetime, timezone
@@ -18,7 +19,7 @@ from bookflow.core.errors import BookflowError, explain_permission
 from bookflow.core.fs import check_local
 from bookflow.core.ids import is_ulid, normalize_ulid
 from bookflow.core.locks import RootLock
-from bookflow.core.models import redact_paths
+from bookflow.core.models import PATH_FIELD_NAMES, redact_paths
 from bookflow.core.perms import private_umask
 from bookflow.core import performance, timings
 from bookflow.core.registry import Command, Plan, Touched
@@ -84,9 +85,30 @@ def parse_when(value: str, zone: str | None, end: bool = False) -> str:
 _log = logging.getLogger("bookflow.dispatch")
 
 
+_ABSOLUTE_PATH = re.compile(r"""(?<![\w/:.~-])(?:/|[A-Za-z]:\\)[^\s/\\()'":;,]+(?:[/\\][^\s/\\()'":;,]+)+""")
+
+
+def _path_values(obj: Any) -> list[str]:
+    if isinstance(obj, dict):
+        return [x for k, v in obj.items() for x in (
+            [v] if isinstance(v, str) and (k in PATH_FIELD_NAMES or k.endswith("_path")) else _path_values(v))]
+    if isinstance(obj, list):
+        return [x for v in obj for x in _path_values(v)]
+    return []
+
+
+def redact_message(message: str, details: Any) -> str:
+    """No filesystem path in what a non-administrator reads: the paths the details name, then any absolute path."""
+    for value in sorted(set(_path_values(details)), key=len, reverse=True):
+        if value:
+            message = message.replace(value, "<path withheld>")
+    return _ABSOLUTE_PATH.sub("<path withheld>", message)
+
+
 def redact_error(err: BookflowError, allowed: bool) -> BookflowError:
     if allowed:
         return err
+    err.message = redact_message(err.message, err.details)
     err.details = redact_paths(err.details, False)
     return err
 

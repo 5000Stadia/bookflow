@@ -251,12 +251,13 @@ def _agent_admission(old,base_pair,actor,principal_id,intent):
     user.manage and agent.manage acts, each needing the agent's own grant, its principal holding the same, the agent
     eligible and unsuspended; never its own membership or its principal's, never a hub administrator, and no role or
     capability above its own."""
-    from .permission_capabilities_catalog import CAPABILITIES
     principal=next((x for x in old.users if x.id==principal_id),None)
     authority=next((x for x in old.authorities if x.agent_user_id==actor.id),None)
     assigned=any(x.agent_user_id==actor.id and x.principal_user_id==principal_id and x.revoked_at is None for x in old.assignments)
     if principal is None or principal.kind!='human' or not principal.active or not assigned or authority is None or authority.suspended_at is not None:
         fail('not_administrator','binding')
+    principals={x.principal_user_id for x in old.assignments if x.agent_user_id==actor.id and x.revoked_at is None}
+    protected={actor.id,principal_id,*principals}  # never itself or any of its principals, whichever token it holds
     if type(intent) in (PutMembership,RevokeMembership):
         if type(intent) is PutMembership:scope=intent.scope;target=intent.user_id;before=None
         else:
@@ -270,14 +271,15 @@ def _agent_admission(old,base_pair,actor,principal_id,intent):
         existing=next((x for x in old.memberships if x.user_id==target and (x.scope_type,x.scope_id)==(scope.kind,scope.id) and x.revoked_at is None),None)
         owner=(type(intent) is PutMembership and intent.role=='owner') or bool(existing and existing.role=='owner')
         _scope_admin(old,base_pair,principal,scope,owner=owner)  # the principal administers that scope too
-        if target in (actor.id,principal_id):fail('protected_identity','target')
+        target_row=next((x for x in old.users if x.id==target),None)
+        if target in protected or (target_row is not None and target_row.hub_admin):fail('protected_identity','target')
+        old_grants,old_denies=(set(json.loads(existing.grants or '[]')),set(json.loads(existing.denies or '[]'))) if existing is not None else (set(),set())
         if type(intent) is PutMembership:
-            before=next((x for x in old.memberships if x.user_id==target and (x.scope_type,x.scope_id)==(scope.kind,scope.id)),None)
-            old_grants,old_denies=(set(json.loads(before.grants or '[]')),set(json.loads(before.denies or '[]'))) if before is not None and before.revoked_at is None else (set(),set())
             widened=(set(intent.grants or ())-old_grants)|(old_denies-set(intent.denies or ()))
-            for capability in widened:
-                if not _held(old,actor.id,capability,None if CAPABILITIES.get(capability,('',))[0]=='hub_admin' else covering):
-                    fail('not_administrator','grants')
+        else:
+            widened=old_denies  # revoking lifts every deny the membership carries: widening, like removing them
+        for capability in sorted(widened):
+            _agent_may_give(old,actor,principal,capability,covering)
         return
     if type(intent) is SetUserActive:
         target=_target(old,intent.user_id)
@@ -291,7 +293,18 @@ def _agent_admission(old,base_pair,actor,principal_id,intent):
     if not _held(old,actor.id,capability):fail('not_administrator','capability')
     if not principal.hub_admin or any(capability in json.loads(m.denies or '[]') for m in old.memberships if m.user_id==principal_id and m.revoked_at is None):
         fail('not_administrator','hub')
-    if target.id in (actor.id,principal_id) or target.hub_admin:fail('protected_identity','target')
+    if target.id in protected or target.hub_admin:fail('protected_identity','target')
+
+
+def _agent_may_give(old,actor,principal,capability,covering):
+    """An agent gives (or un-denies) a capability only if it holds it by explicit grant and its principal could give
+    it: an installation-wide one only for an active hub administrator, and never one the principal is denied."""
+    from .permission_capabilities_catalog import CAPABILITIES
+    hub=CAPABILITIES.get(capability,('',))[0]=='hub_admin'
+    if not _held(old,actor.id,capability,None if hub else covering):fail('not_administrator','grants')
+    if hub and not (principal.hub_admin and principal.active):fail('not_administrator','grants')
+    denied=[m for m in old.memberships if m.user_id==principal.id and m.revoked_at is None and (hub or (m.scope_type,m.scope_id) in covering)]
+    if any(capability in json.loads(m.denies or '[]') for m in denied):fail('not_administrator','grants')
 
 
 def _human_grant_ceiling(old,actor,intent):
