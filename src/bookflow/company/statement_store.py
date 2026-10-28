@@ -28,9 +28,13 @@ def draft_lines(conn, draft_id):
 
 
 def known_line_ids(conn, account_id):
-    """Every line id already imported for the account, in any draft: FITID dedupe that persists."""
-    return set(conn.execute(sa.select(c.statement_lines.c.line_id)
-                            .where(c.statement_lines.c.account_id == account_id)).scalars())
+    """Every line id already imported for the account, in any draft or in the bank inbox while its import stands:
+    FITID dedupe that persists."""
+    found = set(conn.execute(sa.select(c.statement_lines.c.line_id)
+                             .where(c.statement_lines.c.account_id == account_id)).scalars())
+    found.update(conn.execute(sa.select(c.bank_lines.c.line_key)
+                              .where(c.bank_lines.c.account_id == account_id, c.bank_lines.c.live == 1)).scalars())
+    return found
 
 
 def store(conn, *, identity, account_id, draft_id, parsed_format, file_sha256, statement_date, ending_balance,

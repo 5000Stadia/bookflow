@@ -141,6 +141,8 @@ COMMAND_CODES: dict[str, str] = {
     "E_CUTOVER_INCOMPLETE": "The move-in stopped part way; what it made stays in and running it again continues.",
     "E_MERGE_REFUSED": "These two entries cannot be merged; the details name why.",
     "E_BATCH_BLOCKED": "The batch cannot be reversed now; the details name each blocker and what clears it.",
+    "E_ACCOUNT_MISMATCH": "The file looks like another account's; the details name both. Import it to the right account, or confirm.",
+    "E_ALREADY_IMPORTED": "This exact file was already imported into this account; the details name the import.",
 }
 
 ALL_CODES: dict[str, str] = {**INFRASTRUCTURE_CODES, **COMMAND_CODES}

@@ -1290,3 +1290,6 @@ globals().update(_delivery_schema.define_queue_tables(metadata, _column, _table,
 from bookflow.company import import_schema as _import_schema
 globals().update(_import_schema.define_tables(metadata, _column, _table))
 globals().update(_delivery_schema.define_batch_tables(metadata, _column, _table, _common, delivery_messages))
+# The bank inbox (co0111, R108 increment 1): imports, lines, their history, what each account last received.
+from bookflow.company import bank_feed_schema as _bank_feed_schema
+globals().update(_bank_feed_schema.define_tables(metadata, _column, _table))
