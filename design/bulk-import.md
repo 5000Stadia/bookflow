@@ -634,6 +634,15 @@ time: S 30-60 min, M 1.5-2.5 h, L 4-6 h.
    `bulk-edit reverse` with its refusals and `--skip-changed`; the grid page and phone cards; `approve`. *Done when* criterion 7 holds in the browser and over MCP and
    20 items are repriced from a phone; criterion 11 holds for the repricing. *Tests:* rounding (half-up on the currency's places), merge and conflict
    rows, a refused row in the middle, reverse after a later edit, the grid at 300 and 2,000 rows (time recorded).
+
+   > **Changed by Kabe, 2026-10-28.** `bulk-edit approve` and the agent threshold (§8's "a bulk-edit changing more
+   > than 100 records ... stops in `waiting`") are dropped, as for document imports: sensitivity is impact, never
+   > quantity, and whether an actor may bulk-edit is a permission like any other ([principal
+   > directives](principal-directives.md), R187): the `bulk-edit` capability beside each record's own `update`
+   > capability. In place of approval, the agent guide teaches the rule: an edit that sets how the business works
+   > from then on (new terms or prices on many records) gets one clear check of its exact details, from the preview's
+   > diff and totals, with the principal before it runs; a plainly named edit just runs. Neither `import.approve` nor
+   > K1 applies to grid edits.
 7. **Guided opening balances (L).** Migration 7; the `entered_*` kinds and readers; `basis` on tie-out;
    `opening-draft`; the guided page; `accept_differences`. *Done when* criterion 6 holds and the same data moved in
    through `cutover` from anchor-style exports yields the same books. *Tests:* each exception of docs/cutover.md

@@ -1,0 +1,72 @@
+/* R107 increment 6: the grid edit page. A table at desktop; at 390 px each record is a card and nothing scrolls
+   sideways. Every control is at least 44 px tall on a phone. */
+.bulk{max-width:1200px}
+.bulk h2{font-size:1.1rem;margin:.2rem 0 .5rem}
+.bulk-steps{display:flex;gap:.25rem;list-style:none;padding:0;margin:.5rem 0 1rem}
+.bulk-steps li{flex:1 1 0;display:flex;align-items:center;gap:.45rem;padding:.45rem .6rem;border-bottom:3px solid #d0d9e4;color:#555}
+.bulk-steps li.is-done{border-color:#416da1;color:#1f3a5f}
+.bulk-steps li.is-current{border-color:#1f3a5f;color:#1f3a5f;font-weight:700}
+.bulk .step-num{display:inline-flex;align-items:center;justify-content:center;width:1.6rem;height:1.6rem;border-radius:50%;background:#e7f0fc;color:#1f3a5f;font-weight:700;flex:none}
+.bulk .is-current .step-num{background:#1f3a5f;color:#fff}
+.bulk-pick{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:flex-end;margin:.5rem 0}
+.bulk-label{display:flex;flex-direction:column;gap:.2rem;font-weight:600;font-size:.9rem}
+.bulk-label input,.bulk-label select,.bulk-grid input,.bulk-grid select,.bulk-paste textarea{font:inherit;font-weight:400;padding:.4rem .5rem;border:1px solid #9aa9bb;border-radius:.3rem;background:#fff;box-sizing:border-box;max-width:100%}
+.bulk-columns summary{cursor:pointer;padding:.4rem 0}
+.bulk-column-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(12rem,1fr));gap:.2rem .8rem;max-height:16rem;overflow-y:auto;padding:.3rem;border:1px solid #d0d9e4;border-radius:.3rem;background:#fff}
+.bulk-count{color:#444;margin:.4rem 0}
+.bulk-grid-wrap{max-height:65vh;overflow:auto;border:1px solid #d0d9e4;border-radius:.3rem;background:#fff}
+.bulk-grid{border-collapse:collapse;width:100%;font-size:.9rem}
+.bulk-grid th,.bulk-grid td{border-bottom:1px solid #e4e9f0;padding:.2rem .4rem;text-align:left;vertical-align:middle}
+.bulk-grid thead th{position:sticky;top:0;background:#f3f6fa;z-index:1}
+.bulk-grid tbody th{font-weight:600;white-space:nowrap;max-width:18rem;overflow:hidden;text-overflow:ellipsis}
+.bulk-grid input,.bulk-grid select{width:100%;min-width:6rem}
+.bulk-grid td.is-edited input,.bulk-grid td.is-edited select{border-color:#1f3a5f;background:#fff8e1}
+.bulk-op{border:1px solid #d0d9e4;border-radius:.4rem;margin:.8rem 0;padding:.5rem .8rem}
+.bulk-op-row{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:flex-end}
+.bulk-op-row [hidden]{display:none}
+.bulk-paste{margin:.6rem 0}
+.bulk-paste textarea{width:100%;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85rem}
+.bulk-reason{max-width:40rem;margin:.6rem 0}
+.bulk-actions{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;margin:.75rem 0}
+.bulk-small{font-size:.875rem}
+.bulk-bar{display:flex;flex-wrap:wrap;gap:.35rem .6rem;margin:.4rem 0}
+.bulk-bar span,.bulk-tag{background:#fff;border:1px solid #d0d9e4;border-radius:1rem;padding:.15rem .65rem;font-size:.85rem}
+.bulk-bar .bad,.bulk-tag.bad,.status-conflict .bulk-tag,.status-refused .bulk-tag{border-color:#c62828;color:#8e1b1b;background:#fdecec}
+.bulk-bar .good{border-color:#2e7d32;color:#1b5e20;background:#edf7ee}
+.bulk-totals{display:flex;flex-wrap:wrap;gap:.3rem 1.5rem;margin:.4rem 0}
+.bulk-totals div{display:flex;gap:.4rem}
+.bulk-totals dt{font-weight:600}
+.bulk-totals dd{margin:0}
+.bulk-diff{list-style:none;padding:0;margin:.5rem 0;display:grid;grid-template-columns:repeat(auto-fill,minmax(20rem,1fr));gap:.5rem}
+.bulk-diff-row{border:1px solid #d0d9e4;border-radius:.4rem;padding:.4rem .6rem;background:#fff;min-width:0}
+.bulk-diff-row.status-refused,.bulk-diff-row.status-conflict{border-color:#e0a0a0;background:#fffafa}
+.bulk-diff-name{margin:0 0 .2rem;overflow-wrap:anywhere}
+.bulk-diff-fields{list-style:none;padding:0;margin:0}
+.bulk-diff-fields li{overflow-wrap:anywhere}
+.bulk-field{color:#555}
+.bulk-before{text-decoration:line-through;color:#8a8a8a}
+.bulk-after{font-weight:600}
+.bulk-why{margin:.2rem 0 0;font-size:.875rem;color:#8e1b1b;overflow-wrap:anywhere}
+.bulk-undo ul{padding-left:1.2rem}
+.bulk-undo li{overflow-wrap:anywhere}
+.workbench .bulk button.danger-button,.workbench .bulk button[name=action].danger-button{background:#a32020;border-color:#a32020;color:#fff}
+.workbench .bulk button.primary-button,.workbench .bulk button[name=action].primary-button{background:var(--accent,#1b6b50);border-color:var(--accent,#1b6b50);color:#fff}
+@media (max-width:700px){
+  .bulk-steps{flex-direction:column}
+  .bulk-steps li{border-bottom:0;border-left:3px solid #d0d9e4}
+  .bulk-steps li.is-current,.bulk-steps li.is-done{border-left-color:#1f3a5f}
+  .bulk-pick{flex-direction:column;align-items:stretch}
+  .bulk-label input,.bulk-label select,.bulk-pick button,.bulk-actions button,.bulk-actions a,.bulk-undo button{min-height:44px}
+  .bulk-actions a{display:inline-flex;align-items:center}
+  .bulk-column-list label,.bulk .choice{min-height:44px;display:flex;align-items:center}
+  .bulk-grid-wrap{max-height:none;overflow:visible;border:0;background:transparent}
+  .bulk-grid,.bulk-grid tbody,.bulk-grid tr,.bulk-grid th,.bulk-grid td{display:block;width:100%;box-sizing:border-box}
+  .bulk-grid thead{display:none}
+  .bulk-grid tr{border:1px solid #d0d9e4;border-radius:.4rem;margin:0 0 .5rem;padding:.4rem .5rem;background:#fff}
+  .bulk-grid tbody th{border:0;white-space:normal;max-width:none;padding:.2rem 0}
+  .bulk-grid td{border:0;display:flex;align-items:center;gap:.5rem;padding:.15rem 0}
+  .bulk-grid td::before{content:attr(data-label);flex:0 0 40%;font-size:.85rem;color:#555}
+  .bulk-grid input,.bulk-grid select{min-height:44px;flex:1 1 auto;min-width:0}
+  .bulk-op-row{flex-direction:column;align-items:stretch}
+  .bulk-diff{grid-template-columns:1fr}
+}

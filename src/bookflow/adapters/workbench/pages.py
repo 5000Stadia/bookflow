@@ -83,6 +83,7 @@ def _import_kind(noun: str) -> bool:
 
 
 env.globals["import_kind"] = _import_kind
+env.globals["bulk_edit_kind"] = lambda noun: noun in ("customer", "vendor", "item", "account")  # R107 inc 6
 # Money and dates as a person reads them; display only, never input or export.
 env.filters.update(Display.FILTERS)
 # What an audit event did and who did it, in plain words; the stored summary is unchanged.
@@ -645,7 +646,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js", "timekeeping.css", "scan.js", "counts.css", "picks.css", "import.css", "import.js")
+        for name in ("workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js", "timekeeping.css", "scan.js", "counts.css", "picks.css", "import.css", "import.js", "bulk-edit.css", "bulk-edit.js")
     }
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
@@ -808,6 +809,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     ImportPages.mount(app, render=render, run=run, credential=credential, page_error=page_error, host=host,
                       make_context=make_context,
                       role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
+    # R107 increment 6: editing many records at once (grid, changes, done and undo), on the bulk-edit commands.
+    from bookflow.adapters.workbench import bulk_edit_pages as BulkEditPages
+    BulkEditPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                        role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R181 increment 4: the pack screen and the packing slip (the slip shows whatever the switch says).
     from bookflow.adapters.workbench import shipment_pack_pages as ShipmentPackPages
     ShipmentPackPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,

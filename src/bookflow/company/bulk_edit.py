@@ -787,16 +787,50 @@ def reverse(s, ctx, inp, *, dry_run: bool) -> dict:
                             details={'field': 'run', 'state': run['state']})
     reversed_now, fingerprint, skipped = 0, inp.fingerprint, []
     while True:
-        out = batches.reverse(s, ctx, run['batch_id'], reason=ctx.reason, dry_run=dry_run,
-                              limit=batches.DEFAULT_SLICE, fingerprint=fingerprint,
-                              skip_changed=inp.skip_changed)
+        try:
+            out = batches.reverse(s, ctx, run['batch_id'], reason=ctx.reason, dry_run=dry_run,
+                                  limit=batches.DEFAULT_SLICE, fingerprint=fingerprint,
+                                  skip_changed=inp.skip_changed)
+        except BookflowError as error:
+            if error.code == 'E_BATCH_BLOCKED':
+                _readable(s, run, error.details.get('blockers') or [])
+                first = (error.details.get('blockers') or [{}])[0]
+                if first.get('person'):
+                    error.message = (f"{len(error.details['blockers'])} record(s) changed since this edit, first "
+                                     f"{first['person']} Nothing was changed; skip_changed reverses the rest."
+                                     if first.get('code') in batches.CHANGED else error.message)
+                    error.args = (f'{error.code}: {error.message}',)
+            raise
         reversed_now += out['reversed_now']
         skipped = out.get('skipped') or skipped
         fingerprint = None
         if dry_run or out['state'] != 'reversing':
             break
+    _readable(s, run, out.get('blockers') or [])
+    _readable(s, run, skipped)
     out.update(reversed_now=reversed_now, skipped=skipped, run=inp.run)
     return out
+
+
+def _readable(s, run: dict, blockers: list[dict]) -> None:
+    """Each blocker as a person reads it (`person`): the record's name, who changed it (by name) and when."""
+    from bookflow.company.info import principal_names
+    if not blockers:
+        return
+    labels = dict(s.company.conn.execute(sa.select(c.bulk_edit_rows.c.record_id, c.bulk_edit_rows.c.label).where(
+        c.bulk_edit_rows.c.run_id == run['id'])).all())
+    names = principal_names(s.company, {b.get('changed_by') for b in blockers if b.get('changed_by')})
+    for b in blockers:
+        label = labels.get(b.get('record_id'), b.get('record_id'))
+        b['label'] = label
+        who = names.get(b.get('changed_by')) or 'someone'
+        when = (b.get('changed_at') or '')[:16].replace('T', ' ')
+        if b.get('code') == 'edited_again':
+            b['person'] = f"{label} was changed since this edit by {who}{' at ' + when + ' UTC' if when else ''}."
+        elif b.get('code') == 'later_batch':
+            b['person'] = f"{label} was changed since by a later batch: {b.get('message', '').split(', ', 1)[-1]}"
+        else:
+            b['person'] = b.get('message')
 
 
 # ------------------------------------------------------------------ reading
