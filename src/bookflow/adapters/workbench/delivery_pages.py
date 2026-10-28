@@ -552,3 +552,127 @@ def mount(app, *, render, run, credential, page_error, role_allows):
             return await run_in_threadpool(settings_submit, request, company_id, form)
         except BookflowError as e:
             return page_error(request, e)
+
+    # ------------------------------------------------------------ recurring schedules (increment 4)
+
+    FREQUENCIES = (('daily', 'Every day'), ('weekly', 'Every week'), ('every_other_week', 'Every other week'),
+                   ('every_four_weeks', 'Every four weeks'), ('twice_a_month', 'Twice a month'),
+                   ('monthly', 'Every month'), ('every_other_month', 'Every other month'),
+                   ('quarterly', 'Every quarter'), ('twice_a_year', 'Twice a year'), ('annually', 'Every year'))
+    PERIODS = (('previous-month', 'The previous month'), ('month-to-date', 'The month to date'),
+               ('since-last-run', 'Since the last run'))
+
+    def schedules_page(request, company_id, *, error=None, status_code=200, result=None, values=None, editing=None):
+        shown = company(request, company_id)
+        listing = run(request, 'delivery-schedule query', {}, company_id)
+        current = None
+        if editing and editing != 'new':
+            current = run(request, 'delivery-schedule show', {'schedule': editing}, company_id)
+        return render('delivery_schedules.html', request, status_code=status_code, company=shown,
+                      company_id=shown['company_id'], listing=listing, error=error, result=result,
+                      values=values or {}, editing=editing, current=current, kinds=KINDS, kind_label=KIND_LABEL,
+                      frequencies=FREQUENCIES, periods=PERIODS,
+                      can_write=allowed(request, shown, 'delivery-schedule create'),
+                      can_live=allowed(request, shown, 'delivery-schedule live'))
+
+    @app.get('/c/{company_id}/delivery-schedules')
+    def delivery_schedules(request: Request, company_id: str):
+        try:
+            return schedules_page(request, company_id, editing=request.query_params.get('edit'))
+        except BookflowError as e:
+            return page_error(request, e)
+
+    def schedule_input(form, *, new):
+        kind = form.get('kind')
+        out = {'kind': kind, 'frequency': form.get('frequency') or None, 'start_date': form.get('start_date') or None,
+               'mode': form.get('mode') or 'draft', 'combine': form.get('combine') == 'on',
+               'template': form.get('template') or None}
+        if form.get('name'):
+            out['name'] = ' '.join(form['name'].split())
+        what = form.get('what') or ''
+        if kind == 'statement':
+            out.update(period=form.get('period') or None, balance_over=(form.get('balance_over') or '').strip() or None,
+                       method='email' if form.get('email_only') == 'on' else None)
+        elif kind == 'notice':
+            out['ready'] = True
+        elif what in ('queued', 'unsent'):
+            out[what] = True
+        if form.get('stop_date'):
+            out['stop_date'] = form['stop_date']
+        elif not new:
+            out['no_end'] = not form.get('remaining_runs')
+        if form.get('remaining_runs'):
+            out['remaining_runs'] = form['remaining_runs']
+        if form.get('catch_up_days'):
+            out['catch_up_days'] = form['catch_up_days']
+        if not new:
+            # Every selection field is sent, so a change of kind or selection clears what no longer applies.
+            for k in ('queued', 'unsent', 'ready', 'period', 'balance_over', 'method'):
+                out.setdefault(k, None)
+            out['customer'] = form.get('customer') or None
+        return out
+
+    def live_page(request, company_id, schedule, *, error=None, status_code=200):
+        shown = company(request, company_id)
+        out = run(request, 'delivery-schedule live', {'schedule': schedule}, company_id, dry_run=True)
+        return render('delivery_schedule_live.html', request, status_code=status_code, company=shown,
+                      company_id=shown['company_id'], schedule=out, check=out['check'], error=error)
+
+    @app.get('/c/{company_id}/delivery-schedules/{schedule}/live')
+    def delivery_schedule_live(request: Request, company_id: str, schedule: str):
+        try:
+            return live_page(request, company_id, schedule)
+        except BookflowError as e:
+            if e.code in _PASS:
+                raise
+            return schedules_page(request, company_id, error=e.to_dict(), status_code=400)
+
+    def schedules_submit(request, company_id, form):
+        action = form.get('action') or ''
+        name = form.get('schedule') or ''
+        try:
+            if action == 'create':
+                out = run(request, 'delivery-schedule create', schedule_input(form, new=True), company_id,
+                          headers=headers(form, 'Email schedule'))
+                result = f"Schedule {out['name']} saved. " + ' '.join(out['warnings'])
+            elif action == 'update':
+                body = dict(schedule_input(form, new=False), schedule=name)
+                body['expected_version'] = int(form['version']) if form.get('version') else None
+                out = run(request, 'delivery-schedule update', body, company_id,
+                          headers=headers(form, 'Email schedule changed'))
+                result = f"Schedule {out['name']} saved. " + ' '.join(out['warnings'])
+            elif action in ('pause', 'resume', 'run'):
+                out = run(request, f'delivery-schedule {action}', {'schedule': name}, company_id,
+                          headers=headers(form, {'pause': 'Stop the schedule', 'resume': 'Resume the schedule',
+                                                 'run': 'Run the schedule now'}[action]))
+                ran = out.get('ran') or []
+                result = {'pause': f"Schedule {out['name']} stopped.", 'resume': f"Schedule {out['name']} resumed.",
+                          'run': f"Schedule {out['name']}: " + ('; '.join(
+                              f"{r['slot_date']} {r['state']}" + (f", {r['drafted']} drafted" if r['drafted'] else '')
+                              for r in ran) or 'nothing ran') + '.'}[action]
+                if out['warnings']:
+                    result += ' ' + ' '.join(out['warnings'])
+            elif action == 'live':
+                try:
+                    out = run(request, 'delivery-schedule live', {'schedule': name, 'confirm': form.get('confirm')},
+                              company_id, headers=headers(form, 'Make the schedule live'))
+                except BookflowError as e:
+                    if e.code in _PASS:
+                        raise
+                    return live_page(request, company_id, name, error=e.to_dict(),
+                                     status_code=200 if request.headers.get('HX-Request') else 400)
+                result = f"Schedule {out['name']} is live. " + ' '.join(out['warnings'])
+            else:
+                return schedules_page(request, company_id)
+        except BookflowError as e:
+            return failed(request, e, schedules_page, company_id, values=dict(form),
+                          editing=name or ('new' if action == 'create' else None))
+        return schedules_page(request, company_id, result=result.strip())
+
+    @app.post('/c/{company_id}/delivery-schedules')
+    async def delivery_schedules_post(request: Request, company_id: str):
+        form = dict(await request.form())
+        try:
+            return await run_in_threadpool(schedules_submit, request, company_id, form)
+        except BookflowError as e:
+            return page_error(request, e)

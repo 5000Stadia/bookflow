@@ -1,0 +1,24 @@
+{% extends "base.html" %}{% block title %}Turn on a schedule{% endblock %}{% block body %}<style>
+#schedule-live{max-width:760px}#schedule-live dl{display:grid;grid-template-columns:minmax(90px,max-content) 1fr;gap:4px 12px;margin:8px 0}
+#schedule-live dt{font-weight:600}#schedule-live dd{margin:0;overflow-wrap:anywhere}.reach-list{padding-left:18px;overflow-wrap:anywhere}
+.live-actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:12px 0}.live-warning{border-left:3px solid #b58a00;padding:6px 10px;background:#fffbea}
+</style><section id="schedule-live">
+<nav class="crumbs"><a href="/c/{{ company_id }}/delivery">Outbox</a> / <a href="/c/{{ company_id }}/delivery-schedules">Schedules</a> / Turn on</nav>
+<h1>Turn on {{ schedule.name }}?</h1>
+{% if error %}<div role="alert" class="error" data-live-error><strong>{{ error.code }}</strong>: {{ error.message }}</div>{% endif %}
+<p class="live-warning">Once on, this schedule emails customers by itself, with nobody pressing Send. Check these details once; they are exactly what goes on.</p>
+<dl data-live-check>
+<dt>Sends</dt><dd data-live-selection>{{ check.selection }}</dd>
+<dt>When</dt><dd data-live-cadence>{{ check.cadence }}</dd>
+<dt>First run</dt><dd data-live-first>{{ check.first_run or 'none left' }}</dd>
+{% if check.period %}<dt>Period today</dt><dd>{{ check.period }}</dd>{% endif %}
+<dt>Template</dt><dd>{{ check.template }}</dd>
+<dt>Runs under</dt><dd>{{ check.runs_as }}</dd>
+</dl>
+<h2>If it ran today: {{ check.reach_count }} message{{ '' if check.reach_count == 1 else 's' }}</h2>
+{% if check.would_reach %}<ul class="reach-list" data-live-reach>{% for i in check.would_reach %}<li>{{ i.customer_name }}: {{ i.documents|join(', ') }} to {{ i.to|join(', ') }}</li>{% endfor %}</ul>{% if check.reach_count > check.would_reach|length %}<p>and {{ check.reach_count - check.would_reach|length }} more.</p>{% endif %}{% else %}<p data-live-reach>Nobody today.</p>{% endif %}
+{% if check.skipped %}<h2>Left out today: {{ check.skipped_count }}</h2><ul class="reach-list" data-live-skipped>{% for i in check.skipped %}<li>{{ i.customer_name }}: {{ i.documents|join(', ') }} ({{ i.reason_text or i.reason }})</li>{% endfor %}</ul>{% endif %}
+<form method="post" action="/c/{{ company_id }}/delivery-schedules" hx-post="/c/{{ company_id }}/delivery-schedules" hx-target="body" hx-swap="outerHTML" class="live-actions" data-live-form>
+<input type="hidden" name="action" value="live"><input type="hidden" name="schedule" value="{{ schedule.schedule_id }}"><input type="hidden" name="confirm" value="{{ check.fingerprint }}">
+<button type="submit" data-live-confirm>Turn it on</button><a href="/c/{{ company_id }}/delivery-schedules">Not now</a></form>
+</section>{% endblock %}
