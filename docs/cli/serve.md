@@ -26,7 +26,8 @@ Serve every routed command over HTTP and the loopback socket, holding the data-r
 |---|---|---|---|---|---|---|
 | `bind` | `--bind` | string | no | no | "127.0.0.1:8765" | Address to listen on, host:port; maximum length 128 |
 | `allow_network` | `--allow-network` | boolean | no | no | false | Allow a bind address outside loopback |
-| `secure_cookies` | `--secure-cookies` | boolean \| null | no | yes | null | Set Secure on the session cookie; defaults on for non-loopback binds |
+| `secure_cookies` | `--secure-cookies` | boolean \| null | no | yes | null | Set Secure on the session cookie; defaults on for non-loopback binds and for an https public origin |
+| `public_origin` | `--public-origin` | string \| null | no | yes | null | The https://host[:port] a TLS proxy in front of this host serves (for example what `colony serve` prints); links, the printed address and Origin checks use it, and the host then binds 127.0.0.1 only. Defaults to [host] public_origin in config.toml |
 | `background` | `--background` | boolean | no | no | false | Start the host as a background process, wait until it answers, print its address and return; its log is host.log in the data root |
 
 ### Command and context options
@@ -50,6 +51,7 @@ This command has no HTTP route.
 | `socket` | string \| null | yes | yes | — | — |
 | `pid` | integer | yes | no | — | — |
 | `secure_cookies` | boolean | yes | no | — | — |
+| `public_origin` | string \| null | no | yes | null | The configured public origin, when the host sits behind a TLS proxy |
 | `companies_migrated` | array[string] | yes | no | — | — |
 | `companies_failed` | array[object[string, string]] | yes | no | — | — |
 | `warnings` | array[string] | no | no | [] | — |
@@ -63,6 +65,7 @@ Example JSON output:
   "companies_migrated": [],
   "log": null,
   "pid": 1,
+  "public_origin": null,
   "secure_cookies": false,
   "socket": null,
   "url": null,

@@ -54,6 +54,7 @@ class SetupInput(BaseModel):
     role: Literal["readonly", "standard", "admin"] | None = Field(None, description="The agent's role in the company: standard for a new agent; given for an existing one, it changes the role")
     mcp_config: str = Field(".mcp.json", min_length=1, description="MCP client configuration file to write or update (the `bookflow` server entry only)")
     bind: str = Field("127.0.0.1:8765", max_length=128, description="Address the host listens on, host:port (loopback)")
+    public_origin: str | None = Field(None, max_length=256, description="The https://host[:port] a TLS proxy in front of the host serves (for example what `colony serve` prints); the links and the MCP configuration use it. Defaults to [host] public_origin in config.toml")
     serve: bool = Field(True, description="Start the host in the background if it is not answering, and wait until it does")
     link_minutes: int = Field(120, ge=1, le=1440, description="Minutes the owner's one-time password link stays valid")
     new_token: bool = Field(False, description="Issue the agent a new token even though its last one was revoked; a person's decision")
@@ -208,6 +209,7 @@ class OwnerLinkInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     bind: str = Field("127.0.0.1:8765", max_length=128, description="Address the host listens on, host:port (loopback); the link opens there")
     link_minutes: int = Field(120, ge=1, le=1440, description="Minutes the link stays valid")
+    public_origin: str | None = Field(None, max_length=256, description="The https://host[:port] a TLS proxy in front of the host serves (for example what `colony serve` prints); the links and the MCP configuration use it. Defaults to [host] public_origin in config.toml")
 
 
 class OwnerLinkOutput(BaseModel):
@@ -248,6 +250,9 @@ def run_owner_link(cmd, inp: OwnerLinkInput, ctx: Context, s: Session) -> dict[s
         raise BookflowError("E_NETWORK_NOT_ALLOWED", details={"bind": inp.bind},
                             message="The link opens on this computer only; use a loopback address such as 127.0.0.1:8765.")
     root = Path(os.path.abspath(Path(s.data_root).expanduser()))
+    from bookflow.core import public_origin as po
+    origin = po.resolve(root, inp.public_origin)
+    po.require_proxy_bind(origin, host_name, inp.bind)
     if not (root / "hub.db").exists():
         raise BookflowError("E_NOT_INITIALIZED", details={"data_root": str(root)})
     mapped = Config.load(root / "config.toml").user_table(s.os_login) or {}
@@ -261,10 +266,11 @@ def run_owner_link(cmd, inp: OwnerLinkInput, ctx: Context, s: Session) -> dict[s
     if row["password_hash"]:
         raise BookflowError("E_VALIDATION", message=f"{row['username']} already has a password; a one-time link only sets a first one.",
                             details={"fields": [{"field": "owner", "problem": "already has a password"}]})
-    url = host_url(inp.bind)
+    local = host_url(inp.bind)
+    url = po.base_url(origin, local)
     secret, expires = setup_links.create(root, owner_id, minutes=inp.link_minutes)
     link = f"{url}setup/{secret}"
-    running = answers(url)
+    running = answers(local)
     text = (f"One-time link for {row['username']} to choose a password (works once, until {_readable(expires)}):\n  {link}\n"
             + ("" if running else "The host is not answering yet; start it with `bookflow serve --background`.\n"))
     return OwnerLinkOutput(username=row["username"], url=link, expires_at=expires, host_running=running,
@@ -372,7 +378,12 @@ def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
     # Always absolute: the token file's path goes into .mcp.json, which an MCP client reads from
     # its own working directory, and a relative --data-root would point it somewhere else.
     root = Path(os.path.abspath(Path(s.data_root).expanduser()))
-    url = host_url(inp.bind)
+    from bookflow.core import public_origin as po
+    origin = po.resolve(root, inp.public_origin)
+    po.require_proxy_bind(origin, host_name, inp.bind)
+    # `local` is where this computer reaches the host (health checks); `url` is what people and agents are given.
+    local = host_url(inp.bind)
+    url = po.base_url(origin, local)
     steps: list[SetupStep] = []
     warnings: list[str] = []
 
@@ -575,11 +586,11 @@ def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
     if running:
         host = {"status": "running", "pid": running, "log": None}
         step("host", "exists", f"answering at {url} (pid {running})")
-    elif answers(url):
-        raise BookflowError("E_IO", message=f"Something else answers at {url}, not this data root's host; choose another --bind.",
+    elif answers(local):
+        raise BookflowError("E_IO", message=f"Something else answers at {local}, not this data root's host; choose another --bind.",
                             details={"operation": "serve", "address": inp.bind})
     elif inp.serve:
-        started = start_in_background(root, inp.bind)
+        started = start_in_background(root, inp.bind, public_origin=origin)
         host = {"status": "started" if started["started"] else "running", "pid": started["pid"] or None, "log": started["log"]}
         step("host", "created", f"answering at {url}" + (f" (pid {started['pid']}, log {started['log']})" if started["pid"] else ""))
     else:

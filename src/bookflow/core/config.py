@@ -40,6 +40,12 @@ def dump(data: dict[str, Any]) -> str:
         for k, v in client.items():
             lines.append(f"{k} = {_toml_str(str(v))}")
         lines.append("")
+    host = {k: v for k, v in data.get("host", {}).items() if v is not None}
+    if host:
+        lines.append("[host]")
+        for k, v in host.items():
+            lines.append(f"{k} = {_toml_str(str(v))}")
+        lines.append("")
     for login, table in data.get("users", {}).items():
         lines.append(f"[users.{_toml_str(login)}]")
         for k, v in table.items():
@@ -89,7 +95,7 @@ def _settings_changed() -> None:
 class Config:
     def __init__(self, path: Path):
         self.path = path
-        self.data: dict[str, Any] = {"client": {}, "users": {}, "backups": {}}
+        self.data: dict[str, Any] = {"client": {}, "host": {}, "users": {}, "backups": {}}
 
     @classmethod
     def load(cls, path: Path) -> "Config":
@@ -207,10 +213,11 @@ def _parse(contents: str, path: Path) -> dict[str, Any]:
     users = raw.get("users", {})
     client = raw.get("client", {})
     backups = raw.get("backups", {})
-    if (not isinstance(users, dict) or not isinstance(client, dict) or any(not isinstance(v, dict) for v in users.values())
+    host = raw.get("host", {})
+    if (not isinstance(users, dict) or not isinstance(client, dict) or not isinstance(host, dict) or any(not isinstance(v, dict) for v in users.values())
             or not isinstance(backups, dict) or any(not isinstance(v, dict) for v in backups.values())):
         raise BookflowError("E_CONFIG_INVALID", details={"path": str(path), "problem": "unexpected shape"})
-    return {"client": dict(client), "users": {k: dict(v) for k, v in users.items()},
+    return {"client": dict(client), "host": dict(host), "users": {k: dict(v) for k, v in users.items()},
             "backups": {k: dict(v) for k, v in backups.items()}}
 
 

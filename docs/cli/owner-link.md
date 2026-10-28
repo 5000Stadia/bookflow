@@ -28,6 +28,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 |---|---|---|---|---|---|---|
 | `bind` | `--bind` | string | no | no | "127.0.0.1:8765" | Address the host listens on, host:port (loopback); the link opens there; maximum length 128 |
 | `link_minutes` | `--link-minutes` | integer | no | no | 120 | Minutes the link stays valid; minimum 1; maximum 1440 |
+| `public_origin` | `--public-origin` | string \| null | no | yes | null | The https://host[:port] a TLS proxy in front of the host serves (for example what `colony serve` prints); the links and the MCP configuration use it. Defaults to [host] public_origin in config.toml |
 
 ### Command and context options
 

@@ -964,9 +964,12 @@ class Host:
         return done
 
     # ---------------------------------------------------------------- descriptor
-    def write_descriptor(self, bind: str, socket_path: str) -> None:
+    def write_descriptor(self, bind: str, socket_path: str, *, public_origin: str | None = None) -> None:
         p = self.data_root / "host.json"
-        p.write_text(json.dumps({"pid": os.getpid(), "bind": bind, "socket": socket_path, "version": self.version, "started": time.time()}), encoding="utf-8")
+        descriptor = {"pid": os.getpid(), "bind": bind, "socket": socket_path, "version": self.version, "started": time.time()}
+        if public_origin:
+            descriptor["public_origin"] = public_origin
+        p.write_text(json.dumps(descriptor), encoding="utf-8")
         os.chmod(p, 0o600)
 
     def remove_descriptor(self) -> None:
