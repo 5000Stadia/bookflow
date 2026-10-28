@@ -2791,6 +2791,7 @@ _BANK_SORT = {
                     'several candidates or pairs fitting equally, amounts that differ, a line named twice',
     'E_RECORD_NOT_FOUND': 'unknown line, entry, account or payee',
     'E_VERSION_CONFLICT': 'the line changed meanwhile',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
     'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
     'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
 }
@@ -2809,6 +2810,7 @@ MATRIX['bank-line undo'] = {
     'E_BATCH_BLOCKED': 'a line sorted again since, an entry edited, linked, reconciled, deposited, applied, in a '
                        'closed period or without the delete grant (every blocker named)',
     'E_VERSION_CONFLICT': 'the fingerprint of an older dry run, or a line changed meanwhile',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
     'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
     'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
 }

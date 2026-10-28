@@ -829,7 +829,14 @@ card credit, a one-sided transfer) has the same postings and document lines as t
 command, and its audit names `bank-line:<line>`; a closed period refuses `E_PERIOD_CLOSED` as `check post` does;
 missing payee or account asks; ties are listed; a `--lines` batch is all or nothing and undone whole, refused when a
 line was sorted again; transfers in both import orders and one-sided end as one entry; reversal deletes what lines
-were added as. `tests/test_bank_feed_surfaces.py` runs the six through Python, CLI, HTTP and MCP.
+were added as. `tests/test_bank_line_sort_guards.py` (the review's probes, each failing before its fix): an undo
+refused (`entry_matched`, `entry_gone` for a voided, deleted or changed entry, a re-match batch's old entry deleted)
+changes nothing, and links back once cleared; a `--lines` add of 101 undone in slices freezes its lines (match,
+unmatch, ignore, add, transfer and the import's reversal refused) and finishes past a line put back by a missed path;
+`entry_gone` shown, filtered and released for each cause; a one-sided transfer completed 10 days late as one entry,
+`--to` refused naming it, two fits listed; stacked undos unwind newest first; an idempotent retry returns the first
+result; refusal hints match the state; a `--lines` add failing first leaves no batch. `tests/test_bank_feed_surfaces.py`
+runs the six through Python, CLI, HTTP and MCP.
 
 **Property** (`tests/test_bank_line_sort_property.py`, seeds 108 and 2026, 40 rounds over Checking by CSV and Payment
 Example Bank by OFX with transfers between them, entries for some lines and some nine days off): seed 108 -- 12
