@@ -74,3 +74,67 @@ bank_line_query = _read(
     'bank-line query', 'The bank inbox: lines by account, state (waiting, matched, settled...), import, dates, words '
     'or an exact amount, with counts by state. Example: {"account": "Checking", "state": "waiting"}.',
     m.LineQueryInput, m.LineQueryOutput, plan_bank_line_query)
+
+
+# ------------------------------------------------------------------ reverse and move (increment 2)
+
+_REVERSE = (
+    "Undo a bank import as one unit: hide its lines (their keys are released, so the file can come in again), undo "
+    "its matches, delete the entries it created (with preserved history) and restore the account's record of its "
+    "number and last import. Newest first per account: a later live import blocks it (--through reverses the newer "
+    "ones with it). Refused (E_BATCH_BLOCKED) naming every blocker and what clears it; then nothing changes. "
+    '--dry-run shows the plan and a fingerprint. Example: {"import_id": "01J..."}.')
+_MOVE = (
+    "Move a bank import to the account it belongs in, in one step: reverse it, then import its own stored lines "
+    "into the target (no file needed), deduped, matched and checked there; the new import records moved_from. "
+    'Refused whole if the reversal is blocked or the target refuses. Example: {"import_id": "01J...", "to": '
+    '"Savings"}.')
+
+
+_PENDING = m.ReverseOutput(imports=(), state='live', lines=0, matches=0, entries=0, reversed_now=0, remaining=0,
+                           steps=(), blockers=(), fingerprint=None, reversal_batches=(), summary='')
+
+
+def plan_bank_feed_reverse(inp, ctx, s) -> Plan:
+    from bookflow.company import bank_reversal
+    if s.dry_run:
+        return Plan(bank_reversal.reverse(s, ctx, inp, dry_run=True)['out'], {'input': inp})
+    bank_reversal.import_row(s, inp.import_id)
+    return Plan(_PENDING, {'input': inp})
+
+
+def apply_bank_feed_reverse(plan, ctx, s) -> Applied:
+    from bookflow.commands.import_cmds import _finalized
+    from bookflow.company import bank_reversal
+    return _finalized(s, ctx, 'bank-feed.reverse', lambda: bank_reversal.reverse(
+        s, ctx, plan.data['input'], dry_run=False)['out'].model_dump(), m.ReverseOutput)
+
+
+def plan_bank_feed_move(inp, ctx, s) -> Plan:
+    from bookflow.company import bank_reversal
+    if s.dry_run:
+        return Plan(bank_reversal.move(s, ctx, inp, dry_run=True), {'input': inp})
+    bank_reversal.import_row(s, inp.import_id)
+    return Plan(m.MoveOutput(reversal=_PENDING, target=None), {'input': inp})
+
+
+def apply_bank_feed_move(plan, ctx, s) -> Applied:
+    from bookflow.commands.import_cmds import _finalized
+    from bookflow.company import bank_reversal
+    return _finalized(s, ctx, 'bank-feed.move', lambda: bank_reversal.move(
+        s, ctx, plan.data['input'], dry_run=False).model_dump(), m.MoveOutput)
+
+
+_REVERSE_ERRORS = ['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_BATCH_BLOCKED', 'E_VERSION_CONFLICT']
+bank_feed_reverse = command(
+    'bank-feed reverse', scope='company', description=_REVERSE, input_model=m.ReverseInput,
+    output_model=m.ReverseOutput, writes={'company'}, required_role='standard', capability='bank-feed',
+    positional=['import_id'], error_codes=_REVERSE_ERRORS)(plan_bank_feed_reverse)
+bank_feed_reverse.applier(apply_bank_feed_reverse)
+bank_feed_reverse.resource_requirements = _READ
+bank_feed_move = command(
+    'bank-feed move', scope='company', description=_MOVE, input_model=m.MoveInput, output_model=m.MoveOutput,
+    writes={'company'}, required_role='standard', capability='bank-feed', positional=['import_id'],
+    error_codes=[*_REVERSE_ERRORS, 'E_ACCOUNT_MISMATCH'])(plan_bank_feed_move)
+bank_feed_move.applier(apply_bank_feed_move)
+bank_feed_move.resource_requirements = _READ

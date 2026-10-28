@@ -192,6 +192,9 @@ class InboxLine(Model):
 
 class ImportShowOutput(Model):
     bank_import: ImportRow
+    part_way: dict | None = Field(None, description=(
+        'A reversal or move of this import under way or blocked: entries taken back and left, the lines still in '
+        'the inbox, the account a move goes to, and `next`, the command that finishes it; null otherwise.'))
     by_state: dict[str, int]
     lines: tuple[InboxLine, ...]
     next_cursor: str | None
@@ -226,3 +229,63 @@ class LineQueryOutput(Model):
     lines: tuple[InboxLine, ...]
     counts: dict[str, int] = Field(description='Live lines matching the filters other than state, by state.')
     next_cursor: str | None
+
+
+# ------------------------------------------------------------------ reverse and move (increment 2)
+
+# Created entries a reversal deletes per call. Measured (tools/measure_bank_reversal.py): about 0.25 s an entry, so 200
+# took 49 s in one call, close to an agent tool call's minute; 100 keeps a slice near 25 s.
+SLICE = 100
+
+class ReverseInput(Model):
+    import_id: ID = Field(description='The import to reverse.')
+    through: bool = Field(False, description=(
+        'Also reverse every later live import of the same account, newest first, in one plan (each import blocks '
+        'the reversal of those before it).'))
+    limit: int = Field(SLICE, strict=True, ge=1, le=20_000, description=(
+        'Most created entries to delete in this call (a slice, about a quarter second each); the inbox is released '
+        'with the last one.'))
+    fingerprint: str | None = Field(None, min_length=64, max_length=64, description=(
+        'The `fingerprint` a dry run returned; refused if anything changed since.'))
+
+
+class MoveInput(Model):
+    import_id: ID = Field(description='The import that went into the wrong account.')
+    to: AccountSelector = Field(description='The account its lines belong in.')
+    confirm_account: bool = Field(False, description=(
+        "Go on although the import's account number or kind differs from what the target last received "
+        '(needs bank-feed.connect).'))
+    account_confirmed: bool = Field(False, description=(
+        "Go on although lines with no account number look like another account's statement."))
+    auto_match: bool = Field(True, description='Link each line the matcher pairs surely with its entry.')
+    match_days: int = Field(files.MATCH_DAYS, strict=True, ge=0, le=60, description='As for `bank-feed import`.')
+    suggest_days: int = Field(files.SUGGEST_DAYS, strict=True, ge=0, le=120, description='As for `bank-feed import`.')
+    limit: int = Field(SLICE, strict=True, ge=1, le=20_000, description='Most created entries to delete in this call.')
+    fingerprint: str | None = Field(None, min_length=64, max_length=64, description=(
+        'The `fingerprint` a dry run returned; refused if anything changed since.'))
+
+
+class ReverseOutput(Model):
+    imports: tuple[ID, ...] = Field(description='The imports reversed (or to reverse), newest first.')
+    state: str = Field(description='live (dry run), reversing (more slices to run), blocked, or reversed.')
+    lines: Count = Field(description='Inbox lines the reversal hides (their keys are released).')
+    matches: Count = Field(description='Matches it undoes.')
+    entries: Count = Field(description='Entries the imports created that it deletes (with preserved history).')
+    reversed_now: Count = Field(description='Entries deleted by this call.')
+    remaining: Count = Field(description='Steps still to run.')
+    steps: tuple[dict, ...] = Field(description='The plan: each entry to delete, then the inbox release.')
+    blockers: tuple[dict, ...] = Field(description=(
+        'What blocks it (empty when it can run): code, the record, message, and the command that clears it.'))
+    total_blockers: Count = 0
+    fingerprint: str | None = Field(description='Pass to the real run so it is refused if anything changed since.')
+    reversal_batches: tuple[ID, ...] = Field(description='The batches recording the reversals, once begun.')
+    summary: str
+    next: str | None = Field(None, description='The command to run next, or null.')
+
+
+class MoveOutput(Model):
+    reversal: ReverseOutput
+    target: ImportOutput | None = Field(description=(
+        'The re-import into the target: a preview on a dry run, the new import once done; null while the reversal '
+        'still has slices to run.'))
+    next: str | None = Field(None, description='The command to run next, or null.')

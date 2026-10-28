@@ -79,6 +79,7 @@ def _delete():
     cmd.resource_requirements = (('ledger.read', 'member'),)
     cmd.ledger = True
     cmd.permanent_recovery = recover
+    cmd.plan_in_write = True
     cmd.applier(deletion.apply)
     return cmd
 

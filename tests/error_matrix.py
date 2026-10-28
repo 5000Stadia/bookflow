@@ -2771,3 +2771,17 @@ MATRIX['bank-feed import'] = {
 }
 for _name in ('bank-feed show', 'bank-feed query', 'bank-line query'):
     MATRIX[_name] = {'E_VALIDATION': 'invalid input or cursor', 'E_RECORD_NOT_FOUND': 'unknown import or account'}
+# Reverse and move (R108 increment 2).
+_BANK_REVERSE = {
+    'E_VALIDATION': 'already reversed, the account frozen by a reversal under way, a move to the same account or '
+                    'another currency, an import holding no lines',
+    'E_RECORD_NOT_FOUND': 'unknown import or account',
+    'E_BATCH_BLOCKED': 'a later live import, an entry edited, linked, reconciled, deposited, applied, in a closed '
+                       'period or without the delete grant (every blocker named)',
+    'E_VERSION_CONFLICT': 'the fingerprint of an older dry run',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+MATRIX['bank-feed reverse'] = dict(_BANK_REVERSE)
+MATRIX['bank-feed move'] = {**_BANK_REVERSE, 'E_ACCOUNT_MISMATCH': "the import's account number or kind differs "
+                                                                  "from the target's"}

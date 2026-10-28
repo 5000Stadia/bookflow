@@ -20,7 +20,7 @@ from bookflow import BookflowError
 from bookflow.core import registry
 from bookflow.hub import capabilities, people_only, permission_catalog as c, permission_policy as p
 from bookflow.hub import permission_runtime as runtime
-from bookflow.hub import permission_bank_feed_catalog as before_layer, permission_capabilities_catalog as layer
+from bookflow.hub import permission_bank_feed_reverse_catalog as before_layer, permission_capabilities_catalog as layer
 from tests.conftest import hosted_call, make_agent, make_legacy
 from tests.test_row3_host import hosted  # noqa: F401 - fixture
 
@@ -346,7 +346,7 @@ def test_a_root_activated_at_the_previous_catalog_upgrades_with_nothing_broader_
     make_legacy(root)
     lib = bookflow.connect(data_root=str(root))
     with monkeypatch.context() as previous_build:
-        previous_build.setattr(runtime, "current_catalog", lambda: runtime.known_catalog(c.BANK_FEED_POLICY_VERSION))
+        previous_build.setattr(runtime, "current_catalog", lambda: runtime.known_catalog(c.BANK_FEED_REVERSE_POLICY_VERSION))
         state = lib.permission.show()
         lib.permission.activate(expected_generation=state["generation"], expected_catalog_sha256=state["catalog_sha256"])
     company = lib.company.list()["items"][0]["company_id"]

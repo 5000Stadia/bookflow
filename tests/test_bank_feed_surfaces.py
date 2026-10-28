@@ -11,7 +11,8 @@ from tests.mcp_matrix_support import Matrix
 from tests.test_bank_feeds import ofx, sample
 
 SURFACES = ('python', 'cli', 'http', 'mcp')
-COMMANDS = frozenset(('bank-feed import', 'bank-feed show', 'bank-feed query', 'bank-line query'))
+COMMANDS = frozenset(('bank-feed import', 'bank-feed show', 'bank-feed query', 'bank-line query',
+                      'bank-feed move', 'bank-feed reverse'))
 
 
 @pytest.mark.timeout(900)
@@ -36,14 +37,22 @@ def test_the_same_bank_import_through_python_cli_http_and_mcp(root, tmp_path):
                 shown = await call(surface, 'bank-feed show', {'import_id': done['import_id'], 'state': 'waiting'})
                 listed = await call(surface, 'bank-feed query', {'account': 'Checking'})
                 inbox = await call(surface, 'bank-line query', {'account': 'Checking', 'state': 'waiting'})
+                # Increment 2: the import was the wrong account's -- moved in one step, then that undone.
+                where = {'import_id': done['import_id'], 'to': 'Payment Example Bank'}
+                move_plan = await call(surface, 'bank-feed move', where, dry_run=True)
+                moved = await call(surface, 'bank-feed move', where)
+                undo = {'import_id': moved['target']['import_id']}
+                undo_plan = await call(surface, 'bank-feed reverse', undo, dry_run=True)
+                undone = await call(surface, 'bank-feed reverse', {**undo, 'fingerprint': undo_plan['fingerprint']})
                 results[surface] = dict(preview=preview, done=done, again=again, mismatch=mismatch, shown=shown,
-                                        listed=listed, inbox=inbox)
+                                        listed=listed, inbox=inbox, move_plan=move_plan, moved=moved,
+                                        undo_plan=undo_plan, undone=undone)
             return results
         finally:
             await matrix.close()
 
     results = anyio.run(witness)
-    shapes = set()
+    shapes, moves = set(), set()
     for surface, r in results.items():
         assert r['preview']['import_id'] is None and r['preview']['counts'] == r['done']['counts'], surface
         assert (r['done']['counts']['new'], r['done']['counts']['matched']) == (10, 8), surface
@@ -51,6 +60,11 @@ def test_the_same_bank_import_through_python_cli_http_and_mcp(root, tmp_path):
         assert r['shown']['by_state'] == {'matched': 8, 'waiting': 2} and len(r['shown']['lines']) == 2
         assert r['listed']['imports'][0]['id'] == r['done']['import_id'], surface
         assert r['inbox']['counts'] == {'matched': 8, 'waiting': 2}, surface
+        assert (r['move_plan']['reversal']['lines'], r['move_plan']['reversal']['matches']) == (10, 8), surface
+        assert r['move_plan']['target']['counts']['new'] == 10 and r['moved']['reversal']['state'] == 'reversed'
+        assert r['moved']['target']['counts']['new'] == 10, surface
+        assert (r['undo_plan']['lines'], r['undone']['state']) == (10, 'reversed'), surface
+        moves.add((tuple(sorted(r['moved']['target']['counts'].items())), r['undone']['summary']))
         shapes.add((tuple(sorted(r['done']['counts'].items())), tuple(v['line_key'] for v in r['done']['lines']),
                     tuple((v['date'], v['amount'], v['state']) for v in r['inbox']['lines'])))
-    assert len(shapes) == 1
+    assert len(shapes) == 1 and len(moves) == 1

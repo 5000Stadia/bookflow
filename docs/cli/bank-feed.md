@@ -246,6 +246,225 @@ Example JSON output:
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
 
+## `bank-feed move`
+
+Move a bank import to the account it belongs in, in one step: reverse it, then import its own stored lines into the target (no file needed), deduped, matched and checked there; the new import records moved_from. Refused whole if the reversal is blocked or the target refuses. Example: {"import_id": "01J...", "to": "Savings"}.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | bank-feed |
+| Additional resources | ledger.read: member |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/bank-feed.move` |
+| External binary body | none |
+
+### CLI
+
+`bookflow bank-feed move 01J9ZK4QF8T7E2V5N3B6C1D0BF --to Savings --company "Demo Plumbing Co" --reason "Savings statement imported to Checking" --dry-run --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "bank-feed move", "input": {"import_id": "01J9ZK4QF8T7E2V5N3B6C1D0BF", "to": "Savings"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `import_id` | `IMPORT_ID` | string | yes | no | — | The import that went into the wrong account.; pattern "^[0-9A-HJKMNP-TV-Z]{26}$" |
+| `to` | `--to` | string | yes | no | — | The account its lines belong in.; minimum length 1; maximum length 1000 |
+| `confirm_account` | `--confirm-account` | boolean | no | no | false | Go on although the import's account number or kind differs from what the target last received (needs bank-feed.connect). |
+| `account_confirmed` | `--account-confirmed` | boolean | no | no | false | Go on although lines with no account number look like another account's statement. |
+| `auto_match` | `--auto-match` | boolean | no | no | true | Link each line the matcher pairs surely with its entry. |
+| `match_days` | `--match-days` | integer | no | no | 4 | As for `bank-feed import`.; minimum 0; maximum 60 |
+| `suggest_days` | `--suggest-days` | integer | no | no | 14 | As for `bank-feed import`.; minimum 0; maximum 120 |
+| `limit` | `--limit` | integer | no | no | 100 | Most created entries to delete in this call.; minimum 1; maximum 20000 |
+| `fingerprint` | `--fingerprint` | string \| null | no | yes | null | The `fingerprint` a dry run returned; refused if anything changed since. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/bank-feed.move`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `reversal` | object | yes | no | — | — |
+| `reversal.imports` | array[string] | yes | no | — | The imports reversed (or to reverse), newest first. |
+| `reversal.state` | string | yes | no | — | live (dry run), reversing (more slices to run), blocked, or reversed. |
+| `reversal.lines` | integer | yes | no | — | Inbox lines the reversal hides (their keys are released). |
+| `reversal.matches` | integer | yes | no | — | Matches it undoes. |
+| `reversal.entries` | integer | yes | no | — | Entries the imports created that it deletes (with preserved history). |
+| `reversal.reversed_now` | integer | yes | no | — | Entries deleted by this call. |
+| `reversal.remaining` | integer | yes | no | — | Steps still to run. |
+| `reversal.steps` | array[dict] | yes | no | — | The plan: each entry to delete, then the inbox release. |
+| `reversal.blockers` | array[dict] | yes | no | — | What blocks it (empty when it can run): code, the record, message, and the command that clears it. |
+| `reversal.total_blockers` | integer | no | no | 0 | — |
+| `reversal.fingerprint` | string \| null | yes | yes | — | Pass to the real run so it is refused if anything changed since. |
+| `reversal.reversal_batches` | array[string] | yes | no | — | The batches recording the reversals, once begun. |
+| `reversal.summary` | string | yes | no | — | — |
+| `reversal.next` | string \| null | no | yes | null | The command to run next, or null. |
+| `target` | object \| null | yes | yes | — | The re-import into the target: a preview on a dry run, the new import once done; null while the reversal still has slices to run. |
+| `target.import_id` | string \| null | yes | yes | — | The import (null on a dry run, or when nothing was new). |
+| `target.batch_id` | string \| null | yes | yes | — | Its batch, through which it is reversed as one unit. |
+| `target.account_id` | string | yes | no | — | — |
+| `target.currency` | string | yes | no | — | — |
+| `target.format` | literal["ofx", "qfx", "csv"] | yes | no | — | — |
+| `target.file_sha256` | string | yes | no | — | — |
+| `target.date_from` | string \| null | yes | yes | — | — |
+| `target.date_to` | string \| null | yes | yes | — | — |
+| `target.sum` | integer | yes | no | — | The new lines' total, bank sign. |
+| `target.sum_decimal` | string | yes | no | — | — |
+| `target.counts` | object | yes | no | — | — |
+| `target.counts.lines_in_file` | integer | yes | no | — | — |
+| `target.counts.new` | integer | yes | no | — | — |
+| `target.counts.already_in` | integer | yes | no | — | — |
+| `target.counts.in_statement` | integer | yes | no | — | — |
+| `target.counts.repeated_in_file` | integer | yes | no | — | — |
+| `target.counts.soft_duplicates` | integer | yes | no | — | — |
+| `target.counts.fitid_reused` | integer | yes | no | — | — |
+| `target.counts.matched` | integer | yes | no | — | — |
+| `target.counts.settled` | integer | yes | no | — | — |
+| `target.counts.waiting` | integer | yes | no | — | — |
+| `target.summary` | string | yes | no | — | — |
+| `target.account_check` | object | yes | no | — | — |
+| `target.account_check.account_id` | string | yes | no | — | — |
+| `target.account_check.account` | string | yes | no | — | — |
+| `target.account_check.type` | string | yes | no | — | — |
+| `target.account_check.last_import_at` | string \| null | yes | yes | — | — |
+| `target.account_check.file_bank_number` | string \| null | no | yes | null | — |
+| `target.account_check.file_account_last4` | string \| null | no | yes | null | — |
+| `target.account_check.file_kind` | literal["bank", "card"] \| null | no | yes | null | — |
+| `target.account_check.known_bank_number` | string \| null | no | yes | null | — |
+| `target.account_check.known_account_last4` | string \| null | no | yes | null | — |
+| `target.account_check.known_kind` | literal["bank", "card"] \| null | no | yes | null | — |
+| `target.account_check.learns` | string \| null | no | yes | null | The number this import teaches the account (first or confirmed). |
+| `target.account_check.status` | literal["first", "same", "confirmed", "no_id"] | yes | no | — | first (nothing known yet; this import teaches it), same, confirmed (differs; confirm_account given), no_id (a CSV carries none: check the overlap instead). |
+| `target.overlap_elsewhere` | array[object] | yes | no | — | Other feed accounts already holding this file's lines: the sign of a file sent to the wrong account. |
+| `target.overlap_elsewhere[].account_id` | string | yes | no | — | — |
+| `target.overlap_elsewhere[].account` | string | yes | no | — | — |
+| `target.overlap_elsewhere[].lines` | integer | yes | no | — | — |
+| `target.overlap_elsewhere[].percent` | integer | yes | no | — | — |
+| `target.warnings` | array[string] | yes | no | — | — |
+| `target.lines` | array[object] | yes | no | — | — |
+| `target.lines[].id` | string \| null | no | yes | null | The inbox line (null on a dry run, or for a line not imported). |
+| `target.lines[].line_key` | string | yes | no | — | — |
+| `target.lines[].fitid` | string \| null | yes | yes | — | — |
+| `target.lines[].date` | string | yes | no | — | — |
+| `target.lines[].amount` | integer | yes | no | — | Minor units in the bank's sign: positive is money in, or a card payment. |
+| `target.lines[].amount_decimal` | string | yes | no | — | — |
+| `target.lines[].payee` | string | yes | no | — | — |
+| `target.lines[].memo` | string | yes | no | — | — |
+| `target.lines[].number` | string | yes | no | — | — |
+| `target.lines[].outcome` | literal["new", "already_in", "in_statement", "repeated_in_file"] | yes | no | — | new; already_in (the inbox has it); in_statement (a reconciliation has it); repeated_in_file. |
+| `target.lines[].state` | literal["waiting", "matched", "added", "transfer", "ignored", "settled"] \| null | no | yes | null | Where a new line lands; null for a line not imported. |
+| `target.lines[].reason` | string | no | no | "" | — |
+| `target.lines[].entry_id` | string \| null | no | yes | null | The transaction it is matched to. |
+| `target.lines[].suggestions` | array[object] | no | no | [] | — |
+| `target.lines[].suggestions[].entry_id` | string | yes | no | — | — |
+| `target.lines[].suggestions[].date` | string | yes | no | — | — |
+| `target.lines[].suggestions[].amount` | integer | yes | no | — | — |
+| `target.lines[].suggestions[].number` | string | yes | no | — | — |
+| `target.lines[].suggestions[].payees` | array[string] | yes | no | — | — |
+| `target.lines[].possible_duplicate_of` | string \| null | no | yes | null | A live inbox line this one probably repeats. |
+| `target.lines[].warnings` | array[string] | no | no | [] | — |
+| `target.has_more_lines` | boolean | yes | no | — | — |
+| `target.next` | string | yes | no | — | — |
+| `next` | string \| null | no | yes | null | The command to run next, or null. |
+
+Example JSON output:
+
+```json
+{
+  "next": null,
+  "reversal": {
+    "blockers": [],
+    "entries": 1,
+    "fingerprint": null,
+    "imports": [],
+    "lines": 1,
+    "matches": 1,
+    "next": null,
+    "remaining": 1,
+    "reversal_batches": [],
+    "reversed_now": 1,
+    "state": "value",
+    "steps": [],
+    "summary": "value",
+    "total_blockers": 0
+  },
+  "target": null
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_ACCOUNT_MISMATCH` | The file looks like another account's; the details name both. Import it to the right account, or confirm. |
+| `E_BATCH_BLOCKED` | The batch cannot be reversed now; the details name each blocker and what clears it. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
 ## `bank-feed query`
 
 List bank imports newest first, one account's or all, each with its counts and batch (reversed ones with --include-reversed).
@@ -370,6 +589,147 @@ Example JSON output:
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
 
+## `bank-feed reverse`
+
+Undo a bank import as one unit: hide its lines (their keys are released, so the file can come in again), undo its matches, delete the entries it created (with preserved history) and restore the account's record of its number and last import. Newest first per account: a later live import blocks it (--through reverses the newer ones with it). Refused (E_BATCH_BLOCKED) naming every blocker and what clears it; then nothing changes. --dry-run shows the plan and a fingerprint. Example: {"import_id": "01J..."}.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | bank-feed |
+| Additional resources | ledger.read: member |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/bank-feed.reverse` |
+| External binary body | none |
+
+### CLI
+
+`bookflow bank-feed reverse 01J9ZK4QF8T7E2V5N3B6C1D0BF --company "Demo Plumbing Co" --reason "Wrong account" --dry-run --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "bank-feed reverse", "input": {"import_id": "01J9ZK4QF8T7E2V5N3B6C1D0BF"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `import_id` | `IMPORT_ID` | string | yes | no | — | The import to reverse.; pattern "^[0-9A-HJKMNP-TV-Z]{26}$" |
+| `through` | `--through` | boolean | no | no | false | Also reverse every later live import of the same account, newest first, in one plan (each import blocks the reversal of those before it). |
+| `limit` | `--limit` | integer | no | no | 100 | Most created entries to delete in this call (a slice, about a quarter second each); the inbox is released with the last one.; minimum 1; maximum 20000 |
+| `fingerprint` | `--fingerprint` | string \| null | no | yes | null | The `fingerprint` a dry run returned; refused if anything changed since. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/bank-feed.reverse`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `imports` | array[string] | yes | no | — | The imports reversed (or to reverse), newest first. |
+| `state` | string | yes | no | — | live (dry run), reversing (more slices to run), blocked, or reversed. |
+| `lines` | integer | yes | no | — | Inbox lines the reversal hides (their keys are released). |
+| `matches` | integer | yes | no | — | Matches it undoes. |
+| `entries` | integer | yes | no | — | Entries the imports created that it deletes (with preserved history). |
+| `reversed_now` | integer | yes | no | — | Entries deleted by this call. |
+| `remaining` | integer | yes | no | — | Steps still to run. |
+| `steps` | array[dict] | yes | no | — | The plan: each entry to delete, then the inbox release. |
+| `blockers` | array[dict] | yes | no | — | What blocks it (empty when it can run): code, the record, message, and the command that clears it. |
+| `total_blockers` | integer | no | no | 0 | — |
+| `fingerprint` | string \| null | yes | yes | — | Pass to the real run so it is refused if anything changed since. |
+| `reversal_batches` | array[string] | yes | no | — | The batches recording the reversals, once begun. |
+| `summary` | string | yes | no | — | — |
+| `next` | string \| null | no | yes | null | The command to run next, or null. |
+
+Example JSON output:
+
+```json
+{
+  "blockers": [],
+  "entries": 1,
+  "fingerprint": null,
+  "imports": [],
+  "lines": 1,
+  "matches": 1,
+  "next": null,
+  "remaining": 1,
+  "reversal_batches": [],
+  "reversed_now": 1,
+  "state": "value",
+  "steps": [],
+  "summary": "value",
+  "total_blockers": 0
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_BATCH_BLOCKED` | The batch cannot be reversed now; the details name each blocker and what clears it. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
 ## `bank-feed show`
 
 Show a bank import: its file, counts, who and why, its batch and state, and its lines (`--state waiting` for those still to sort). Example: {"import_id": "01J..."}.
@@ -454,6 +814,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `bank_import.created_via` | string | yes | no | — | — |
 | `bank_import.on_behalf_of` | string \| null | yes | yes | — | — |
 | `bank_import.created_at` | string | yes | no | — | — |
+| `part_way` | dict \| null | no | yes | null | A reversal or move of this import under way or blocked: entries taken back and left, the lines still in the inbox, the account a move goes to, and `next`, the command that finishes it; null otherwise. |
 | `by_state` | object[string, integer] | yes | no | — | — |
 | `lines` | array[object] | yes | no | — | — |
 | `lines[].id` | string | yes | no | — | — |
@@ -507,7 +868,8 @@ Example JSON output:
   },
   "by_state": {},
   "lines": [],
-  "next_cursor": null
+  "next_cursor": null,
+  "part_way": null
 }
 ```
 
