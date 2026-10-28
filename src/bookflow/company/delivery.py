@@ -399,6 +399,10 @@ def project(s, row, docs=None, *, names=None, numbers=None, stale=None, warnings
     if row['resend_of']:
         resend = s.company.conn.execute(sa.select(c.delivery_messages.c.number).where(
             c.delivery_messages.c.id == row['resend_of'])).scalar()
+    batch = None
+    if row.get('batch_id'):
+        batch = s.company.conn.execute(sa.select(c.delivery_batches.c.number).where(
+            c.delivery_batches.c.id == row['batch_id'])).scalar()
     present = None
     if row['status'] == 'cancelled' and docs:
         present = {r[0] for r in s.company.conn.execute(sa.select(c.delivery_files.c.sha256).where(
@@ -419,7 +423,7 @@ def project(s, row, docs=None, *, names=None, numbers=None, stale=None, warnings
         from_address=row['from_address'], reply_to=row['reply_to'], to=json.loads(row['to_addresses']),
         cc=json.loads(row['cc_addresses']), bcc=json.loads(row['bcc_addresses']), subject=row['subject'],
         body=row['body'], message_id=row['message_id'], template_id=row['template_id'], template_name=template_name,
-        resend_of=resend, released_by=row['released_by'], released_at=row['released_at'], go_by=row['go_by'],
+        resend_of=resend, batch=batch, released_by=row['released_by'], released_at=row['released_at'], go_by=row['go_by'],
         go_at=row['go_at'], waiting_for_go=row['status'] == 'ready' and row['go_by'] is None,
         sent_at=row['sent_at'], sent_via=row['sent_via'], sent_method=row['sent_method'],
         delivery=tracking(s, row), cancelled_reason=row['cancelled_reason'],
@@ -507,29 +511,59 @@ def template_for(s, kind, selector=None) -> dict:
 
 def compose(s, ctx, read, src: Source, template, *, subject=None, body=None):
     """Describe the document once; fill the template from it; draw the PDF from the same description."""
+    renders, *rest = compose_many(s, ctx, read, [src], template, subject=subject, body=body)
+    return (renders[0], *rest)
+
+
+# Fields every combined document must agree on to be filled; document.number lists them all.
+_COMBINED = ('document.date', 'document.due_date', 'document.total', 'document.balance_due', 'document.po_number',
+             'document.terms')
+
+
+def compose_many(s, ctx, read, srcs, template, *, subject=None, body=None):
+    """``compose`` for one customer's documents in one message (``--combine``): one PDF each, the template filled
+    from the first, with ``document.number`` listing every number and the other document fields kept only where the
+    documents agree (a template never recomputes an amount)."""
     from bookflow.company.info import read_info
     from bookflow.documents import model
     from bookflow.documents.render import drawn
     company_id = s.company_row['id']
-    document = model.build(read, company_id, src.kind, src.identity)
-    rendered = drawn(src.kind, document)
+    src = srcs[0]
+    documents = [model.build(read, company_id, x.kind, x.identity) for x in srcs]
+    renders = [drawn(x.kind, d) for x, d in zip(srcs, documents)]
     customer = src.record if src.kind == 'statement' else read('customer show', {'customer': src.customer_id},
                                                                 company_id)
     company = read('company show', {}, company_id)
     company = {**company['info'], 'display_name': company['display_name']}
-    values = merge_values(s, src, document, customer, company)
+    values = merge_values(s, src, documents[0], customer, company)
+    differ = set()
+    if len(srcs) > 1:
+        others = [merge_values(s, x, d, customer, company) for x, d in zip(srcs[1:], documents[1:])]
+        values['document.number'] = ', '.join(v for v in [values['document.number'],
+                                                          *(o['document.number'] for o in others)] if v)
+        for name in _COMBINED:
+            if any(o.get(name) != values.get(name) for o in others):
+                values[name] = None
+                differ.add(name)
     empty: set[str] = set()
     filled_subject = subject if subject is not None else merge.fill(template['subject'], src.kind, values, 'subject',
                                                                     empty)
     filled_body = body if body is not None else merge.fill(template['body'], src.kind, values, 'body', empty)
     filled_subject = ' '.join(filled_subject.split())[:500] or f'{src.label} from {values["company.name"] or ""}'
-    warnings = [f'Merge field {{{{{name}}}}} has no value for this {SOURCE_LABEL[src.kind].lower()}; it is left '
+    warnings = [f'Merge field {{{{{name}}}}} differs between the combined documents; it is left empty.'
+                if name in differ else
+                f'Merge field {{{{{name}}}}} has no value for this {SOURCE_LABEL[src.kind].lower()}; it is left '
                 'empty.' for name in sorted(empty)]
-    return rendered, customer, read_info(s.company), company, filled_subject, filled_body, warnings
+    return renders, customer, read_info(s.company), company, filled_subject, filled_body, warnings
 
 
-def _dedupe(kind, customer_id, src: Source, to, cc, bcc, again_of=None) -> str:
-    raw = json.dumps([kind, customer_id, [src.kind, src.id, src.revision, src.date_from, src.date_to],
+def _dedupe(kind, customer_id, src: Source, to, cc, bcc, again_of=None, others=()) -> str:
+    """One key per kind, customer, sources and revisions, and recipients. A single source keeps increment 1's key;
+    combined sources list every one, in the order attached."""
+    sources = [src.kind, src.id, src.revision, src.date_from, src.date_to]
+    if others:
+        sources = [[x.kind, x.id, x.revision, x.date_from, x.date_to] for x in (src, *others)]
+    raw = json.dumps([kind, customer_id, sources,
                       sorted(x.casefold() for x in to), sorted(x.casefold() for x in cc),
                       sorted(x.casefold() for x in bcc), again_of], separators=(',', ':'))
     return hashlib.sha256(raw.encode()).hexdigest()
@@ -555,10 +589,34 @@ def _number(s):
 
 # ---------------------------------------------------------------- draft
 
-def prepare_draft(s, ctx, inp) -> Plan:
-    read = reader(s, ctx)
+def _combined(read, company_id, inp, src) -> list[Source]:
+    """The other documents of a ``--combine`` draft: same kind, same customer, each once."""
+    selectors = list(getattr(inp, 'documents', None) or [])
+    if not selectors:
+        return []
+    if not getattr(inp, 'combine', False):
+        raise _invalid('documents', 'several documents go in one message only with combine: true')
+    if src.kind not in ('invoice', 'sales-receipt', 'estimate'):
+        raise _invalid('combine', 'only invoices, sales receipts and estimates are combined into one message')
+    seen, out = {src.id}, []
+    for selector in selectors:
+        other = resolve_source(read, company_id, SimpleNamespace(kind=src.kind, document=selector, customer=None,
+                                                                 date_from=None, date_to=None))
+        if other.id in seen:
+            continue
+        if other.customer_id != src.customer_id:
+            raise _invalid('documents', f'{other.label} is to another customer; one message goes to one customer')
+        seen.add(other.id)
+        out.append(other)
+    return out
+
+
+def prepare_draft(s, ctx, inp, *, batch_id=None, read=None) -> Plan:
+    read = read or reader(s, ctx)
     company_id = s.company_row['id']
     src = resolve_source(read, company_id, inp)
+    others = _combined(read, company_id, inp, src)
+    srcs = [src, *others]
     template = template_for(s, src.kind, inp.template)
     customer = src.record if src.kind == 'statement' else read('customer show', {'customer': src.customer_id},
                                                                 company_id)
@@ -571,8 +629,13 @@ def prepare_draft(s, ctx, inp) -> Plan:
         cc = addresses('cc', inp.cc)
     if inp.bcc is not None:
         bcc = addresses('bcc', inp.bcc)
-    earlier = [r for r in messages_for_source(s, src.kind, src.id, src.date_from, src.date_to)
-               if r['status'] != 'cancelled']
+    earlier, labels = [], {}
+    for x in srcs:
+        for r in messages_for_source(s, x.kind, x.id, x.date_from, x.date_to):
+            if r['status'] != 'cancelled' and r['id'] not in labels:
+                earlier.append(r)
+                labels[r['id']] = x.label
+    earlier.sort(key=lambda r: (r['created_at'], r['id']), reverse=True)
     again_of = None
     if inp.again and earlier:
         # Again names the newest sent message, or else the original in the outbox -- never an earlier "again",
@@ -580,37 +643,35 @@ def prepare_draft(s, ctx, inp) -> Plan:
         named = next((r for r in earlier if r['status'] == 'sent'), None) or next(
             (r for r in earlier if r['resend_of'] is None), earlier[-1])
         again_of = named['id']
-    key = _dedupe(src.kind, src.customer_id, src, to, cc, bcc, again_of)
+    key = _dedupe(src.kind, src.customer_id, src, to, cc, bcc, again_of, others)
     same = next((r for r in earlier if r['dedupe_key'] == key and r['status'] in LIVE), None)
     if same is not None:
         return Plan(project(s, same, existing=True, warnings=[
-            f"Message {same['number']} is already in the outbox for {src.label}; it is returned unchanged."]),
-            dict(existing=True))
+            f"Message {same['number']} is already in the outbox for {labels[same['id']]}; it is returned unchanged."]),
+            dict(existing=True, row=same))
     if not inp.again:
         live = next((r for r in earlier if r['status'] in LIVE), None)
         if live is not None:
-            n = live['number']
+            n, label = live['number'], labels[live['id']]
             if staleness(s, _docs(s, [live['id']]).get(live['id'], [])):
-                raise _conflict(live, problem=f'{src.label} changed after this message was drafted', next_step=(
+                raise _conflict(live, problem=f'{label} changed after this message was drafted', next_step=(
                     f'Attach it as it is now with `delivery update {n} --refresh` (the message keeps its number '
                     'and history), or cancel it.'))
-            raise _conflict(live, problem=f'{src.label} is already in the outbox in this message', next_step=(
+            raise _conflict(live, problem=f'{label} is already in the outbox in this message', next_step=(
                 f'Change it with `delivery update {n}` (`--refresh` attaches the document as it is now), cancel '
                 'it, or draft with --again for a second message.'))
         sent = next((r for r in earlier if r['status'] == 'sent'), None)
         if sent is not None:
-            raise _conflict(sent, problem=f'{src.label} was already sent in this message', next_step=(
+            raise _conflict(sent, problem=f"{labels[sent['id']]} was already sent in this message", next_step=(
                 'Draft with --again to send it again; the new message names this one.'))
-    rendered, customer, info, company, subject, body, warnings = compose(
-        s, ctx, read, src, template, subject=inp.subject, body=inp.body)
+    renders, customer, info, company, subject, body, warnings = compose_many(
+        s, ctx, read, srcs, template, subject=inp.subject, body=inp.body)
     if not to:
         warnings.append('No To address: the customer has no email. Add one with `delivery update --to` before '
                         'releasing it.')
     at = clock.now_iso()
     number, sequence = _number(s)
     message_id = new_id()
-    content = rendered.content
-    sha = hashlib.sha256(content).hexdigest()
     row = dict(
         id=message_id, version=1, created_at=at, created_by=s.actor.id, created_via=ctx.interface.value,
         updated_at=at, updated_by=s.actor.id, updated_via=ctx.interface.value, number=number, kind=src.kind,
@@ -621,31 +682,37 @@ def prepare_draft(s, ctx, inp) -> Plan:
         message_id=f'<{message_id.lower()}@bookflow.invalid>', template_id=template['id'], dedupe_key=key,
         resend_of=again_of, released_by=None, released_at=None, go_by=None, go_at=None, attempts=0,
         next_attempt_at=None, lease_until=None, sent_at=None, sent_via=None, sent_method=None, connection_id=None,
-        provider_ref=None, failure_code=None, failure_text=None, cancelled_reason=None)
+        provider_ref=None, failure_code=None, failure_text=None, cancelled_reason=None, batch_id=batch_id)
     if from_check := row['from_address']:
         if not EMAIL.match(from_check):
             row['from_address'] = None
-    doc = dict(id=new_id(), message_id=message_id, position=1, role='document', source_kind=src.kind,
-               source_id=src.id, source_revision=src.revision, statement_from=src.date_from,
-               statement_to=src.date_to, file_name=rendered.filename, media_type=rendered.media_type,
-               size_bytes=len(content), sha256=sha, attachment_id=None, created_at=at, created_by=s.actor.id,
-               created_via=ctx.interface.value)
-    file_row = dict(sha256=sha, size_bytes=len(content), media_type=rendered.media_type, content=content,
-                    created_at=at)
-    numbers = {src.id: src.number} if src.number else {}
-    preview = project(s, dict(row, id=None if s.dry_run else row['id']), [doc],
+    docs, files = [], {}
+    for position, (x, rendered) in enumerate(zip(srcs, renders), start=1):
+        content = rendered.content
+        sha = hashlib.sha256(content).hexdigest()
+        docs.append(dict(id=new_id(), message_id=message_id, position=position, role='document', source_kind=x.kind,
+                         source_id=x.id, source_revision=x.revision, statement_from=x.date_from,
+                         statement_to=x.date_to, file_name=rendered.filename, media_type=rendered.media_type,
+                         size_bytes=len(content), sha256=sha, attachment_id=None, created_at=at,
+                         created_by=s.actor.id, created_via=ctx.interface.value))
+        files[sha] = dict(sha256=sha, size_bytes=len(content), media_type=rendered.media_type, content=content,
+                          created_at=at)
+    numbers = {x.id: x.number for x in srcs if x.number}
+    preview = project(s, dict(row, id=None if s.dry_run else row['id']), docs,
                       names={src.customer_id: customer.get('full_name') or customer.get('name')}, numbers=numbers,
                       stale=None, warnings=warnings,
                       next_commands=[f'delivery update {number}', f'delivery send {number}',
                                      f'delivery export {number}'])
     preview = preview.model_copy(update={'documents': [a.model_copy(update={'pdf_path': None}) if s.dry_run else a
                                                        for a in preview.documents]})
-    return Plan(preview, dict(row=row, doc=doc, file=file_row, sequence=sequence,
-                              details=dict(template=template['id'], template_name=template['name'],
-                                           sources=[dict(kind=src.kind, id=src.id, revision=src.revision,
-                                                         date_from=src.date_from, date_to=src.date_to)],
-                                           warnings=warnings, again_of=again_of,
-                                           custom=[k for k in ('subject', 'body') if getattr(inp, k) is not None])))
+    details = dict(template=template['id'], template_name=template['name'],
+                   sources=[dict(kind=x.kind, id=x.id, revision=x.revision, date_from=x.date_from,
+                                 date_to=x.date_to) for x in srcs],
+                   warnings=warnings, again_of=again_of,
+                   custom=[k for k in ('subject', 'body') if getattr(inp, k) is not None])
+    if batch_id:
+        details['batch'] = batch_id
+    return Plan(preview, dict(row=row, docs=docs, files=list(files.values()), sequence=sequence, details=details))
 
 
 def apply_draft(plan, ctx, s) -> Applied:
@@ -653,16 +720,19 @@ def apply_draft(plan, ctx, s) -> Applied:
         return Applied(plan.preview, [], f'returned message {plan.preview.number}, already in the outbox')
     from sqlalchemy.dialects.sqlite import insert
     conn = s.company.conn
-    row, doc, file_row, sequence = plan.data['row'], plan.data['doc'], plan.data['file'], plan.data['sequence']
-    conn.execute(insert(c.delivery_files).values(**file_row).on_conflict_do_nothing(index_elements=['sha256']))
+    row, docs, sequence = plan.data['row'], plan.data['docs'], plan.data['sequence']
+    for file_row in plan.data['files']:
+        conn.execute(insert(c.delivery_files).values(**file_row).on_conflict_do_nothing(index_elements=['sha256']))
     stmt = insert(c.sequences).values(**sequence)
     conn.execute(stmt.on_conflict_do_update(index_elements=['name'], set_=sequence))
     conn.execute(c.delivery_messages.insert().values(**row))
-    conn.execute(c.delivery_message_documents.insert().values(**doc))
+    for doc in docs:
+        conn.execute(c.delivery_message_documents.insert().values(**doc))
     event = _event(s, ctx, row['id'], 'drafted', 'draft', plan.data['details'], at=row['created_at'])
     out = plan.preview.model_copy(update={'id': row['id']})
     return Applied(out, [Touched(RECORD, row['id'], 'create', None, 1, row, db='company'),
-                         Touched('delivery_message_document', doc['id'], 'create', None, None, doc, db='company'),
+                         *(Touched('delivery_message_document', doc['id'], 'create', None, None, doc, db='company')
+                           for doc in docs),
                          Touched('delivery_event', event['id'], 'create', None, None, event, db='company')],
                    f"drafted message {row['number']} to {plan.preview.customer_name}: {row['subject']}")
 
@@ -789,20 +859,23 @@ def _plan_refresh(s, ctx, before, after, changed):
     docs = _docs(s, [before['id']]).get(before['id'], [])
     template = s.company.conn.execute(sa.select(c.delivery_templates).where(
         c.delivery_templates.c.id == before['template_id'])).mappings().first()
-    updates, files, refreshed, src = [], [], [], None
+    updates, files, refreshed = [], [], []
     filled = {}
+    pairs = []
     for doc in docs:
         if doc['role'] != 'document':
             continue
         identity = _identity(doc)
-        src = resolve_source(read, company_id, SimpleNamespace(
+        pairs.append((doc, resolve_source(read, company_id, SimpleNamespace(
             kind=doc['source_kind'], document=identity.get('document'), customer=identity.get('customer'),
-            date_from=identity.get('date_from'), date_to=identity.get('date_to')))
-        if template is not None and not filled:
-            rendered, *_, subject, body, _warn = compose(s, ctx, read, src, dict(template))
-            filled = {'subject': subject, 'body': body}
-        else:
-            rendered = drawn_now(read, company_id, doc)
+            date_from=identity.get('date_from'), date_to=identity.get('date_to')))))
+    srcs = [x for _, x in pairs]
+    if template is not None and srcs:
+        renders, *_, subject, body, _warn = compose_many(s, ctx, read, srcs, dict(template))
+        filled = {'subject': subject, 'body': body}
+    else:
+        renders = [drawn_now(read, company_id, doc) for doc, _ in pairs]
+    for (doc, src), rendered in zip(pairs, renders):
         sha = hashlib.sha256(rendered.content).hexdigest()
         if sha == doc['sha256'] and src.revision == doc['source_revision']:
             continue
@@ -819,10 +892,10 @@ def _plan_refresh(s, ctx, before, after, changed):
         if name in filled and name not in kept and filled[name] != after[name]:
             after[name] = filled[name]
             refilled.append(name)
-    if src is not None and updates:
-        after['dedupe_key'] = _dedupe(before['kind'], before['customer_id'], src, json.loads(after['to_addresses']),
-                                      json.loads(after['cc_addresses']), json.loads(after['bcc_addresses']),
-                                      before['resend_of'])
+    if srcs and updates:
+        after['dedupe_key'] = _dedupe(before['kind'], before['customer_id'], srcs[0],
+                                      json.loads(after['to_addresses']), json.loads(after['cc_addresses']),
+                                      json.loads(after['bcc_addresses']), before['resend_of'], srcs[1:])
     plan = dict(updates=updates, files=files, prune=[] if _exported(s, before['id']) else
                 [old['sha256'] for old, _ in updates])
     return plan, refreshed, refilled, kept
@@ -906,7 +979,16 @@ def prepare_send(s, ctx, inp) -> Plan:
     seen, plans, warnings = set(), [], []
     read = reader(s, ctx)
     at = clock.now_iso()
-    for selector in inp.messages:
+    selectors = list(inp.messages or [])
+    if getattr(inp, 'batch', None):
+        from bookflow.company import delivery_batches as batches
+        selectors, more = batches.drafts_to_release(s, inp.batch)
+        if more:
+            warnings.append(f'{more} more draft(s) in batch {inp.batch} wait: run `delivery send --batch '
+                            f'{inp.batch}` again.')
+    elif not selectors:
+        raise _invalid('messages', 'name the drafts to release, or give batch')
+    for selector in selectors:
         before = _row(s, selector)
         if before['id'] in seen:
             continue
@@ -1124,6 +1206,9 @@ def query(s, inp) -> m.MessagePageOutput:
         q = q.where(t.c.customer_id == resolve_party(s.company, 'customer', inp.customer)['id'])
     if inp.source:
         q = q.where(sa.exists(sa.select(d.c.id).where(d.c.message_id == t.c.id, d.c.source_id == inp.source)))
+    if getattr(inp, 'batch', None):
+        from bookflow.company import delivery_batches as batches
+        q = q.where(t.c.batch_id == batches.row(s, inp.batch)['id'])
     if inp.date_from:
         q = q.where(t.c.created_at >= inp.date_from)
     if inp.date_to:

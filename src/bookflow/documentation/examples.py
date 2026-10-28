@@ -1854,3 +1854,19 @@ EXAMPLES.update({
                                         {'connection': 'Office'}),
     'delivery-connection query': Example('bookflow delivery-connection query' + _C + ' --json', {}),
 })
+
+# Document delivery (R112 increment 3): flags, the queue and batches.
+EXAMPLES.update({
+    'delivery flag': Example('bookflow delivery flag invoice DEMO-SALE-INV-ACTIVE' + _C + ' --reason "Email later" --json',
+                             {'kind': 'invoice', 'document': 'DEMO-SALE-INV-ACTIVE'}),
+    'delivery unflag': Example('bookflow delivery unflag invoice DEMO-SALE-INV-ACTIVE' + _C
+                               + ' --reason "They want it by post" --json',
+                               {'kind': 'invoice', 'document': 'DEMO-SALE-INV-ACTIVE'}),
+    'delivery queue': Example('bookflow delivery queue' + _C + ' --json', {}),
+    'delivery batch': Example('bookflow delivery batch --kind statement --period 2026-11 --balance-over 0 --method email'
+                              + _C + ' --dry-run --json',
+                              {'kind': 'statement', 'period': '2026-11', 'balance_over': '0', 'method': 'email'}),
+    'delivery batch-show': Example('bookflow delivery batch-show B-1001' + _C + ' --json', {'batch': 'B-1001'}),
+    'delivery batch-cancel': Example('bookflow delivery batch-cancel B-1001' + _C + ' --reason "Wrong month" --json',
+                                     {'batch': 'B-1001'}),
+})

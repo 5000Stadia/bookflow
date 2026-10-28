@@ -13,6 +13,7 @@ class ApproveInput(_Strict):
     messages: list[Selector] | None = Field(default=None, min_length=1, max_length=100, description=(
         'Ready messages waiting for a go, by number or id.'))
     all_waiting: bool = Field(default=False, description='Every message waiting for a go (at most 100).')
+    batch: Selector | None = Field(default=None, description="A batch's messages waiting for a go (at most 100).")
 
 
 class RetryInput(_Strict):

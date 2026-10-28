@@ -304,3 +304,71 @@ delivery_connection_query = _connection_read(
     'delivery-connection query', 'The sending connections, and the transport kinds this build registers (none: '
     'nothing leaves this machine).', qm.ConnectionQueryInput, qm.ConnectionPageOutput, plan_connection_query,
     errors=[])
+
+
+# ---------------------------------------------------------------- flags, the queue and batches (increment 3)
+
+from bookflow.company import delivery_batch_models as bm  # noqa: E402
+from bookflow.company import delivery_batches as db  # noqa: E402
+
+_FLAG = ("Mark a document Email later (the anchor's checkbox): `delivery queue` lists it until a message carries it. "
+         'Example: {"kind": "invoice", "document": "1007"}.')
+_UNFLAG = ("Mark a document not to email: an explicit opt-out, which wins over the company's auto-flag date.")
+_QUEUE = ('The documents to be emailed: flagged Email later, or dated on or after the auto-flag date for a customer '
+          'who prefers email, with no live or sent message; each with its To or "no address". method mail lists '
+          'the customers who prefer mail.')
+_BATCH = (
+    'Draft many messages in one act: queued (to-be-emailed documents), unsent with a kind (filters date_from, '
+    'date_to, customer_type, customer), kind statement with period and balance_over (one per customer with a '
+    'balance), or kind notice with ready. Run it with dry_run first and show the person who gets what and who is '
+    'skipped and why; then run it without. It drafts 10 per call and returns next: call again with it until done. '
+    'send releases them too; combine puts a customer\'s documents in one message. Example: {"kind": "statement", '
+    '"period": "2026-09", "balance_over": "0", "method": "email"}.')
+_BATCH_SHOW = "A batch: its selection, who gets what (with each message), who was skipped and why, and how far it is."
+_BATCH_CANCEL = ('Cancel a batch as one unit, with --reason: every message it drafted that was never released or '
+                 'exported is cancelled; the ones that block (released, exported, sent) are named and stay.')
+_BATCH_VERSION = ('delivery batch-show', 'batch', 'version')
+
+
+def plan_delivery_flag(inp, ctx, s) -> Plan:
+    return db.prepare_flag(s, ctx, inp, True)
+
+
+def plan_delivery_unflag(inp, ctx, s) -> Plan:
+    return db.prepare_flag(s, ctx, inp, False)
+
+
+def plan_delivery_queue(inp, ctx, s) -> Plan:
+    return Plan(db.queue(s, ctx, inp))
+
+
+def plan_delivery_batch(inp, ctx, s) -> Plan:
+    return db.prepare_batch(s, ctx, inp)
+
+
+def plan_delivery_batch_show(inp, ctx, s) -> Plan:
+    return Plan(db.show(s, inp))
+
+
+def plan_delivery_batch_cancel(inp, ctx, s) -> Plan:
+    return db.prepare_cancel(s, ctx, inp)
+
+
+delivery_flag = _write('delivery flag', _FLAG, bm.FlagInput, bm.FlagOutput, plan_delivery_flag, db.apply_flag,
+                       positional=('kind', 'document'),
+                       errors=['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT'])
+delivery_unflag = _write('delivery unflag', _UNFLAG, bm.FlagInput, bm.FlagOutput, plan_delivery_unflag,
+                         db.apply_flag, positional=('kind', 'document'),
+                         errors=['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT'])
+delivery_queue = _read('delivery queue', _QUEUE, bm.QueueInput, bm.QueueOutput, plan_delivery_queue,
+                       errors=['E_RECORD_NOT_FOUND', 'E_VALIDATION'])
+# R187: `send` releases with a go only for an actor holding delivery.send (today: a person).
+delivery_batch = _write('delivery batch', _BATCH, bm.BatchInput, bm.BatchOutput, plan_delivery_batch,
+                        db.apply_batch,
+                        errors=['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_WORK_DEPENDENCY'])
+delivery_batch_show = _read('delivery batch-show', _BATCH_SHOW, bm.BatchSelector, bm.BatchOutput,
+                            plan_delivery_batch_show, errors=['E_RECORD_NOT_FOUND'], positional=('batch',))
+delivery_batch_cancel = _write('delivery batch-cancel', _BATCH_CANCEL, bm.BatchCancelInput, bm.BatchOutput,
+                               plan_delivery_batch_cancel, db.apply_cancel, positional=('batch',),
+                               version=_BATCH_VERSION,
+                               errors=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_REASON_REQUIRED'])

@@ -667,9 +667,12 @@ def tick_record(s, system_id, outcomes, reports, now: datetime) -> q.RunOutput:
 def prepare_approve(s, ctx, inp) -> Plan:
     """A person's go for ready messages waiting for one. People-only; R187: ``delivery.send``."""
     t = c.delivery_messages
-    if inp.all_waiting:
-        rows = [dict(r) for r in s.company.conn.execute(sa.select(t).where(t.c.status == 'ready', t.c.go_by.is_(None))
-                                                        .order_by(t.c.released_at, t.c.id).limit(100)).mappings()]
+    if inp.all_waiting or getattr(inp, 'batch', None):
+        q = sa.select(t).where(t.c.status == 'ready', t.c.go_by.is_(None))
+        if getattr(inp, 'batch', None):
+            from bookflow.company import delivery_batches as batches
+            q = q.where(t.c.batch_id == batches.row(s, inp.batch)['id'])
+        rows = [dict(r) for r in s.company.conn.execute(q.order_by(t.c.released_at, t.c.id).limit(100)).mappings()]
     elif inp.messages:
         rows, seen = [], set()
         for selector in inp.messages:
