@@ -2814,3 +2814,20 @@ MATRIX['bank-line undo'] = {
     'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
     'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
 }
+# Grid edits (R107 increment 6).
+_BULK_WRITE = {
+    'E_VALIDATION': 'an unknown column or kind, a value the column cannot hold, nothing asked, an operation on the '
+                    'wrong type, over 5,000 records, all or nothing with a refused record, already applied',
+    'E_RECORD_NOT_FOUND': 'unknown grid edit, or a named or pasted record the list lacks',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+MATRIX['bulk-edit preview'] = dict(_BULK_WRITE)
+MATRIX['bulk-edit apply'] = dict(_BULK_WRITE, E_VERSION_CONFLICT='applied meanwhile by another call')
+MATRIX['bulk-edit reverse'] = dict(_BULK_WRITE, E_BATCH_BLOCKED='a record edited again since (each named; '
+                                   '--skip-changed leaves them), or an update the caller may not run',
+                                   E_VERSION_CONFLICT='the batch changed since the dry run that gave --fingerprint')
+MATRIX['bulk-edit columns'] = {'E_VALIDATION': 'unknown kind'}
+for _name in ('bulk-edit grid', 'bulk-edit show'):
+    MATRIX[_name] = {'E_VALIDATION': 'invalid input or column', 'E_RECORD_NOT_FOUND': 'unknown grid edit or record'}
+MATRIX['bulk-edit query'] = {'E_VALIDATION': 'invalid input or cursor'}

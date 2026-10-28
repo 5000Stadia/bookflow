@@ -98,7 +98,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +4 the bank inbox (R108 increment 1): bank-feed import/show/query, bank-line query.
     # +2 reverse and move (R108 increment 2): bank-feed reverse, bank-feed move.
     # +6 sorting the inbox (R108 increment 3): bank-line match, unmatch, ignore, add, transfer, undo.
-    assert len(rows) == 840
+    # +7 grid edits (R107 increment 6): bulk-edit columns, grid, preview, apply, reverse, show, query.
+    assert len(rows) == 847
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
@@ -415,7 +416,10 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # (line, entry, each item's entry), transfer 3 (pair, to, entry), ignore 2 (line, note), unmatch 1 (line),
     # undo 1 (fingerprint) -- their null branches. No new variant kind.
     # 4285 -> 4286 (R108 inc 3 review fixes, measured): bank-line query's entry_gone filter -- its null branch.
-    assert sum(len(group["paths"]) for group in mapped)==4286
+    # 4286 -> 4304 (R107 inc 6, measured per command): bulk-edit preview 9 (query, records, paste, paste_columns,
+    # and each operation's by, round, find, replace, from), grid 3 (query, records, columns), query 3 (kind, state,
+    # cursor), show 2 (outcome, cursor), reverse 1 (fingerprint) -- their null branches. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==4304
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

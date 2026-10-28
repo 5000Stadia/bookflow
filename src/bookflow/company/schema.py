@@ -1295,3 +1295,6 @@ globals().update(_delivery_schema.define_schedule_tables(metadata, _column, _tab
 # The bank inbox (co0112, R108 increment 1): imports, lines, their history, what each account last received.
 from bookflow.company import bank_feed_schema as _bank_feed_schema
 globals().update(_bank_feed_schema.define_tables(metadata, _column, _table))
+# Grid edits (co0115, R107 increment 6): a selection's diff, applied as one reversible batch.
+from bookflow.company import bulk_edit_schema as _bulk_edit_schema
+globals().update(_bulk_edit_schema.define_tables(metadata, _column, _table))

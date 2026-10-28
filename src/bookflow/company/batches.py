@@ -357,7 +357,7 @@ NOT_REFERENCES: dict[tuple[str, str], str] = {
     ('pick_list_lines', 'root_document_id'): _INTERNAL, ('pick_list_lines', 'root_line_id'): _INTERNAL,
     ('batches', 'source_id'): _LEDGER, ('batches', 'actor_id'): _PEOPLE, ('batch_effects', 'record_id'): _LEDGER,
     ('import_runs', 'attachment_id'): _LEDGER, ('import_rows', 'record_id'): _LEDGER,
-    ('import_keys', 'record_id'): _LEDGER,
+    ('import_keys', 'record_id'): _LEDGER, ('bulk_edit_rows', 'record_id'): _LEDGER,
     ('delivery_events', 'actor_id'): _PEOPLE,
     ('delivery_message_documents', 'attachment_id'): 'a stored file, never a list record',
     ('delivery_messages', 'connection_id'): 'a delivery connection, which no import or batch makes',
@@ -535,6 +535,44 @@ def _latest(s, keys: list[tuple[str, str]]) -> dict[tuple[str, str], dict]:
     return out
 
 
+def _chains(s, batch: dict, keys: list[tuple[str, str]]) -> dict[tuple[str, str], dict]:
+    """For each record, the writes recorded on it since this batch's own last one, in order: ``left`` (the version the
+    batch left), ``expected`` (the version the recorded writes since lead to), ``broken`` (a write did not follow the
+    one before: an edit no batch recorded came between) and ``standing`` (the newest later batch whose change to the
+    record still stands: live, part way, or reversed without reaching it)."""
+    by_type: dict[str, list[str]] = {}
+    for record_type, record_id in keys:
+        by_type.setdefault(record_type, []).append(record_id)
+    found: dict[tuple[str, str], list] = {}
+    for record_type, ids in by_type.items():
+        for start in range(0, len(ids), 500):
+            rows = s.company.raw.execute(
+                'SELECT e.record_id, e.batch_id, e.version_after, b.reversal_of, b.label, b.state, b.reversed_by '
+                'FROM batch_effects e JOIN batches b ON b.id = e.batch_id WHERE e.record_type = ? '
+                'AND e.record_id IN (SELECT value FROM json_each(?)) ORDER BY e.rowid',
+                (record_type, json.dumps(ids[start:start + 500]))).fetchall()
+            for row in rows:
+                found.setdefault((record_type, row[0]), []).append(row)
+    out = {}
+    for key, rows in found.items():
+        own = [i for i, row in enumerate(rows) if row[1] == batch['id']]
+        if not own:
+            continue
+        left = rows[own[-1]][2]
+        expected, broken, standing = left, False, None
+        later = rows[own[-1] + 1:]
+        undone = {row[1] for row in later if row[3] is not None}  # reversal batches that wrote this record since
+        for record_id, batch_id, version, reversal_of, label, state, reversed_by in later:
+            if version is not None and expected is not None and version not in (expected, expected + 1):
+                broken = True
+            expected = version if version is not None else expected
+            if reversal_of is None and batch_id != batch['id'] and reversed_by not in undone:
+                standing = {'batch_id': batch_id, 'version_after': version, 'reversal_of': None, 'label': label,
+                            'state': state}
+        out[key] = {'left': left, 'expected': expected, 'broken': broken, 'standing': standing}
+    return out
+
+
 def _current(s, record_type: str, ids: list[str]) -> dict[str, dict]:
     rec = _record(record_type)
     t = rec.table
@@ -678,6 +716,7 @@ def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
             continue
         pending.append((g, rec, steps_done))
     latest = _latest(s, [g['key'] for g, _, _ in pending])
+    chains = _chains(s, batch, [g['key'] for g, _, _ in pending])
     by_type: dict[str, list[str]] = {}
     for g, _, _ in pending:
         by_type.setdefault(g['record_type'], []).append(g['record_id'])
@@ -693,6 +732,12 @@ def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
             continue
         label = f"{rec.noun} {row[rec.name_field]}"
         last = latest.get(g['key'])
+        chain = chains.get(g['key']) if not getattr(rec, 'document', False) else None
+        if chain is not None and chain['standing'] is not None:
+            # A later batch whose change to this record still stands (live, part way, or reversed without it).
+            last = chain['standing']
+        elif chain is not None:
+            last = None
         if last is not None and last['batch_id'] not in (batch_id, batch['reversed_by']) \
                 and last['reversal_of'] is None:
             blockers.append(_blocker(g, rec, 'later_batch',
@@ -700,6 +745,12 @@ def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
                                      clears=f"reverse batch {last['batch_id']} first", batch=last['batch_id']))
             continue
         expected = last['version_after'] if last is not None else None
+        changed = expected is not None and row['version'] != expected
+        if chain is not None:
+            # Each write since the batch's own must follow the one before (version + 1, or the same for a write that
+            # changed nothing); a gap is an edit no batch recorded, made in between, which reversing would undo.
+            changed = chain['broken'] or row['version'] != chain['expected']
+            expected = chain['left']
         edit = _document_edit(s, rec, g['record_id']) if getattr(rec, 'document', False) else None
         if edit is not None:
             blockers.append(_blocker(g, rec, 'edited_again', f"{label} was edited since the batch (revision "
@@ -707,7 +758,7 @@ def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
                                      clears=f"`{rec.noun} show {row[rec.name_field]}` shows the change; undo it or "
                                             'keep the batch', changed_by=edit['by'], changed_at=edit['at']))
             continue
-        if expected is not None and row['version'] != expected and not getattr(rec, 'document', False):
+        if changed and not getattr(rec, 'document', False):
             blockers.append(_blocker(g, rec, 'edited_again',
                                      f"{label} was changed since the batch (version {row['version']}, the batch left "
                                      f"{expected}), by {row['updated_by']} at {row['updated_at']}.",
@@ -825,10 +876,16 @@ def refuse(found: dict) -> BookflowError:
 
 # ------------------------------------------------------------------ reversing
 
+CHANGED = ('edited_again', 'later_batch')  # what skip_changed leaves: a record changed since the batch
+
 def reverse(s, ctx, batch_id: str, *, reason: str | None, dry_run: bool = False, limit: int = DEFAULT_SLICE,
             fingerprint: str | None = None, interrupt: Callable[[int], None] | None = None,
-            then: Callable[[], Any] | None = None, on_begin: Callable[[Any, str], None] | None = None) -> dict:
-    """Reverse a batch (or its next slice). ``interrupt`` is a test hook called after each record; ``then`` runs
+            then: Callable[[], Any] | None = None, on_begin: Callable[[Any, str], None] | None = None,
+            skip_changed: bool = False) -> dict:
+    """Reverse a batch (or its next slice). ``skip_changed`` (grid edits) reverses every record but those changed since
+    (``CHANGED`` blockers: edited again, or touched by a later live batch): they are left as they are, returned as
+    ``skipped``, and the batch ends ``reversed_partly``; any other blocker still refuses the whole. ``interrupt`` is a
+    test hook called after each record; ``then`` runs
     inside the transaction that marks the batch reversed (a bank import's move re-imports there), and its result is
     returned as ``then``; ``on_begin(s, reversal_id)`` inside the one that opens the reversal batch (a move keeps its
     flags there).
@@ -841,6 +898,9 @@ def reverse(s, ctx, batch_id: str, *, reason: str | None, dry_run: bool = False,
     adapter = adapter_for(batch['kind'])
     starting = batch['state'] not in ('reversing', 'blocked')
     found = plan(s, ctx, batch_id, probe=dry_run or (starting and fingerprint is None))
+    skipped = [b for b in found['blockers'] if b['code'] in CHANGED] if skip_changed else []
+    if skipped:
+        found['blockers'] = [b for b in found['blockers'] if b['code'] not in CHANGED]
     if found['blockers']:
         if not dry_run and not starting and adapter.blocks:
             _set_state(s, batch_id, 'blocked')
@@ -850,7 +910,8 @@ def reverse(s, ctx, batch_id: str, *, reason: str | None, dry_run: bool = False,
         raise BookflowError('E_VERSION_CONFLICT', message='The batch changed since that dry run; run it again.',
                             details={'field': 'fingerprint', 'current': found['fingerprint']})
     if dry_run:
-        return _result(s, found, state=batch['state'], reversed_now=0, dry_run=True)
+        return dict(_result(s, found, state=batch['state'], reversed_now=0, dry_run=True),
+                    skipped=skipped[:MAX_BLOCKERS])
     if batch['state'] == 'blocked':
         _set_state(s, batch_id, 'reversing')
     reversal_id = batch['reversed_by'] or _begin(s, ctx, batch, reason, on_begin)
@@ -889,13 +950,14 @@ def reverse(s, ctx, batch_id: str, *, reason: str | None, dry_run: bool = False,
             interrupt(reversed_now)
     if len(found['work']) > len(work):
         rest = found['steps'][len(work):]
-        return _result(s, dict(found, steps=rest, fingerprint=_fingerprint(rest)), state='reversing',
-                       reversed_now=reversed_now)
-    event_id, then_out = _finish(s, ctx, batch_id, reversal_id, batch, then)
+        return dict(_result(s, dict(found, steps=rest, fingerprint=_fingerprint(rest)), state='reversing',
+                            reversed_now=reversed_now), skipped=skipped[:MAX_BLOCKERS])
+    event_id, then_out = _finish(s, ctx, batch_id, reversal_id, batch, then,
+                                 state='reversed_partly' if skipped else 'reversed')
     final = _batch(s, batch_id)
-    return {'batch': describe(s, final), 'state': 'reversed', 'reversed_now': reversed_now, 'remaining': 0,
+    return {'batch': describe(s, final), 'state': final['state'], 'reversed_now': reversed_now, 'remaining': 0,
             'blockers': [], 'steps': [], 'fingerprint': None, 'reversal_batch': reversal_id, 'event_id': event_id,
-            'dry_run': False, 'then': then_out}
+            'dry_run': False, 'then': then_out, 'skipped': skipped[:MAX_BLOCKERS]}
 
 
 def _stopped(found: dict, g: dict, rec: ListRecord, row: dict, error: BookflowError, reversed_now: int):
@@ -985,7 +1047,8 @@ def _begin(s, ctx, batch: dict, reason: str | None, on_begin: Callable[[Any, str
     return reversal_id
 
 
-def _finish(s, ctx, batch_id: str, reversal_id: str, batch: dict, then: Callable[[], Any] | None = None):
+def _finish(s, ctx, batch_id: str, reversal_id: str, batch: dict, then: Callable[[], Any] | None = None,
+            state: str = 'reversed'):
     from bookflow.core.audit import write_event_to
     from bookflow.core.registry import Touched
     n = counts(s, batch_id)
@@ -996,15 +1059,15 @@ def _finish(s, ctx, batch_id: str, reversal_id: str, batch: dict, then: Callable
             # Read again inside the transaction: a second finish (a retry that raced the first) would release the
             # batch's effects twice and write its records back over later changes.
             if s.company.conn.execute(sa.select(c.batches.c.state).where(c.batches.c.id == batch_id)).scalar() \
-                    == 'reversed':
+                    in ('reversed', 'reversed_partly'):
                 raise BookflowError('E_VALIDATION', message=f"Batch {batch_id} was already reversed.",
                                     details={'field': 'batch', 'state': 'reversed'})
             event_id = write_event_to(s.company, ctx, 'batch reverse', summary,
-                                      [Touched('batch', batch_id, 'update', None, None, {'state': 'reversed'},
+                                      [Touched('batch', batch_id, 'update', None, None, {'state': state},
                                                {'state': batch['state']}, db='company')],
                                       actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code)
             s.company.conn.execute(sa.update(c.batches).where(c.batches.c.id == batch_id).values(
-                state='reversed', reversal_event_id=event_id))
+                state=state, reversal_event_id=event_id))
             finished = adapter_for(batch['kind']).on_finished
             if finished is not None:
                 finished(s, batch)
