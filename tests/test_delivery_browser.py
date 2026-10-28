@@ -14,6 +14,7 @@ import pytest
 
 from tests.test_row5_browser_acceptance import CHROME, browser_site  # noqa: F401
 from tests.test_row8_register_browser import _command, register_browser  # noqa: F401
+from tests.test_delivery_close import own
 
 pytestmark = pytest.mark.skipif(not CHROME.exists(), reason='Chrome unavailable')
 
@@ -69,7 +70,7 @@ def test_email_an_invoice_from_its_page_and_find_it_waiting_in_the_outbox(regist
                timeout=30)
     assert b.evaluate('!!document.querySelector("[data-message-result]")'), _text(b)[-1500:]
     assert b.evaluate('window.__sameDocument === true'), 'the form left the page instead of swapping through htmx'
-    [row] = run('delivery.query', {'status': 'all'})['rows']
+    [row] = own(run('delivery.query', {'status': 'all'})['rows'])
     assert row['subject'] == 'Invoice from Demo Plumbing, as promised' and row['status'] == 'ready'
     message = run('delivery.show', {'message': row['number']})
     assert message['go_by'] and not message['waiting_for_go'] and message['connection'] == 'none'

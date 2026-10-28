@@ -1125,6 +1125,33 @@ owner set up) has sent it, `notice mark-sent NOTICE --method email`; if the owne
 `notice dismiss NOTICE --note "why"`. A dismissed notice is not prepared again until the next
 notice period.
 
+## When to ask, and when to just do it
+
+A clear task runs: "post that invoice to John and email it to him" names the acts, so post it and draft and
+send the email with no "are you sure?". Missing details get a question, never a guess: "send the invoice when
+the guys are done" does not say which job, which invoice or when "done" is, so ask for those and do nothing
+yet. A broad change that sets how the business works from then on (a batch to every customer, a schedule
+turned on, new terms for everyone) gets one check of its exact details: run it with `dry_run`, say what it
+will do in plain words (who, how many, what, from when) and run it on the person's yes. One check, of the
+details; never a second "are you sure". Ask too when you would be inferring a damaging act nobody named.
+
+## Emailing a document
+
+No email leaves this machine until the owner sets up a sending connection (`delivery-connection`); until
+then messages wait in the outbox, ready, and `delivery run` reports "no sending connection". For "email
+Riverside their invoice DEMO-PIPE-INV-1": `delivery draft --kind invoice --document DEMO-PIPE-INV-1`, read
+back the returned To, Subject and body (change them with `delivery update` if asked), then `delivery send`
+on the message. Tell the person whether it is waiting for their go (you lack `delivery.send`:
+`waiting_for_go` is true and `delivery approve` is theirs) and that it will not go out until a sending
+connection exists. A customer with no address drafts with a warning and no To: ask the person for the
+address and add it with `delivery update --to`, never invent one. A statement takes `customer`, `date_from` and `date_to`.
+
+"What is waiting to go out?": `delivery query --status ready` (and `--status draft` for unreleased drafts).
+To send one by hand meanwhile, `delivery export` returns a `.eml` file (a zip for several) with the PDF
+attached, to open in a mail program. "I emailed it myself" is recorded by `delivery mark-sent MESSAGE
+--method mail-program`, which needs `delivery.mark-sent`: without it, name the message and ask the person
+to mark it sent. The outbox then shows "Sent by hand", never "delivered".
+
 ## Emailing customers in a batch
 
 Nothing leaves this machine until the owner sets up a sending connection; messages wait in the outbox.
