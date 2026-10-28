@@ -178,6 +178,7 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.IMPORT_DOCUMENTS_POLICY_VERSION: '6418e208309e3f01e38b4749e62895dad640e66deada78c513ed3bf7127cf13a',
     c.BANK_FEED_REVERSE_POLICY_VERSION: 'df70eed353fe2243e74c722b39a0e7a9b12f98a2e3bd1a9c03bfc382325328c6',
     c.BANK_LINE_POLICY_VERSION: 'bd11005cfa5a7630090a663bf20f7dd2bd8d7c4ee4a764cd7295a40e1f4f61e9',
+    c.CAPABILITIES_POLICY_VERSION: 'f639c12bed3999fc17973aa0698198f2af7dc1c111932d1af9c4ac3e58e99c99',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -331,6 +332,7 @@ def _full_known():
     from . import permission_import_documents_catalog
     from . import permission_bank_feed_reverse_catalog
     from . import permission_bank_line_catalog
+    from . import permission_capabilities_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
         c.SETUP_POLICY_VERSION: permission_setup_catalog,
@@ -410,6 +412,7 @@ def _full_known():
         c.IMPORT_DOCUMENTS_POLICY_VERSION: permission_import_documents_catalog,
         c.BANK_FEED_REVERSE_POLICY_VERSION: permission_bank_feed_reverse_catalog,
         c.BANK_LINE_POLICY_VERSION: permission_bank_line_catalog,
+        c.CAPABILITIES_POLICY_VERSION: permission_capabilities_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is
     # a handful of string comparisons, once per process, and no descriptor is hashed for
@@ -570,7 +573,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.BANK_LINE_POLICY_VERSION)
+    return known_catalog(c.CAPABILITIES_POLICY_VERSION)
 
 
 def catalog_for_root(tx):

@@ -875,7 +875,7 @@ class DemoResetOutput(WriteOutput):
 demo_reset = command("demo reset", scope="hub", description="Move the entire existing demo organization and all its companies to trash, then recreate Demo Plumbing Co; optionally also seed Reference Plumbing Co. Other organizations are untouched. On a data root that also holds a real (non-demo) company it refuses unless force names that root.",
                      input_model=DemoResetInput, output_model=DemoResetOutput, writes={"hub", "company", "config"}, required_role="hub_admin",
                      error_codes=["E_DEMO_RESET_INCOMPLETE", "E_NAME_TAKEN", "E_PERMISSION"],
-                     authorization="human hub administrator; a root holding real books needs force naming it")
+                     authorization="hub administrator, or an agent granted demo.reset; never while the demo organization holds a company the demo did not create; a root holding real books elsewhere needs force naming it")
 
 
 def _load_seed(resource: str = "seed.toml") -> dict[str, Any]:
@@ -885,10 +885,24 @@ def _load_seed(resource: str = "seed.toml") -> dict[str, Any]:
 
 
 def _require_demo_only_root(inp: DemoResetInput, s: Session) -> None:
-    """A root holding real books resets its demo only when the request names that root."""
+    """Demo reset trashes the whole demo organization, so it never runs while that organization holds a company the
+    demo did not create, for anyone and whatever force says. A root holding real books elsewhere resets its demo only
+    when the request names that root. No refusal message carries a path (the details do, redacted for
+    non-administrators)."""
+    live = sa.or_(h.companies.c.pending_path.is_(None), sa.not_(h.companies.c.pending_path.like("trash/%")))
+    inside = s.hub.conn.execute(sa.select(h.companies.c.display_name).join(
+        h.organizations, h.organizations.c.id == h.companies.c.organization_id).where(
+        h.organizations.c.is_demo.is_(True), h.companies.c.is_demo.is_(False), live,
+    ).order_by(h.companies.c.display_name)).scalars().all()
+    if inside:
+        raise BookflowError("E_PERMISSION", message=(
+            f"The demo organization holds {len(inside)} compan{'y' if len(inside) == 1 else 'ies'} the demo did not "
+            "create, and demo reset would move it to trash with the demo. Move or remove "
+            f"{'that company' if len(inside) == 1 else 'those companies'} from the demo organization first; force "
+            "does not override this."),
+            details={"reason": "real_company_in_demo_organization", "real_companies": list(inside)})
     real = s.hub.conn.execute(sa.select(h.companies.c.display_name).where(
-        h.companies.c.is_demo.is_(False),
-        sa.or_(h.companies.c.pending_path.is_(None), sa.not_(h.companies.c.pending_path.like("trash/%"))),
+        h.companies.c.is_demo.is_(False), live,
     ).order_by(h.companies.c.display_name)).scalars().all()
     if not real:
         return
@@ -901,9 +915,9 @@ def _require_demo_only_root(inp: DemoResetInput, s: Session) -> None:
         except OSError:
             pass
     raise BookflowError("E_PERMISSION", message=(
-        f"This data root ({root}) holds real books ({len(real)} non-demo "
+        f"This data root holds real books ({len(real)} non-demo "
         f"compan{'y' if len(real) == 1 else 'ies'}). Demo reset is meant for a root that holds only the demo; "
-        "to reset the demo here anyway, pass force with this data root's full path."),
+        "to reset the demo here anyway, an installation administrator passes force with this data root's full path."),
         details={"reason": "real_company_present", "data_root": str(root), "real_companies": list(real),
                  "force": "the data root's full path" if inp.force is None else "does not name this data root"})
 
@@ -1157,6 +1171,11 @@ def _seed_demo_agent(s: Session, ctx: Context, company: dict[str, Any]) -> None:
     from bookflow.hub.permission_access import activated
     if not activated(s):
         s.warnings.append(f"the demo agent {DEMO_AGENT} needs activated permissions; run `permission activate`")
+        return
+    if s.actor.kind != "human":
+        # Assigning and authorizing an agent stay a person's acts (capabilities-v1), so a person sets the demo's agent up.
+        s.warnings.append(f"the demo agent {DEMO_AGENT} is assigned and authorized by a person; run the reset yourself "
+                          "or `agent assign` and `agent authorize` it")
         return
     hub_ctx = ctx.model_copy(update={"company_id": None})
 

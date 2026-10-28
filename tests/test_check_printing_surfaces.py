@@ -148,8 +148,8 @@ def test_an_agent_prepares_a_run_but_only_a_person_confirms_cancels_or_reprints(
     for name, body in (('check.print-confirm', {'run': run_id}), ('check.print-cancel', {'run': run_id})):
         refused = agent_call(name, body)
         assert refused.status_code == 403, refused.text
-        assert refused.json()['code'] == 'E_PERMISSION' and refused.json()['details']['reason'] == 'people_only'
+        assert refused.json()['code'] == 'E_PERMISSION' and refused.json()['details']['capability'] == 'check.print-confirm'
     confirmed = hosted.ok('check.print-confirm', {'run': run_id}, company=cid, headers=REASON)
     assert confirmed['status'] == 'confirmed'
     refused = agent_call('check.reprint', {'check': queued.json()['id']})
-    assert refused.status_code == 403 and refused.json()['details']['reason'] == 'people_only'
+    assert refused.status_code == 403 and refused.json()['details']['capability'] == 'check.print-confirm'

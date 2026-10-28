@@ -596,10 +596,11 @@ def _refuse_without_authority(s, row):
             'needs': 'automate.delivery'})
 
 
-def _refuse_agent_live():
-    """R187: automate.delivery. Until then making a send schedule live is a person's act."""
-    from bookflow.hub import people_only
-    return people_only.refusal(people_only.ROLES_RULE, command='delivery-schedule live', capability='customer')
+def _require_automate(s):
+    """automate.delivery (capabilities-v1): an agent needs its principal's grant. The go its runs release is still
+    checked by _refuse_without_authority, which until R187's consumer step counts only a person's go."""
+    from bookflow.hub import capabilities
+    capabilities.require_company(s, 'delivery-schedule live')
 
 
 def _today(s):
@@ -618,8 +619,8 @@ def prepare_update(s, ctx, inp) -> Plan:
         _check_selection(s, after)
         after.update(_authority(s, ctx))
     warnings, check = [], None
-    if inp.confirm is not None and s.actor.kind != 'human':
-        raise _refuse_agent_live()
+    if inp.confirm is not None:
+        _require_automate(s)
     if inp.confirm is not None:
         _refuse_without_authority(s, before)
     if operative and before['state'] in ('live', 'paused'):
@@ -680,8 +681,7 @@ def apply_update(plan, ctx, s) -> Applied:
 
 def prepare_live(s, ctx, inp) -> Plan:
     """Make a send schedule live: one check of its exact details. A person's act until R187 (automate.delivery)."""
-    if s.actor.kind != 'human':  # the catalog refuses an agent first; kept so the rule is visible here too
-        raise _refuse_agent_live()
+    _require_automate(s)  # dispatch asks an agent first; kept so the rule is visible here too
     before = resolve(s, inp.schedule)
     _check_version(before, inp.expected_version)
     _refuse_without_authority(s, before)

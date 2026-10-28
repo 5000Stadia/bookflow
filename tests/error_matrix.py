@@ -2668,7 +2668,7 @@ MATRIX['delivery mark-sent'] = {'E_VALIDATION': 'sent_at in the future or malfor
                                 'E_RECORD_NOT_FOUND': 'unknown message',
                                 'E_WORK_DEPENDENCY': 'already sent or cancelled',
                                 'E_VERSION_CONFLICT': 'stale expected_version',
-                                'E_PERMISSION': "an agent: marking sent is a person's act", **_DELIVERY_TAIL}
+                                'E_PERMISSION': "an agent its principal has not granted delivery.mark-sent", **_DELIVERY_TAIL}
 MATRIX['delivery export'] = {'E_RECORD_NOT_FOUND': 'unknown message', 'E_WORK_DEPENDENCY': 'a cancelled message',
                              'E_VERSION_CONFLICT': 'changed while exporting', **_DELIVERY_TAIL}
 MATRIX['delivery show'] = {'E_RECORD_NOT_FOUND': 'unknown message'}
@@ -2692,12 +2692,12 @@ MATRIX['delivery-template preview'] = {'E_VALIDATION': 'a voided document or mis
 MATRIX['delivery approve'] = {'E_VALIDATION': 'no messages and not all_waiting, or more than one of them',
                               'E_RECORD_NOT_FOUND': 'unknown message',
                               'E_WORK_DEPENDENCY': 'the message is not ready, or the batch is cancelled', 'E_VERSION_CONFLICT': 'changed while approving',
-                              'E_PERMISSION': "an agent: a go is a person's act", **_DELIVERY_TAIL}
+                              'E_PERMISSION': "an agent its principal has not granted delivery.send", **_DELIVERY_TAIL}
 MATRIX['delivery retry'] = {'E_VALIDATION': 'no To address', 'E_RECORD_NOT_FOUND': 'unknown message',
                             'E_WORK_DEPENDENCY': 'not held or failed, or held because the document changed',
                             'E_VERSION_CONFLICT': 'stale expected_version', **_DELIVERY_TAIL}
 MATRIX['delivery run'] = {**_DELIVERY_TAIL}
-_CONNECTION_WRITE = {'E_PERMISSION': "an agent: a sending connection is a person's act", **_DELIVERY_TAIL}
+_CONNECTION_WRITE = {'E_PERMISSION': "an agent its principal has not granted delivery.connect", **_DELIVERY_TAIL}
 MATRIX['delivery-connection add'] = {'E_VALIDATION': 'no transport of that kind, bad settings or secret_ref, name in use',
                                      **_CONNECTION_WRITE}
 MATRIX['delivery-connection update'] = {'E_VALIDATION': 'bad settings or secret_ref, or nothing to change',
@@ -2743,7 +2743,7 @@ MATRIX['delivery-schedule live'] = {'E_VALIDATION': 'no confirm (show the check 
                                     'E_VERSION_CONFLICT': 'stale expected_version',
                                     'E_WORK_DEPENDENCY': 'the details or recipients changed since the check, or no '
                                                          'slot left',
-                                    'E_PERMISSION': "an agent (a person's act until automate.delivery), or a person "
+                                    'E_PERMISSION': "an agent its principal has not granted automate.delivery, or a person "
                                                     'who could not give a go now',
                                     **_DELIVERY_TAIL}
 MATRIX['delivery-schedule pause'] = {'E_RECORD_NOT_FOUND': 'unknown schedule',

@@ -53,11 +53,9 @@ def refuse(field, problem, **details):
 def admit(s, family):
     """People only, then the family's explicit Delete grant; dispatch has checked ledger.post."""
     if getattr(s.actor, 'kind', None) != 'human':
-        # The catalog's people-only list refuses an agent at dispatch; this is the same refusal for a caller
-        # that arrives without one (R168's mechanism, hub/people_only.py).
-        from bookflow.hub import people_only
-        command = 'invoice restore' if family == 'invoice' else 'journal restore'
-        raise people_only.refusal('', command=command, capability=capability(family))
+        # restore.document (capabilities-v1): asked of an agent at dispatch, and again here.
+        from bookflow.hub import capabilities
+        capabilities.require_company(s, 'invoice restore' if family == 'invoice' else 'journal restore')
     access.require_explicit_grant(s, capability(family))
 
 

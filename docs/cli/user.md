@@ -12,7 +12,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 |---|---|
 | Scope | hub |
 | Kind | write |
-| Required role | human installation administrator on an activated installation |
+| Required role | installation administrator, or an agent its principal granted user.manage, on an activated installation |
 | Capability | user |
 | Feature | — |
 | HTTP | `POST /commands/user.activate` |
@@ -135,7 +135,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 |---|---|
 | Scope | hub |
 | Kind | write |
-| Required role | human hub administrator; the grant also needs administration of that scope |
+| Required role | hub administrator, or an agent granted user.manage (no hub administrator, no password, no role above its own); the grant also needs administration of that scope |
 | Capability | user |
 | Feature | — |
 | HTTP | `POST /commands/user.add` |
@@ -273,7 +273,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 |---|---|
 | Scope | hub |
 | Kind | write |
-| Required role | human installation administrator on an activated installation |
+| Required role | installation administrator, or an agent its principal granted user.manage, on an activated installation |
 | Capability | user |
 | Feature | — |
 | HTTP | `POST /commands/user.deactivate` |

@@ -12,7 +12,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 |---|---|
 | Scope | hub |
 | Kind | write |
-| Required role | human installation administrator on an activated installation |
+| Required role | installation administrator, or an agent its principal granted agent.manage, on an activated installation |
 | Capability | user |
 | Feature | — |
 | HTTP | `POST /commands/agent.activate` |
@@ -534,7 +534,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 |---|---|
 | Scope | hub |
 | Kind | write |
-| Required role | human installation administrator on an activated installation |
+| Required role | installation administrator, or an agent its principal granted agent.manage, on an activated installation |
 | Capability | user |
 | Feature | — |
 | HTTP | `POST /commands/agent.create` |
@@ -702,7 +702,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 |---|---|
 | Scope | hub |
 | Kind | write |
-| Required role | human installation administrator on an activated installation |
+| Required role | installation administrator, or an agent its principal granted agent.manage, on an activated installation |
 | Capability | user |
 | Feature | — |
 | HTTP | `POST /commands/agent.deactivate` |
@@ -1213,7 +1213,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 |---|---|
 | Scope | hub |
 | Kind | write |
-| Required role | human installation administrator on an activated installation |
+| Required role | installation administrator, or an agent its principal granted agent.manage, on an activated installation |
 | Capability | user |
 | Feature | — |
 | HTTP | `POST /commands/agent.unassign` |
