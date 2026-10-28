@@ -16,7 +16,7 @@ What it does today:
 - **Corrections** — revise, void, or delete (nine document families) with retained history, under per-user permissions.
 - **Emailing documents** — an email for an invoice, sales receipt, estimate, statement or overdue notice, drafted from an editable template with its PDF attached; an outbox that shows each message's state and history; batches ("statements to everyone who owes us") previewed before they run; recurring schedules; customers who prefer email queued for sending. No sender is built yet: **nothing leaves this machine until a sending connection is set up**, and until then messages wait in the outbox, ready. Meanwhile export one as a `.eml` file (or a zip of several), send it from your own mail program, and mark it sent; the outbox then reads "Sent by hand".
 
-Invoices, sales receipts, estimates and statements produce a PDF from their own page. Not yet available: sending email from Bookflow itself (a sending connection), payroll, bank feeds, budgets and multi-currency ledgers — see [V2 and beyond](design/V2-ROADMAP.md).
+Invoices, sales receipts, estimates and statements produce a PDF from their own page. Not yet available: sending email from Bookflow itself (a sending connection), payroll, live bank connections and multi-currency ledgers — see [V2 and beyond](design/V2-ROADMAP.md).
 
 The Python distribution is `bookflow-core`; the import package and command are both `bookflow`.
 
