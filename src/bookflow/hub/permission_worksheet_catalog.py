@@ -26,9 +26,23 @@ ADDED_ACTIONS = tuple(
     c.CompanyAction(name, tuple(sorted((*resources, c.Requirement(capability, threshold)),
                                        key=lambda r: r.capability)), True, (_OWNER.format(planner),))
     for name, capability, threshold, planner, resources, _ in _ADDED)
+# batches.require_read (R107, layer import-v1) asks whether the caller could run a kind's own `show`
+# (or `attachment text`, for a file read through an import) before a preview, a run or a batch is shown.
+# import-v1 shipped without declaring that probe, and an accepted descriptor is never rewritten, so the
+# next delta declares it here (see tests/test_permission_catalog.py on why). Its pairs are the `show`
+# requirements of every importable kind plus `attachment text`'s: the only records a batch can touch are
+# the ones an import wrote. The test derives the same set from import_kinds, so a new kind fails it.
+_IMPORT_READS = ('account', 'attachment', 'class', 'customer', 'customer-message', 'customer-type', 'employee',
+                 'item', 'item-category', 'job-type', 'other-name', 'payment-method', 'price-level', 'sales-rep',
+                 'ship-method', 'term', 'vendor', 'vendor-type')
+CURRENT_SOURCES = (*previous.CATALOG.conditional_sources,
+    c.ResourceSource('bookflow.company.batches.require_read',
+        (('src/bookflow/company/batches.py', 363), ('src/bookflow/company/batches.py', 365)),
+        tuple(c.Requirement(capability, 'member') for capability in _IMPORT_READS)))
 CATALOG = replace(previous.CATALOG, version=c.WORKSHEET_POLICY_VERSION,
     commands=tuple(sorted((*previous.CATALOG.commands, *ADDED_COMMANDS), key=lambda x: x.name)),
-    company_actions=tuple(sorted((*previous.CATALOG.company_actions, *ADDED_ACTIONS), key=lambda x: x.key)))
+    company_actions=tuple(sorted((*previous.CATALOG.company_actions, *ADDED_ACTIONS), key=lambda x: x.key)),
+    conditional_sources=tuple(sorted(CURRENT_SOURCES, key=lambda x: x.owner)))
 MANIFEST = c.catalog_manifest(CATALOG, previous.MANIFEST.standalone_names)
 
 
