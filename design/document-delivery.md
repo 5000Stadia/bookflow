@@ -278,8 +278,8 @@ problem (no address); `--method mail` lists the customers the owner prints for, 
 
 A batch is previewable (`--dry-run` lists who gets what and who is skipped, with reasons: no address,
 method `mail`, already sent). It returns a `batch_id` and drafts in chunks per call (the scheduler's
-fair-share rule: no batch holds the writer for its whole length; the chunk size is set from the
-measurement in increment 3), returning `next`; the browser loops with progress. A batch makes **drafts**,
+fair-share rule: no batch holds the writer for its whole length; 10 messages per call, measured in
+increment 3 at about 0.9 s of writer time for invoices and 2 s for statements), returning `next`; the browser loops with progress. A batch makes **drafts**,
 or with `--send` releases them too. Every message names its batch, so *Send forms* [M 321] is the
 outbox filtered to one batch: deselect, edit, release the rest.
 
@@ -680,3 +680,64 @@ bounded in process and on the host's delivery thread with checkpoints going on a
 from another installation and an attached file disabled, tracking after delivered, the backoff from the answer, a
 poll-only tick without the barrier, a dry-run check and redacted text), `tests/test_delivery_seeded.py` (the queue,
 five seeds of 30 steps: 20 messages reached the fake server, none twice; 20 crashes between send and record, 4 leases expired, 6 held unknown outcomes, 4 failed, 11 retry waits, 11 sent), and `tests/test_delivery_surfaces.py` (the new commands on all four surfaces).
+
+## As built: increment 3 (2026-10-27)
+
+**What exists.** co0108 (`delivery_flags`, `delivery_batches`, `delivery_messages.batch_id` with its index), six
+commands under the `delivery-batch-v1` layer (on `delivery-queue-v1`): `delivery flag`, `unflag`, `queue`, `batch`,
+`batch-show`, `batch-cancel`; `delivery draft` gains `combine` with `documents`; `delivery send` and `approve` take a
+`batch`; `delivery query` filters by `batch` and a message shows its batch; `company update` gains
+`delivery_auto_flag_from`. Code: `company/delivery_batches.py`, `company/delivery_batch_models.py`. The browser has the
+*Email later* checkbox beside Email… on invoices, sales receipts and estimates (an htmx fragment that posts on change),
+the batch page (*Email the queue…*, *Email unsent invoices…*, *Email statements…* from the Outbox: a preview with a
+checkbox per message, the skipped with why, then a progress bar that loops chunk by chunk, Send the drafts and Cancel
+the batch), the Outbox's batch filter, and the auto-flag date in Email and sending.
+
+**Decisions taken in the build, each reversible:**
+
+- **Permissions** follow increments 1 and 2: `customer` at `standard` to flag, unflag, batch and cancel a batch, at
+  `member` for `queue` and `batch-show`, each with `ledger.read` and `customer-work` at `member`. A batch's `send`
+  releases as `delivery send` does: a person's release is their go, an agent's waits (comment naming `delivery.send`
+  for R187). No people-only action is added: drafting is anyone's.
+- **To be emailed is derived** (§5) from the books, the flags, the date and the messages on every read; the customer's
+  method is effective through the job's parents, and an explicit `unflag` wins over the date. A flagged document goes
+  even to a customer who prefers mail (the person asked); otherwise `--unsent` skips `prefers_mail` and an opted-out
+  document. `queue --method mail` lists the customers only.
+- **The selection is fixed when a batch begins** (`targets`, `skipped` as JSON on the batch), so `next` resumes
+  exactly. Each target is drafted through `delivery draft`'s own planner inside the batch's write; one that gained a
+  message meanwhile, or can no longer be drafted, is skipped then and named (`in_outbox`, `sent`, `refused` with the
+  refusal's words). A selection with nothing to draft keeps no batch (`state: nothing`). Skip reasons: `no_address`,
+  `prefers_mail`, `not_email` (statements with `--method email`), `opted_out`, `in_outbox`, `sent`, `excluded`
+  (`exclude`, the browser's unticked boxes), `refused`.
+- **Missing specifics are refused, naming what to give** (no selection, no kind for `unsent`, no period for statements,
+  `ready` for notices, statement-only filters elsewhere); the dry run lists exactly who gets what and who is skipped and
+  why, and the agent guide tells an agent to show it before a broad batch.
+- **Statements** take the customers with a balance over `balance_over` (default 0) from `report
+  customer-balance-summary` at the period's end, read as the principal; a job is its own customer, as the statement
+  report has it.
+- **`--combine`** puts one customer's documents of one kind in one message, one PDF each; `document.number` lists every
+  number and the other document fields are kept only where the documents agree (a warning names the rest). A combined
+  message's dedupe key lists every source; a single source keeps increment 1's key. A refresh redraws every document.
+- **A batch is cancelled as one unit:** every message it drafted that was never released or exported is cancelled
+  (event `cancelled` naming the batch), and the ones that block are named and stay (`released`, `exported`, `sent`);
+  drafting stops. Cancel writes in one transaction (200 statements: 2.6 s). **For R186:** a delivery batch maps onto the
+  shared batch ledger as one entry whose reversal is this cancel; nothing later depends on a batch's drafts (a later
+  batch only skipped what this one held, and cancelling puts those documents back in the queue), so newest-first holds.
+  `delivery send --batch` releases the drafts a chunk per call, naming how many wait.
+
+**Measured** (in process, a fresh company, `tests/test_delivery_batch.py` with `BF_DELIVERY_LARGE=1000`, printed with
+`-s`): 1,000 unsent invoices for 200 customers: selection (dry run) 1.2 s; the whole batch 92 s in 100 calls, a chunk
+of 10 at 0.88 s median and 2.53 s at most (the first call 1.75 s), 0.09 s per draft; 200 statements: selection 3.1 s,
+the batch 44 s, 1.99 s per chunk. The chunk stays 10, the dispatcher's.
+
+**Not in this increment:** schedules (increment 4; `delivery_batches.schedule_run_id` waits for them); the demo seed's
+messages and the closing trial (increment 5).
+
+**Tests:** `tests/test_delivery_batch.py` (the queue from flags, the date and a job's inherited method; each selection
+against hand-worked sets with its skips; combine and its refresh; statements and notices; refusals naming the missing
+detail; chunks, resume, a skip found while drafting and the cancel with its blockers; send and the batch release; the
+demo company's queue batched and rerun; the 1,000-document measurement), `tests/test_delivery_batch_browser.py` (Email
+later ticked on a demo invoice; the batch preview, one left out, drafted through the htmx loop and cancelled, at 1440 and
+390), `tests/test_delivery_seeded.py` (batches: five seeds of 30 steps of flags, dates, methods, batches, reruns and
+cancels; after every step the queue equals the hand-worked rule, no document has two live messages, every skip is named,
+and a cancelled batch keeps only drafts exported before it).

@@ -1125,6 +1125,18 @@ owner set up) has sent it, `notice mark-sent NOTICE --method email`; if the owne
 `notice dismiss NOTICE --note "why"`. A dismissed notice is not prepared again until the next
 notice period.
 
+## Emailing customers in a batch
+
+Nothing leaves this machine until the owner sets up a sending connection; messages wait in the outbox.
+For "send statements to everyone who owes us", run `delivery batch --kind statement --period 2026-09
+--balance-over 0 --method email --dry-run` and show the person exactly who would get what and who is
+skipped and why (no address, prefers mail, already in the outbox or sent) before running it without
+`--dry-run`: a batch is a broad change, so confirm its details once. If the period, kind or customers
+are not given, ask; never guess them. A batch drafts 10 messages per call and returns `next`; call
+`delivery batch` with it until `state` is `done`. `delivery queue` lists what is to be emailed;
+`delivery batch-cancel B-1001 --reason "..."` cancels a whole batch, naming any message that was
+already released or exported.
+
 ## A scanned barcode
 
 Pass a scanned code as `item`: every `item` field resolves an id, then a name, then a barcode, so

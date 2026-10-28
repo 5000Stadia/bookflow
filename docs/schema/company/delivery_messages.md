@@ -48,3 +48,4 @@ Database: `company`.
 | `failure_code` | VARCHAR(64) | yes | — | — | — | — | Why it failed. |
 | `failure_text` | VARCHAR(2000) | yes | — | — | — | — | The transport's text. |
 | `cancelled_reason` | VARCHAR(500) | yes | — | — | — | — | Why it was cancelled. |
+| `batch_id` | VARCHAR(26) | yes | — | — | ix_delivery_messages_batch | delivery_batches.id | The batch that drafted it; null for a single draft. |
