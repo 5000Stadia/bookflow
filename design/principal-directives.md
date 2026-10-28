@@ -200,3 +200,44 @@ asks for those specifics and never fills them in by guessing. The agent guide sa
 - `delivery mark-sent`'s refusal names the capability `customer` (people_only) instead of `delivery.mark-sent`.
 - `delivery-schedule live`'s help says "a person". Both hide that a principal can grant these; R187 increment 0 fixes
   the wording when it converts people-only acts to capabilities.
+
+## As built: increment 1 (2026-10-28)
+
+- **Layer `capabilities-v1`** on `bank-feed-v1` (`hub/permission_capabilities_catalog.py`, 826 commands, descriptor
+  `75dd3c81`). It registers 18 capabilities: §2's 14 and the four R112 acts that were people-only (`delivery.send`,
+  `delivery.mark-sent`, `delivery.connect`, `automate.delivery`), each with role defaults at the threshold that ran the
+  command before (hub capabilities at `hub_admin`). It clears `human_only` on every admin action except the five
+  `admin:people-only:` keys of §2 b, so `people_only_commands()` is exactly those five. No existing command, default,
+  company action or threshold changes; only the authorization text of the commands that said "human".
+- **The gate** is `hub/capabilities.py`, asked only of a non-human actor (a person's admission is untouched): permissions
+  activated; an explicit grant of the capability on the agent's own live membership covering the scope (a role
+  default never suffices for an agent) and no deny of it; then the usual actor/principal intersection through one
+  declared `require_resource` site (`company/capability_gate.py`). Installation-wide capabilities need the agent's
+  grant and an active hub-administrator principal who is not denied it. It runs at admission
+  (`access.require_command_activation`), in `dispatch.authorize` once the company resolves, in the publication
+  re-check, and in the domain checks that used to refuse non-persons (merges, restores, conversion, costing method,
+  accountant, closing date, schedule live, backup schedule).
+- **Ceilings (§1).** `hub/identity_admin.py` now admits an agent's own token for membership put/revoke, user active and
+  assignment removal only, under `_agent_admission`: its grant and its principal's (the principal must administer the
+  scope, as owner for owner changes); never its own or its principal's membership or status, never a hub
+  administrator; no role above its own; no capability it does not hold by explicit grant (widening a deny counts).
+  Activation, authorization and catalog replacement stay human at that layer too. A person who is not an installation
+  administrator cannot give a hub capability. An agent's `user add` sets no password and never `hub_admin` (setting a
+  password stays a person's act), and an agent's `agent create` is owned by its principal.
+- **Refusals.** An (a) act: `capability`, `reason: capability_not_granted` (or `principal_lacks_capability`,
+  `activation_required`), the act and capability named and "ask your principal to grant it if this is yours to do".
+  The five: `reason: people_only` (kept for existing clients) with `principal_only: true`.
+- **R112 wording (the note above):** `delivery mark-sent` now names `delivery.mark-sent`; `delivery-schedule live`,
+  `create`, `update` and `delivery approve` help name the capability instead of "a person".
+- **Proved:** the policy engine, `bank-feed-v1` against `capabilities-v1`, gives 252,627 identical command x role x
+  deny admissions for people (787 company commands; 4 roles plus installation administrators; 64 deny combinations
+  over each command's own capabilities) and suspends none of the agents; a root activated at `bank-feed-v1` upgrades
+  with no agent suspended, no token revoked, and the same answers for the agent and the person; over HTTP every one of
+  the 41 commands (§2's 32 and R112's 9) and the closing date refuses an ungranted agent naming the capability, admits it once granted, and
+  refuses it when its principal does not hold the capability, while a person is never asked.
+- **Left for later increments:** an agent holding `delivery.send` or `automate.delivery` passes the gate, but
+  delivery's own go (`delivery_dispatch.go_lost`) still counts only a person's, so its approval gives no go and a
+  schedule it tries to make live is refused for want of one: nothing leaves on an agent's say until the consumer step
+  (increment 3) counts a holder's go. A person's deny of a new capability does not yet bind that person's own commands
+  (it binds their agents); memorized entries still exclude every former people-only act; `agent show`/`list` stay
+  installation-administrator reads.
