@@ -27,6 +27,7 @@ import json
 
 import sqlalchemy as sa
 
+from bookflow.company import document_numbers
 from bookflow.company import journals, schema as c
 from bookflow.core.errors import BookflowError
 from bookflow.core.ids import is_ulid
@@ -150,7 +151,8 @@ def resolve(s, selector, noun):
             found = [dict(r) for r in s.company.conn.execute(
                 base.where(t.c.id == candidates[0]['transaction_id'])).mappings()]
     if not found:
-        found = [dict(r) for r in s.company.conn.execute(base.where(t.c.number == selector)).mappings()]
+        found = document_numbers.prefer_live([dict(r) for r in s.company.conn.execute(
+            base.where(t.c.number == selector)).mappings()])
     if not found:
         raise BookflowError('E_RECORD_NOT_FOUND',
                             details={'record_type': KIND[noun], 'selector': selector})

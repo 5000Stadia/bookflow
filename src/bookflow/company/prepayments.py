@@ -46,6 +46,7 @@ import json
 import sqlalchemy as sa
 from sqlalchemy import alias
 
+from bookflow.company import document_numbers
 from bookflow.company import accounts as account_service, schema as c
 from bookflow.company import document_effects as effects, sales_defaults as defaults
 from bookflow.company.journal_models import parse_domestic_amount
@@ -229,7 +230,7 @@ def resolve_document(s, selector):
         if kind in kinds:
             found = effects.rows(s, t, t.c.kind == kind, t.c.number == parts[1].strip())
         else:
-            found = effects.rows(s, t, t.c.number == text, t.c.kind.in_(kinds))
+            found = document_numbers.prefer_live(effects.rows(s, t, t.c.number == text, t.c.kind.in_(kinds)))
     if not found:
         raise BookflowError('E_RECORD_NOT_FOUND', details={'record_type': 'work_document', 'selector': selector})
     if len(found) > 1:

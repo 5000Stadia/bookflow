@@ -840,8 +840,10 @@ def _plans_in_write(cmd: Command, s: Session, dry_run: bool) -> bool:
 
     Only a real (not dry-run) company-only write that opted in: a preview, a read, an advisory
     command or one that also writes the hub or config plans before any transaction, as before.
+    A batch step with its own write first (`batch_before`, an import reversal's retiring step) plans there too.
     """
-    return (getattr(cmd, "plan_in_write", False) and not dry_run and cmd.is_write
+    return ((getattr(cmd, "plan_in_write", False) or getattr(s, "batch_before", None) is not None)
+            and not dry_run and cmd.is_write
             and cmd.kind != "advisory" and set(cmd.writes) == {"company"} and s.company is not None)
 
 
@@ -874,6 +876,11 @@ def _apply(cmd: Command, plan: Plan | None, ctx: Context, s: Session, key=(None,
         try:
             if co_tx:
                 _upsert_principals(s, ctx)
+            # A batch step's own write before the command's (an import reversal retires a document's number while
+            # the document still stands), in the command's transaction and before its plan reads the document.
+            before = getattr(s, "batch_before", None)
+            if before is not None and co_tx and planner is not None:
+                before(s)
             if planner is not None:
                 s.plan_in_write = True
                 try:
