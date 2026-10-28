@@ -387,7 +387,9 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # fingerprint (1); batch query's kind, state, scope, cursor (4). No new variant kind.
     # 4136 -> 4146 (R181 inc 5, measured): report order-fulfillment's site, customer, status, newly_shippable and
     # cursor, report shipments' date_from, customer, site, ship_method and cursor -- their null branches.
-    assert sum(len(group["paths"]) for group in mapped)==4146
+    # 4146 -> 4149 (R181 closing-trial fixes, measured): sales-order invoice's expected_version, conversion_key and date
+    # are optional now -- their null branches.
+    assert sum(len(group["paths"]) for group in mapped)==4149
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

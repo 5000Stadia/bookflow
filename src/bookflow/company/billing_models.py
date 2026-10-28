@@ -137,6 +137,10 @@ class OrderSelection(StrictModel):
 
 class SalesOrderInvoiceInput(ConversionInput, InvoiceFields, PrepaymentChoice):
     sales_order: Selector
+    expected_version: _Version | None = Field(default=None, description='Optional guard: the order version read.')
+    conversion_key: str | None = Field(default=None, min_length=1, max_length=128, description=(
+        'Optional retry key; default: one per order version.'))
+    date: _Date | None = Field(default=None, description='Invoice date; default today.')
     selections: list[OrderSelection] | None = Field(default=None, min_length=1, max_length=200)
     all_open: bool = Field(default=False, description=(
         'Bill every open quantity whatever the stock. Without it (and without line_ids or selections) the invoice '

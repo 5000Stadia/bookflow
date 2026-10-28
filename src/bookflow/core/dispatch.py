@@ -95,7 +95,12 @@ def redact_error(err: BookflowError, allowed: bool) -> BookflowError:
 def validate_input(cmd: Command, raw: dict[str, Any]) -> BaseModel:
     ctx_keys = set(raw) & CONTEXT_FIELD_NAMES
     if ctx_keys:
-        raise BookflowError("E_CONTEXT_IN_INPUT", details={"fields": sorted(ctx_keys)})
+        names = sorted(ctx_keys)
+        raise BookflowError("E_CONTEXT_IN_INPUT", message=(
+            f"Take {', '.join(names)} out of input: {'it is' if len(names) == 1 else 'they are'} request context, "
+            "given beside input, not in it -- over MCP `bookflow_run` a top-level field next to `input` "
+            '({"command": ..., "input": {...}, "reason": "..."}); in the CLI --reason; over HTTP the X-Bookflow-Reason '
+            "header."), details={"fields": names})
     try:
         return cmd.input_model.model_validate(raw)
     except ValidationError as e:

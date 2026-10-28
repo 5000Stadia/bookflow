@@ -2302,7 +2302,7 @@ Example JSON output:
 
 ## `sales-order invoice`
 
-Invoice what has shipped on a sales order. With no selection it bills what can ship: each stocked line up to what is available to this order (on hand less what other orders and work orders commit), shared in line order among its lines for one item, and every other open line when anything ships or the order has no open stocked line; if nothing can ship it refuses with each line's open quantity and availability. all_open bills every open quantity whatever the stock; line_ids bills whole open remainders; selections take a quantity per line, naming line_id or an item that exactly one open line carries. Percent, net-amount and rebill selections are refused. The invoice is taxed as an ordinary invoice of its own date (defaulted tax selections resolved again, current rates); order_tax shows the difference from the order's quoted tax. Posting issues the stock and consumes the order lines in one transaction; apply_prepayment (default true) uses money held on the order or its estimate. A retried conversion key returns the original invoice.
+Invoice a sales order. With no selection it bills every unit shipped and not yet invoiced (all shipments together, one invoice; the invoice moves no stock for them), and when nothing waits to be billed, what can ship: each stocked line up to what is available to this order, issuing that stock. all_open bills every open quantity whatever the stock; line_ids bills whole open remainders; selections take a quantity per line (line_id, or an item one open line carries); shipments bills just those shipments. date defaults to today; expected_version and conversion_key are optional guards. Taxed as an ordinary invoice of its date. apply_prepayment (default true) uses money held on the order. A retried conversion key returns the original invoice.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -2337,9 +2337,9 @@ The same example as complete `bookflow_run` arguments:
 | `ar_account` | `--ar-account` | string \| null | no | yes | null | — |
 | `terms` | `--terms` | string \| null | no | yes | null | — |
 | `due_date` | `--due-date` | string \| null | no | yes | null | — |
-| `expected_version` | `--expected-version` | integer | yes | no | — | minimum 1 |
-| `conversion_key` | `--conversion-key` | string | yes | no | — | minimum length 1; maximum length 128 |
-| `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
+| `expected_version` | `--expected-version` | integer \| null | no | yes | null | Optional guard: the order version read. |
+| `conversion_key` | `--conversion-key` | string \| null | no | yes | null | Optional retry key; default: one per order version. |
+| `date` | `--date` | string \| null | no | yes | null | Invoice date; default today. |
 | `number` | `--number` | string \| null | no | yes | null | — |
 | `line_ids` | `--line-ids` | array[string] \| null | no | yes | null | — |
 | `selections[].line_id` | inside `--selections` JSON array | string \| null | no | yes | null | — |

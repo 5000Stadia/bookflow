@@ -229,6 +229,25 @@ def available_to(s, item_ids, *, excluding=None, as_of=None):
     return {item: stock.get(item, 0) - taken.get(item, 0) - builds.get(item, 0) for item in item_ids}
 
 
+def available_at(s, item_ids, site_id, *, excluding=None, as_of=None):
+    """``available_to`` at one site: on hand there less what every other document commits there (a line naming no
+    site commits at the default site) and pending builds there reserve. What a shipment from the site can take."""
+    from bookflow.company import placements
+    item_ids = list(item_ids)
+    if not item_ids:
+        return {}
+    stock = placements.on_hand(s, as_of, item_ids=item_ids, site_id=site_id)
+    default = placements.default_site_id(s) == site_id
+    taken = {}
+    if deducts_documents(s):
+        for line in open_lines(s, as_of, items=item_ids):
+            if line.document_id != excluding and (line.site_id == site_id or (line.site_id is None and default)):
+                taken[line.item_id] = taken.get(line.item_id, 0) + line.open_base
+    builds = for_assemblies_by_site(s, as_of) if deducts_builds(s) else {}
+    return {item: stock.get((item, site_id), 0) - taken.get(item, 0) - builds.get((item, site_id), 0)
+            for item in item_ids}
+
+
 def _plain(microunits):
     from bookflow.core.exact import format_quantity_micro_units
     return format_quantity_micro_units(microunits)

@@ -11,7 +11,25 @@ from bookflow.company.journal_outputs import JournalMoneyOutput
 from bookflow.company.ledger_reports import ReportMetadata
 
 Selector = Annotated[str, Field(min_length=1, max_length=1004), BeforeValidator(lambda v: v.strip() if isinstance(v, str) else v)]
-Quantity = Annotated[str, Field(min_length=1, max_length=40)]
+
+
+def number_text(value):
+    """A JSON number given where decimal text is asked, as that text, exactly: an integer as its digits, a float by its
+    shortest repr when that is a plain decimal (0.1 is '0.1'); anything else is left for the field to refuse."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        import math
+        import re
+        text = repr(value)
+        if math.isfinite(value) and re.fullmatch(r'-?[0-9]+(\.[0-9]+)?', text):
+            return text[:-2] if text.endswith('.0') else text
+    return value
+
+
+Quantity = Annotated[str, Field(min_length=1, max_length=40), BeforeValidator(number_text)]
 Tracking = Annotated[list[Annotated[str, Field(min_length=1, max_length=64)]], Field(max_length=50)]
 
 
@@ -81,7 +99,8 @@ class ShipmentPostInput(_Freighted):
         'Inventory site the shipment leaves; default the order lines\' site, else the default site. One shipment '
         'leaves one site.'))
     lines: list[ShipmentLineInput] | None = Field(default=None, min_length=1, max_length=200, description=(
-        "What ships. Omitted: every order line's quantity still to ship, up to what is available to the order."))
+        "What ships. Omitted: every order line's quantity still to ship, up to what is available to the order at "
+        "the site. With pick_list: part of what was picked; the rest stays on the list."))
 
 
 class ShipmentUpdateInput(_Freighted):

@@ -41,14 +41,14 @@ def sheet(run, **filters):
 
 @pytest.fixture
 def two_sites(books):
-    """A warehouse and an annex. Widgets 10 on hand, gadgets 1. Acme orders 3 widgets (any site) and 2 gadgets from the
+    """A warehouse and an annex. Widgets 10 on hand at the warehouse, gadgets 1 at the annex. Acme orders 3 widgets (any site) and 2 gadgets from the
     annex; Adams, a day later, 9 widgets."""
     run = books['run']
     run('inventory-site update', dict(site='Main', name='Warehouse'), reason='Our warehouse')
     run('inventory-site create', dict(name='Annex'), reason='Second shed')
     widget, gadget = _item(books, 'Widget'), _item(books, 'Gadget', cost='4.00')
     run('bill post', dict(vendor=books['vendor'], date='2017-03-01', items=[
-        dict(item=widget, quantity='10', unit_cost='4.00'), dict(item=gadget, quantity='1', unit_cost='2.00')]),
+        dict(item=widget, quantity='10', unit_cost='4.00'), dict(item=gadget, quantity='1', unit_cost='2.00', site='Annex')]),
         reason='Stock in')
     acme = books['client'].customer.create(company=books['company'], name='Acme')['id']
     first = run('sales-order create', dict(customer=acme, date='2017-03-02', ship_date='2017-03-04', lines=[
@@ -68,18 +68,19 @@ def test_can_ship_now_by_site_matches_hand_worked_figures_and_the_dry_run(two_si
     report = sheet(run, as_of='2017-03-06')
     rows = _rows(report)
     a, b = rows[first['number']], rows[second['number']]
-    # Widgets: 10 on hand, Adams commits 9, so 1 is available to Acme; Acme commits 3, so 7 to Adams.
-    # Acme's only line naming a site names the annex, so `shipment post` ships from there: 1 widget and 1 gadget.
+    # Availability is by site: the widgets are all at the warehouse, the gadget at the annex.
+    # Widgets at the warehouse: 10 on hand, Adams commits 9, so 1 is available to Acme; Acme commits 3, so 7 to Adams.
+    # Acme's only line naming a site names the annex, so `shipment post` ships from there: no widget, 1 gadget.
     assert a['site_name'] == 'Annex' and b['site_name'] == 'Warehouse'
     widget_line, gadget_line = (line['order_line_id'] for line in a['lines'])
-    assert can_ship(a) == {widget_line: 1, gadget_line: 1}
+    assert can_ship(a) == {gadget_line: 1}
     assert can_ship(b) == {b['lines'][0]['order_line_id']: 7}
-    assert a['shippable_amount']['amount'] == '39.00' and b['shippable_amount']['amount'] == '210.00'
+    assert a['shippable_amount']['amount'] == '9.00' and b['shippable_amount']['amount'] == '210.00'
     assert a['to_ship_amount']['amount'] == '108.00' and not a['can_ship_complete']
     assert a['fulfillment_status'] == 'to_pick' and a['invoice_progress'] == 'open'
     assert a['promised_ship_date'] == '2017-03-04' and a['days_late'] == 2 and b['days_late'] is None
     by_site = {site['site_name']: site for site in a['by_site']}
-    assert by_site['Annex']['lines'] == 2 and by_site['Warehouse']['lines'] == 1
+    assert by_site['Annex']['lines'] == 1 and by_site['Warehouse']['lines'] == 1
     assert by_site['Warehouse']['shippable_amount']['amount'] == '30.00'
     for row in (a, b):
         assert can_ship(row) == would_ship(run, row['sales_order_number'])
@@ -90,14 +91,14 @@ def test_can_ship_now_by_site_matches_hand_worked_figures_and_the_dry_run(two_si
     # At the warehouse Acme's gadget line, which ships from the annex, has nothing.
     warehouse = _rows(sheet(run, site='Warehouse'))[first['number']]
     assert can_ship(warehouse) == {widget_line: 1} and warehouse['site_name'] == 'Warehouse'
-    assert report['totals']['orders'] == 2 and report['totals']['shippable_amount']['amount'] == '249.00'
+    assert report['totals']['orders'] == 2 and report['totals']['shippable_amount']['amount'] == '219.00'
 
 
 def test_a_receipt_makes_a_short_order_newly_shippable(two_sites):
     run, first = two_sites['run'], two_sites['first']
     assert not sheet(run, newly_shippable='2017-03-04')['rows']
     run('bill post', dict(vendor=two_sites['books']['vendor'], date='2017-03-05', items=[
-        dict(item=two_sites['gadget'], quantity='1', unit_cost='2.00')]), reason='Gadget came')
+        dict(item=two_sites['gadget'], quantity='1', unit_cost='2.00', site='Annex')]), reason='Gadget came')
     newly = sheet(run, newly_shippable='2017-03-04')['rows']
     assert [row['sales_order_number'] for row in newly] == [first['number']]
     assert Fraction(newly[0]['lines'][1]['can_ship_now']) == 2

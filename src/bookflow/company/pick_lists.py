@@ -15,7 +15,10 @@ order: bin, item name, order date.
 
 **Holding.** A list that is not cancelled holds, for each order not yet shipped from it, what is planned (open, at
 least what was picked) or what was picked (done). A shipment posted from the list for an order consumes that order's
-picks; voiding it gives them back to the list.
+picks; voiding it gives them back to the list. A shipment from the list that names ``lines`` ships part of what was
+picked: what it took comes off the picks and the plan (by bin and lot), and the rest stays on the list, which still
+holds it for the order. An order is shipped from the list once a live shipment from it leaves none of its picked
+units with anything left to ship (`live_states`).
 
 **Entries** append, as count entries do. Each order line's picks replay in order to chunks (bin, lot, serial number,
 quantity): ``add`` appends one, ``set`` grows by the difference or takes back the newest first. With a staging bin at
@@ -171,6 +174,7 @@ class Chunk:
 class LineState:
     line: dict
     chunks: list = field(default_factory=list)
+    shipped: int = 0
 
     @property
     def picked(self):
@@ -222,6 +226,89 @@ def line_states(s, lists, *, extra_entries=()):
     return states
 
 
+def _taken(s, links):
+    """``[(list id, order id, item id, place, lot id, serial id, base)]`` the live shipments from lists took, by the
+    place (bin, staging when staged) each unit left."""
+    if not links:
+        return []
+    params, marks = {}, []
+    for index, link in enumerate(links):
+        params[f's{index}'] = link['shipment_id']
+        marks.append(f':s{index}')
+    owner = {link['shipment_id']: link['pick_list_id'] for link in links}
+    out = []
+    for row in s.company.conn.execute(sa.text(
+            "SELECT h.id AS shipment_id, h.sales_order_id, p.item_id, p.bin_id, p.lot_id, p.serial_number_id, "
+            "sum(p.quantity_microunits) AS q FROM inventory_placements p "
+            "JOIN inventory_movements m ON m.id = p.movement_id JOIN shipments h ON h.transaction_id = "
+            f"m.transaction_id WHERE h.id IN ({', '.join(marks)}) GROUP BY 1, 2, 3, 4, 5, 6"), params).mappings():
+        if int(row['q']) < 0:
+            out.append((owner[row['shipment_id']], row['sales_order_id'], row['item_id'], row['bin_id'],
+                        row['lot_id'], row['serial_number_id'], -int(row['q'])))
+    return out
+
+
+def _consume(states, list_id, order_id, item_id, place, lot_id, serial_id, quantity):
+    """Take ``quantity`` off the picks of this order's lines of the item on the list: the same place, lot and serial
+    number first, then any; each line's plan falls by what came off it."""
+    mine = [st for st in sorted(states.values(), key=lambda st: st.line['position'])
+            if (st.line['pick_list_id'], st.line['sales_order_id'], st.line['item_id']) == (list_id, order_id, item_id)]
+    left = quantity
+    for exact in (True, False):
+        for st in mine:
+            for chunk in list(st.chunks):
+                if left <= 0:
+                    return
+                if exact and ((chunk.staging_bin_id or chunk.bin_id), chunk.lot_id, chunk.serial_id) != \
+                        (place, lot_id, serial_id):
+                    continue
+                take = min(chunk.quantity, left)
+                chunk.quantity -= take
+                left -= take
+                st.shipped += take
+                if not chunk.quantity:
+                    st.chunks.remove(chunk)
+
+
+def live_states(s, lists, *, extra_entries=()):
+    """``(states, closed)``: every line's picks (``line_states``) less what live shipments from the list took, each
+    line's planned quantity less the same, and ``closed`` the ``(list id, order id)`` pairs shipped from the list --
+    a live shipment from it and no picked unit left of an order line with anything left to ship. A shipment that
+    named some of the picked lines leaves the order on the list until the rest ships."""
+    states = line_states(s, lists, extra_entries=extra_entries)
+    links = live_links(s, [row['id'] for row in lists])
+    if not links:
+        return states, set()
+    for taken in _taken(s, links):
+        _consume(states, *taken)
+    for st in states.values():
+        if st.shipped:
+            st.line = dict(st.line, quantity_microunits=max(0, int(st.line['quantity_microunits']) - st.shipped))
+    left = {}
+    for st in states.values():
+        if st.picked:
+            key = (st.line['pick_list_id'], st.line['sales_order_id'])
+            left.setdefault(key, set()).add((st.line['root_document_id'], st.line['root_line_id']))
+    closed = set()
+    for link in links:
+        key = (link['pick_list_id'], link['sales_order_id'])
+        if key in closed:
+            continue
+        roots = left.get(key)
+        if not roots or not _still_to_ship(s, link['sales_order_id'], roots):
+            closed.add(key)
+    return states, closed
+
+
+def _still_to_ship(s, order_id, roots):
+    from bookflow.company import shipments, work
+    header = work.resolve(s, order_id, 'sales_order')
+    if header['status'] != 'open' or not header['active']:
+        return False
+    return any(row['to_ship'] > 0 for row in shipments._order_lines(s, header, work.revision(s, header))
+               if row['root'] in roots)
+
+
 def _held(s, *, exclude_list=None, roots=None, site_id=None):
     """``{(list row, root): (base microunits, item id, order id)}`` live lists hold per order line."""
     if not s.company.conn.execute(sa.text("SELECT 1 FROM pick_lists LIMIT 1")).first():
@@ -231,10 +318,10 @@ def _held(s, *, exclude_list=None, roots=None, site_id=None):
              if row['status'] != 'cancelled' and row['id'] != exclude_list]
     if not lists:
         return {}
-    shipped = {(link['pick_list_id'], link['sales_order_id']) for link in live_links(s, [row['id'] for row in lists])}
+    states, shipped = live_states(s, lists)
     by_id = {row['id']: row for row in lists}
     planned, picked, facts = {}, {}, {}
-    for state in line_states(s, lists).values():
+    for state in states.values():
         line = state.line
         if (line['pick_list_id'], line['sales_order_id']) in shipped:
             continue
@@ -296,8 +383,9 @@ def refuse_held(found, doing, remedy=None):
     first = numbers[0]
     raise BookflowError('E_WORK_DEPENDENCY', message=(
         f'Pick list {", ".join(numbers)} holds units of this order, so {doing}. '
-        + (remedy or f'Ship from the list (`shipment post --pick-list {first}`) or cancel it '
-                     f'(`pick-list cancel {first}`) first.')),
+        + (remedy or f'Ship from the list: `shipment post --pick-list {first}`, with `lines` to ship only some of '
+                     f'what was picked (the rest stays on the list). Cancel the list (`pick-list cancel {first}`) '
+                     'only to drop the picks.')),
         details=dict(problem='a pick list holds units of this order', pick_lists=numbers, reason='picked_on_list'))
 
 
@@ -407,10 +495,10 @@ def _reserved_by_bin(s, site_id, item_id, staged):
              if row['status'] != 'cancelled']
     if not lists:
         return {}
-    shipped = {(link['pick_list_id'], link['sales_order_id']) for link in live_links(s, [row['id'] for row in lists])}
+    states, shipped = live_states(s, lists)
     status = {row['id']: row['status'] for row in lists}
     out = {}
-    for state in line_states(s, lists).values():
+    for state in states.values():
         line = state.line
         if line['item_id'] != item_id or (line['pick_list_id'], line['sales_order_id']) in shipped:
             continue
@@ -858,9 +946,9 @@ def _picked_serials(s, *, exclude_list=None):
     if not lists:
         return {}
     numbers = {row['id']: row['number'] for row in lists}
-    shipped = {(link['pick_list_id'], link['sales_order_id']) for link in live_links(s, list(numbers))}
+    states, shipped = live_states(s, lists)
     out = {}
-    for state in line_states(s, lists).values():
+    for state in states.values():
         if (state.line['pick_list_id'], state.line['sales_order_id']) in shipped:
             continue
         for chunk in state.chunks:
@@ -1078,7 +1166,7 @@ def show_output(s, current):
     out = output(s, current)
     nexts = []
     if current['status'] != 'cancelled':
-        shipped = {order.sales_order_id for order in out.orders if order.shipments}
+        shipped = {order for _, order in live_states(s, [current])[1]}
         waiting = [order for order in out.orders if order.sales_order_id not in shipped]
         if current['status'] == 'open':
             nexts.append(f'pick-list enter {current["number"]}')
@@ -1142,10 +1230,11 @@ def shipping_plan(s, list_selector, order_selector, site_selector):
     current = resolve(s, list_selector)
     if current['status'] == 'cancelled':
         raise _invalid('pick_list', f'pick list {current["number"]} is cancelled')
-    states = line_states(s, [current])
+    states, closed = live_states(s, [current])
     order_ids = list(dict.fromkeys(st.line['sales_order_id'] for st in sorted(states.values(),
                                                                                 key=lambda st: st.line['position'])))
-    links = {link['sales_order_id']: link['number'] for link in live_links(s, [current['id']])}
+    links = {link['sales_order_id']: link['number'] for link in live_links(s, [current['id']])
+             if (current['id'], link['sales_order_id']) in closed}
     if order_selector is not None:
         from bookflow.company import work
         order = work.resolve(s, order_selector, 'sales_order')
@@ -1189,13 +1278,14 @@ def shipping_plan(s, list_selector, order_selector, site_selector):
     return current, order_id, list(parts.values())
 
 
-def link_rows(s, current, shipment_id, order_id, provenance):
-    """The rows a shipment from the list writes: its link, and ``done`` when every order has shipped from it."""
+def link_rows(s, current, shipment_id, order_id, provenance, *, closes=True):
+    """The rows a shipment from the list writes: its link, and ``done`` when every order has shipped from it.
+    ``closes``: false for a shipment of part of what was picked, which leaves the order on the list."""
     rows = [('pick_list_shipments', 'pick_list_shipment', 'id', [dict(
         id=new_id(), pick_list_id=current['id'], shipment_id=shipment_id, sales_order_id=order_id, **provenance)])]
-    if current['status'] == 'open':
+    if current['status'] == 'open' and closes:
         order_ids = {line['sales_order_id'] for line in _lines(s, [current['id']])}
-        shipped = {link['sales_order_id'] for link in live_links(s, [current['id']])} | {order_id}
+        shipped = {order for _, order in live_states(s, [current])[1]} | {order_id}
         if order_ids <= shipped:
             rows.append(('pick_list_revisions', 'pick_list_revision', 'id', [dict(
                 id=new_id(), pick_list_id=current['id'], revision_number=current['revision_number'] + 1,
@@ -1216,9 +1306,9 @@ def picked_in_place(s, site_id, items=None, bin_ids=None):
         return []
     from bookflow.company import bins
     numbers = {row['id']: row['number'] for row in lists}
-    shipped = {(link['pick_list_id'], link['sales_order_id']) for link in live_links(s, list(numbers))}
+    states, shipped = live_states(s, lists)
     totals = {}
-    for state in line_states(s, lists).values():
+    for state in states.values():
         line = state.line
         if (line['pick_list_id'], line['sales_order_id']) in shipped:
             continue
