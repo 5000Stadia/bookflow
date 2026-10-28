@@ -89,3 +89,5 @@ Database: `company`.
 | `cycle_class_id` | VARCHAR(26) | yes | — | — | ix_items_cycle_class_id | cycle_classes.id | Cycle-count class of the item; null when it is never due for a cycle count. |
 | `unit_weight_microunits` | BIGINT | yes | — | — | — | — | Weight of one base unit in micro-units of the company's weight unit, for landed cost by weight; null when not set. |
 | `unit_volume_microunits` | BIGINT | yes | — | — | — | — | Volume of one base unit in micro-units of the company's volume unit, for landed cost by volume; null when not set. |
+| `picture_attachment_id` | VARCHAR(26) | yes | — | — | ix_items_picture_attachment_id | attachments.id | The item's chosen picture: an image attachment linked to the item; null shows its newest linked image. |
+| `picture_thumbnail_attachment_id` | VARCHAR(26) | yes | — | — | ix_items_picture_thumbnail_attachment_id | attachments.id | A small copy of the chosen picture, linked to the item; null when none was made. |

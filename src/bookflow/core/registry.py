@@ -360,6 +360,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.bank_feed_cmds": ["bank-feed", "bank-line"],
     "bookflow.commands.fulfillment_cmds": ["report"],
     "bookflow.commands.item_convert_cmds": ["item"],
+    "bookflow.commands.item_picture_cmds": ["item picture", "item"],
     "bookflow.commands.prepayment_cmds": ["prepayment", "report"],
     "bookflow.commands.rate_cmds": ["rate"],
     "bookflow.commands.activity_cmds": ["activity"],

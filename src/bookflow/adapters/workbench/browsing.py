@@ -87,7 +87,11 @@ def page(request, company_id, noun, definition, verbs, meta, run, render):
     list_state = Layout.state(query, opened, quiet=('query', 'sort', 'direction', 'columns', 'limit', 'metadata_active_only'))
     # On a phone the Filters button counts what narrows the list: criteria and inactive records.
     list_state['filters'] = len(criteria) + (1 if raw['include_inactive'] else 0)
+    # R114: an item list gains a picture column when any item on the page has a picture.
+    from bookflow.adapters.workbench.item_picture_pages import thumbs
+    item_thumbs = thumbs(run, company_id, [row['id'] for row in result['items']]) if noun == 'item' else {}
     return render('master_list.html', request, company_id=company_id, noun=noun, meta=meta, verbs=verbs,
+        item_thumbs=item_thumbs,
         list_state=list_state, sorts=definition.sorts, default_columns=defaults,
         layout=Layout.plan(noun, [item['key'] for item in selected], [row['values'] for row in result['items']],
                            name=definition.display_field, kinds={item['key']: item['kind'] for item in selected}, defaults=defaults,
