@@ -408,9 +408,23 @@ def test_a_person_is_never_asked_for_a_capability_and_an_actorless_caller_is_ref
     assert refused.value.details["reason"] == "people_only"
 
 
+def test_demo_reset_never_runs_while_the_demo_organization_holds_a_real_company(root):
+    c_ = bookflow.connect(data_root=str(root))
+    demo_org = c_.company.list()["items"][0]["organization_id"]
+    c_.run("company new", {"display_name": "Inside Co", "legal_name": "Inside Co LLC",
+                           "home_currency": "USD", "organization": demo_org})
+    for body in ({}, {"force": str(root)}):  # force does not override it, even for an installation administrator
+        with pytest.raises(BookflowError) as held:
+            c_.run("demo reset", body, dry_run=True)
+        assert held.value.details["reason"] == "real_company_in_demo_organization"
+        assert held.value.details["real_companies"] == ["Inside Co"]
+        assert str(root) not in held.value.message
+    assert "Inside Co" in {x["display_name"] for x in c_.company.list()["items"]}
+
+
 def test_demo_reset_refuses_a_root_holding_real_books_unless_force_names_it(root):
     c_ = bookflow.connect(data_root=str(root))
-    organization = c_.company.list()["items"][0]["organization_id"]
+    organization = c_.run("organization new", {"name": "Roofing Org"})["organization_id"]
     c_.run("company new", {"display_name": "Real Roofing", "legal_name": "Real Roofing LLC",
                            "home_currency": "USD", "organization": organization})
     with pytest.raises(BookflowError) as refused:
@@ -418,7 +432,7 @@ def test_demo_reset_refuses_a_root_holding_real_books_unless_force_names_it(root
     assert refused.value.code == "E_PERMISSION"
     assert refused.value.details["reason"] == "real_company_present"
     assert refused.value.details["real_companies"] == ["Real Roofing"]
-    assert "force" in str(refused.value)
+    assert "force" in str(refused.value) and str(root) not in refused.value.message
     with pytest.raises(BookflowError) as wrong:
         c_.run("demo reset", {"force": str(root / "elsewhere")})
     assert wrong.value.details["reason"] == "real_company_present"
