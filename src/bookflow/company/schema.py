@@ -1300,3 +1300,6 @@ items.append_column(_column("picture_attachment_id", sa.String(26), "The item's 
 items.append_column(_column("picture_thumbnail_attachment_id", sa.String(26), "A small copy of the chosen picture, linked to the item; null when none was made.", sa.ForeignKey("attachments.id", ondelete="RESTRICT"), nullable=True))
 sa.Index("ix_items_picture_attachment_id", items.c.picture_attachment_id)
 sa.Index("ix_items_picture_thumbnail_attachment_id", items.c.picture_thumbnail_attachment_id)
+# Grid edits (co0116, R107 increment 6): a selection's diff, applied as one reversible batch.
+from bookflow.company import bulk_edit_schema as _bulk_edit_schema
+globals().update(_bulk_edit_schema.define_tables(metadata, _column, _table))
