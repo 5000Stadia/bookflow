@@ -74,7 +74,8 @@ class ServeInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     bind: str = Field(DEFAULT_BIND, description="Address to listen on, host:port", max_length=128)
     allow_network: bool = Field(False, description="Allow a bind address outside loopback")
-    secure_cookies: bool | None = Field(None, description="Set Secure on the session cookie; defaults on for non-loopback binds")
+    secure_cookies: bool | None = Field(None, description="Set Secure on the session cookie; defaults on for non-loopback binds and for an https public origin")
+    public_origin: str | None = Field(None, max_length=256, description="The https://host[:port] a TLS proxy in front of this host serves (for example what `colony serve` prints); links, the printed address and Origin checks use it, and the host then binds 127.0.0.1 only. Defaults to [host] public_origin in config.toml")
     background: bool = Field(False, description="Start the host as a background process, wait until it answers, print its address and return; its log is host.log in the data root")
 
 
@@ -85,6 +86,7 @@ class ServeOutput(BaseModel):
     socket: str | None
     pid: int
     secure_cookies: bool
+    public_origin: str | None = Field(None, description="The configured public origin, when the host sits behind a TLS proxy")
     companies_migrated: list[str]
     companies_failed: list[dict[str, str]]
     warnings: list[str] = Field(default_factory=list)
@@ -139,9 +141,11 @@ def is_loopback(host: str) -> bool:
         return False
 
 
-def cookie_security(host: str, explicit: bool | None) -> bool:
-    """Resolve the tri-state cookie option without losing an explicit false."""
-    return not is_loopback(host) if explicit is None else explicit
+def cookie_security(host: str, explicit: bool | None, public_origin: str | None = None) -> bool:
+    """Resolve the tri-state cookie option without losing an explicit false; an https public origin means Secure."""
+    if explicit is not None:
+        return explicit
+    return not is_loopback(host) or bool(public_origin and public_origin.startswith("https://"))
 
 
 def _serve_actor(s: Session) -> dict[str, Any]:
@@ -170,16 +174,19 @@ def _serve_actor(s: Session) -> dict[str, Any]:
 
 def run_serve(cmd, inp: ServeInput, ctx: Context, s: Session) -> dict[str, Any]:
     """The bootstrap path for `serve` (dispatch._run_bootstrap): no lock path, no plan/apply."""
+    from bookflow.core import public_origin as po
     host_name, port = parse_bind(inp.bind)
+    origin = po.resolve(s.data_root, inp.public_origin)
+    po.require_proxy_bind(origin, host_name, inp.bind)
     if not inp.allow_network and not is_loopback(host_name):
         raise BookflowError("E_NETWORK_NOT_ALLOWED", details={"bind": inp.bind})
     _serve_actor(s)
-    secure = cookie_security(host_name, inp.secure_cookies)
+    secure = cookie_security(host_name, inp.secure_cookies, origin)
     if inp.background:
         started = start_in_background(s.data_root, inp.bind, allow_network=inp.allow_network,
-                                      secure_cookies=inp.secure_cookies)
-        return ServeOutput(bind=inp.bind, url=started["url"], log=started["log"], socket=None, pid=started["pid"],
-                           secure_cookies=secure, companies_migrated=[], companies_failed=[],
+                                      secure_cookies=inp.secure_cookies, public_origin=origin)
+        return ServeOutput(bind=inp.bind, url=po.base_url(origin, started["url"]), log=started["log"], socket=None,
+                           pid=started["pid"], secure_cookies=secure, public_origin=origin, companies_migrated=[], companies_failed=[],
                            warnings=[] if started["started"] else ["a host was already answering at this address"]).model_dump(mode="json")
     import socket as _socket
     import uvicorn
@@ -191,7 +198,7 @@ def run_serve(cmd, inp: ServeInput, ctx: Context, s: Session) -> dict[str, Any]:
         # publication remains delayed until both listeners are ready.
         handle = start_serving(
             s.data_root, client_version(), bind=inp.bind,
-            secure_cookies=secure, publish_descriptor=False,
+            secure_cookies=secure, publish_descriptor=False, public_origin=origin,
         )
         tcp = _socket.socket(_socket.AF_INET6 if ":" in host_name else _socket.AF_INET, _socket.SOCK_STREAM)
         tcp.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
@@ -207,7 +214,7 @@ def run_serve(cmd, inp: ServeInput, ctx: Context, s: Session) -> dict[str, Any]:
                     "errno": errno.errorcode.get(e.errno, str(e.errno)),
                 },
             )
-        handle.host.write_descriptor(inp.bind, str(handle.socket))
+        handle.host.write_descriptor(inp.bind, str(handle.socket), public_origin=origin)
         log.warning("bookflow host listening on %s (socket %s)", inp.bind, handle.socket)
         from bookflow.adapters.http.admission import AdmissionProtocol
         server = uvicorn.Server(uvicorn.Config(handle.app, http=AdmissionProtocol, loop="asyncio",
@@ -230,7 +237,7 @@ def run_serve(cmd, inp: ServeInput, ctx: Context, s: Session) -> dict[str, Any]:
             for signum in (signal.SIGINT, signal.SIGTERM):
                 previous[signum] = signal.getsignal(signum)
                 signal.signal(signum, request_shutdown)
-        announce_when_ready(server, inp.bind)
+        announce_when_ready(server, inp.bind, origin)
         try:
             server.run(sockets=[tcp])
         finally:
@@ -244,7 +251,8 @@ def run_serve(cmd, inp: ServeInput, ctx: Context, s: Session) -> dict[str, Any]:
                 tcp.close()
             except OSError:  # pragma: no cover
                 pass
-    out = ServeOutput(bind=inp.bind, url=host_url(inp.bind), socket=str(handle.socket), pid=os.getpid(), secure_cookies=secure,
+    out = ServeOutput(bind=inp.bind, url=po.base_url(origin, host_url(inp.bind)), socket=str(handle.socket), pid=os.getpid(),
+                      secure_cookies=secure, public_origin=origin,
                       companies_migrated=list(handle.companies_migrated), companies_failed=list(handle.companies_failed))
     return out.model_dump(mode="json")
 
@@ -259,7 +267,7 @@ def host_url(bind: str) -> str:
 READY_PREFIX = "Bookflow is ready at "
 
 
-def announce_when_ready(server, bind: str) -> None:
+def announce_when_ready(server, bind: str, public_origin: str | None = None) -> None:
     """Print one line on stderr once uvicorn accepts requests, so nobody has to poll for it (R182)."""
     import sys
     import threading
@@ -270,7 +278,9 @@ def announce_when_ready(server, bind: str) -> None:
             if server.should_exit:
                 return
             time.sleep(0.02)
-        print(f"{READY_PREFIX}{host_url(bind)} (health check: GET {host_url(bind)}health)", file=sys.stderr, flush=True)
+        # The health check stays on the local address: that is what the proxy and `serve --background` reach.
+        where = f"{public_origin}/ (through its TLS proxy; locally {host_url(bind)})" if public_origin else host_url(bind)
+        print(f"{READY_PREFIX}{where} (health check: GET {host_url(bind)}health)", file=sys.stderr, flush=True)
 
     threading.Thread(target=watch, name="bookflow-ready", daemon=True).start()
 
@@ -300,7 +310,7 @@ def serving_pid(root: Path, bind: str) -> int | None:
 
 
 def start_in_background(root: Path, bind: str, *, allow_network: bool = False, secure_cookies: bool | None = None,
-                        wait_seconds: float = 180.0) -> dict[str, Any]:
+                        public_origin: str | None = None, wait_seconds: float = 180.0) -> dict[str, Any]:
     """Start `serve` detached and wait, inside this call, until it answers; or report the one already answering."""
     import subprocess
     import sys
@@ -317,6 +327,8 @@ def start_in_background(root: Path, bind: str, *, allow_network: bool = False, s
             "--data-root", str(root)]
     if allow_network:
         args.append("--allow-network")
+    if public_origin:
+        args += ["--public-origin", public_origin]
     if secure_cookies is not None:
         args.append("--secure-cookies" if secure_cookies else "--no-secure-cookies")
     fd = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
@@ -371,7 +383,8 @@ class ServeHandle:
 
 
 def start_serving(data_root: Path | str, version: str, *, bind: str = DEFAULT_BIND,
-                  secure_cookies: bool = False, publish_descriptor: bool = True) -> ServeHandle:
+                  secure_cookies: bool = False, publish_descriptor: bool = True,
+                  public_origin: str | None = None) -> ServeHandle:
     """Take the lock, migrate everything, build the app, listen on the socket, and write host.json."""
     from bookflow.adapters.http.app import create_app
     from bookflow.adapters.http.local import LocalListener
@@ -402,12 +415,12 @@ def start_serving(data_root: Path | str, version: str, *, bind: str = DEFAULT_BI
         raise
     try:
         migrated, failed = migrate_everything(host)
-        app = create_app(host, secure_cookies=secure_cookies)
+        app = create_app(host, secure_cookies=secure_cookies, public_origin=public_origin, bind=bind)
         sock = socket_path(root)
         listener = LocalListener(host, sock, make_local_handler(host, version))
         listener.start()
         if publish_descriptor:
-            host.write_descriptor(bind, str(sock))
+            host.write_descriptor(bind, str(sock), public_origin=public_origin)
     except BaseException:
         host.stop()
         raise

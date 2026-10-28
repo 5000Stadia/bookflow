@@ -72,6 +72,20 @@ Setup's result ends with `owner_checklist`, the two things only the owner does, 
 - What you enter shows in the books as yours, made for them.
 - Some things stay theirs: the closing date, who can do what (people, roles, tokens), merging duplicates and backup schedules. You will ask them when one comes up.
 
+## Serving over HTTPS (phones, the camera)
+
+The host speaks plain HTTP on this computer. To reach it from a phone or another machine over HTTPS (browsers allow the camera only on a secure page), put a TLS proxy in front of it and tell Bookflow the address people use:
+
+1. Run a TLS-terminating proxy that forwards to `http://127.0.0.1:PORT`: for example `colony serve PORT`, `tailscale serve`, Caddy or nginx. Note the https address it serves, such as `https://books.example.ts.net:8443`.
+2. Start the host on loopback with that origin: `bookflow serve --background --bind 127.0.0.1:PORT --public-origin https://books.example.ts.net:8443`. To keep it, add it to the data root's `config.toml`:
+
+   ```toml
+   [host]
+   public_origin = "https://books.example.ts.net:8443"
+   ```
+
+With a public origin the host binds `127.0.0.1` only (the proxy is what the network reaches), so it refuses `--bind 0.0.0.0` and `--allow-network`. Every address it hands out uses the origin: the printed address, `setup`'s and `owner-link`'s one-time links, and the `--url` in the MCP configuration `setup` writes (rerun `bookflow setup ... --public-origin https://...` to update it). Session cookies become `Secure`, and a browser write from a page at any other origin is refused. Bookflow never trusts the request's `Host` or `X-Forwarded-*` headers for this; the origin is configuration only. Without a public origin nothing changes, including the LAN mode `--bind 0.0.0.0:PORT --allow-network`.
+
 ## Later
 
 - After a restart of the computer, start the host again with `bookflow serve --background`. It prints the address once it answers.

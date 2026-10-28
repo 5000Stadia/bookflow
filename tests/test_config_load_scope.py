@@ -32,7 +32,7 @@ def test_inside_a_scope_the_first_read_is_kept_and_each_load_gets_its_own_copy(c
         with load_scope():  # a nested scope shares the outer one
             third = Config.load(path)
     assert len(reads) == 1
-    assert second.data == third.data == {"client": {}, "users": {"ann": {"user_id": "U1"}}, "backups": {}}
+    assert second.data == third.data == {"client": {}, "host": {}, "users": {"ann": {"user_id": "U1"}}, "backups": {}}
     assert second.data is not third.data and second.path == path
     Config.load(path)
     assert len(reads) == 2  # the scope ended

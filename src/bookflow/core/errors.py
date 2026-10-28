@@ -131,6 +131,7 @@ COMMAND_CODES: dict[str, str] = {
     "E_CHART_EXISTS": "This company already has an applied chart.",
     "E_LOGIN_FAILED": "Login failed.",
     "E_WORKBENCH_HEADER": "Cookie-authenticated writes need the X-Bookflow-Workbench header.",
+    "E_ORIGIN_REFUSED": "The request came from a page at another origin than this host's; it was not run.",
     "E_VERSION_MISMATCH": "The running host and this client are different Bookflow versions; stop the host or upgrade the client.",
     "E_NETWORK_NOT_ALLOWED": "Binding outside loopback needs --allow-network.",
     "E_DOCS_STALE": "Generated documentation differs from the current command and schema definitions.",

@@ -39,6 +39,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `role` | `--role` | literal["readonly", "standard", "admin"] \| null | no | yes | null | The agent's role in the company: standard for a new agent; given for an existing one, it changes the role |
 | `mcp_config` | `--mcp-config` | string | no | no | ".mcp.json" | MCP client configuration file to write or update (the `bookflow` server entry only); minimum length 1 |
 | `bind` | `--bind` | string | no | no | "127.0.0.1:8765" | Address the host listens on, host:port (loopback); maximum length 128 |
+| `public_origin` | `--public-origin` | string \| null | no | yes | null | The https://host[:port] a TLS proxy in front of the host serves (for example what `colony serve` prints); the links and the MCP configuration use it. Defaults to [host] public_origin in config.toml |
 | `serve` | `--serve` | boolean | no | no | true | Start the host in the background if it is not answering, and wait until it does |
 | `link_minutes` | `--link-minutes` | integer | no | no | 120 | Minutes the owner's one-time password link stays valid; minimum 1; maximum 1440 |
 | `new_token` | `--new-token` | boolean | no | no | false | Issue the agent a new token even though its last one was revoked; a person's decision |

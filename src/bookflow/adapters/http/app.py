@@ -27,7 +27,7 @@ from bookflow.hub import users
 
 log = logging.getLogger("bookflow.http")
 
-STATUS = {"E_UNAUTHENTICATED": 401, "E_LOGIN_FAILED": 401, "E_PERMISSION": 403, "E_WORKBENCH_HEADER": 403,
+STATUS = {"E_UNAUTHENTICATED": 401, "E_LOGIN_FAILED": 401, "E_PERMISSION": 403, "E_WORKBENCH_HEADER": 403, "E_ORIGIN_REFUSED": 403,
           "E_COMPANY_NOT_FOUND": 404, "E_ORGANIZATION_NOT_FOUND": 404, "E_EVENT_NOT_FOUND": 404, "E_DIRECTIVE_NOT_FOUND": 404, "E_RECORD_NOT_FOUND": 404, "E_USER_NOT_FOUND": 404, "E_TOKEN_NOT_FOUND": 404,
           "E_WORK_DEPENDENCY": 409, "E_CONVERSION_KEY_REUSED": 409, "E_VERSION_CONFLICT": 409, "E_AGENT_PRINCIPAL_MISMATCH": 409, "E_PREVIEW_STALE": 409, "E_QUERY_STALE": 409, "E_IDEMPOTENCY_MISMATCH": 409, "E_NAME_TAKEN": 409, "E_DB_BUSY": 409,
           "E_VALIDATION": 422, "E_VALUE_RANGE": 422, "E_LIST_FILTER": 422, "E_INTERNAL": 500, "E_GUARD_REFUSED": 500, "E_PAYMENT_PROFILE_INVALID": 500}
@@ -110,6 +110,60 @@ class CookieRenewalMiddleware:
         await self.app(scope, receive, send_with_cookie)
 
 
+# Identity headers a Tailscale proxy adds (and strips from outside traffic). Bookflow does not authenticate by
+# them (design/https-serving.md); they are dropped at the door so no handler can read or log them by accident.
+DROPPED_HEADERS = frozenset((b"tailscale-user-login", b"tailscale-user-name", b"tailscale-user-profile-pic"))
+SAFE_METHODS = frozenset(("GET", "HEAD", "OPTIONS"))
+
+
+class PublicOriginMiddleware:
+    """The host's origin comes from configuration, never from the request (design/https-serving.md).
+
+    With a public origin set, every request is seen at that scheme and host (so anything Starlette builds from
+    request.url, such as a trailing-slash redirect, points at the proxy and never at the Host header a client
+    sent), and an unsafe request whose Origin (or, lacking one, Referer) names another origin is refused before
+    any handler runs. The host's own loopback address stays accepted for a browser on this computer. Without a
+    public origin the request is passed on as before. Tailscale identity headers are dropped either way.
+    """
+
+    def __init__(self, app, *, public_origin: str | None, bind: str | None):
+        from bookflow.core import public_origin as po
+        self.app = app
+        self.origin = public_origin
+        self.accepted = ({public_origin} | (po.local_origins(bind) if bind else set())) if public_origin else set()
+        if public_origin:
+            parsed = urlsplit(public_origin)
+            self.scheme, self.netloc = parsed.scheme, parsed.netloc.encode("latin-1")
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] not in ("http", "websocket"):
+            await self.app(scope, receive, send)
+            return
+        headers = [(k, v) for k, v in scope.get("headers", []) if k.lower() not in DROPPED_HEADERS]
+        if self.origin:
+            from bookflow.core import public_origin as po
+            found = {k.lower(): v for k, v in headers}
+            if scope.get("method", "GET") not in SAFE_METHODS:
+                claimed = found.get(b"origin")
+                if claimed is not None:
+                    text = claimed.decode("latin-1")
+                    source = None if text == "null" else po.origin_of(text)
+                else:
+                    referer = found.get(b"referer")
+                    text = referer.decode("latin-1") if referer is not None else None
+                    source = po.origin_of(text) if text else None
+                if text is not None and source not in self.accepted:
+                    response = error_response(BookflowError("E_ORIGIN_REFUSED", details={"accepted": self.origin}))
+                    await response(scope, receive, send)
+                    return
+            headers = [(k, v) for k, v in headers if k.lower() != b"host"] + [(b"host", self.netloc)]
+            scope = dict(scope, scheme=self.scheme if scope["type"] == "http" else ("wss" if self.scheme == "https" else "ws"),
+                         headers=headers)
+        else:
+            scope = dict(scope, headers=headers)
+        await self.app(scope, receive, send)
+
+
 def route_name(command_name: str) -> str:
     return command_name.replace(" ", ".")
 
@@ -140,12 +194,17 @@ class Credential:
             raise BookflowError("E_UNAUTHENTICATED", details={"reason": "credential changed"})
 
 
-def create_app(host, *, secure_cookies: bool) -> FastAPI:
+def create_app(host, *, secure_cookies: bool, public_origin: str | None = None, bind: str | None = None) -> FastAPI:
+    """`public_origin` is the normalized https://host[:port] a TLS proxy serves (core.public_origin); `bind` is
+    the host's own address, whose loopback origin stays accepted beside it."""
     registry.load_all()
     app = FastAPI(title="Bookflow", version=host.version, docs_url=None, redoc_url=None, openapi_url=None)
+    app.state.public_origin = public_origin
     app.add_middleware(CookieRenewalMiddleware, secure_cookies=secure_cookies)
     from bookflow.adapters.http.publication import PublicationMiddleware
     app.add_middleware(PublicationMiddleware, host=host)
+    # Added last, so it runs first: the origin check refuses before publication or cookie handling see a request.
+    app.add_middleware(PublicOriginMiddleware, public_origin=public_origin, bind=bind)
 
     # ------------------------------------------------------------ credentials
     def credential(request: Request, *, renew_cookie: bool = True, publication: bool = True) -> Credential:
@@ -482,6 +541,12 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
     @app.get("/health")
     async def health():
         return {"ok": True}
+
+    @app.get("/secure-context")
+    async def secure_context():
+        """Whether people reach this host over https through a configured public origin (R190: the camera needs a
+        secure page). The page itself knows window.isSecureContext; static/secure-context.js combines the two."""
+        return {"public_origin": public_origin, "https": bool(public_origin and public_origin.startswith("https://"))}
 
     from bookflow.adapters.mcp.bridge import mount_mcp
     mount_mcp(app, host, credential, make_context)
