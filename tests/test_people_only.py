@@ -10,7 +10,7 @@ import bookflow
 from bookflow import BookflowError
 from bookflow.core import registry
 from bookflow.hub import permission_human_admin_catalog as layer, people_only, permission_runtime as runtime
-from bookflow.hub import permission_bank_line_catalog as tip_layer
+from bookflow.hub import permission_item_picture_catalog as tip_layer
 from tests.conftest import hosted_call, make_agent
 from tests.test_row3_host import hosted  # noqa: F401 - fixture
 
@@ -69,6 +69,7 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # bank-feed-reverse-v1 adds none: a reversal deletes created entries through each family's own delete grant.
     # import-documents-v1 adds none: each document runs its own command under its own capability.
     # bank-line-v1 adds none: an add or transfer runs the family's own post command as the caller.
+    # item-picture-v1 adds none: a picture is an item edit and its file an ordinary attachment.
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {
         'journal restore', 'invoice restore', 'customer merge', 'customer unmerge', 'vendor merge', 'vendor unmerge',

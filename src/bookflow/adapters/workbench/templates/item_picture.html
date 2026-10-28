@@ -1,0 +1,18 @@
+{# The item picture (R114 increment 1): beside the item's name; the htmx target of its own forms. #}
+{% set p = item_picture %}{% set shown = p.picture %}
+<section class="item-picture" id="item-picture" aria-label="Picture" data-item-picture>
+<div class="item-picture-frame">{% if shown %}<img src="{{ shown.url }}" alt="Picture of {{ p.name }}" data-item-picture-image onerror="this.hidden=true">{% else %}<span class="muted">No picture</span>{% endif %}</div>
+<div class="item-picture-side">
+{% if shown and not shown.chosen %}<p class="muted small">The newest image attached to this item.</p>{% endif %}
+{% if p.can_edit %}<form hx-post="/c/{{ company_id }}/item-picture/{{ p.item }}" hx-encoding="multipart/form-data" hx-target="#item-picture" hx-swap="outerHTML" hx-trigger="picture-ready" data-item-picture-form>
+<input type="hidden" name="expected_version" value="{{ p.version }}">
+<label class="button-like">Take photo<input type="file" accept="image/*" capture="environment" data-picture-choose class="visually-hidden"></label>
+<label class="button-like secondary">Choose picture<input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" data-picture-choose class="visually-hidden"></label>
+<input type="file" name="picture" hidden data-picture-file><input type="file" name="thumbnail" hidden data-picture-thumbnail>
+</form>
+{% if shown %}<form hx-post="/c/{{ company_id }}/item-picture/{{ p.item }}/clear" hx-target="#item-picture" hx-swap="outerHTML" hx-confirm="Remove this picture from the item? It stays in the item's history." class="inline"><input type="hidden" name="expected_version" value="{{ p.version }}"><button type="submit" class="secondary" data-picture-remove>Remove</button></form>{% endif %}
+{% endif %}
+<p role="status" data-picture-status>{{ picture_message or '' }}</p>
+{% if picture_error %}<p role="alert" class="error" data-picture-error>{{ picture_error.message }}</p>{% endif %}
+</div>
+</section>

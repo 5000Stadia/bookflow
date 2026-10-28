@@ -29,6 +29,7 @@ class TransferResource:
     store: Path
     info: BodyInfo | None = None
     staged: StagedAttachment | None = None
+    head: bytes = b""  # the body's first bytes, kept for a command that checks what the body is (an item picture)
 
 
 def prepare(cmd, raw, ctx, s, *, selector=None, source="option", dry_run=False):
@@ -88,6 +89,8 @@ class InputBody:
             raise BookflowError("E_VALUE_RANGE", details={"field": "body", "limit": self.limit})
         if self.stage is not None:
             self.stage.write(chunk)
+        if len(self.resource.head) < 64:
+            self.resource.head += chunk[:64 - len(self.resource.head)]
         self.digest.update(chunk)
         self.size += len(chunk)
 

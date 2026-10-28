@@ -104,6 +104,7 @@ ACCEPTED = {
     'bank-feed-reverse-v1': (828, 'df70eed353fe2243e74c722b39a0e7a9b12f98a2e3bd1a9c03bfc382325328c6'),
     'import-documents-v1': (828, '6418e208309e3f01e38b4749e62895dad640e66deada78c513ed3bf7127cf13a'),
     'bank-line-v1': (834, 'bd11005cfa5a7630090a663bf20f7dd2bd8d7c4ee4a764cd7295a40e1f4f61e9'),
+    'item-picture-v1': (837, 'cbe8d181e0a02bd759b39537f5afe6e2ea022e1016b15e4c0f5356717c873bad'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -248,6 +249,7 @@ CHAIN_ADDITIONS = {
     'import-documents-v1': set(),
     'bank-line-v1': {'bank-line add', 'bank-line ignore', 'bank-line match', 'bank-line transfer', 'bank-line undo',
                      'bank-line unmatch'},
+    'item-picture-v1': {'item picture clear', 'item picture set', 'item picture use'},
 }
 
 _ANCESTOR_EDIT = """

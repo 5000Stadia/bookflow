@@ -116,3 +116,16 @@ input[data-date] { min-width:0; max-width:100%; }
 .scan-field .scan-hint { color: var(--muted, #555); }
 .scan-field .scan-status { margin: .25rem 0 0; min-height: 1.2em; overflow-wrap: anywhere; }
 .scan-field .scan-status[data-kind="unknown"], .scan-field .scan-status[data-kind="error"] { color: var(--warn, #8a4b00); }
+/* The item picture (R114 increment 1): beside the item's name, and small in lists and on the pick and pack lines. */
+.item-heading{display:flex;flex-wrap:wrap;align-items:flex-start;gap:1rem 1.5rem}
+.item-heading .record-heading{flex:1 1 16rem;min-width:0;overflow-wrap:anywhere}
+.item-picture{display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-start;max-width:100%}
+.item-picture-frame{width:10rem;height:10rem;border:1px solid #ccc;border-radius:6px;display:flex;align-items:center;justify-content:center;background:#f6f6f6;overflow:hidden}
+.item-picture-frame img{max-width:100%;max-height:100%;object-fit:contain}
+.item-picture-side{flex:1 1 10rem;min-width:0}
+.item-picture-side form{margin:0 0 .5rem}
+.item-picture .button-like{display:inline-block;font:inherit;padding:.35rem .8rem;margin:0 .5rem .5rem 0;border:1px solid #767676;border-radius:3px;background:#efefef;cursor:pointer}
+.item-picture .button-like:focus-within{outline:2px solid #1a5fb4;outline-offset:2px}
+.visually-hidden{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+img.item-thumb{width:2.5rem;height:2.5rem;object-fit:cover;border-radius:4px;vertical-align:middle;margin-right:.4rem;background:#f0f0f0}
+@media (max-width:600px){.item-picture-frame{width:100%;max-width:20rem;height:14rem}}

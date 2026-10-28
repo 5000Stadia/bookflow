@@ -645,7 +645,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js", "timekeeping.css", "scan.js", "counts.css", "picks.css", "import.css", "import.js")
+        for name in ("workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js", "timekeeping.css", "scan.js", "counts.css", "picks.css", "import.css", "import.js", "item-picture.js")
     }
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
@@ -808,6 +808,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     ImportPages.mount(app, render=render, run=run, credential=credential, page_error=page_error, host=host,
                       make_context=make_context,
                       role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
+    # R114 increment 1: the item picture -- served content-addressed, set and removed on the item page.
+    from bookflow.adapters.workbench import item_picture_pages as ItemPicturePages
+    item_picture_context = ItemPicturePages.mount(app, render=render, run=run, credential=credential,
+        page_error=page_error, host=host, make_context=make_context,
+        role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R181 increment 4: the pack screen and the packing slip (the slip shows whatever the switch says).
     from bookflow.adapters.workbench import shipment_pack_pages as ShipmentPackPages
     ShipmentPackPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
@@ -1302,6 +1307,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         target_definition = _noun_meta(target).get("definition")
         identifier = target_definition.identifier if target_definition is not None else "id"
         options = []
+        # R114: an item's picture rides on its option (a datalist cannot draw it; a richer picker reads it).
+        pictures = (ItemPicturePages.thumbs(lambda name, raw, company: run(request, name, raw, company), company_id,
+                                            [row.get("id") for row in output.get("items", [])[:25]])
+                    if target == "item" else {})
         for row in output.get("items", [])[:25]:
             stable_id = row.get(identifier) or row.get("id")
             if stable_id is None or (not include_inactive and not row.get("active", True)):
@@ -1314,7 +1323,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 f'<option value="{escape(str(stable_id), quote=True)}" '
                 f'label="{escape(label, quote=True)}" '
                 f'data-version="{escape(str(row.get("version", "")), quote=True)}" '
-                f'data-link-version="{escape(str(relationship_version), quote=True)}"></option>'
+                f'data-link-version="{escape(str(relationship_version), quote=True)}"'
+                + (f' data-picture="{escape(pictures[row["id"]], quote=True)}"' if row.get("id") in pictures else '')
+                + '></option>'
             )
         return HTMLResponse("".join(options), headers={"Cache-Control": "no-store"})
 
@@ -1838,6 +1849,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 if err.code == 'E_QUERY_STALE':
                     return render('error.html', request, error=err.to_dict(), restart_url=request.url.path)
                 return page_error(request, err)
+        item_picture = None
+        if company_id and command_noun == 'item' and not out.get('deletion'):
+            item_picture = item_picture_context(out, role_view or {}, cred)
         item_numbers = None
         if company_id and command_noun == 'item' and (out.get('tracking') or 'none') != 'none':
             # A tracked item's lots or serial numbers, and its unassigned units, by site (R104 increment 4).
@@ -1858,7 +1872,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             from bookflow.adapters.workbench import landed_cost_pages
             landed = landed_cost_pages.record_panel(request, run, company_id, out, record_id)
         return render("record.html", request, company_id=company_id, noun=noun, record_id=record_id, record=visible_record, record_title=record_title, record_noun_label=record_noun_label, audit=audit, meta=meta, verbs=verbs,
-                      item_numbers=item_numbers, landed=landed,
+                      item_numbers=item_numbers, landed=landed, item_picture=item_picture,
                       details_url=_details_url(request, company_id, noun, record_id),
                       source_report_watermark=_source_watermark(request),
                       master_detail=master_detail,
