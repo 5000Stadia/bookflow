@@ -182,3 +182,11 @@ itself the confirmation: the principal named the act, so the agent posts and sen
 only when it would do a damaging act the principal did not plainly name: it is inferring the act ("tidy up the
 customer list" read as deleting 40 customers), the act reaches wider than what was said, or the request is ambiguous
 about which records. The confirm-first mark tells the agent which acts need that care; it is never a prompt by itself.
+
+Kabe, sharpened: "We DON'T want over-paranoia on straightforward tasks. Pulling off a one-time change import to all
+customers which impacts how we work forever deserves a double check our details are exactly as we want to live with."
+So there are two cases. Straightforward work, even a send or a void the principal named, just runs. A broad change
+that sets how the business works from then on (new terms or price levels on every customer, a chart restructure, a
+bulk import that rewrites records) gets one double-check even when named: the agent shows the dry run's exact details
+("212 customers, terms Net 30 to Net 15, from today") and runs it on the principal's yes. One check, of the details,
+never a repeated "are you sure".
