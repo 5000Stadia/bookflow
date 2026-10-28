@@ -991,6 +991,18 @@ stable record IDs). Combine it with `projection: "reference"` and
 collections. It intersects every other criterion and remains subject to ordinary
 company authority and cursor checks. Omitted `ids` preserves ordinary browsing.
 
+## Importing invoices, bills or payments from a file
+
+"Load these 40 open invoices from the spreadsheet" is `import check --kind invoice` on the file (every
+problem at once, by column and row), then `import preview`, then `import run` until done. Rows sharing an
+invoice number are one invoice, its lines in file order; a payment file is applied to invoices by their
+numbers. An unknown customer is named, never made, unless the owner asked for new customers to be created
+(`create_missing`, and never one that looks like an existing name). A plainly named import just runs. An
+import that sets how the business works from then on (a saved mapping next month's file will use, customers
+or lists it creates, an opening) gets one check of its exact details, from the preview, with the owner
+before `import run`. `import reverse --dry-run`, then `import reverse`, undoes a whole run; it is refused,
+naming the payment, while a payment is applied to one of its invoices.
+
 ## Reading a bank statement from a file
 
 When the owner says the statement is in your input folder, attach the file once and import it by its
