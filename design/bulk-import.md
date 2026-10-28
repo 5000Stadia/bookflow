@@ -143,6 +143,23 @@ NFC, trim, case-fold and collapsed spaces.
 
 ### Outcomes, atomic or not
 
+> **A quick check first (Kabe, 2026-10-27):** "So we're not wasting the user's time or crunching invalid data, can we do
+> a quick validation pass on the data which is lightweight and simple and surface to the user the problematic elements
+> of the data that are not valid?" Before any preview or run, `import check` reads the file once and checks every cell
+> against its field without running a command:
+>
+> - Is the mapping complete? Every required field needs a column.
+> - Does each cell fit its field's type? Money, quantity, date, number, yes/no and choice lists are checked against
+>   the field's length and pattern.
+> - Does every reference exist? Names, numbers and codes are looked up in one query per list, held in memory.
+> - Are row keys repeated within the file?
+>
+> It returns every problem at once, grouped by column, with row numbers and the exact cell text. Example: "Amount,
+> rows 14, 92: '$599.♎56' is not an amount". `import preview` and `import run` start with the same check and stop
+> there if anything is wrong, so no command is dry-run on data that cannot land. The check is measured on 10,000 rows;
+> its target is a few seconds, against the preview's minutes. It changes nothing and needs only the kind's read
+> permission.
+
 > **Decided by Kabe, 2026-10-27, superseding the partial-success default below:** "I think all or nothing seems like
 > the move really. Let's say the name 'Johnson, Beck ♎️' is invalid. Well I'm fine there if we drop the odd character,
 > not fine if we don't import the whole name. A dollar value of $599.♎️56 however indicates the data is junk and we
