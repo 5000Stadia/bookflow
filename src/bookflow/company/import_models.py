@@ -141,6 +141,7 @@ class ImportCheckOutput(BaseModel):
     mapping: dict[str, Any] = Field(description='Columns to input paths, key, formats, value maps.')
     decisions: list[dict[str, Any]] = Field(description='What must be decided before a preview can run.')
     notes: list[str] = Field(description='Things worth knowing: a guessed encoding, rows keyed by content.')
+    samples: dict[str, list[str]] = Field({}, description='Up to three values of each column, as the file has them.')
     next: str | None = Field(description='What to do next.')
 
 

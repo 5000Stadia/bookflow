@@ -224,6 +224,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `mapping` | object[string, any] | yes | no | — | Columns to input paths, key, formats, value maps. |
 | `decisions` | array[object[string, any]] | yes | no | — | What must be decided before a preview can run. |
 | `notes` | array[string] | yes | no | — | Things worth knowing: a guessed encoding, rows keyed by content. |
+| `samples` | object[string, array[string]] | no | no | {} | Up to three values of each column, as the file has them. |
 | `next` | string \| null | yes | yes | — | What to do next. |
 
 Example JSON output:
@@ -244,6 +245,7 @@ Example JSON output:
   "problems_total": 1,
   "rows": 1,
   "rows_with_problems": 1,
+  "samples": {},
   "source": "value",
   "summary": [],
   "to_decide": [],

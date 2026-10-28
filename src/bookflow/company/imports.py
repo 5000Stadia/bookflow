@@ -1080,12 +1080,25 @@ def _prepare(s, ctx, inp) -> dict:
             'check': report, 'matched': matched, 'notes': notes, 'attachment_name': attachment_name}
 
 
+def samples(table: tabular.Table, count: int = 3) -> dict[str, list[str]]:
+    """Up to ``count`` non-blank values of each column, as the file has them (cut at 60 characters)."""
+    out: dict[str, list[str]] = {h: [] for h in table.headers}
+    for _, cells in table.rows:
+        for header, cell in zip(table.headers, cells):
+            values = out[header]
+            if len(values) < count and cell.strip() and cell not in values:
+                values.append(cell if len(cell) <= 60 else cell[:59] + '…')
+        if all(len(v) >= count for v in out.values()):
+            break
+    return out
+
+
 def check(s, ctx, inp) -> dict:
     p = _prepare(s, ctx, inp)
     report = p['check']
     return {**report, 'kind': p['kind'].name, 'source': p['source'], 'matched': p['matched'],
             'mapping': p['mapping'].as_dict(p['table'].headers), 'decisions': p['mapping'].decisions,
-            'notes': p['notes'],
+            'notes': p['notes'], 'samples': samples(p['table']),
             'next': ('import preview with the same file' + (' and mapping' if p['matched'] else '')) if report['ok']
             else ('decide what `to_decide` lists (preview, then `import decide`, or pass the format)'
                   if report['clean'] else None)}
