@@ -178,6 +178,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `freight.item_id` | string | yes | no | — | — |
 | `freight.item_name` | string \| null | no | yes | null | — |
 | `freight.billed_by` | string \| null | no | yes | null | Invoice number that billed it; null: not yet billed. |
+| `freight.to_bill` | boolean | no | no | true | Still to bill: a later invoice of its units carries it. |
 | `invoice` | object \| null | no | yes | null | The invoice `invoice: true` made. |
 | `invoice.id` | string | yes | no | — | — |
 | `invoice.number` | string \| null | no | yes | null | — |
@@ -468,6 +469,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `freight.item_id` | string | yes | no | — | — |
 | `freight.item_name` | string \| null | no | yes | null | — |
 | `freight.billed_by` | string \| null | no | yes | null | Invoice number that billed it; null: not yet billed. |
+| `freight.to_bill` | boolean | no | no | true | Still to bill: a later invoice of its units carries it. |
 | `invoice` | object \| null | no | yes | null | The invoice `invoice: true` made. |
 | `invoice.id` | string | yes | no | — | — |
 | `invoice.number` | string \| null | no | yes | null | — |
@@ -2192,6 +2194,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `freight.item_id` | string | yes | no | — | — |
 | `freight.item_name` | string \| null | no | yes | null | — |
 | `freight.billed_by` | string \| null | no | yes | null | Invoice number that billed it; null: not yet billed. |
+| `freight.to_bill` | boolean | no | no | true | Still to bill: a later invoice of its units carries it. |
 | `invoice` | object \| null | no | yes | null | The invoice `invoice: true` made. |
 | `invoice.id` | string | yes | no | — | — |
 | `invoice.number` | string \| null | no | yes | null | — |
@@ -2485,6 +2488,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `freight.item_id` | string | yes | no | — | — |
 | `freight.item_name` | string \| null | no | yes | null | — |
 | `freight.billed_by` | string \| null | no | yes | null | Invoice number that billed it; null: not yet billed. |
+| `freight.to_bill` | boolean | no | no | true | Still to bill: a later invoice of its units carries it. |
 | `invoice` | object \| null | no | yes | null | The invoice `invoice: true` made. |
 | `invoice.id` | string | yes | no | — | — |
 | `invoice.number` | string \| null | no | yes | null | — |
@@ -3061,6 +3065,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `freight.item_id` | string | yes | no | — | — |
 | `freight.item_name` | string \| null | no | yes | null | — |
 | `freight.billed_by` | string \| null | no | yes | null | Invoice number that billed it; null: not yet billed. |
+| `freight.to_bill` | boolean | no | no | true | Still to bill: a later invoice of its units carries it. |
 | `invoice` | object \| null | no | yes | null | The invoice `invoice: true` made. |
 | `invoice.id` | string | yes | no | — | — |
 | `invoice.number` | string \| null | no | yes | null | — |
@@ -3336,6 +3341,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `freight.item_id` | string | yes | no | — | — |
 | `freight.item_name` | string \| null | no | yes | null | — |
 | `freight.billed_by` | string \| null | no | yes | null | Invoice number that billed it; null: not yet billed. |
+| `freight.to_bill` | boolean | no | no | true | Still to bill: a later invoice of its units carries it. |
 | `invoice` | object \| null | no | yes | null | The invoice `invoice: true` made. |
 | `invoice.id` | string | yes | no | — | — |
 | `invoice.number` | string \| null | no | yes | null | — |
@@ -3605,6 +3611,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `freight.item_id` | string | yes | no | — | — |
 | `freight.item_name` | string \| null | no | yes | null | — |
 | `freight.billed_by` | string \| null | no | yes | null | Invoice number that billed it; null: not yet billed. |
+| `freight.to_bill` | boolean | no | no | true | Still to bill: a later invoice of its units carries it. |
 | `invoice` | object \| null | no | yes | null | The invoice `invoice: true` made. |
 | `invoice.id` | string | yes | no | — | — |
 | `invoice.number` | string \| null | no | yes | null | — |

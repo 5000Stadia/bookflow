@@ -255,11 +255,13 @@ class CompanyUpdateInput(BaseModel):
     overdue_notice_minimum: str | None = Field(None, description="Overdue notices: the least overdue balance that earns a notice, in the home currency (e.g. 25.00); null for any amount.")
     overdue_notice_template: Literal["statement", "letter"] | None = Field(None, description="Overdue notices: what each notice is, the customer statement or a short collection letter listing the overdue invoices.")
     invoice_when_shipping: Literal["ask", "always", "never"] | None = Field(None, description="Shipments: after a shipment posts, ask (the default) whether to invoice it now, always offer to, or never; it drives the browser's prompt and the agent's next-command hint. `shipment post` itself does only what it is told.")
+    delivery_reply_to: str | None = Field(None, max_length=254, description="Email: the Reply-To address on every message (e.g. accounts@example.com); null for none.")
+    delivery_copy_to: str | None = Field(None, max_length=254, description="Email: a Bcc copy of every message to this address; null for none.")
     pick_and_pack_enabled: bool = Field(None, strict=True, description="Pick lists, draft shipments and boxes as optional layers on shipping: off by default, when `shipment post` ships straight from the order. Turning it off is refused while a pick list or draft shipment is open.")
     weight_unit: str | None = Field(None, min_length=1, max_length=16, description="The one weight unit of item weights and boxes (lb, kg, oz): a label, never converted.")
     shipping_item_id: str | None = Field(None, description="Other-charge or service item a shipment's freight to bill is billed as, by default.")
 
-    @field_validator("legal_name", "tax_id", "industry", "contact_name", "phone", "fax", "email", "website", "timezone", "closing_date", "free_on_board", "finance_charge_annual_rate", "finance_charge_minimum", "finance_charge_account_id", "overdue_notice_minimum", mode="before")
+    @field_validator("legal_name", "tax_id", "industry", "contact_name", "phone", "fax", "email", "website", "timezone", "closing_date", "free_on_board", "finance_charge_annual_rate", "finance_charge_minimum", "finance_charge_account_id", "overdue_notice_minimum", "delivery_reply_to", "delivery_copy_to", mode="before")
     @classmethod
     def _blank(cls, v):
         return _empty_to_none(v)
@@ -325,6 +327,11 @@ def _validate_merged(new: dict[str, Any], s: Session, changed: set[str]) -> None
         raise BookflowError("E_VALIDATION", details={"fields": fields})
     if new["prompt_for_class"] and not new["use_classes"]:
         raise BookflowError("E_VALIDATION", details={"fields": [{"field": "prompt_for_class", "problem": "requires use_classes"}]})
+    for name in ("delivery_reply_to", "delivery_copy_to"):
+        if name in changed and new.get(name):
+            from bookflow.company.delivery import EMAIL
+            if not EMAIL.match(new[name]):
+                raise BookflowError("E_VALIDATION", details={"fields": [{"field": name, "problem": "not an email address"}]})
     if "pick_and_pack_enabled" in changed and not new["pick_and_pack_enabled"]:
         from bookflow.company import pick_lists, shipment_packing
         pick_lists.check_turning_off(s)

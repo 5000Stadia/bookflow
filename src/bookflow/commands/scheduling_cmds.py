@@ -95,7 +95,7 @@ def _notice_write(verb, model):
     cmd = command(name, scope='company', description=DESCRIPTIONS[name], input_model=model,
                   output_model=NoticeWriteOutput, writes={'company'}, required_role='standard', capability='customer',
                   accepts_idempotency_key=True, positional=['notice'], version_source=('notice show', 'notice', 'version'),
-                  error_codes=['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT'])(planner)
+                  error_codes=['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_WORK_DEPENDENCY'])(planner)
     cmd.applier(notices.apply_write)
     return cmd
 

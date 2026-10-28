@@ -313,12 +313,12 @@ def test_a_draft_from_a_pick_list_ships_what_was_picked_and_goes_stale_when_pick
     assert [o['shipments'] for o in shown['orders']] == [[shipped['number']]]
 
 
-def test_co0105_ddl_is_the_metadata():
+def test_co0106_ddl_is_the_metadata():
     import importlib
     from sqlalchemy.dialects.sqlite import dialect
     from sqlalchemy.schema import CreateTable
     from bookflow.company import schema as c, shipment_packing_schema
-    m = importlib.import_module('bookflow.storage.company_migrations.versions.0105_shipment_packing')
+    m = importlib.import_module('bookflow.storage.company_migrations.versions.0106_shipment_packing')
     assert m.DDL == tuple(str(CreateTable(c.metadata.tables[t]).compile(dialect=dialect()))
                           for t in reversed(m.TABLES))
     assert m.GUARDS == shipment_packing_schema.GUARDS

@@ -1,4 +1,4 @@
-"""Packing and shipping facts (co0105, R181 increment 4; design/pick-pack-ship.md §5, §6, §8).
+"""Packing and shipping facts (co0106, R181 increment 4; design/pick-pack-ship.md §5, §6, §8).
 
 Packing is an optional layer under the company switch ``pick_and_pack_enabled`` (K3): drafts and boxes. Freight to
 bill, the weight unit and the shipping item are shipping facts every shipper has, switch or not.

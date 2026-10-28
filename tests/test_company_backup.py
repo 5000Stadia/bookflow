@@ -193,15 +193,16 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0102 = importlib.import_module("bookflow.storage.company_migrations.versions.0102_shipments")
     co0103 = importlib.import_module("bookflow.storage.company_migrations.versions.0103_shipment_returns")
     co0104 = importlib.import_module("bookflow.storage.company_migrations.versions.0104_pick_lists")
-    co0105 = importlib.import_module("bookflow.storage.company_migrations.versions.0105_shipment_packing")
+    co0105 = importlib.import_module("bookflow.storage.company_migrations.versions.0105_delivery_messages")
+    co0106 = importlib.import_module("bookflow.storage.company_migrations.versions.0106_shipment_packing")
 
     def older(conn):
-        # Newest first: co0105 (on co0104): its guards and six tables; company_info.weight_unit and
+        # Newest first: co0106 (on co0105): its guards and six tables; company_info.weight_unit and
         # shipment_revisions.freight_minor_units dropped; shipping_item_id and freight_item_id (columns with a foreign
         # key, which DROP COLUMN refuses) taken out of the schema text, every value in them being null here.
-        for trigger in co0105.TRIGGERS:
+        for trigger in co0106.TRIGGERS:
             conn.execute(f"DROP TRIGGER {trigger}")
-        for table in co0105.TABLES:
+        for table in co0106.TABLES:
             conn.execute(f"DROP TABLE {table}")
         conn.execute("PRAGMA writable_schema=ON")
         assert conn.execute("UPDATE sqlite_schema SET sql = replace(sql, ', shipping_item_id VARCHAR(26) REFERENCES "
@@ -209,12 +210,18 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
         assert conn.execute("UPDATE sqlite_schema SET sql = replace(sql, ', freight_item_id VARCHAR(26) REFERENCES "
                             "items (id)', '') WHERE name = 'shipment_revisions'").rowcount == 1
         conn.execute("PRAGMA writable_schema=OFF")
+        for column in co0106.COMPANY_COLUMNS:
+            conn.execute(f"ALTER TABLE company_info DROP COLUMN {column}")
+        for column in co0106.REVISION_COLUMNS:
+            conn.execute(f"ALTER TABLE shipment_revisions DROP COLUMN {column}")
+        # Then co0105 (on co0104): its guards and five tables, company_info's three delivery columns.
+        for trigger in co0105.TRIGGERS:
+            conn.execute(f"DROP TRIGGER {trigger}")
+        for table in co0105.TABLES:
+            conn.execute(f"DROP TABLE {table}")
         for column in co0105.COMPANY_COLUMNS:
             conn.execute(f"ALTER TABLE company_info DROP COLUMN {column}")
-        for column in co0105.REVISION_COLUMNS:
-            conn.execute(f"ALTER TABLE shipment_revisions DROP COLUMN {column}")
-        # Then co0104 (on co0103).
-        # Newest first: co0104 (on co0103): its guards and five tables, inventory_placements' source CHECK put back,
+        # Then co0104 (on co0103): its guards and five tables, inventory_placements' source CHECK put back,
         # company_info.pick_and_pack_enabled and inventory_sites.staging_bin_id (a column with a foreign key, which
         # DROP COLUMN refuses: its text is taken out of the schema, every value in it being null here).
         for trigger in co0104.TRIGGERS:
@@ -412,7 +419,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))
     restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older",
                                               "organization": "Older Books Organization"})
-    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0105"
+    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0106"
     folder = _folder(client, restored["company_id"])
     # The migration took its verified backup of the restored database first, as every migration does.
     assert list((folder / "backups").glob("*-from-co0062.db"))

@@ -53,9 +53,16 @@ def render(read: Read, company_id: str, kind: str, identity: Mapping[str, Any]) 
     receipt or estimate, and `{"customer": <id>, "date_from": ..., "date_to": ...}` for a
     customer statement, which is identified by whose account it is and over what period.
     """
+    return drawn(kind, build(read, company_id, kind, identity))
+
+
+def drawn(kind: str, document) -> Rendered:
+    """The bytes and name of a document already described by `model.build`: the second half of `render`.
+
+    Document delivery describes a document once, reads its merge fields from that description, and
+    attaches what this returns, so the attached bytes are `render`'s by construction."""
     from bookflow.documents.pdf import to_pdf
 
-    document = build(read, company_id, kind, identity)
     if kind == "statement":
         parts = (document.parties[0].name if document.parties else None,
                  dict(document.facts).get("Statement date"))

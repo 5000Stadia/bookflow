@@ -763,14 +763,14 @@ For the builder, defaults standing unless review finds otherwise:
   Shipping facts every shipper has, switch or not: tracking numbers (as before), **freight to bill**, the weight unit,
   **`shipment post --invoice`** with the `invoice_when_shipping` preference, and the **packing slip** (a shipment with
   no boxes prints every line unboxed). A shipment with no boxes shows no packing while the switch is off.
-- **Migration co0105** (on co0104) adds `shipment_drafts` (immutable header: number from the `shipment` sequence,
+- **Migration co0106** (on co0105, R112 delivery; first written as co0105 on co0104) adds `shipment_drafts` (immutable header: number from the `shipment` sequence,
   order, customer, site, pick list), `shipment_draft_revisions` (append-only: `draft`, then `cancelled` or `shipped`;
   facts and freight), `shipment_draft_lines` (immutable: order line root, item, base quantity, bin named, lot and
   serial numbers as text), `shipment_packages` and `shipment_package_contents` (per revision of a draft or a shipment:
   box number, package type, tare, measured weight, dimensions, tracking number; contents by shipment line identity
   with serial numbers) and `shipment_freight_billings`; columns `shipment_revisions.freight_minor_units` and
   `freight_item_id`, `company_info.weight_unit` (`lb`) and `shipping_item_id`. Every new row immutable; no guard
-  counts rows. Permission layer `packing-v1` on `picking-v1`: `shipment create`, `pack`, `cancel` are `item` standard
+  counts rows. Permission layer `packing-v1` on `delivery-v1`: `shipment create`, `pack`, `cancel` are `item` standard
   with `customer-work` read.
 - **Drafts.** A draft is planned as `shipment post` would plan it (nothing posted, a unit worth nothing allowed) and
   holds its units: every later `shipment post` or `shipment create` of the order plans around live drafts. Posting
