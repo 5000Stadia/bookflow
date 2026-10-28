@@ -118,5 +118,7 @@ printing or print queues, no check printing and no purchase-side documents. Emai
 document is [document delivery](document-delivery.md) (R112): it attaches this renderer's own
 bytes (`render.drawn`, the second half of `render`), and since R112 the PDF is drawn invariant
 -- no creation clock, no random file id -- so the same document always gives the same bytes and
-a frozen attachment can be checked against a fresh render by its hash. No sender is built:
-nothing leaves the machine.
+a frozen attachment can be checked against a fresh render by its hash. Drafting, templates, the
+outbox, batches and schedules are built; no sender is: nothing leaves the machine until a person sets
+up a sending connection. Meanwhile a message exports as a `.eml` file with this PDF attached, is sent
+from the owner's own mail program and is marked sent ("Sent by hand").

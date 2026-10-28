@@ -16,6 +16,7 @@ from bookflow import BookflowError
 from bookflow.core import clock as bf_clock
 from tests.test_bill_item_lines import books  # noqa: F401
 from tests.test_row3_host import hosted  # noqa: F401
+from tests.test_delivery_close import own
 
 
 class Clock:
@@ -253,8 +254,8 @@ def test_an_agents_send_schedule_sends_nothing_until_a_person_makes_it_live(host
         ticked = host.schedule_now(now=clock.at)[cid]
         assert ticked['delivery_schedules']['Daily invoices']['ran'][-1]['released'] == 1
         assert ticked['delivery']['claimed'] == 1 and ticked['delivery']['sent'] == 1
-        sent = [r for r in hosted.ok('delivery.query', {'status': 'sent', 'limit': 50}, company=cid,
-                                     headers=hosted.bearer)['rows']]
+        sent = own(hosted.ok('delivery.query', {'status': 'sent', 'limit': 50}, company=cid,
+                             headers=hosted.bearer)['rows'])
         assert len(sent) == 1 and len(backend.delivered) == 1
         assert len(waiting) == len(hosted.ok('delivery.query', {'status': 'waiting', 'limit': 50}, company=cid,
                                              headers=hosted.bearer)['rows'])
@@ -292,7 +293,7 @@ def test_an_establisher_deactivated_or_without_authority_pauses_it_and_nothing_s
     assert temp['state'] == 'paused' and 'denied' in temp['paused_reason']
     # The temp's run still drafted, but released nothing with a go: every message waits.
     assert temp['runs'][0]['state'] == 'done' and not temp['runs'][0]['go']
-    rows = hosted.ok('delivery.query', {'status': 'all', 'limit': 50}, company=cid, headers=hosted.bearer)['rows']
+    rows = own(hosted.ok('delivery.query', {'status': 'all', 'limit': 50}, company=cid, headers=hosted.bearer)['rows'])
     assert rows and all(r['status'] == 'ready' and r['waiting_for_go'] for r in rows)
     todos = [t['title'] for t in hosted.ok('todo.list', {'status': 'open'}, company=cid, headers=hosted.bearer)['items']]
     assert sum('is paused' in t for t in todos) == 2
@@ -548,7 +549,7 @@ def test_only_the_establisher_carries_the_go(hosted, monkeypatch):  # noqa: F811
         clock = Clock(monkeypatch, '2026-06-05')
         ran = hosted.ok('delivery-schedule.run', {'schedule': 'Daily'}, company=cid, headers=as_agent)['ran']
         assert ran[-1]['released'] >= 1 and not any(r['go'] for r in ran)
-        rows = hosted.ok('delivery.query', {'status': 'all', 'limit': 50}, company=cid, headers=hosted.bearer)['rows']
+        rows = own(hosted.ok('delivery.query', {'status': 'all', 'limit': 50}, company=cid, headers=hosted.bearer)['rows'])
         assert rows and all(r['status'] == 'ready' and r['waiting_for_go'] for r in rows)
         host.schedule_now(now=clock.at)
         assert backend.delivered == []

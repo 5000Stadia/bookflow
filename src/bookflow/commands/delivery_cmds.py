@@ -324,7 +324,8 @@ _BATCH = (
     'balance), or kind notice with ready. Always run it with dry_run first and show the person who gets what and '
     'who is skipped and why; then run it with the dry run\'s fingerprint (a changed set is refused). It drafts 10 per '
     'call and returns next: call again with it until done. '
-    'send releases them too; combine puts a customer\'s documents in one message. Example: {"kind": "statement", '
+    'send releases them too; combine puts a customer\'s documents in one message. To repeat it every month or day, '
+    'use delivery-schedule create. Example: {"kind": "statement", '
     '"period": "2026-09", "balance_over": "0", "method": "email"}.')
 _BATCH_QUERY = ("The batches: unfinished (still drafting, or with drafts to send or messages waiting for a go) or all, "
                 "each with the commands that continue or cancel it.")

@@ -901,3 +901,39 @@ the Edit form keeping the next slot, the cadence and a live schedule live), `tes
 losing and regaining authority; after every step one run per slot, no run claimed past its window, and no go on a run
 begun without authority or its messages), and `tests/test_delivery_surfaces.py` (the eight commands on all four
 surfaces).
+
+## As built: increment 5 (2026-10-28)
+
+**What exists.** The close: no migration and no permission layer. The agent guide gains "When to ask, and when to just
+do it" (clear tasks run; missing details get a question, with "send the invoice when the guys are done"; a broad
+lasting change gets one check of its exact details; no "are you sure?" on a plainly named act) and "Emailing a
+document" (draft, read back, send, the go, no connection, the `.eml` export and mark-sent by hand), beside the batch
+and schedule sections; README lists emailing documents and says plainly that nothing leaves the machine until a
+sending connection is set up, and how to export and mark sent meanwhile; `printed-documents.md`'s "Not built here"
+says what is built and what is not. Generated docs are current.
+
+**Demo seed.** Riverside Apartments and Lakeside Dental get addresses and prefer email; the statement template gains a
+line; M-1001 (DEMO-PIPE-INV-1) is drafted, exported and marked sent by hand, M-1002 (Riverside's statement) is a
+draft; "Daily invoice emails" is a draft-mode schedule, paused, so the host never runs it in a demo. No connection.
+Nothing is released: the trial's seed also had DEMO-DISC-INV-1 released and ready, but a person's release is a go, so
+it would leave the moment anyone set up a sending connection in the demo, and every dispatch test claimed it; it was
+dropped. Nothing financial, so no demo oracle moved. What moved: delivery tests that claimed something about every
+outbox row now leave out the demo's own two (`own()` in `tests/test_delivery_close.py`), and the surfaces witness
+lists two schedules, the demo's and its own.
+
+**The closing trial (criterion 8),** notes/trials/r112-trial/: a fresh Sonnet with only the three MCP tools, one
+resumed session, the demo plus Acme Supply (invoices 1007, 1008), a debtor with no address and overdue notices. Six
+prompts right first time (§7's four, the missing-details prompt, which asked and did nothing, and "turn it on", which
+the agent handed to the owner); "every month from now on" wrong first time: the agent searched `recurring` and
+`schedule`, found only the crew calendar and said it could not be done. Fixed: owner words as catalog keywords
+(email, mail, outbox; recurring, repeat, every month, monthly, automatic) and `delivery batch` help pointing to
+`delivery-schedule create`; rerun in a fresh session, it created the send schedule as a draft, showed its details
+once and left turning it on to the owner. The owner then exported 1007's email and Acme's notice as `.eml`, marked
+both sent, and the outbox, notice queue and audit list agree.
+
+**Left as found (permission layers are not changed here):** the `delivery mark-sent` refusal reads "a person's act"
+with `people_only` and capability `customer`, not `delivery.mark-sent`, and `delivery-schedule live` help says "a
+person"; both are true for an agent without the grant but hide that a principal can grant it (R187).
+
+**Tests:** `tests/test_delivery_close.py` (the demo's messages in three states with an export and a mark-sent in
+history, the edited template, the paused schedule, no connection; owner words finding the delivery commands).
