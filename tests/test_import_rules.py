@@ -254,6 +254,7 @@ CHECKED_LIKE_THE_RUN = [
     ('item', 'Name,Type,Income Account\nPart,inventory_part,Service Income\n', 'create', {}, None),
     ('term', 'Terms,Net due in days\nBrand New,10\n', 'upsert', {}, None),  # a new row in upsert needs `kind`
     ('customer', 'Name,Parent\nSelf1,Self1\n', 'create', {}, 'Parent'),  # its own parent
+    ('customer', 'Name,Job start\nLoose Job,2026-03-01\n', 'create', {}, 'Job start'),  # a job field, no parent
 ]
 
 

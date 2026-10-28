@@ -2719,3 +2719,54 @@ command = "landed-cost post"
 capture = "pipe_landed"
 input = { charges = [{ document = "${freight_bill.id}" }], targets = [{ document = "${pipe_bill_1.id}" }, { document = "${pipe_bill_2.id}" }], basis = "quantity", number = "DEMO-LC-1" }
 reason = "Spread the freight over both pipe deliveries"
+
+# Document delivery (R112 increment 5). No sending connection: nothing leaves the machine. Two customers get
+# addresses; the statement template gains a line; two messages show the outbox's states -- DEMO-PIPE-INV-1
+# exported as a .eml and marked sent by hand (M-1001), and Riverside's statement left a draft (M-1002); one
+# draft-mode schedule for queued invoices, paused. Nothing is released: a released message carries a person's go and
+# would leave the moment someone sets up a sending connection in the demo. Nothing financial.
+[[commands]]
+command = "customer update"
+input = { customer = "Riverside Apartments", email = "office@riverside.example", preferred_delivery_method = "email" }
+reason = "Riverside takes its invoices by email"
+
+[[commands]]
+command = "customer update"
+input = { customer = "Lakeside Dental", email = "ap@lakeside.example", preferred_delivery_method = "email" }
+reason = "Lakeside takes its invoices by email"
+
+[[commands]]
+command = "delivery-template update"
+input = { template = "Statement", kind = "statement", body = "Dear {{customer.name}},\n\nPlease find attached your statement for {{statement.date_from}} to {{statement.date_to}}. The balance due is {{statement.balance}}.\n\nWe accept checks and bank transfers. If you have any questions about your account, please call us.\n\n{{sender.name}}\n{{company.name}}{{if company.phone}}\n{{company.phone}}{{end}}" }
+reason = "Say how customers can pay"
+
+[[commands]]
+command = "delivery draft"
+capture = "pipe_invoice_email"
+input = { kind = "invoice", document = "DEMO-PIPE-INV-1" }
+reason = "Email the pipe invoice to Riverside"
+
+[[commands]]
+command = "delivery export"
+input = { messages = ["${pipe_invoice_email.id}"] }
+reason = "Send it from our own mail program"
+
+[[commands]]
+command = "delivery mark-sent"
+input = { message = "${pipe_invoice_email.id}", method = "mail-program" }
+reason = "Sent it from Outlook"
+
+[[commands]]
+command = "delivery draft"
+input = { kind = "statement", customer = "Riverside Apartments", date_from = "2026-11-01", date_to = "2026-11-30" }
+reason = "Riverside's statement, to review"
+
+[[commands]]
+command = "delivery-schedule create"
+input = { name = "Daily invoice emails", kind = "invoice", queued = true, frequency = "daily", start_date = "2026-12-13", mode = "draft" }
+reason = "Draft each day's queued invoice emails"
+
+[[commands]]
+command = "delivery-schedule pause"
+input = { schedule = "Daily invoice emails" }
+reason = "Hold it until the owner has looked"

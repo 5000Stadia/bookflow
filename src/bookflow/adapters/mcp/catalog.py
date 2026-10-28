@@ -141,6 +141,9 @@ KEYWORDS = {
                      "convert", "conversion", "iif", "quickbooks", "quickbooks desktop", "qb", "qbd",
                      "opening balance", "opening balances", "old books", "set up from", "setup from",
                      "bring over"), _MOVE_IN),
+    # R112: owners say email, not delivery; "every month" means a schedule.
+    **dict.fromkeys(("email", "e-mail", "mail", "outbox", "send email"), ("delivery", "delivery-schedule", "delivery-template")),
+    **dict.fromkeys(("recurring", "repeat", "every month", "monthly", "automatic"), ("delivery-schedule", "memorized")),
 }
 
 

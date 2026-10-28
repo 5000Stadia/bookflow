@@ -4,6 +4,8 @@ Done when criterion 3 holds (next month's file runs from the saved mapping in tw
 missing mapped header refuses to match) and an unknown terms name is decided once. Over CLI and MCP in
 tests/test_import_surfaces.py.
 """
+import io
+
 import pytest
 
 from bookflow import BookflowError
@@ -93,11 +95,11 @@ def test_a_renamed_required_header_and_synonyms(books):
         'kind': 'customer', 'content': 'Customer Name,E-mail\nOne,one@x.test\n'})['run']['id']})
     shown = books.run('import-mapping show', {'source': 'Names'})
     assert shown['mapping']['columns'] == {'Customer Name': 'name', 'E-mail': 'email'}  # synonyms guessed, saved
-    error = refusal(lambda: books.run('import preview', {'kind': 'customer', 'content': 'Client,E-mail\nTwo,t@x\n',
+    error = refusal(lambda: books.run('import preview', {'kind': 'customer', 'content': 'Patron,E-mail\nTwo,t@x\n',
                                                          'mapping': 'Names'}))
     assert "'Customer Name'" in error.message
     # Without the mapping the guess has nothing for the name: the check says the mapping is incomplete.
-    checked = books.run('import check', {'kind': 'customer', 'content': 'Client,E-mail\nTwo,t@x.test\n'})
+    checked = books.run('import check', {'kind': 'customer', 'content': 'Patron,E-mail\nTwo,t@x.test\n'})
     assert [g['code'] for g in checked['problems']] == ['unmapped_required']
 
 
@@ -247,3 +249,133 @@ def test_saved_mappings_and_suggestions_need_the_kinds_read_permission(books):
     assert [(u['value'], u['suggestions'], u['look_alikes']) for u in out['unknown_references']] == [('Net 3O', [], [])]
     assert books.run('import check', {'kind': 'customer', 'content': 'Name,Terms\nZed,Net 3O\n',
                                       'source': 'Other'})['unknown_references'][0]['suggestions']
+
+
+# ------------------------------------------------------------------ the review of increment 3 (r107-inc3-review.md)
+
+def _clerk(books, denies):
+    from pathlib import Path
+
+    from tests.conftest import as_user, make_actor
+    make_actor(Path(books.root), 'clerk')
+    books.client.run('membership grant', {'user': 'clerk', 'company': books.company, 'role': 'standard',
+                                          'expected_version': 0, 'denies': denies})
+    return as_user(Path(books.root), 'clerk')
+
+
+def test_the_outlook_counts_only_rows_that_will_land(books):
+    """High 1: two vendors wait on an unknown term answered "leave out": the preview said "Import 4"; it lands 2."""
+    text = 'Supplier\tPay terms\nDC 1\tNet 30\nDC 2\tNet 30\nDC 3\tWeird terms\nDC 4\tWeird terms\n'
+    preview = books.run('import preview', {'kind': 'vendor', 'content': text})
+    assert preview['outlook'] == {'create': 2, 'update': 0, 'answered': 0, 'left_out': 0, 'waiting': 2,
+                                  'unchanged': 0, 'differs': 0, 'missing': 0, 'refused': 0, 'land': 2}
+    out = books.run('import decide', {'run': preview['run']['id'], 'answers': [
+        {'field': 'terms_id', 'value': 'Weird terms', 'action': 'skip'}]})
+    assert (out['outlook']['land'], out['outlook']['left_out'], out['outlook']['waiting']) == (2, 2, 0)
+    assert run_all(books, preview['run']['id'])['counts'] == {'created': 2, 'skipped': 2, 'not_run': 0}
+
+
+def test_answers_name_their_field_so_any_text_is_decidable(books):
+    """Medium 7: "A=B" split at its "=", and a text unknown in two columns needed "Column:text" the page never sent."""
+    books.run('customer-type create', {'name': 'Retail'})
+    text = 'Name,Terms,Customer Type,Preferred Ship Method\nA,A=B,Gold,Gold\n'
+    preview = books.run('import preview', {'kind': 'customer', 'content': text})
+    error = refusal(lambda: books.run('import decide', {'run': preview['run']['id'], 'skip': ['Gold']}))
+    assert 'more than one column' in error.message
+    out = books.run('import decide', {'run': preview['run']['id'], 'answers': [
+        {'field': 'terms_id', 'value': 'A=B', 'action': 'map', 'target': 'Net 30'},
+        {'field': 'customer_type_id', 'value': 'Gold', 'action': 'map', 'target': 'Retail'},
+        {'field': 'preferred_ship_method_id', 'value': 'Gold', 'action': 'create'}]})
+    assert out['run']['state'] == 'previewed' and out['outlook']['land'] == 1
+    run_all(books, preview['run']['id'])
+    shown = books.run('customer show', {'customer': 'A'})
+    assert shown['terms_id'] == books.run('term show', {'term': 'Net 30'})['id']
+    assert shown['preferred_ship_method_id'] == books.run('ship-method show', {'ship_method': 'Gold'})['id']
+    # A wrong answer names the reference it is about, so a page can show it beside that one.
+    again = books.run('import preview', {'kind': 'customer', 'content': 'Name,Terms\nZ,A=C\n'})
+    error = refusal(lambda: books.run('import decide', {'run': again['run']['id'], 'answers': [
+        {'field': 'terms_id', 'value': 'A=C', 'action': 'map', 'target': 'Nett 30'}]}))
+    assert error.details['ref'] == {'field': 'terms_id', 'value': 'A=C'} and 'Net 30' in error.message
+
+
+def test_remember_with_only_creates_and_skips_is_not_refused(books):
+    """Medium 5: `remember` (ticked by default on the page) with create and skip answers was refused."""
+    preview = books.run('import preview', {'kind': 'customer', 'source': 'Shop export',
+                                           'content': 'Name,Customer Type,Terms\nA,Walk-in,Odd\n'})
+    out = books.run('import decide', {'run': preview['run']['id'], 'remember': True, 'answers': [
+        {'field': 'customer_type_id', 'value': 'Walk-in', 'action': 'create'},
+        {'field': 'terms_id', 'value': 'Odd', 'action': 'skip'}]})
+    assert out['run']['state'] == 'previewed' and books.run('import-mapping query', {})['items'] == []
+
+
+def test_a_typed_target_is_a_read_and_choices_are_the_readable_records(books):
+    """Low 12 and Medium 5: a caller who may not read terms could probe their names through a map; the page offers
+    the records the caller may read to pick from, not three suggestions."""
+    content = 'Name,Terms\nZed,Net 3O\n'
+    assert 'Net 30' in books.run('import check', {'kind': 'customer', 'content': content})['choices']['term']
+    clerk = _clerk(books, ['term'])
+    assert clerk.run('import check', {'kind': 'customer', 'content': content},
+                     company=books.company)['choices'] == {}
+    preview = clerk.run('import preview', {'kind': 'customer', 'content': content}, company=books.company,
+                        reason='import')
+    error = refusal(lambda: clerk.run('import decide', {'run': preview['run']['id'], 'answers': [
+        {'field': 'terms_id', 'value': 'Net 3O', 'action': 'map', 'target': 'Net 30'}]}, company=books.company,
+        reason='decide'))
+    assert error.code == 'E_PERMISSION'
+
+
+def test_a_reload_keeps_the_sample_and_names_who_ran_it(books):
+    """Low 12: a reload of a previewed run lost its sample; the Undo plan did not say who ran the import."""
+    preview = books.run('import preview', {'kind': 'vendor', 'content': 'Supplier\nS 1\nS 2\n'})
+    shown = books.run('import show', {'run': preview['run']['id']})
+    assert [s['row'] for s in shown['sample']] == [1, 2] and shown['sample'] == preview['sample']
+    assert shown['run']['created_by_name']
+
+
+def _import_file(books, caption, body, **extra):
+    company = books.run('company show')['company_id']
+    return books.run('attachment add', dict(record_type='import_file', record_id=company, caption=caption,
+                                            original_filename=f'{caption}.csv', media_type='text/csv', **extra),
+                     input_stream=io.BytesIO(body), reason='File to import')
+
+
+def _link_active(books, link_id):
+    with company_db(books) as db:
+        return db.execute('SELECT active FROM attachment_links WHERE id = ?', (link_id,)).fetchone()[0] == 1
+
+
+def test_import_files_are_the_kinds_records_and_are_pruned(books):
+    """Medium 8: every check kept its file as an ordinary company attachment that any member could download."""
+    company = books.run('company show')['company_id']
+    first = _import_file(books, 'vendor', b'Supplier\nSecret Supplier\n')
+    assert first['link']['record_type'] == 'import_file'
+    assert books.run('attachment list', {'record_type': 'company_info', 'record_id': company})['items'] == []
+    clerk = _clerk(books, ['vendor'])
+    for name in ('attachment get', 'attachment text'):
+        error = refusal(lambda: clerk.run(name, {'attachment': first['attachment']['id']}, company=books.company,
+                                          **({'output_stream': io.BytesIO()} if name.endswith('get') else {})))
+        assert error.code == 'E_PERMISSION', name
+    assert clerk.run('attachment list', {'record_type': 'import_file', 'record_id': company},
+                     company=books.company)['items'] == []
+    assert books.run('attachment text', {'attachment': first['attachment']['id']})['text'].startswith('Supplier')
+    error = refusal(lambda: _import_file(books, 'not-a-kind', b'x\n'))
+    assert error.code == 'E_VALIDATION'
+    error = refusal(lambda: books.run('attachment link', {'attachment': first['attachment']['id'],
+                                                          'record_type': 'import_file', 'record_id': company}))
+    assert error.code == 'E_VALIDATION'
+    # A newer check of the same kind replaces a file whose import never ran.
+    second = _import_file(books, 'vendor', b'Supplier\nS Two\n')
+    assert not _link_active(books, first['link']['id']) and _link_active(books, second['link']['id'])
+    # The file of a run that landed records stays: a re-run of its source reads it.
+    preview = books.run('import preview', {'kind': 'vendor', 'attachment': second['attachment']['id']})
+    run_all(books, preview['run']['id'])
+    third = _import_file(books, 'vendor', b'Supplier\nS Three\n')
+    assert _link_active(books, second['link']['id']) and _link_active(books, third['link']['id'])
+    # Another kind's file is another import; after seven days any unused file goes.
+    terms = _import_file(books, 'term', b'Terms\nT\n')
+    assert _link_active(books, third['link']['id'])
+    with company_db(books) as db:
+        db.execute("UPDATE attachment_links SET linked_at = '2020-01-01T00:00:00.000Z' WHERE id = ?",
+                   (terms['link']['id'],))
+    _import_file(books, 'customer', b'Name\nC\n')
+    assert not _link_active(books, terms['link']['id']) and _link_active(books, second['link']['id'])

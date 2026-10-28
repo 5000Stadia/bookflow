@@ -91,6 +91,10 @@ def test_every_hand_authored_fence_is_classified():
             ("illustrative", "json"),  # who got a serial number (R104 serial/lot)
             ("illustrative", "json"),  # landed cost spread over a receipt (landed cost)
             ("illustrative", "json"),  # ship an order now, bill it later (R181)
+            ("illustrative", "json"),  # a return before billing (R181)
+            ("illustrative", "json"),  # a pick list and its entries (R181)
+            ("illustrative", "json"),  # packing a heater into box 2 (R181)
+            ("illustrative", "json"),  # the fulfillment worksheet (R181)
         ],
         "agent-install.md": [("illustrative", "sh"), ("illustrative", "sh"), ("illustrative", "json"), ("illustrative", "sh")],
         # Seed/serve, documentation generation, and financial statement examples.
