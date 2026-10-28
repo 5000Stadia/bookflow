@@ -916,3 +916,51 @@ Each finding has a test that failed before its fix (`test_import_rules.py`, `tes
   1.49 s), still within the target of a few seconds.
 - **Permissions**: the eight commands of increment 2 move from `import-v1` (restored as merged) to
   `import-mapping-v1` (above). The migration is co0110, on main's co0109 (delivery batches).
+
+## As built: increment 3
+
+- **One page, `/c/<company>/import`** (`adapters/workbench/import_pages.py`, `templates/import.html`, `static/import.css`
+  and `import.js`), reached from the Company menu ("Import records from a file") and an **Import…** link on each of the
+  17 list kinds' list pages. Steps: **File** (kind; choose, drop or paste; a pasted table shows at once as a table, in
+  the browser, before anything is posted; a template download per kind), **Check** (counts bar; every problem at once,
+  grouped by column in the file's order, with row numbers and the exact cell; the columns as rows at 1440 and as cards
+  at 390, each with three samples and a field picker; the formats, saved mapping and unknown references to decide),
+  **Preview** (counts per outcome, refused rows, a sample of the exact records, and one confirmation naming the count:
+  "Import 4 records"), **Run** (a progress card), **Done** (counts, refused rows, "Save this mapping as", Undo). At
+  390 px the steps are a vertical stepper and nothing scrolls sideways (asserted at every step).
+- **Only the registry's commands.** The page runs `import kinds`, `template`, `check`, `preview`, `decide`, `run`,
+  `cancel`, `reverse`, `errors`, `show` and `import-mapping save`; no migration, no new permission layer, and the
+  page's writes need the grants the commands need. Decided: the check's answers are given beside the problems, and
+  the Preview button runs `import preview` then, if the run waits, `import decide` with the page's answers in the same
+  post (decisions need a stored run, so they cannot be made before a preview). A term is created as standard terms
+  due in N days (the page asks N); a list whose create needs more than a name is offered map or skip only.
+- **The file is an attachment.** A chosen file or a pasted table is kept as an attachment on the company
+  (`attachment add company_info`, through the same published transfer the HTTP route uses) and the import reads it by
+  id through `tabular.read`: text in any encoding the reader detects (the cp1252 note shows), or `.xlsx`. Uploads over
+  16 MB (the commands' own `content` limit) are refused before anything is stored. Corrected files are uploaded on the
+  Check step; the columns chosen by hand carry over (one the new file lacks is dropped).
+- **htmx for every post**, multipart where a file goes; refusals answer 200 with the error in place on the step they
+  came from (a file that was chosen stays chosen). Each answer that names a run pushes `?run=<id>`, so a reload, or
+  opening the page again after a lock screen, lands on the run's step; a `running` run then continues by itself (one
+  slice of 100 rows or 4 seconds per request, `hx-trigger="load"`), and Pause stops asking. Nothing imports while the
+  page is closed.
+- **All or nothing stays the default.** A file with problems cannot preview; "Import the other N rows only" is its own
+  button (`partial`), and its refused rows download from the Preview and Done steps as `import errors`' CSV (UTF-8
+  with a byte order mark so a spreadsheet reads accents; its formula guard unchanged). Downloads are plain GET links
+  (reads need no workbench header).
+- **Undo** plans first (`import reverse` dry run): "Undo reverses all 5 records it made or changed", then one
+  confirmation; a blocked plan lists each blocker with what clears it, and nothing changes. A long reversal continues
+  by slices as the run does.
+- **`import check` gains `samples`**: up to three distinct non-blank values per column, as the file has them (cut at
+  60 characters), for the Columns step. `docs/cli/import.md` regenerated.
+- **Tests:** `tests/test_import_pages_browser.py` (real Chrome, 1440 and 390): criterion 1's customer file
+  (Windows-1252, semicolons, renamed headers, a day-first date on a job row, parenthesized negatives with decimal
+  commas, two unknown terms) uploaded with a junk amount and an unmapped name; the check lists both; the columns are
+  mapped on the page; the corrected file is uploaded; 'Net 30 days' is mapped and 'Due in 60' created; the formula row
+  is left out by the partial button; the preview's counts and sample; Import; the refused row downloaded by a real
+  click (its `=1+2` written `'=1+2`); the mapping saved; Undo confirmed and every record inactive. A pasted vendor
+  table imports the same way, and a run left after one row resumes when its page is opened again. Screens:
+  `/tmp/m4-shots/import3/`.
+- **Found, not fixed here:** a customer row with a job date but no parent passes `import check` and is refused by the
+  preview (`job fields require a parent customer`): the check's "refuses what the run would" misses that rule
+  (`_input_rules` does not cover it). The guesser does not map `E-mail address` (only `e-mail` and `email address`).
