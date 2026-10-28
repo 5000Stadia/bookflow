@@ -165,3 +165,14 @@ Each default stands if nobody decides. Q1 is Kabe's.
 - **Q5. Who may reverse a batch.** *Default:* a holder of the capability that made the writes, or any admin; [bulk-import](bulk-import.md) §8a settles it.
 - **Q6. A non-human principal.** *Default:* not built. `_is_person` remains the one seam for the five (b) commands.
 - **Q7. Renaming identifiers** (`people_only.py`, catalog keys). *Default:* never; words only.
+
+## Addendum (2026-10-27): impact, not quantity
+
+Kabe: "I really don't think the quantity of items is what identifies something sensitive or not. If the agent has the
+permission to do so and the directive, it should do it ... generalize overall impact to simply behaviorally confirm
+before damaging: 'just to be clear you want XYZ'." So no size thresholds anywhere (R107's are dropped). Commands whose
+effect could damage carry a `confirm_first` mark in the registry (deletes, voids, reversals of batches, sends and
+mark-sent, permission and capability changes, broad bulk edits); `help` and the MCP tool list show it. The agent guide
+says: before running a confirm-first command, say in plain words what it will do and get the principal's yes in the
+conversation, unless the principal's directive already names that act; use `--dry-run` to show exactly what would
+change. Bookflow does not enforce the conversation; permissions and reversible batches remain the hard guarantees.
