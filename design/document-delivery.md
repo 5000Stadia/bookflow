@@ -683,7 +683,7 @@ five seeds of 30 steps: 20 messages reached the fake server, none twice; 20 cras
 
 ## As built: increment 3 (2026-10-27)
 
-**What exists.** co0108 (`delivery_flags`, `delivery_batches`, `delivery_messages.batch_id` with its index), seven
+**What exists.** co0109 (on R107's co0108; `delivery_flags`, `delivery_batches`, `delivery_messages.batch_id` with its index), seven
 commands under the `delivery-batch-v1` layer (on `delivery-queue-v1`): `delivery flag`, `unflag`, `queue`, `batch`,
 `batch-show`, `batch-query`, `batch-cancel`; `delivery draft` gains `combine` with `documents`; `delivery send` and `approve` take a
 `batch`; `delivery query` filters by `batch` and a message shows its batch; `company update` gains

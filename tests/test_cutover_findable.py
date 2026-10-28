@@ -30,7 +30,14 @@ def test_every_command_list_page_fits_the_budget_and_paging_reaches_every_comman
     assert set(row) == {"name", "description", "scope", "kind", "authorization"}
 
 
-@pytest.mark.parametrize("words", ["import", "migrate", "migrat", "migration", "move in", "switch from", "convert",
+def test_import_leads_to_the_import_commands():
+    """Since R107, `import` is its own noun: a file of records from any program (design/bulk-import.md §8)."""
+    from bookflow.adapters.mcp.catalog import list_commands
+    names = [row["name"] for row in list_commands(prefix="import")["commands"]]
+    assert {"import kinds", "import template", "import preview", "import run"} <= set(names)
+
+
+@pytest.mark.parametrize("words", ["migrate", "migrat", "migration", "move in", "switch from", "convert",
                                    "conversion", "IIF", "QuickBooks", "opening balance", "opening balances",
                                    "opening", "old books", "set up from", "import from QuickBooks"])
 def test_migration_words_lead_to_cutover_first(words):

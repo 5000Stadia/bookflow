@@ -27,3 +27,6 @@ Database: `company`.
 | `state` | VARCHAR(10) | no | — | — | — | — | drafting, done or cancelled. |
 | `schedule_run_id` | VARCHAR(26) | yes | — | — | — | — | The schedule run that started it (increment 4); null for a person or agent. |
 | `cancelled_reason` | VARCHAR(500) | yes | — | — | — | — | Why it was cancelled. |
+| `go_by` | VARCHAR(26) | yes | — | — | — | — | The person whose go the batch's releases carry, decided once when it began (a person who asked to send); null otherwise, so a later continue never adds a go. |
+| `fingerprint` | VARCHAR(64) | no | — | — | — | — | SHA-256 of the exact set when it began (documents, versions, recipients); a run or continue carrying another is refused. |
+| `drafted` | TEXT | no | — | — | — | — | Each message as the batch left it (version, recipients hash, content hash), a JSON object by message id: approve and send by batch act only on messages still so. |

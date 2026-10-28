@@ -21,7 +21,9 @@ COMMANDS = frozenset(('shipment post', 'shipment update', 'shipment void', 'ship
                       'pick-list create', 'pick-list enter', 'pick-list show', 'pick-list query', 'pick-list close',
                       'pick-list cancel',
                       # R181 increment 4: a draft made, packed (retried), shipped with its invoice; another cancelled.
-                      'shipment create', 'shipment pack', 'shipment cancel'))
+                      'shipment create', 'shipment pack', 'shipment cancel',
+                      # R181 increment 5: the worksheet and the shipments report, read after.
+                      'report order-fulfillment', 'report shipments'))
 
 
 @pytest.mark.timeout(900)
@@ -97,7 +99,10 @@ def test_the_same_shipment_through_python_cli_http_and_mcp(root, tmp_path):
                                                                               'unit_price': '20.00'}]})
                 dropped = await call(surface, 'shipment create', {'sales_order': third['number']})
                 dropped = await call(surface, 'shipment cancel', {'shipment': dropped['number'], 'expected_version': 1})
-                results[surface] = dict(draft=draft, packed=packed, packed_again=packed_again, from_draft=from_draft,
+                worksheet = await call(surface, 'report order-fulfillment', {'customer': customer, 'limit': 200})
+                shipped = await call(surface, 'report shipments', {'date_from': DEMO_AS_OF, 'date_to': DEMO_AS_OF,
+                                                                   'customer': customer})
+                results[surface] = dict(worksheet=worksheet, shipped=shipped, draft=draft, packed=packed, packed_again=packed_again, from_draft=from_draft,
                                         dropped=dropped, pick=pick, picked=picked, picked_again=picked_again, pick_shown=pick_shown,
                                         pick_listed=pick_listed, from_list=from_list, closed=closed, cancelled=cancelled,
                                         preview=preview, first=first, again=again, tracked=tracked, shown=shown,
@@ -136,4 +141,9 @@ def test_the_same_shipment_through_python_cli_http_and_mcp(root, tmp_path):
         assert r['from_draft']['number'] == r['draft']['number'] and r['from_draft']['invoice']['id'], surface
         assert len(r['from_draft']['packing']['packages']) == 1 and r['dropped']['status'] == 'cancelled', surface
         shapes.add(('pack', r['draft']['number'], r['from_draft']['invoice']['total']['minor_units']))
-    assert len(shapes) == 3
+        shipped = [row['shipment_number'] for row in r['shipped']['rows']]
+        assert r['from_draft']['number'] in shipped and r['first']['number'] in shipped, surface
+        assert r['shipped']['rows'][shipped.index(r['from_draft']['number'])]['boxes'] == 1, surface
+        shapes.add(('sheet', tuple((row['sales_order_number'], row['fulfillment_status'], row['shippable_amount']['amount'])
+                                   for row in r['worksheet']['rows']), tuple(shipped)))
+    assert len(shapes) == 4

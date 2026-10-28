@@ -63,6 +63,7 @@ OWNERS = {
     "delivery.run": Impact.CONSERVATIVE,
     "delivery.tick": Impact.CONSERVATIVE,
     "cutover.apply": Impact.CONSERVATIVE,
+    "batch.apply": Impact.CONSERVATIVE,
     "config.flush": Impact.PROJECTION,
 }
 

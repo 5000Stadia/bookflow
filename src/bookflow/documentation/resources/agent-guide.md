@@ -1328,6 +1328,16 @@ its invoice in one transaction) and the printed `packing-slip` (no prices).
 {"command": "shipment pack", "reason": "WH-1001 went in box 2", "input": {"shipment": "1004", "unit": "WH-1001", "box": 2}}
 ```
 
+**What can ship.** `report order-fulfillment` is the fulfillment worksheet: each open order's status (`to_pick`,
+`picking`, `picked`, `packed`, `partly_shipped`, `shipped`), what it has to ship and what `shipment post` would ship
+now, by line and site; `--status to_pick,picking` answers "what's left to pick?", `--can-ship`, `--complete-only` and
+`--newly-shippable <date>` narrow it. `report shipments` lists shipments with boxes, weights and tracking numbers.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "report order-fulfillment", "input": {"status": "to_pick,picking"}}
+```
+
 ## Stock sent back to a vendor
 
 Enter it as one `vendor-credit post` with `items`: one row per thing sent back, each with

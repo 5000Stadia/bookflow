@@ -36,8 +36,8 @@ The same example as complete `bookflow_run` arguments:
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `messages` | `--messages` | array[string] \| null | no | yes | null | Ready messages waiting for a go, by number or id. |
-| `all_waiting` | `--all-waiting` | boolean | no | no | false | Every message waiting for a go (at most 100). |
-| `batch` | `--batch` | string \| null | no | yes | null | A batch's messages waiting for a go (at most 100). |
+| `all_waiting` | `--all-waiting` | boolean | no | no | false | Every message waiting for a go (100 per call; it says when more wait). |
+| `batch` | `--batch` | string \| null | no | yes | null | A batch's messages waiting for a go, only those still as the batch drafted them (100 per call). |
 
 ### Command and context options
 
@@ -187,7 +187,7 @@ Example JSON output:
 
 ## `delivery batch`
 
-Draft many messages in one act: queued (to-be-emailed documents), unsent with a kind (filters date_from, date_to, customer_type, customer), kind statement with period and balance_over (one per customer with a balance), or kind notice with ready. Run it with dry_run first and show the person who gets what and who is skipped and why; then run it without. It drafts 10 per call and returns next: call again with it until done. send releases them too; combine puts a customer's documents in one message. Example: {"kind": "statement", "period": "2026-09", "balance_over": "0", "method": "email"}.
+Draft many messages in one act: queued (to-be-emailed documents), unsent with a kind (filters date_from, date_to, customer_type, customer), kind statement with period and balance_over (one per customer with a balance), or kind notice with ready. Always run it with dry_run first and show the person who gets what and who is skipped and why; then run it with the dry run's fingerprint (a changed set is refused). It drafts 10 per call and returns next: call again with it until done. send releases them too; combine puts a customer's documents in one message. Example: {"kind": "statement", "period": "2026-09", "balance_over": "0", "method": "email"}.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -233,7 +233,9 @@ The same example as complete `bookflow_run` arguments:
 | `combine` | `--combine` | boolean | no | no | false | One message per customer with all its documents. |
 | `send` | `--send` | boolean | no | no | false | Release each draft too. |
 | `template` | `--template` | string \| null | no | yes | null | Template; default the kind's default. |
-| `exclude` | `--exclude` | array[string] | no | no | [] | Leave these out: document ids (statements: customer ids), from the dry run. |
+| `exclude` | `--exclude` | array[string] | no | no | [] | Leave these out: the dry run's keys (a combined row's key covers its whole group), or document ids. |
+| `fingerprint` | `--fingerprint` | string \| null | no | yes | null | The dry run's fingerprint: the run is refused if the set changed since. Continuing: the batch's. |
+| `seen` | `--seen` | array[string] | no | no | [] | Optional: the dry run's row fingerprints, so a refusal names what changed. |
 
 ### Command and context options
 
@@ -281,41 +283,47 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `released` | integer | no | no | 0 | — |
 | `remaining` | integer | no | no | 0 | — |
 | `would_draft` | array[object] | no | no | [] | Preview and show: who gets what. |
-| `would_draft[].key` | string | yes | no | — | What exclude takes: the document id, or the customer id for a statement. |
+| `would_draft[].key` | string | yes | no | — | What exclude takes: the document id, a combined row's group key, or the customer id for a statement. |
 | `would_draft[].kind` | string | yes | no | — | — |
 | `would_draft[].customer_id` | string | yes | no | — | — |
 | `would_draft[].customer_name` | string | yes | no | — | — |
 | `would_draft[].documents` | array[string] | no | no | [] | Invoice 1007, Statement 2026-09-01 to ... |
 | `would_draft[].to` | array[string] | no | no | [] | — |
-| `would_draft[].reason` | string \| null | no | yes | null | Skipped: no_address, prefers_mail, not_email, opted_out, in_outbox, sent, excluded or refused. |
+| `would_draft[].reason` | string \| null | no | yes | null | Skipped: no_address, prefers_mail, not_email, opted_out, in_outbox, sent, excluded, refused, not_queued or changed (since the preview). |
 | `would_draft[].reason_text` | string \| null | no | yes | null | — |
 | `would_draft[].message` | string \| null | no | yes | null | The message drafted for it, or the one already there. |
 | `would_draft[].status` | string \| null | no | yes | null | — |
+| `would_draft[].fingerprint` | string \| null | no | yes | null | This row: documents, versions and recipients. |
 | `skipped` | array[object] | no | no | [] | — |
-| `skipped[].key` | string | yes | no | — | What exclude takes: the document id, or the customer id for a statement. |
+| `skipped[].key` | string | yes | no | — | What exclude takes: the document id, a combined row's group key, or the customer id for a statement. |
 | `skipped[].kind` | string | yes | no | — | — |
 | `skipped[].customer_id` | string | yes | no | — | — |
 | `skipped[].customer_name` | string | yes | no | — | — |
 | `skipped[].documents` | array[string] | no | no | [] | Invoice 1007, Statement 2026-09-01 to ... |
 | `skipped[].to` | array[string] | no | no | [] | — |
-| `skipped[].reason` | string \| null | no | yes | null | Skipped: no_address, prefers_mail, not_email, opted_out, in_outbox, sent, excluded or refused. |
+| `skipped[].reason` | string \| null | no | yes | null | Skipped: no_address, prefers_mail, not_email, opted_out, in_outbox, sent, excluded, refused, not_queued or changed (since the preview). |
 | `skipped[].reason_text` | string \| null | no | yes | null | — |
 | `skipped[].message` | string \| null | no | yes | null | The message drafted for it, or the one already there. |
 | `skipped[].status` | string \| null | no | yes | null | — |
+| `skipped[].fingerprint` | string \| null | no | yes | null | This row: documents, versions and recipients. |
 | `messages` | array[string] | no | no | [] | Messages drafted by this call. |
 | `cancelled` | array[string] | no | no | [] | Cancel: the messages cancelled. |
 | `kept` | array[object] | no | no | [] | Cancel: the messages that block (released, exported or sent), each with why. |
-| `kept[].key` | string | yes | no | — | What exclude takes: the document id, or the customer id for a statement. |
+| `kept[].key` | string | yes | no | — | What exclude takes: the document id, a combined row's group key, or the customer id for a statement. |
 | `kept[].kind` | string | yes | no | — | — |
 | `kept[].customer_id` | string | yes | no | — | — |
 | `kept[].customer_name` | string | yes | no | — | — |
 | `kept[].documents` | array[string] | no | no | [] | Invoice 1007, Statement 2026-09-01 to ... |
 | `kept[].to` | array[string] | no | no | [] | — |
-| `kept[].reason` | string \| null | no | yes | null | Skipped: no_address, prefers_mail, not_email, opted_out, in_outbox, sent, excluded or refused. |
+| `kept[].reason` | string \| null | no | yes | null | Skipped: no_address, prefers_mail, not_email, opted_out, in_outbox, sent, excluded, refused, not_queued or changed (since the preview). |
 | `kept[].reason_text` | string \| null | no | yes | null | — |
 | `kept[].message` | string \| null | no | yes | null | The message drafted for it, or the one already there. |
 | `kept[].status` | string \| null | no | yes | null | — |
+| `kept[].fingerprint` | string \| null | no | yes | null | This row: documents, versions and recipients. |
 | `next` | dict \| null | no | yes | null | Input for the next chunk (delivery batch), while drafting. |
+| `fingerprint` | string \| null | no | yes | null | The exact set (documents, versions, recipients); pass it to the run so a changed set is refused. |
+| `go` | boolean | no | no | false | Whether its releases carry a person's go (decided when it began). |
+| `open_batches` | array[string] | no | no | [] | Dry run: unfinished batches over this same selection; continue one instead of starting another. |
 | `version` | integer \| null | no | yes | null | — |
 | `warnings` | array[string] | no | no | [] | — |
 | `next_commands` | array[string] | no | no | [] | — |
@@ -327,12 +335,15 @@ Example JSON output:
   "batch_id": null,
   "cancelled": [],
   "drafted": 0,
+  "fingerprint": null,
+  "go": false,
   "kept": [],
   "kind": null,
   "messages": [],
   "next": null,
   "next_commands": [],
   "number": null,
+  "open_batches": [],
   "planned": 1,
   "released": 0,
   "remaining": 0,
@@ -461,41 +472,47 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `released` | integer | no | no | 0 | — |
 | `remaining` | integer | no | no | 0 | — |
 | `would_draft` | array[object] | no | no | [] | Preview and show: who gets what. |
-| `would_draft[].key` | string | yes | no | — | What exclude takes: the document id, or the customer id for a statement. |
+| `would_draft[].key` | string | yes | no | — | What exclude takes: the document id, a combined row's group key, or the customer id for a statement. |
 | `would_draft[].kind` | string | yes | no | — | — |
 | `would_draft[].customer_id` | string | yes | no | — | — |
 | `would_draft[].customer_name` | string | yes | no | — | — |
 | `would_draft[].documents` | array[string] | no | no | [] | Invoice 1007, Statement 2026-09-01 to ... |
 | `would_draft[].to` | array[string] | no | no | [] | — |
-| `would_draft[].reason` | string \| null | no | yes | null | Skipped: no_address, prefers_mail, not_email, opted_out, in_outbox, sent, excluded or refused. |
+| `would_draft[].reason` | string \| null | no | yes | null | Skipped: no_address, prefers_mail, not_email, opted_out, in_outbox, sent, excluded, refused, not_queued or changed (since the preview). |
 | `would_draft[].reason_text` | string \| null | no | yes | null | — |
 | `would_draft[].message` | string \| null | no | yes | null | The message drafted for it, or the one already there. |
 | `would_draft[].status` | string \| null | no | yes | null | — |
+| `would_draft[].fingerprint` | string \| null | no | yes | null | This row: documents, versions and recipients. |
 | `skipped` | array[object] | no | no | [] | — |
-| `skipped[].key` | string | yes | no | — | What exclude takes: the document id, or the customer id for a statement. |
+| `skipped[].key` | string | yes | no | — | What exclude takes: the document id, a combined row's group key, or the customer id for a statement. |
 | `skipped[].kind` | string | yes | no | — | — |
 | `skipped[].customer_id` | string | yes | no | — | — |
 | `skipped[].customer_name` | string | yes | no | — | — |
 | `skipped[].documents` | array[string] | no | no | [] | Invoice 1007, Statement 2026-09-01 to ... |
 | `skipped[].to` | array[string] | no | no | [] | — |
-| `skipped[].reason` | string \| null | no | yes | null | Skipped: no_address, prefers_mail, not_email, opted_out, in_outbox, sent, excluded or refused. |
+| `skipped[].reason` | string \| null | no | yes | null | Skipped: no_address, prefers_mail, not_email, opted_out, in_outbox, sent, excluded, refused, not_queued or changed (since the preview). |
 | `skipped[].reason_text` | string \| null | no | yes | null | — |
 | `skipped[].message` | string \| null | no | yes | null | The message drafted for it, or the one already there. |
 | `skipped[].status` | string \| null | no | yes | null | — |
+| `skipped[].fingerprint` | string \| null | no | yes | null | This row: documents, versions and recipients. |
 | `messages` | array[string] | no | no | [] | Messages drafted by this call. |
 | `cancelled` | array[string] | no | no | [] | Cancel: the messages cancelled. |
 | `kept` | array[object] | no | no | [] | Cancel: the messages that block (released, exported or sent), each with why. |
-| `kept[].key` | string | yes | no | — | What exclude takes: the document id, or the customer id for a statement. |
+| `kept[].key` | string | yes | no | — | What exclude takes: the document id, a combined row's group key, or the customer id for a statement. |
 | `kept[].kind` | string | yes | no | — | — |
 | `kept[].customer_id` | string | yes | no | — | — |
 | `kept[].customer_name` | string | yes | no | — | — |
 | `kept[].documents` | array[string] | no | no | [] | Invoice 1007, Statement 2026-09-01 to ... |
 | `kept[].to` | array[string] | no | no | [] | — |
-| `kept[].reason` | string \| null | no | yes | null | Skipped: no_address, prefers_mail, not_email, opted_out, in_outbox, sent, excluded or refused. |
+| `kept[].reason` | string \| null | no | yes | null | Skipped: no_address, prefers_mail, not_email, opted_out, in_outbox, sent, excluded, refused, not_queued or changed (since the preview). |
 | `kept[].reason_text` | string \| null | no | yes | null | — |
 | `kept[].message` | string \| null | no | yes | null | The message drafted for it, or the one already there. |
 | `kept[].status` | string \| null | no | yes | null | — |
+| `kept[].fingerprint` | string \| null | no | yes | null | This row: documents, versions and recipients. |
 | `next` | dict \| null | no | yes | null | Input for the next chunk (delivery batch), while drafting. |
+| `fingerprint` | string \| null | no | yes | null | The exact set (documents, versions, recipients); pass it to the run so a changed set is refused. |
+| `go` | boolean | no | no | false | Whether its releases carry a person's go (decided when it began). |
+| `open_batches` | array[string] | no | no | [] | Dry run: unfinished batches over this same selection; continue one instead of starting another. |
 | `version` | integer \| null | no | yes | null | — |
 | `warnings` | array[string] | no | no | [] | — |
 | `next_commands` | array[string] | no | no | [] | — |
@@ -507,12 +524,15 @@ Example JSON output:
   "batch_id": null,
   "cancelled": [],
   "drafted": 0,
+  "fingerprint": null,
+  "go": false,
   "kept": [],
   "kind": null,
   "messages": [],
   "next": null,
   "next_commands": [],
   "number": null,
+  "open_batches": [],
   "planned": 1,
   "released": 0,
   "remaining": 0,
@@ -557,6 +577,118 @@ Example JSON output:
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
 | `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
+## `delivery batch-query`
+
+The batches: unfinished (still drafting, or with drafts to send or messages waiting for a go) or all, each with the commands that continue or cancel it.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | customer |
+| Additional resources | ledger.read: member, customer-work: member |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/delivery.batch-query` |
+| External binary body | none |
+
+### CLI
+
+`bookflow delivery batch-query --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "delivery batch-query", "input": {}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `state` | `--state` | literal["unfinished", "all"] | no | no | "unfinished" | unfinished: still drafting, or with drafts to send or messages waiting for a go; all: every batch. |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 500 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/delivery.batch-query`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `rows` | array[object] | no | no | [] | — |
+| `rows[].batch_id` | string | yes | no | — | — |
+| `rows[].number` | string | yes | no | — | — |
+| `rows[].kind` | string | yes | no | — | — |
+| `rows[].state` | string | yes | no | — | — |
+| `rows[].planned` | integer | yes | no | — | — |
+| `rows[].position` | integer | yes | no | — | — |
+| `rows[].drafts` | integer | yes | no | — | Messages still drafts. |
+| `rows[].waiting` | integer | yes | no | — | Ready messages waiting for a person's go. |
+| `rows[].created_at` | string | yes | no | — | — |
+| `rows[].next_commands` | array[string] | no | no | [] | — |
+| `count` | integer | yes | no | — | — |
+| `truncated` | boolean | no | no | false | — |
+
+Example JSON output:
+
+```json
+{
+  "count": 0,
+  "rows": [],
+  "truncated": false
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
 
 ## `delivery batch-show`
 
@@ -627,41 +759,47 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `released` | integer | no | no | 0 | — |
 | `remaining` | integer | no | no | 0 | — |
 | `would_draft` | array[object] | no | no | [] | Preview and show: who gets what. |
-| `would_draft[].key` | string | yes | no | — | What exclude takes: the document id, or the customer id for a statement. |
+| `would_draft[].key` | string | yes | no | — | What exclude takes: the document id, a combined row's group key, or the customer id for a statement. |
 | `would_draft[].kind` | string | yes | no | — | — |
 | `would_draft[].customer_id` | string | yes | no | — | — |
 | `would_draft[].customer_name` | string | yes | no | — | — |
 | `would_draft[].documents` | array[string] | no | no | [] | Invoice 1007, Statement 2026-09-01 to ... |
 | `would_draft[].to` | array[string] | no | no | [] | — |
-| `would_draft[].reason` | string \| null | no | yes | null | Skipped: no_address, prefers_mail, not_email, opted_out, in_outbox, sent, excluded or refused. |
+| `would_draft[].reason` | string \| null | no | yes | null | Skipped: no_address, prefers_mail, not_email, opted_out, in_outbox, sent, excluded, refused, not_queued or changed (since the preview). |
 | `would_draft[].reason_text` | string \| null | no | yes | null | — |
 | `would_draft[].message` | string \| null | no | yes | null | The message drafted for it, or the one already there. |
 | `would_draft[].status` | string \| null | no | yes | null | — |
+| `would_draft[].fingerprint` | string \| null | no | yes | null | This row: documents, versions and recipients. |
 | `skipped` | array[object] | no | no | [] | — |
-| `skipped[].key` | string | yes | no | — | What exclude takes: the document id, or the customer id for a statement. |
+| `skipped[].key` | string | yes | no | — | What exclude takes: the document id, a combined row's group key, or the customer id for a statement. |
 | `skipped[].kind` | string | yes | no | — | — |
 | `skipped[].customer_id` | string | yes | no | — | — |
 | `skipped[].customer_name` | string | yes | no | — | — |
 | `skipped[].documents` | array[string] | no | no | [] | Invoice 1007, Statement 2026-09-01 to ... |
 | `skipped[].to` | array[string] | no | no | [] | — |
-| `skipped[].reason` | string \| null | no | yes | null | Skipped: no_address, prefers_mail, not_email, opted_out, in_outbox, sent, excluded or refused. |
+| `skipped[].reason` | string \| null | no | yes | null | Skipped: no_address, prefers_mail, not_email, opted_out, in_outbox, sent, excluded, refused, not_queued or changed (since the preview). |
 | `skipped[].reason_text` | string \| null | no | yes | null | — |
 | `skipped[].message` | string \| null | no | yes | null | The message drafted for it, or the one already there. |
 | `skipped[].status` | string \| null | no | yes | null | — |
+| `skipped[].fingerprint` | string \| null | no | yes | null | This row: documents, versions and recipients. |
 | `messages` | array[string] | no | no | [] | Messages drafted by this call. |
 | `cancelled` | array[string] | no | no | [] | Cancel: the messages cancelled. |
 | `kept` | array[object] | no | no | [] | Cancel: the messages that block (released, exported or sent), each with why. |
-| `kept[].key` | string | yes | no | — | What exclude takes: the document id, or the customer id for a statement. |
+| `kept[].key` | string | yes | no | — | What exclude takes: the document id, a combined row's group key, or the customer id for a statement. |
 | `kept[].kind` | string | yes | no | — | — |
 | `kept[].customer_id` | string | yes | no | — | — |
 | `kept[].customer_name` | string | yes | no | — | — |
 | `kept[].documents` | array[string] | no | no | [] | Invoice 1007, Statement 2026-09-01 to ... |
 | `kept[].to` | array[string] | no | no | [] | — |
-| `kept[].reason` | string \| null | no | yes | null | Skipped: no_address, prefers_mail, not_email, opted_out, in_outbox, sent, excluded or refused. |
+| `kept[].reason` | string \| null | no | yes | null | Skipped: no_address, prefers_mail, not_email, opted_out, in_outbox, sent, excluded, refused, not_queued or changed (since the preview). |
 | `kept[].reason_text` | string \| null | no | yes | null | — |
 | `kept[].message` | string \| null | no | yes | null | The message drafted for it, or the one already there. |
 | `kept[].status` | string \| null | no | yes | null | — |
+| `kept[].fingerprint` | string \| null | no | yes | null | This row: documents, versions and recipients. |
 | `next` | dict \| null | no | yes | null | Input for the next chunk (delivery batch), while drafting. |
+| `fingerprint` | string \| null | no | yes | null | The exact set (documents, versions, recipients); pass it to the run so a changed set is refused. |
+| `go` | boolean | no | no | false | Whether its releases carry a person's go (decided when it began). |
+| `open_batches` | array[string] | no | no | [] | Dry run: unfinished batches over this same selection; continue one instead of starting another. |
 | `version` | integer \| null | no | yes | null | — |
 | `warnings` | array[string] | no | no | [] | — |
 | `next_commands` | array[string] | no | no | [] | — |
@@ -673,12 +811,15 @@ Example JSON output:
   "batch_id": null,
   "cancelled": [],
   "drafted": 0,
+  "fingerprint": null,
+  "go": false,
   "kept": [],
   "kind": null,
   "messages": [],
   "next": null,
   "next_commands": [],
   "number": null,
+  "open_batches": [],
   "planned": 1,
   "released": 0,
   "remaining": 0,
@@ -1991,6 +2132,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `count` | integer | yes | no | — | — |
 | `truncated` | boolean | no | no | false | — |
 | `auto_flag_from` | string \| null | no | yes | null | The company's auto-flag date; null is off. |
+| `flag` | literal["email-later", "not-to-email"] \| null | no | yes | null | With document: that document's flag (null: neutral, the auto-flag date decides). |
 
 Example JSON output:
 
@@ -1999,6 +2141,7 @@ Example JSON output:
   "auto_flag_from": null,
   "count": 0,
   "customers": [],
+  "flag": null,
   "rows": [],
   "truncated": false
 }
@@ -2788,7 +2931,7 @@ Example JSON output:
 
 ## `delivery unflag`
 
-Mark a document not to email: an explicit opt-out, which wins over the company's auto-flag date.
+Mark a document never to email: an explicit opt-out, which wins over the company's auto-flag date. clear removes the flag instead (back to neutral).
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -2821,6 +2964,7 @@ The same example as complete `bookflow_run` arguments:
 |---|---|---|---|---|---|---|
 | `kind` | `KIND` | literal["invoice", "sales-receipt", "estimate"] | yes | no | — | invoice, sales-receipt or estimate. |
 | `document` | `DOCUMENT` | string | yes | no | — | The document, by number or id.; minimum length 1; maximum length 1004 |
+| `clear` | `--clear` | boolean | no | no | false | Remove the flag instead: back to neutral, where the auto-flag date decides. Without it, an explicit opt-out (never email this). |
 
 ### Command and context options
 

@@ -330,9 +330,11 @@ def _row_by_id(connection: sa.Connection, table: sa.Table, record_id: str) -> di
 
 def _hierarchy_rows(connection: sa.Connection, table: sa.Table, root: Mapping[str, Any]) -> list[dict[str, Any]]:
     path = str(root["path"])
+    # The subtree is the range of paths starting with this one (slash-delimited, so "/" + 1 = "0" bounds it): a
+    # read of the path index, where LIKE scanned the table.
     rows = connection.execute(
         sa.select(table)
-        .where(table.c.path.like(path + "%"))
+        .where(table.c.path >= path, table.c.path < path[:-1] + "0")
         .order_by(table.c.depth, table.c.path, table.c.id)
     ).mappings().all()
     return [dict(row) for row in rows]

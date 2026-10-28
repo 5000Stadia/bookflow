@@ -251,7 +251,7 @@ FLAG_KINDS = ('invoice', 'sales-receipt', 'estimate')
 
 
 def define_batch_tables(metadata, C, T, common, messages):
-    """Increment 3 (co0108): *Email later* flags, batches, and the batch a message was drafted in."""
+    """Increment 3 (co0109): *Email later* flags, batches, and the batch a message was drafted in."""
     flags = T('delivery_flags', *common(),
         C('source_kind', sa.String(16), 'Kind of the document: ' + ', '.join(FLAG_KINDS) + '.', nullable=False),
         C('source_id', sa.String(26), 'The invoice, sales receipt (transactions) or estimate (work_documents).',

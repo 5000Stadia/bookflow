@@ -24,4 +24,4 @@ Database: `company`.
 | `full_name` | VARCHAR(1004) | no | — | — | — | — | Materialized colon-delimited name from the root through this record. |
 | `full_name_key` | VARCHAR(2004) | no | — | unique | — | — | NFC-normalized and case-folded full-name key. |
 | `depth` | INTEGER | no | — | — | — | — | One-based hierarchy depth from one through five. |
-| `path` | VARCHAR(136) | no | — | — | — | — | Binary-collated internal path encoded as slash-delimited ULIDs. |
+| `path` | VARCHAR(136) | no | — | — | ix_job_types_path | — | Binary-collated internal path encoded as slash-delimited ULIDs. |

@@ -140,6 +140,7 @@ COMMAND_CODES: dict[str, str] = {
     "E_CUTOVER_BLOCKED": "The move-in plan has blocking exceptions; fix or map them, then run it again.",
     "E_CUTOVER_INCOMPLETE": "The move-in stopped part way; what it made stays in and running it again continues.",
     "E_MERGE_REFUSED": "These two entries cannot be merged; the details name why.",
+    "E_BATCH_BLOCKED": "The batch cannot be reversed now; the details name each blocker and what clears it.",
 }
 
 ALL_CODES: dict[str, str] = {**INFRASTRUCTURE_CODES, **COMMAND_CODES}
