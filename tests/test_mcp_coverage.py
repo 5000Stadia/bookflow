@@ -99,7 +99,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +2 reverse and move (R108 increment 2): bank-feed reverse, bank-feed move.
     # +6 sorting the inbox (R108 increment 3): bank-line match, unmatch, ignore, add, transfer, undo.
     # +4 the item picture (R114 increment 1): item picture set, use, get, clear.
-    assert len(rows) == 844
+    # +3 each person's Home (R191): user home set, show, clear.
+    assert len(rows) == 847
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).

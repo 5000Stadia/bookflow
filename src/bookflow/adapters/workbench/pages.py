@@ -10,6 +10,7 @@ import hashlib
 import secrets
 import threading
 import time
+from contextvars import ContextVar
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -253,7 +254,18 @@ def _tracks_numbers(request, company_id, run):
     return False
 
 
+# The signed-in reader's effective capabilities in the company this request is about (R191, design/point-of-sale.md
+# §9): set once per request when `company show` runs, so every menu, tile, link, control and form on the page asks
+# the same question the command boundary asks. Unset (hub pages, legacy roots) the role decides, as it always has.
+EFFECTIVE: ContextVar[Any] = ContextVar("bookflow_effective_capabilities", default=None)
+
+
 def _role_allows(cmd: registry.Command, record: dict[str, Any], *, hub_admin: bool = False) -> bool:
+    effective = EFFECTIVE.get()
+    if effective is not None and cmd is not None and record.get("company_id") in (None, effective.company_id):
+        decided = effective.decide(cmd)
+        if decided is not None:
+            return decided
     if hub_admin or record.get("access") == "hub_admin":
         return True
     required = cmd.required_role
@@ -655,6 +667,21 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         ctx['company_today'] = DateDefaults.company_today(company_view) if company_view and company_view.get('company_id') == ctx.get('company_id') else ''
         ctx['math_currencies'] = {code: value[0] for code, value in CURRENCIES.items()}
         ctx['math_company_currency'] = (company_view or {}).get('home_currency', '') if company_view and company_view.get('company_id') == ctx.get('company_id') else ''
+        hc = ctx.get("company_id") or ctx.get("header_company_id")
+        if hc and not (company_view and company_view["company_id"] == hc) and name != "login.html":
+            try:  # a hub page keeps the company links: offer only what the reader may open there
+                company_view = run(request, "company show", {}, hc)
+            except BookflowError:
+                company_view = None
+                ctx["header_company_id"] = None if not ctx.get("company_id") else ctx.get("header_company_id")
+        try:
+            ctx.setdefault("hub_admin_reader", credential(request).hub_admin)
+            ctx.setdefault("signed_in_reader", True)
+        except BookflowError:
+            ctx.setdefault("hub_admin_reader", False)
+            ctx.setdefault("signed_in_reader", False)
+        if company_view and company_view["company_id"] == hc:
+            ctx.setdefault("navigation", navigation(request, company_view))
         if company_view and company_view["company_id"] == (ctx.get("company_id") or ctx.get("header_company_id")):
             ctx["company_label"] = company_view["display_name"]
             # Picking (R181 K3) is an optional layer: its buttons show only while the company has it on.
@@ -679,7 +706,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             ctx['billing_reactivate_allowed'] = bool(company_view and _role_allows(
                 registry.get(source_kind + ' update'), company_view, hub_admin=credential(request).hub_admin))
         tpl = env.get_template(name)
-        response = HTMLResponse(tpl.render(request=request, static_urls=static_urls, hub_nouns=_nouns("hub"), company_nouns=_nouns("company"), workbench_menu=Home.MENU, json=json, display_money=lambda value: Money(value["minor_units"], value["currency"]).to_dict()["amount"], **ctx),
+        response = HTMLResponse(tpl.render(request=request, static_urls=static_urls, hub_nouns=_nouns("hub"), company_nouns=_nouns("company"), workbench_menu=(ctx.get("navigation") or {}).get("menu", Home.MENU), json=json, display_money=lambda value: Money(value["minor_units"], value["currency"]).to_dict()["amount"], **ctx),
                                 status_code=status_code)
         if ctx.get("flash_result") is not None:
             response.headers["Cache-Control"] = "no-store"
@@ -724,10 +751,44 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         result = run_command(cmd, raw, ctx, cred, company, "option" if company else "none", dry_run)
         if name == "company show":
             request.state.workbench_company = result
+            effective_capabilities(request, result["company_id"])
             # The company's own way of showing a negative amount, for every figure this
             # request renders through the display filters.
             Display.NEGATIVES.set((result.get("info") or {}).get("negative_number_style") or "minus")
         return result
+
+    def effective_capabilities(request: Request, company_id: str):
+        """The reader's effective capabilities in the company, computed once per request (`membership effective`)."""
+        from bookflow.hub.user_homes import Effective
+        cached = getattr(request.state, "effective", None)
+        if cached is None or cached.company_id != company_id:
+            try:
+                cached = Effective.from_output(run(request, "membership effective", {"company": company_id}, None))
+            except BookflowError:
+                cached = Effective(company_id, None)  # unanswerable: the role decides; the command boundary still guards
+            request.state.effective = cached
+        EFFECTIVE.set(cached)
+        return cached
+
+    def navigation(request: Request, company_view: dict[str, Any]) -> dict[str, Any]:
+        """What the header and side menu offer this reader in this company (design/point-of-sale.md §9)."""
+        cached = getattr(request.state, "navigation", None)
+        if cached is not None and cached[0] == company_view["company_id"]:
+            return cached[1]
+        cred = credential(request)
+        effective = effective_capabilities(request, company_view["company_id"])
+        permits = company_permits(request, company_view)
+        rows = Home.company_rows(permits)
+        menu = Home.offered_menu(company_view["company_id"], permits, rows)
+        role = company_view.get("role")
+        administers = effective.holds("membership.grant")
+        if administers is None:
+            administers = role in ("admin", "owner")
+        nav = dict(menu=menu, minimal=not menu,
+                   users=bool(administers or cred.hub_admin),
+                   advanced=any(command.is_write for verbs in rows.values() for command in verbs))
+        request.state.navigation = (company_view["company_id"], nav)
+        return nav
 
     Purchases.install_deletion(app, run=run, render=render, page_error=page_error)
     FindPage.install(app, host=host, run=run, render=render, page_error=page_error)
@@ -893,12 +954,21 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     @permission_read_package(host)
     def login_page(request: Request):
         nxt = safe_workbench_destination(request.query_params.get("next"))
-        return render("login.html", request, error=None, next=nxt)
+        return render("login.html", request, error=None, next=nxt, hide_home=True)
 
     @app.get("/", response_class=HTMLResponse)
     @permission_read_package(host)
     def home(request: Request):
-        """Land in a company: the only one you can see, else the one this browser used last, else the picker."""
+        """Land on the person's Home when they may open it (design/point-of-sale.md §8); otherwise in a company: the
+        Home's own Overview when its page is no longer theirs, the only one you can see, else the one this browser
+        used last, else the picker. Signing in and the Home button both land here; a `next=` link goes straight on."""
+        try:
+            chosen = run(request, "user home show", {}, None).get("home")
+        except BookflowError:
+            chosen = None
+        if chosen and chosen["available"]:
+            return RedirectResponse(chosen["url"], status_code=303)
+        fallback = "?home=unavailable" if chosen else ""
         try:
             out = run(request, "company list", {}, None)
         except BookflowError as e:
@@ -906,11 +976,26 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         items = out["items"]
         ids = {c["company_id"] for c in items}
         last = request.cookies.get(LAST_COMPANY)
+        if chosen and chosen["company_id"] in ids:
+            return RedirectResponse(f"/c/{chosen['company_id']}/{fallback}", status_code=303)
         if len(items) == 1:
-            return RedirectResponse(f"/c/{items[0]['company_id']}/", status_code=303)
+            return RedirectResponse(f"/c/{items[0]['company_id']}/{fallback}", status_code=303)
         if last in ids:
-            return RedirectResponse(f"/c/{last}/", status_code=303)
+            return RedirectResponse(f"/c/{last}/{fallback}", status_code=303)
         return render("picker.html", request, companies=items, columns=list_columns(items), schema_head=migrate.HEADS["company"])
+
+    @app.post("/home", response_class=HTMLResponse)
+    async def make_this_page_my_home(request: Request):
+        """The account menu's *Make this page my Home*: `user home set` with the page the person is on."""
+        form = await request.form()
+        page = str(form.get("page") or "")
+        try:
+            out = await run_in_threadpool(run, request, "user home set", {"page": page}, None)
+        except BookflowError as e:
+            return HTMLResponse(f'<span class="error" role="alert" data-make-home-result="refused">{escape(e.message)}</span>',
+                                headers={"Cache-Control": "no-store"})
+        return HTMLResponse('<span data-make-home-result="set">This page is now your Home.</span>',
+                            headers={"Cache-Control": "no-store"})
 
     @app.get("/companies", response_class=HTMLResponse)
     @permission_read_package(host)
@@ -969,6 +1054,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             company_id=show["company_id"],
             panels=Home.resolve(show["company_id"], permits=company_permits(request, show)),
             clocks=_open_clocks(request, show["company_id"]),
+            home_unavailable=request.query_params.get("home") == "unavailable",
         )
         resp.set_cookie(LAST_COMPANY, show["company_id"], httponly=True, samesite="lax", secure=secure_cookies, max_age=90 * 86400, path="/")  # a per-browser convenience, no identity in it
         return resp
@@ -1109,9 +1195,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             permits=company_permits(request, show),
             heading=lambda noun, verb: Naming.heading(noun, verb, _noun_meta(noun)),
             plural=lambda noun: Naming.list_heading(noun, _noun_meta(noun)),
-            selector=_record_selector)
+            selector=_record_selector, menu=navigation(request, show)["menu"])
         hub_admin = credential(request).hub_admin
-        index += Admin.finder_entries(lambda cmd: _role_allows(cmd, {}, hub_admin=hub_admin))
+        if hub_admin:  # Administration's pages, like its menu entry, are for hub administrators only (§9)
+            index += Admin.finder_entries(lambda cmd: _role_allows(cmd, {}, hub_admin=hub_admin))
         return JSONResponse({"items": index}, headers={"Cache-Control": "no-store"})
 
     @app.get("/c/{company_id}/_activity")
@@ -1954,7 +2041,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 authorized_company = run(request, "company show", {}, company_id)
             except BookflowError as e:
                 return page_error(request, e)
-            if cmd.is_write and not _role_allows(cmd, authorized_company, hub_admin=cred.hub_admin):
+            # Any command page a denied capability would refuse answers the refusal page up front (R191 §9).
+            if not _role_allows(cmd, authorized_company, hub_admin=cred.hub_admin):
                 return page_error(request, BookflowError("E_PERMISSION", details={
                     "capability": cmd.capability, "required_role": cmd.required_role,
                 }))

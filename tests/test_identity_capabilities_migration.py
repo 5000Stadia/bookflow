@@ -32,10 +32,11 @@ CUSTOM = ("owner", "custom-extension", "owner")
 
 
 def _without_generation(schema):
-    # hub0014 added the generation; hub0015 added the append-only audit triggers; hub0016 the accountant mirror.
+    # hub0014 added the generation; hub0015 added the append-only audit triggers; hub0016 the accountant mirror;
+    # hub0017 each person's Home.
     return [x for x in schema if 'authority_generation' not in x['name'] and not (
         x['type'] == 'trigger' and x['table'] in ('audit_events', 'audit_entries')) and not (
-        x['name'].startswith(('company_accountant', 'ix_company_accountants')))]
+        x['name'].startswith(('company_accountant', 'ix_company_accountants', 'user_homes', 'sqlite_autoindex_user_homes')))]
 
 
 def _rows(conn):

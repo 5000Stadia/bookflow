@@ -20,7 +20,7 @@ M = importlib.import_module('bookflow.storage.hub_migrations.versions.0016_compa
 
 
 def test_the_frozen_ddl_is_what_the_metadata_declares():
-    assert M.revision == 'hub0016' and M.down_revision == 'hub0015' and HEADS['hub'] == 'hub0016'
+    assert M.revision == 'hub0016' and M.down_revision == 'hub0015' and HEADS['hub'] >= 'hub0016'
     assert M.DDL == tuple(str(CreateTable(t).compile(dialect=sqlite.dialect())) for t in (h.company_accountants, h.company_accountant_sync))
     assert M.INDEXES == tuple(str(CreateIndex(i).compile(dialect=sqlite.dialect())) for i in h.company_accountants.indexes)
 
@@ -40,7 +40,7 @@ def test_upgrading_backfills_designations_and_marks_unreadable_books_unverified(
         hub.execute('DROP TABLE company_accountant_sync')
         hub.execute("UPDATE alembic_version SET version_num='hub0015'")
     with open_database(root / 'hub.db', writable=True) as db:
-        assert migrate_to_head(db, 'hub', tmp_path) == ('hub0015', 'hub0016')
+        assert migrate_to_head(db, 'hub', tmp_path) == ('hub0015', HEADS['hub'])
         assert db.raw.execute('PRAGMA foreign_key_check').fetchall() == []
     with sqlite3.connect(root / 'hub.db') as hub:
         assert hub.execute('SELECT company_id, user_id, through_date FROM company_accountants').fetchall() == [(company, cpa, '2026-09-30')]

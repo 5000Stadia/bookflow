@@ -36,10 +36,10 @@ def grant_controls():
 
 
 def install(app, *, run, render, page_error):
-    def view(request,company_id,values=None,result=None,error=None):
+    def view(request,company_id,values=None,result=None,error=None,selected_user=None):
         current = run(request,'membership effective',{'company':company_id},None)
         rows = memberships(request,company_id)
-        selected = (values or {}).get('user') or request.query_params.get('user')
+        selected = selected_user or (values or {}).get('user') or request.query_params.get('user')
         member = next((row for row in rows if row['scope_type']=='company' and row['scope_id']==company_id and
                        selected in (row['user_id'],row['username'])),None)
         if values is None:
@@ -51,6 +51,7 @@ def install(app, *, run, render, page_error):
                 other_grants=json.dumps([x for x in grants if x not in CAPS]),
                 other_denies=json.dumps([x for x in denies if x not in ('ledger.post','ledger.read')]))
         effective = run(request,'membership effective',{'company':company_id,'user':selected},None) if selected else None
+        home = home_of(request, selected)
         agents, agent_admin = agent_panel(request, rows, current)
         controls = grant_controls()
         from bookflow.adapters.workbench import admin as Admin
@@ -66,10 +67,41 @@ def install(app, *, run, render, page_error):
         return render('permissions.html',request,company_id=company_id,company_label=current['company_name'],
             admin=Admin, people=people, selected_name=selected_name,
             current=current,rows=rows,values=values,result=result,error=error,effective=effective,
-            agents=agents,agent_admin=agent_admin,
+            agents=agents,agent_admin=agent_admin,home=home,home_result=getattr(request.state,'home_result',None),
             delete_grants=controls,delete_nouns=', '.join(label.lower() for _,label in controls),
             shown_capabilities=('ledger.read','ledger.post')+CAPS,
             status_code=409 if error and error['code']=='E_VERSION_CONFLICT' else 400 if error else 200)
+
+    def home_of(request, selected):
+        """The selected person's Home, when the viewer may set it (user.manage); otherwise no Home control."""
+        if not selected:
+            return None
+        try:
+            return run(request,'user home show',{'user':selected},None)
+        except BookflowError:
+            return None
+
+    @app.post('/c/{company_id}/users/home',response_class=HTMLResponse)
+    async def set_company_user_home(company_id: str, request: Request):
+        """Set or clear a person's Home from their row (design/point-of-sale.md §8): `user home set --user`."""
+        from starlette.concurrency import run_in_threadpool
+        form = await request.form()
+        user, page = str(form.get('user') or ''), str(form.get('page') or '')
+
+        def submit():
+            try:
+                if form.get('action') == 'clear':
+                    out = run(request,'user home clear',{'user':user},None)
+                else:
+                    out = run(request,'user home set',{'user':user,'company':company_id,'page':page},None)
+                request.state.home_result = dict(ok=True,message=out['message'])
+            except BookflowError as exc:
+                request.state.home_result = dict(ok=False,message=exc.message,page=page)
+            try:
+                return view(request,company_id,selected_user=user)
+            except BookflowError as exc:
+                return page_error(request,exc,company_id=company_id)
+        return await run_in_threadpool(submit)
 
     def memberships(request, company_id):
         """Every membership reaching this company, read a page at a time."""

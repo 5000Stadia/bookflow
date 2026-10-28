@@ -533,6 +533,67 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   1600x1200 and 320x240, headers, the item list, the pick screen, Remove; nothing scrolls sideways; a photo with EXIF
   orientation 6 stored upright; a broken image shows "No picture"; an unswapped failure shows its message).
 
+### As built: increment 3 (menus and Home)
+
+- **Menus follow capabilities.** The workbench asks `membership effective` once per request, when `company show`
+  first runs, and keeps the answer for the request (`pages.EFFECTIVE`). `_role_allows`, which `company_permits` and
+  every page control already called, decides a company command from it: the command's own (capability, threshold)
+  and each resource requirement must be admitted, exactly the pairs `core.dispatch.authorize` checks. A legacy
+  (never activated) root, a hub command or a pair the catalog does not list falls back to the role, as before. So
+  side-menu sections, section links, Overview tiles, the noun grid and All commands, the finder, record controls
+  (notes, attachments, activity), and the up-front refusal of a command page all follow one answer. A section shows
+  only while it has something for the reader (its records, a "+ New", list or task link, Banking's registers;
+  Reports and Audit a command of their nouns); with none left the side menu, the finder and its fixed entries, Find
+  transactions, Switch company and the account menu go, and the header shows Home, the company and Sign out (Held
+  comes with the POS). *Users & permissions* shows to holders of `membership.grant` (or, legacy, admin and owner) and
+  to installation administrators (`user.manage`); *Advanced tools* (menu and Overview footer) to holders of some
+  company write; *Administration* and *System activity* (account menu, the company picker) and the finder's
+  Installation entries only to installation administrators. A hub page keeps the company links of the last company
+  and filters them the same way. The command boundary is unchanged.
+- **Home.** Storage is hub0017 on hub0016: a new table `user_homes` (user_id primary key, company_id, path, version,
+  set_at, set_by, set_via) rather than the `users.home_*` columns sketched in §8, so setting a Home never moves a
+  user's version, which the permission audit reads as part of a person's authority, and no existing table changes.
+  No company migration (bulk edit keeps co0116). Commands `user home set --page PATH [--company C] [--user U]`,
+  `user home show [--user U]`, `user home clear [--user U]`: hub, capability `user`, threshold `authenticated`; one's
+  own is self-service for any signed-in actor; another person's (set, show or clear) calls
+  `hub.capabilities.require_hub(s, "user.manage")`, the check `user deactivate` uses, so an installation
+  administrator or an agent granted `user.manage` acting for one passes and nobody else; a target must be a person.
+  Layer `user-home-v1` on `item-picture-v1` (841 commands, descriptor 9cfd9e91). `--page` is the path after
+  `/c/<company>/` or the whole `/c/<company>/...` path (the company then comes from it). A page is accepted only if
+  `home.page_commands` resolves it (the Overview, `_all`, `find`, `_registers`, `audit`, a visible `_group/<slug>`,
+  any destination a tile or section link declares, or a noun's list, `<noun>/<verb>`, record `<noun>/<id>` or
+  `<noun>/<id>/<verb>` page) and the **target's** effective capabilities in that company admit every command it
+  runs (`hub.user_homes.permits_for`, `membership effective`'s computation; legacy, the target's role). The same
+  check runs again whenever the Home is used.
+- **Landing.** `/` (where signing in without `next=` lands, the brand link, and the Home button) goes to the Home when
+  it is available; otherwise to the Home's company Overview (or the usual landing when that company is gone) with
+  `?home=unavailable`, which shows exactly "Your Home page is not available to you; showing the Overview."; with no
+  Home set it lands as it always has. `next=` still wins. The Home button is a house at the left of the header on
+  every signed-in page; the menu's Overview entry keeps its name and now has its own icon. *Make this page my Home*
+  in the account menu posts the current path through htmx (`POST /home`) and answers "This page is now your Home."
+  or the refusal. A person's row in Users & permissions shows *Home page for* with Set Home and Clear Home when the
+  viewer may read it (`user home show --user` succeeds, i.e. `user.manage`).
+- **Settled choices.** (1) Every company command page, read or write, answers the refusal page up front when the
+  reader's capabilities refuse it (§9 named write forms; a denied report page now refuses too, rather than showing a
+  form whose run fails). (2) Note controls follow `note`, attachment controls `attachment` (§9 said both follow
+  `attachment`; each now follows the capability its command checks, so a control never offers what the boundary
+  refuses). (3) The finder's *All commands* stays while any section does; only *Advanced tools* needs a write.
+  (4) Setting another's Home is `user.manage` only, as briefed; a company administrator who is not an installation
+  administrator does not see the Home control (widening to `membership.grant` for members of that company is a
+  later choice). (5) A Home names a page, not a record's existence: a record page stays a valid Home if the record
+  is later deleted (it then shows not found); a page switched off by a company preference (pick lists while picking
+  is off) is judged by capability alone. (6) Agents may set their own Home (harmless; the command is the same for
+  everyone) but nobody may set an agent's.
+- **§9 missed.** The Items section stays for a POS clerk while the preset keeps `item` read, so criterion 2's "no
+  accounting menu" holds but the clerk's header is not empty until increment 4 decides whether `item` alone opens
+  Items. The finder's Installation entries (Users, Tokens, Agents...) were offered to everyone; they now follow
+  Administration. The company picker's Administration link likewise.
+- **Tests.** `tests/test_menus_and_home.py` (the page and finder sets for standard, readonly and readonly denied
+  `reports`; a denied write form refused up front; a report Home landed on after signing in and from the Home
+  button, `next=` winning; a revoked Home falling back with its line; set refusals, `user.manage` for another's,
+  the Users & permissions control), `tests/test_home_browser.py` (Chrome at 390 px: Make this page my Home on a
+  report, then the Home button from the customer list; nothing scrolls sideways).
+
 ## 16. Open questions
 
 Each default stands if nobody decides. K1 and K2 are Kabe's.

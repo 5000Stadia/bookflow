@@ -106,6 +106,7 @@ ACCEPTED = {
     'bank-line-v1': (834, 'bd11005cfa5a7630090a663bf20f7dd2bd8d7c4ee4a764cd7295a40e1f4f61e9'),
     'capabilities-v1': (834, 'f639c12bed3999fc17973aa0698198f2af7dc1c111932d1af9c4ac3e58e99c99'),
     'item-picture-v1': (838, 'fb1968ec34b88620255e739d05573fb009d3ac47036745294fd0a6f9c77ac8af'),
+    'user-home-v1': (841, '9cfd9e91fa9613980c23ee3561f4c8228b5c50c2bc49e78f1a4f7f0669f241cd'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -252,6 +253,7 @@ CHAIN_ADDITIONS = {
                      'bank-line unmatch'},
     'capabilities-v1': set(),  # no command: the people-only acts become capabilities
     'item-picture-v1': {'item picture clear', 'item picture get', 'item picture set', 'item picture use'},
+    'user-home-v1': {'user home clear', 'user home set', 'user home show'},
 }
 
 _ANCESTOR_EDIT = """

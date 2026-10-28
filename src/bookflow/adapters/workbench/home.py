@@ -1034,7 +1034,7 @@ FINDER_LABELS = {
 }
 
 
-def finder_index(company_id: str, grouped, *, permits, heading, plural, selector) -> list[dict[str, Any]]:
+def finder_index(company_id: str, grouped, *, permits, heading, plural, selector, menu=None) -> list[dict[str, Any]]:
     """Every task and command page this reader may open, by name, for the header's finder.
 
     ``grouped`` is the company's (group, [(noun, verbs)]) rows already filtered to what this company
@@ -1055,8 +1055,10 @@ def finder_index(company_id: str, grouped, *, permits, heading, plural, selector
         else:
             entry["keywords"] += [word for word in (label, *keywords) if word not in entry["keywords"]]
 
-    add("Overview", base + "/", "Menu", "section")
-    for entry in MENU:
+    menu = MENU if menu is None else menu  # the sections this reader may open (R191); none left, no fixed entries
+    if menu:
+        add("Overview", base + "/", "Menu", "section")
+    for entry in menu:
         add(entry.label, f"{base}/_group/{entry.slug}", "Menu", "section")
     for panel in resolve(company_id, permits=permits):
         for item in panel.steps:
@@ -1089,5 +1091,153 @@ def finder_index(company_id: str, grouped, *, permits, heading, plural, selector
                     add(("Open an " if title[:1] in "aeiou" and not title.startswith("uni") else "Open a ") + title, f"{noun_base}/show", where, "page", verb.name)
                 elif not verb.version_source:
                     add(FINDER_LABELS.get(verb.name) or heading(noun, verb.verb), f"{noun_base}/{verb.verb}", where, "page", verb.name)
-    add("All commands", base + "/_all", labels.get("settings", ""), "task", "advanced tools")
+    if menu:
+        add("All commands", base + "/_all", labels.get("settings", ""), "task", "advanced tools")
     return list(entries.values())
+
+
+# ---------------------------------------------------------------- menus follow capabilities (R191)
+
+def noun_group(noun: str) -> str:
+    """The navigation group a company noun is listed under, as All commands groups it."""
+    from bookflow.adapters.workbench import work as Work
+    meta = Work.meta(noun, registry.noun_meta(noun))
+    if meta.get("ui_group"):
+        return str(meta["ui_group"])
+    if noun == "company":
+        return "Company"
+    if noun in ("audit", "hub audit", "undo"):
+        return "Audit"
+    if noun in ("profile",):
+        return "Settings"
+    if noun in ("chart",):
+        return "Accounting"
+    return "Hub"
+
+
+def _menu_nouns(entry: MenuGroup, noun: str, group: str) -> bool:
+    return group in entry.groups or noun in entry.nouns
+
+
+def section_offers(company_id: str, entry: MenuGroup, permits, rows) -> bool:
+    """Whether a menu section has anything left for this reader (design/point-of-sale.md §9).
+
+    A section page shows its records, its "+ New" menu, its lists and tasks (and Banking its registers); Reports
+    and Audit show the commands of their nouns. ``rows`` is {noun: [commands this reader may run]} for the company's
+    nouns. A section with nothing the reader may open is not offered at all.
+    """
+    section = SECTION_BY_SLUG.get(entry.slug)
+    if section is None:
+        return any(verbs and _menu_nouns(entry, noun, noun_group(noun)) for noun, verbs in rows.items())
+    if section.records:
+        query = registry.get(f"{section.records} query")
+        if query is not None and permits(query):
+            return True
+    if entry.slug == "banking":
+        listing = registry.get("account list")
+        if listing is not None and permits(listing):
+            return True
+    found = resolve_section(company_id, section, permits=permits)
+    return any(found[key] for key in ("new", "lists", "tasks", "groups"))
+
+
+def company_rows(permits) -> dict[str, list[registry.Command]]:
+    """{noun: [routed company commands this reader may run]}, every company noun present."""
+    rows: dict[str, list[registry.Command]] = {}
+    for command in registry.routed_commands():
+        if command.scope != "company" or command.noun.endswith(" query") or (command.verb == "query" and command.noun != "rate"):
+            continue
+        verbs = rows.setdefault(command.noun, [])
+        if permits(command):
+            verbs.append(command)
+    return rows
+
+
+def offered_menu(company_id: str, permits, rows=None) -> list[MenuGroup]:
+    """The menu sections this reader may open, in menu order."""
+    rows = company_rows(permits) if rows is None else rows
+    return [entry for entry in MENU if section_offers(company_id, entry, permits, rows)]
+
+
+# Pages that are not a noun's own page, and the command each one reads. A Home may be any of these, any destination
+# a tile or section link declares, any visible section, or a noun's own list, record, report or form page.
+FIXED_PAGES: dict[str, tuple[str, ...]] = {
+    "": ("company show",),  # the Overview
+    "_all": ("company show",),
+    "find": ("transaction find",),
+    "_registers": ("account list",),
+    "audit": ("audit list",),
+}
+_SAFE = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.")
+
+
+def normalize_page(path: str) -> str | None:
+    """A Home path as stored: the part under /c/<company>/, no slashes at either end; None if it cannot be one."""
+    path = (path or "").strip()
+    if len(path) > 400 or any(ch in path for ch in "?#\\") or "//" in path.strip("/"):
+        return None
+    path = path.strip("/")
+    parts = path.split("/") if path else []
+    if any(not part or part in (".", "..") or not set(part) <= _SAFE for part in parts):
+        return None
+    return path
+
+
+def _declared_destinations() -> dict[str, tuple[str, ...]]:
+    found: dict[str, tuple[str, ...]] = {}
+    actions = [step.action for panel in PANELS for step in panel.steps]
+    for section in SECTIONS:
+        actions += [*section.new, *section.lists, *section.tasks, *(a for _, links in section.groups for a in links)]
+    for action in actions:
+        if action.destination and action.commands:
+            found.setdefault(action.destination.split("?")[0].strip("/"), action.commands)
+    return found
+
+
+def page_commands(path: str) -> tuple[str, ...] | str | None:
+    """What opening a workbench page needs: the command names it runs, ``"section:<slug>"`` for a menu section, or
+    None when the path is not a workbench page at all. Reads the registry only."""
+    from bookflow.adapters.workbench import routing as Routing
+    from bookflow.core.ids import is_ulid
+    path = normalize_page(path)
+    if path is None:
+        return None
+    if path in FIXED_PAGES:
+        return FIXED_PAGES[path]
+    parts = path.split("/")
+    if parts[0] == "_group":
+        return f"section:{parts[1]}" if len(parts) == 2 and parts[1] in MENU_BY_SLUG else None
+    declared = _declared_destinations().get(path)
+    if declared:
+        return declared
+    noun = Routing.noun(parts[0])
+
+    def routed(name: str) -> registry.Command | None:
+        command = registry.get(name)
+        return command if command is not None and command.scope == "company" and command in registry.routed_commands() else None
+
+    if len(parts) == 1:
+        for name in (f"{noun} list", f"{noun} query", noun):
+            if routed(name):
+                return (name,)
+        return None
+    if len(parts) == 2:
+        if routed(f"{noun} {parts[1]}"):
+            return (f"{noun} {parts[1]}",)
+        if (parts[1] == "self" or is_ulid(parts[1]) or parts[1].isdigit()) and routed(f"{noun} show"):
+            return (f"{noun} show",)
+        return None
+    if len(parts) == 3 and (parts[1] == "self" or is_ulid(parts[1]) or parts[1].isdigit()) and routed(f"{noun} {parts[2]}"):
+        return (f"{noun} {parts[2]}",)
+    return None
+
+
+def page_open(company_id: str, path: str, permits) -> bool | None:
+    """Whether this reader may open the page: None when it is not a workbench page, else True or False."""
+    needs = page_commands(path)
+    if needs is None:
+        return None
+    if isinstance(needs, str):
+        return MENU_BY_SLUG[needs.split(":", 1)[1]] in offered_menu(company_id, permits)
+    commands = [registry.get(name) for name in needs]
+    return all(command is not None and permits(command) for command in commands)
