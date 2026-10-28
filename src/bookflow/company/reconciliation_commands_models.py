@@ -549,7 +549,7 @@ INPUTS={
  'reconcile mark':Mark,'reconcile mark-all':MarkAll,'reconcile accept-current':AcceptCurrent,
  'reconcile proposal set':ProposalSet,'reconcile proposal remove':ProposalRemove,
  'reconcile preview':Preview,'reconcile finish':Finish,'reconcile opening finish':PreparedChange,
- 'reconcile leave':DraftChange,'reconcile resume':DraftChange,'reconcile cancel':DraftChange,
+ 'reconcile leave':DraftChange,'reconcile resume':DraftChange,'reconcile cancel':DraftChange,'reconcile discard':Discard,
  'reconcile amendment start':AmendmentStart,'reconcile amendment preview':AmendmentPreview,'reconcile amendment apply':AmendmentApply,
  'reconcile undo':Undo,'reconcile attempt begin':AttemptBegin,'reconcile attempt upload':AttemptUpload,
  'reconcile attempt seal':AttemptChange,'reconcile attempt apply':AttemptApply,'reconcile attempt abort':AttemptChange,

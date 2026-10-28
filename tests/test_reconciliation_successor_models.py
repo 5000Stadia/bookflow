@@ -61,7 +61,7 @@ def certificate_world(client,driver):
 
 def test_contract_inventory_strict_shapes_and_storage_payloads():
     from bookflow.company.reconciliation_schema import COMMANDS
-    assert set(COMMANDS)<=m.INPUTS.keys() and len(m.INPUTS)==43
+    assert set(COMMANDS)<=m.INPUTS.keys() and len(m.INPUTS)==44
     for model in set(m.INPUTS.values()):assert model.model_json_schema()['additionalProperties'] is False
     with pytest.raises(ValidationError):m.Page(limit=True)
     with pytest.raises(ValidationError):m.Page(limit=201)
