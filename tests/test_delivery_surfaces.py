@@ -20,7 +20,10 @@ COMMANDS = frozenset(('delivery draft', 'delivery update', 'delivery send', 'del
                       'delivery approve', 'delivery retry', 'delivery run', 'delivery-connection add',
                       'delivery-connection update', 'delivery-connection enable', 'delivery-connection disable',
                       'delivery-connection remove', 'delivery-connection check', 'delivery-connection show',
-                      'delivery-connection query'))
+                      'delivery-connection query',
+                      # Increment 3: flags, the queue and batches.
+                      'delivery flag', 'delivery unflag', 'delivery queue', 'delivery batch', 'delivery batch-show',
+                      'delivery batch-cancel'))
 
 
 @pytest.mark.timeout(900)
@@ -45,6 +48,11 @@ def test_the_same_delivery_through_python_cli_http_and_mcp(root, tmp_path):
                 retired = await call('delivery-template deactivate', {'template': made['id']})
                 shown_template = await call('delivery-template show', {'template': made['id']})
                 templates = await call('delivery-template query', {'include_inactive': True})
+                flagged = await call('delivery flag', {'kind': 'invoice', 'document': 'DEMO-SALE-INV-ACTIVE'})
+                listed = await call('delivery queue', {})
+                unflagged = await call('delivery unflag', {'kind': 'invoice', 'document': 'DEMO-SALE-INV-ACTIVE'})
+                flags = (flagged['queued'], [r['number'] for r in listed['rows']], unflagged['flag'],
+                         unflagged['queued'])
                 draft = await call('delivery draft', {'kind': 'invoice', 'document': 'DEMO-SALE-INV-ACTIVE'})
                 edited = await call('delivery update', {'message': draft['number'], 'subject': 'Your invoice'})
                 shown = await call('delivery show', {'message': draft['number']})
@@ -64,9 +72,15 @@ def test_the_same_delivery_through_python_cli_http_and_mcp(root, tmp_path):
                 statement = await call('delivery draft', {'kind': 'statement', 'customer': invoice['customer_id'],
                                                           'date_from': '2025-12-01', 'date_to': '2025-12-31'})
                 cancelled = await call('delivery cancel', {'message': statement['number']})
+                batch = await call('delivery batch', {'kind': 'statement', 'date_from': '2026-09-01',
+                                                      'date_to': '2026-09-30', 'customer': invoice['customer_id']})
+                batch_shown = await call('delivery batch-show', {'batch': batch['number']})
+                batch_cancel = await call('delivery batch-cancel', {'batch': batch['number']})
+                flags += (batch['planned'], len(batch['messages']), batch_shown['drafted'], batch_cancel['state'],
+                          len(batch_cancel['cancelled']))
                 outbox = await call('delivery query', {'status': 'all'})
                 results[surface] = (fields, preview, retired, shown_template, templates, edited, shown, released,
-                                    exported, sent, history, cancelled, outbox, queue)
+                                    exported, sent, history, cancelled, outbox, queue, flags)
             return results
         finally:
             await matrix.close()
@@ -74,7 +88,9 @@ def test_the_same_delivery_through_python_cli_http_and_mcp(root, tmp_path):
     results = anyio.run(witness)
     shapes = set()
     for surface, (fields, preview, retired, shown_template, templates, edited, shown, released, exported, sent,
-                  history, cancelled, outbox, queue) in results.items():
+                  history, cancelled, outbox, queue, flags) in results.items():
+        assert flags == (True, ['DEMO-SALE-INV-ACTIVE'], 'not-to-email', False, 1, 1, 1, 'cancelled', 1), \
+            (surface, flags)
         assert queue == (0, 'E_WORK_DEPENDENCY', 0, 'none', [], [], 'E_VALIDATION', ('E_RECORD_NOT_FOUND',) * 6), \
             (surface, queue)
         assert preview['subject'] == 'Invoice DEMO-SALE-INV-ACTIVE' and preview['template_name'] == 'Brief', surface

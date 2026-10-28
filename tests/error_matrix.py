@@ -2680,3 +2680,17 @@ MATRIX['delivery-connection check'] = {'E_VALIDATION': 'its kind is not availabl
                                        'E_RECORD_NOT_FOUND': 'unknown connection', **_CONNECTION_WRITE}
 MATRIX['delivery-connection show'] = {'E_RECORD_NOT_FOUND': 'unknown connection'}
 MATRIX['delivery-connection query'] = {}
+# Document delivery (R112 increment 3): flags, the queue and batches.
+_FLAG = {'E_VALIDATION': 'a voided document', 'E_RECORD_NOT_FOUND': 'unknown document',
+         'E_VERSION_CONFLICT': 'flagged meanwhile', **_DELIVERY_TAIL}
+MATRIX['delivery flag'] = dict(_FLAG)
+MATRIX['delivery unflag'] = dict(_FLAG)
+MATRIX['delivery queue'] = {'E_RECORD_NOT_FOUND': 'unknown customer', 'E_VALIDATION': 'invalid filter'}
+MATRIX['delivery batch'] = {'E_VALIDATION': 'no selection, or a missing kind, period or ready; a filter for another kind',
+                            'E_RECORD_NOT_FOUND': 'unknown batch, customer or customer type',
+                            'E_VERSION_CONFLICT': 'the batch moved meanwhile',
+                            'E_WORK_DEPENDENCY': 'a document refused while drafting (recorded as a skip)',
+                            **_DELIVERY_TAIL}
+MATRIX['delivery batch-show'] = {'E_RECORD_NOT_FOUND': 'unknown batch'}
+MATRIX['delivery batch-cancel'] = {'E_RECORD_NOT_FOUND': 'unknown batch', 'E_VERSION_CONFLICT': 'stale expected_version',
+                                   'E_REASON_REQUIRED': 'no --reason', **_DELIVERY_TAIL}

@@ -305,7 +305,10 @@ DELIVERY_COMMANDS = frozenset(('delivery draft', 'delivery update', 'delivery se
     # R112 increment 2: the queue and the transport seam.
     'delivery approve', 'delivery retry', 'delivery run', 'delivery-connection add', 'delivery-connection update',
     'delivery-connection enable', 'delivery-connection disable', 'delivery-connection remove',
-    'delivery-connection check', 'delivery-connection show', 'delivery-connection query'))
+    'delivery-connection check', 'delivery-connection show', 'delivery-connection query',
+    # R112 increment 3: flags, the queue and batches.
+    'delivery flag', 'delivery unflag', 'delivery queue', 'delivery batch', 'delivery batch-show',
+    'delivery batch-cancel'))
 
 LANDED_COST_COMMANDS = frozenset(('landed-cost setup', 'landed-cost charges', 'landed-cost post', 'landed-cost void',
     'landed-cost show', 'landed-cost query'))

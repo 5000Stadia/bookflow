@@ -95,6 +95,7 @@ ACCEPTED = {
     'delivery-v1': (771, '085b7a93194e439557234ed8d88a7d7bdfd39ed06f8b2cbdddb732daca07561b'),
     'packing-v1': (774, '10872774b49e7497c34eccde2882c74e49c36ead5d7d2ff765399dd31fae79c8'),
     'delivery-queue-v1': (785, '2e19e20f01b2cdc3110be9f381a9ec54fa4f7f0ba5ef6880b49189576076554c'),
+    'delivery-batch-v1': (791, '3a335c0698356e5e7194943a145695d01fecbf2fa51a296876072a1babdb4042'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -224,6 +225,8 @@ CHAIN_ADDITIONS = {
                           'delivery-connection check', 'delivery-connection disable', 'delivery-connection enable',
                           'delivery-connection query', 'delivery-connection remove', 'delivery-connection show',
                           'delivery-connection update'},
+    'delivery-batch-v1': {'delivery batch', 'delivery batch-cancel', 'delivery batch-show', 'delivery flag',
+                          'delivery queue', 'delivery unflag'},
 }
 
 _ANCESTOR_EDIT = """

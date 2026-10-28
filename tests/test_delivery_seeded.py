@@ -233,3 +233,111 @@ def test_seeded_queue_never_sends_twice_records_every_attempt_and_holds_unknowns
                         tally['retried'] = tally.get('retried', 0) + 1
             _queue_check(run, backend, seed, step)
     print('queue seed', seed, 'deliveries', len(backend.delivered), dict(sorted(tally.items())))
+
+
+# ---------------------------------------------------------------- increment 3: flags, the auto-flag date and batches
+
+BATCH_STEPS = int(os.environ.get('BF_DELIVERY_BATCH_STEPS', '30'))
+SKIP_REASONS = {'no_address', 'prefers_mail', 'not_email', 'opted_out', 'in_outbox', 'sent', 'excluded', 'refused'}
+
+
+def _expected_queue(run, desk, flags, auto_from, methods):
+    """The queue worked by hand from what the steps did: flags, the date, each customer's method, the messages."""
+    out = set()
+    for number in desk['invoices']:
+        invoice = run('invoice show', {'invoice': number})
+        if invoice['status'] == 'voided':
+            continue
+        rows = run('delivery query', {'status': 'all', 'source': invoice['id']})['rows']
+        if any(r['status'] != 'cancelled' for r in rows):
+            continue
+        flag = flags.get(number)
+        if flag is True or (flag is None and auto_from and invoice['date'] >= auto_from
+                            and methods[invoice['customer_id']] == 'email'):
+            out.add(number)
+    return out
+
+
+@pytest.mark.timeout(1800)
+@pytest.mark.parametrize('seed', SEEDS)
+def test_seeded_batches_duplicate_nothing_name_every_skip_and_cancel_whole(desk, seed, monkeypatch):
+    from bookflow.company import delivery_batches
+    monkeypatch.setattr(delivery_batches, 'CHUNK', 2)
+    rng, run, tally = random.Random(seed), desk['run'], {}
+    customers = sorted({run('invoice show', {'invoice': n})['customer_id'] for n in desk['invoices']})
+    methods = {cid: 'none' for cid in customers}
+    flags, auto_from, batches = {}, None, []
+
+    def act(name):
+        tally[name] = tally.get(name, 0) + 1
+
+    for step in range(BATCH_STEPS):
+        choice = rng.choice(('flag', 'unflag', 'date', 'method', 'batch', 'batch', 'more', 'cancel', 'draft',
+                             'release', 'export'))
+        try:
+            if choice in ('flag', 'unflag'):
+                number = rng.choice(desk['invoices'])
+                run('delivery ' + choice, {'kind': 'invoice', 'document': number}, reason='Seed')
+                flags[number] = choice == 'flag'
+            elif choice == 'date':
+                auto_from = rng.choice((None, '2026-03-02', '2026-03-04'))
+                run('company update', {'delivery_auto_flag_from': auto_from})
+            elif choice == 'method':
+                cid = rng.choice(customers)
+                methods[cid] = rng.choice(('email', 'mail', 'none'))
+                run('customer update', {'customer': cid, 'preferred_delivery_method': methods[cid]})
+            elif choice == 'batch':
+                raw = rng.choice(({'queued': True}, {'kind': 'invoice', 'unsent': True},
+                                  {'kind': 'statement', 'period': '2026-03'}))
+                if 'statement' not in raw.values() and rng.random() < 0.3:
+                    raw['combine'] = True
+                raw['send'] = rng.random() < 0.3
+                preview = run('delivery batch', raw, dry_run=True)
+                out = run('delivery batch', raw, reason='Batch')
+                assert out['planned'] == preview['planned'], (seed, step)
+                while out['next']:
+                    out = run('delivery batch', out['next'], reason='Go on')
+                if out['batch_id']:
+                    batches.append(out['number'])
+                # A rerun of the same selection drafts nothing new.
+                again = run('delivery batch', dict(raw, send=False), dry_run=True)
+                assert again['planned'] == 0, (seed, step, raw, again['would_draft'])
+                act('batch ' + ('statement' if 'period' in raw else 'queued' if raw.get('queued') else 'unsent'))
+            elif choice == 'more' and batches:
+                out = run('delivery batch', {'batch': rng.choice(batches)}, reason='Go on')
+                assert out['messages'] == [], (seed, step)  # every batch here was run to its end
+            elif choice == 'cancel' and batches:
+                number = rng.choice(batches)
+                out = run('delivery batch-cancel', {'batch': number}, reason='Undo the batch')
+                assert out['state'] == 'cancelled'
+                act('batch cancel')
+            elif choice == 'draft':
+                run('delivery draft', {'kind': 'invoice', 'document': rng.choice(desk['invoices'])}, reason='One')
+            elif choice in ('release', 'export'):
+                rows = run('delivery query', {'status': 'draft', 'limit': 500})['rows']
+                if rows:
+                    number = rng.choice(rows)['number']
+                    run('delivery send' if choice == 'release' else 'delivery export', {'messages': [number]},
+                        reason='Seed')
+            act(choice)
+        except BookflowError as e:
+            assert e.code in EXPECTED_REFUSALS, (seed, step, choice, e.code, e.message)
+            act('refused ' + e.code)
+        # After every step: the queue is what the hand-worked rule says; at most one live message per document;
+        # every skip is named; a cancelled batch leaves no drafted message standing.
+        queue = {r['number'] for r in run('delivery queue', {})['rows']}
+        assert queue == _expected_queue(run, desk, flags, auto_from, methods), (seed, step, choice)
+        live = {}
+        for row in run('delivery query', {'status': 'live', 'limit': 500})['rows']:
+            for source in row['source_ids']:
+                live[source] = live.get(source, 0) + 1
+        assert all(v == 1 for v in live.values()), (seed, step, live)
+        for number in batches:
+            shown = run('delivery batch-show', {'batch': number})
+            assert all(s['reason'] in SKIP_REASONS and s['reason_text'] for s in shown['skipped']), (seed, step)
+            if shown['state'] == 'cancelled':
+                # Only a draft exported before the cancel stands (it may have been sent by hand), and it was named.
+                for row in run('delivery query', {'batch': number, 'status': 'draft', 'limit': 500})['rows']:
+                    events = [e['event'] for e in run('delivery history', {'message': row['number']})['events']]
+                    assert 'exported' in events, (seed, step, number, row['number'])
+    print('batch seed', seed, 'batches', len(batches), dict(sorted(tally.items())))
