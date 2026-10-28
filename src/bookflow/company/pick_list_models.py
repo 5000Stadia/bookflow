@@ -1,11 +1,11 @@
 """Input and output shapes for pick lists (R181 increment 3, design/pick-pack-ship.md §4)."""
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, BeforeValidator, Field
 
-from bookflow.company.shipment_models import IsoDate, Quantity, Selector, _Strict
+from bookflow.company.shipment_models import IsoDate, Quantity, Selector, _Strict, number_text
 
 
 class PickListCreateInput(_Strict):
@@ -22,7 +22,8 @@ class PickListCreateInput(_Strict):
 
 
 class PickEntryInput(_Strict):
-    line: str | None = Field(default=None, max_length=40, description='The pick line, by position or line_id.')
+    line: Annotated[str, BeforeValidator(number_text)] | None = Field(
+        default=None, max_length=40, description='The pick line, by position or line_id.')
     item: Selector | None = Field(default=None, description='Or the item picked (name, id or barcode).')
     sales_order: Selector | None = Field(default=None, description='With item: the order, when the list holds the '
                                          'item for two orders.')

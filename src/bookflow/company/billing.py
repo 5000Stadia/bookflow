@@ -25,7 +25,8 @@ def dependency(problem, **details):
 def hashes(inp, kind, destination):
     key = hashlib.sha256(inp.conversion_key.encode()).hexdigest()
     intent = dict(kind=kind, destination=destination,
-        input=inp.model_dump(mode='json', exclude={'expected_facts_fingerprint'}))
+        input=inp.model_dump(mode='json', exclude={'expected_facts_fingerprint'}
+                             | ({'date', 'expected_version'} - inp.model_fields_set)))
     return key, hashlib.sha256(sales.json_text(intent).encode()).hexdigest()
 
 

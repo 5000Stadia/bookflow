@@ -90,9 +90,82 @@ def _numbers(kind):
             fields = {"item": row["full_name"]}
             fields.update({"serial_numbers": [row["number"]]} if kind == "serial_number" else {"lot": row["number"]})
             out.append({"kind": kind, "id": row["id"], "name": f"{row['full_name']} {row['number']}", "type": row["type"],
-                        "active": bool(row["active"]), "barcode": None, "on_hand": on_hand, "line_fields": fields})
+                        "active": bool(row["active"]), "barcode": None, "on_hand": on_hand, "line_fields": fields,
+                        "fulfillment": _fulfillment(s, kind, row["id"], row["number"])})
         return out
     return finder
+
+
+def _boxes_of(s, revision_id, identity, number, serial):
+    """Box numbers of a draft's or shipment's revision holding the line ``identity`` (and the serial number)."""
+    from bookflow.company import shipment_packing as packing
+    out = []
+    for box in packing.load(s, revision_id):
+        held = box["contents"].get(identity)
+        if held and held[0] and (not serial or not held[1] or number in held[1]):
+            out.append(box["box"])
+    return out
+
+
+def _fulfillment(s, kind, number_id, number):
+    """Where a serial number or lot is in fulfillment (design/pick-pack-ship.md §7): picked on a live pick list,
+    on a live draft shipment, or on a posted shipment, with the box it is packed in."""
+    if not s.company.conn.execute(sa.text("SELECT 1 FROM sqlite_schema WHERE name = 'pick_lists'")).first():
+        return []
+    from bookflow.company import pick_lists, serial_lots, shipment_packing as packing, shipments
+    serial = kind == "serial_number"
+    column = "serial_number_id" if serial else "lot_id"
+    orders = {}
+
+    def order_number(order_id):
+        if order_id not in orders:
+            orders[order_id] = s.company.conn.execute(sa.select(c.work_documents.c.number).where(
+                c.work_documents.c.id == order_id)).scalar()
+        return orders[order_id]
+    out = []
+    lists = [row for row in pick_lists._current_rows(s) if row["status"] != "cancelled"]
+    if lists:
+        names = {row["id"]: row["number"] for row in lists}
+        states, closed = pick_lists.live_states(s, lists)
+        found = {}
+        for state in states.values():
+            line = state.line
+            if (line["pick_list_id"], line["sales_order_id"]) in closed:
+                continue
+            quantity = sum(chunk.quantity for chunk in state.chunks
+                           if (chunk.serial_id if serial else chunk.lot_id) == number_id)
+            if quantity:
+                key = (line["pick_list_id"], line["sales_order_id"])
+                found[key] = found.get(key, 0) + quantity
+        for (list_id, order_id), quantity in found.items():
+            out.append({"kind": "pick_list", "number": names[list_id], "sales_order": order_number(order_id),
+                        "quantity": format_quantity_micro_units(quantity), "boxes": []})
+    for draft in packing._current_drafts(s):
+        if draft["status"] != "draft":
+            continue
+        for line in packing.lines_of_draft(s, draft["id"]):
+            if (number in (line.serials or ())) if serial else (line.lot or "").casefold() == number.casefold():
+                out.append({"kind": "draft", "number": draft["number"], "sales_order": order_number(
+                    draft["sales_order_id"]), "quantity": format_quantity_micro_units(
+                    serial_lots.UNIT if serial else line.quantity),
+                    "boxes": _boxes_of(s, draft["revision_id"], line.identity, number, serial)})
+    taken = s.company.conn.execute(sa.text(
+        f"SELECT h.id, h.number, h.sales_order_id, cur.id AS revision_id, cur.ship_date, "
+        f"sum(p.quantity_microunits) AS q FROM inventory_placements p "
+        f"JOIN inventory_movements m ON m.id = p.movement_id JOIN shipments h ON h.transaction_id = m.transaction_id "
+        f"JOIN ({shipments._CURRENT}) cur ON cur.shipment_id = h.id "
+        f"WHERE p.{column} = :id AND cur.status = 'shipped' GROUP BY h.id ORDER BY cur.ship_date DESC, h.number DESC"),
+        {"id": number_id}).mappings().all()
+    for row in taken:
+        if int(row["q"]) >= 0:
+            continue
+        boxes = []
+        for line in packing.shipment_lines(s, row["revision_id"]):
+            if (number in (line.serials or ())) if serial else (line.lot or "").casefold() == number.casefold():
+                boxes.extend(_boxes_of(s, row["revision_id"], line.identity, number, serial))
+        out.append({"kind": "shipment", "number": row["number"], "sales_order": order_number(row["sales_order_id"]),
+                    "quantity": format_quantity_micro_units(-int(row["q"])), "boxes": sorted(set(boxes))})
+    return out
 
 
 def _bins(s, code: str, sites: dict[str, str], as_of: str) -> list[dict[str, Any]]:
@@ -147,6 +220,11 @@ def lookup(s, inp) -> dict[str, Any]:
     elif found["kind"] != "item":
         where = ", ".join(f"{place['site']} {place['quantity']}" for place in found["on_hand"]) or "not in stock"
         message = f"{code} is {found['kind'].replace('_', ' ')} {code} of {found['line_fields']['item']} ({where})."
+        places = [f"{place['kind'].replace('_', ' ')} {place['number']} (sales order {place['sales_order']}"
+                  + (f", box {', '.join(str(b) for b in place['boxes'])}" if place['boxes'] else "") + ")"
+                  for place in found.get("fulfillment") or ()]
+        if places:
+            message += " On " + "; ".join(places) + "."
     else:
         message = f"{code} is {found['name']}."
     return {

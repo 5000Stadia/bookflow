@@ -5,9 +5,9 @@ something stocked to ship or shipped and not invoiced, its fulfillment status be
 can ship now. **Can ship now is what `shipment post --sales-order <n>` would ship**, worked out by the same steps
 `shipments._plan` takes with no lines named: each order line's to-ship (`shipments._order_lines`), less what live
 drafts hold, at the site `shipment post` picks (or the one asked for), taken in line order from what is available to
-the order (on hand less what every other document commits, as `commitments.available_to` reads it). An order a live
-pick list holds ships from the list, so `shipment post` from the order alone is refused and its can-ship-now is zero,
-with a note naming the list. Availability is read once for the whole company, not once per order.
+the order at that site (on hand there less what every other document commits there, as `commitments.available_at`
+reads it). An order a live pick list holds ships from the list, so `shipment post` from the order alone is refused and
+its can-ship-now is zero, with a note naming the list. Availability is read once by site, not once per order.
 
 Fulfillment status (§2): `shipped` when nothing is left to ship; else, while picking and packing are on, `packed` (a
 live draft with every unit in a box), `picking` (a live open list still has units to pick for it), `picked` (picked
@@ -91,9 +91,9 @@ def _picks(s):
     if not lists:
         return {}
     by_id = {row['id']: row for row in lists}
-    shipped = {(link['pick_list_id'], link['sales_order_id']) for link in pick_lists.live_links(s, list(by_id))}
+    states, shipped = pick_lists.live_states(s, lists)
     planned, picked = {}, {}
-    for state in pick_lists.line_states(s, lists).values():
+    for state in states.values():
         line = state.line
         if (line['pick_list_id'], line['sales_order_id']) in shipped:
             continue
@@ -145,12 +145,14 @@ def _drafts(s):
 
 
 class _Stock:
-    """Available to each order, read once: on hand less what every other document commits and pending builds
-    reserve, as `commitments.available_to` gives it (on hand alone while the preferences are off)."""
+    """Available to each order at each site, read once: on hand at the site less what every other document commits
+    there (a line naming no site commits at the default site) and pending builds there reserve, as
+    `commitments.available_at` gives it (on hand alone while the preferences are off)."""
 
     def __init__(self, s, items, as_of=None):
         from bookflow.company import commitments
-        self.on_hand = commitments.on_hand(s, items, as_of) if items else {}
+        self.on_hand = placements.on_hand(s, as_of, item_ids=sorted(items)) if items else {}
+        self.default = placements.default_site_id(s)
         self.value = {}
         if items:
             m = c.inventory_movements
@@ -160,18 +162,20 @@ class _Stock:
                 query = query.where(m.c.effective_date <= as_of)
             self.value = {item: int(value or 0) for item, value in s.company.conn.execute(query)}
         self.deducts = commitments.deducts_documents(s)
-        self.builds = commitments.for_assemblies(s) if commitments.deducts_builds(s) else {}
+        self.builds = commitments.for_assemblies_by_site(s) if commitments.deducts_builds(s) else {}
         self.total, self.own = {}, {}
         if self.deducts and items:
             for line in commitments.open_lines(s, items=sorted(items)):
-                self.total[line.item_id] = self.total.get(line.item_id, 0) + line.open_base
-                key = (line.document_id, line.item_id)
+                site = line.site_id or self.default
+                self.total[(line.item_id, site)] = self.total.get((line.item_id, site), 0) + line.open_base
+                key = (line.document_id, line.item_id, site)
                 self.own[key] = self.own.get(key, 0) + line.open_base
 
-    def to(self, order_id, items):
-        return {item: self.on_hand.get(item, 0)
-                - ((self.total.get(item, 0) - self.own.get((order_id, item), 0)) if self.deducts else 0)
-                - self.builds.get(item, 0) for item in items}
+    def to(self, order_id, items, site_id):
+        return {item: self.on_hand.get((item, site_id), 0)
+                - ((self.total.get((item, site_id), 0) - self.own.get((order_id, item, site_id), 0))
+                   if self.deducts else 0)
+                - self.builds.get((item, site_id), 0) for item in items}
 
 
 def _ship_now(lines, order_id, site_id, stock):
@@ -184,18 +188,27 @@ def _ship_now(lines, order_id, site_id, stock):
 
 
 def _worthless(now, lines, stock):
-    """Whether every unit ``now`` ships is of an item whose stock is carried at no value, so `shipment post` would
-    post no cost and refuse it (``shipment_without_value``)."""
+    """Whether every unit ``now`` ships is worth nothing in the books, so `shipment post` would post no cost and refuse
+    it (``shipment_without_value``): an item carried at no value, or so few units (a case unit's last micro-units at a
+    site) that their cost at the item's average rounds to no cent."""
     if not now:
         return False
-    items = {line['facts'].item_id for line in lines if line['root'] in now}
-    return all(stock.value.get(item, 0) == 0 for item in items)
+    held = {}
+    for (item, _), quantity in stock.on_hand.items():
+        held[item] = held.get(item, 0) + quantity
+    item_of = {line['root']: line['facts'].item_id for line in lines}
+    for root, base in now.items():
+        item = item_of.get(root)
+        value, quantity = stock.value.get(item, 0), held.get(item, 0)
+        if value and (quantity <= 0 or round(Fraction(value) * base / quantity)):
+            return False
+    return True
 
 
 def _plan_now(lines, order_id, site_id, stock):
     from bookflow.company.shipments import _to_base
     eligible = [line for line in lines if line['left'] > 0 and line['line'].get('site_id') in (None, site_id)]
-    left = stock.to(order_id, {line['facts'].item_id for line in eligible})
+    left = stock.to(order_id, {line['facts'].item_id for line in eligible}, site_id)
     out = {}
     for line in eligible:
         item = line['facts'].item_id
