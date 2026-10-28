@@ -197,7 +197,8 @@ def test_import_is_the_same_as_typing_and_permission_parity(books):
         books.run('customer create', {'name': 'Long', 'phone': '9' * 80})
     preview = books.run('import preview', {'kind': 'customer', 'content': 'Name,Phone\nLong,' + '9' * 80 + '\n'})
     assert preview['refused'][0]['code'] == typed_error.value.code and preview['refused'][0]['column'] == 'Phone'
-    # A caller who may import but not make customers gets the command's own refusal, row by row.
+    # A caller who may import but not read or make customers is refused the preview itself (its rows would show
+    # which customers exist and how they differ), as typing is refused the create.
     from tests.conftest import as_user, make_actor
     make_actor(Path(books.root), 'clerk')
     books.client.run('membership grant', {'user': 'clerk', 'company': books.company, 'role': 'standard',
@@ -205,8 +206,9 @@ def test_import_is_the_same_as_typing_and_permission_parity(books):
     clerk = as_user(Path(books.root), 'clerk')
     with pytest.raises(BookflowError) as direct:
         clerk.run('customer create', {'name': 'Clerk Co'}, company=books.company)
-    shown = clerk.run('import preview', {'kind': 'customer', 'content': 'Name\nClerk Co\n'}, company=books.company)
-    assert direct.value.code == 'E_PERMISSION' and shown['refused'][0]['code'] == 'E_PERMISSION'
+    with pytest.raises(BookflowError) as shown:
+        clerk.run('import preview', {'kind': 'customer', 'content': 'Name\nClerk Co\n'}, company=books.company)
+    assert direct.value.code == shown.value.code == 'E_PERMISSION'
     # Someone who cannot import at all is refused the import itself.
     make_actor(Path(books.root), 'viewer')
     books.client.run('membership grant', {'user': 'viewer', 'company': books.company, 'role': 'readonly',

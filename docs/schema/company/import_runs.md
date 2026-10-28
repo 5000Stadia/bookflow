@@ -12,7 +12,7 @@ Database: `company`.
 | `kind` | VARCHAR(32) | no | — | — | — | — | Import kind (customer, vendor, item, account, term...). |
 | `mode` | VARCHAR(8) | no | — | — | — | — | create, update or upsert. |
 | `atomic` | BOOLEAN | no | — | — | — | — | True when the first refusal undoes the whole run. |
-| `state` | VARCHAR(16) | no | — | — | — | — | previewed, running, stopped, waiting, done, cancelled or rolled_back. |
+| `state` | VARCHAR(16) | no | — | — | — | — | previewed, running, stopped, waiting, done, cancelled, rolled_back or failed (an atomic undo refused). |
 | `source` | VARCHAR(200) | no | — | — | — | — | The named origin of the file; keys are unique within it. |
 | `mapping` | TEXT | no | — | — | — | — | JSON of the mapping used: columns to input paths, key columns, formats. |
 | `attachment_id` | VARCHAR(26) | yes | — | — | — | — | Attachment the file came from; null for pasted text. |

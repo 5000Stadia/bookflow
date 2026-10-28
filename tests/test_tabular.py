@@ -75,7 +75,9 @@ def test_dates_orders_pivots_and_serials():
 def test_booleans_and_formula_safety():
     assert [tabular.parse_bool(x) for x in ('Yes', 'n', '1', 'FALSE', '')] == [True, False, True, False, None]
     text = tabular.write_csv(['Name', 'Note'], [['=HYPERLINK("x")', '+1'], ['-2', '@SUM(A1)'], ['Acme', '0042']])
-    assert text.splitlines() == ['Name,Note', '"\'=HYPERLINK(""x"")",\'+1', "'-2,'@SUM(A1)", 'Acme,0042']
+    assert text.splitlines() == ['Name,Note', '"\'=HYPERLINK(""x"")",+1', "-2,'@SUM(A1)", 'Acme,0042']
+    assert [cells for _, cells in tabular.read(text).rows] == [['=HYPERLINK("x")', '+1'], ['-2', '@SUM(A1)'],
+                                                                ['Acme', '0042']]
 
 
 @pytest.mark.parametrize('text', ['1,234.56', '(1,234.56)', '1234.56-', '$12', '-5.00', '0.10', '1000'])

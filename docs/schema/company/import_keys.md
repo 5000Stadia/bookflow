@@ -11,8 +11,8 @@ Database: `company`.
 | `id` | VARCHAR(26) | no | — | primary key 1 | — | — | Stable ULID of this key. |
 | `source` | VARCHAR(200) | no | — | — | ux_import_keys_standing | — | The source the key is unique in. |
 | `key_hash` | VARCHAR(64) | no | — | — | ux_import_keys_standing | — | SHA-256 of source, kind and the normalized key. |
-| `record_type` | VARCHAR(64) | no | — | — | — | — | Record the key made. |
-| `record_id` | VARCHAR(26) | no | — | — | — | — | That record. |
+| `record_type` | VARCHAR(64) | no | — | — | ix_import_keys_record | — | Record the key made. |
+| `record_id` | VARCHAR(26) | no | — | — | ix_import_keys_record | — | That record. |
 | `run_id` | VARCHAR(26) | no | — | — | — | import_runs.id | The run that made it. |
 | `batch_id` | VARCHAR(26) | no | — | — | ix_import_keys_batch | batches.id | The batch that made it. |
 | `created_at` | VARCHAR(32) | no | — | — | — | — | UTC time it was written, with the record. |

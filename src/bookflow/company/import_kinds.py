@@ -39,6 +39,11 @@ class Kind:
         return f'{self.noun} update'
 
     @property
+    def selector(self) -> str:
+        """The input field its show, update and deactivate commands select a record by (`customer_type`)."""
+        return self.noun.replace('-', '_')
+
+    @property
     def definition(self):
         from bookflow.company import lists
         return lists.get_list_definition(self.noun)

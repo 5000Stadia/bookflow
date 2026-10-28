@@ -58,6 +58,9 @@ def decode(raw: bytes) -> tuple[str, str, bool]:
         return _strict(raw[3:], 'utf-8'), 'utf-8-sig', False
     if raw.startswith(b'\xff\xfe') or raw.startswith(b'\xfe\xff'):
         return _strict(raw, 'utf-16'), 'utf-16', False
+    unmarked = _utf16_without_bom(raw)
+    if unmarked is not None:
+        return _strict(raw, unmarked), unmarked, True
     try:
         return raw.decode('utf-8'), 'utf-8', False
     except UnicodeDecodeError:
@@ -68,6 +71,19 @@ def decode(raw: bytes) -> tuple[str, str, bool]:
             f'The file is neither UTF-8 nor Windows-1252 (byte {bad + 1} decodes in neither); save it as UTF-8 CSV.'),
             details={'field': 'content', 'problem': 'encoding', 'byte_offset': bad})
     return raw.decode('cp1252'), 'cp1252', True
+
+
+def _utf16_without_bom(raw: bytes) -> str | None:
+    """UTF-16 saved without a byte order mark: text in Latin script has a zero byte in every other position."""
+    sample = raw[:4096 - 4096 % 2]
+    if len(sample) < 4 or b'\x00' not in sample:
+        return None
+    even, odd = sample[0::2], sample[1::2]
+    if odd.count(0) >= len(odd) * 0.4 and even.count(0) <= len(even) * 0.05:
+        return 'utf-16-le'
+    if even.count(0) >= len(even) * 0.4 and odd.count(0) <= len(odd) * 0.05:
+        return 'utf-16-be'
+    return None
 
 
 def _strict(raw: bytes, encoding: str) -> str:
@@ -109,6 +125,12 @@ def read(raw: bytes | str, *, delimiter: str | None = None, header_row: bool = T
     else:
         text, encoding, guessed = (raw[1:] if raw.startswith('﻿') else raw), 'text', False
         sha = digest(raw)
+    if '\x00' in text:
+        at = text.index('\x00')
+        line = text.count('\n', 0, at) + 1
+        raise BookflowError('E_VALIDATION', message=(
+            f'The file has a NUL character on line {line}, which no text holds; save it again as UTF-8 CSV.'),
+            details={'field': 'content', 'problem': 'nul', 'line': line})
     if delimiter is None:
         delimiter = sniff_delimiter(text)
     if delimiter not in DELIMITERS:
@@ -121,7 +143,7 @@ def read(raw: bytes | str, *, delimiter: str | None = None, header_row: bool = T
         for cells in reader:
             start, line = line, reader.line_num + 1
             if any(cell.strip() for cell in cells):
-                records.append((start, cells))
+                records.append((start, [unguard(cell) for cell in cells]))
     except csv.Error as exc:
         raise BookflowError('E_VALIDATION', message=f'The file cannot be read as delimited text near line {line}: {exc}',
                             details={'field': 'content', 'line': line}) from None
@@ -349,10 +371,21 @@ def parse_bool(text: str) -> bool | None:
     raise CellError('bad_value', f'not yes or no: {text!r}')
 
 
+FORMULA = ('=', '+', '-', '@', '\t', '\r')
+# Digits and the marks numbers, phones and dates are written with: nothing a spreadsheet could run.
+NUMERIC_LIKE = re.compile(r'[-+]?[0-9(][0-9 ().,/:+-]*')
+
+
 def spreadsheet_safe(cell: str) -> str:
-    """A cell written to a file a spreadsheet opens: one starting ``=``, ``+``, ``-`` or ``@`` gets an apostrophe."""
+    """A cell written to a file a spreadsheet opens: text starting ``=``, ``+``, ``-`` or ``@`` gets an apostrophe,
+    as the report CSV guards it; a number, phone or date (``-5``, ``+1 415 555 0100``) is left as written."""
     text = '' if cell is None else str(cell)
-    return "'" + text if text[:1] in ('=', '+', '-', '@', '\t', '\r') else text
+    return "'" + text if text[:1] in FORMULA and not NUMERIC_LIKE.fullmatch(text) else text
+
+
+def unguard(cell: str) -> str:
+    """The reader's half of ``spreadsheet_safe``: a refused-rows file imports again with its own values."""
+    return cell[1:] if cell[:1] == "'" and cell[1:2] in FORMULA and cell[1:2] != '' else cell
 
 
 def write_csv(headers: list[str], rows: list[list[str]]) -> str:

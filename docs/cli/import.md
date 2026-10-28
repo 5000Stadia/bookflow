@@ -502,7 +502,7 @@ The same example as complete `bookflow_run` arguments:
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `kind` | `--kind` | string \| null | no | yes | null | Only runs of this kind. |
-| `state` | `--state` | literal["previewed", "running", "stopped", "waiting", "done", "cancelled", "rolled_back"] \| null | no | yes | null | Only runs in this state. |
+| `state` | `--state` | literal["previewed", "running", "stopped", "waiting", "done", "cancelled", "rolled_back", "failed"] \| null | no | yes | null | Only runs in this state. |
 | `limit` | `--limit` | integer | no | no | 50 | Most runs to return.; minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | `next_cursor` of the previous page. |
 

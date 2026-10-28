@@ -108,6 +108,7 @@ def _hierarchy(table_name: str) -> list:
         sa.UniqueConstraint("full_name_key", name=f"uq_{table_name}_full_name_key"),
         sa.Index(f"ux_{table_name}_root_name", "name_key", unique=True, sqlite_where=sa.text("parent_id IS NULL AND active = 1")),
         sa.Index(f"ux_{table_name}_sibling_name", "parent_id", "name_key", unique=True, sqlite_where=sa.text("parent_id IS NOT NULL AND active = 1")),
+        sa.Index(f"ix_{table_name}_path", "path"),
     ]
 
 

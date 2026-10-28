@@ -52,6 +52,7 @@ batches.register(batches.Adapter('import', 'record', on_reversed=_release_keys, 
 
 def _attachment_bytes(s, selector: str) -> tuple[dict, bytes]:
     from bookflow.company import attachment_store as store
+    batches.require_read(s, 'attachment text')  # reading a file through an import is reading it
     row = s.company.conn.execute(sa.select(c.attachments).where(c.attachments.c.id == selector)).mappings().first()
     if row is None:
         raise BookflowError('E_RECORD_NOT_FOUND', details={'record_type': 'attachment', 'selector': selector,
@@ -196,10 +197,11 @@ def coerce(spec: kinds.FieldSpec | None, cell: str, mapping: Mapping, places: in
         if spec.path in UNIT_PRICES:
             from bookflow.core.unit_price import EXTRA_PLACES
             places += EXTRA_PLACES  # an item's price and cost carry sub-cent unit prices, as `item create` takes them
-        return tabular.money_text(tabular.parse_money(cell, places, decimal=mapping.decimal,
-                                                      thousands=mapping.thousands), places).rstrip('0').rstrip('.') \
-            if spec.path in UNIT_PRICES else tabular.money_text(tabular.parse_money(
-                cell, places, decimal=mapping.decimal, thousands=mapping.thousands), places)
+        amount = tabular.parse_money(cell, places, decimal=mapping.decimal, thousands=mapping.thousands)
+        if amount is None:  # a currency code or symbol with no number
+            raise tabular.CellError('bad_value', f'not an amount: {cell!r}')
+        text = tabular.money_text(amount, places)
+        return text.rstrip('0').rstrip('.') if spec.path in UNIT_PRICES else text
     if spec.type == 'decimal':
         return tabular.parse_decimal(cell, decimal=mapping.decimal, thousands=mapping.thousands)
     if spec.type == 'date':
@@ -461,36 +463,46 @@ def _leaves(payload: dict, prefix: str = '') -> list[str]:
     return out
 
 
-def _input_shaped(s, kind: kinds.Kind, current: dict, payload: dict) -> dict:
-    """The record's current values for the top-level fields this row sets, shaped as the update command's input."""
+def before_values(kind: kinds.Kind, current: dict, payload: dict, after: dict | None) -> dict:
+    """What an update's reversal sends back to restore the record exactly: the prior value, shaped as the update
+    command's input, of every field the row set and every field the update changed beside them (a primary contact
+    the phone made, a derived address), read from the record as shown before and after the write."""
     from bookflow.core import registry
     model = registry.get(kind.update).input_model
     out = {}
-    for key in payload:
-        if key not in model.model_fields:
+    for key, info in model.model_fields.items():
+        if key in (kind.selector, 'expected_version') or key not in current:
             continue
-        value = _plain(current.get(key))
-        if isinstance(value, dict):
-            sub = _get_annotation_fields(model, key)
-            value = {k: v for k, v in value.items() if sub is None or k in sub}
-        out[key] = value
+        prior = _shaped(info.annotation, _plain(current.get(key)))
+        if key in payload or (after is not None and key in after
+                              and _shaped(info.annotation, _plain(after.get(key))) != prior):
+            out[key] = prior
     return out
 
 
-def _get_annotation_fields(model, key: str):
+def _shaped(annotation, value):
+    """A shown value as an input of ``annotation`` takes it: nested records keep only their input fields."""
     import typing
-    annotation = model.model_fields[key].annotation
-    for candidate in typing.get_args(annotation) or (annotation,):
-        if hasattr(candidate, 'model_fields'):
-            return set(candidate.model_fields)
-    return None
+    if isinstance(value, dict) and 'amount' in value and 'currency' in value:
+        return value['amount']
+    candidates = [a for a in (typing.get_args(annotation) or (annotation,)) if a is not type(None)]
+    if isinstance(value, list):
+        items = [typing.get_args(a)[0] for a in candidates if typing.get_origin(a) is list and typing.get_args(a)]
+        return [_shaped(items[0], v) for v in value] if items else value
+    if isinstance(value, dict):
+        for candidate in candidates:
+            if hasattr(candidate, 'model_fields'):
+                return {k: _shaped(candidate.model_fields[k].annotation, v) for k, v in value.items()
+                        if k in candidate.model_fields}
+    return value
 
 
 # ------------------------------------------------------------------ classifying one row (preview and run alike)
 
 def classify(s, ctx, run: dict, kind: kinds.Kind, books: Books, plan: RowPlan, pending: set[str],
              columns: dict[str, str], *, dry_run: bool) -> tuple[str, dict | None, dict | None]:
-    """Set the row's status; returns (action, resolved input, before) where action is create, update or none."""
+    """Set the row's status; returns (action, resolved input, the record as shown before an update) where action is
+    create, update or none."""
     if plan.status == 'refused' and (plan.payload is None or plan.code in READER_CODES):
         return 'none', None, None
     payload = plan.payload or {}
@@ -514,7 +526,7 @@ def classify(s, ctx, run: dict, kind: kinds.Kind, books: Books, plan: RowPlan, p
         return 'none', None, None
     if existing is not None:
         plan.record_type, plan.record_id = kind.definition.record_type, existing
-        current = batches.run_nested(s, ctx, f'{kind.noun} show', {kind.noun: existing},
+        current = batches.run_nested(s, ctx, f'{kind.noun} show', {kind.selector: existing},
                                      source_ref=f"import:{run['id']}")
         if _same(kind, resolved, current):
             plan.status = 'unchanged'
@@ -525,9 +537,9 @@ def classify(s, ctx, run: dict, kind: kinds.Kind, books: Books, plan: RowPlan, p
                        != norm_key(_get_path(current, p))]
             plan.message = 'A record with this name exists and differs in ' + ', '.join(changed[:8]) + '; nothing applied.'
             return 'none', None, None
-        body = {kind.noun: existing, 'expected_version': current['version'], **resolved}
+        body = {kind.selector: existing, 'expected_version': current['version'], **resolved}
         plan.status = 'update' if dry_run else 'updated'
-        return 'update', body, _input_shaped(s, kind, current, resolved)
+        return 'update', body, current
     plan.status = 'create' if dry_run else 'created'
     if waits:
         plan.message = 'Refers to a record an earlier row makes; checked when it runs.'
@@ -561,6 +573,8 @@ def _company_year(s) -> int:
 
 def prepare_preview(s, ctx, inp) -> dict:
     kind = kinds.kind(inp.kind)
+    # A preview shows which records exist and how they differ: the kind's own read permission, first.
+    batches.require_read(s, f'{kind.noun} show')
     if (inp.content is None) == (inp.attachment is None):
         raise BookflowError('E_VALIDATION', message='Give the file as `content` or `attachment`, one of them.',
                             details={'field': 'content'})
@@ -681,7 +695,7 @@ def run_slice(s, ctx, inp, *, interrupt=None) -> dict:
     """Run the next slice of a previewed run. ``interrupt`` is a test hook called after each row."""
     run = _run_row(s, inp.run)
     kind = kinds.kind(run['kind'])
-    if run['state'] in ('cancelled', 'rolled_back'):
+    if run['state'] in ('cancelled', 'rolled_back', 'failed'):
         raise BookflowError('E_VALIDATION', message=f"Run {run['id']} is {run['state']}; preview the file again.",
                             details={'field': 'run', 'state': run['state']})
     if run['state'] == 'done':
@@ -703,10 +717,7 @@ def run_slice(s, ctx, inp, *, interrupt=None) -> dict:
                                                          'continued. Preview the corrected file again.'),
                                 details={'field': 'run', 'batch_state': state})
     if run['batch_id'] is None:
-        batch_id = batches.open_batch(s, ctx, kind='import', label=(
-            f"Import of {run['file_name'] or kind.name + 's'} ({run['row_count']} rows)"), scope=f'import:{kind.name}',
-            source_type='import_run', source_id=run['id'], reason=ctx.reason or run['reason'])
-        _update_run(s, run, batch_id=batch_id, state='running')
+        _start(s, ctx, run, kind)
     elif run['state'] != 'running':
         _update_run(s, run, state='running')
     columns = {p: h for h, p in mapping['columns'].items()}
@@ -770,6 +781,29 @@ def run_slice(s, ctx, inp, *, interrupt=None) -> dict:
     return show(s, ctx, run['id'], done_now=done_now)
 
 
+def _start(s, ctx, run: dict, kind: kinds.Kind) -> None:
+    """Open the run's batch and mark the run `running` in one transaction."""
+    with s.commits.operation(OWNER, s.company):
+        s.company.raw.execute('BEGIN IMMEDIATE')
+        try:
+            batch_id = batches._insert_batch(
+                s, ctx, kind='import', label=f"Import of {run['file_name'] or kind.name + 's'} ({run['row_count']} rows)",
+                scope=f'import:{kind.name}', ordering=batches.adapter_for('import').ordering, source_type='import_run',
+                source_id=run['id'], reason=ctx.reason or run['reason'])
+            changed = s.company.conn.execute(sa.update(c.import_runs).where(
+                c.import_runs.c.id == run['id'], c.import_runs.c.batch_id.is_(None)).values(
+                batch_id=batch_id, state='running', version=c.import_runs.c.version + 1, updated_at=batches.now()))
+            if changed.rowcount != 1:
+                raise BookflowError('E_VERSION_CONFLICT', message=f"Run {run['id']} began meanwhile; run it again.",
+                                    details={'field': 'run'})
+            s.commits.commit(s.company, OWNER)
+        except BaseException:
+            if s.company.write_transaction:
+                s.company.raw.rollback()
+            raise
+    run.update(batch_id=batch_id, state='running')
+
+
 def _row_recorder(run: dict, kind: kinds.Kind, plan: RowPlan, before: dict | None):
     record_type = kind.definition.record_type
 
@@ -783,9 +817,10 @@ def _row_recorder(run: dict, kind: kinds.Kind, plan: RowPlan, before: dict | Non
         for rt, rid, action, version in found:
             if rid != main:
                 continue
+            prior = (before_values(kind, before, plan.payload or {}, output if isinstance(output, dict) else None)
+                     if action == 'updated' and before is not None else None)
             batches.record_effect(s, run['batch_id'], record_type=rt, record_id=rid, action=action,
-                                  version_after=version, before=before if action == 'updated' else None,
-                                  event_id=event_id)
+                                  version_after=version, before=prior, event_id=event_id)
         if cmd.name == kind.create and main:
             s.company.conn.execute(sa.insert(c.import_keys).values(
                 id=new_id(), source=run['source'], key_hash=plan.key_hash, record_type=record_type, record_id=main,
@@ -798,9 +833,19 @@ def _row_recorder(run: dict, kind: kinds.Kind, plan: RowPlan, before: dict | Non
 def _roll_back(s, ctx, run: dict, plan: RowPlan) -> dict:
     """An atomic run met a refusal: undo what it made through its batch, and end it."""
     made = batches.counts(s, run['batch_id'])
-    if made:
-        batches.reverse(s, ctx, run['batch_id'], reason=f'Atomic import stopped at row {plan.row_no}: {plan.code}',
-                        limit=10 ** 9)
+    try:
+        if made:
+            batches.reverse(s, ctx, run['batch_id'], reason=f'Atomic import stopped at row {plan.row_no}: {plan.code}',
+                            limit=10 ** 9)
+    except BookflowError as error:
+        # The undo was refused: the plan is checked whole first, so it changed nothing (or, refused part way, what
+        # it undid is recorded and `import reverse` goes on). The run ends `failed` and is never continued.
+        _update_run(s, run, state='failed')
+        out = show(s, ctx, run['id'])
+        out['notes'].append(f"Row {plan.row_no} was refused ({plan.code}: {plan.message}); undoing the "
+                            f"{sum(made.values())} record(s) the atomic run had made was refused too: {error.message} "
+                            f"`import reverse {run['id']}` finishes it once that is cleared.")
+        return out
     _update_run(s, run, state='rolled_back')
     out = show(s, ctx, run['id'])
     out['notes'].append(f'Row {plan.row_no} was refused ({plan.code}: {plan.message}); the atomic run undid the '
@@ -810,7 +855,7 @@ def _roll_back(s, ctx, run: dict, plan: RowPlan) -> dict:
 
 def cancel(s, ctx, run_id: str) -> dict:
     run = _run_row(s, run_id)
-    if run['state'] in ('done', 'cancelled', 'rolled_back'):
+    if run['state'] in ('done', 'cancelled', 'rolled_back', 'failed'):
         raise BookflowError('E_VALIDATION', message=f"Run {run_id} is already {run['state']}.",
                             details={'field': 'run', 'state': run['state']})
     _update_run(s, run, state='cancelled')
@@ -833,8 +878,15 @@ def reverse(s, ctx, inp, *, dry_run: bool) -> dict:
 
 # ------------------------------------------------------------------ reading
 
-def show(s, ctx, run_id: str, *, done_now: int = 0, prepared: dict | None = None) -> dict:
+def _run_read(s, run_id: str) -> dict:
+    """The run, if the caller may read its kind's records: its cells and refusals are those records' values."""
     run = _run_row(s, run_id)
+    batches.require_read(s, f"{kinds.kind(run['kind']).noun} show")
+    return run
+
+
+def show(s, ctx, run_id: str, *, done_now: int = 0, prepared: dict | None = None) -> dict:
+    run = _run_read(s, run_id)
     mapping = json.loads(run['mapping'])
     phase = 'run' if run['state'] != 'previewed' else 'preview'
     counts = _counts(s, run_id, phase)
@@ -917,7 +969,7 @@ def query(s, ctx, inp) -> dict:
 
 
 def rows(s, ctx, inp) -> dict:
-    run = _run_row(s, inp.run)
+    run = _run_read(s, inp.run)
     phase = inp.phase or ('run' if run['state'] != 'previewed' else 'preview')
     q = sa.select(c.import_rows).where(c.import_rows.c.run_id == inp.run, c.import_rows.c.phase == phase)
     if inp.status:
@@ -933,7 +985,7 @@ def rows(s, ctx, inp) -> dict:
 
 
 def errors(s, ctx, run_id: str) -> dict:
-    run = _run_row(s, run_id)
+    run = _run_read(s, run_id)
     mapping = json.loads(run['mapping'])
     phase = 'run' if run['state'] != 'previewed' else 'preview'
     refused = s.company.conn.execute(sa.select(c.import_rows.c.row_no, c.import_rows.c.code, c.import_rows.c.message,
@@ -971,25 +1023,44 @@ _EXAMPLES = {'string': 'Example', 'money': '125.00', 'date': '2026-01-31', 'bool
              'decimal': '2', 'reference': '', 'any': ''}
 
 
+# Example rows that preview clean in a company on the general chart (a sales rep's employee imported first).
+_EXAMPLE_ROWS = {
+    'customer': {'name': 'Acme Plumbing'}, 'vendor': {'name': 'Northside Supply'},
+    'item': {'name': 'Service call', 'type': 'service', 'description': 'Service call', 'price': '125.00',
+             'cost': '', 'income_account_id': 'Service Income', 'expense_account_id': ''},
+    'account': {'number': '6997', 'name': 'Trade Show Supplies', 'type': 'expense',
+                'description': 'Booths and banners'},
+    'term': {'name': 'Net 45', 'kind': 'standard', 'due_days': '45'},
+    'price-level': {'name': 'Wholesale', 'kind': 'fixed_percent', 'percent': '-10'},
+    'sales-rep': {'name': 'Pat Lee', 'initials': 'PL', 'name_type': 'employee', 'name_id': 'Pat Lee'},
+}
+_TEMPLATE_PATHS = {
+    'customer': ['name', 'company_name', 'email', 'phone', 'terms_id', 'billing_address.line1',
+                 'billing_address.city', 'billing_address.state', 'billing_address.postal_code'],
+    'vendor': ['name', 'company_name', 'email', 'phone', 'terms_id', 'address.line1', 'address.city',
+               'address.state', 'address.postal_code'],
+    'item': ['name', 'type', 'description', 'price', 'cost', 'income_account_id', 'expense_account_id'],
+    'account': ['number', 'name', 'type', 'description'],
+    'term': ['name', 'kind', 'due_days'],
+    'price-level': ['name', 'kind', 'percent'],
+}
+
+
 def template(kind_name: str) -> dict:
     k = kinds.kind(kind_name)
     specs = kinds.fields(kind_name)
-    common = {'customer': ['name', 'company_name', 'email', 'phone', 'terms_id', 'billing_address.line1',
-                           'billing_address.city', 'billing_address.state', 'billing_address.postal_code'],
-              'vendor': ['name', 'company_name', 'email', 'phone', 'terms_id', 'address.line1', 'address.city',
-                         'address.state', 'address.postal_code'],
-              'item': ['name', 'type', 'description', 'price', 'cost', 'income_account_id', 'expense_account_id'],
-              'account': ['number', 'name', 'type', 'description']}.get(k.name)
+    common = _TEMPLATE_PATHS.get(k.name)
     paths = common or [p for p, s in specs.items() if s.required or p in ('name',)]
-    paths = [p for p in dict.fromkeys([p for p, s in specs.items() if s.required] + paths) if p in specs]
+    paths = [p for p in dict.fromkeys(([] if common else [p for p, s in specs.items() if s.required]) + paths)
+             if p in specs]
+    given = _EXAMPLE_ROWS.get(k.name, {})
     example = []
     for p in paths:
         spec = specs[p]
-        if spec.type == 'enum':
+        if p in given:
+            example.append(given[p])
+        elif spec.type == 'enum':
             example.append(spec.enum[0])
-        elif p == 'name':
-            example.append({'customer': 'Acme Plumbing', 'vendor': 'Northside Supply', 'item': 'Service call',
-                            'account': 'Office Supplies', 'term': 'Net 45'}.get(k.name, 'Example'))
         else:
             example.append(_EXAMPLES.get(spec.type, ''))
     return {'kind': k.name, 'command': k.create, 'header': paths, 'example': example,

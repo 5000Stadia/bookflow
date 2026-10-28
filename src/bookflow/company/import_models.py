@@ -65,7 +65,7 @@ class ImportRunSelector(_Input):
 
 class ImportQueryInput(_Input):
     kind: str | None = Field(None, max_length=32, description='Only runs of this kind.')
-    state: Literal['previewed', 'running', 'stopped', 'waiting', 'done', 'cancelled', 'rolled_back'] | None = Field(
+    state: Literal['previewed', 'running', 'stopped', 'waiting', 'done', 'cancelled', 'rolled_back', 'failed'] | None = Field(
         None, description='Only runs in this state.')
     limit: int = Field(50, ge=1, le=200, description='Most runs to return.')
     cursor: str | None = Field(None, max_length=26, description='`next_cursor` of the previous page.')

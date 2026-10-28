@@ -21,7 +21,7 @@ import sqlalchemy as sa
 BATCH_STATES = ('live', 'reversing', 'blocked', 'reversed', 'reversed_partly')
 ORDERINGS = ('strict', 'record')
 EFFECT_ACTIONS = ('created', 'updated', 'linked', 'rule_learned', 'reversed')
-RUN_STATES = ('previewed', 'running', 'stopped', 'waiting', 'done', 'cancelled', 'rolled_back')
+RUN_STATES = ('previewed', 'running', 'stopped', 'waiting', 'done', 'cancelled', 'rolled_back', 'failed')
 MODES = ('create', 'update', 'upsert')
 PHASES = ('preview', 'run')
 
@@ -86,7 +86,7 @@ def define_tables(metadata, C, T):
         C('kind', sa.String(32), 'Import kind (customer, vendor, item, account, term...).', nullable=False),
         C('mode', sa.String(8), 'create, update or upsert.', nullable=False),
         C('atomic', sa.Boolean, 'True when the first refusal undoes the whole run.', nullable=False),
-        C('state', sa.String(16), 'previewed, running, stopped, waiting, done, cancelled or rolled_back.',
+        C('state', sa.String(16), 'previewed, running, stopped, waiting, done, cancelled, rolled_back or failed (an atomic undo refused).',
           nullable=False),
         C('source', sa.String(200), 'The named origin of the file; keys are unique within it.', nullable=False),
         C('mapping', sa.Text, 'JSON of the mapping used: columns to input paths, key columns, formats.',
@@ -147,6 +147,7 @@ def define_tables(metadata, C, T):
         sa.Index('ux_import_keys_standing', 'source', 'key_hash', unique=True,
                  sqlite_where=sa.text('released_by IS NULL')),
         sa.Index('ix_import_keys_batch', 'batch_id'),
+        sa.Index('ix_import_keys_record', 'record_type', 'record_id'),
         description='The import key ledger: which record each keyed row made, so a re-run never duplicates. Only the '
                     'release columns change, once.')
     return {'batches': batches, 'batch_effects': effects, 'import_runs': runs, 'import_rows': rows,

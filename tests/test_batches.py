@@ -159,8 +159,8 @@ def test_a_reversal_needs_the_callers_own_grants(books):
                                           'expected_version': 0, 'denies': ['customer']})
     clerk = as_user(Path(books.root), 'clerk')
     error = refusal(lambda: clerk.run('import reverse', {'run': run}, company=books.company))
-    assert error.code == 'E_BATCH_BLOCKED'
-    assert {b['code'] for b in error.details['blockers']} == {'E_PERMISSION'}
+    # Refused before any plan: the batch's records are not the clerk's to read (nor to change).
+    assert error.code == 'E_PERMISSION' and error.details['capability'] == 'customer'
     assert len(active_customers(books)) == 2
 
 
@@ -174,6 +174,9 @@ def test_co0105_ddl_is_the_metadata():
                           for t in reversed(m.TABLES))
     assert set(m.INDEXES) == {str(CreateIndex(i).compile(dialect=dialect())) for t in m.TABLES
                               for i in c.metadata.tables[t].indexes}
+    paths = {str(CreateIndex(i).compile(dialect=dialect())) for t in c.metadata.tables.values()
+             for i in t.indexes if i.name.endswith('_path')}
+    assert set(m.PATH_INDEXES) == paths and len(paths) == 8
 
 
 def test_a_run_stopped_part_way_and_reversed_is_never_continued(books):
