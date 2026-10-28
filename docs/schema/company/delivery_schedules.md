@@ -36,6 +36,9 @@ Database: `company`.
 | `paused_reason` | VARCHAR(500) | yes | — | — | — | — | Why it is paused. |
 | `paused_at` | VARCHAR(32) | yes | — | — | — | — | When it was paused. |
 | `catch_up_days` | INTEGER | no | — | — | — | — | A missed slot runs only if no older than this many days (default 7); older ones are skipped. |
+| `run_time` | VARCHAR(5) | no | — | — | — | — | Company-local time of day (HH:MM, default 06:00) from which a slot is due. |
+| `confirmed` | VARCHAR(32) | yes | — | — | — | — | The rule's fingerprint a person confirmed making it live (selection, cadence, template and its exact content, mode); a run whose rule no longer matches returns it to draft. |
+| `draft_reason` | VARCHAR(500) | yes | — | — | — | — | Why it last returned to draft from live; null when made live. |
 | `run_as` | VARCHAR(26) | no | — | — | — | — | Who last set what it drafts: its runs draft as them. |
 | `run_as_for` | VARCHAR(26) | yes | — | — | — | — | The person run_as (an agent) acted for; null for a person. |
 | `run_as_epoch` | INTEGER | yes | — | — | — | — | An agent run_as's authority epoch when it saved; its runs need the same. |

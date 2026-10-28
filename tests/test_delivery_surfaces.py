@@ -108,7 +108,7 @@ def test_the_same_delivery_through_python_cli_http_and_mcp(root, tmp_path):
     for surface, (fields, preview, retired, shown_template, templates, edited, shown, released, exported, sent,
                   history, cancelled, outbox, queue, flags) in results.items():
         assert flags == (True, ['DEMO-SALE-INV-ACTIVE'], 'not-to-email', False, 1, 1, 1, 'cancelled', 1, 'draft', '10',
-                         'Every month from 2099-01-31 (month end)', 'live', 'Nothing is due: the next slot is 2099-01-31.',
+                         'Every month from 2099-01-31 (month end) at 06:00', 'live', 'Nothing is due: the next slot is 2099-01-31 from 06:00.',
                          False, True, 1, '2099-01-31'), \
             (surface, flags)
         assert queue == (0, 'E_WORK_DEPENDENCY', 0, 'none', [], [], 'E_VALIDATION', ('E_RECORD_NOT_FOUND',) * 6), \

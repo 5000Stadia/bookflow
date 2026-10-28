@@ -28,6 +28,6 @@ Database: `company`.
 | `drafted` | INTEGER | no | — | — | — | — | Messages drafted. |
 | `released` | INTEGER | no | — | — | — | — | Messages released to the outbox. |
 | `skipped_count` | INTEGER | no | — | — | — | — | Documents or customers skipped, each named on the batch. |
-| `reason` | VARCHAR(24) | yes | — | — | — | — | Skipped or failed: superseded, outside_window, stopped, no_authority, failed. |
+| `reason` | VARCHAR(24) | yes | — | — | — | — | Skipped or failed: superseded, outside_window, stopped, no_authority, unavailable (a passing refusal: the slot is skipped and the schedule goes on), failed. |
 | `reason_text` | VARCHAR(500) | yes | — | — | — | — | The reason in words. |
 | `finished_at` | VARCHAR(32) | yes | — | — | — | — | When it ended. |

@@ -33,7 +33,8 @@ from __future__ import annotations
 import calendar
 import hashlib
 import json
-from datetime import date, timedelta
+from contextvars import ContextVar
+from datetime import date, datetime, timedelta, timezone
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.sqlite import insert
@@ -53,8 +54,9 @@ RECORD = 'delivery_schedule'
 RUN_RECORD = 'delivery_schedule_run'
 DEFAULT_CATCH_UP_DAYS = 7
 SKIPS_PER_STEP = 200
+DEFAULT_RUN_TIME = '06:00'
 OPERATIVE = ('kind', 'selection', 'template_id', 'combine', 'frequency', 'start_date', 'stop_date', 'remaining_runs',
-             'mode', 'catch_up_days')
+             'mode', 'catch_up_days', 'run_time')
 SELECTION_FIELDS = ('queued', 'unsent', 'ready', 'period', 'customer', 'customer_type', 'balance_over', 'method')
 KIND_PLURAL = {'invoice': 'invoices', 'sales-receipt': 'sales receipts', 'estimate': 'estimates',
                'statement': 'statements', 'notice': 'overdue notices'}
@@ -65,7 +67,15 @@ FREQUENCY_TEXT = {'daily': 'Every day', 'weekly': 'Every week', 'every_other_wee
 SKIP_TEXT = {'superseded': 'a later slot was due; only the latest missed slot runs',
              'outside_window': 'older than the catch-up window when the host next ran',
              'stopped': 'the schedule was stopped',
-             'no_authority': 'nobody with the authority to run it'}
+             'no_authority': 'nobody with the authority to run it',
+             'unavailable': 'the books refused for now; the schedule goes on at its next slot',
+             'failed': 'the run failed'}
+# Refusals that pass: the slot is skipped with why and the schedule keeps running.
+TRANSIENT = frozenset({'E_DB_BUSY', 'E_VERSION_CONFLICT'})
+# Refusals that mean the actor no longer has the authority: the schedule pauses.
+NO_AUTHORITY = frozenset({'E_PERMISSION', 'E_NO_ACTOR', 'E_UNAUTHENTICATED'})
+# The host tick's company-local time of day (HH:MM) while it runs schedules; None otherwise.
+_TICK_TIME: ContextVar[str | None] = ContextVar('delivery_schedule_tick_time', default=None)
 
 
 def _invalid(field, problem):
@@ -78,16 +88,80 @@ def _sha(value) -> str:
 
 # ---------------------------------------------------------------- dates
 
-def anchor_day(frequency: str, start: str) -> int | None:
-    """The day a month-family schedule keeps: the start's day, or 31 when the start is a month's last day."""
+def _unit(frequency):
     from bookflow.company.memorized_schema import FREQUENCIES
-    unit, _ = FREQUENCIES[frequency]
+    return FREQUENCIES[frequency][0]
+
+
+def anchor_day(frequency: str, start: str) -> int | None:
+    """The day a month-family schedule keeps: the start's day, or 31 when the start is a month's last day. Twice a
+    month keeps a pair: the start and 15 days after (a start after the 15th: 15 days before and the start); a start
+    on the 29th to 31st keeps the 15th and the month's last day (anchor 31)."""
+    unit = _unit(frequency)
     if unit not in ('month', 'semimonth'):
         return None
     at = parse(start)
-    if unit == 'month' and at.day == calendar.monthrange(at.year, at.month)[1]:
+    if unit == 'semimonth':
+        return at.day if at.day <= 15 else (at.day - 15 if at.day <= 28 else 31)
+    if at.day == calendar.monthrange(at.year, at.month)[1]:
         return 31
     return at.day
+
+
+def _pair(year, month, anchor) -> list[date]:
+    last = calendar.monthrange(year, month)[1]
+    days = (15, last) if anchor == 31 else (anchor, min(anchor + 15, last))
+    return [date(year, month, x) for x in sorted(set(days))]
+
+
+def _advance(frequency, slot, anchor):
+    """The slot after ``slot``: the memorized schedule's arithmetic, except twice a month (``_pair``)."""
+    if _unit(frequency) != 'semimonth':
+        return advance(frequency, slot, anchor)
+    at = parse(slot)
+    for candidate in _pair(at.year, at.month, anchor):
+        if candidate > at:
+            return candidate.isoformat()
+    following = (at.replace(day=1) + timedelta(days=32)).replace(day=1)
+    return _pair(following.year, following.month, anchor)[0].isoformat()
+
+
+def first_slot(frequency, start) -> str:
+    """The first slot on or after the start: the start itself, or for twice a month from the 29th to 31st, the
+    month's last day."""
+    at = parse(start)
+    if _unit(frequency) == 'semimonth' and at.day >= 29:
+        return at.replace(day=calendar.monthrange(at.year, at.month)[1]).isoformat()
+    return start
+
+
+def _local(zone, at=None) -> datetime:
+    from zoneinfo import ZoneInfo
+    moment = at or clock.now()
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    try:
+        return moment.astimezone(ZoneInfo(zone)) if zone else moment
+    except Exception:  # noqa: BLE001 - an unknown zone reads as UTC, as the memorized schedule's today does
+        return moment
+
+
+def moment(s) -> tuple[str, str]:
+    """Company-local (today, HH:MM): the host tick's own, else now (a fixed working day reads as its end)."""
+    from bookflow.company.memorized_schedule import today
+    day = today(s.company_tz)
+    if _TICK_TIME.get() is not None:
+        return day, _TICK_TIME.get()
+    if clock.working_day() is not None:
+        return day, '23:59'
+    return day, _local(s.company_tz).strftime('%H:%M')
+
+
+def through(row, today: str, hhmm: str) -> str:
+    """The last day whose slot is due now: today once its run time has come, else yesterday."""
+    if hhmm >= (row.get('run_time') or DEFAULT_RUN_TIME):
+        return today
+    return (parse(today) - timedelta(days=1)).isoformat()
 
 
 def _finished(slot, row, runs_left) -> bool:
@@ -103,12 +177,12 @@ def due_slots(row, today: str, limit: int = 100000) -> list[str]:
     out, slot, left = [], row['next_date'], row['remaining_runs']
     while not _finished(slot, row, left) and slot <= today and len(out) < limit:
         out.append(slot)
-        slot = advance(row['frequency'], slot, row['anchor_day'])
+        slot = _advance(row['frequency'], slot, row['anchor_day'])
     return out
 
 
 def _after(row, slot):
-    nxt = advance(row['frequency'], slot, row['anchor_day'])
+    nxt = _advance(row['frequency'], slot, row['anchor_day'])
     return None if nxt is None or (row['stop_date'] and nxt > row['stop_date']) else nxt
 
 
@@ -199,8 +273,9 @@ def _customer_name(s, selector):
 
 def cadence(row) -> str:
     text = f"{FREQUENCY_TEXT[row['frequency']]} from {row['start_date']}"
-    if row['anchor_day'] == 31 and row['frequency'] not in ('twice_a_month',):
-        text += ' (month end)'
+    if row['anchor_day'] == 31:
+        text += ' (the 15th and the last day)' if row['frequency'] == 'twice_a_month' else ' (month end)'
+    text += f" at {row.get('run_time') or DEFAULT_RUN_TIME}"
     if row['stop_date']:
         text += f", until {row['stop_date']}"
     if row['remaining_runs'] is not None:
@@ -213,8 +288,12 @@ def _name(s, user_id):
     return name(s, user_id) if user_id else None
 
 
+def is_finished(row) -> bool:
+    return row['next_date'] is None or _finished(row['next_date'], row, row['remaining_runs'])
+
+
 def status_label(s, row) -> str:
-    if row['next_date'] is None:
+    if is_finished(row):
         return 'Finished'
     if not row['active']:
         return 'Stopped'
@@ -223,7 +302,8 @@ def status_label(s, row) -> str:
     if row['state'] == 'paused':
         return f"Paused: {row['paused_reason']}"
     if row['mode'] == 'send':
-        return 'Draft: its messages wait for a go until a person makes it live'
+        back = f" (back to draft: {row['draft_reason']})" if row.get('draft_reason') else ''
+        return f'Draft{back}: its messages wait for a go until a person makes it live'
     return 'Drafts only'
 
 
@@ -266,7 +346,9 @@ def output(s, row, *, warnings=(), check=None, ran=(), runs=10) -> sm.ScheduleOu
         remaining_runs=row['remaining_runs'], next_date=row['next_date'], mode=row['mode'], active=bool(row['active']),
         state=row['state'], status_label=status_label(s, row), established_by=row['established_by'],
         established_by_name=_name(s, row['established_by']), established_at=row['established_at'],
-        paused_reason=row['paused_reason'], catch_up_days=row['catch_up_days'], runs_as_name=_name(s, row['run_as']),
+        paused_reason=row['paused_reason'], catch_up_days=row['catch_up_days'],
+        run_time=row.get('run_time') or DEFAULT_RUN_TIME, draft_reason=row.get('draft_reason'),
+        runs_as_name=_name(s, row['run_as']),
         runs=[_run_out(s, r) for r in _runs(s, row['id'], runs)] if runs and row.get('id') else [], check=check,
         ran=list(ran), version=row.get('version'), warnings=list(warnings), next_commands=commands)
 
@@ -277,13 +359,30 @@ def _operative(row) -> dict:
     return {k: row[k] for k in OPERATIVE}
 
 
+def _template_content(s, row):
+    """The template a run would use, as (id, subject, body): the schedule's own, else the kind's default."""
+    t = c.delivery_templates
+    q = sa.select(t.c.id, t.c.subject, t.c.body)
+    q = q.where(t.c.id == row['template_id']) if row['template_id'] else q.where(
+        t.c.kind == row['kind'], t.c.is_default.is_(True), t.c.active.is_(True))
+    found = s.company.conn.execute(q).first()
+    return list(found) if found else None
+
+
+def rule_fingerprint(s, row) -> str:
+    """What a person confirms (design/document-delivery.md §6): the rule -- selection, cadence and run time, template
+    id and the template's exact text (the kind's default when none is named), combine, mode, catch-up window. Not
+    how many documents match on a given day: a dynamic selection is the point."""
+    return _sha([_operative(row), _template_content(s, row)])[:32]
+
+
 def live_check(s, ctx, row, today: str) -> sm.LiveCheck:
-    """One check of the exact details a person makes live: what it drafts, how often, its first run, and who it would
-    reach if it ran today. The fingerprint covers the schedule's operative fields and that exact set."""
+    """One check of the exact details a person makes live: what it drafts, how often, its first run, its template, and
+    who it would reach if it ran today (shown, not bound). The fingerprint covers the rule (``rule_fingerprint``)."""
     inp = batch_input(s, row, today, send=True)
     _, targets, skipped, prints = db.resolve(s, ctx, inp)
     period = f'{inp.date_from} to {inp.date_to}' if row['kind'] == 'statement' else None
-    fingerprint = _sha([_operative(row), db.set_fingerprint(prints)])[:32]
+    fingerprint = rule_fingerprint(s, row)
     who = _name(s, s.actor.id) if s.actor.kind == 'human' else None
     return sm.LiveCheck(
         selection=selection_text(s, row), cadence=cadence(row), first_run=first_run(row, today), period=period,
@@ -379,7 +478,7 @@ def _fields(s, inp, row) -> dict:
         out.update(name=name, name_key=name.casefold())
     if getattr(inp, 'kind', None) is not None:
         out['kind'] = inp.kind
-    for k in ('combine', 'frequency', 'start_date', 'stop_date', 'remaining_runs', 'mode', 'catch_up_days'):
+    for k in ('combine', 'frequency', 'start_date', 'stop_date', 'remaining_runs', 'mode', 'catch_up_days', 'run_time'):
         if k in given and getattr(inp, k) is not None:
             out[k] = getattr(inp, k)
     if getattr(inp, 'no_end', False):
@@ -396,20 +495,41 @@ def _fields(s, inp, row) -> dict:
         raise _invalid('template', 'the kind changed: choose a template of the new kind, or none for its default')
     if out['stop_date'] and out['stop_date'] < out['start_date']:
         raise _invalid('stop_date', 'is before start_date')
-    timing = {'frequency', 'start_date'} & given
-    if timing or row.get('id') is None:
+    new = row.get('id') is None
+    # The slots move only when the cadence itself changed (the browser form sends both fields on every save).
+    if new or out['frequency'] != row['frequency'] or out['start_date'] != row['start_date']:
         out['anchor_day'] = anchor_day(out['frequency'], out['start_date'])
-        out['next_date'] = out['start_date']
-    if {'stop_date', 'remaining_runs', 'no_end'} & given and out['next_date'] is None and row.get('id'):
-        out['next_date'] = _resume_from(s, row)
+        first = first_slot(out['frequency'], out['start_date'])
+        out['next_date'] = first if new else _not_before(s, out, first)
+    if {'stop_date', 'remaining_runs', 'no_end'} & given and is_finished(out) and not new:
+        out['next_date'] = _not_before(s, out, _resume_from(s, out))
+    if out['next_date'] and _finished(out['next_date'], out, out['remaining_runs']):
+        out['next_date'] = None  # finished: reads Finished, and the tick never looks at it
     return out
+
+
+def _last_slot(s, schedule_id):
+    r = c.delivery_schedule_runs
+    return s.company.conn.execute(sa.select(sa.func.max(r.c.slot_date)).where(
+        r.c.schedule_id == schedule_id)).scalar()
 
 
 def _resume_from(s, row):
     """A finished schedule given a later end picks up from the slot after its last one."""
-    r = c.delivery_schedule_runs
-    last = s.company.conn.execute(sa.select(sa.func.max(r.c.slot_date)).where(r.c.schedule_id == row['id'])).scalar()
-    return advance(row['frequency'], last, row['anchor_day']) if last else row['start_date']
+    last = _last_slot(s, row['id'])
+    return _advance(row['frequency'], last, row['anchor_day']) if last else first_slot(row['frequency'],
+                                                                                       row['start_date'])
+
+
+def _not_before(s, row, slot):
+    """``slot``, or the first slot after it that is neither in the past nor already claimed: an edit never moves the
+    next slot into the past."""
+    today, last = _today(s), _last_slot(s, row['id'])
+    for _ in range(100000):
+        if slot is None or (slot >= today and (last is None or slot > last)):
+            return slot
+        slot = _advance(row['frequency'], slot, row['anchor_day'])
+    return None
 
 
 def _name_taken(s, key, own=None):
@@ -429,7 +549,7 @@ def prepare_create(s, ctx, inp) -> Plan:
                 template_id=None, combine=False, frequency=inp.frequency, start_date=inp.start_date, stop_date=None,
                 remaining_runs=None, next_date=inp.start_date, anchor_day=None, mode='draft', active=True,
                 state='draft', established_by=None, established_at=None, paused_reason=None, paused_at=None,
-                catch_up_days=DEFAULT_CATCH_UP_DAYS)
+                catch_up_days=DEFAULT_CATCH_UP_DAYS, run_time=DEFAULT_RUN_TIME, confirmed=None, draft_reason=None)
     row = _fields(s, inp, base)
     row['combine'] = bool(row['combine'])
     if _name_taken(s, row['name_key']):
@@ -465,6 +585,17 @@ def _check_version(row, expected):
             'current_version': row['version'], 'updated_by': row['updated_by'], 'updated_via': row['updated_via']})
 
 
+def _refuse_without_authority(s, row):
+    """Making it live (or keeping it live through a change) is lending one's own go: refused, saying why, when the
+    person could not give a go now (R187: automate.delivery and delivery.send)."""
+    why = authority_lost(s, s.actor.id)
+    if why is not None:
+        text = f"You cannot make schedule {row['name']} live: {why}."
+        raise BookflowError('E_PERMISSION', message=text, details={
+            'reason': 'no_send_authority', 'command': 'delivery-schedule live', 'problem': why,
+            'needs': 'automate.delivery'})
+
+
 def _refuse_agent_live():
     """R187: automate.delivery. Until then making a send schedule live is a person's act."""
     from bookflow.hub import people_only
@@ -489,6 +620,8 @@ def prepare_update(s, ctx, inp) -> Plan:
     warnings, check = [], None
     if inp.confirm is not None and s.actor.kind != 'human':
         raise _refuse_agent_live()
+    if inp.confirm is not None:
+        _refuse_without_authority(s, before)
     if operative and before['state'] in ('live', 'paused'):
         stays = False
         if after['mode'] == 'send' and before['state'] == 'live' and s.actor.kind == 'human':
@@ -499,17 +632,20 @@ def prepare_update(s, ctx, inp) -> Plan:
                 raise _changed(before)
         if stays:
             at = clock.now_iso()
-            after.update(established_by=s.actor.id, established_at=at)
+            after.update(established_by=s.actor.id, established_at=at, confirmed=check.fingerprint)
         else:
-            after.update(state='draft', established_by=None, established_at=None, paused_reason=None, paused_at=None)
+            after.update(state='draft', established_by=None, established_at=None, paused_reason=None, paused_at=None,
+                         confirmed=None)
             if before['state'] == 'live':
+                after['draft_reason'] = f"changed by {_name(s, s.actor.id) or s.actor.id}"[:500]
                 warnings.append('This change returns it to draft: its runs leave messages waiting for a go until a '
                                 'person makes it live again with the check of the changed schedule.')
     if not operative and after == before:
         return Plan(output(s, before, warnings=['Nothing changed.']), dict(idle=True))
     after = d._touch(s, ctx, after) if not s.dry_run else dict(after, version=before['version'] + 1)
+    drop = before['state'] == 'live' and after['state'] != 'live'
     return Plan(output(s, after, warnings=warnings, check=check), dict(before=before, after=after,
-                                                                       warnings=warnings))
+                                                                       warnings=warnings, drop_go=drop))
 
 
 def _changed(row):
@@ -533,8 +669,10 @@ def apply_update(plan, ctx, s) -> Applied:
     if plan.data.get('idle'):
         return Applied(plan.preview, [], 'nothing changed')
     before, after = plan.data['before'], plan.data['after']
-    touched = _write(s, before, after)
-    return Applied(output(s, after, warnings=plan.data['warnings']), [touched],
+    touched = [_write(s, before, after)]
+    if plan.data.get('drop_go'):
+        touched += end_open_run(s, ctx, after, after['draft_reason'] or 'returned to draft', cancel=False)
+    return Applied(output(s, after, warnings=plan.data['warnings']), touched,
                    f"delivery schedule {after['name']} updated")
 
 
@@ -546,7 +684,8 @@ def prepare_live(s, ctx, inp) -> Plan:
         raise _refuse_agent_live()
     before = resolve(s, inp.schedule)
     _check_version(before, inp.expected_version)
-    if before['next_date'] is None:
+    _refuse_without_authority(s, before)
+    if is_finished(before):
         raise BookflowError('E_WORK_DEPENDENCY', message=f"Schedule {before['name']} has run out: give it a later "
                             'stop date or more runs first.', details={
                                 'record_type': RECORD, 'record_id': before['id'], 'status': 'finished',
@@ -564,7 +703,8 @@ def prepare_live(s, ctx, inp) -> Plan:
         raise _changed(before)
     at = clock.now_iso()
     after = d._touch(s, ctx, dict(candidate, state='live', established_by=s.actor.id, established_at=at,
-                                  paused_reason=None, paused_at=None, **_authority(s, ctx)), at)
+                                  paused_reason=None, paused_at=None, confirmed=check.fingerprint, draft_reason=None,
+                                  **_authority(s, ctx)), at)
     warnings = [] if after['active'] else ['It is stopped: resume it for it to run.']
     return Plan(output(s, after, check=check, warnings=warnings), dict(before=before, after=after,
                                                                        warnings=warnings))
@@ -577,7 +717,7 @@ def prepare_pause(s, ctx, inp) -> Plan:
     if not before['active']:
         return Plan(output(s, before, warnings=['It is already stopped.']), dict(idle=True))
     after = d._touch(s, ctx, dict(before, active=False))
-    return Plan(output(s, after), dict(before=before, after=after, warnings=[]))
+    return Plan(output(s, after), dict(before=before, after=after, warnings=[], drop_go='stopped'))
 
 
 def prepare_resume(s, ctx, inp) -> Plan:
@@ -590,7 +730,8 @@ def prepare_resume(s, ctx, inp) -> Plan:
     after = dict(before, active=True)
     warnings = []
     if before['state'] == 'paused':
-        after.update(state='draft', paused_reason=None, paused_at=None, established_by=None, established_at=None)
+        after.update(state='draft', paused_reason=None, paused_at=None, established_by=None, established_at=None,
+                     confirmed=None)
         if before['mode'] == 'send':
             warnings.append('It is a draft again: a person makes it live (delivery-schedule live) for its messages '
                             'to carry a go.')
@@ -615,6 +756,8 @@ def apply_act(plan, ctx, s) -> Applied:
     touched = [_write(s, before, after)]
     for slot, reason in plan.data.get('skip', ()):
         touched += _skip(s, ctx, after, slot, reason)
+    if plan.data.get('drop_go'):
+        touched += end_open_run(s, ctx, after, plan.data['drop_go'], cancel=False)
     out = output(s, after, warnings=plan.data['warnings'], check=plan.preview.check)
     return Applied(out, touched, f"delivery schedule {after['name']}: {out.status_label}")
 
@@ -644,11 +787,15 @@ def _skip(s, ctx, schedule, slot, reason, text=None) -> list[Touched]:
     return [Touched(RUN_RECORD, row['id'], 'create', None, 1, row, db='company')] if _claim(s, row) else []
 
 
-def claim_due(s, ctx, schedule, today) -> tuple[dict, list[Touched], list[dict]]:
-    """Claim what is due: the latest missed slot as a run when inside the window; every other due slot skipped with
-    why. Returns the schedule as now stored, what was written, and the runs claimed or skipped."""
-    slots = due_slots(schedule, today)
+def claim_due(s, ctx, schedule, today, upto=None) -> tuple[dict, list[Touched], list[dict]]:
+    """Claim what is due through ``upto`` (today once the run time has come, else yesterday): the latest missed slot
+    as a run when inside the window; every other due slot skipped with why. Returns the schedule as now stored, what
+    was written, and the runs claimed or skipped. A schedule that has finished gets no next slot."""
+    slots = due_slots(schedule, upto or today)
     if not slots:
+        if schedule['next_date'] and is_finished(schedule):
+            after = d._touch(s, ctx, dict(schedule, next_date=None))
+            return after, [_write(s, schedule, after)], []
         return schedule, [], []
     touched, made, used = [], [], 0
     latest = slots[-1]
@@ -705,9 +852,9 @@ def _assignee(s, schedule) -> str | None:
     return _active_admin(s)
 
 
-def _todo(s, ctx, schedule, source_ref, title, notes) -> list[Touched]:
+def _todo(s, ctx, schedule, source_ref, title, notes, assignee=None) -> list[Touched]:
     from bookflow.company import todos
-    assignee = _assignee(s, schedule)
+    assignee = assignee or _assignee(s, schedule)
     if assignee is None:
         return []
     todo = todos.scheduler_todo(s, ctx, source_ref=source_ref, title=title, notes=notes, assignee_id=assignee,
@@ -716,6 +863,25 @@ def _todo(s, ctx, schedule, source_ref, title, notes) -> list[Touched]:
         return []
     s.company.conn.execute(c.todos.insert().values(**todo))
     return [Touched('todo', todo['id'], 'create', None, 1, todo, db='company')]
+
+
+def _standing_todo(s, ctx, schedule, title, notes) -> list[Touched]:
+    """One to-do per schedule, updated in place (reopened if it was done), never one per run."""
+    t = c.todos
+    ref = f"delivery-schedule-waiting:{schedule['id']}"
+    found = s.company.conn.execute(sa.select(t).where(t.c.source_ref == ref)).mappings().first()
+    if found is None:
+        return _todo(s, ctx, schedule, ref, title, notes)
+    before = dict(found)
+    if before['status'] == 'inactive':
+        return []
+    after = d._touch(s, ctx, dict(before, title=title[:160], notes=notes, status='open', completed_at=None,
+                                  completed_by=None, due_date=clock.today_iso()))
+    done = s.company.conn.execute(t.update().where(t.c.id == before['id'], t.c.version == before['version']).values(
+        **{k: v for k, v in after.items() if k != 'id'}))
+    if done.rowcount != 1:
+        raise BookflowError('E_VERSION_CONFLICT', details={'record_type': 'todo', 'record_id': before['id']})
+    return [Touched('todo', after['id'], 'update', before['version'], after['version'], after, before, db='company')]
 
 
 def pause(s, ctx, schedule, why) -> tuple[dict, list[Touched]]:
@@ -732,11 +898,119 @@ def pause(s, ctx, schedule, why) -> tuple[dict, list[Touched]]:
     return after, touched
 
 
+def _drop_released_go(s, ctx, batch_id, why) -> list[Touched]:
+    """Released messages of a batch, not yet claimed for sending, lose the go and wait for a person's."""
+    t, touched = c.delivery_messages, []
+    for found in s.company.conn.execute(sa.select(t).where(t.c.batch_id == batch_id, t.c.status == 'ready',
+                                                           t.c.go_by.is_not(None))).mappings().all():
+        before = dict(found)
+        after = d._touch(s, ctx, before)
+        details = {'reason': why[:500], 'batch': batch_id}
+        d.drop_go(before, after, details)
+        d._write_row(s, before, after)
+        event = d._event(s, ctx, after['id'], 'held', 'ready', details, at=after['updated_at'])
+        touched += [Touched(d.RECORD, after['id'], 'update', before['version'], after['version'], after, before,
+                            db='company'),
+                    Touched('delivery_event', event['id'], 'create', None, None, event, db='company')]
+    return touched
+
+
+def end_batch(s, ctx, batch_id, why, *, cancel) -> list[Touched]:
+    """An open run's batch, when its run failed or paused (``cancel``: its drafts are cancelled and the batch with
+    them) or its schedule left live (the batch's go is dropped, so later chunks release without one). Either way its
+    released messages lose the go and wait for a person's."""
+    if not batch_id:
+        return []
+    t = c.delivery_batches
+    batch = s.company.conn.execute(sa.select(t).where(t.c.id == batch_id)).mappings().first()
+    if batch is None or batch['state'] != 'drafting':
+        return []
+    batch, touched = dict(batch), []
+    if cancel:
+        from types import SimpleNamespace
+        cctx = ctx.model_copy(update={'reason': why[:140]})
+        plan = db.prepare_cancel(s, cctx, SimpleNamespace(batch=batch['number'], expected_version=None))
+        touched += db.apply_cancel(plan, cctx, s).touched
+        batch = dict(s.company.conn.execute(sa.select(t).where(t.c.id == batch_id)).mappings().first())
+    if batch['go_by']:
+        after = d._touch(s, ctx, dict(batch, go_by=None))
+        done = s.company.conn.execute(t.update().where(t.c.id == batch['id'], t.c.version == batch['version']).values(
+            **{k: after[k] for k in ('go_by', 'version', 'updated_at', 'updated_by', 'updated_via')}))
+        if done.rowcount != 1:
+            raise BookflowError('E_VERSION_CONFLICT', details={'record_type': db.RECORD, 'record_id': batch['id']})
+        touched.append(Touched(db.RECORD, batch['id'], 'update', batch['version'], after['version'], after, batch,
+                               db='company'))
+    return touched + _drop_released_go(s, ctx, batch_id, why)
+
+
+def end_open_run(s, ctx, schedule, why, *, cancel, reason=None) -> list[Touched]:
+    """The open run of a schedule: with ``reason`` it fails (and its batch is cancelled); without, it goes on with no
+    go."""
+    run = open_run(s, schedule['id'])
+    if run is None:
+        return []
+    touched = end_batch(s, ctx, run['batch_id'], why, cancel=cancel)
+    values = dict(go_by=None)
+    if reason:
+        values.update(state='failed', reason=reason, reason_text=why[:500], finished_at=clock.now_iso())
+    if reason or run['go_by']:
+        touched.append(_update_run(s, ctx, run, **values))
+    return touched
+
+
+def return_to_draft(s, ctx, schedule, why, *, todo=True) -> tuple[dict, list[Touched]]:
+    """A live schedule whose confirmed rule changed: back to draft with why, its open run's go dropped, one to-do."""
+    if schedule['state'] != 'live':
+        return schedule, []
+    who = schedule['established_by']
+    after = d._touch(s, ctx, dict(schedule, state='draft', established_by=None, established_at=None, confirmed=None,
+                                  draft_reason=why[:500]))
+    touched = [_write(s, schedule, after)]
+    touched += end_open_run(s, ctx, after, why, cancel=False)
+    if todo:
+        touched += _todo(s, ctx, after, f"delivery-schedule-draft:{schedule['id']}:{after['version']}",
+                         f"Email schedule {schedule['name']} is a draft again",
+                         f"{why}. Its runs leave messages waiting for a go until a person checks it and makes it live "
+                         f'again: delivery-schedule live "{schedule["name"]}" --dry-run.', assignee=who)
+    return after, touched
+
+
+def affected_by_template(s, kind, template_id, *, content, default) -> list[str]:
+    """Live schedules a template change would return to draft: those using it whose text changes (``content``), and
+    those using the kind's default when the default changes (``default``)."""
+    t = c.delivery_schedules
+    rows = s.company.conn.execute(sa.select(t.c.name, t.c.template_id).where(
+        t.c.state == 'live', t.c.kind == kind).order_by(t.c.name_key)).all()
+    current = _template_content(s, dict(template_id=None, kind=kind))
+    is_default = current is not None and current[0] == template_id
+    return [name for name, used in rows
+            if (used == template_id and content) or (used is None and (default or (content and is_default)))]
+
+
+def recheck_live(s, ctx, kind, why) -> tuple[list[str], list[Touched]]:
+    """After a template of ``kind`` changed: each live schedule whose rule no longer matches what was confirmed
+    returns to draft with why and one to-do."""
+    t, names, touched = c.delivery_schedules, [], []
+    for found in s.company.conn.execute(sa.select(t).where(t.c.state == 'live', t.c.kind == kind)
+                                        .order_by(t.c.name_key)).mappings().all():
+        row = dict(found)
+        if rule_fingerprint(s, row) != row['confirmed']:
+            _, written = return_to_draft(s, ctx, row, why)
+            touched += written
+            names.append(row['name'])
+    return names, touched
+
+
 def _go(s, ctx, schedule) -> tuple[str | None, dict, list[Touched]]:
-    """The go a starting run's releases carry, decided once at the firing: the establisher's while the schedule is
-    live and they still hold the authority (R187: automate.delivery and delivery.send); else none."""
-    if schedule['mode'] != 'send' or schedule['state'] != 'live':
+    """The go a starting run's releases carry, decided once at the firing: the establisher's, only when the run is
+    drafted as the establisher (the host's tick, which acts as ``run_as``, the establisher of a live schedule; or the
+    establisher's own Run now), while the schedule is live, its rule is still the one confirmed, and they still hold
+    the authority (R187: automate.delivery and delivery.send). Anyone else's run drafts with no go."""
+    if schedule['mode'] != 'send' or schedule['state'] != 'live' or s.actor.id != schedule['established_by']:
         return None, schedule, []
+    if rule_fingerprint(s, schedule) != schedule['confirmed']:
+        after, touched = return_to_draft(s, ctx, schedule, 'its rule or template changed since it was confirmed')
+        return None, after, touched
     why = authority_lost(s, schedule['established_by'])
     if why is None:
         return schedule['established_by'], schedule, []
@@ -788,19 +1062,20 @@ def draft_step(s, ctx, schedule, run) -> tuple[dict, dict, list[Touched], list[s
     touched.append(_update_run(s, ctx, run, **values))
     run = touched[-1].after
     if run['state'] == 'done' and run['mode'] == 'send' and not run['go_by'] and run['released']:
-        touched += _todo(s, ctx, schedule, f"delivery-schedule-run:{run['id']}",
-                         f"{run['released']} email(s) from {schedule['name']} wait for your go",
-                         f"The {run['slot_date']} run of {schedule['name']} released {run['released']} message(s) "
-                         f"(batch {out.number}); none leaves until a person approves it: delivery approve --batch "
-                         f"{out.number}, or the Outbox's Waiting for your go.")
+        touched += _standing_todo(
+            s, ctx, schedule, f"Emails from {schedule['name']} wait for your go",
+            f"The {run['slot_date']} run of {schedule['name']} released {run['released']} message(s) (batch "
+            f"{out.number}); none leaves until a person approves it: delivery approve --batch {out.number}, or the "
+            "Outbox's Waiting for your go. This to-do is updated by each such run.")
     return schedule, run, touched, warnings
 
 
-def step(s, ctx, schedule, today) -> tuple[dict, list[dict], list[Touched], list[str]]:
+def step(s, ctx, schedule, today, upto=None) -> tuple[dict, list[dict], list[Touched], list[str]]:
     """What is due for one schedule now: claim and skip slots, then draft one chunk of its open run."""
     touched, warnings, ran = [], [], []
-    if schedule['active'] and schedule['next_date'] and schedule['next_date'] <= today:
-        schedule, written, made = claim_due(s, ctx, schedule, today)
+    upto = upto or today
+    if schedule['active'] and schedule['next_date'] and schedule['next_date'] <= upto:
+        schedule, written, made = claim_due(s, ctx, schedule, today, upto)
         touched += written
         ran += [r for r in made if r['state'] == 'skipped']
     run = open_run(s, schedule['id']) if schedule['active'] else None
@@ -814,75 +1089,83 @@ def step(s, ctx, schedule, today) -> tuple[dict, list[dict], list[Touched], list
 
 def prepare_run(s, ctx, inp) -> Plan:
     schedule = resolve(s, inp.schedule)
-    today = _today(s)
+    today, hhmm = moment(s)
+    upto = through(schedule, today, hhmm)
     if not schedule['active']:
         return Plan(output(s, schedule, warnings=['It is stopped: resume it first.']), dict(idle=True))
-    due = due_slots(schedule, today, 1) if schedule['next_date'] else []
+    due = due_slots(schedule, upto, 1) if schedule['next_date'] else []
     if not due and open_run(s, schedule['id']) is None:
-        text = f"Nothing is due: the next slot is {schedule['next_date']}." if schedule['next_date'] else \
-            'It has run out.'
+        if is_finished(schedule):
+            text = 'It has run out.'
+        else:
+            text = f"Nothing is due: the next slot is {schedule['next_date']} from {schedule['run_time']}."
         return Plan(output(s, schedule, warnings=[text]), dict(idle=True))
     if s.dry_run:
         slot = first_run(schedule, today)
         return Plan(output(s, schedule, warnings=[f'Would run the slot of {slot} (or continue its open run).']),
                     dict(idle=True))
-    return Plan(output(s, schedule), dict(schedule=schedule, today=today))
+    return Plan(output(s, schedule), dict(schedule=schedule, today=today, upto=upto))
 
 
 def apply_run(plan, ctx, s) -> Applied:
     if plan.data.get('idle'):
         return Applied(plan.preview, [], 'nothing due')
-    schedule, ran, touched, warnings = step(s, ctx, plan.data['schedule'], plan.data['today'])
+    schedule, ran, touched, warnings = step(s, ctx, plan.data['schedule'], plan.data['today'], plan.data['upto'])
     out = output(s, schedule, warnings=warnings, ran=[_run_out(s, r) for r in ran])
     return Applied(out, touched, f"delivery schedule {schedule['name']}: {len(ran)} run(s)")
 
 
 # ---------------------------------------------------------------- the host's tick
 
-def has_due(conn, today: str) -> bool:
-    """One statement: is any schedule due, or any run still drafting? A company with no schedules pays only this."""
-    return bool(conn.exec_driver_sql(
-        "SELECT EXISTS (SELECT 1 FROM delivery_schedules WHERE active = 1 AND next_date <= ?) OR EXISTS "
+_DUE = "active = 1 AND next_date <= :today AND (next_date < :today OR run_time <= :hhmm)"
+
+
+def has_due(conn, today: str, hhmm: str = '23:59') -> bool:
+    """One statement: is any schedule due (its slot's day come, and on the day its run time), or any run still
+    drafting? A company with no schedules pays only this."""
+    return bool(conn.execute(sa.text(
+        f"SELECT EXISTS (SELECT 1 FROM delivery_schedules WHERE {_DUE}) OR EXISTS "
         "(SELECT 1 FROM delivery_schedule_runs r JOIN delivery_schedules x ON x.id = r.schedule_id "
-        "WHERE r.state = 'drafting' AND x.active = 1)", (today,)).scalar())
+        "WHERE r.state = 'drafting' AND x.active = 1)"), dict(today=today, hhmm=hhmm)).scalar())
 
 
-def _due(s, today) -> list[dict]:
+def _due(s, today, hhmm) -> list[dict]:
     t, r = c.delivery_schedules, c.delivery_schedule_runs
     drafting = sa.select(r.c.schedule_id).where(r.c.state == 'drafting')
-    return [dict(x) for x in s.company.conn.execute(sa.select(t).where(t.c.active.is_(True), sa.or_(
-        t.c.next_date <= today, t.c.id.in_(drafting))).order_by(t.c.name_key)).mappings()]
+    return [dict(x) for x in s.company.conn.execute(sa.select(t).where(sa.or_(
+        sa.text(_DUE).bindparams(today=today, hhmm=hhmm), sa.and_(t.c.active.is_(True), t.c.id.in_(drafting))))
+        .order_by(t.c.name_key)).mappings()]
 
 
-def _system_stop(s, system_id, schedule, why, today):
-    """The actor a schedule drafts as can no longer lend authority: as the host, pause it (one to-do), skip what is
-    due and fail an open run, all with the reason. Nothing is drafted."""
+def _system_stop(s, system_id, schedule, why, today, upto, *, reason='no_authority', stop=True):
+    """As the host, with the reason: skip what is due and fail an open run, cancelling its batch. ``stop`` (the actor
+    lost the authority, or the run failed) pauses it too, with one to-do; a passing refusal (``unavailable``) leaves
+    it running from its next slot."""
     from bookflow.company.scheduler import _act_as, context
     _act_as(s, system_id)
-    ctx = context().model_copy(update={'actor_id': system_id, 'reason': f"On schedule: {schedule['name']}"})
+    ctx = context().model_copy(update={'actor_id': system_id, 'reason': f"On schedule: {schedule['name']}"[:140]})
     with s.commits.operation('delivery.tick', s.hub, s.company):
         s.company.raw.execute('BEGIN IMMEDIATE')
         try:
-            schedule, touched = pause(s, ctx, schedule, why)
-            for slot in due_slots(schedule, today, SKIPS_PER_STEP):
-                touched += _skip(s, ctx, schedule, slot, 'no_authority', why[:500])
-            slots = due_slots(schedule, today, SKIPS_PER_STEP)
+            touched = []
+            if stop:
+                schedule, touched = pause(s, ctx, schedule, why)
+            slots = due_slots(schedule, upto, SKIPS_PER_STEP)
+            for slot in slots:
+                touched += _skip(s, ctx, schedule, slot, reason, why[:500])
             if slots:
                 nxt = _after(schedule, slots[-1])
                 after = d._touch(s, ctx, dict(schedule, next_date=None if _finished(
                     nxt, schedule, schedule['remaining_runs']) else nxt))
                 touched.append(_write(s, schedule, after))
-            run = open_run(s, schedule['id'])
-            if run is not None:
-                touched.append(_update_run(s, ctx, run, state='failed', reason='no_authority',
-                                           reason_text=why[:500], finished_at=clock.now_iso()))
-            _audit(s, ctx, f"schedule {schedule['name']} paused: {why}", touched)
+            touched += end_open_run(s, ctx, schedule, why, cancel=True, reason=reason)
+            _audit(s, ctx, f"schedule {schedule['name']} {'paused' if stop else 'skipped a slot'}: {why}", touched)
             s.commits.commit(s.company, 'delivery.tick')
         except BaseException:
             if s.company.write_transaction:
                 s.company.raw.rollback()
             raise
-    return {'paused': why}
+    return {'paused': why} if stop else {'skipped': why}
 
 
 def _audit(s, ctx, summary, touched):
@@ -892,19 +1175,31 @@ def _audit(s, ctx, summary, touched):
                        actor_kind=s.actor.kind, directive_code=s.directive_code)
 
 
-def _pending_slot(schedule, today):
-    slots = due_slots(schedule, today)
+def _pending_slot(schedule, upto):
+    slots = due_slots(schedule, upto)
     return slots[-1] if slots else None
+
+
+def _refusal(e) -> tuple[str, bool]:
+    """How a refused step is recorded: (reason, stop). A passing refusal (the writer busy, a record moved meanwhile,
+    an accountant's copy out) skips the slot and the schedule goes on; a lost authority or anything else pauses it."""
+    if isinstance(e, BookflowError):
+        if e.code in TRANSIENT or 'accountant' in str((e.details or {}).get('reason') or ''):
+            return 'unavailable', False
+        if e.code in NO_AUTHORITY:
+            return 'no_authority', True
+    return 'failed', True
 
 
 def tick(s, system_id, now) -> dict | None:
     """The scheduler's step for one company, on the host's writer. None, after one statement, when nothing is due.
 
     Each due schedule takes one step as its ``run_as`` through ``delivery-schedule run`` (that actor's authority
-    checked afresh; interface system, client scheduler; "On schedule: <name> for <slot>")."""
-    from bookflow.company.memorized_schedule import today as local_today
-    today = local_today(s.company_tz, at=now)
-    if not has_due(s.company.conn, today):
+    checked afresh; interface system, client scheduler; "On schedule: <name> for <slot>"). A slot is due from the
+    schedule's run time, company-local."""
+    local = _local(s.company_tz, now)
+    today, hhmm = local.date().isoformat(), local.strftime('%H:%M')
+    if not has_due(s.company.conn, today, hhmm):
         return None
     from bookflow.company import scheduler
     from bookflow.core import registry
@@ -912,36 +1207,43 @@ def tick(s, system_id, now) -> dict | None:
     from bookflow.core.dispatch import run_in_session
     cmd = registry.get('delivery-schedule run')
     out = {}
-    for schedule in _due(s, today):
+    for schedule in _due(s, today, hhmm):
         name = schedule['name']
+        upto = through(schedule, today, hhmm)
         epoch = schedule['run_as_epoch'] if schedule['run_as_epoch'] is not None else scheduler._NOT_RECORDED
         why, epoch = scheduler._cannot_act(s, schedule['run_as'], schedule['run_as_for'], epoch,
                                            what='set what this schedule drafts')
         try:
             if why is not None:
                 out[name] = _system_stop(s, system_id, schedule, f'{scheduler._name(s, schedule["run_as"])} cannot '
-                                         f'run it: {why}', today)
+                                         f'run it: {why}', today, upto)
                 continue
             run = open_run(s, schedule['id'])
-            slot = run['slot_date'] if run else _pending_slot(schedule, today)
+            slot = run['slot_date'] if run else _pending_slot(schedule, upto)
             scheduler._act_as(s, schedule['run_as'], schedule['run_as_for'], epoch)
             ctx = scheduler.context().model_copy(update={
                 'actor_id': schedule['run_as'], 'actor_kind': ActorKind(s.actor.kind),
                 'on_behalf_of': schedule['run_as_for'],
                 'reason': (f'On schedule: {name} for {slot}' if slot else f'On schedule: {name}')[:140]})
-            with clock.as_of_day(today):  # the tick's own day, which the command reads as today
-                result = run_in_session(cmd, cmd.input_model.model_validate({'schedule': schedule['id']}), ctx, s)
+            token = _TICK_TIME.set(hhmm)
+            try:
+                with clock.as_of_day(today):  # the tick's own day and time, which the command reads as now
+                    result = run_in_session(cmd, cmd.input_model.model_validate({'schedule': schedule['id']}), ctx, s)
+            finally:
+                _TICK_TIME.reset(token)
             out[name] = {'ran': [{k: r.get(k) for k in ('slot_date', 'state', 'drafted', 'released', 'reason')}
                                  for r in result.get('ran', [])]}
-        except BookflowError as e:
+        except Exception as e:  # noqa: BLE001 - every failure is recorded on the schedule; none retries every tick
             if s.company is not None and s.company.write_transaction:
                 s.company.raw.rollback()
-            # Whatever stopped the step -- the actor's authority or anything else -- pauses the schedule with the
-            # reason, so a failing schedule never retries every minute.
-            text = e.message or e.code
-            reason = f"{scheduler._name(s, schedule['run_as'])} cannot run it ({e.code}): {text}"
+            reason, stop = _refusal(e)
+            code = e.code if isinstance(e, BookflowError) else type(e).__name__
+            text = (e.message or e.code) if isinstance(e, BookflowError) else str(e) or type(e).__name__
+            who = scheduler._name(s, schedule['run_as'])
+            words = f"{who} cannot run it ({code}): {text}" if stop else f"refused for now ({code}): {text}"
             try:
-                out[name] = _system_stop(s, system_id, resolve(s, schedule['id']), reason[:500], today)
+                out[name] = _system_stop(s, system_id, resolve(s, schedule['id']), words[:500], today, upto,
+                                         reason=reason, stop=stop)
             except Exception as again:  # noqa: BLE001 - recorded, never fatal to the host
                 out[name] = scheduler._failure(again)
     return out

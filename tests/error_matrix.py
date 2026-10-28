@@ -2726,13 +2726,15 @@ _SCHEDULE_ERRORS = {'E_VALIDATION': 'a missing frequency, start, selection or pe
 MATRIX['delivery-schedule create'] = dict(_SCHEDULE_ERRORS)
 MATRIX['delivery-schedule update'] = dict(_SCHEDULE_ERRORS, E_VERSION_CONFLICT='stale expected_version',
                                           E_WORK_DEPENDENCY="confirm is not the changed schedule's check",
-                                          E_PERMISSION='an agent passing confirm (automate.delivery)')
+                                          E_PERMISSION='an agent passing confirm (automate.delivery), or a person '
+                                                       'who could not give a go now')
 MATRIX['delivery-schedule live'] = {'E_VALIDATION': 'no confirm (show the check first)',
                                     'E_RECORD_NOT_FOUND': 'unknown schedule',
                                     'E_VERSION_CONFLICT': 'stale expected_version',
                                     'E_WORK_DEPENDENCY': 'the details or recipients changed since the check, or no '
                                                          'slot left',
-                                    'E_PERMISSION': "an agent (a person's act until automate.delivery)",
+                                    'E_PERMISSION': "an agent (a person's act until automate.delivery), or a person "
+                                                    'who could not give a go now',
                                     **_DELIVERY_TAIL}
 MATRIX['delivery-schedule pause'] = {'E_RECORD_NOT_FOUND': 'unknown schedule',
                                      'E_VERSION_CONFLICT': 'stale expected_version', **_DELIVERY_TAIL}

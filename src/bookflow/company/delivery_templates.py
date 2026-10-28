@@ -25,12 +25,25 @@ def _invalid(field_name, problem):
                          details={'fields': [{'field': field_name, 'problem': problem}]})
 
 
-def output(s, row, warnings=()) -> m.TemplateOutput:
+def output(s, row, warnings=(), schedules=()) -> m.TemplateOutput:
     from bookflow.core.session import localize
+    warnings = list(warnings)
+    if schedules:
+        warnings.append('Live email schedule(s) ' + ', '.join(schedules) + ' return to draft: a person confirmed the '
+                        'old text; their messages wait for a go until a person makes each live again.')
     return m.TemplateOutput(id=row['id'], version=row['version'], kind=row['kind'], name=row['name'],
                             subject=row['subject'], body=row['body'], is_default=bool(row['is_default']),
                             active=bool(row['active']), updated_at=localize(s, row['updated_at']),
-                            updated_by=row['updated_by'], warnings=list(warnings))
+                            updated_by=row['updated_by'], schedules_to_draft=list(schedules), warnings=warnings)
+
+
+def _schedules(s, ctx, kind, name, touched) -> list[str]:
+    """Live schedules whose confirmed rule covered this kind's template text or default: back to draft, with why and
+    one to-do each (design/document-delivery.md §6)."""
+    from bookflow.company import delivery_schedules
+    names, written = delivery_schedules.recheck_live(s, ctx, kind, f'its email template {name} changed')
+    touched += written
+    return names
 
 
 def resolve(s, selector, kind=None) -> dict:
@@ -84,7 +97,10 @@ def prepare_create(s, ctx, inp) -> Plan:
     if inp.is_default:
         old = _current_default(s, inp.kind)
         retire = (old, dict(_stamp(s, ctx, old, at), is_default=False)) if old else None
-    return Plan(output(s, row), dict(row=row, retire=retire))
+    from bookflow.company import delivery_schedules
+    would = delivery_schedules.affected_by_template(s, inp.kind, row['id'], content=False,
+                                                    default=bool(inp.is_default))
+    return Plan(output(s, row, schedules=would), dict(row=row, retire=retire))
 
 
 def apply_create(plan, ctx, s) -> Applied:
@@ -92,7 +108,8 @@ def apply_create(plan, ctx, s) -> Applied:
     row = plan.data['row']
     s.company.conn.execute(c.delivery_templates.insert().values(**row))
     touched.append(Touched(RECORD, row['id'], 'create', None, 1, row, db='company'))
-    return Applied(output(s, row), touched, f"created {row['kind']} email template {row['name']}")
+    names = _schedules(s, ctx, row['kind'], row['name'], touched) if row['is_default'] else []
+    return Applied(output(s, row, schedules=names), touched, f"created {row['kind']} email template {row['name']}")
 
 
 def _retire(s, retire) -> list:
@@ -143,7 +160,11 @@ def prepare_update(s, ctx, inp) -> Plan:
         after['is_default'] = True
     if all(after[k] == before[k] for k in ('name', 'subject', 'body', 'is_default')):
         raise _invalid('template', 'nothing to change: give name, subject, body or is_default')
-    return Plan(output(s, after), dict(before=before, after=after, retire=retire))
+    from bookflow.company import delivery_schedules
+    would = delivery_schedules.affected_by_template(
+        s, before['kind'], before['id'], content=any(after[k] != before[k] for k in ('subject', 'body')),
+        default=after['is_default'] and not before['is_default'])
+    return Plan(output(s, after, schedules=would), dict(before=before, after=after, retire=retire))
 
 
 def apply_update(plan, ctx, s) -> Applied:
@@ -152,7 +173,9 @@ def apply_update(plan, ctx, s) -> Applied:
     _write(s, before, after)
     touched.append(Touched(RECORD, after['id'], 'update', before['version'], after['version'], after, before,
                            db='company'))
-    return Applied(output(s, after), touched, f"updated {after['kind']} email template {after['name']}")
+    names = _schedules(s, ctx, after['kind'], after['name'], touched)
+    return Applied(output(s, after, schedules=names), touched,
+                   f"updated {after['kind']} email template {after['name']}")
 
 
 def prepare_deactivate(s, ctx, inp) -> Plan:

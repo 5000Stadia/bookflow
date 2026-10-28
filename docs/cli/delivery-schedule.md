@@ -38,7 +38,7 @@ The same example as complete `bookflow_run` arguments:
 | `queued` | `--queued` | boolean \| null | no | yes | null | Every to-be-emailed document (of kind). |
 | `unsent` | `--unsent` | boolean \| null | no | yes | null | Documents of kind with no live or sent message. |
 | `ready` | `--ready` | boolean \| null | no | yes | null | kind notice: every ready overdue notice. |
-| `period` | `--period` | literal["previous-month", "month-to-date", "since-last-run"] \| null | no | yes | null | Statements: previous-month, month-to-date (to the run's day) or since-last-run (from the day after the last run's period; the first run takes the previous month). |
+| `period` | `--period` | literal["previous-month", "month-to-date", "since-last-run"] \| null | no | yes | null | Statements: previous-month (the prior month: run on the 1st), month-to-date (to the run's day) or since-last-run (from the day after the last run's period; the first run takes the previous month). |
 | `customer` | `--customer` | string \| null | no | yes | null | Only this customer and its jobs. |
 | `customer_type` | `--customer-type` | string \| null | no | yes | null | Only customers of this type. |
 | `balance_over` | `--balance-over` | string \| null | no | yes | null | Statements: a balance over this. |
@@ -51,6 +51,7 @@ The same example as complete `bookflow_run` arguments:
 | `remaining_runs` | `--remaining-runs` | integer \| null | no | yes | null | Stop after this many runs. |
 | `mode` | `--mode` | literal["draft", "send"] \| null | no | yes | null | draft: each run leaves drafts. send: each run releases them; they leave only once a person has made the schedule live (delivery-schedule live), and until then wait for a go. |
 | `catch_up_days` | `--catch-up-days` | integer \| null | no | yes | null | After the host was off, the latest missed slot runs only if no older than this (default 7). |
+| `run_time` | `--run-time` | string \| null | no | yes | null | Company-local HH:MM from which a slot is due (default 06:00). |
 | `name` | `--name` | string | yes | no | — | minimum length 1; maximum length 100 |
 | `kind` | `--kind` | literal["invoice", "sales-receipt", "estimate", "statement", "notice"] | yes | no | — | — |
 
@@ -112,6 +113,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `established_at` | string \| null | no | yes | null | — |
 | `paused_reason` | string \| null | no | yes | null | — |
 | `catch_up_days` | integer | yes | no | — | — |
+| `run_time` | string | no | no | "06:00" | — |
+| `draft_reason` | string \| null | no | yes | null | Why it last returned to draft from live. |
 | `runs_as_name` | string \| null | no | yes | null | — |
 | `runs` | array[object] | no | no | [] | Recent runs, newest first. |
 | `runs[].run_id` | string | yes | no | — | — |
@@ -194,6 +197,7 @@ Example JSON output:
   "catch_up_days": 1,
   "check": null,
   "combine": false,
+  "draft_reason": null,
   "established_at": null,
   "established_by": null,
   "established_by_name": null,
@@ -206,6 +210,7 @@ Example JSON output:
   "paused_reason": null,
   "ran": [],
   "remaining_runs": null,
+  "run_time": "06:00",
   "runs": [],
   "runs_as_name": null,
   "schedule_id": null,
@@ -348,6 +353,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `established_at` | string \| null | no | yes | null | — |
 | `paused_reason` | string \| null | no | yes | null | — |
 | `catch_up_days` | integer | yes | no | — | — |
+| `run_time` | string | no | no | "06:00" | — |
+| `draft_reason` | string \| null | no | yes | null | Why it last returned to draft from live. |
 | `runs_as_name` | string \| null | no | yes | null | — |
 | `runs` | array[object] | no | no | [] | Recent runs, newest first. |
 | `runs[].run_id` | string | yes | no | — | — |
@@ -430,6 +437,7 @@ Example JSON output:
   "catch_up_days": 1,
   "check": null,
   "combine": false,
+  "draft_reason": null,
   "established_at": null,
   "established_by": null,
   "established_by_name": null,
@@ -442,6 +450,7 @@ Example JSON output:
   "paused_reason": null,
   "ran": [],
   "remaining_runs": null,
+  "run_time": "06:00",
   "runs": [],
   "runs_as_name": null,
   "schedule_id": null,
@@ -585,6 +594,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `established_at` | string \| null | no | yes | null | — |
 | `paused_reason` | string \| null | no | yes | null | — |
 | `catch_up_days` | integer | yes | no | — | — |
+| `run_time` | string | no | no | "06:00" | — |
+| `draft_reason` | string \| null | no | yes | null | Why it last returned to draft from live. |
 | `runs_as_name` | string \| null | no | yes | null | — |
 | `runs` | array[object] | no | no | [] | Recent runs, newest first. |
 | `runs[].run_id` | string | yes | no | — | — |
@@ -667,6 +678,7 @@ Example JSON output:
   "catch_up_days": 1,
   "check": null,
   "combine": false,
+  "draft_reason": null,
   "established_at": null,
   "established_by": null,
   "established_by_name": null,
@@ -679,6 +691,7 @@ Example JSON output:
   "paused_reason": null,
   "ran": [],
   "remaining_runs": null,
+  "run_time": "06:00",
   "runs": [],
   "runs_as_name": null,
   "schedule_id": null,
@@ -950,6 +963,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `established_at` | string \| null | no | yes | null | — |
 | `paused_reason` | string \| null | no | yes | null | — |
 | `catch_up_days` | integer | yes | no | — | — |
+| `run_time` | string | no | no | "06:00" | — |
+| `draft_reason` | string \| null | no | yes | null | Why it last returned to draft from live. |
 | `runs_as_name` | string \| null | no | yes | null | — |
 | `runs` | array[object] | no | no | [] | Recent runs, newest first. |
 | `runs[].run_id` | string | yes | no | — | — |
@@ -1032,6 +1047,7 @@ Example JSON output:
   "catch_up_days": 1,
   "check": null,
   "combine": false,
+  "draft_reason": null,
   "established_at": null,
   "established_by": null,
   "established_by_name": null,
@@ -1044,6 +1060,7 @@ Example JSON output:
   "paused_reason": null,
   "ran": [],
   "remaining_runs": null,
+  "run_time": "06:00",
   "runs": [],
   "runs_as_name": null,
   "schedule_id": null,
@@ -1185,6 +1202,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `established_at` | string \| null | no | yes | null | — |
 | `paused_reason` | string \| null | no | yes | null | — |
 | `catch_up_days` | integer | yes | no | — | — |
+| `run_time` | string | no | no | "06:00" | — |
+| `draft_reason` | string \| null | no | yes | null | Why it last returned to draft from live. |
 | `runs_as_name` | string \| null | no | yes | null | — |
 | `runs` | array[object] | no | no | [] | Recent runs, newest first. |
 | `runs[].run_id` | string | yes | no | — | — |
@@ -1267,6 +1286,7 @@ Example JSON output:
   "catch_up_days": 1,
   "check": null,
   "combine": false,
+  "draft_reason": null,
   "established_at": null,
   "established_by": null,
   "established_by_name": null,
@@ -1279,6 +1299,7 @@ Example JSON output:
   "paused_reason": null,
   "ran": [],
   "remaining_runs": null,
+  "run_time": "06:00",
   "runs": [],
   "runs_as_name": null,
   "schedule_id": null,
@@ -1411,6 +1432,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `established_at` | string \| null | no | yes | null | — |
 | `paused_reason` | string \| null | no | yes | null | — |
 | `catch_up_days` | integer | yes | no | — | — |
+| `run_time` | string | no | no | "06:00" | — |
+| `draft_reason` | string \| null | no | yes | null | Why it last returned to draft from live. |
 | `runs_as_name` | string \| null | no | yes | null | — |
 | `runs` | array[object] | no | no | [] | Recent runs, newest first. |
 | `runs[].run_id` | string | yes | no | — | — |
@@ -1493,6 +1516,7 @@ Example JSON output:
   "catch_up_days": 1,
   "check": null,
   "combine": false,
+  "draft_reason": null,
   "established_at": null,
   "established_by": null,
   "established_by_name": null,
@@ -1505,6 +1529,7 @@ Example JSON output:
   "paused_reason": null,
   "ran": [],
   "remaining_runs": null,
+  "run_time": "06:00",
   "runs": [],
   "runs_as_name": null,
   "schedule_id": null,
@@ -1585,7 +1610,7 @@ The same example as complete `bookflow_run` arguments:
 | `queued` | `--queued` | boolean \| null | no | yes | null | Every to-be-emailed document (of kind). |
 | `unsent` | `--unsent` | boolean \| null | no | yes | null | Documents of kind with no live or sent message. |
 | `ready` | `--ready` | boolean \| null | no | yes | null | kind notice: every ready overdue notice. |
-| `period` | `--period` | literal["previous-month", "month-to-date", "since-last-run"] \| null | no | yes | null | Statements: previous-month, month-to-date (to the run's day) or since-last-run (from the day after the last run's period; the first run takes the previous month). |
+| `period` | `--period` | literal["previous-month", "month-to-date", "since-last-run"] \| null | no | yes | null | Statements: previous-month (the prior month: run on the 1st), month-to-date (to the run's day) or since-last-run (from the day after the last run's period; the first run takes the previous month). |
 | `customer` | `--customer` | string \| null | no | yes | null | Only this customer and its jobs. |
 | `customer_type` | `--customer-type` | string \| null | no | yes | null | Only customers of this type. |
 | `balance_over` | `--balance-over` | string \| null | no | yes | null | Statements: a balance over this. |
@@ -1598,6 +1623,7 @@ The same example as complete `bookflow_run` arguments:
 | `remaining_runs` | `--remaining-runs` | integer \| null | no | yes | null | Stop after this many runs. |
 | `mode` | `--mode` | literal["draft", "send"] \| null | no | yes | null | draft: each run leaves drafts. send: each run releases them; they leave only once a person has made the schedule live (delivery-schedule live), and until then wait for a go. |
 | `catch_up_days` | `--catch-up-days` | integer \| null | no | yes | null | After the host was off, the latest missed slot runs only if no older than this (default 7). |
+| `run_time` | `--run-time` | string \| null | no | yes | null | Company-local HH:MM from which a slot is due (default 06:00). |
 | `schedule` | `SCHEDULE` | string | yes | no | — | Schedule name or id.; minimum length 1; maximum length 1004 |
 | `name` | `--name` | string \| null | no | yes | null | — |
 | `kind` | `--kind` | literal["invoice", "sales-receipt", "estimate", "statement", "notice"] \| null | no | yes | null | — |
@@ -1663,6 +1689,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `established_at` | string \| null | no | yes | null | — |
 | `paused_reason` | string \| null | no | yes | null | — |
 | `catch_up_days` | integer | yes | no | — | — |
+| `run_time` | string | no | no | "06:00" | — |
+| `draft_reason` | string \| null | no | yes | null | Why it last returned to draft from live. |
 | `runs_as_name` | string \| null | no | yes | null | — |
 | `runs` | array[object] | no | no | [] | Recent runs, newest first. |
 | `runs[].run_id` | string | yes | no | — | — |
@@ -1745,6 +1773,7 @@ Example JSON output:
   "catch_up_days": 1,
   "check": null,
   "combine": false,
+  "draft_reason": null,
   "established_at": null,
   "established_by": null,
   "established_by_name": null,
@@ -1757,6 +1786,7 @@ Example JSON output:
   "paused_reason": null,
   "ran": [],
   "remaining_runs": null,
+  "run_time": "06:00",
   "runs": [],
   "runs_as_name": null,
   "schedule_id": null,

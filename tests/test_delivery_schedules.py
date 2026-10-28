@@ -343,3 +343,275 @@ def test_the_idle_tick_for_a_company_with_no_schedules_costs_nothing_measurable(
     print(f'idle tick median with the schedules hook {with_hook * 1000:.2f} ms, without {without * 1000:.2f} ms; '
           f'the hook statement {per_statement * 1e6:.1f} us')
     assert per_statement < 0.001
+
+
+# ---------------------------------------------------------------- review fixes (r112-inc4-review.md)
+
+def _open_todos(run, text):
+    return [t for t in run('todo list', {'status': 'open'})['items'] if text in t['title']]
+
+
+def _make_live(run, name):
+    check = run('delivery-schedule live', {'schedule': name}, dry_run=True)['check']
+    return run('delivery-schedule live', {'schedule': name, 'confirm': check['fingerprint']}, reason='Turn on')
+
+
+def test_a_template_edit_returns_a_live_schedule_to_draft_but_a_growing_match_does_not(office):
+    """High 2 and the decision in §6: the confirmation covers the rule, the template's exact text and the default
+    pointer included, not how many documents match on a day."""
+    run, clock, invoice = office['run'], office['clock'], office['invoice']
+    invoice('A-1', '2026-06-01')
+    run('delivery-schedule create', {'name': 'D', 'kind': 'invoice', 'unsent': True, 'frequency': 'daily',
+                                     'start_date': '2026-06-02', 'mode': 'send'})
+    check = run('delivery-schedule live', {'schedule': 'D'}, dry_run=True)['check']
+    assert check['reach_count'] == 1
+    for n in range(4):  # a growing match: no pause, no re-confirming; the fingerprint is the rule's
+        invoice(f'B-{n}', '2026-06-01', office['baker'])
+    assert run('delivery-schedule live', {'schedule': 'D'}, dry_run=True)['check']['fingerprint'] == \
+        check['fingerprint']
+    assert run('delivery-schedule live', {'schedule': 'D', 'confirm': check['fingerprint']})['state'] == 'live'
+    clock.set('2026-06-02')
+    ran = run('delivery-schedule run', {'schedule': 'D'})['ran']
+    assert [(r['state'], r['released'], r['go']) for r in ran] == [('done', 5, True)]
+    # The default template's body changes: the live schedule (on the default) is a draft again, with why, one to-do,
+    # and the template's answer names it. A dry run says so first and changes nothing.
+    default = next(r['name'] for r in run('delivery-template query', {'kind': 'invoice'})['rows'] if r['is_default'])
+    edit = {'template': default, 'kind': 'invoice', 'body': 'Please pay to a new account.'}
+    preview = run('delivery-template update', edit, dry_run=True)
+    assert preview['schedules_to_draft'] == ['D']
+    assert run('delivery-schedule show', {'schedule': 'D'})['state'] == 'live'
+    edited = run('delivery-template update', edit, reason='New wording')
+    assert edited['schedules_to_draft'] == ['D'] and 'return to draft' in edited['warnings'][-1]
+    shown = run('delivery-schedule show', {'schedule': 'D'})
+    assert shown['state'] == 'draft' and 'template' in shown['draft_reason'] and 'back to draft' in \
+        shown['status_label']
+    assert len(_open_todos(run, 'is a draft again')) == 1
+    invoice('C-1', '2026-06-02')
+    clock.set('2026-06-03')
+    ran = run('delivery-schedule run', {'schedule': 'D'})['ran']
+    assert [(r['released'], r['go']) for r in ran] == [(1, False)]
+    # Made live again, then another template made the default: back to draft again.
+    _make_live(run, 'D')
+    made = run('delivery-template create', {'kind': 'invoice', 'name': 'Plain', 'subject': 'Invoice',
+                                             'body': 'Attached.', 'is_default': True}, reason='New default')
+    assert made['schedules_to_draft'] == ['D']
+    assert run('delivery-schedule show', {'schedule': 'D'})['state'] == 'draft'
+    # A template the schedule does not use changes nothing.
+    _make_live(run, 'D')
+    other = run('delivery-template create', {'kind': 'invoice', 'name': 'Other', 'subject': 'Hi', 'body': 'Hi.'},
+                reason='Spare')
+    assert run('delivery-template update', {'template': other['id'], 'body': 'Hello.'}, reason='x')[
+        'schedules_to_draft'] == []
+    assert run('delivery-schedule show', {'schedule': 'D'})['state'] == 'live'
+
+
+def test_an_edit_never_strands_a_schedule_due_or_moves_it_into_the_past(office):
+    """Medium 4 (the review's probes 1 and 4): slots move only when the cadence changes, never into the past; a
+    finished schedule reads Finished and is never due."""
+    run, clock = office['run'], office['clock']
+    from bookflow.company import delivery_schedules as ds
+    run('delivery-schedule create', {'name': 'R', 'kind': 'invoice', 'unsent': True, 'frequency': 'daily',
+                                     'start_date': '2026-06-01', 'remaining_runs': 2})
+    for day in ('2026-06-01', '2026-06-02'):
+        clock.set(day)
+        run('delivery-schedule run', {'schedule': 'R'})
+    out = run('delivery-schedule update', {'schedule': 'R', 'name': 'R2', 'start_date': '2026-06-01',
+                                           'frequency': 'daily'})
+    assert (out['next_date'], out['status_label']) == (None, 'Finished')
+    clock.set('2026-06-10')
+    assert run('delivery-schedule run', {'schedule': 'R2'})['warnings'] == ['It has run out.']
+    # Lowering the stop date below the next slot finishes it too.
+    run('delivery-schedule create', {'name': 'D', 'kind': 'invoice', 'unsent': True, 'frequency': 'daily',
+                                     'start_date': '2026-06-10'})
+    for day in ('2026-06-10', '2026-06-11', '2026-06-12'):
+        clock.set(day)
+        run('delivery-schedule run', {'schedule': 'D'})
+    out = run('delivery-schedule update', {'schedule': 'D', 'stop_date': '2026-06-11'})
+    assert (out['next_date'], out['status_label']) == (None, 'Finished')
+    # A weekly schedule renamed with its unchanged start keeps its next slot; a new cadence starts from today.
+    run('delivery-schedule create', {'name': 'N', 'kind': 'invoice', 'unsent': True, 'frequency': 'weekly',
+                                     'start_date': '2026-06-01'})
+    clock.set('2026-06-22')
+    run('delivery-schedule run', {'schedule': 'N'})
+    out = run('delivery-schedule update', {'schedule': 'N', 'name': 'N2', 'start_date': '2026-06-01',
+                                           'frequency': 'weekly'})
+    assert out['next_date'] == '2026-06-29'
+    out = run('delivery-schedule update', {'schedule': 'N2', 'frequency': 'daily'})
+    assert out['next_date'] == '2026-06-23'  # the 22nd already ran: never into the past, never twice
+
+    def due(day):
+        return [r['name'] for r in run('delivery-schedule query', {})['rows'] if r['next_date'] and
+                r['next_date'] <= day and r['active']]
+    assert due('2026-07-01') == ['N2']  # R2 and D are finished: the tick never looks at them
+    assert ds.through({'run_time': '06:00'}, '2026-07-01', '05:59') == '2026-06-30'
+
+
+def test_a_slot_is_due_from_its_run_time_and_month_end_statements_run_on_the_first(office):
+    """Medium 5: a run time, company-local, default 06:00; the recommended month-end statement setup runs on the 1st
+    covering the prior month."""
+    run, clock, invoice = office['run'], office['clock'], office['invoice']
+    invoice('S-1', '2026-03-20')
+    made = run('delivery-schedule create', {'name': 'Statements', 'kind': 'statement', 'period': 'previous-month',
+                                            'balance_over': '0', 'frequency': 'monthly', 'start_date': '2026-04-01'})
+    assert made['run_time'] == '06:00' and made['cadence'] == 'Every month from 2026-04-01 at 06:00'
+    clock.set('2026-04-01', hour=5)
+    assert 'Nothing is due' in run('delivery-schedule run', {'schedule': 'Statements'})['warnings'][0]
+    clock.set('2026-04-01', hour=6)
+    ran = run('delivery-schedule run', {'schedule': 'Statements'})['ran']
+    assert [(r['slot_date'], r['date_from'], r['date_to'], r['drafted']) for r in ran] == [
+        ('2026-04-01', '2026-03-01', '2026-03-31', 1)]
+    run('delivery-schedule update', {'schedule': 'Statements', 'run_time': '18:30'})
+    clock.set('2026-05-01', hour=18)
+    assert run('delivery-schedule run', {'schedule': 'Statements'})['ran'] == []
+    clock.set('2026-05-01', hour=19)
+    assert [r['slot_date'] for r in run('delivery-schedule run', {'schedule': 'Statements'})['ran']] == ['2026-05-01']
+
+
+def test_returning_to_draft_drops_the_go_of_the_open_run(office, monkeypatch):
+    """Medium 6, second half: a live schedule returned to draft mid-run: its batch and its released messages lose the
+    go; later chunks release without one."""
+    run, clock, invoice = office['run'], office['clock'], office['invoice']
+    from bookflow.company import delivery_batches
+    monkeypatch.setattr(delivery_batches, 'CHUNK', 1)
+    invoice('G-1', '2026-06-01')
+    invoice('G-2', '2026-06-01', office['baker'])
+    run('delivery-schedule create', {'name': 'G', 'kind': 'invoice', 'unsent': True, 'frequency': 'daily',
+                                     'start_date': '2026-06-02', 'mode': 'send'})
+    _make_live(run, 'G')
+    clock.set('2026-06-02')
+    first = run('delivery-schedule run', {'schedule': 'G'})['ran'][-1]
+    assert (first['state'], first['released'], first['go']) == ('drafting', 1, True)
+    rows = run('delivery query', {'batch': first['batch'], 'status': 'all', 'limit': 50})['rows']
+    assert [r['waiting_for_go'] for r in rows] == [False]
+    out = run('delivery-schedule update', {'schedule': 'G', 'combine': True})
+    assert out['state'] == 'draft'
+    assert run('delivery batch-show', {'batch': first['batch']})['go'] is False
+    rest = run('delivery-schedule run', {'schedule': 'G'})['ran'][-1]
+    assert (rest['state'], rest['released'], rest['go']) == ('done', 2, False)
+    rows = run('delivery query', {'batch': first['batch'], 'status': 'all', 'limit': 50})['rows']
+    assert len(rows) == 2 and all(r['status'] == 'ready' and r['waiting_for_go'] for r in rows)
+
+
+def test_waiting_runs_share_one_todo_live_checks_authority_and_twice_a_month_at_month_end(office, monkeypatch):
+    """Lows: one standing to-do per non-live send schedule; live refuses a person who could not give a go;
+    twice a month from the 29th to 31st keeps the 15th and the last day."""
+    run, clock, invoice = office['run'], office['clock'], office['invoice']
+    from bookflow.company import delivery_schedules as ds
+    run('delivery-schedule create', {'name': 'W', 'kind': 'invoice', 'unsent': True, 'frequency': 'daily',
+                                     'start_date': '2026-06-01', 'mode': 'send'})
+    for n, day in enumerate(('2026-06-01', '2026-06-02', '2026-06-03')):
+        invoice(f'W-{n}', day)
+        clock.set(day)
+        assert run('delivery-schedule run', {'schedule': 'W'})['ran'][-1]['released'] == 1
+    todos = _open_todos(run, 'wait for your go')
+    assert len(todos) == 1 and '2026-06-03' in todos[0]['notes']
+    monkeypatch.setattr(ds, 'authority_lost', lambda s, user: 'Ann may no longer send this company\'s email')
+    with pytest.raises(BookflowError) as refused:
+        run('delivery-schedule live', {'schedule': 'W'}, dry_run=True)
+    assert refused.value.code == 'E_PERMISSION' and refused.value.details['reason'] == 'no_send_authority'
+    assert 'may no longer send' in refused.value.message
+
+    def slots(start, today):
+        row = dict(frequency='twice_a_month', next_date=ds.first_slot('twice_a_month', start), stop_date=None,
+                   anchor_day=ds.anchor_day('twice_a_month', start), remaining_runs=None)
+        return ds.due_slots(row, today)
+    assert slots('2027-01-31', '2027-03-31') == ['2027-01-31', '2027-02-15', '2027-02-28', '2027-03-15',
+                                                 '2027-03-31']
+    assert slots('2027-01-29', '2027-02-28') == ['2027-01-31', '2027-02-15', '2027-02-28']
+    assert slots('2027-01-30', '2027-02-28') == ['2027-01-31', '2027-02-15', '2027-02-28']
+    assert slots('2027-01-15', '2027-03-01') == ['2027-01-15', '2027-01-30', '2027-02-15', '2027-02-28']
+    assert slots('2027-01-20', '2027-02-20') == ['2027-01-20', '2027-02-05', '2027-02-20']
+    assert slots('2027-01-01', '2027-01-31') == ['2027-01-01', '2027-01-16']
+
+
+@pytest.mark.timeout(900)
+def test_only_the_establisher_carries_the_go(hosted, monkeypatch):  # noqa: F811
+    """High 1 (the review's probe 3): an agent pressing Run now on a person's live schedule drafts with its own
+    authority and no go, so nothing leaves; the establisher's own Run now carries the go."""
+    from tests.delivery_fake_transport import SETTINGS, FakeBackend, registered
+    from tests.test_people_only import REASON as PERSON, _agent
+    cid, host = hosted.company_id, hosted.handle.host
+    _host_books(hosted)
+    person = {**hosted.bearer, **PERSON}
+    _, as_agent = _agent(hosted)
+    with registered(FakeBackend()) as backend:
+        hosted.ok('delivery-connection.add', {'name': 'Office', 'kind': 'fake', 'settings': SETTINGS}, company=cid,
+                  headers=person)
+        hosted.ok('delivery-connection.enable', {'connection': 'Office'}, company=cid, headers=person)
+        hosted.ok('delivery-schedule.create', {'name': 'Daily', 'kind': 'invoice', 'unsent': True,
+                                               'frequency': 'daily', 'start_date': '2026-06-05', 'mode': 'send'},
+                  company=cid, headers=person)
+        check = hosted.ok('delivery-schedule.live?dry_run=true', {'schedule': 'Daily'}, company=cid,
+                          headers=person)['check']
+        hosted.ok('delivery-schedule.live', {'schedule': 'Daily', 'confirm': check['fingerprint']}, company=cid,
+                  headers=person)
+        clock = Clock(monkeypatch, '2026-06-05')
+        ran = hosted.ok('delivery-schedule.run', {'schedule': 'Daily'}, company=cid, headers=as_agent)['ran']
+        assert ran[-1]['released'] >= 1 and not any(r['go'] for r in ran)
+        rows = hosted.ok('delivery.query', {'status': 'all', 'limit': 50}, company=cid, headers=hosted.bearer)['rows']
+        assert rows and all(r['status'] == 'ready' and r['waiting_for_go'] for r in rows)
+        host.schedule_now(now=clock.at)
+        assert backend.delivered == []
+        # The establisher's own Run now carries their go.
+        hosted.ok('invoice.post', {'number': 'E-1', 'date': '2026-06-05', 'customer': 'Harbour Mills',
+                                   'lines': [{'item': 'Site labour', 'quantity': '1'}]}, company=cid, headers=person)
+        clock.set('2026-06-06')
+        ran = hosted.ok('delivery-schedule.run', {'schedule': 'Daily'}, company=cid, headers=person)['ran']
+        assert [(r['released'], r['go']) for r in ran] == [(1, True)]
+
+
+@pytest.mark.timeout(900)
+def test_a_failed_run_cancels_its_batch_pauses_once_and_a_passing_refusal_skips_the_slot(hosted, monkeypatch):  # noqa: F811,E501
+    """Medium 6 and the lows: any failure in a run pauses the schedule with one to-do and no retry every tick; its
+    open batch is cancelled and its released messages lose the go. A passing refusal skips the slot with why and the
+    schedule goes on."""
+    from tests.test_people_only import REASON as PERSON
+    from bookflow.company import delivery_batches, delivery_schedules as ds
+    cid, host = hosted.company_id, hosted.handle.host
+    _host_books(hosted)
+    person = {**hosted.bearer, **PERSON}
+    monkeypatch.setattr(delivery_batches, 'CHUNK', 1)
+    for number in ('F-1', 'F-2'):
+        hosted.ok('invoice.post', {'number': number, 'date': '2026-06-01', 'customer': 'Harbour Mills',
+                                   'lines': [{'item': 'Site labour', 'quantity': '1'}]}, company=cid, headers=person)
+    hosted.ok('delivery-schedule.create', {'name': 'Daily', 'kind': 'invoice', 'unsent': True, 'frequency': 'daily',
+                                           'start_date': '2026-06-01', 'mode': 'send'}, company=cid, headers=person)
+    check = hosted.ok('delivery-schedule.live?dry_run=true', {'schedule': 'Daily'}, company=cid,
+                      headers=person)['check']
+    hosted.ok('delivery-schedule.live', {'schedule': 'Daily', 'confirm': check['fingerprint']}, company=cid,
+              headers=person)
+    hosted.ok('delivery-schedule.create', {'name': 'Weekly', 'kind': 'invoice', 'unsent': True,
+                                           'frequency': 'weekly', 'start_date': '2026-06-02'}, company=cid,
+              headers=person)
+    at = datetime(2026, 6, 1, 12, tzinfo=timezone.utc)
+    first = host.schedule_now(now=at)[cid]['delivery_schedules']['Daily']['ran'][-1]
+    assert (first['state'], first['released']) == ('drafting', 1)
+    real = ds.draft_step
+
+    def boom(*a, **k):
+        raise RuntimeError('boom')
+    monkeypatch.setattr(ds, 'draft_step', boom)
+    ticked = host.schedule_now(now=at)[cid]['delivery_schedules']
+    assert 'boom' in ticked['Daily']['paused']
+    shown = hosted.ok('delivery-schedule.show', {'schedule': 'Daily'}, company=cid, headers=hosted.bearer)
+    assert shown['state'] == 'paused' and (shown['runs'][0]['state'], shown['runs'][0]['reason']) == ('failed',
+                                                                                                    'failed')
+    batch = hosted.ok('delivery.batch-show', {'batch': shown['runs'][0]['batch']}, company=cid,
+                      headers=hosted.bearer)
+    assert batch['state'] == 'cancelled' and batch['go'] is False
+    rows = hosted.ok('delivery.query', {'batch': batch['number'], 'status': 'all', 'limit': 50}, company=cid,
+                     headers=hosted.bearer)['rows']
+    assert [(r['status'], r['waiting_for_go']) for r in rows] == [('ready', True)]
+    # No retry every tick: nothing is due, nothing runs, no second to-do.
+    assert 'delivery_schedules' not in host.schedule_now(now=at)[cid]
+    todos = hosted.ok('todo.list', {'status': 'open'}, company=cid, headers=hosted.bearer)['items']
+    assert sum('Daily is paused' in t['title'] for t in todos) == 1
+    # A passing refusal skips the slot with why; the schedule keeps running.
+    monkeypatch.setattr(ds, 'draft_step', lambda *a, **k: (_ for _ in ()).throw(BookflowError('E_DB_BUSY')))
+    ticked = host.schedule_now(now=datetime(2026, 6, 2, 12, tzinfo=timezone.utc))[cid]['delivery_schedules']
+    assert 'E_DB_BUSY' in ticked['Weekly']['skipped']
+    weekly = hosted.ok('delivery-schedule.show', {'schedule': 'Weekly'}, company=cid, headers=hosted.bearer)
+    assert (weekly['state'], weekly['active'], weekly['next_date']) == ('draft', True, '2026-06-09')
+    assert [(r['slot_date'], r['state'], r['reason']) for r in weekly['runs']] == [('2026-06-02', 'skipped',
+                                                                                  'unavailable')]
+    monkeypatch.setattr(ds, 'draft_step', real)

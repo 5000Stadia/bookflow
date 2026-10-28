@@ -20,8 +20,8 @@ class _Fields(_Strict):
     unsent: bool | None = Field(default=None, description='Documents of kind with no live or sent message.')
     ready: bool | None = Field(default=None, description='kind notice: every ready overdue notice.')
     period: Period | None = Field(default=None, description=(
-        "Statements: previous-month, month-to-date (to the run's day) or since-last-run (from the day after the last "
-        "run's period; the first run takes the previous month)."))
+        "Statements: previous-month (the prior month: run on the 1st), month-to-date (to the run's day) or "
+        "since-last-run (from the day after the last run's period; the first run takes the previous month)."))
     customer: Selector | None = Field(default=None, description='Only this customer and its jobs.')
     customer_type: Selector | None = Field(default=None, description='Only customers of this type.')
     balance_over: str | None = Field(default=None, max_length=24, description='Statements: a balance over this.')
@@ -39,6 +39,8 @@ class _Fields(_Strict):
         'schedule live (delivery-schedule live), and until then wait for a go.'))
     catch_up_days: int | None = Field(default=None, ge=0, le=31, description=(
         'After the host was off, the latest missed slot runs only if no older than this (default 7).'))
+    run_time: str | None = Field(default=None, pattern=r'^([01][0-9]|2[0-3]):[0-5][0-9]$', description=(
+        'Company-local HH:MM from which a slot is due (default 06:00).'))
 
 
 class ScheduleCreateInput(_Fields):
@@ -139,6 +141,8 @@ class ScheduleOutput(BaseModel):
     established_at: str | None = None
     paused_reason: str | None = None
     catch_up_days: int
+    run_time: str = '06:00'
+    draft_reason: str | None = Field(default=None, description='Why it last returned to draft from live.')
     runs_as_name: str | None = None
     runs: list[RunOutput] = Field(default_factory=list, description='Recent runs, newest first.')
     check: LiveCheck | None = None

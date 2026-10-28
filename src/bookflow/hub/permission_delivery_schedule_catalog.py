@@ -15,7 +15,7 @@ from . import permission_delivery_batch_catalog as previous, permission_catalog 
 from . import permission_human_admin_catalog as human_admin
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = 'fcfcd4fa21641a8e49c689714985b4ed27c1b3c8'
+SOURCE_COMMIT = '44ecfdef80e37bd6b87f660256b12b5f5b8b9bda'
 _OWNER = 'bookflow.commands.delivery_cmds.{}|src/bookflow/commands/delivery_cmds.py'
 _MESSAGES = (c.Requirement(capability='customer-work', threshold='member'),
              c.Requirement(capability='ledger.read', threshold='member'))

@@ -68,3 +68,29 @@ def test_a_send_schedule_saved_checked_and_turned_on(register_browser, width):
     assert shown['state'] == 'live' and shown['mode'] == 'send' and shown['established_by']
     if width == 390:
         _fits(b)
+    if width != 1440:
+        return
+    # A name-only edit through the Edit form (which sends every field, start date included) leaves the cadence and
+    # the next slot alone, and a live schedule live.
+    from datetime import date, timedelta
+    start = (date.today() - timedelta(days=3)).isoformat()
+    write('delivery-schedule.create', {'name': 'Ran before', 'kind': 'invoice', 'unsent': True,
+                                       'frequency': 'daily', 'start_date': start})
+    write('delivery-schedule.run', {'schedule': 'Ran before'})
+    before = run('delivery-schedule.show', {'schedule': 'Ran before'})
+    assert before['next_date'] != start
+    for name, renamed in (('Ran before', 'Ran before (renamed)'), ('Daily invoices', 'Daily invoices (renamed)')):
+        shown = run('delivery-schedule.show', {'schedule': name})
+        b.navigate(f"{base}/delivery-schedules?edit={shown['schedule_id']}")
+        b.wait_for('!!document.querySelector("[data-schedule-form] [name=version]")', timeout=30)
+        b.evaluate('''(() => { window.__sameDocument = true;
+            const f = document.querySelector("[data-schedule-form]");
+            f.querySelector("[name=name]").value = %r;
+            f.querySelector("[data-schedule-save]").click(); })()''' % renamed)
+        b.wait_for('!!document.querySelector("[data-schedules-result]") || !!document.querySelector('
+                   '"[data-schedules-error]")', timeout=30)
+        assert f'Schedule {renamed} saved' in _text(b), _text(b)
+        after = run('delivery-schedule.show', {'schedule': renamed})
+        assert (after['next_date'], after['cadence'], after['state']) == (shown['next_date'], shown['cadence'],
+                                                                          shown['state'])
+    assert run('delivery-schedule.show', {'schedule': 'Daily invoices (renamed)'})['state'] == 'live'

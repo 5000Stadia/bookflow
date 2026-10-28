@@ -344,6 +344,13 @@ def define_schedule_tables(metadata, C, T, common):
         C('paused_at', sa.String(32), 'When it was paused.', nullable=True),
         C('catch_up_days', sa.Integer, 'A missed slot runs only if no older than this many days (default 7); older '
           'ones are skipped.', nullable=False),
+        C('run_time', sa.String(5), "Company-local time of day (HH:MM, default 06:00) from which a slot is due.",
+          nullable=False),
+        C('confirmed', sa.String(32), "The rule's fingerprint a person confirmed making it live (selection, cadence, "
+          "template and its exact content, mode); a run whose rule no longer matches returns it to draft.",
+          nullable=True),
+        C('draft_reason', sa.String(500), 'Why it last returned to draft from live; null when made live.',
+          nullable=True),
         C('run_as', sa.String(26), 'Who last set what it drafts: its runs draft as them.', nullable=False),
         C('run_as_for', sa.String(26), 'The person run_as (an agent) acted for; null for a person.', nullable=True),
         C('run_as_epoch', sa.Integer, "An agent run_as's authority epoch when it saved; its runs need the same.",
@@ -353,8 +360,10 @@ def define_schedule_tables(metadata, C, T, common):
         sa.CheckConstraint(f'frequency IN ({quoted(SCHEDULE_FREQUENCIES)})', name='ck_delivery_schedule_frequency'),
         sa.CheckConstraint(f'mode IN ({quoted(SCHEDULE_MODES)})', name='ck_delivery_schedule_mode'),
         sa.CheckConstraint(f'state IN ({quoted(SCHEDULE_STATES)})', name='ck_delivery_schedule_state'),
-        sa.CheckConstraint("state != 'live' OR (mode = 'send' AND established_by IS NOT NULL)",
-                           name='ck_delivery_schedule_live'),
+        sa.CheckConstraint("state != 'live' OR (mode = 'send' AND established_by IS NOT NULL AND confirmed IS NOT "
+                           "NULL)", name='ck_delivery_schedule_live'),
+        sa.CheckConstraint("run_time GLOB '[0-2][0-9]:[0-5][0-9]' AND run_time <= '23:59'",
+                           name='ck_delivery_schedule_run_time'),
         sa.CheckConstraint("(state = 'paused') = (paused_reason IS NOT NULL)", name='ck_delivery_schedule_paused'),
         sa.CheckConstraint("json_valid(selection) AND json_type(selection) = 'object'",
                            name='ck_delivery_schedule_selection'),
@@ -380,7 +389,8 @@ def define_schedule_tables(metadata, C, T, common):
         C('drafted', sa.Integer, 'Messages drafted.', nullable=False),
         C('released', sa.Integer, 'Messages released to the outbox.', nullable=False),
         C('skipped_count', sa.Integer, 'Documents or customers skipped, each named on the batch.', nullable=False),
-        C('reason', sa.String(24), 'Skipped or failed: superseded, outside_window, stopped, no_authority, failed.',
+        C('reason', sa.String(24), 'Skipped or failed: superseded, outside_window, stopped, no_authority, '
+          'unavailable (a passing refusal: the slot is skipped and the schedule goes on), failed.',
           nullable=True),
         C('reason_text', sa.String(500), 'The reason in words.', nullable=True),
         C('finished_at', sa.String(32), 'When it ended.', nullable=True),

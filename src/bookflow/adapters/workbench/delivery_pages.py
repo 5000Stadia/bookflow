@@ -605,6 +605,8 @@ def mount(app, *, render, run, credential, page_error, role_allows):
             out['remaining_runs'] = form['remaining_runs']
         if form.get('catch_up_days'):
             out['catch_up_days'] = form['catch_up_days']
+        if form.get('run_time'):
+            out['run_time'] = form['run_time']
         if not new:
             # Every selection field is sent, so a change of kind or selection clears what no longer applies.
             for k in ('queued', 'unsent', 'ready', 'period', 'balance_over', 'method'):
