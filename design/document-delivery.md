@@ -312,6 +312,35 @@ month [E 71]; every day, invoices still to be emailed; weekly, ready overdue not
   `system`, client `scheduler`, reason "On schedule: <name> for <slot>".
 - With no connection, a `send` schedule still runs: it fills the outbox with messages `ready`, which is
   the point of building the item before its sender.
+- **What a person confirms (decided 2026-10-28, Navigator, under Kabe's rule to settle reversible
+  choices).** Making a schedule live confirms its *rule*: the selection, the cadence and run time, the template
+  id **and the template's exact text** (the kind's default when none is named, so the default pointer too), the
+  recipients the selection names (customer, type, email-only, one message per customer), the catch-up window and
+  the mode. It does not confirm how many documents match on a given day: a dynamic selection such as "customers with
+  a balance" is the point, and sensitivity is impact, never quantity. So a growing match neither pauses the schedule
+  nor asks again; the check still shows who it would reach today, as information. Any change to the rule returns a
+  live schedule to draft: an operative edit (unless a person confirms the changed schedule's check), an edit of the
+  text of the template it uses, or another template made the kind's default when it uses the default. The schedule
+  records why (`draft_reason`), raises one to-do, and the template edit's answer names the schedules it sent back
+  (`schedules_to_draft`). A run whose rule no longer matches what was confirmed returns it to draft the same way.
+- **Only the establisher's own runs carry the go.** The host's tick acts as `run_as`, which for a live schedule is
+  its establisher, and carries their go; a person's own Run now carries it only if they are the establisher. A
+  `delivery-schedule run` by anyone else drafts with the caller's own authority and no go, so its messages wait.
+  `live` checks the person's own authority to give a go first and refuses, saying why.
+- **A slot is due from its run time,** company-local, default 06:00. Recommended month-end statements: monthly,
+  starting on the 1st, period `previous-month` (the prior month in full), so every invoice of the month's last day
+  is in; a `month-to-date` run on the last day would run before that day's invoices exist.
+- **Edits never strand a schedule.** The next slot moves only when the frequency or start actually changes, and then
+  never into the past nor onto a slot already run; a schedule out of runs or past its stop date reads Finished and
+  costs the tick nothing.
+- **A failed or paused run cancels its open batch:** its drafts are cancelled and its released, unsent messages lose
+  the go and wait for a person's. A schedule returned to draft, or stopped, drops the go of its open run's batch and
+  of the messages that batch released. Any failure of a run pauses the schedule with one to-do (no retry every
+  tick); a passing refusal (the writer busy, a record moved meanwhile, an accountant's copy out) skips that slot as
+  `unavailable` and the schedule goes on; it pauses only when authority is really lost. A send schedule that is not
+  live keeps one standing to-do, updated by each run that leaves messages waiting.
+- **Twice a month** keeps a pair of days: the start and fifteen days later (a start after the 15th: fifteen days
+  before, and the start); a start on the 29th to 31st keeps the 15th and the month's last day.
 
 ## 7. Agents and permissions
 
@@ -772,3 +801,103 @@ later ticked on a demo invoice; the batch preview, one left out, drafted through
 390), `tests/test_delivery_seeded.py` (batches: five seeds of 30 steps of flags, dates, methods, batches, reruns and
 cancels; after every step the queue equals the hand-worked rule, no document has two live messages, every skip is named,
 and a cancelled batch keeps only drafts exported before it).
+
+## As built: increment 4 (2026-10-27; review fixes 2026-10-28)
+
+**What exists.** co0110 (on co0109; `delivery_schedules`, `delivery_schedule_runs` unique on `(schedule_id,
+slot_date)`, both guarded against delete), eight commands under the `delivery-schedule-v1` layer (on
+`delivery-batch-v1`): `delivery-schedule create`, `update`, `live`, `pause`, `resume`, `run`, `show`, `query`. Code:
+`company/delivery_schedules.py`, `company/delivery_schedule_models.py`; the host's tick calls
+`delivery_schedules.tick` before the delivery claim (`core/host.py`), so a live run's releases can leave on the same
+tick. The browser has Email schedules (from Email and sending): each schedule with its state, cadence, next slot and
+last run, Run now, Stop / Resume, Edit, a New schedule form, and *Turn on…*, the make-live check page.
+
+**Decisions taken in the build, each reversible:**
+
+- **Making live is its own command, `delivery-schedule live`,** people-only until R187 (an admin action like
+  `delivery approve`; the refusal names `automate.delivery` in `details.needs`). `update --mode send` by anyone sets the
+  mode and leaves the schedule a draft. Each R187 place says `automate.delivery` in a comment: the catalog layer, the
+  live and update planners, `authority_lost`, and `people_only.R187_CAPABILITY`.
+- **One check of the exact details (Kabe's rule for broad changes).** `live` with `dry_run` returns `check`: the
+  selection and cadence in words, the first run, the period, the template, whose authority it runs under, who it would
+  reach if it ran today (and who is left out, why: shown, not bound), and a fingerprint of the rule
+  (`rule_fingerprint`: the operative fields and the template's id and exact text; §6, decided 2026-10-28), stored as
+  `confirmed`. The act needs `confirm` equal to it (`E_VALIDATION` without, `E_WORK_DEPENDENCY` when anything changed). `show --check`
+  gives an agent the same check to put to its principal. No second "are you sure".
+- **An operative change** (kind, selection, template, combine, frequency, start, stop, runs, mode, catch-up window,
+  run time) returns a live or paused schedule to draft, unless a person passes the changed schedule's check as `confirm` (then it
+  stays live and the editor becomes the establisher). An agent passing `confirm` is refused like `live`. A name change
+  is not operative.
+- **Whose authority.** A run drafts as `run_as`, the last actor to make an operative change (an agent with its
+  principal and epoch, checked as R111's entries are), through `delivery-schedule run` under the tick's day and time
+  (`clock.as_of_day` and the module's tick time); interface `system`, client `scheduler`, reason "On schedule: <name>
+  for <slot>". A live run's go is the establisher's, decided once when its batch begins, and only when the run is
+  drafted as the establisher (the tick, as `run_as`, or the establisher's own Run now); anyone else's run drafts with
+  their own authority and no go. A run whose rule no longer matches `confirmed` returns the schedule to draft first.
+  The establisher must still pass `go_lost` (the interim
+  `delivery.send`/`automate.delivery` rule: an active person with a standing membership at standard not denied
+  `customer`); otherwise the schedule is paused with the reason, one to-do is raised (per pause), and the run drafts
+  and releases with no go, so its messages wait. The dispatcher's own check at the claim still applies.
+- **An actor who can no longer lend authority** (deactivated, an agent unassigned, suspended or re-epoched), a
+  refusal of the step for want of authority (`E_PERMISSION`, `E_NO_ACTOR`, `E_UNAUTHENTICATED`), or any other
+  exception, pauses the schedule as the host, skips the due slots (`no_authority`, or `failed`), fails an open run and
+  cancels its batch (drafts cancelled; released, unsent messages lose the go), and raises the one to-do, so a
+  failing schedule never retries every minute. A passing refusal (`E_DB_BUSY`, `E_VERSION_CONFLICT`, an accountant's
+  copy) skips the due slots as `unavailable` (and fails an open run the same way) and leaves the schedule running.
+- **Returned to draft or stopped,** the open run's batch and the messages it released lose the go (`end_batch`); the
+  run goes on without one. A template edit or a new default calls `recheck_live`; `delivery-template update` and
+  `create` answer `schedules_to_draft` (a dry run predicts it with `affected_by_template`).
+- **A send schedule that is not live** still runs: it releases what it drafts with no go, and one standing to-do per
+  schedule ("Emails from <schedule> wait for your go", source `delivery-schedule-waiting:<id>`, updated in place and
+  reopened by each such run) goes to the establisher, else `run_as` if a person, else the agent's
+  principal, else an active administrator.
+- **Slots.** A step claims the latest due slot as a run if it is no older than `catch_up_days` (default 7, at most 31)
+  and records every other due slot `skipped` (`superseded` inside the window, `outside_window` beyond it; at most 200
+  per step). The claim and the first chunk are one write; later steps draft one chunk each (the batch's `CHUNK`). The
+  run is the batch's `schedule_run_id`. `remaining_runs` counts runs, not skips. A slot is due from `run_time`
+  (company-local HH:MM, default 06:00): `has_due` is `next_date < today OR (next_date = today AND run_time <= now)`.
+  An edit moves `next_date` only when frequency or start changed, then to the first slot neither past nor already
+  run; a schedule out of runs or past its stop date gets `next_date` null (Finished) on the edit or its next step.
+  Twice a month keeps a pair (`_pair`): the start and 15 days later, or 15 days before a start after the 15th; a
+  start on the 29th to 31st keeps the 15th and the last day (first slot the start month's last day). A month-end start keeps month end
+  (anchor 31: 31 Jan, 28 Feb, 31 Mar; 29 Feb 2028 to 31 Mar); a 30th is clamped in February and returns to the 30th.
+- **Statement periods** for a slot: `previous-month`, `month-to-date` (the 1st to the slot) and `since-last-run` (the
+  day after the last done run's period end, else the previous month).
+- **`pause` stops** (`active` false; nothing runs); `resume` restarts from today, recording slots that passed while
+  stopped as `skipped` (`stopped`), and brings a paused schedule back as a draft.
+- **The idle cost** is one statement (`has_due`: an active schedule due by today, or a drafting run of an active one).
+- The hook is not an after-apply dispatch hook (none was added), and no guard trigger counts rows.
+
+**Not in this increment:** `automation list/show/pause` and R187's capabilities; the shared batch ledger entry for a
+run (R186); the demo seed's schedules and the closing trial (increment 5).
+
+**Measured:** the idle scheduler tick for a company with no schedules, through the host (median of 25): 8.92 ms with
+the schedules hook, 9.20 ms without; the hook's one statement on the writer, 40.0 µs (`tests/test_delivery_schedules.py`,
+printed with `-s`). Within the run-to-run noise: nothing measurable.
+
+**Review fixes (2026-10-28, notes/reviews/r112-inc4-review.md):** High 1 the go (only the establisher's own
+runs), High 2 the template (bound in the fingerprint; an edit returns live schedules to draft), Medium 3 documented
+(§6), Medium 4 stranded "due" state, Medium 5 run time, Medium 6 failed runs cancel their batch, and the five lows
+(every exception pauses once; passing refusals skip; one standing to-do; `live` checks the person's own authority;
+twice a month at month end). co0110 gained `run_time`, `confirmed` and `draft_reason`.
+
+**Tests:** `tests/test_delivery_schedules.py` (review fixes: a template edit and a new default returning a live
+schedule to draft with one to-do while a growing match does not; edits that never strand a schedule due or move it
+into the past; the run time and month-end statements run on the 1st; returning to draft dropping an open run's go;
+one standing to-do, `live` refusing a person without the authority, twice a month at month end; on the host, an
+agent's Run now carrying no go while the establisher's does, and a failed run cancelling its batch, pausing once with
+no retry, and a passing refusal skipping its slot; month-end slots across February and a leap year, missing details
+refused, a month-end statement schedule once per slot with a second run the same day finding it; the catch-up rule
+for a daily schedule off nineteen days (only the 20th runs; seven superseded, twelve outside the window), a weekly one
+whose latest slot is outside its window (nothing runs), two days off inside it, and a stop and resume skipping what
+passed; a restart mid-run continuing from its batch with no duplicate; on the host: an agent's send schedule leaving
+every message waiting with one to-do and nothing sent, the agent refused `live` naming `automate.delivery`, a
+person's check and confirm, an agent's edit returning it to draft, a person's confirmed change keeping it live, and a
+live run's message sent on the same tick; an establisher deactivated and one without the authority each pausing it
+with one to-do and nothing with a go; the idle-tick measurement), `tests/test_delivery_schedule_browser.py` (the form
+saved by a real htmx submit, Turn on's check read and confirmed, at 1440 and 390; at 1440 a name-only edit through
+the Edit form keeping the next slot, the cadence and a live schedule live), `tests/test_delivery_seeded.py`
+(schedules: five seeds of 30 steps on a test clock with runs, stops, resumes, re-establishing and the establisher
+losing and regaining authority; after every step one run per slot, no run claimed past its window, and no go on a run
+begun without authority or its messages), and `tests/test_delivery_surfaces.py` (the eight commands on all four
+surfaces).

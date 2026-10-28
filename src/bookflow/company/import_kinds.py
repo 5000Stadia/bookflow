@@ -181,6 +181,7 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
         'schedule cancel', 'ship-method deactivate', 'term deactivate', 'unit-of-measure deactivate',
         'vendor deactivate', 'vendor-credit unapply', 'vendor-type deactivate',
         'delivery-template deactivate', 'delivery-connection disable', 'delivery-connection remove',
+        'delivery-schedule pause',
     )),
     'needs-a-person': frozenset((
         'accountant mark-entry', 'accountant reviewed-through', 'accountant-copy export', 'assembly finalize',
@@ -189,7 +190,7 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
         'payment recovery upload', 'price-rule set-preferences', 'timesheet set-preferences',
         'delivery approve', 'delivery send', 'delivery mark-sent', 'delivery export', 'delivery retry', 'delivery run',
         'delivery-connection add', 'delivery-connection update', 'delivery-connection enable',
-        'delivery-connection check',
+        'delivery-connection check', 'delivery-schedule live',
     )),
     'not-yet': frozenset((
         'attachment add', 'batch-invoice post', 'billing-group add', 'billing-group create', 'bin create',
@@ -203,11 +204,11 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
         'sales-tax pay', 'sales-tax-code create', 'schedule create', 'shipment post', 'statement-charge post',
         'time-activity create', 'todo create', 'transfer post', 'trip create', 'unit-of-measure create',
         'vehicle create', 'work-order create',
-        'delivery draft', 'delivery-template create', 'shipment create',
+        'delivery draft', 'delivery-template create', 'shipment create', 'delivery-schedule create',
     )),
     'not-a-record': frozenset((
         'import preview', 'import run', 'import cancel', 'import reverse', 'import decide', 'import-mapping save',
-        'import-mapping deactivate',
+        'import-mapping deactivate', 'bank-feed import',
         'account activate', 'accountant reclassify', 'accountant-copy changes', 'accountant-copy import',
         'assembly build', 'assembly update', 'attachment link', 'barcode generate', 'batch-invoice retry',
         'bill payment apply', 'bill update', 'billing-group rename', 'bin activate', 'bin update', 'budget fill',
@@ -239,6 +240,7 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
         'work-order invoice', 'work-order purchase-order', 'work-order sales-receipt', 'work-order update',
         'delivery update', 'delivery-template update', 'shipment pack',
         'delivery flag', 'delivery unflag', 'delivery batch',
+        'delivery-schedule update', 'delivery-schedule resume', 'delivery-schedule run',
     )),
 }
 

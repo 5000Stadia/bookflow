@@ -286,6 +286,8 @@ class TemplateOutput(BaseModel):
     active: bool
     updated_at: str
     updated_by: str
+    schedules_to_draft: list[str] = Field(default_factory=list, description=(
+        'Live email schedules this change returned to draft: their confirmation covered the old text.'))
     warnings: list[str] = Field(default_factory=list)
 
 

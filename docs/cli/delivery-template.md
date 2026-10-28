@@ -86,6 +86,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `active` | boolean | yes | no | — | — |
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
+| `schedules_to_draft` | array[string] | no | no | [] | Live email schedules this change returned to draft: their confirmation covered the old text. |
 | `warnings` | array[string] | no | no | [] | — |
 
 Example JSON output:
@@ -98,6 +99,7 @@ Example JSON output:
   "is_default": false,
   "kind": "human",
   "name": "value",
+  "schedules_to_draft": [],
   "subject": "value",
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
@@ -219,6 +221,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `active` | boolean | yes | no | — | — |
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
+| `schedules_to_draft` | array[string] | no | no | [] | Live email schedules this change returned to draft: their confirmation covered the old text. |
 | `warnings` | array[string] | no | no | [] | — |
 
 Example JSON output:
@@ -231,6 +234,7 @@ Example JSON output:
   "is_default": false,
   "kind": "human",
   "name": "value",
+  "schedules_to_draft": [],
   "subject": "value",
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
@@ -572,6 +576,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].active` | boolean | yes | no | — | — |
 | `rows[].updated_at` | string | yes | no | — | — |
 | `rows[].updated_by` | string | yes | no | — | — |
+| `rows[].schedules_to_draft` | array[string] | no | no | [] | Live email schedules this change returned to draft: their confirmation covered the old text. |
 | `rows[].warnings` | array[string] | no | no | [] | — |
 | `count` | integer | yes | no | — | — |
 
@@ -681,6 +686,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `active` | boolean | yes | no | — | — |
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
+| `schedules_to_draft` | array[string] | no | no | [] | Live email schedules this change returned to draft: their confirmation covered the old text. |
 | `warnings` | array[string] | no | no | [] | — |
 
 Example JSON output:
@@ -693,6 +699,7 @@ Example JSON output:
   "is_default": false,
   "kind": "human",
   "name": "value",
+  "schedules_to_draft": [],
   "subject": "value",
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
@@ -816,6 +823,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `active` | boolean | yes | no | — | — |
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
+| `schedules_to_draft` | array[string] | no | no | [] | Live email schedules this change returned to draft: their confirmation covered the old text. |
 | `warnings` | array[string] | no | no | [] | — |
 
 Example JSON output:
@@ -828,6 +836,7 @@ Example JSON output:
   "is_default": false,
   "kind": "human",
   "name": "value",
+  "schedules_to_draft": [],
   "subject": "value",
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",

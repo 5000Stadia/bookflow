@@ -18,7 +18,8 @@ import hashlib
 import io
 import re
 from dataclasses import dataclass, field, replace
-from datetime import date
+from bisect import bisect_left, bisect_right
+from datetime import date, timedelta
 
 from bookflow.core.errors import BookflowError
 
@@ -401,11 +402,25 @@ def match(lines, candidates, *, match_days=MATCH_DAYS, suggest_days=SUGGEST_DAYS
     listing both. Ties are broken only by the rank above.
     """
     results = [Result(line) for line in lines]
+    # Only a same-amount movement inside the suggestion window can pair, so each line looks only at
+    # its amount's movements, sorted by date and cut to the window (ISO dates sort as strings).
+    buckets = {}
+    for j, candidate in enumerate(candidates):
+        buckets.setdefault(candidate.amount, []).append((candidate.date, j))
+    for bucket in buckets.values():
+        bucket.sort()
+    bucket_dates = {amount: [d for d, _ in bucket] for amount, bucket in buckets.items()}
     pairs = []
     for i, result in enumerate(results):
-        for j, candidate in enumerate(candidates):
-            if candidate.amount != result.line.amount:
-                continue
+        bucket = buckets.get(result.line.amount)
+        if not bucket:
+            continue
+        day = date.fromisoformat(result.line.date)
+        dates = bucket_dates[result.line.amount]
+        lo = bisect_left(dates, (day - timedelta(days=suggest_days)).isoformat())
+        hi = bisect_right(dates, (day + timedelta(days=suggest_days)).isoformat())
+        for _, j in bucket[lo:hi]:
+            candidate = candidates[j]
             days = _days(result.line.date, candidate.date)
             ours, theirs = _digits(result.line.number), _digits(candidate.number)
             if ours and theirs and ours != theirs:
@@ -414,12 +429,16 @@ def match(lines, candidates, *, match_days=MATCH_DAYS, suggest_days=SUGGEST_DAYS
                 continue
             same_check = bool(ours) and ours == theirs
             strong = (same_check or days <= match_days) and candidate.eligible
-            pairs.append((_rank(result.line, candidate), i, j, strong))
+            # A movement a certified statement already cleared ranks after any that is still open, so an open
+            # entry is never left behind for one that is already settled.
+            pairs.append(((candidate.reconciled, *_rank(result.line, candidate)), i, j, strong))
     pairs.sort(key=lambda p: (not p[3], p[0], p[1], p[2]))
     taken_line, taken_movement = set(), set()
-    by_line = {}
-    for rank, i, j, strong in pairs:
+    by_line, by_movement = {}, {}
+    for pair in pairs:
+        rank, i, j, strong = pair
         by_line.setdefault(i, []).append((rank, j, strong))
+        by_movement.setdefault(j, []).append(pair)
     for rank, i, j, strong in pairs:
         if not strong or i in taken_line or j in taken_movement:
             continue
@@ -427,7 +446,7 @@ def match(lines, candidates, *, match_days=MATCH_DAYS, suggest_days=SUGGEST_DAYS
         if len(rivals) > 1:
             continue  # two movements equally good for this line: leave it to a person
         # Another line that ranks this movement just as well makes it a coin toss too.
-        contenders = [p for p in pairs if p[2] == j and p[3] and p[1] not in taken_line and p[0] == rank]
+        contenders = [p for p in by_movement[j] if p[3] and p[1] not in taken_line and p[0] == rank]
         if len(contenders) > 1:
             continue
         taken_line.add(i)
@@ -437,9 +456,9 @@ def match(lines, candidates, *, match_days=MATCH_DAYS, suggest_days=SUGGEST_DAYS
         result.match = candidate
         result.status = 'reconciled' if candidate.reconciled else 'matched'
         result.reason = ('already cleared by a certified statement' if candidate.reconciled
-                         else 'same amount and check number' if rank[0] == 0
-                         else 'same amount, same day' if rank[1] == 0
-                         else f'same amount, {rank[1]} day{"s" if rank[1] > 1 else ""} apart')
+                         else 'same amount and check number' if rank[1] == 0
+                         else 'same amount, same day' if rank[2] == 0
+                         else f'same amount, {rank[2]} day{"s" if rank[2] > 1 else ""} apart')
     for i, result in enumerate(results):
         if result.match is not None:
             continue
@@ -466,12 +485,12 @@ def match(lines, candidates, *, match_days=MATCH_DAYS, suggest_days=SUGGEST_DAYS
         else:
             result.reason = 'no entry in the books has this amount near this date; enter it, then import again'
             ours = _digits(result.line.number)
-            near = [x for j, x in enumerate(candidates)
-                    if ours and x.amount == result.line.amount and _digits(x.number)
-                    and _digits(x.number) != ours and j not in taken_movement
-                    and _days(result.line.date, x.date) <= suggest_days]
+            near = sorted((_days(result.line.date, candidates[j].date), j) for _, j in buckets.get(result.line.amount, ())
+                          if ours and _digits(candidates[j].number)
+                          and _digits(candidates[j].number) != ours and j not in taken_movement
+                          and _days(result.line.date, candidates[j].date) <= suggest_days)
+            near = [candidates[j] for _, j in near]
             if near:
-                near.sort(key=lambda x: _days(result.line.date, x.date))
                 named = ', '.join(f'{x.number} on {x.date}' for x in near[:3])
                 result.reason = (f'possibly already entered as {named}, which has the same amount but a different '
                                  f'number (the statement says {result.line.number}); check before entering it again')

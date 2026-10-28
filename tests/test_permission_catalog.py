@@ -118,6 +118,8 @@ RESOURCE_PAIRS = {
     'reconciliation_adapters.population': {('ledger.read', 'member')},
     'reconciliation_adapters.prepare_prospective': {('customer-work', 'member')},
     'reconciliation_proposals.preview': {('ledger.post', 'standard')},
+    # bank-feed-v1: going on past an account-number mismatch is a connection-level decision.
+    'bank_feeds._require_connect': {('bank-feed.connect', 'admin')},
     # transaction-find-v1: a family is searched only for a caller its own `show` admits.
     'transaction_find._withheld': {('customer-work', 'member'), ('ledger.read', 'member')},
     'transaction_deletion_facts.admit': {('ledger.read', 'member'), ('transaction.invoice.delete', 'standard'), ('transaction.journal_entry.delete', 'standard'), ('transaction.payment.delete', 'standard'), ('transaction.sales_receipt.delete', 'standard')},

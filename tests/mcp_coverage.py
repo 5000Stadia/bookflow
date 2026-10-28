@@ -310,7 +310,10 @@ DELIVERY_COMMANDS = frozenset(('delivery draft', 'delivery update', 'delivery se
     'delivery-connection check', 'delivery-connection show', 'delivery-connection query',
     # R112 increment 3: flags, the queue and batches.
     'delivery flag', 'delivery unflag', 'delivery queue', 'delivery batch', 'delivery batch-show', 'delivery batch-query',
-    'delivery batch-cancel'))
+    'delivery batch-cancel',
+    # R112 increment 4: recurring schedules.
+    'delivery-schedule create', 'delivery-schedule update', 'delivery-schedule live', 'delivery-schedule pause',
+    'delivery-schedule resume', 'delivery-schedule run', 'delivery-schedule show', 'delivery-schedule query'))
 
 # R107 increments 0 to 2: a file checked, previewed, decided, run, read back, its batch read and reversed; its mapping
 # saved and next month's file run from it; another cancelled.
@@ -320,6 +323,9 @@ IMPORT_COMMANDS = frozenset(('import kinds', 'import template', 'import preview'
     'import check', 'import decide', 'import-mapping save', 'import-mapping show', 'import-mapping history',
     'import-mapping query', 'import-mapping match', 'import-mapping deactivate'))
 
+# R108 increment 1: a statement previewed and imported into the bank inbox, refused twice, read back.
+BANK_FEED_COMMANDS = frozenset(('bank-feed import', 'bank-feed show', 'bank-feed query', 'bank-line query'))
+
 LANDED_COST_COMMANDS = frozenset(('landed-cost setup', 'landed-cost charges', 'landed-cost post', 'landed-cost void',
     'landed-cost show', 'landed-cost query'))
 
@@ -327,7 +333,7 @@ BIN_COMMANDS = frozenset(('bin activate', 'bin create', 'bin deactivate', 'bin l
     'cycle-class activate', 'cycle-class create', 'cycle-class deactivate', 'cycle-class list', 'cycle-class show',
     'cycle-class update', 'cycle-count classify', 'cycle-count due', 'report items-by-bin'))
 
-FROZEN_COMMANDS = IMPORT_COMMANDS | DELIVERY_COMMANDS | SETUP_TRIAL_COMMANDS | SHIPMENT_COMMANDS | AGENT_SETUP_COMMANDS | VERIFY_COMMANDS | FIFO_COMMANDS | LANDED_COST_COMMANDS | BIN_COMMANDS | SERIAL_LOT_COMMANDS | PERF_COMMANDS | SCHEDULING_COMMANDS | INVENTORY_COUNT_COMMANDS | BARCODE_COMMANDS | CHECK_PRINTING_COMMANDS | ACCOUNTANT_REVIEW_COMMANDS | TIMEKEEPING_COMMANDS | INVENTORY_SITE_COMMANDS | PARTIAL_PO_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
+FROZEN_COMMANDS = BANK_FEED_COMMANDS | IMPORT_COMMANDS | DELIVERY_COMMANDS | SETUP_TRIAL_COMMANDS | SHIPMENT_COMMANDS | AGENT_SETUP_COMMANDS | VERIFY_COMMANDS | FIFO_COMMANDS | LANDED_COST_COMMANDS | BIN_COMMANDS | SERIAL_LOT_COMMANDS | PERF_COMMANDS | SCHEDULING_COMMANDS | INVENTORY_COUNT_COMMANDS | BARCODE_COMMANDS | CHECK_PRINTING_COMMANDS | ACCOUNTANT_REVIEW_COMMANDS | TIMEKEEPING_COMMANDS | INVENTORY_SITE_COMMANDS | PARTIAL_PO_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
 account create
 account deactivate
 account list
@@ -884,6 +890,7 @@ def execution_map():
     from tests.test_verify_surfaces import COMMANDS as VERIFY_SURFACE_COMMANDS
     from tests.test_shipment_surfaces import COMMANDS as SHIPMENT_SURFACE_COMMANDS
     from tests.test_import_surfaces import COMMANDS as IMPORT_SURFACE_COMMANDS
+    from tests.test_bank_feed_surfaces import COMMANDS as BANK_FEED_SURFACE_COMMANDS
     from tests.test_inventory_count_surfaces import COMMANDS as INVENTORY_COUNT_SURFACE_COMMANDS
     from tests.test_scheduling_surfaces import COMMANDS as SCHEDULING_SURFACE_COMMANDS
     from tests.test_perf_surfaces import COMMANDS as PERF_SURFACE_COMMANDS
@@ -988,6 +995,7 @@ def execution_map():
                    'tests/test_verify_surfaces.py::test_the_same_verification_through_python_cli_http_and_mcp' if cmd.name in VERIFY_SURFACE_COMMANDS else  # all four
                    'tests/test_shipment_surfaces.py::test_the_same_shipment_through_python_cli_http_and_mcp' if cmd.name in SHIPMENT_SURFACE_COMMANDS else  # all four
                    'tests/test_import_surfaces.py::test_the_same_import_through_python_cli_http_and_mcp' if cmd.name in IMPORT_SURFACE_COMMANDS else  # all four
+                   'tests/test_bank_feed_surfaces.py::test_the_same_bank_import_through_python_cli_http_and_mcp' if cmd.name in BANK_FEED_SURFACE_COMMANDS else  # all four
                    'tests/test_inventory_count_surfaces.py::test_the_same_count_through_python_cli_http_and_mcp' if cmd.name in INVENTORY_COUNT_SURFACE_COMMANDS else  # all four
                    'tests/test_scheduling_surfaces.py::test_the_same_to_dos_notices_and_reminders_through_python_cli_http_and_mcp' if cmd.name in SCHEDULING_SURFACE_COMMANDS else  # all four
                    'tests/test_perf_surfaces.py::test_the_same_timings_report_through_python_cli_http_and_mcp' if cmd.name in PERF_SURFACE_COMMANDS else  # all four

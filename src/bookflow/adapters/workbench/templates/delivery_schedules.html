@@ -1,0 +1,49 @@
+{% extends "base.html" %}{% block title %}Email schedules{% endblock %}{% block body %}<style>
+#delivery-schedules .schedule-card{border:1px solid #d8dde3;border-radius:6px;padding:10px 12px;margin:0 0 12px;max-width:760px;overflow-wrap:anywhere}
+#delivery-schedules .schedule-card h2{margin:0 0 4px;font-size:1.1em}.schedule-status{font-weight:600}
+.schedule-status.live{color:#1d6b2f}.schedule-status.paused{color:#9a3b00}.schedule-status.stopped{color:#666}
+.schedule-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 0}.schedule-actions form{margin:0}
+.schedule-runs{margin:6px 0 0;padding-left:18px}.schedule-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 12px;max-width:760px}
+.schedule-form label{display:flex;flex-direction:column;gap:2px}.schedule-form label.inline{flex-direction:row;align-items:center;gap:6px}
+.schedule-form input,.schedule-form select{max-width:100%;box-sizing:border-box}.schedule-form .wide{grid-column:1/-1}
+.delivery-note{border-left:3px solid #b58a00;padding:6px 10px;background:#fffbea;max-width:760px}
+</style><section id="delivery-schedules">
+<nav class="crumbs"><a href="/c/{{ company_id }}/delivery">Outbox</a> / <a href="/c/{{ company_id }}/delivery-settings">Email and sending</a> / Schedules</nav>
+<h1>Email schedules</h1>
+<p class="delivery-note">A schedule drafts a batch on its own, once per slot, while Bookflow's host is running. After the host was off, only the latest missed slot runs, and only within its catch-up window. A send schedule is a draft until a person turns it on: until then its messages wait for your go.</p>
+{% if result %}<p class="notice" role="status" data-schedules-result>{{ result }}</p>{% endif %}
+{% if error %}<div role="alert" class="error" data-schedules-error><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
+{% if not listing.rows %}<p data-schedules-empty>No schedules yet.</p>{% endif %}
+{% for r in listing.rows %}<article class="schedule-card" data-schedule="{{ r.name }}">
+<h2>{{ r.name }}</h2>
+<p><span class="schedule-status {{ 'stopped' if not r.active else r.state }}" data-schedule-status>{{ r.status_label }}</span></p>
+<p>{{ kind_label[r.kind] }}s · {{ 'Sends' if r.mode == 'send' else 'Drafts only' }} · {{ r.cadence }}{% if r.next_date %} · next slot {{ r.next_date }}{% endif %}</p>
+{% if r.last_run %}<p class="muted" data-schedule-last-run>Last run {{ r.last_run.slot_date }}: {{ r.last_run.state }}{% if r.last_run.state in ('done', 'drafting') %}, {{ r.last_run.drafted }} drafted{% if r.last_run.released %}, {{ r.last_run.released }} released{% if not r.last_run.go %} (waiting for a go){% endif %}{% endif %}{% if r.last_run.batch %} (<a href="/c/{{ company_id }}/delivery/batch?batch={{ r.last_run.batch }}">{{ r.last_run.batch }}</a>){% endif %}{% elif r.last_run.reason_text %}: {{ r.last_run.reason_text }}{% endif %}</p>{% endif %}
+{% if can_write %}<div class="schedule-actions">
+{% if r.mode == 'send' and r.state != 'live' and can_live and r.next_date %}<a href="/c/{{ company_id }}/delivery-schedules/{{ r.schedule_id }}/live" data-schedule-turn-on>Turn on…</a>{% endif %}
+<form method="post" action="/c/{{ company_id }}/delivery-schedules" hx-post="/c/{{ company_id }}/delivery-schedules" hx-target="body" hx-swap="outerHTML"><input type="hidden" name="schedule" value="{{ r.schedule_id }}">
+{% if r.active %}<button type="submit" name="action" value="run" data-schedule-run>Run now</button> <button type="submit" name="action" value="pause" data-schedule-pause>Stop</button>{% else %}<button type="submit" name="action" value="resume" data-schedule-resume>Resume</button>{% endif %}</form>
+<a href="/c/{{ company_id }}/delivery-schedules?edit={{ r.schedule_id }}#schedule-form" data-schedule-edit>Edit</a></div>{% endif %}
+</article>{% endfor %}
+{% if can_write %}{% set cur = current or {} %}{% set sel = cur.get('selection', {}) %}
+<details {% if editing %}open{% endif %} id="schedule-form"><summary>{% if current %}Edit {{ current.name }}{% else %}New schedule{% endif %}</summary>
+<form method="post" action="/c/{{ company_id }}/delivery-schedules" hx-post="/c/{{ company_id }}/delivery-schedules" hx-target="body" hx-swap="outerHTML" class="schedule-form" data-schedule-form>
+<input type="hidden" name="action" value="{{ 'update' if current else 'create' }}">{% if current %}<input type="hidden" name="schedule" value="{{ current.schedule_id }}"><input type="hidden" name="version" value="{{ current.version }}">{% endif %}
+<label class="wide">Name <input type="text" name="name" value="{{ values.get('name', cur.get('name', '')) }}" placeholder="Month-end statements" data-schedule-name></label>
+<label>Email <select name="kind" data-schedule-kind>{% for k in kinds %}<option value="{{ k }}" {% if values.get('kind', cur.get('kind')) == k %}selected{% endif %}>{{ kind_label[k] }}s</option>{% endfor %}</select></label>
+<label>Which (invoices, receipts, estimates) <select name="what" data-schedule-what><option value="">Choose</option><option value="queued" {% if values.get('what') == 'queued' or sel.get('queued') %}selected{% endif %}>To be emailed (the queue)</option><option value="unsent" {% if values.get('what') == 'unsent' or sel.get('unsent') %}selected{% endif %}>Not yet emailed</option></select></label>
+<label>Statement period <select name="period" data-schedule-period><option value="">Choose</option>{% for v, l in periods %}<option value="{{ v }}" {% if values.get('period', sel.get('period')) == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></label>
+<label>Statements: balance over <input type="text" name="balance_over" value="{{ values.get('balance_over', sel.get('balance_over', '')) }}" placeholder="0" inputmode="decimal"></label>
+<label class="inline"><input type="checkbox" name="email_only" {% if values.get('email_only') or sel.get('method') == 'email' %}checked{% endif %}> Statements: email customers only</label>
+<label class="inline"><input type="checkbox" name="combine" {% if values.get('combine') or cur.get('combine') %}checked{% endif %}> One message per customer</label>
+<label>How often <select name="frequency" data-schedule-frequency><option value="">Choose</option>{% for v, l in frequencies %}<option value="{{ v }}" {% if values.get('frequency', cur.get('frequency')) == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></label>
+<label>First day <input type="date" name="start_date" value="{{ values.get('start_date', cur.get('start_date', '')) }}" data-schedule-start></label>
+<label>From (time of day) <input type="time" name="run_time" value="{{ values.get('run_time', cur.get('run_time', '06:00')) }}" data-schedule-run-time></label>
+<label>Last day (optional) <input type="date" name="stop_date" value="{{ values.get('stop_date', cur.get('stop_date') or '') }}"></label>
+<label>Or stop after runs (optional) <input type="number" name="remaining_runs" min="1" value="{{ values.get('remaining_runs', cur.get('remaining_runs') or '') }}"></label>
+<label>Catch-up window, days <input type="number" name="catch_up_days" min="0" max="31" value="{{ values.get('catch_up_days', cur.get('catch_up_days', 7)) }}"></label>
+<label>Each run <select name="mode" data-schedule-mode><option value="draft" {% if values.get('mode', cur.get('mode')) != 'send' %}selected{% endif %}>Leaves drafts for you to send</option><option value="send" {% if values.get('mode', cur.get('mode')) == 'send' %}selected{% endif %}>Sends them (once turned on)</option></select></label>
+<div class="wide"><button type="submit" data-schedule-save>{{ 'Save changes' if current else 'Save schedule' }}</button>{% if current %} <a href="/c/{{ company_id }}/delivery-schedules">Cancel</a>{% endif %}</div>
+{% if current and current.state == 'live' %}<p class="wide muted">Changing what or when it sends turns it back to a draft; turn it on again to check the new details.</p>{% endif %}
+</form></details>{% endif %}
+</section>{% endblock %}

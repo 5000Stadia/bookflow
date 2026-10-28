@@ -1140,6 +1140,18 @@ approves only messages still exactly as the batch drafted them, and names the re
 batch-query` lists unfinished batches; `delivery batch-cancel B-1001 --reason "..."` cancels a whole
 batch, naming any message that was already released or exported.
 
+## Recurring email schedules
+
+"Email statements to everyone with a balance at each month end": `delivery-schedule create --name
+"Month-end statements" --kind statement --period month-to-date --balance-over 0 --frequency monthly
+--start-date 2026-11-30 --mode send`. Ask for anything missing (which documents, how often, the first
+day); never guess. The host runs each slot once; after it was off, only the latest missed slot runs, and
+only within `catch_up_days`. A `send` schedule you write stays a draft: its runs leave messages waiting for
+a go and raise one to-do. Making it live (`delivery-schedule live`) is your principal's act (it needs
+`automate.delivery`): run it with `--dry-run`, show them the check (selection, cadence, first run, who it
+would reach today), and they turn it on with its fingerprint as `confirm`. Your later change to what or
+when it sends returns it to draft. `delivery-schedule pause` stops it; `show` lists its runs.
+
 ## A scanned barcode
 
 Pass a scanned code as `item`: every `item` field resolves an id, then a name, then a barcode, so
