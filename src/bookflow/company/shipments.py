@@ -612,7 +612,8 @@ def _order_lines(s, header, rev, exclude_shipment=None):
         waiting = _to_selected(sum(p.waiting for p in parts.get(root, ())), facts.unit_factor_nanounits)
         to_ship = (facts.quantity_microunits - invoiced - facts.cancelled_quantity_microunits - waiting
                    + _to_selected(own_billed.get(root, 0), facts.unit_factor_nanounits))
-        out.append(dict(line=line, facts=facts, root=root, to_ship=max(to_ship, Fraction(0)) if running else Fraction(0)))
+        out.append(dict(line=line, facts=facts, root=root, invoiced=invoiced,
+                        to_ship=max(to_ship, Fraction(0)) if running else Fraction(0)))
     return out
 
 
