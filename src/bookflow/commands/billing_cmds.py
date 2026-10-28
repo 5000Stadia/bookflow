@@ -12,17 +12,14 @@ def prepayments_kinds():
 
 
 ORDER_DESCRIPTIONS = {
-    'invoice': ('Invoice what has shipped on a sales order. With no selection it bills what can ship: each stocked line '
-                'up to what is available to this order (on hand less what other orders and work orders commit), shared '
-                'in line order among its lines for one item, and every other open line when anything ships or the order '
-                'has no open stocked line; if nothing can ship it refuses with each line\'s open quantity and '
-                'availability. all_open bills every open quantity whatever the stock; line_ids bills whole open '
-                'remainders; selections take a quantity per line, naming line_id or an item that exactly one open line '
-                'carries. Percent, net-amount and rebill selections are refused. The invoice is taxed as an ordinary '
-                'invoice of its own date (defaulted tax selections resolved again, current rates); order_tax shows the '
-                'difference from the order\'s quoted tax. Posting issues the stock and consumes the order lines in one '
-                'transaction; apply_prepayment (default true) uses money held on the order or its estimate. A retried '
-                'conversion key returns the original invoice.'),
+    'invoice': ('Invoice a sales order. With no selection it bills every unit shipped and not yet invoiced (all '
+                'shipments together, one invoice; the invoice moves no stock for them), and when nothing waits to be '
+                'billed, what can ship: each stocked line up to what is available to this order, issuing that stock. '
+                'all_open bills every open quantity whatever the stock; line_ids bills whole open remainders; '
+                'selections take a quantity per line (line_id, or an item one open line carries); shipments bills '
+                'just those shipments. date defaults to today; expected_version and conversion_key are optional '
+                'guards. Taxed as an ordinary invoice of its date. apply_prepayment (default true) uses money held on '
+                'the order. A retried conversion key returns the original invoice.'),
     'billing': ('Show an order\'s lines with ordered, invoiced, cancelled and remaining quantities, remaining amounts and '
                 'tax forecast, and the invoices made from it.'),
 }
@@ -33,6 +30,30 @@ ORDER_DESCRIPTIONS = {
 ORDER_STEER = (' When the customer has an open sales order for these items, bill the order with `sales-order invoice` '
                'instead, so its backorder, committed stock and any deposit follow; warnings name the open orders and '
                'give the exact command.')
+
+
+def order_invoice_defaults(s, ctx, inp):
+    """`sales-order invoice` with no date, conversion key or expected version: today, a key of its own (the request's
+    idempotency key, else the order's current version, which every invoice from it moves on), and no version guard."""
+    missing = {}
+    if inp.date is None:
+        from bookflow.core import clock
+        missing['date'] = clock.today_iso()
+    if inp.conversion_key is None or inp.expected_version is None:
+        from bookflow.company import work
+        header = work.resolve(s, inp.sales_order, 'sales_order')
+        if inp.expected_version is None:
+            missing['expected_version'] = header['version']
+        if inp.conversion_key is None:
+            missing['conversion_key'] = f'sales order {header["id"]} ' + (
+                f'request {ctx.idempotency_key}' if ctx.idempotency_key else f'version {header["version"]} invoice')
+    if not missing:
+        return inp
+    out = inp.model_copy(update=missing)
+    # Filled here, not asked for: the conversion's request hash leaves the date and version out (billing.hashes), so a
+    # retry with the same idempotency key on another day, after the order moved on, is the same request.
+    out.__pydantic_fields_set__.difference_update({'date', 'expected_version'} & set(missing))
+    return out
 
 
 def order_advice(s, output):
@@ -56,6 +77,7 @@ def register(kind, prefix, verb):
     model = getattr(models, prefix + ''.join(w.title() for w in verb.split('-')) + 'Input')
     def planner(inp, ctx, s):
         from bookflow.company.billing_allocations import one_reading
+        inp = order_invoice_defaults(s, ctx, inp) if (kind, verb) == ('sales_order', 'invoice') else inp
         with one_reading(s):
             plan = Plan(billing_queries.billing(s, ctx, inp, kind)) if read else billing.prepare(s, ctx, inp, kind, destination)
         if verb == 'invoice' and kind != 'sales_order' and plan.data.get('changed', True):
@@ -123,6 +145,8 @@ def register(kind, prefix, verb):
         if verb == 'invoice' and kind in prepayments_kinds():
             def replay(inp, ctx, s, hit):
                 from bookflow.company import prepayments
+                if kind == 'sales_order':
+                    inp = order_invoice_defaults(s, ctx, inp)
                 result = billing.replay_conversion(s, ctx, inp, kind, destination, hit)
                 return prepayments.conversion_replay_dict(s, result)
             cmd.replay = replay

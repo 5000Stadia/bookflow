@@ -203,6 +203,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `match.on_hand[].item` | string \| null | no | yes | null | On a bin label: that item's name. |
 | `match.on_hand[].quantity` | string | yes | no | — | — |
 | `match.line_fields` | object[string, any] | yes | no | — | Fields to put on a document line for this code, e.g. {"item": "Copper Coupling"}, or {"item": "Water Heater", "serial_numbers": ["WH-1"]} for a serial label. |
+| `match.fulfillment` | array[object] \| null | no | yes | null | Serial or lot: the pick lists, drafts and shipments holding it, newest shipment first, with its box. |
+| `match.fulfillment[].kind` | string | yes | no | — | `pick_list` (picked, not shipped), `draft` or `shipment`. |
+| `match.fulfillment[].number` | string | yes | no | — | — |
+| `match.fulfillment[].sales_order` | string \| null | yes | yes | — | — |
+| `match.fulfillment[].quantity` | string | yes | no | — | — |
+| `match.fulfillment[].boxes` | array[integer] | yes | no | — | Box numbers it is packed in; empty when not boxed. |
 | `matches` | array[object] | yes | no | — | Every record carrying the code, active first: two when a duplicate is kept. |
 | `matches[].kind` | string | yes | no | — | What the code names: `item`, else `bin` (a bin label), else `serial_number` or `lot` (a scanned unit label). |
 | `matches[].id` | string | yes | no | — | — |
@@ -217,6 +223,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `matches[].on_hand[].item` | string \| null | no | yes | null | On a bin label: that item's name. |
 | `matches[].on_hand[].quantity` | string | yes | no | — | — |
 | `matches[].line_fields` | object[string, any] | yes | no | — | Fields to put on a document line for this code, e.g. {"item": "Copper Coupling"}, or {"item": "Water Heater", "serial_numbers": ["WH-1"]} for a serial label. |
+| `matches[].fulfillment` | array[object] \| null | no | yes | null | Serial or lot: the pick lists, drafts and shipments holding it, newest shipment first, with its box. |
+| `matches[].fulfillment[].kind` | string | yes | no | — | `pick_list` (picked, not shipped), `draft` or `shipment`. |
+| `matches[].fulfillment[].number` | string | yes | no | — | — |
+| `matches[].fulfillment[].sales_order` | string \| null | yes | yes | — | — |
+| `matches[].fulfillment[].quantity` | string | yes | no | — | — |
+| `matches[].fulfillment[].boxes` | array[integer] | yes | no | — | Box numbers it is packed in; empty when not boxed. |
 | `ambiguous` | boolean | yes | no | — | — |
 | `valid_ean13` | boolean | yes | no | — | Whether the code is a 13-digit EAN with a correct check digit (other symbologies are still looked up). |
 | `message` | string | yes | no | — | The answer in words; for an unknown code, how to assign it to an item. |

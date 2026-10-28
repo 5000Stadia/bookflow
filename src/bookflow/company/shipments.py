@@ -572,6 +572,7 @@ class _Shipment:
     journal_lines: list = field(default_factory=list)
     line_of: dict = field(default_factory=dict)
     warnings: list = field(default_factory=list)
+    partial_pick: bool = False
 
 
 def _order(s, selector):
@@ -687,6 +688,82 @@ def _site(s, inp_site, candidates, current=None):
     return placements.default_site_id(s)
 
 
+def _named_picks(s, candidates, picked, entries):
+    """``(parts, partial)``: the picked parts the ``lines`` of a shipment from a pick list name -- an order line (or
+    item), optionally a bin, lot or serial numbers, and a quantity (default all picked of it) -- and whether units
+    picked for an order line with more to ship are left on the list."""
+    from bookflow.company import bins, serial_lots
+    names = bins.bin_names(s, [part['bin_id'] for part in picked if part['bin_id']])
+    numbers = serial_lots.number_names(s, lot_ids=[part['lot_id'] for part in picked if part['lot_id']],
+                                       serial_ids=[i for part in picked for i in part['serials']])
+    left = [dict(part, serials=list(part['serials'])) for part in picked]
+    out, seen = [], set()
+    for index, entry in enumerate(entries):
+        row = _pick_line(candidates, entry, index, s)
+        place = _place_key(entry)
+        if (row['root'], place) in seen:
+            raise _invalid(f'lines.{index}', 'name each order line once, or tell its lines apart by bin or lot')
+        seen.add((row['root'], place))
+        wanted_serials = {str(n).strip().casefold() for n in entry.serial_numbers or ()}
+
+        def matches(part):
+            bin_name = names.get(part['bin_id']) if part['bin_id'] else None
+            lot_name = numbers[part['lot_id']]['number'] if part['lot_id'] else None
+            return (part['root'] == row['root'] and part['base'] > 0
+                    and (place[0] is None or (bin_name or '').casefold() == place[0])
+                    and (place[1] is None or (lot_name or '').casefold() == place[1]))
+        mine = [part for part in left if matches(part)]
+        held = sum(part['base'] for part in mine)
+        if not held:
+            raise _invalid(f'lines.{index}', 'nothing of this order line is picked on the list'
+                           + (' in that bin or lot' if place != (None, None) else ''))
+        if entry.quantity is not None:
+            try:
+                selected = parse_quantity_micro_units(entry.quantity)
+            except BookflowError:
+                raise _invalid(f'lines.{index}.quantity', 'use a positive decimal quantity') from None
+            if selected <= 0:
+                raise _invalid(f'lines.{index}.quantity', 'must be positive')
+            from bookflow.company.sales_calculations import base_quantity
+            want = base_quantity(selected, row['facts'].unit_factor_nanounits)
+        else:
+            want = len(wanted_serials) * serial_lots.UNIT if wanted_serials else held
+        if want > held:
+            raise _invalid(f'lines.{index}.quantity', f'only {format_quantity_micro_units(held)} of this line is '
+                           'picked on the list', message=(
+                f'{row["facts"].profile.item.label}: {format_quantity_micro_units(want)} asked, '
+                f'{format_quantity_micro_units(held)} picked on the list. Pick the rest first, or ship what was picked.'))
+        for part in mine:
+            if want <= 0:
+                break
+            if wanted_serials and part['serials']:
+                serials = [i for i in part['serials'] if numbers[i]['number'].casefold() in wanted_serials]
+                serials = serials[:want // serial_lots.UNIT]
+                if not serials:
+                    continue
+                take = len(serials) * serial_lots.UNIT
+                for i in serials:
+                    part['serials'].remove(i)
+                    wanted_serials.discard(numbers[i]['number'].casefold())
+            else:
+                take = min(part['base'], want)
+                serials = part['serials'][:take // serial_lots.UNIT] if part['serials'] else []
+                part['serials'] = part['serials'][len(serials):]
+            part['base'] -= take
+            want -= take
+            out.append(dict(part, base=take, serials=serials))
+        if wanted_serials:
+            raise _invalid(f'lines.{index}.serial_numbers', 'these serial numbers are not picked for this line: '
+                           + ', '.join(sorted(wanted_serials)))
+    to_ship = {row['root']: _to_base(row['to_ship'], row['facts'].unit_factor_nanounits) for row in candidates
+               if row['to_ship'] > 0}
+    taking = {}
+    for part in out:
+        taking[part['root']] = taking.get(part['root'], 0) + part['base']
+    partial = any(part['base'] > 0 and to_ship.get(part['root'], 0) > taking.get(part['root'], 0) for part in left)
+    return out, partial
+
+
 def _from_picks(s, candidates, picked, warnings):
     """``chosen`` from a pick list's parts (R181 increment 3): one shipment line per order line, bin and lot the
     picks came from, taking at most what each order line has to ship; the excess is named to put back."""
@@ -726,6 +803,39 @@ def _from_picks(s, candidates, picked, warnings):
     return chosen
 
 
+def _by_place(s, row, base, site_id, date, places):
+    """``[(base, Numbers)]``: ``base`` units of one order line taken from the site's places as a pick takes them
+    (the item's default bin first, then other bins; lots earliest expiry first; staging and what live pick lists
+    reserve left out), so a shipment from the order alone names the bins and lots its units leave. Whatever the
+    places do not hold (picked units in staging) ships with no place named, taken from where they stand."""
+    from bookflow.company import bins, pick_lists, serial_lots
+    from bookflow.company.serial_lots import Numbers
+    item = row['facts'].item_id
+    if item not in places:
+        staging = pick_lists.staging_bin(s, site_id)
+        places[item] = pick_lists._place_holdings(s, item, site_id, date, staging,
+                                                  pick_lists._reserved_by_bin(s, site_id, item, staging))
+    out, left = [], base
+    for place in places[item]:
+        if left <= 0:
+            break
+        got = min(place[2], left)
+        if got <= 0:
+            continue
+        place[2] -= got
+        left -= got
+        out.append([got, place[0], place[1]])
+    if left > 0 and len(out) <= 1 and (not out or (out[0][1] is None and out[0][2] is None)):
+        return [(base, None)]
+    names = bins.bin_names(s, [b for _, b, _ in out if b])
+    lots = serial_lots.number_names(s, lot_ids=[lot for _, _, lot in out if lot])
+    found = [(got, Numbers(lot=lots[lot]['number'] if lot else None, serial_numbers=None,
+                           bin=names.get(bin_id) if bin_id else bins.NO_BIN)) for got, bin_id, lot in out]
+    if left > 0:
+        found.append((left, None))
+    return found
+
+
 def _plan(s, ctx, *, header, rev, date, site_id, position, entries_in, sni_id, current=None, prior_lines=(),
           picked=None, draft=False, held=None, drafted=None):
     """Every line this shipment ships, and the stock change it implies; nothing written. ``held``: what live drafts
@@ -740,7 +850,7 @@ def _plan(s, ctx, *, header, rev, date, site_id, position, entries_in, sni_id, c
             row['to_ship'] = max(row['to_ship'] - _to_selected(held[row['root']], row['facts'].unit_factor_nanounits),
                                  Fraction(0))
     chosen, explicit_priors, extra_warnings = [], [], []
-    drafted_identities = None
+    drafted_identities, partial = None, False
     if drafted is not None:
         by_root = {row['root']: row for row in candidates}
         named = {}
@@ -756,6 +866,8 @@ def _plan(s, ctx, *, header, rev, date, site_id, position, entries_in, sni_id, c
             chosen.append((row, base, numbers))
         drafted_identities = [identity for _, _, _, identity in drafted]
     elif picked is not None:
+        if entries_in is not None:
+            picked, partial = _named_picks(s, candidates, picked, entries_in)
         chosen = _from_picks(s, candidates, picked, extra_warnings)
     elif entries_in is None and current is not None:
         # Restating date, place or count position only: the lines stay as they are.
@@ -769,8 +881,10 @@ def _plan(s, ctx, *, header, rev, date, site_id, position, entries_in, sni_id, c
     elif entries_in is None:
         stocked = [row for row in candidates if row['to_ship'] > 0
                    and (row['line'].get('site_id') in (None, site_id))]
-        available = commitments.available_to(s, {row['facts'].item_id for row in stocked}, excluding=header['id'])
+        available = commitments.available_at(s, {row['facts'].item_id for row in stocked}, site_id,
+                                              excluding=header['id'])
         left = dict(available)
+        places = {}
         for row in stocked:
             factor = row['facts'].unit_factor_nanounits
             can = max(0, left.get(row['facts'].item_id, 0))
@@ -778,7 +892,7 @@ def _plan(s, ctx, *, header, rev, date, site_id, position, entries_in, sni_id, c
             if base <= 0:
                 continue
             left[row['facts'].item_id] = left.get(row['facts'].item_id, 0) - base
-            chosen.append((row, base, None))
+            chosen.extend((row, part, numbers) for part, numbers in _by_place(s, row, base, site_id, date, places))
         if not chosen:
             raise BookflowError('E_VALIDATION', message=(
                 'Nothing on this order can ship from this site now: ' + ', '.join(
@@ -876,6 +990,7 @@ def _plan(s, ctx, *, header, rev, date, site_id, position, entries_in, sni_id, c
             'Invoiced. Enter the bill that bought the stock, or record what it is worth with `inventory adjust`, '
             'then ship.'), reason='shipment_without_value')
     shipment.warnings = list(change.warnings) + extra_warnings
+    shipment.partial_pick = partial
     return shipment
 
 
@@ -1220,8 +1335,6 @@ def _run(s, ctx, inp, operation, *, persist):
     if operation == 'post' and draft is None and getattr(inp, 'pick_list', None) is not None:
         # Shipping what was picked (R181 increment 3): the order and site come from the list.
         from bookflow.company import pick_lists
-        if inp.lines is not None:
-            raise _invalid('lines', 'ship from the pick list or name the lines, not both')
         pick_current, order_id, picked = pick_lists.shipping_plan(s, inp.pick_list, inp.sales_order, inp.site)
     if operation == 'post':
         if picked is None and draft is None and inp.sales_order is None:
@@ -1360,7 +1473,8 @@ def _run(s, ctx, inp, operation, *, persist):
             transaction_id=tx['id'], **provenance)]))
         if pick_current is not None:
             from bookflow.company import pick_lists
-            extra.extend(pick_lists.link_rows(s, pick_current, shipment_id, header['id'], provenance))
+            extra.extend(pick_lists.link_rows(s, pick_current, shipment_id, header['id'], provenance,
+                                              closes=not shipment.partial_pick))
         revision_number = 1
     else:
         shipment_id, number = current['id'], current['number']

@@ -32,6 +32,14 @@ class SiteQuantity(_Strict):
     quantity: str
 
 
+class FulfillmentPlace(_Strict):
+    kind: str = Field(description="`pick_list` (picked, not shipped), `draft` or `shipment`.")
+    number: str
+    sales_order: str | None
+    quantity: str
+    boxes: list[int] = Field(description="Box numbers it is packed in; empty when not boxed.")
+
+
 class BarcodeMatch(_Strict):
     kind: str = Field(description="What the code names: `item`, else `bin` (a bin label), else `serial_number` or `lot` (a scanned unit label).")
     id: str
@@ -41,6 +49,8 @@ class BarcodeMatch(_Strict):
     barcode: str | None
     on_hand: list[SiteQuantity] = Field(description="Quantity on hand by site as of as_of; sites holding none are left out.")
     line_fields: dict[str, Any] = Field(description="Fields to put on a document line for this code, e.g. {\"item\": \"Copper Coupling\"}, or {\"item\": \"Water Heater\", \"serial_numbers\": [\"WH-1\"]} for a serial label.")
+    fulfillment: list[FulfillmentPlace] | None = Field(default=None, exclude_if=lambda v: v is None, description=(
+        "Serial or lot: the pick lists, drafts and shipments holding it, newest shipment first, with its box."))
 
 
 class BarcodeLookupOutput(_Strict):
