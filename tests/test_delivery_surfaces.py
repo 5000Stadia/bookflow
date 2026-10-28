@@ -15,7 +15,12 @@ COMMANDS = frozenset(('delivery draft', 'delivery update', 'delivery send', 'del
                       'delivery export', 'delivery show', 'delivery query', 'delivery history',
                       'delivery-template create', 'delivery-template update', 'delivery-template deactivate',
                       'delivery-template show', 'delivery-template query', 'delivery-template fields',
-                      'delivery-template preview'))
+                      'delivery-template preview',
+                      # Increment 2: no transport is registered, so the queue is read, run and refused the same way.
+                      'delivery approve', 'delivery retry', 'delivery run', 'delivery-connection add',
+                      'delivery-connection update', 'delivery-connection enable', 'delivery-connection disable',
+                      'delivery-connection remove', 'delivery-connection check', 'delivery-connection show',
+                      'delivery-connection query'))
 
 
 @pytest.mark.timeout(900)
@@ -44,6 +49,15 @@ def test_the_same_delivery_through_python_cli_http_and_mcp(root, tmp_path):
                 edited = await call('delivery update', {'message': draft['number'], 'subject': 'Your invoice'})
                 shown = await call('delivery show', {'message': draft['number']})
                 released = await call('delivery send', {'messages': [draft['number']]})
+                approved = await call('delivery approve', {'messages': [draft['number']]})
+                retry = await call('delivery retry', {'message': draft['number']}, rejected=True)
+                ran = await call('delivery run', {})
+                connections = await call('delivery-connection query', {})
+                added = await call('delivery-connection add', {'name': 'Office', 'kind': 'mcp-mail'}, rejected=True)
+                missing = [await call(f'delivery-connection {verb}', {'connection': 'Office'}, rejected=True)
+                           for verb in ('update', 'enable', 'disable', 'remove', 'check', 'show')]
+                queue = (approved['count'], retry['code'], ran['claimed'], ran['connection'], connections['rows'],
+                         connections['kinds_available'], added['code'], tuple(m['code'] for m in missing))
                 exported = await call('delivery export', {'messages': [draft['number']]})
                 sent = await call('delivery mark-sent', {'message': draft['number'], 'method': 'webmail'})
                 history = await call('delivery history', {'message': draft['number']})
@@ -52,7 +66,7 @@ def test_the_same_delivery_through_python_cli_http_and_mcp(root, tmp_path):
                 cancelled = await call('delivery cancel', {'message': statement['number']})
                 outbox = await call('delivery query', {'status': 'all'})
                 results[surface] = (fields, preview, retired, shown_template, templates, edited, shown, released,
-                                    exported, sent, history, cancelled, outbox)
+                                    exported, sent, history, cancelled, outbox, queue)
             return results
         finally:
             await matrix.close()
@@ -60,7 +74,9 @@ def test_the_same_delivery_through_python_cli_http_and_mcp(root, tmp_path):
     results = anyio.run(witness)
     shapes = set()
     for surface, (fields, preview, retired, shown_template, templates, edited, shown, released, exported, sent,
-                  history, cancelled, outbox) in results.items():
+                  history, cancelled, outbox, queue) in results.items():
+        assert queue == (0, 'E_WORK_DEPENDENCY', 0, 'none', [], [], 'E_VALIDATION', ('E_RECORD_NOT_FOUND',) * 6), \
+            (surface, queue)
         assert preview['subject'] == 'Invoice DEMO-SALE-INV-ACTIVE' and preview['template_name'] == 'Brief', surface
         assert retired['active'] is False and shown_template['name'] == 'Brief', surface
         assert edited['subject'] == shown['subject'] == 'Your invoice' and shown['to'] == ['ap@example.test'], surface

@@ -57,6 +57,8 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # picking-v1 adds none: pick lists are stock records that post nothing.
     # delivery-v1 adds `delivery mark-sent`: what happened in the owner's own mail program is known to the owner.
     # packing-v1 adds none: drafts and boxes are stock records that post nothing.
+    # delivery-queue-v1 adds `delivery approve` (a go) and every `delivery-connection` write and check (where mail goes
+    # under whose keys); R187 converts them to delivery.send and delivery.connect.
     # worksheet-v1 adds none: the worksheet and the shipments report are reports.
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {
@@ -65,7 +67,9 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
         'account merge', 'account unmerge', 'item merge', 'item unmerge', 'clock link',
         'accountant add', 'accountant remove', 'accountant-copy cancel', 'accountant-copy import',
         'check print-confirm', 'check print-cancel', 'check reprint',
-        'costing-method set', 'costing-method withdraw', 'delivery mark-sent'}
+        'costing-method set', 'costing-method withdraw', 'delivery mark-sent', 'delivery approve',
+        'delivery-connection add', 'delivery-connection update', 'delivery-connection enable',
+        'delivery-connection disable', 'delivery-connection remove', 'delivery-connection check'}
 
     # Every write at the identity capabilities is people-only; the one exception lets an
     # agent revoke its own token. Reads are not listed.

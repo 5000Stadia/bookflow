@@ -8,10 +8,10 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_packing_catalog as previous, permission_catalog as c
+from . import permission_delivery_queue_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = '7b641a8bca4631f86fceef5884164bc1c63ab577'
+SOURCE_COMMIT = '73d7bebd640414bda46984313ac503ccd66bbcfe'
 _OWNER = 'bookflow.commands.fulfillment_cmds.{}|src/bookflow/commands/fulfillment_cmds.py'
 # (name, capability, threshold, planner, resources, authorization text)
 _ADDED = (

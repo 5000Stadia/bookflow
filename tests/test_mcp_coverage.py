@@ -86,8 +86,10 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +16 document delivery (R112 increment 1): delivery draft/update/send/cancel/mark-sent/export/show/query/history,
     # delivery-template create/update/deactivate/show/query/fields/preview.
     # +3 drafts and packing (R181 increment 4): shipment create, pack, cancel.
+    # +11 the delivery queue (R112 increment 2): delivery approve/retry/run, delivery-connection
+    # add/update/enable/disable/remove/check/show/query.
     # +2 the fulfillment worksheet (R181 increment 5): report order-fulfillment, report shipments.
-    assert len(rows) == 782
+    assert len(rows) == 793
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
@@ -374,9 +376,11 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 4033 -> 4103 (R181 inc 4, measured per command on both trees): shipment create 29, shipment pack 21, shipment
     # cancel 1; shipment post 15 (shipment, expected_version, packages and their contents, freight_amount and
     # freight_item, invoice), shipment update 2 (freight), company update 2 (weight_unit, shipping_item_id).
-    # 4103 -> 4113 (R181 inc 5, measured): report order-fulfillment's site, customer, status, newly_shippable and
+    # 4103 -> 4115 (R112 inc 2, measured): the queue's optional inputs (approve's messages, retry's and the connection
+    # writes' expected_version, a connection's secret_ref, daily_limit and settings) -- their null branches.
+    # 4115 -> 4125 (R181 inc 5, measured): report order-fulfillment's site, customer, status, newly_shippable and
     # cursor, report shipments' date_from, customer, site, ship_method and cursor -- their null branches.
-    assert sum(len(group["paths"]) for group in mapped)==4113
+    assert sum(len(group["paths"]) for group in mapped)==4125
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

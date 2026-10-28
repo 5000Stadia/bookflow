@@ -5598,6 +5598,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows` | array[object] | yes | no | — | — |
 | `rows[].sales_order_id` | string | yes | no | — | — |
 | `rows[].sales_order_number` | string | yes | no | — | — |
+| `rows[].sales_order_version` | integer | yes | no | — | The order's version when read: pass it as `expected_version` to `sales-order invoice` so a stale reading bills nothing. |
 | `rows[].date` | string | yes | no | — | — |
 | `rows[].customer_id` | string | yes | no | — | — |
 | `rows[].customer_name` | string | yes | no | — | — |
@@ -5622,6 +5623,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].shipped_not_invoiced_amount.minor_units` | integer | yes | no | — | — |
 | `rows[].pick_lists` | array[string] | no | no | [] | Live pick lists holding it (picking on). |
 | `rows[].drafts` | array[string] | no | no | [] | Its draft shipments (packing on). |
+| `rows[].packed_drafts` | array[string] | no | no | [] | Its drafts with every unit in a box: ship each with `shipment post --shipment`. |
 | `rows[].by_site` | array[object] | no | no | [] | — |
 | `rows[].by_site[].site_id` | string | yes | no | — | — |
 | `rows[].by_site[].site_name` | string | yes | no | — | — |

@@ -182,3 +182,125 @@ delivery_template_preview = _read(
     'are listed.', m.TemplatePreviewInput, m.PreviewOutput, plan_template_preview,
     errors=['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE'], positional=('kind', 'document'),
     resources=())
+
+
+# ---------------------------------------------------------------- the queue and the transport seam (increment 2)
+
+from bookflow.company import delivery_connections as cn  # noqa: E402
+from bookflow.company import delivery_dispatch as dq  # noqa: E402
+from bookflow.company import delivery_queue_models as qm  # noqa: E402
+
+_APPROVE = ("A person's go for ready messages waiting for one (an agent's release): by number, or all_waiting. A "
+            'message leaves only with a go, and only through a sending connection. A person\'s act. '
+            'Example: {"messages": ["M-1001"]}.')
+_RETRY = ('Put a failed message, or one held because an attempt ended without an answer, back in the outbox. Check '
+          'the sent mail first: if it went, mark it sent instead. A person\'s retry is their go; an agent\'s waits.')
+_RUN = ('One dispatch pass now: claim due messages with a go, send each through the sending connection, record what '
+        'it said (sent, try again later, failed, or held when the answer is unknown). With no connection it claims '
+        'nothing. The host does this on its own about once a minute.')
+_CONNECTION = ('A sending connection: where mail goes, under keys held in the keyring or environment (secret_ref), '
+               'never in Bookflow. A person\'s act.')
+
+
+def plan_delivery_approve(inp, ctx, s) -> Plan:
+    return dq.prepare_approve(s, ctx, inp)
+
+
+def plan_delivery_retry(inp, ctx, s) -> Plan:
+    return dq.prepare_retry(s, ctx, inp)
+
+
+def plan_delivery_run(inp, ctx, s) -> Plan:
+    return dq.prepare_run(s, ctx, inp)
+
+
+# R187 converts the people-only check (catalog PEOPLE_ONLY) to the capability delivery.send.
+delivery_approve = _write('delivery approve', _APPROVE, qm.ApproveInput, m.MessagesOutput, plan_delivery_approve,
+                          dq.apply_many, errors=['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_WORK_DEPENDENCY',
+                                                 'E_VERSION_CONFLICT', 'E_PERMISSION'])
+delivery_retry = _write('delivery retry', _RETRY, qm.RetryInput, m.MessageOutput, plan_delivery_retry, d.apply_single,
+                        positional=('message',), version=_VERSION,
+                        errors=['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_WORK_DEPENDENCY', 'E_VERSION_CONFLICT'])
+delivery_run = _write('delivery run', _RUN, qm.RunInput, qm.RunOutput, plan_delivery_run, dq.apply_run, errors=[])
+
+
+def plan_connection_add(inp, ctx, s) -> Plan:
+    return cn.prepare_add(s, ctx, inp)
+
+
+def plan_connection_update(inp, ctx, s) -> Plan:
+    return cn.prepare_update(s, ctx, inp)
+
+
+def plan_connection_enable(inp, ctx, s) -> Plan:
+    return cn.prepare_enable(s, ctx, inp)
+
+
+def plan_connection_disable(inp, ctx, s) -> Plan:
+    return cn.prepare_disable(s, ctx, inp)
+
+
+def plan_connection_remove(inp, ctx, s) -> Plan:
+    return cn.prepare_remove(s, ctx, inp)
+
+
+def plan_connection_check(inp, ctx, s) -> Plan:
+    return cn.prepare_check(s, ctx, inp)
+
+
+def plan_connection_show(inp, ctx, s) -> Plan:
+    return Plan(cn.show(s, inp))
+
+
+def plan_connection_query(inp, ctx, s) -> Plan:
+    return Plan(cn.query(s, inp))
+
+
+_CONNECTION_VERSION = ('delivery-connection show', 'connection', 'version')
+
+
+def _connection_write(name, description, inp, planner, *, errors, positional=('connection',), version=_CONNECTION_VERSION):
+    # Admin and people-only (catalog PEOPLE_ONLY); R187 converts this to the capability delivery.connect.
+    cmd = command(name, scope='company', description=_CONNECTION + ' ' + description, input_model=inp,
+                  output_model=qm.ConnectionOutput, writes={'company'}, required_role='admin', capability='company',
+                  accepts_idempotency_key=True, positional=list(positional), version_source=version,
+                  error_codes=[*errors, 'E_PERMISSION', *_TAIL])(planner)
+    cmd.applier(cn.apply)
+    return cmd
+
+
+delivery_connection_add = _connection_write(
+    'delivery-connection add', 'Add one, disabled, of a kind this build registers (none yet: every kind is refused, '
+    'naming the kinds available).', qm.ConnectionAddInput, plan_connection_add, errors=['E_VALIDATION'],
+    positional=(), version=None)
+delivery_connection_update = _connection_write(
+    'delivery-connection update', 'Change its name, settings, secret_ref or daily limit.', qm.ConnectionUpdateInput,
+    plan_connection_update, errors=['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT'])
+delivery_connection_enable = _connection_write(
+    'delivery-connection enable', 'Let it send from this machine (a copy or restore elsewhere stays disabled).',
+    qm.ConnectionWriteInput, plan_connection_enable, errors=['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT'])
+delivery_connection_disable = _connection_write(
+    'delivery-connection disable', 'Stop sending through it; ready messages wait.', qm.ConnectionWriteInput,
+    plan_connection_disable, errors=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT'])
+delivery_connection_remove = _connection_write(
+    'delivery-connection remove', 'Remove it (kept for the history).', qm.ConnectionWriteInput,
+    plan_connection_remove, errors=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT'])
+delivery_connection_check = _connection_write(
+    'delivery-connection check', 'Ask its transport whether it can connect with its secret; the answer is kept.',
+    qm.ConnectionSelector, plan_connection_check, errors=['E_VALIDATION', 'E_RECORD_NOT_FOUND'], version=None)
+
+
+def _connection_read(name, description, inp, out, planner, *, errors, positional=()):
+    return command(name, scope='company', description=description, input_model=inp, output_model=out,
+                   required_role='member', capability='company', positional=list(positional),
+                   error_codes=errors)(planner)
+
+
+delivery_connection_show = _connection_read(
+    'delivery-connection show', 'Show a sending connection: kind, settings, where its secret is (never the secret), '
+    'whether it is enabled here.', qm.ConnectionSelector, qm.ConnectionOutput, plan_connection_show,
+    errors=['E_RECORD_NOT_FOUND'], positional=('connection',))
+delivery_connection_query = _connection_read(
+    'delivery-connection query', 'The sending connections, and the transport kinds this build registers (none: '
+    'nothing leaves this machine).', qm.ConnectionQueryInput, qm.ConnectionPageOutput, plan_connection_query,
+    errors=[])

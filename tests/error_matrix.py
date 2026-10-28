@@ -2659,3 +2659,28 @@ MATRIX['delivery-template fields'] = {}
 MATRIX['delivery-template preview'] = {'E_VALIDATION': 'a voided document or missing identity',
                                        'E_RECORD_NOT_FOUND': 'unknown document or template',
                                        'E_INACTIVE_REFERENCE': 'an inactive template'}
+# Document delivery (R112 increment 2): the queue and the transport seam.
+MATRIX['delivery approve'] = {'E_VALIDATION': 'no messages and not all_waiting', 'E_RECORD_NOT_FOUND': 'unknown message',
+                              'E_WORK_DEPENDENCY': 'the message is not ready', 'E_VERSION_CONFLICT': 'changed while approving',
+                              'E_PERMISSION': "an agent: a go is a person's act", **_DELIVERY_TAIL}
+MATRIX['delivery retry'] = {'E_VALIDATION': 'no To address', 'E_RECORD_NOT_FOUND': 'unknown message',
+                            'E_WORK_DEPENDENCY': 'not held or failed, or held because the document changed',
+                            'E_VERSION_CONFLICT': 'stale expected_version', **_DELIVERY_TAIL}
+MATRIX['delivery run'] = {**_DELIVERY_TAIL}
+_CONNECTION_WRITE = {'E_PERMISSION': "an agent: a sending connection is a person's act", **_DELIVERY_TAIL}
+MATRIX['delivery-connection add'] = {'E_VALIDATION': 'no transport of that kind, bad settings or secret_ref, name in use',
+                                     **_CONNECTION_WRITE}
+MATRIX['delivery-connection update'] = {'E_VALIDATION': 'bad settings or secret_ref, or nothing to change',
+                                        'E_RECORD_NOT_FOUND': 'unknown connection',
+                                        'E_VERSION_CONFLICT': 'stale expected_version', **_CONNECTION_WRITE}
+MATRIX['delivery-connection enable'] = {'E_VALIDATION': 'its kind is not available here',
+                                        'E_RECORD_NOT_FOUND': 'unknown connection',
+                                        'E_VERSION_CONFLICT': 'stale expected_version', **_CONNECTION_WRITE}
+MATRIX['delivery-connection disable'] = {'E_RECORD_NOT_FOUND': 'unknown connection',
+                                         'E_VERSION_CONFLICT': 'stale expected_version', **_CONNECTION_WRITE}
+MATRIX['delivery-connection remove'] = {'E_RECORD_NOT_FOUND': 'unknown connection',
+                                        'E_VERSION_CONFLICT': 'stale expected_version', **_CONNECTION_WRITE}
+MATRIX['delivery-connection check'] = {'E_VALIDATION': 'its kind is not available here',
+                                       'E_RECORD_NOT_FOUND': 'unknown connection', **_CONNECTION_WRITE}
+MATRIX['delivery-connection show'] = {'E_RECORD_NOT_FOUND': 'unknown connection'}
+MATRIX['delivery-connection query'] = {}

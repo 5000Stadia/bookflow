@@ -7,7 +7,13 @@ says exactly whether its invoice's current revision differs from the drafted one
 message's history is complete -- one event per act, in order, the last naming the message's status -- and every
 attached file's hash is the frozen bytes' own. No act is refused by a guard trigger or an internal error.
 
-Five seeds of 30 steps in an ordinary run; BF_DELIVERY_SEEDS and BF_DELIVERY_STEPS widen it.
+Increment 2 adds the queue: fresh invoices released with a go, dispatch passes whose fake transport answers at random
+(accepted, temporary, permanent, unknown, or a raise), crashes between the send and the record, the clock moved past
+backoffs and leases, and a person's retry, mark-sent or cancel. After every step: no message reached a recipient twice,
+every attempt is a claim with exactly one answer (unless still in flight), and nothing follows an unknown outcome
+without a person's retry.
+
+Five seeds of 30 steps in an ordinary run; BF_DELIVERY_SEEDS, BF_DELIVERY_STEPS and BF_DELIVERY_QUEUE_STEPS widen it.
 """
 import base64
 import hashlib
@@ -131,3 +137,99 @@ def test_seeded_outbox_keeps_one_live_message_true_stale_flags_and_whole_histori
             act('refused ' + e.code)
         _check(run, model, seed, step)
     print('seed', seed, 'messages', len(model), dict(sorted(tally.items())))
+
+
+# ---------------------------------------------------------------- increment 2: the queue, against the fake transport
+
+QUEUE_STEPS = int(os.environ.get('BF_DELIVERY_QUEUE_STEPS', '30'))
+
+
+def _queue_check(run, backend, seed, step):
+    rows = run('delivery query', {'status': 'all', 'limit': 500})['rows']
+    for row in rows:
+        number = row['number']
+        message = run('delivery show', {'message': number})
+        events = run('delivery history', {'message': number})['events']
+        names = [e['event'] for e in events]
+        # No message is sent twice.
+        assert backend.deliveries_of(number) <= 1, (seed, step, number, names)
+        # Every attempt is recorded: one claim per attempt and per send that reached the server.
+        claims = [e for e in events if e['event'] == 'claimed']
+        assert len(claims) == message['attempts'], (seed, step, number, names)
+        reached = {k for k, m in backend.received.items() if m.number == number}
+        assert reached <= {e['details']['attempt_key'] for e in claims}, (seed, step, number)
+        # ... and each claim has exactly one answer, unless it is still in flight.
+        answers = 0
+        for e in events:
+            if e['event'] in ('accepted', 'attempt_failed') and not e['details'].get('late') or (
+                    e['event'] == 'held' and e['details'].get('reason') == 'outcome_unknown'):
+                answers += 1
+        assert answers == len(claims) - (message['status'] == 'sending'), (seed, step, number, names)
+        # An unknown outcome waits for a person: no claim follows it without a retry in between.
+        waiting = False
+        for e in events:
+            if e['event'] == 'held' and e['details'].get('reason') == 'outcome_unknown':
+                waiting = True
+            elif e['event'] == 'retried':
+                waiting = False
+            elif e['event'] == 'claimed':
+                assert not waiting, (seed, step, number, names)
+        assert [e['ordinal'] for e in events] == list(range(1, len(events) + 1))
+        assert events[-1]['status'] == message['status'] or names[-1] in ('exported',), (seed, step, number)
+
+
+@pytest.mark.timeout(1800)
+@pytest.mark.parametrize('seed', SEEDS)
+def test_seeded_queue_never_sends_twice_records_every_attempt_and_holds_unknowns(books, monkeypatch, seed):  # noqa: F811
+    from bookflow.company import delivery_dispatch
+    from tests.delivery_fake_transport import FakeBackend, registered
+    from tests.test_delivery_queue import _desk, connect
+    rng = random.Random(seed)
+    tally = {}
+    real_send = delivery_dispatch.send
+
+    def crash(claims, polls, **hooks):
+        real_send(claims, polls, **hooks)
+        raise RuntimeError('host killed between the send and the record')
+
+    with registered(FakeBackend()) as backend:
+        desk = _desk(books, monkeypatch, backend)
+        run = desk['run']
+        connect(run)
+        for step in range(QUEUE_STEPS):
+            choice = rng.choice(('ready', 'ready', 'run', 'run', 'run', 'crash', 'wait', 'person', 'cancel'))
+            tally[choice] = tally.get(choice, 0) + 1
+            if choice == 'ready':
+                desk['ready']()
+            elif choice in ('run', 'crash'):
+                backend.plan(*rng.choices(('accepted', 'temporary', 'permanent', 'unknown', 'raise'),
+                                          weights=(4, 3, 1, 1, 1), k=10))
+                if choice == 'crash':
+                    monkeypatch.setattr(delivery_dispatch, 'send', crash)
+                try:
+                    out = run('delivery run', {}, reason='Send what is due')
+                    for key in ('sent', 'retrying', 'failed', 'held', 'expired'):
+                        tally['run ' + key] = tally.get('run ' + key, 0) + out[key]
+                except Exception as error:  # noqa: BLE001 - only the injected crash
+                    assert choice == 'crash' and 'host killed' in str(error), error
+                finally:
+                    monkeypatch.setattr(delivery_dispatch, 'send', real_send)
+                backend.script.clear()
+            elif choice == 'wait':
+                desk['clock'].advance(rng.choice((1, 6, 11, 31, 121)))
+            else:
+                rows = run('delivery query', {'status': 'attention', 'limit': 500})['rows']
+                if rows:
+                    row = rng.choice(rows)
+                    message = run('delivery show', {'message': row['number']})
+                    if choice == 'cancel':
+                        run('delivery cancel', {'message': row['number']}, reason='Not needed')
+                    elif message['hold_reason'] == 'outcome_unknown' or backend.deliveries_of(row['number']):
+                        # The person finds it in the sent mail.
+                        run('delivery mark-sent', {'message': row['number']}, reason='It went')
+                        tally['marked sent'] = tally.get('marked sent', 0) + 1
+                    else:
+                        run('delivery retry', {'message': row['number']}, reason='Try again')
+                        tally['retried'] = tally.get('retried', 0) + 1
+            _queue_check(run, backend, seed, step)
+    print('queue seed', seed, 'deliveries', len(backend.delivered), dict(sorted(tally.items())))

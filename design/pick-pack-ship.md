@@ -857,8 +857,9 @@ For the builder, defaults standing unless review finds otherwise:
   `date_from` optional; filters customer, site, ship method; each with order, customer, site, ship method, carrier,
   tracking numbers (the shipment's and its boxes'), quantity, boxes with type, weight and tracking, total weight and
   unweighed units (the pack screen's own arithmetic), freight to bill; totals of shipments, boxes and weight.
-- **Permission layer `worksheet-v1`** on `packing-v1`: both reports `reports` member (776 commands, descriptor
-  daba86b3). No migration: the worksheet stores nothing.
+- **Permission layer `worksheet-v1`** on `delivery-queue-v1` (re-chained from `packing-v1` when main brought R112
+  increment 2): both reports `reports` member (787 commands, descriptor a920b739). No migration: the worksheet stores
+  nothing.
 - **Browser.** Items > Fulfillment (`/inventory/fulfillment`), opening on Can ship now, with tabs To pick, Picking, To
   pack (picked), Packed, Shipped not invoiced and All while pick and pack is on, and To ship instead of the four without it;
   sort, site, customer, shippable-since and complete-only filters; per order its lines in a disclosure. Selected orders

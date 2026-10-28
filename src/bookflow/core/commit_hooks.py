@@ -60,6 +60,8 @@ OWNERS = {
     "memorized.enter": Impact.CONSERVATIVE,
     "scheduler.run": Impact.CONSERVATIVE,
     "scheduler.write": Impact.CONSERVATIVE,
+    "delivery.run": Impact.CONSERVATIVE,
+    "delivery.tick": Impact.CONSERVATIVE,
     "cutover.apply": Impact.CONSERVATIVE,
     "config.flush": Impact.PROJECTION,
 }
@@ -147,6 +149,20 @@ class CommitHooks:
         self._before(operation, owner, OWNERS[owner])
         yield
         operation.committed += 1
+
+    def reopen(self):
+        """Settle what the open operation has committed so far and reopen the commit barrier, for an owner that
+        calls out between two writes (``delivery run``: claim, the transports, record). Nothing may be open; a later
+        conservative commit in the same operation closes the barrier again."""
+        self._confined()
+        operation = self._operation
+        if operation is None or self._depth == 0:
+            raise RuntimeError("Reopen has no active actual owner")
+        if any(not getattr(db, '_closed', False) and db.write_transaction for db in operation.databases.values()):
+            raise RuntimeError("Reopen inside an unfinished transaction")
+        if operation.barrier is not None:
+            self.admission.finish_commit(operation.barrier, committed=bool(operation.committed or operation.external))
+            operation.barrier = None
 
     def publishing(self, owner: str):
         operation = self._operation

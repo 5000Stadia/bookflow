@@ -422,19 +422,50 @@ def project(s, row, docs=None, *, names=None, numbers=None, stale=None, warnings
         resend_of=resend, released_by=row['released_by'], released_at=row['released_at'], go_by=row['go_by'],
         go_at=row['go_at'], waiting_for_go=row['status'] == 'ready' and row['go_by'] is None,
         sent_at=row['sent_at'], sent_via=row['sent_via'], sent_method=row['sent_method'],
-        delivery='unknown' if row['status'] == 'sent' else None, cancelled_reason=row['cancelled_reason'],
+        delivery=tracking(s, row), cancelled_reason=row['cancelled_reason'],
         stale=bool(stale), stale_reason=stale, documents=attached,
         created_at=localize(s, row['created_at']), created_by=row['created_by'],
         updated_at=localize(s, row['updated_at']), updated_by=row['updated_by'], existing=existing,
+        connection=_connection_name(s, row), attempts=row['attempts'], next_attempt_at=row['next_attempt_at'],
+        failure_code=row['failure_code'], failure_text=row['failure_text'], provider_ref=row['provider_ref'],
         warnings=list(warnings), next_commands=next_commands)
+
+
+def _connection_name(s, row) -> str:
+    """The connection a message went through, or the one it would go through now; ``none`` when there is none."""
+    from bookflow.company import delivery_connections as conns
+    if row['connection_id']:
+        name = s.company.conn.execute(sa.select(c.delivery_connections.c.name).where(
+            c.delivery_connections.c.id == row['connection_id'])).scalar()
+        if name:
+            return name
+    return conns.label(s) if row['status'] in LIVE else 'none'
+
+
+def tracking(s, row) -> str | None:
+    """A sent message's delivery, derived from its newest tracking event: unknown (hand-sent, or nothing said),
+    accepted, delivered or bounced. Never 'opened'."""
+    if row['status'] != 'sent':
+        return None
+    if row['sent_via'] != 'connection':
+        return 'unknown'
+    e = c.delivery_events
+    newest = s.company.conn.execute(sa.select(e.c.event).where(
+        e.c.message_id == row['id'], e.c.event.in_(('accepted', 'delivered', 'bounced')))
+        .order_by(e.c.ordinal.desc()).limit(1)).scalar()
+    return newest or 'unknown'
 
 
 def _next(row) -> list[str]:
     n = row['number']
+    if row['status'] == 'held' and row['hold_reason'] == 'outcome_unknown' or row['status'] == 'failed':
+        return [f'delivery mark-sent {n}', f'delivery retry {n}', f'delivery cancel {n}']
     if row['status'] in ('draft', 'held'):
         return [f'delivery update {n}', f'delivery send {n}' if row['status'] == 'draft' else
                 f'delivery update {n} --refresh', f'delivery cancel {n}']
-    if row['status'] in ('ready', 'failed'):
+    if row['status'] == 'ready' and row['go_by'] is None:
+        return [f'delivery approve --messages \'["{n}"]\'', f'delivery export {n}', f'delivery cancel {n}']
+    if row['status'] == 'ready':
         return [f'delivery export {n}', f'delivery mark-sent {n}', f'delivery cancel {n}']
     return [f'delivery history {n}']
 
@@ -721,9 +752,18 @@ def prepare_update(s, ctx, inp) -> Plan:
         raise _invalid('message', 'nothing to change: give to, cc, bcc, subject or body, or refresh')
     if before['status'] == 'held' and before['hold_reason'] == 'no_recipient' and json.loads(after['to_addresses']):
         after.update(status='draft', hold_reason=None)
+    drop_go(before, after, details)  # an edit or a refresh changes what a go was given for
     return _plan_single(s, ctx, before, after, 'edited', {'changed': sorted(changed), **details,
                         **{k: v for k, v in changed.items() if k in ('to', 'cc', 'bcc')}},
                         f"edited message {before['number']} ({', '.join(sorted(changed))})", extra=extra)
+
+
+def drop_go(before, after, details=None) -> None:
+    """A go is given for the exact frozen content and recipients it saw: it ends when the message is held, refreshed
+    or edited, or released by an actor without the send authority. The event says whose go ended."""
+    after.update(go_by=None, go_at=None)
+    if before.get('go_by') and details is not None:
+        details['go_withdrawn'] = before['go_by']
 
 
 def _edited_fields(s, message_id) -> set[str]:
@@ -880,7 +920,9 @@ def prepare_send(s, ctx, inp) -> Plan:
         after = _touch(s, ctx, before, at)
         if stale:
             after.update(status='held', hold_reason=stale)
-            plans.append((before, after, 'held', {'reason': stale, 'at': 'release'}))
+            held = {'reason': stale, 'at': 'release'}
+            drop_go(before, after, held)
+            plans.append((before, after, 'held', held))
             warnings.append(f"Message {before['number']} is held: {HOLD_TEXT[stale]}. "
                             + _refresh_hint(before['number'], stale))
             continue
@@ -889,10 +931,17 @@ def prepare_send(s, ctx, inp) -> Plan:
         if person:
             after.update(go_by=s.actor.id, go_at=at)
             details.update(go_by=s.actor.id, go_at=at)
+        else:  # R187: an actor without delivery.send; whatever go the message carried does not survive its release
+            drop_go(before, after, details)
         plans.append((before, after, 'released', details))
     if any(a['status'] == 'ready' for _, a, _, _ in plans):
-        warnings.append(NO_CONNECTION if person else NO_CONNECTION + " An agent's release also waits for a "
-                        "person's go before anything could leave.")
+        from bookflow.company import delivery_connections as conns
+        connected = conns.label(s) != 'none'
+        if not person:  # R187: an actor holding delivery.send releases with a go
+            warnings.append(("" if connected else NO_CONNECTION + ' ') + "An agent's release waits for a person's go "
+                            '(delivery approve) before anything could leave.')
+        elif not connected:
+            warnings.append(NO_CONNECTION)
     outs = [project(s, after) for _, after, _, _ in plans]
     return Plan(m.MessagesOutput(messages=outs, count=len(outs), warnings=warnings), dict(plans=plans))
 
@@ -970,7 +1019,8 @@ def prepare_export(s, ctx, inp) -> Plan:
             held.append(row['number'])
             # Asking again for a message already held for this reason holds nothing more.
             if not (row['status'] == 'held' and row['hold_reason'] == stale):
-                holds.append((row, dict(_touch(s, ctx, row, at), status='held', hold_reason=stale)))
+                holds.append((row, dict(_touch(s, ctx, row, at), status='held', hold_reason=stale, go_by=None,
+                                        go_at=None)))
             warnings.append(f"Message {row['number']} is held, not exported: {HOLD_TEXT[stale]}. "
                             + _refresh_hint(row['number'], stale))
             continue
@@ -1001,8 +1051,9 @@ def apply_export(plan, ctx, s) -> Applied:
     touched = []
     for before, after in plan.data['holds']:
         _write_row(s, before, after)
-        event = _event(s, ctx, after['id'], 'held', 'held', {'reason': after['hold_reason'], 'at': 'export'},
-                       at=after['updated_at'])
+        event = _event(s, ctx, after['id'], 'held', 'held', {'reason': after['hold_reason'], 'at': 'export',
+                                                             **({'go_withdrawn': before['go_by']} if before['go_by']
+                                                                else {})}, at=after['updated_at'])
         touched += [Touched(RECORD, after['id'], 'update', before['version'], after['version'], after, before,
                             db='company'),
                     Touched('delivery_event', event['id'], 'create', None, None, event, db='company')]
@@ -1098,7 +1149,9 @@ def query(s, inp) -> m.MessagePageOutput:
             waiting_for_go=row['status'] == 'ready' and row['go_by'] is None,
             updated_at=localize(s, row['updated_at']), updated_by=names.get(row['updated_by']) or row['updated_by'],
             sent_at=localize(s, row['sent_at']) if row['sent_at'] else None))
-    return m.MessagePageOutput(rows=out, count=len(out), truncated=truncated, counts=counts(s))
+    from bookflow.company import delivery_connections as conns
+    return m.MessagePageOutput(rows=out, count=len(out), truncated=truncated, counts=counts(s),
+                               connection=conns.label(s))
 
 
 def live_for_notice(s, notice_id) -> dict | None:

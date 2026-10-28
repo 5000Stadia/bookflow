@@ -211,6 +211,9 @@ def apply_company_restore(plan: Plan, ctx: Context, s: Session) -> Applied:
                 facts = db.raw.execute("SELECT legal_name, home_currency FROM company_info").fetchone()
                 db.raw.execute("BEGIN IMMEDIATE")
                 info.write_display_name_copy(db, display)
+                # A restored copy cannot send: every sending connection waits for a person to enable it here (R112).
+                from bookflow.company.delivery_connections import disable_all
+                disable_all(db.raw)
                 info.upsert_principal(db, user_id=s.actor.id, username=s.actor.username, display_name=s.actor.display_name, kind=s.actor.kind)
                 snapshot = {"backup_id": manifest.get("backup_id"), "file_name": path.name, "source_company_id": manifest["company_id"],
                             "company_id": cid, "as_copy": cid != manifest["company_id"], "backup_created_at": manifest["created_at"],

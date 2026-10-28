@@ -36,6 +36,12 @@ ACT_SUBJECTS = {
     'costing-method set': 'Changing the costing method', 'costing-method withdraw': 'Withdrawing a costing method switch',
     # delivery-v1: what happened in the owner's own mail program is known to the owner.
     'delivery mark-sent': 'Recording that an email was sent by hand',
+    # delivery-queue-v1: a go, and where mail goes under whose keys (R187: delivery.send, delivery.connect).
+    'delivery approve': 'Giving an email its go', 'delivery-connection add': 'Adding a sending connection',
+    'delivery-connection update': 'Changing a sending connection',
+    'delivery-connection enable': 'Enabling a sending connection', 'delivery-connection disable':
+    'Disabling a sending connection', 'delivery-connection remove': 'Removing a sending connection',
+    'delivery-connection check': 'Checking a sending connection',
 }
 
 
