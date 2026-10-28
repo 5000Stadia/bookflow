@@ -761,6 +761,15 @@ def _read_calls(hosted):
     for noun, column in dict((noun, column) for noun, column in COLLECTIONS).items():
         record = hosted.ok(f'{noun}.query', {'limit': 1, 'include_inactive': True}, company=cid)['items'][0]
         calls[f'{noun} query children'] = ({'record': record['id'], 'column': column, 'limit': 2}, cid)
+    # The demo's items carry no picture (R114): give one a picture so `item picture get` downloads real bytes.
+    from bookflow.core.transfer_protocol import encode_input
+    from tests.test_item_pictures import png
+    pictured = hosted.ok("item.query", {"limit": 1}, company=cid)["items"][0]
+    uploaded = hosted.api.post(f"/companies/{cid}/transfers/item.picture.set", headers={
+        **hosted.bearer, "X-Bookflow-Input": encode_input({"item": pictured["id"], "original_filename": "parity.png"}),
+        "X-Bookflow-Reason": "Read parity", "Content-Type": "application/octet-stream"}, content=png())
+    assert uploaded.status_code == 200, uploaded.text
+    calls["item picture get"] = ({"attachment": uploaded.json()["picture"]["attachment_id"]}, cid)
     documented = _documented_read_calls(hosted, set(calls))
     DOCUMENTED_READS.clear()
     DOCUMENTED_READS.update(documented)
