@@ -422,28 +422,51 @@ def _mapping(s, account_id: str, inp) -> dict:
     return {**default, **saved, **{k: v for k, v in given.items() if v != default[k]}}
 
 
-def prepare(s, ctx, inp) -> dict:
-    """What importing this file would do, derived afresh; writes nothing."""
+def frozen_by(conn, account_id: str) -> dict | None:
+    """An import of this account whose reversal is under way (``reversing``) or stopped (``blocked``): while one
+    is, the account takes no new import (design/bank-feeds.md §6)."""
+    row = conn.execute(sa.select(c.bank_feed_imports.c.id, c.batches.c.state).join(
+        c.batches, c.batches.c.id == c.bank_feed_imports.c.batch_id).where(
+        c.batches.c.scope == scope(account_id), c.batches.c.state.in_(('reversing', 'blocked')))).mappings().first()
+    return dict(row) if row is not None else None
+
+
+def prepare(s, ctx, inp, *, stored: dict | None = None, exclude_import: str | None = None) -> dict:
+    """What importing this file would do, derived afresh; writes nothing.
+
+    ``stored`` is a move's re-import (design/bank-feeds.md §6): the reversed import's own lines as a parsed statement
+    (``parsed``), its file digest (``sha``) and the account number it carried (``hint``), in place of a file.
+    ``exclude_import``: that import's lines, still live while a move is previewed, are not counted as another
+    account's."""
     conn = s.company.conn
     account = _account(s, inp.account)
     account_id = account['id']
+    busy = frozen_by(conn, account_id)
+    if busy is not None:
+        raise BookflowError('E_VALIDATION', message=(
+            f"{_full_name(s, account_id)} takes no new import while import {busy['id']} is being reversed "
+            f"({busy['state']}); `bank-feed reverse {busy['id']}` finishes it."),
+            details={'field': 'account', 'import': busy['id'], 'state': busy['state']})
     currency = account['currency']
     card = account['type'] == 'credit_card'
     places = _places(currency)
     mapping = _mapping(s, account_id, inp)
-    if inp.attachment is not None:
+    if stored is not None:
+        text, parsed = '', stored['parsed']
+    elif inp.attachment is not None:
         from bookflow.company.attachment_text import attachment_text
         text = attachment_text(s, inp.attachment, 'attachment')[1]
     else:
         text = inp.content
-    parsed = read_file(text, inp.format, places, mapping)
+    if stored is None:
+        parsed = read_file(text, inp.format, places, mapping)
     if inp.save_mapping and parsed.format != 'csv':
         raise files.invalid('save_mapping', 'only a CSV file has a column mapping to save')
     if parsed.currency and parsed.currency.upper() != currency:
         raise files.invalid('content', f'the file is in {parsed.currency}; this account is in {currency}')
     if not parsed.lines:
         raise files.invalid('content', 'the file has no transactions')
-    sha = hashlib.sha256(text.encode()).hexdigest()
+    sha = stored['sha'] if stored is not None else hashlib.sha256(text.encode()).hexdigest()
     warnings: list[str] = []
 
     # The whole file: this exact file came in already.
@@ -459,7 +482,8 @@ def prepare(s, ctx, inp) -> dict:
                 details={'import': same_file['id'], 'imported_at': same_file['created_at'], 'field': 'again'})
         warnings.append(f"this exact file came in on {same_file['created_at'][:10]} (import {same_file['id']})")
 
-    check = _account_check(s, account, parsed, text, inp)
+    check = _account_check(s, account, parsed, text, inp, hint=stored['hint'] if stored is not None else _FROM_TEXT,
+                           not_holder=stored.get('taught_to') if stored is not None else None)
     sign = -1 if card else 1
 
     # Keys: the parser's ids. A FITID is the same line while its amount is the same and its date moved no further
@@ -518,7 +542,7 @@ def prepare(s, ctx, inp) -> dict:
     _soft_duplicates(conn, account_id, rows, new)
 
     # Which account: a file with no account number is checked by what it holds.
-    overlap = _overlap(s, account_id, [r['key'] for r in rows if r['outcome'] != 'repeated_in_file'])
+    overlap = _overlap(s, account_id, [r['key'] for r in rows if r['outcome'] != 'repeated_in_file'], exclude_import)
     if check['status'] == 'no_id':
         _content_check(s, account, rows, overlap, inp)
     for o in overlap:
@@ -582,7 +606,12 @@ def prepare(s, ctx, inp) -> dict:
                 overlap=overlap, input=inp)
 
 
-def _account_check(s, account: dict, parsed, text: str, inp) -> dict:
+_FROM_TEXT = object()
+
+
+def _account_check(s, account: dict, parsed, text: str, inp, hint=_FROM_TEXT, not_holder: str | None = None) -> dict:
+    """``not_holder``: an account whose record of this number a move's reversal is about to take back (it learned
+    it from the very import being moved), so it does not hold the number."""
     conn = s.company.conn
     account_id = account['id']
     known = conn.execute(sa.select(c.bank_feed_accounts).where(
@@ -595,7 +624,8 @@ def _account_check(s, account: dict, parsed, text: str, inp) -> dict:
                known_kind=known['kind'] if known else None)
     if parsed.format == 'csv':
         return {**out, 'status': 'no_id', 'hint': None}
-    hint = ofx_hint(text)
+    if hint is _FROM_TEXT:
+        hint = ofx_hint(text)
     if hint is None:
         return {**out, 'status': 'no_id', 'hint': None}
     out.update(file_bank_number=hint['bank_number'], file_account_last4=hint['account_last4'], file_kind=hint['kind'])
@@ -618,6 +648,7 @@ def _account_check(s, account: dict, parsed, text: str, inp) -> dict:
                         f"...{account['institution_account_last4']} at the bank")
     holder = conn.execute(sa.select(c.bank_feed_accounts.c.account_id).where(
         c.bank_feed_accounts.c.account_id != account_id,
+        c.bank_feed_accounts.c.account_id.is_not(not_holder),
         c.bank_feed_accounts.c.account_last4 == hint['account_last4'],
         sa.func.coalesce(c.bank_feed_accounts.c.bank_number, '') == (hint['bank_number'] or ''))).scalar()
     if holder is not None:
@@ -643,13 +674,14 @@ def _account_check(s, account: dict, parsed, text: str, inp) -> dict:
     return {**out, 'status': 'confirmed', 'hint': hint, 'learns': learns}
 
 
-def _overlap(s, account_id: str, keys: list[str]) -> list[dict]:
+def _overlap(s, account_id: str, keys: list[str], exclude_import: str | None = None) -> list[dict]:
     if not keys:
         return []
     found: dict[str, int] = {}
     for chunk in _chunks(set(keys)):
         for other, n in s.company.conn.execute(sa.select(c.bank_lines.c.account_id, sa.func.count()).where(
                 c.bank_lines.c.account_id != account_id, c.bank_lines.c.live == 1,
+                c.bank_lines.c.import_id.is_not(exclude_import),
                 c.bank_lines.c.line_key.in_(chunk)).group_by(c.bank_lines.c.account_id)).all():
             found[other] = found.get(other, 0) + int(n)
     return sorted(({'account_id': other, 'account': _full_name(s, other), 'lines': n,
@@ -706,7 +738,7 @@ def output(prepared: dict, *, import_id=None, batch_id=None, line_ids=None, dry_
 
 # ------------------------------------------------------------------ writing an import
 
-def write(s, ctx, prepared: dict) -> tuple[m.ImportOutput, bool]:
+def write(s, ctx, prepared: dict, *, moved_from: str | None = None) -> tuple[m.ImportOutput, bool]:
     """Record the import in the command's own transaction; returns the output and whether anything was written."""
     from bookflow.company import statement_store as store
     from bookflow.core import clock
@@ -749,7 +781,7 @@ def write(s, ctx, prepared: dict) -> tuple[m.ImportOutput, bool]:
             file_sha256=prepared['sha'], attachment_id=inp.attachment, mapping_name=inp.mapping_name or None,
             date_from=prepared['date_from'], date_to=prepared['date_to'], lines_in_file=len(prepared['rows']),
             lines_new=len(new), counts=json.dumps(prepared['counts'], sort_keys=True),
-            warnings=json.dumps(prepared['warnings']), moved_from=None, reason=ctx.reason,
+            warnings=json.dumps(prepared['warnings']), moved_from=moved_from, reason=ctx.reason,
             created_by=actor.id, created_via=via, on_behalf_of=batches._on_behalf(s, ctx), created_at=at,
             audit_event_id=event))
         line_rows, event_rows = [], []
@@ -926,3 +958,6 @@ def line_query(s, inp) -> dict:
         lines.append(_line_out(dict(v), places[v['account_id']]))
     return dict(lines=tuple(lines), counts=counts, next_cursor=str(start + inp.limit) if len(found) > inp.limit
                 else None)
+
+
+from bookflow.company import bank_reversal as _reversal  # noqa: E402,F401  (registers the bank-import adapter)

@@ -58,6 +58,16 @@ class Adapter:
     on_reversed: Callable[[Any, dict, str], None] | None = None  # (s, effect, reversal batch id), in the last step's tx
     on_finished: Callable[[Any, dict], None] | None = None  # (s, batch), in the transaction that marks it reversed
     label: str = ''
+    # A kind whose effects are not list records plans and runs its own inverse steps (bank imports):
+    # planner(s, ctx, batch, effects, done, probe, blockers) -> dict(steps, work, blockers, records, pending), where
+    # steps[i] describes work[i] (extra trailing steps describe what on_finished does); runner(s, ctx, batch,
+    # reversal_id, item) runs one work item and records its reversal effects; reader(s, batch) checks the caller may
+    # read the batch. blocks: a reversal stopped by a blocker between slices is marked `blocked` (else it stays
+    # `reversing`); the same command resumes either.
+    planner: Callable | None = None
+    runner: Callable | None = None
+    reader: Callable[[Any, dict], None] | None = None
+    blocks: bool = False
 
 
 ADAPTERS: dict[str, Adapter] = {}
@@ -177,9 +187,11 @@ def touched_effects(applied, record_types: set[str]) -> list[tuple[str, str, str
 
 
 def run_nested(s, ctx, name: str, payload: dict, *, source_ref: str, dry_run: bool = False,
-               recorder: Callable | None = None) -> dict:
+               recorder: Callable | None = None, recovery: bool = True) -> dict:
     """Run one registry command inside this session, as `cutover` nests its steps: the caller's own authority,
-    validation and audit, with ``source_ref`` naming where the write came from."""
+    validation and audit, with ``source_ref`` naming where the write came from. ``recovery=False`` skips a command's
+    permanent-recovery lookup (a replay by operation key), which closes and reopens the session's company: a nested
+    step that carries no operation key has nothing to replay."""
     from bookflow.core import registry
     from bookflow.core.dispatch import run_in_session, validate_input
     command = registry.get(name)
@@ -187,7 +199,8 @@ def run_nested(s, ctx, name: str, payload: dict, *, source_ref: str, dry_run: bo
     saved = (s.company_touched, s.hub_touched, list(s.warnings), s.dry_run, getattr(s, 'batch_recorder', None))
     s.batch_recorder = recorder
     try:
-        return run_in_session(command, validate_input(command, payload), nested, s, dry_run=dry_run)
+        return run_in_session(command, validate_input(command, payload), nested, s, dry_run=dry_run,
+                              _recovery_checked=not recovery)
     finally:
         s.company_touched, s.hub_touched, s.warnings, s.dry_run, s.batch_recorder = saved
         if s.company is not None and s.company.write_transaction:
@@ -222,7 +235,8 @@ def describe(s, batch: dict, *, with_plan: bool = False, ctx=None) -> dict:
                                  'created_at', 'reversed_by', 'reversed_at', 'reversal_reason', 'reversal_event_id')}
     out['counts'] = counts(s, batch['id'])
     if with_plan:
-        if batch['state'] in ('live', 'reversing') and batch['reversal_of'] is None and batch['kind'] in ADAPTERS:
+        if batch['state'] in ('live', 'reversing', 'blocked') and batch['reversal_of'] is None \
+                and batch['kind'] in ADAPTERS:
             try:
                 found = plan(s, ctx, batch['id'], probe=False)
             except BookflowError as error:
@@ -241,7 +255,8 @@ def describe(s, batch: dict, *, with_plan: bool = False, ctx=None) -> dict:
 
 def show(s, ctx, batch_id: str) -> dict:
     batch = _batch(s, batch_id)
-    require_batch_read(s, batch)
+    reader = ADAPTERS[batch['kind']].reader if batch['kind'] in ADAPTERS else None
+    (reader or require_batch_read)(s, batch)
     out = describe(s, batch, with_plan=True, ctx=ctx)
     out['effects'] = [_effect_out(e) for e in effects(s, batch_id)[:200]]
     return out
@@ -532,16 +547,19 @@ def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
     if batch['state'] in ('reversed', 'reversed_partly'):
         raise BookflowError('E_VALIDATION', message=f'Batch {batch_id} is already {batch["state"]}.',
                             details={'field': 'batch', 'state': batch['state']})
-    require_batch_read(s, batch)
+    (adapter.reader or require_batch_read)(s, batch)
     if adapter.ordering == 'strict':
         later = s.company.conn.execute(sa.text(
             "SELECT id, label, created_at FROM batches WHERE scope = :scope AND reversal_of IS NULL "
-            "AND state IN ('live', 'reversing') AND rowid > (SELECT rowid FROM batches WHERE id = :id) "
+            "AND state IN ('live', 'reversing', 'blocked') AND rowid > (SELECT rowid FROM batches WHERE id = :id) "
             "ORDER BY rowid DESC"), {'scope': batch['scope'], 'id': batch_id}).mappings().all()
         for row in later:
             blockers.append({'seq': None, 'record_type': 'batch', 'record_id': row['id'], 'code': 'later_batch',
                              'message': f"A later batch in {batch['scope']} is still live: {row['label']}.",
                              'clears': f"reverse batch {row['id']} first", 'at': row['created_at']})
+    if adapter.planner is not None:
+        found = adapter.planner(s, ctx, batch, effects(s, batch_id), _done_steps(s, batch), probe, blockers)
+        return {'batch': batch, 'fingerprint': _fingerprint(found['steps']), **found}
     groups = _groups(effects(s, batch_id))
     done = _done_steps(s, batch)
     made = {g['key'] for g in groups if g['action'] == 'created'}
@@ -662,7 +680,7 @@ def _clears_for(error: BookflowError, rec: ListRecord) -> str:
 
 
 def _progress(found: dict) -> str:
-    if found['batch']['state'] != 'reversing':
+    if found['batch']['state'] not in ('reversing', 'blocked'):
         return ''
     done = found['records'] - found['pending']
     return f"The reversal is part way ({done} of {found['records']} records reversed) and cannot go on. "
@@ -682,29 +700,49 @@ def refuse(found: dict) -> BookflowError:
 # ------------------------------------------------------------------ reversing
 
 def reverse(s, ctx, batch_id: str, *, reason: str | None, dry_run: bool = False, limit: int = DEFAULT_SLICE,
-            fingerprint: str | None = None, interrupt: Callable[[int], None] | None = None) -> dict:
-    """Reverse a batch (or its next slice). ``interrupt`` is a test hook called after each record.
+            fingerprint: str | None = None, interrupt: Callable[[int], None] | None = None,
+            then: Callable[[], Any] | None = None) -> dict:
+    """Reverse a batch (or its next slice). ``interrupt`` is a test hook called after each record; ``then`` runs
+    inside the transaction that marks the batch reversed (a bank import's move re-imports there), and its result is
+    returned as ``then``.
 
     The whole plan is probed (every inverse command dry-run) once: by a dry run whose fingerprint the real call
     carries, else by the first slice. A later slice re-checks only what can have changed since: each record's
     version against its newest effect, what uses a created record, and later batches. An inverse command refused
     while running stops the slice there with the record named; what ran stays reversed and the state `reversing`."""
     batch = _batch(s, batch_id)
-    starting = batch['state'] != 'reversing'
+    adapter = adapter_for(batch['kind'])
+    starting = batch['state'] not in ('reversing', 'blocked')
     found = plan(s, ctx, batch_id, probe=dry_run or (starting and fingerprint is None))
     if found['blockers']:
+        if not dry_run and not starting and adapter.blocks:
+            _set_state(s, batch_id, 'blocked')
+            found['batch'] = _batch(s, batch_id)
         raise refuse(found)
     if starting and fingerprint is not None and fingerprint != found['fingerprint']:
         raise BookflowError('E_VERSION_CONFLICT', message='The batch changed since that dry run; run it again.',
                             details={'field': 'fingerprint', 'current': found['fingerprint']})
     if dry_run:
         return _result(s, found, state=batch['state'], reversed_now=0, dry_run=True)
-    adapter = adapter_for(batch['kind'])
+    if batch['state'] == 'blocked':
+        _set_state(s, batch_id, 'reversing')
     reversal_id = batch['reversed_by'] or _begin(s, ctx, batch, reason)
     batch = _batch(s, batch_id)
     work = found['work'][:max(1, limit)]
     reversed_now = 0
-    for g, rec, row, steps, offset in work:
+    for item in work if adapter.runner is not None else ():
+        try:
+            adapter.runner(s, ctx, batch, reversal_id, item)
+        except BookflowError as error:
+            stopped = _stopped_item(found, item, error, reversed_now)
+            if adapter.blocks:
+                _set_state(s, batch_id, 'blocked')
+                stopped.details['state'] = 'blocked'
+            raise stopped from None
+        reversed_now += 1
+        if interrupt is not None:
+            interrupt(reversed_now)
+    for g, rec, row, steps, offset in work if adapter.runner is None else ():
         total = 1 if g['action'] == 'updated' else 2
         version = row['version']
         for i, (name, payload) in enumerate(steps):
@@ -725,11 +763,11 @@ def reverse(s, ctx, batch_id: str, *, reason: str | None, dry_run: bool = False,
         rest = found['steps'][len(work):]
         return _result(s, dict(found, steps=rest, fingerprint=_fingerprint(rest)), state='reversing',
                        reversed_now=reversed_now)
-    event_id = _finish(s, ctx, batch_id, reversal_id, batch)
+    event_id, then_out = _finish(s, ctx, batch_id, reversal_id, batch, then)
     final = _batch(s, batch_id)
     return {'batch': describe(s, final), 'state': 'reversed', 'reversed_now': reversed_now, 'remaining': 0,
             'blockers': [], 'steps': [], 'fingerprint': None, 'reversal_batch': reversal_id, 'event_id': event_id,
-            'dry_run': False}
+            'dry_run': False, 'then': then_out}
 
 
 def _stopped(found: dict, g: dict, rec: ListRecord, row: dict, error: BookflowError, reversed_now: int):
@@ -741,6 +779,34 @@ def _stopped(found: dict, g: dict, rec: ListRecord, row: dict, error: BookflowEr
         "The rest is unchanged; once that is cleared, the same command goes on from there."),
         details={'batch': found['batch']['id'], 'blockers': [blocker], 'total': 1, 'state': 'reversing',
                  'records': found['records'], 'reversed': done})
+
+
+def _stopped_item(found: dict, item: dict, error: BookflowError, reversed_now: int):
+    """An adapter's own inverse step refused while running (``item`` carries its record and label)."""
+    done = found['records'] - found['pending'] + reversed_now
+    blocker = {'seq': item.get('seq'), 'record_type': item.get('record_type'), 'record_id': item.get('record_id'),
+               'code': item.get('code_for', {}).get(error.code, error.code),
+               'message': f"{item.get('label', item.get('record_id'))}: {error.message}",
+               'clears': item.get('clears_for', {}).get(error.code), 'details': error.details}
+    return BookflowError('E_BATCH_BLOCKED', message=(
+        f"The reversal stopped part way ({done} of {found['records']} records reversed): {blocker['message']} "
+        "The rest is unchanged; once that is cleared, the same command goes on from there."),
+        details={'batch': found['batch']['id'], 'blockers': [blocker], 'total': 1, 'state': 'reversing',
+                 'records': found['records'], 'reversed': done})
+
+
+def _set_state(s, batch_id: str, state: str) -> None:
+    """Move a batch between `reversing` and `blocked` in its own transaction."""
+    with s.commits.operation(OWNER, s.company):
+        s.company.raw.execute('BEGIN IMMEDIATE')
+        try:
+            s.company.conn.execute(sa.update(c.batches).where(
+                c.batches.c.id == batch_id, c.batches.c.state.in_(('reversing', 'blocked'))).values(state=state))
+            s.commits.commit(s.company, OWNER)
+        except BaseException:
+            if s.company.write_transaction:
+                s.company.raw.rollback()
+            raise
 
 
 def _result(s, found: dict, *, state: str, reversed_now: int, dry_run: bool = False) -> dict:
@@ -789,7 +855,7 @@ def _begin(s, ctx, batch: dict, reason: str | None) -> str:
     return reversal_id
 
 
-def _finish(s, ctx, batch_id: str, reversal_id: str, batch: dict) -> str:
+def _finish(s, ctx, batch_id: str, reversal_id: str, batch: dict, then: Callable[[], Any] | None = None):
     from bookflow.core.audit import write_event_to
     from bookflow.core.registry import Touched
     n = counts(s, batch_id)
@@ -806,9 +872,10 @@ def _finish(s, ctx, batch_id: str, reversal_id: str, batch: dict) -> str:
             finished = adapter_for(batch['kind']).on_finished
             if finished is not None:
                 finished(s, batch)
+            then_out = then() if then is not None else None
             s.commits.commit(s.company, OWNER)
         except BaseException:
             if s.company.write_transaction:
                 s.company.raw.rollback()
             raise
-    return event_id
+    return event_id, then_out
