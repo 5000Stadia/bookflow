@@ -363,7 +363,7 @@ def apply_link(plan: Plan, ctx: Context, s) -> Applied:
 
 attachment_unlink = command("attachment unlink", scope="company", description="Unlink an occurrence with its expected version, retaining history and bytes.",
     input_model=AttachmentUnlinkInput, output_model=AttachmentWriteOutput, writes={"company"}, required_role="standard",
-    positional=["link"], error_codes=["E_RECORD_NOT_FOUND", "E_VERSION_CONFLICT", "E_DB_BUSY"])
+    positional=["link"], error_codes=["E_RECORD_NOT_FOUND", "E_VERSION_CONFLICT", "E_DB_BUSY", "E_VALIDATION"])
 
 
 @attachment_unlink
@@ -383,6 +383,14 @@ def plan_unlink(inp: AttachmentUnlinkInput, ctx: Context, s) -> Plan:
         changes={"active"}, expected_version=inp.expected_version,
         history_since=lambda v: history_from_entries(s.company, "attachment_link", row["id"], v, decode_snapshot), actor_id=s.actor.id, window_seconds=0)
     changed = row["active"]
+    if changed and row["record_type"] == "item":  # R114: a chosen item picture leaves through `item picture clear`
+        from bookflow.company.item_pictures import referring_item
+        owner = referring_item(s.company, row["attachment_id"], row["record_id"])
+        if owner:
+            from bookflow.core.errors import BookflowError
+            raise BookflowError("E_VALIDATION", f"This file is the picture of item {owner['full_name']}; remove it "
+                                "with `item picture clear` (Remove on the item page), which unlinks it too.",
+                                {"fields": [{"field": "link", "problem": "the item's chosen picture"}]})
     if changed:
         row.update(active=False, version=row["version"]+1, updated_at=now_iso(), updated_by=s.actor.id, updated_via=ctx.interface.value)
     return Plan(_write_preview(s, _get(s, "attachment", row["attachment_id"]), row), dict(link=row, changed=changed))

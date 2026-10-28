@@ -63,7 +63,10 @@ def mount(app, *, render, run, credential, page_error, role_allows):
             bins = [row['full_name'] for row in run(request, 'bin list', {'site': shown['site_id']}, company_id)['bins']]
         except BookflowError:
             bins = []
-        return render('pick_list.html', request, status_code=status_code, company=company,
+        from bookflow.adapters.workbench.item_picture_pages import thumbs as item_thumbs
+        thumbs = item_thumbs(lambda name, raw, company: run(request, name, raw, company), company_id,
+                             [line['item_id'] for line in shown['lines']])
+        return render('pick_list.html', request, status_code=status_code, company=company, thumbs=thumbs,
                       company_id=company['company_id'], pick=shown, groups=_groups(shown['lines']), bins=bins,
                       values=values or {}, result=result, error=error, today=today_iso(),
                       can_enter=role_allows('pick-list enter', company, credential(request)),

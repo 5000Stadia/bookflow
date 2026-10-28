@@ -53,7 +53,10 @@ def mount(app, *, render, run, credential, page_error, role_allows):
         boxes = [b['box'] for b in packing['packages']]
         values = dict(values or {})
         values.setdefault('box', str(values.get('box') or (boxes[-1] if boxes else 1)))
-        return render('shipment_pack.html', request, status_code=status_code, company=company,
+        from bookflow.adapters.workbench.item_picture_pages import thumbs as item_thumbs
+        thumbs = item_thumbs(lambda name, raw, company: run(request, name, raw, company), company_id,
+                             [line['item_id'] for line in shown['lines']])
+        return render('shipment_pack.html', request, status_code=status_code, company=company, thumbs=thumbs,
                       company_id=company['company_id'], shipment=shown, packing=packing, where=where,
                       next_box=max(boxes, default=0) + 1, values=values, result=result, error=error, quote=quote,
                       can_pack=role_allows('shipment pack', company, credential(request)) and

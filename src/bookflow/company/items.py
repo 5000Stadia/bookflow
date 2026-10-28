@@ -16,6 +16,7 @@ import sqlalchemy as sa
 
 from bookflow.core import unit_price
 from bookflow.company import custom_fields, list_service, schema, units
+from bookflow.company.item_pictures import ItemPictureOutput
 from bookflow.company.lists import get_list_definition, hierarchy_projection, normalize_display_name
 from bookflow.core.errors import BookflowError
 from bookflow.core.exact import (
@@ -374,6 +375,9 @@ class ItemOutput(StrictModel):
     combined_percent: str | None
     child_count: int
     has_children: bool
+    # R114 increment 1: the chosen picture, else the newest linked image; the thumbnail only beside a chosen one.
+    picture: ItemPictureOutput | None = None
+    thumbnail: ItemPictureOutput | None = None
 
 
 @dataclass(frozen=True)
@@ -1635,6 +1639,8 @@ class _ProjectionCache:
     stock: Mapping[str, tuple[int, int]] = field(default_factory=dict)
     # Committed, on order and reserved for builds per stocked item, read once per page.
     figures: Mapping[str, tuple[int, int, int, bool, bool]] | None = None
+    # Each item's (picture, thumbnail), read once per page (R114 increment 1).
+    pictures: Mapping[str, tuple[Any, Any]] | None = None
 
 
 # The stock-carrying item types, and the running sums that value them. Both come from the
@@ -1836,7 +1842,13 @@ def _build_projection_cache(
         home_currency=_home_currency(db),
         stock=_stock(db, [str(row["id"]) for row in owners if row["type"] in STOCK_TYPES]),
         figures=_stock_figures(db, [str(row["id"]) for row in owners if row["type"] in STOCK_TYPES]),
+        pictures=_pictures(db, owners),
     )
+
+
+def _pictures(db: Database, owners: Sequence[Mapping[str, Any]]) -> dict[str, tuple[Any, Any]]:
+    from bookflow.company import item_pictures
+    return item_pictures.pictures(db, owners)
 
 
 def _label(
@@ -2009,6 +2021,9 @@ def project_item(
             committed, on_order, builds, deducts, deducts_builds = cache.figures.get(owner_id, (0, 0, 0, True, True))
         else:
             committed, on_order, builds, deducts, deducts_builds = _stock_figures(db, [owner_id]).get(owner_id, (0, 0, 0, True, True))
+    from bookflow.company import item_pictures
+    picture, thumbnail = (cache.pictures.get(owner_id, (None, None)) if cache is not None and cache.pictures is not None
+                          else item_pictures.pictures(db, [owner]).get(owner_id, (None, None)))
     return ItemOutput(
         **{field: owner[field] for field in (
             "id", "version", "created_at", "created_by", "created_via", "updated_at",
@@ -2056,6 +2071,7 @@ def project_item(
         inventory_values_available=stocked,
         bill_of_material_cost=_bom_cost(db, members, cache) if owner["type"] == "inventory_assembly" else None,
         combined_percent=combined, child_count=child_count, has_children=bool(child_count),
+        picture=picture, thumbnail=thumbnail,
     )
 
 
