@@ -15,9 +15,12 @@ from __future__ import annotations
 import base64
 from urllib.parse import quote, urlencode
 
+import re
+
 from fastapi import Request
 from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
+from starlette.convertors import Convertor, register_url_convertor
 
 from bookflow.core.errors import BookflowError
 
@@ -60,7 +63,28 @@ def _exported(out):
     return {'result': ' '.join(out.get('warnings') or []) or 'Exported.', 'export': file}
 
 
+class _MessageConvertor(Convertor):
+    """A message selector in ``/delivery/{message}``, never a delivery verb.
+
+    The message routes are mounted before the generic ``/{noun}/{verb}`` ones, so without this
+    ``/delivery/approve`` (a command's form) would be looked up as message "approve" and answer 404."""
+
+    def __init__(self, verbs):
+        self.regex = (f"(?!(?:{'|'.join(re.escape(v) for v in sorted(verbs))})(?:/|$))" if verbs else '') + '[^/]+'
+
+    def convert(self, value: str) -> str:
+        return value
+
+    def to_string(self, value: str) -> str:
+        return value
+
+
 def mount(app, *, render, run, credential, page_error, role_allows):
+    from bookflow.core import registry
+    registry.load_all()  # the verbs the message routes must leave to the generic forms
+    register_url_convertor('delivery_message', _MessageConvertor(
+        {c.verb for c in registry.routed_commands() if c.noun == 'delivery' and c.verb}))
+
     def headers(form, default=None):
         reason = (form.get('ctx:reason') or '').strip() or default
         return {'X-Bookflow-Reason': reason} if reason else None
@@ -442,14 +466,14 @@ def mount(app, *, render, run, credential, page_error, role_allows):
                       kind_label=KIND_LABEL, can_write=allowed(request, shown, 'delivery update'),
                       is_person=credential(request) is not None)
 
-    @app.get('/c/{company_id}/delivery/{number}')
+    @app.get('/c/{company_id}/delivery/{number:delivery_message}')
     def delivery_message(request: Request, company_id: str, number: str):
         try:
             return message_page(request, company_id, number)
         except BookflowError as e:
             return page_error(request, e)
 
-    @app.get('/c/{company_id}/delivery/{number}/file/{position}')
+    @app.get('/c/{company_id}/delivery/{number:delivery_message}/file/{position}')
     def delivery_file(request: Request, company_id: str, number: str, position: int):
         try:
             shown = run(request, 'delivery show', {'message': number, 'include_files': True}, company_id)
@@ -484,7 +508,7 @@ def mount(app, *, render, run, credential, page_error, role_allows):
             return failed(request, e, message_page, company_id, number, values=dict(form))
         return message_page(request, company_id, number, result=result)
 
-    @app.post('/c/{company_id}/delivery/{number}')
+    @app.post('/c/{company_id}/delivery/{number:delivery_message}')
     async def delivery_message_post(request: Request, company_id: str, number: str):
         form = dict(await request.form())
         try:

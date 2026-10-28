@@ -11,7 +11,7 @@
 {% if existing %}<p class="warn" data-existing>Message <a href="/c/{{ company_id }}/delivery/{{ existing.number }}">{{ existing.number }}</a> for this document is {{ existing.status_label|lower }}. {% if existing.stale %}The document changed after it was drafted: refresh it to attach the document as it is now, or cancel it from its page.{% elif existing.status in ('draft', 'held') %}Saving here edits it.{% elif existing.status == 'sent' %}Saving here sends it again as a new message.{% endif %}</p>{% endif %}
 {% for w in preview.warnings %}<p class="warn" data-empty-field>{{ w }}</p>{% endfor %}
 {% if can_write %}
-<form method="post" action="/c/{{ company_id }}/delivery/compose" data-email-panel>
+<form method="post" action="/c/{{ company_id }}/delivery/compose" hx-post="/c/{{ company_id }}/delivery/compose" hx-target="body" hx-swap="outerHTML" data-email-panel>
 {% for k, v in identity.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
 {% if existing and existing.status == 'sent' %}<input type="hidden" name="again" value="on">{% endif %}{% if existing and existing.stale %}<input type="hidden" name="existing" value="{{ existing.number }}">{% endif %}
 <label>Template <select name="template" hx-get="/c/{{ company_id }}/delivery/compose" hx-include="[name=kind],[name=document],[name=customer],[name=date_from],[name=date_to]" hx-target="body" hx-swap="outerHTML" data-template-picker>{% for t in templates %}<option value="{{ t.id }}" {% if t.id == preview.template_id %}selected{% endif %}>{{ t.name }}{% if t.is_default %} (default){% endif %}</option>{% endfor %}</select></label>
