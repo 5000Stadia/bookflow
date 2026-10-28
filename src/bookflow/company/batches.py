@@ -404,7 +404,7 @@ class DocumentRecord:
     selector: str
     inverse: str
     type_value: str
-    type_column: str
+    type_column: str | None
     document = True
     number_field = None
 
@@ -420,8 +420,8 @@ def document_record(record_type: str) -> DocumentRecord | None:
 
 
 def _document_steps(s, group: dict, rec: DocumentRecord) -> list[tuple[str, dict]]:
-    """A document's retiring command; a payment the same batch made, still applied (to an invoice the batch made
-    too), is unapplied first, since a payment is deleted only once nothing is applied."""
+    """A document's retiring command; a payment or bill payment still applied is unapplied first, since a payment is
+    deleted (a bill payment voided) only once nothing stands applied."""
     steps = []
     if rec.type_value == 'payment':
         rows = s.company.raw.execute(
@@ -432,15 +432,28 @@ def _document_steps(s, group: dict, rec: DocumentRecord) -> list[tuple[str, dict
             steps.append(('payment unapply', {'payment': group['record_id'], 'operation_key': f"reverse-{group['record_id']}",
                                               'applications': [{'application_id': a, 'invoice_expected_version': v}
                                                                for a, v in rows]}))
+    elif rec.type_value == 'bill_payment':
+        # A bill payment is voided only once nothing stands applied (E_HAS_APPLICATIONS): unapplied first, as a
+        # bank import's reversal does.
+        standing = s.company.raw.execute(
+            'SELECT 1 FROM ap_applications a WHERE a.source_transaction_id = ? AND a.reverses_application_id IS NULL '
+            'AND NOT EXISTS (SELECT 1 FROM ap_applications r WHERE r.reverses_application_id = a.id) LIMIT 1',
+            (group['record_id'],)).fetchone()
+        if standing:
+            steps.append(('bill payment unapply', {'payment': group['record_id']}))
     steps.append((rec.inverse, {rec.selector: group['record_id']}))
     return steps
+
+
+# A document table's revisions (else transaction_revisions): (table, column naming the document).
+REVISIONS = {'work_documents': ('work_revisions', 'document_id'),
+             'purchase_orders': ('purchase_order_revisions', 'document_id')}
 
 
 def _document_edit(s, rec: DocumentRecord, record_id: str) -> dict | None:
     """A document edited since the import made it: a revision after its first. Settling it (a payment applied)
     changes its version, not its revisions, and is found as a use instead."""
-    table, column = ('work_revisions', 'document_id') if rec.table.name == 'work_documents' else (
-        'transaction_revisions', 'transaction_id')
+    table, column = REVISIONS.get(rec.table.name, ('transaction_revisions', 'transaction_id'))
     row = s.company.raw.execute(f'SELECT count(*), max(created_at) FROM {table} WHERE {column} = ?',
                                 (record_id,)).fetchone()
     if not row or row[0] <= 1:
@@ -705,7 +718,8 @@ def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
         if use is not None:
             blockers.append(_blocker(g, rec, 'in_use',
                                      f"{label} is in use: " + (', '.join(use['documents']) if use['documents'] else
-                                                               'rows of ' + ', '.join(use['tables'])) + ' refer to it.',
+                                                               'rows of ' + ', '.join(use['tables']))
+                                     + (' refers to it.' if len(use['documents']) == 1 else ' refer to it.'),
                                      clears=f"void, delete or move what uses {label} first", used_by=use['rows']))
             continue
         steps = _steps_for(g, rec, row['version'], s)[len(steps_done):]

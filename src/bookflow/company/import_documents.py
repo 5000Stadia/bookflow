@@ -54,6 +54,8 @@ def plan_documents(kind: kinds.DocKind, table: tabular.Table, mapping, source: s
     by_key: dict[str, Any] = {}
     occurrences: dict[str, int] = {}
     current = None
+    # A payment's explicit key: a mapped payment number or reference (`PAYMENT_REFS`), never a guess from equal cells.
+    explicit = [p for p in PAYMENT_REFS if p in position] if kind.name == 'payment' else []
     for row_no, (line, cells) in enumerate(table.rows, start=1):
         scratch = imp.RowPlan(row_no, line, cells)
         if row_no in table.width_errors:
@@ -63,6 +65,7 @@ def plan_documents(kind: kinds.DocKind, table: tabular.Table, mapping, source: s
             doc = _new_doc(imp, len(docs) + 1, row_no, line)
             docs.append(doc)
             _absorb(doc, scratch, {}, row_no, line, cells)
+            current = doc  # a blank-key row below continues this refused row, never the document before it
             continue
         values = imp.read_cells(kind, table, mapping, specs, scratch, row_no, line, cells, places, year)
         keyed = [values.get(p, mapping.constants.get(p)) for p in mapping.key]
@@ -76,13 +79,12 @@ def plan_documents(kind: kinds.DocKind, table: tabular.Table, mapping, source: s
                                                     + ('s' if len(mapping.key) > 1 else '') + '.'})
             else:
                 doc = current  # the document above goes on: its number is written on its first row only
+        elif kind.name == 'payment' and mapping.key:
+            doc = _payment_doc(imp, kind, source, mapping, explicit, values, row_no, line, docs, by_key, current,
+                               column_of)
         elif mapping.key:
-            hashed = imp.key_hash(source, kind.name, keyed)
-            doc = by_key.get(hashed)
-            if doc is None:
-                doc = by_key[hashed] = _new_doc(imp, len(docs) + 1, row_no, line)
-                doc.key_hash = hashed
-                docs.append(doc)
+            doc = _keyed_doc(imp, imp.key_hash(source, kind.name, keyed), row_no, line, docs, by_key, current,
+                             column_of, mapping.key)
         else:
             content = json.dumps(values, sort_keys=True, default=str)
             occurrences[content] = occurrences.get(content, 0) + 1
@@ -110,8 +112,66 @@ def plan_documents(kind: kinds.DocKind, table: tabular.Table, mapping, source: s
                 doc.line_values.setdefault(array, []).append(leaves)
         current = doc
     for doc in docs:
-        _finish(imp, kind, doc, mapping, column_of)
+        _finish(imp, kind, doc, mapping, column_of, places)
     return docs
+
+
+# A payment's own number or reference, when mapped, is what tells one payment from another (`plan_documents`).
+PAYMENT_REFS = ('number', 'reference')
+
+
+def _keyed_doc(imp, hashed: str, row_no: int, line: int, docs: list, by_key: dict, current, column_of: dict,
+               key: list):
+    """The document a keyed row belongs to. Its rows must be together: a key that comes back after another document
+    refuses that document whole (`key_apart`), since gathering it would guess which rows belong to it."""
+    doc = by_key.get(hashed)
+    if doc is None:
+        doc = by_key[hashed] = _new_doc(imp, len(docs) + 1, row_no, line)
+        doc.key_hash = hashed
+        docs.append(doc)
+    elif doc is not current and not any(p['code'] == 'key_apart' for p in doc.problems):
+        columns = ', '.join(column_of.get(p, p) for p in key)
+        doc.problems.append({'column': None, 'code': 'key_apart', 'value': '', 'row': row_no, 'required': True,
+                             'key_column': column_of.get(key[-1]),
+                             'message': f'row {row_no} repeats the key ({columns}) of row {doc.spans[0][0]} with '
+                                        "another document between them: one document's rows must be together; "
+                                        'sort the file by its key columns'})
+    return doc
+
+
+def _payment_doc(imp, kind, source: str, mapping, explicit: list, values: dict, row_no: int, line: int, docs: list,
+                 by_key: dict, current, column_of: dict):
+    """The payment a row belongs to. Rows are one payment only by an explicit key: the same mapped number or
+    reference (and customer), or a later row leaving every key cell blank. Under a payment that names a reference, a
+    row naming none whose customer, date and amount are blank or that payment's continues it (the reference written
+    on its first row only). Two rows with the same customer, date and amount and no reference are ambiguous (one
+    payment over two invoices, or two equal payments): both are refused (`ambiguous_payment`), never merged."""
+    refs = [values.get(p) for p in explicit]
+    others = [p for p in mapping.key if p not in explicit]
+    if any(v not in (None, '') for v in refs):
+        doc = _keyed_doc(imp, imp.key_hash(source, kind.name, ['payment', values.get('customer'), *refs]), row_no,
+                         line, docs, by_key, current, column_of, ['customer', *explicit])
+        doc.named = True
+        return doc
+    if explicit and current is not None and getattr(current, 'named', False) and all(
+            values.get(p) in (None, '') or imp.norm_key(values[p]) == imp.norm_key(
+                (current.header.get(p) or (None,))[0]) for p in others):
+        return current
+    hashed = imp.key_hash(source, kind.name, [values.get(p) for p in mapping.key])
+    doc = by_key.get(hashed)
+    if doc is None:
+        doc = by_key[hashed] = _new_doc(imp, len(docs) + 1, row_no, line)
+        doc.key_hash = hashed
+        docs.append(doc)
+        return doc
+    if not any(p['code'] == 'ambiguous_payment' for p in doc.problems):
+        doc.problems.append({
+            'column': None, 'code': 'ambiguous_payment', 'value': '', 'row': row_no, 'required': True,
+            'message': f'rows {doc.spans[0][0]} and {row_no} give the same customer, date and amount and no reference, '
+                       'so they could be one payment over two invoices or two equal payments. Map a reference column '
+                       '(a check number tells payments apart), or put one payment per row, leaving the customer, '
+                       "date and amount blank on a payment's later rows"})
+    return doc
 
 
 def _new_doc(imp, number: int, row_no: int, line: int):
@@ -128,7 +188,7 @@ def _absorb(doc, scratch, values, row_no, line, cells) -> None:
     doc.originals.update(scratch.originals)
 
 
-def _finish(imp, kind: kinds.DocKind, doc, mapping, column_of: dict) -> None:
+def _finish(imp, kind: kinds.DocKind, doc, mapping, column_of: dict, places: int = 2) -> None:
     payload: dict = {}
     for path, (value, _) in doc.header.items():
         imp._set_path(payload, path, value)
@@ -137,13 +197,15 @@ def _finish(imp, kind: kinds.DocKind, doc, mapping, column_of: dict) -> None:
             imp._set_path(payload, path, value)
     for array in kind.lines:
         lines = []
-        for leaves in doc.line_values.get(array, []):
+        rows = doc.line_rows.get(array) or []
+        for i, leaves in enumerate(doc.line_values.get(array, [])):
             line: dict = {}
             for leaf, value in leaves.items():
                 imp._set_path(line, leaf, value)
             for path, value in mapping.constants.items():
                 if path.startswith(array + '[].') and imp._get_path(line, path.split('[].', 1)[1]) is None:
                     imp._set_path(line, path.split('[].', 1)[1], value)
+            _line_amounts(doc, line, rows[i] if i < len(rows) else doc.row_no, column_of, array, places)
             lines.append(line)
         if lines:
             payload[array] = lines
@@ -161,6 +223,43 @@ def _finish(imp, kind: kinds.DocKind, doc, mapping, column_of: dict) -> None:
                                  'row': first, 'message': f'blank, and `{kind.create}` requires {name}'})
     doc.payload = payload
     imp._settle(doc)
+
+
+def _line_amounts(doc, line: dict, row: int, column_of: dict, array: str, places: int) -> None:
+    """A line's amount columns as its command takes them. A Debit and a Credit column (a journal) become the line's
+    side and amount. A sales line with a Rate and an Amount sends the rate only, as typing does (the command refuses
+    both), and the Amount must be Qty x Rate as the command extends it (half to even, once), exactly."""
+    debit, credit = line.pop('debit', None), line.pop('credit', None)
+    if debit is not None or credit is not None:
+        if debit is not None and credit is not None:
+            doc.problems.append({'column': column_of.get(f'{array}[].credit'), 'code': 'E_VALIDATION',
+                                 'value': credit, 'row': row,
+                                 'message': 'a journal line is a debit or a credit: fill one of its two columns'})
+        elif 'side' in line or 'amount' in line:
+            doc.problems.append({'column': column_of.get(f'{array}[].side') or column_of.get(f'{array}[].amount'),
+                                 'code': 'E_VALIDATION', 'value': line.get('side') or line.get('amount') or '',
+                                 'row': row, 'message': 'give a line its side either by a Debit or Credit column or '
+                                                        'by a side and an amount, not both'})
+        else:
+            line['side'], line['amount'] = ('debit', debit) if debit is not None else ('credit', credit)
+    if 'unit_price' in line and 'net_amount' in line:
+        from bookflow.core import exact, unit_price
+        amount = line.pop('net_amount')
+        try:
+            quantity = exact.parse_quantity_micro_units(line.get('quantity') or '1')
+            price = tabular.parse_money(line['unit_price'], places + unit_price.EXTRA_PLACES)
+            given = tabular.parse_money(amount, places)
+        except (BookflowError, tabular.CellError, ValueError):
+            return  # the cells' own problems are reported where they were read
+        if price is None or given is None:
+            return
+        extended = unit_price.extension(quantity, price)
+        if extended != given:
+            doc.problems.append({
+                'column': column_of.get(f'{array}[].net_amount'), 'code': 'amount_mismatch', 'value': amount,
+                'row': row, 'message': f"the amount {amount} is not the quantity times the rate "
+                                       f"({line.get('quantity') or '1'} x {line['unit_price']} = "
+                                       f'{tabular.money_text(extended, places)}); correct one of them'})
 
 
 # ------------------------------------------------------------------ the books as documents meet them
@@ -194,14 +293,16 @@ class DocBooks(_imports().Books):
 def _taken_numbers(s, kind: kinds.DocKind) -> dict[str, str]:
     """The numbers the books already use in this kind's series (`E_DUPLICATE_NUMBER` when typed), normalized, with
     the status of the document holding each: a deleted document keeps its number in its history."""
-    if 'number' not in kinds.fields(kind.name):
-        return {}
+    if 'number' not in kinds.fields(kind.name) or kind.name == 'check':
+        return {}  # a cheque's number is held per bank account (`_check_number`)
     table = c.metadata.tables[kind.table]
     family = NUMBER_FAMILIES.get(kind.family, (kind.family,))
     status = table.c.status if 'status' in table.c else sa.literal('')
     imp = _imports()
-    rows = s.company.conn.execute(sa.select(table.c.number, status, table.c.id).where(
-        table.c[kind.type_column].in_(family), table.c.number.is_not(None))).all()
+    kept = [table.c.number.is_not(None)]
+    if kind.type_column is not None:
+        kept.append(table.c[kind.type_column].in_(family))
+    rows = s.company.conn.execute(sa.select(table.c.number, status, table.c.id).where(*kept)).all()
     gone = deleted_ids(s, [r[2] for r in rows])
     return {imp.norm_key(n): 'deleted' if i in gone else (st or '') for n, st, i in rows}
 
@@ -302,8 +403,10 @@ def resolve_payload(books, kind, payload: dict, columns: dict, decided: dict | N
 
 def check_documents(s, kind: kinds.DocKind, table: tabular.Table, mapping, docs: list, books) -> None:
     """What the command would refuse, found without running it: each document's input through the command's own
-    input model; a reference to an inactive record; a number the books already use; a journal that does not
-    balance; a payment's invoices (found by number, the payment's customer's, open) and amounts that exceed it."""
+    input model; a reference to an inactive record, or a payee no name list holds; a date in a closed period; a
+    number the books or another document of the file already use (a cheque's per bank account, as the command
+    compares it); a journal that does not balance; a payment's invoices (found by number, the payment's customer's,
+    open) and what the whole file applies to each against its open balance."""
     from bookflow.core import registry
     from bookflow.core.dispatch import validate_input
     imp = _imports()
@@ -311,6 +414,8 @@ def check_documents(s, kind: kinds.DocKind, table: tabular.Table, mapping, docs:
     columns = {p: table.headers[i] for i, p in mapping.columns.items()}
     position = {p: i for i, p in mapping.columns.items()}
     places = imp._places(s)
+    in_file: dict = {}  # a number (or a cheque's account and number) -> the first file row holding it
+    applied: dict[str, int] = {}  # an invoice's id -> what the file's payments apply to it, in minor units
     for doc in docs:
         payload = doc.payload
         if payload is None or doc.key_hash in books.ledger:
@@ -334,12 +439,22 @@ def check_documents(s, kind: kinds.DocKind, table: tabular.Table, mapping, docs:
                                      'row': row or first,
                                      'message': f"{target.replace('-', ' ')} {value!r} is inactive; a document must "
                                                 'name an active record'})
-        number = payload.get('number')
-        if isinstance(number, str) and imp.norm_key(number) in books.taken:
-            held = books.taken[imp.norm_key(number)]
-            problem('number', 'E_DUPLICATE_NUMBER', f'{kind.name.replace("-", " ")} {number} is already in the books'
-                    + (' (a deleted document keeps its number in its history; give this one another number)'
-                       if held == 'deleted' else '; a document takes a free number'))
+        payee = payload.get('pay_to') if isinstance(payload.get('pay_to'), dict) else {}
+        if isinstance(payee.get('name_id'), str):
+            noun = str(payee.get('name_type') or 'vendor').replace('_', '-')
+            if books.resolve(noun, payee['name_id']) is None:
+                problem('pay_to.name_id', 'unknown_reference', f"no {noun.replace('-', ' ')} is named "
+                        f"{payee['name_id']!r}; a payee is a vendor, customer, employee or other name already in "
+                        'the books')
+        if kind.name not in UNPOSTED and isinstance(payload.get('date'), str):
+            from bookflow.company import journals
+            try:
+                journals.open_dates(s, [payload['date']])
+            except BookflowError as error:
+                closing = (error.details or {}).get('closing_date')
+                problem('date', error.code, f"{payload['date']} is in a closed period (the books are closed through "
+                                            f'{closing}); date the document after it' if closing else error.message)
+        _check_number(s, kind, payload, books, problem, in_file, first)
         if kind.name == 'journal':
             sides = {'debit': 0, 'credit': 0}
             for line in payload.get('lines') or []:
@@ -349,7 +464,7 @@ def check_documents(s, kind: kinds.DocKind, table: tabular.Table, mapping, docs:
                 problem(None, 'unbalanced', f"the entry does not balance: debits {tabular.money_text(sides['debit'], places)}, "
                                             f"credits {tabular.money_text(sides['credit'], places)}")
         if kind.name in ('payment', 'bill-payment'):
-            _check_applications(s, kind, payload, books, problem, places)
+            _check_applications(s, kind, payload, books, problem, places, applied)
         body = command_body(kind, payload, placeholder=True)
         try:
             validate_input(command, body)
@@ -363,10 +478,57 @@ def check_documents(s, kind: kinds.DocKind, table: tabular.Table, mapping, docs:
         imp._settle(doc)
 
 
-def _check_applications(s, kind, payload: dict, books, problem, places: int) -> None:
+# Documents that post nothing, so the closing date does not bar them (as typing them is not barred).
+UNPOSTED = frozenset(('estimate', 'sales-order', 'purchase-order'))
+
+
+def _check_number(s, kind, payload: dict, books, problem, in_file: dict, first: int) -> None:
+    """A number the books already use in this document's series, or another document of the file: a cheque's
+    compared per bank account with leading zeros ignored (`check_numbers.canonical`), as `check post` compares it."""
+    imp = _imports()
+    number = payload.get('number')
+    if not isinstance(number, str) or not number.strip():
+        return
+    label = kind.name.replace('-', ' ')
+    if kind.name == 'check':
+        from bookflow.company import check_numbers
+        account = books.resolve('account', payload['account']) if isinstance(payload.get('account'), str) else None
+        if account is None:
+            return
+        try:
+            _, key, _ = check_numbers.canonical(number)
+        except BookflowError:
+            return  # the input model names it
+        held = check_numbers._held(s, account, key)
+        if held:
+            problem('number', 'E_DUPLICATE_NUMBER', f"check number {number} is already on a cheque drawn on "
+                    f"{payload['account']!r} (number {held.get('check_number')}); two cheques cannot carry one "
+                    'number on one bank account')
+            return
+        seen_key = ('check', account, key)
+    else:
+        if imp.norm_key(number) in books.taken:
+            held = books.taken[imp.norm_key(number)]
+            problem('number', 'E_DUPLICATE_NUMBER', f'{label} {number} is already in the books'
+                    + (' (a deleted document keeps its number in its history; give this one another number)'
+                       if held == 'deleted' else '; a document takes a free number'))
+            return
+        seen_key = ('number', imp.norm_key(number))
+    if seen_key in in_file:
+        problem('number', 'E_DUPLICATE_NUMBER', f'{label} number {number} is on two documents of this file (rows '
+                f'{in_file[seen_key]} and {first}); each document takes its own number')
+    else:
+        in_file[seen_key] = first
+
+
+def _check_applications(s, kind, payload: dict, books, problem, places: int, applied: dict) -> None:
+    """A payment's invoices (a bill payment's bills) by number: in the books, open, the payment's customer's; and
+    for a payment, what it applies to each, added to what the file's earlier payments apply, within its open balance
+    (`E_APPLICATION_CAPACITY` at the run otherwise)."""
     array, leaf = ('applications', 'invoice') if kind.name == 'payment' else ('bills', 'bill')
     lines = payload.get(array) or []
     customer = books.resolve('customer', payload['customer']) if isinstance(payload.get('customer'), str) else None
+    amount = tabular.parse_money(payload['amount'], places) if isinstance(payload.get('amount'), str) else None
     total = 0
     for i, line in enumerate(lines):
         number = line.get(leaf)
@@ -376,16 +538,31 @@ def _check_applications(s, kind, payload: dict, books, problem, places: int) -> 
         path = f'{array}[].{leaf}'
         if found is None or found['status'] in ('deleted', 'voided'):
             problem(path, 'unknown_reference', f'no {leaf} {number!r} in the books', line_index=i)
+            found = None
         elif leaf == 'invoice' and customer is not None and found.get('customer_id') not in (None, customer):
             problem(path, 'E_VALIDATION', f"invoice {number} is another customer's, not {payload['customer']!r}",
                     line_index=i)
+        share = tabular.parse_money(line['amount'], places) if isinstance(line.get('amount'), str) else (
+            amount if len(lines) == 1 else None)
         if isinstance(line.get('amount'), str):
-            total += tabular.parse_money(line['amount'], places) or 0
+            total += share or 0
+        if leaf == 'invoice' and found is not None and share:
+            from bookflow.company import payment_queries
+            try:
+                due = payment_queries.invoice_current(s, found['id'])['due_minor_units']
+            except BookflowError:
+                continue
+            so_far = applied.get(found['id'], 0) + share
+            applied[found['id']] = so_far
+            if so_far > due:
+                problem(f'{array}[].amount', 'E_APPLICATION_CAPACITY',
+                        f'invoice {number} has {tabular.money_text(due, places)} open, and this file applies '
+                        f'{tabular.money_text(so_far, places)} to it'
+                        + (' over more than one payment' if so_far != share else ''), line_index=i)
     if kind.name == 'payment':
         if len(lines) > 1 and any(not isinstance(line.get('amount'), str) for line in lines):
             problem(f'{array}[].amount', 'E_VALIDATION', 'a payment applied to more than one invoice needs the '
                                                          'amount applied to each')
-        amount = tabular.parse_money(payload['amount'], places) if isinstance(payload.get('amount'), str) else None
         if amount is not None and total > amount:
             problem(f'{array}[].amount', 'E_VALIDATION', f'the amounts applied ({tabular.money_text(total, places)}) '
                                                          f'exceed the payment ({payload["amount"]})')

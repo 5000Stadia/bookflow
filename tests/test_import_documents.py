@@ -148,7 +148,7 @@ def test_a_wrong_customer_document_is_refused_whole(books):
 def test_a_document_continues_on_rows_whose_key_is_blank_and_its_lines_keep_file_order(books):
     content = text(['Num', 'Customer', 'Date', 'Item', 'Amount'],
                    [['A-1', 'Acme Plumbing', '2026-03-01', 'Labor', '100.00'], ['', '', '', 'Parts', '5.00'],
-                    ['B-1', 'Bolt Electric', '2026-03-02', 'Labor', '50.00'], ['A-1', '', '', 'Trip charge', '35.00']])
+                    ['A-1', '', '', 'Trip charge', '35.00'], ['B-1', 'Bolt Electric', '2026-03-02', 'Labor', '50.00']])
     preview = books.run('import preview', {'kind': 'invoice', 'content': content})
     assert preview['counts'] == {'create': 2}
     run_all(books, preview['run']['id'])
@@ -552,3 +552,237 @@ def test_seeded_document_imports_payments_and_reversals_keep_the_invariants(book
         assert net.get(receivable, 0) == sum(dues.values())
     print(f'seeded documents {seed}: {totals}')
     assert totals['invoices'] and totals['payments']
+
+
+# ------------------------------------------------------------------ the increment 4 review (notes/reviews/r107-inc4-review.md)
+
+PAY = ['Customer', 'Date', 'Amount', 'Reference', 'Method', 'Deposit To', 'Invoice No', 'Applied']
+
+
+def _due(books, number):
+    return books.run('invoice show', {'invoice': number})['settlement_current']['due_minor_units']
+
+
+def _payments(books):
+    """(number, deleted) of every payment, from the books."""
+    with db(books) as conn:
+        gone = {r[0] for r in conn.execute('SELECT transaction_id FROM payment_deletions')}
+        return [(n, i in gone) for n, i in conn.execute("SELECT number, id FROM transactions WHERE type = 'payment'")]
+
+
+def test_an_atomic_run_called_without_a_reason_still_undoes_everything_it_made(books):
+    """High 1: the undo runs its nested deletes under the run's stored reason, not the run call's (none here)."""
+    run_all(books, books.run('import preview', {'kind': 'invoice', 'content': text(
+        SALE[:6], [['P-3', 'Acme Plumbing', '2026-03-01', 'Labor', '1', '100'],
+                   ['P-5', 'Acme Plumbing', '2026-03-01', 'Labor', '1', '100']])})['run']['id'])
+    content = text(PAY, [['Acme Plumbing', '2026-03-05', '100.00', 'R0', 'Check', 'Undeposited Funds', 'P-5', '100.00'],
+                         ['Acme Plumbing', '2026-03-06', '60.00', 'R3', 'Check', 'Undeposited Funds', 'P-3', '60.00']])
+    preview = books.run('import preview', {'kind': 'payment', 'content': content}, reason='Payments from the bank')
+    # Between the preview and the run, P-3 is part paid by hand: R3 no longer fits and is refused at the run.
+    p3 = books.run('invoice show', {'invoice': 'P-3'})
+    books.run('payment receive', {'customer': 'Acme Plumbing', 'date': '2026-03-05', 'amount': '60.00',
+                                  'deposit_to': 'Undeposited Funds', 'operation_key': 'typed-p3',
+                                  'payment_method': 'Check',
+                                  'applications': {'mode': 'inline', 'items': [
+                                      {'invoice': p3['id'], 'expected_version': p3['version'], 'amount': '60.00'}]}})
+    done = run_all(books, preview['run']['id'])  # no reason on the run call
+    assert done['run']['state'] == 'rolled_back', done['notes']
+    assert [deleted for _, deleted in _payments(books)].count(False) == 1  # only the typed one stands
+    assert _due(books, 'P-5') == 10000 and _due(books, 'P-3') == 4000
+
+
+def _reverse(books, run_id):
+    return books.run('import reverse', {'run': run_id}, reason='Wrong file')['state']
+
+
+def _nets(books):
+    with db(books) as conn:
+        rows = conn.execute('SELECT account_id, debit_minor_units, credit_minor_units FROM posting_lines').fetchall()
+    net = {}
+    for account, d, c in rows:
+        net[account] = net.get(account, 0) + (d or 0) - (c or 0)
+    return {k: v for k, v in net.items() if v}
+
+
+@pytest.mark.parametrize('kind', sorted(KINDS))
+def test_every_kind_imports_reverses_to_the_exact_prior_state_and_a_corrected_file_imports_again(books, kind):
+    """High 2 and 3: a bill payment is unapplied then voided; a purchase order is found in its own table."""
+    setup, header, rows, _ = KINDS[kind]
+    if setup is not None:
+        setup(books)
+
+    def content(n):
+        return text(header, [[cell.replace('{n}', n) for cell in row] for row in rows])
+    before = _nets(books)
+    preview = books.run('import preview', {'kind': kind, 'content': content('IMP-1'), 'key_by_content': True})
+    assert run_all(books, preview['run']['id'], key_by_content=True)['counts']['created'] == 1
+    assert _reverse(books, preview['run']['id']) == 'reversed'
+    assert _nets(books) == before
+    # The corrected file (a new number where the kind has one: see "Number reuse" in As built) imports again.
+    check = books.run('import check', {'kind': kind, 'content': content('IMP-2'), 'key_by_content': True})
+    assert check['ok'], check['summary']
+    again = books.run('import preview', {'kind': kind, 'content': content('IMP-2'), 'key_by_content': True})
+    assert run_all(books, again['run']['id'], key_by_content=True)['counts']['created'] == 1
+
+
+def test_a_purchase_order_number_the_books_use_is_refused_in_the_check(books):
+    _inventory(books)
+    header = ['PO No', 'Vendor', 'Date', 'Item', 'Qty', 'Cost']
+    run_all(books, books.run('import preview', {'kind': 'purchase-order', 'content': text(
+        header, [['PO-1', 'Northside Supply', '2026-03-01', 'Widget', '10', '8']])})['run']['id'])
+    check = books.run('import check', {'kind': 'purchase-order', 'source': 'other', 'content': text(
+        header, [['PO-1', 'Northside Supply', '2026-03-02', 'Widget', '5', '8']])})
+    assert [g['code'] for g in check['problems']] == ['E_DUPLICATE_NUMBER']
+
+
+def _codes(books, kind, content, **extra):
+    check = books.run('import check', {'kind': kind, 'content': content, **extra})
+    return {g['code'] for g in check['problems']} | {'unknown_reference' for _ in check['to_decide']}, check
+
+
+def test_the_check_catches_what_the_run_would_refuse(books):
+    """Medium 4: each of these passed the check and was refused only at the run."""
+    run = books.run
+    run_all(books, run('import preview', {'kind': 'invoice', 'content': text(SALE[:6], [
+        ['P-1', 'Acme Plumbing', '2026-03-01', 'Labor', '1', '100'],
+        ['P-3', 'Acme Plumbing', '2026-03-01', 'Labor', '1', '100']])})['run']['id'])
+    # A payment above the invoice's open balance, alone and as two payments of one file.
+    codes, _ = _codes(books, 'payment', text(PAY, [
+        ['Acme Plumbing', '2026-03-05', '150.00', 'R1', 'Check', 'Undeposited Funds', 'P-1', '150.00']]))
+    assert 'E_APPLICATION_CAPACITY' in codes
+    codes, check = _codes(books, 'payment', text(PAY, [
+        ['Acme Plumbing', '2026-03-06', '60.00', 'R3', 'Check', 'Undeposited Funds', 'P-3', '60.00'],
+        ['Acme Plumbing', '2026-03-07', '60.00', 'R4', 'Check', 'Undeposited Funds', 'P-3', '60.00']]))
+    assert codes == {'E_APPLICATION_CAPACITY'} and check['problems'][0]['rows'] == [2], check['summary']
+    # An unknown line tax code, and a check payee no name list holds.
+    codes, _ = _codes(books, 'invoice', text(SALE[:6] + ['Tax Code'], [
+        ['T-1', 'Acme Plumbing', '2026-03-01', 'Labor', '1', '5', 'ZZZ']]))
+    assert codes == {'unknown_reference'}
+    cheque = ['Bank Account', 'Check No', 'Date', 'Amount', 'Payee', 'Expense Account', 'Line Amount']
+    codes, _ = _codes(books, 'check', text(cheque, [
+        ['Checking', '1001', '2026-03-05', '10.00', 'Nobody Inc', 'Utilities', '10.00']]))
+    assert codes == {'unknown_reference'}
+    # Check numbers equal once leading zeros are off, on one account; another account may use it.
+    run_all(books, run('import preview', {'kind': 'check', 'content': text(cheque, [
+        ['Checking', '1001', '2026-03-05', '10.00', 'Northside Supply', 'Utilities', '10.00']])})['run']['id'])
+    codes, _ = _codes(books, 'check', text(cheque, [
+        ['Checking', '01001', '2026-03-06', '5.00', 'Northside Supply', 'Utilities', '5.00']]), source='other')
+    assert codes == {'E_DUPLICATE_NUMBER'}
+    run('account create', {'name': 'Savings Checking', 'type': 'bank'})
+    codes, _ = _codes(books, 'check', text(cheque, [
+        ['Savings Checking', '1001', '2026-03-06', '5.00', 'Northside Supply', 'Utilities', '5.00'],
+        ['Savings Checking', '01001', '2026-03-07', '5.00', 'Northside Supply', 'Utilities', '5.00']]))
+    assert codes == {'E_DUPLICATE_NUMBER'}  # the second row's cheque, within the file
+    # One bill number on two bills of the file (different vendor references).
+    codes, check = _codes(books, 'bill', text(['Vendor', 'Ref No', 'Num', 'Date', 'Account', 'Amount'], [
+        ['Northside Supply', 'V1', 'N-1', '2026-03-06', 'Utilities', '5.00'],
+        ['Northside Supply', 'V2', 'N-1', '2026-03-06', 'Utilities', '6.00']]))
+    assert codes == {'E_DUPLICATE_NUMBER'} and check['problems'][0]['rows'] == [2]
+    # A closed period, for each kind that posts.
+    books.client.company.update(company=books.company, closing_date='2026-01-31', expected_version=None,
+                                reason='Close January')
+    for kind, content in (
+            ('invoice', text(SALE[:6], [['C-1', 'Acme Plumbing', '2026-01-15', 'Labor', '1', '5']])),
+            ('journal', text(['Num', 'Date', 'Account', 'Side', 'Amount'], [
+                ['J-1', '2026-01-15', 'Rent', 'debit', '5'], ['J-1', '2026-01-15', 'Checking', 'credit', '5']])),
+            ('bill', text(['Vendor', 'Ref', 'Date', 'Account', 'Amount'],
+                          [['Northside Supply', 'R1', '2026-01-15', 'Utilities', '5']]))):
+        codes, _ = _codes(books, kind, content)
+        assert codes == {'E_PERIOD_CLOSED'}, kind
+
+
+def test_two_equal_payments_without_a_reference_are_refused_never_merged(books):
+    """Medium 5: grouping by customer, date and amount alone lost $30 of cash in one payment."""
+    _invoices(books)
+    no_ref = [h for h in PAY if h != 'Reference']
+    content = text(no_ref, [['Acme Plumbing', '2026-04-09', '30.00', 'Check', 'Undeposited Funds', 'P-1', '15.00'],
+                            ['Acme Plumbing', '2026-04-09', '30.00', 'Check', 'Undeposited Funds', 'P-2', '15.00']])
+    codes, check = _codes(books, 'payment', content)
+    assert codes == {'ambiguous_payment'} and 'reference column' in check['problems'][0]['message']
+    # Its later rows' customer, date and amount left blank: one payment over two invoices.
+    one = text(no_ref, [['Acme Plumbing', '2026-04-09', '30.00', 'Check', 'Undeposited Funds', 'P-1', '15.00'],
+                        ['', '', '', '', '', 'P-2', '15.00']])
+    preview = books.run('import preview', {'kind': 'payment', 'content': one})
+    assert preview['counts'] == {'create': 1}
+    # A reference written on the first row only does not split one payment into two.
+    first_only = text(PAY, [['Acme Plumbing', '2026-04-10', '20.00', '881', 'Check', 'Undeposited Funds', 'P-1', '10.00'],
+                            ['Acme Plumbing', '2026-04-10', '20.00', '', 'Check', 'Undeposited Funds', 'P-2', '10.00']])
+    preview = books.run('import preview', {'kind': 'payment', 'content': first_only})
+    assert preview['counts'] == {'create': 1}
+    run_all(books, preview['run']['id'])
+    assert [deleted for _, deleted in _payments(books)] == [False]
+    assert _due(books, 'P-1') == _due(books, 'P-2') == 8500 - 1000
+
+
+def test_create_missing_holds_look_alikes_of_each_other_and_of_the_books(books):
+    """Medium 6: in-file look-alikes, word order and small misspellings are held; nothing is made unseen."""
+    content = text(SALE[:6], [['Z-1', 'Zeta Supply', '2026-03-01', 'Labor', '1', '5'],
+                              ['Z-2', 'ZETA Supply Inc.', '2026-03-01', 'Labor', '1', '5'],
+                              ['Z-3', 'Plumbing, Acme', '2026-03-01', 'Labor', '1', '5'],
+                              ['Z-4', 'Bolt Electrik', '2026-03-01', 'Labor', '1', '5'],
+                              ['Z-5', 'Quill Paper', '2026-03-01', 'Labor', '1', '5']])
+    preview = books.run('import preview', {'kind': 'invoice', 'content': content, 'create_missing': True})
+    held = {n.split("'")[1] for n in preview['notes'] if 'was not created' in n}
+    assert held == {'Zeta Supply', 'ZETA Supply Inc.', 'Plumbing, Acme', 'Bolt Electrik'}
+    books.run('import decide', {'run': preview['run']['id'], 'skip': sorted(held)})
+    run_all(books, preview['run']['id'])
+    names = {r.get('full_name') or r.get('display_name') for r in books.run('customer query', {'limit': 50})['items']}
+    assert names == {'Acme Plumbing', 'Bolt Electric', 'Cedar Homes', 'Quill Paper'}
+
+
+def test_a_caller_who_cannot_read_the_list_is_refused_never_given_a_silent_create(books):
+    from tests.conftest import as_user, make_actor
+    make_actor(Path(books.root), 'clerk')
+    books.client.run('membership grant', {'user': 'clerk', 'company': books.company, 'role': 'standard',
+                                          'expected_version': 0, 'denies': ['customer']})
+    clerk = as_user(Path(books.root), 'clerk')
+    content = text(SALE[:6], [['N-1', 'Acme Plumbng', '2026-03-01', 'Labor', '1', '5']])
+    preview = clerk.run('import preview', {'kind': 'invoice', 'content': content, 'create_missing': True},
+                        company=books.company)
+    assert preview['run']['state'] == 'waiting'
+    assert any('may not read the customer list' in n for n in preview['notes'])
+    with pytest.raises(BookflowError) as caught:
+        clerk.run('import decide', {'run': preview['run']['id'], 'create': ['Acme Plumbng']}, company=books.company)
+    assert caught.value.code == 'E_PERMISSION'
+    names = {r.get('full_name') or r.get('display_name') for r in books.run('customer query', {'limit': 50})['items']}
+    assert 'Acme Plumbng' not in names
+
+
+def test_rate_and_amount_columns_debit_and_credit_columns_and_rows_that_must_stay_together(books):
+    """Lows: a QuickBooks Qty/Rate/Amount file, a Debit/Credit journal, a blank-key row after a refused row, and a
+    key repeated after another document."""
+    header = SALE[:6] + ['Amount']
+    good = text(header, [['M-1', 'Acme Plumbing', '2026-03-01', 'Parts', '3', '12.335', '37.00']])
+    preview = books.run('import preview', {'kind': 'invoice', 'content': good})
+    assert preview['counts'] == {'create': 1}
+    run_all(books, preview['run']['id'])
+    assert books.run('invoice show', {'invoice': 'M-1'})['total']['amount'] == '37.00'
+    codes, check = _codes(books, 'invoice', text(header, [
+        ['M-2', 'Acme Plumbing', '2026-03-01', 'Parts', '3', '12.335', '99.99']]))
+    assert codes == {'amount_mismatch'} and '37.00' in check['problems'][0]['message']
+    journal = text(['Num', 'Date', 'Account', 'Debit', 'Credit'], [['J-4', '2026-03-01', 'Rent', '5.00', ''],
+                                                                   ['J-4', '2026-03-01', 'Checking', '', '5.00']])
+    preview = books.run('import preview', {'kind': 'journal', 'content': journal})
+    assert preview['counts'] == {'create': 1}, preview.get('refused')
+    run_all(books, preview['run']['id'])
+    shown = books.run('journal show', {'journal': 'J-4'})
+    assert sorted(line['side'] for line in shown['revision']['lines']) == ['credit', 'debit']
+    # A blank-key row under a row with the wrong number of cells stays with that refused row.
+    ragged = 'Num,Customer,Date,Item,Qty,Rate\nA-9,Acme Plumbing,2026-03-01,Labor,1,5\nB-9,Bolt Electric\n,,,Parts,1,5\n'
+    preview = books.run('import preview', {'kind': 'invoice', 'content': ragged, 'partial': True})
+    assert preview['counts'] == {'create': 1, 'refused': 1}
+    run_all(books, preview['run']['id'])
+    assert [x[0] for x in invoice_lines(books, 'A-9')] == ['Labor']
+    # A key that comes back after another document refuses that document whole.
+    apart = text(SALE[:6], [['A-1', 'Acme Plumbing', '2026-03-01', 'Labor', '1', '5'],
+                            ['B-1', 'Bolt Electric', '2026-03-01', 'Labor', '1', '5'],
+                            ['A-1', 'Acme Plumbing', '2026-03-01', 'Parts', '1', '5']])
+    codes, check = _codes(books, 'invoice', apart)
+    assert codes == {'key_apart'} and check['documents_with_problems'] == 1
+
+
+def test_an_estimate_line_cost_and_markup_are_typed_as_money_and_percent():
+    from bookflow.company import import_kinds
+    fields = import_kinds.fields('estimate')
+    assert fields['lines[].estimated_unit_cost'].type == 'money'
+    assert fields['lines[].markup_percent'].type == 'decimal'

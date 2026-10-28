@@ -7,6 +7,8 @@ authority), atomicity, and no effect without its write.
 import dataclasses
 from pathlib import Path
 
+import re
+
 import pytest
 
 from bookflow import BookflowError
@@ -170,8 +172,16 @@ def test_co0108_ddl_is_the_metadata():
     from sqlalchemy.schema import CreateIndex, CreateTable
     from bookflow.company import schema as c
     m = importlib.import_module('bookflow.storage.company_migrations.versions.0108_batches_imports')
-    assert m.DDL == tuple(str(CreateTable(c.metadata.tables[t]).compile(dialect=dialect()))
-                          for t in reversed(m.TABLES))
+    # Columns a later migration added (co0113: import_rows.spans) are left out: co0108 created the tables without them.
+    later = importlib.import_module('bookflow.storage.company_migrations.versions.0113_import_documents').COLUMNS
+
+    def as_created(name):
+        ddl = str(CreateTable(c.metadata.tables[name]).compile(dialect=dialect()))
+        for table, column in later:
+            if table == name:
+                ddl = re.sub(rf'\n\t{column} [^\n]*?, ', '', ddl, count=1)
+        return ddl
+    assert m.DDL == tuple(as_created(t) for t in reversed(m.TABLES))
     assert set(m.INDEXES) == {str(CreateIndex(i).compile(dialect=dialect())) for t in m.TABLES
                               for i in c.metadata.tables[t].indexes}
     paths = {str(CreateIndex(i).compile(dialect=dialect())) for t in c.metadata.tables.values()

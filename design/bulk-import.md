@@ -1048,19 +1048,62 @@ Each finding has a test that failed before its fix (`test_import_rules.py`, `tes
   caller's own explicit delete grant. A payment the batch made is unapplied first (`payment unapply`), then deleted;
   its later step's grant is checked in the plan. A document is **in use** while a standing payment or credit is applied
   to it (`applications`, `ap_applications`, not reversed, the payer not voided), and the blocker names the payment
-  (`invoice INV-1 is in use: payment 1 refer to it`) unless the same batch made it. **Edited again** for a document is
+  (`invoice INV-1 is in use: payment 1 refers to it`) unless the same batch made it. **Edited again** for a document is
   a revision after its first (a settlement changes its version, not its revisions). The released keys let the same
   file preview as new, but a deleted document keeps its number, so the corrected file needs new numbers; the check
-  says so. Decided: not changing the commands' number rule (a deleted invoice's number stays in its history).
+  says so. A bill payment the batch made is unapplied (`bill payment unapply`) and then voided, as a bank import's
+  reversal does; a purchase order is read from `purchase_orders` and its revisions from `purchase_order_revisions`.
+  An all-or-nothing undo (a refusal mid-run, or a cancel) runs its nested deletes under the run's stored reason, so
+  a run called without one still lands nothing.
 - **Kabe's 2026-10-28 ruling** replaces `approve` and the agent threshold (§11, increment 4): no size threshold, no
   `import.approve` wait; the rule for an import that sets how the business works is in the agent guide ("Importing
   invoices, bills or payments from a file"). Decided: an invoice line with no item is refused by `invoice post`
   itself (its line requires an item), so the import refuses it too, never stricter or looser than typing; a constant
   (`constants {"lines[].item": "Services"}`) fills blank items when the person wants description-and-amount lines.
-- **Permissions:** layer `import-documents-v1` on `bank-feed-v1` (826 commands, descriptor ac0f7050) adds no command,
+- **Permissions:** layer `import-documents-v1` on `bank-feed-reverse-v1` (828 commands, descriptor 6418e208, re-chained at the merge of main 5de700e0; `require_read` pinned at batches.py 381/383) adds no command,
   capability or default; it re-declares `batches.require_read` with the document kinds' `show` reads (`ledger.read`,
   `customer-work` at member). No new write command, so the importable table is unchanged apart from the 14 commands
   leaving `PLANNED`.
+- **The review of increment 4** (`notes/reviews/r107-inc4-review.md`; each reproduced probe is a test in
+  `tests/test_import_documents.py`, failing before the fix):
+  - *The check catches what the run would refuse*, now also: a date on or before the closing date (posting kinds;
+    estimates, sales orders and purchase orders post nothing), an unknown line or customer tax code (a reference to
+    the sales tax code list, so it is a decision like any unknown name), a cheque payee no name list holds, what the
+    whole file's payments apply to an invoice against its open balance (`E_APPLICATION_CAPACITY`; two payments of one
+    file that together overpay it are caught, not only each alone), a cheque number already on that bank account
+    with leading zeros ignored (`check_numbers.canonical`, the command's own key) or on another cheque of the file,
+    and a number on two documents of the file (a bill keyed by vendor and reference).
+  - *Payments group only by an explicit key.* Decided: a mapped payment number or reference (with the customer)
+    makes rows one payment; a row naming no reference under a payment that has one continues it when its customer,
+    date and amount are blank or the same (the reference written on its first row only); later rows leaving the
+    customer, date and amount blank continue the payment above. Two rows with the same customer, date and amount and
+    no reference are ambiguous (one payment over two invoices, or two equal payments) and both are refused in the
+    check (`ambiguous_payment`: map a reference column, or put one payment per row with its later rows' key cells
+    blank); they are never merged.
+  - *`create_missing` look-alikes.* New names are compared with each other too: two look-alikes in one file are both
+    held, neither made. The look-alike test (`imports.alike`) widens `cutover.alike_names` with word order
+    (`Smith, Bob` / `Bob Smith`) and small misspellings: plural endings off and words sorted, an edit distance of at
+    most 1 in a name of 4 to 7 letters and at most 2 from 8 letters on (`Acme Supply` / `Acme Suplies`); numbers
+    must match exactly. A caller who may not read the customer or vendor list cannot rule a look-alike out, so the
+    preview makes nothing for them (a note says why) and `import decide --create` refuses with `E_PERMISSION`.
+  - *Rows.* A document's rows must be together: decided, a key repeated after another document refuses that
+    document whole (`key_apart`: sort the file by its key columns), rather than gathering it with a warning, since
+    gathering guesses which rows belong where. A blank-key row under a row refused for its width continues that
+    refused row, never the document before it. A sales line with Rate and Amount columns sends the rate only (the
+    command refuses both) and the amount must equal quantity times rate as the command extends it (half to even,
+    once) exactly (`amount_mismatch`); with no Rate column, Amount is the line amount. A journal with a Debit and a
+    Credit column maps (`lines[].debit`, `lines[].credit` become the line's side and amount). An estimate line's
+    estimated unit cost is money (sub-cent, as typed) and its markup percent a decimal.
+  - *Number reuse after reversal: not built.* The Navigator's decision (a deleted document frees its number, a
+    voided one keeps it unless an import reversal voided it; lookups by number prefer the live document) assumed no
+    unique index on document numbers. The books have three: `uq_transaction_type_number` (and
+    `uq_transaction_receivable_number` for invoices and credit memos), `uq_purchase_order_number` and
+    `uq_work_kind_number`, and a deleted document's header is fenced immutable (`*_deletions_transaction_fence`). Reuse
+    needs a migration that replaces those constraints with guard triggers counting standing rows only (rebuilding
+    `transactions`, `purchase_orders` and `work_documents`), or renaming a freed header; that choice is the
+    Navigator's. Until then a reversed import's numbers stay held and the corrected file takes new numbers (the check
+    says so); the command-side changes (live-first lookups, occupancy that skips freed numbers) are ready apart from
+    the schema.
 - **Seeded check** (`test_seeded_document_imports_payments_and_reversals_keep_the_invariants`, seeds 5, 41, 107, 20
   steps each): invoice files from two sources, reruns, partial payments to random open invoices and reversals of
   random live batches; after every step the books balance (Python integers over posting lines), every invoice's due

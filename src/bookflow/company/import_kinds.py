@@ -147,7 +147,7 @@ class DocKind:
     synonyms: dict[str, str] = field(default_factory=dict)
     summary: str = ''
     table: str = 'transactions'
-    type_column: str = 'type'
+    type_column: str | None = 'type'  # None: the table holds this kind alone (purchase_orders)
     money: tuple[str, ...] = ()
     dates: tuple[str, ...] = ()
     decimals: tuple[str, ...] = ()
@@ -225,12 +225,13 @@ DOC_KINDS: dict[str, DocKind] = {k.name: k for k in (
             'purchase-order void', synonyms={**_PURCHASE, 'po no': 'number', 'item': 'lines[].item',
                                              'qty': 'lines[].quantity', 'quantity': 'lines[].quantity',
                                              'cost': 'lines[].rate', 'rate': 'lines[].rate'},
-            summary='Purchase orders, grouped by number.'),
+            table='purchase_orders', type_column=None, summary='Purchase orders, grouped by number.'),
     DocKind('journal', 'journal post', 'journal_entry', 'journal', 'journal', 'journal delete',
             synonyms={'entry no': 'number', 'num': 'number', 'number': 'number', 'date': 'date', 'memo': 'memo',
                       'account': 'lines[].account', 'debit/credit': 'lines[].side', 'side': 'lines[].side',
                       'amount': 'lines[].amount', 'line memo': 'lines[].description',
-                      'description': 'lines[].description', 'class': 'lines[].class_id'},
+                      'description': 'lines[].description', 'class': 'lines[].class_id',
+                      'debit': 'lines[].debit', 'credit': 'lines[].credit'},
             summary='Journal entries, grouped by number; each row a debit or credit line.'),
     DocKind('check', 'check post', 'check', 'check', 'check', 'check delete', lines=('expenses', 'items'),
             key_default=('account', 'number'), key_core=('account', 'number'), synonyms=_SPEND,
@@ -239,7 +240,7 @@ DOC_KINDS: dict[str, DocKind] = {k.name: k for k in (
             lines=('expenses', 'items'), key_default=(), key_core=(), synonyms=_SPEND,
             summary='Card charges; a file has no number for them, so each row is one charge keyed by its content.'),
     DocKind('payment', 'payment receive', 'payment', 'payment', 'payment', 'payment delete', lines=('applications',),
-            key_default=('customer', 'date', 'amount', 'reference'), key_core=('customer', 'date', 'amount'),
+            key_default=('customer', 'date', 'amount', 'reference', 'number'), key_core=('customer', 'date', 'amount'),
             synonyms={'customer': 'customer', 'customer name': 'customer', 'client': 'customer', 'name': 'customer',
                       'date': 'date', 'payment date': 'date', 'amount': 'amount', 'payment amount': 'amount',
                       'total': 'amount', 'reference': 'reference', 'ref no': 'reference', 'check no': 'reference',
@@ -247,8 +248,8 @@ DOC_KINDS: dict[str, DocKind] = {k.name: k for k in (
                       'memo': 'memo', 'invoice': 'applications[].invoice', 'invoice no': 'applications[].invoice',
                       'invoice number': 'applications[].invoice', 'applied': 'applications[].amount',
                       'amount applied': 'applications[].amount'},
-            summary="Customer payments, applied to invoices by number; rows sharing customer, date, amount and "
-                    'reference are one payment.'),
+            summary='Customer payments, applied to invoices by number; rows sharing a reference (or payment number) '
+                    'are one payment, as are later rows leaving customer, date and amount blank.'),
     DocKind('bill-payment', 'bill pay', 'bill_payment', 'bill payment', 'payment', 'bill payment void',
             lines=('bills',), key_default=('date', 'funding_account', 'check_number', 'reference', 'number'),
             key_core=('date', 'funding_account'),
@@ -502,15 +503,17 @@ def required(kind_name: str, mode: str = 'create') -> tuple[str, ...]:
 # A document's fields, by their leaf: money, quantities, dates, and the lists a reference names (the command takes
 # the text and resolves it itself; the check looks it up first). `invoice` and `bill` are documents found by number.
 DOC_MONEY = frozenset(('amount', 'net_amount', 'unit_price', 'unit_cost', 'discount', 'price_basis_amount',
-                       'value_change', 'new_value'))
-DOC_DECIMALS = frozenset(('quantity', 'quantity_change', 'new_quantity', 'percent', 'rate'))
+                       'value_change', 'new_value', 'estimated_unit_cost', 'debit', 'credit'))
+DOC_DECIMALS = frozenset(('quantity', 'quantity_change', 'new_quantity', 'percent', 'rate', 'markup_percent',
+                          'completed_quantity', 'cancelled_quantity'))
 DOC_DATES = frozenset(('date', 'due_date', 'ship_date', 'expires_on', 'expected_date', 'lot_expiry'))
 DOC_REFERENCES = {'customer': 'customer', 'vendor': 'vendor', 'terms': 'term', 'ar_account': 'account',
                   'ap_account': 'account', 'deposit_to': 'account', 'account': 'account', 'funding_account': 'account',
                   'adjustment_account': 'account', 'discount_account': 'account', 'write_off_account': 'account',
                   'class_id': 'class', 'sales_rep': 'sales-rep', 'ship_method': 'ship-method',
                   'payment_method': 'payment-method', 'price_level': 'price-level', 'customer_message': 'customer-message',
-                  'item': 'item', 'invoice': 'invoice', 'bill': 'bill'}
+                  'item': 'item', 'invoice': 'invoice', 'bill': 'bill', 'tax_code': 'sales-tax-code',
+                  'customer_tax_code': 'sales-tax-code'}
 # Inputs a file never gives: replays, fingerprints, defaults switches, a line's id or serials.
 DOC_SKIPPED = frozenset(('operation_key', 'expected_facts_fingerprint', 'custom_field_kinds',
                          'expected_custom_field_kinds', 'use_defaults', 'refresh_defaults', 'count_position',
@@ -575,7 +578,15 @@ def _doc_fields(k: DocKind) -> dict[str, FieldSpec]:
             out[path] = typed(path, name, branch, node, name in required)
 
     add('', schema['properties'], set(schema.get('required', ())))
+    for path in DOC_EXTRA.get(k.name, ()):
+        out[path] = FieldSpec(path, 'money', False, (), None, JOURNAL_SIDES[path])
     return out
+
+
+# A journal file with a Debit and a Credit column: each row's filled one becomes the line's side and amount.
+JOURNAL_SIDES = {'lines[].debit': 'The line amount when it is a debit (a Debit column); becomes side and amount.',
+                 'lines[].credit': 'The line amount when it is a credit (a Credit column); becomes side and amount.'}
+DOC_EXTRA = {'journal': tuple(JOURNAL_SIDES)}
 
 
 def line_array(path: str) -> str | None:

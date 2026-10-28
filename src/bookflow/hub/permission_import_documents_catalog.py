@@ -21,7 +21,7 @@ _PRIOR = next(s for s in previous.CATALOG.conditional_sources if s.owner == _REQ
 CURRENT_SOURCES = (
     *(s for s in previous.CATALOG.conditional_sources if s.owner != _REQUIRE_READ),
     c.ResourceSource(_REQUIRE_READ,
-        (('src/bookflow/company/batches.py', 369), ('src/bookflow/company/batches.py', 371)),
+        (('src/bookflow/company/batches.py', 381), ('src/bookflow/company/batches.py', 383)),
         tuple(sorted({*_PRIOR.requirements, c.Requirement('ledger.read', 'member'),
                       c.Requirement('customer-work', 'member')}, key=lambda r: r.capability))))
 CATALOG = replace(previous.CATALOG, version=c.IMPORT_DOCUMENTS_POLICY_VERSION,

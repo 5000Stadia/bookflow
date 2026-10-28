@@ -40,7 +40,7 @@ REFUSED_SHOWN = 20
 SAMPLE = 5
 WRITES = ('created', 'updated')
 UNIT_PRICES = frozenset(('price', 'cost'))
-DOC_UNIT_PRICES = frozenset(('unit_price', 'unit_cost', 'price_basis_amount', 'rate'))
+DOC_UNIT_PRICES = frozenset(('unit_price', 'unit_cost', 'price_basis_amount', 'rate', 'estimated_unit_cost'))
 INT64_MAX = 2 ** 63 - 1
 PLACEHOLDER_ID = '0' * 26  # what a reference becomes when a row is checked against its command's input model
 # Text fields that are identifiers, numbers or codes rather than words: a stray character refuses, never dropped.
@@ -572,10 +572,9 @@ class Books:
         return list(dict.fromkeys(self.look_alikes(noun, value) + close))[:3]
 
     def look_alikes(self, noun: str, value: str) -> list[str]:
-        from bookflow.company.cutover import alike_names
         if not self.readable(noun):
             return []
-        return [n for n in self.ref_index(noun)['names'] if isinstance(n, str) and alike_names(value, n)][:3]
+        return [n for n in self.ref_index(noun)['names'] if isinstance(n, str) and alike(value, n)][:3]
 
     def add_reference(self, noun: str, name: str, record_id: str) -> None:
         index = self.ref_index(noun)
@@ -1117,7 +1116,8 @@ def _prepare(s, ctx, inp) -> dict:
     batches.require_read(s, f'{kind.noun} show')
     if kinds.is_document(kind) and inp.mode != 'create':
         raise BookflowError('E_VALIDATION', message=(
-            f'A {kind.name.replace("-", " ")} import creates documents only; change one with `{kind.noun} update`.'),
+            f'{article(kind.name).capitalize()} {kind.name.replace("-", " ")} import creates documents only; change '
+            f'one with `{kind.noun} update`.'),
             details={'field': 'mode', 'value': inp.mode})
     table, attachment_name = read_table(s, inp)
     saved, matched, decision = import_mappings.for_file(s, kind, table, inp)
@@ -1273,18 +1273,75 @@ def apply_preview(s, ctx, prepared: dict) -> dict:
 def _create_missing(books, references: list[dict], notes: list[str]) -> list[dict]:
     """`create_missing` (§2): the unknown references an import may make from their name alone, decided `create` at
     the preview and made by their own command when their first row runs. A customer or vendor that looks like an
-    existing one is never made, whoever runs the import: it stays to decide (map it, or create it with its own
-    command). An item or account is never made; a list needing more than a name (terms) stays to decide too."""
+    existing one, or like another new name in the same file, is never made, whoever runs the import: it stays to
+    decide (map it, or create it with its own command). A caller who may not read that list cannot rule a look-alike
+    out, so nothing is made for them either. An item or account is never made; a list needing more than a name
+    (terms) stays to decide too."""
     out = []
+    parties = [r for r in references if r['target'] in ('customer', 'vendor')]
     for ref in references:
         target = ref['target']
-        alike = books.look_alikes(target, ref['value']) if target in ('customer', 'vendor') else []
-        if alike:
-            notes.append(f"{ref['value']!r} was not created: it looks like {', '.join(map(repr, alike))}; map it to "
-                         'one of them, or skip its rows.')
-        elif creatable(target) == 'from the name':
+        if target in ('customer', 'vendor'):
+            if not books.readable(target):
+                notes.append(f"{ref['value']!r} was not created: you may not read the {target} list, so a look-alike "
+                             'of it cannot be ruled out; someone who can creates it, or map it.')
+                continue
+            known = books.look_alikes(target, ref['value'])
+            twins = [r['value'] for r in parties if r is not ref and r['target'] == target
+                     and alike(ref['value'], r['value'])][:3]
+            if known or twins:
+                said = ', '.join(map(repr, known)) if known else ', '.join(map(repr, twins)) + ' in this file'
+                notes.append(f"{ref['value']!r} was not created: it looks like {said}; map it to one of them, or "
+                             'skip its rows.')
+                continue
+        if creatable(target) == 'from the name':
             out.append(ref)
     return out
+
+
+def article(noun: str) -> str:
+    return 'an' if noun[:1].lower() in 'aeiou' else 'a'
+
+
+def _stem(word: str) -> str:
+    """A word with its plural ending off (`supplies` and `supply` are one word to a look-alike test)."""
+    if len(word) > 4 and word.endswith('ies'):
+        return word[:-3] + 'y'
+    if len(word) > 3 and word.endswith('s') and not word.endswith('ss'):
+        return word[:-1]
+    return word
+
+
+def _distance(a: str, b: str) -> int:
+    previous = list(range(len(b) + 1))
+    for i, x in enumerate(a, 1):
+        current = [i]
+        for j, y in enumerate(b, 1):
+            current.append(min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (x != y)))
+        previous = current
+    return previous[-1]
+
+
+def alike(first: str, second: str) -> bool:
+    """Two names that probably mean one party, so an import never makes the second (§2): `cutover`'s test (the
+    same words, an abbreviation, a company suffix), the same words in another order (`Smith, Bob`, `Bob Smith`),
+    or a small misspelling: with plural endings off and the words sorted, at most 1 letter added, dropped or changed
+    in a name of 4 to 7 letters, at most 2 from 8 letters on (`Acme Supply`, `Acme Suplies`). Numbers must match
+    exactly (`Route 59 Auto` is not `Route 69 Auto`). Offered or held only, never mapped on this judgement."""
+    from bookflow.company.cutover import _name_tokens, alike_names
+    if alike_names(first, second):
+        return True
+    a, b = sorted(_stem(w) for w in _name_tokens(first)), sorted(_stem(w) for w in _name_tokens(second))
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    if [w for w in a if any(ch.isdigit() for ch in w)] != [w for w in b if any(ch.isdigit() for ch in w)]:
+        return False
+    x, y = ''.join(a), ''.join(b)
+    shortest = min(len(x), len(y))
+    limit = 2 if shortest >= 8 else 1 if shortest >= 4 else 0
+    return 0 < _distance(x, y) <= limit
 
 
 def _row_values(run_id: str, plan: RowPlan, phase: str, at: str, *, keep: bool = False) -> dict:
@@ -1405,7 +1462,8 @@ def run_slice(s, ctx, inp, *, interrupt=None) -> dict:
     if kinds.is_document(kind) and mapping.get('keyed_by_content') and not (
             mapping.get('key_by_content') or getattr(inp, 'key_by_content', False)):
         raise BookflowError('E_VALIDATION', message=(
-            f"No key column is mapped, so each row is a {kind.name.replace('-', ' ')} keyed by its content: a re-run "
+            f"No key column is mapped, so each row is {article(kind.name)} {kind.name.replace('-', ' ')} keyed by its "
+            "content: a re-run "
             'after an amount is edited would import a second copy. Map the key columns ('
             + (', '.join(kind.key_default) or 'this kind has none') + ') and preview again, or run with key_by_content '
             'to accept it.'), details={'field': 'key_by_content', 'run': run['id']})
@@ -1640,13 +1698,20 @@ def _row_recorder(run: dict, kind: kinds.Kind, plan: RowPlan, before: dict | Non
     return record
 
 
+def _undo_ctx(ctx, run: dict):
+    """The context an all-or-nothing undo runs its nested deletes under: the run's own stored reason (given at the
+    preview or the run that began it), so a run called without one still undoes everything it made."""
+    reason = run.get('reason') or ctx.reason or f"Import run {run['id']} undone"
+    return ctx.model_copy(update={'reason': reason})
+
+
 def _roll_back(s, ctx, run: dict, plan: RowPlan) -> dict:
     """An atomic run met a refusal: undo what it made through its batch, and end it."""
     made = batches.counts(s, run['batch_id'])
     try:
         if made:
-            batches.reverse(s, ctx, run['batch_id'], reason=f'Atomic import stopped at row {plan.row_no}: {plan.code}',
-                            limit=10 ** 9)
+            batches.reverse(s, _undo_ctx(ctx, run), run['batch_id'],
+                            reason=f'Atomic import stopped at row {plan.row_no}: {plan.code}', limit=10 ** 9)
     except BookflowError as error:
         # The undo was refused: the plan is checked whole first, so it changed nothing (or, refused part way, what
         # it undid is recorded and `import reverse` goes on). The run ends `failed` and is never continued.
@@ -1674,7 +1739,8 @@ def cancel(s, ctx, run_id: str) -> dict:
     if run['atomic'] and made:
         # All or nothing: a cancelled run lands nothing, so what its slices made (and any reference a decision
         # created) is undone through its batch first. A refused undo leaves the run as it was.
-        batches.reverse(s, ctx, run['batch_id'], reason=ctx.reason or f'Import run {run_id} cancelled', limit=10 ** 9)
+        batches.reverse(s, _undo_ctx(ctx, run), run['batch_id'], reason=ctx.reason or f'Import run {run_id} cancelled',
+                        limit=10 ** 9)
         run = _run_row(s, run_id)
     _update_run(s, run, state='cancelled')
     out = show(s, ctx, run_id)
