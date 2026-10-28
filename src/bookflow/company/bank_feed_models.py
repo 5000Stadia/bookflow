@@ -192,6 +192,9 @@ class InboxLine(Model):
 
 class ImportShowOutput(Model):
     bank_import: ImportRow
+    part_way: dict | None = Field(None, description=(
+        'A reversal or move of this import under way or blocked: entries taken back and left, the lines still in '
+        'the inbox, the account a move goes to, and `next`, the command that finishes it; null otherwise.'))
     by_state: dict[str, int]
     lines: tuple[InboxLine, ...]
     next_cursor: str | None

@@ -901,7 +901,7 @@ def show(s, import_id: str, *, state=None, limit=100, cursor=None) -> dict:
         q = q.where(c.bank_lines.c.state == state)
     start = _offset(cursor)
     found = s.company.conn.execute(q.order_by(c.bank_lines.c.ordinal).offset(start).limit(limit + 1)).mappings().all()
-    return dict(bank_import=_import_row(s, dict(row)), by_state=by_state,
+    return dict(bank_import=_import_row(s, dict(row)), part_way=_reversal.progress(s, dict(row)), by_state=by_state,
                 lines=tuple(_line_out(dict(v), places) for v in found[:limit]),
                 next_cursor=str(start + limit) if len(found) > limit else None)
 

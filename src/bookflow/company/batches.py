@@ -701,10 +701,11 @@ def refuse(found: dict) -> BookflowError:
 
 def reverse(s, ctx, batch_id: str, *, reason: str | None, dry_run: bool = False, limit: int = DEFAULT_SLICE,
             fingerprint: str | None = None, interrupt: Callable[[int], None] | None = None,
-            then: Callable[[], Any] | None = None) -> dict:
+            then: Callable[[], Any] | None = None, on_begin: Callable[[Any, str], None] | None = None) -> dict:
     """Reverse a batch (or its next slice). ``interrupt`` is a test hook called after each record; ``then`` runs
     inside the transaction that marks the batch reversed (a bank import's move re-imports there), and its result is
-    returned as ``then``.
+    returned as ``then``; ``on_begin(s, reversal_id)`` inside the one that opens the reversal batch (a move keeps its
+    flags there).
 
     The whole plan is probed (every inverse command dry-run) once: by a dry run whose fingerprint the real call
     carries, else by the first slice. A later slice re-checks only what can have changed since: each record's
@@ -726,7 +727,7 @@ def reverse(s, ctx, batch_id: str, *, reason: str | None, dry_run: bool = False,
         return _result(s, found, state=batch['state'], reversed_now=0, dry_run=True)
     if batch['state'] == 'blocked':
         _set_state(s, batch_id, 'reversing')
-    reversal_id = batch['reversed_by'] or _begin(s, ctx, batch, reason)
+    reversal_id = batch['reversed_by'] or _begin(s, ctx, batch, reason, on_begin)
     batch = _batch(s, batch_id)
     work = found['work'][:max(1, limit)]
     reversed_now = 0
@@ -829,7 +830,7 @@ def _reversal_recorder(reversal_id: str, group: dict, index: int, adapter: Adapt
     return record
 
 
-def _begin(s, ctx, batch: dict, reason: str | None) -> str:
+def _begin(s, ctx, batch: dict, reason: str | None, on_begin: Callable[[Any, str], None] | None = None) -> str:
     """Open the reversal batch and mark the batch `reversing` in one transaction; refused if another reversal of it
     began since this call read it."""
     with s.commits.operation(OWNER, s.company):
@@ -847,6 +848,8 @@ def _begin(s, ctx, batch: dict, reason: str | None) -> str:
                                         reason=reason)
             s.company.conn.execute(sa.update(c.batches).where(c.batches.c.id == batch['id']).values(
                 state='reversing', reversed_by=reversal_id, reversed_at=now(), reversal_reason=reason))
+            if on_begin is not None:
+                on_begin(s, reversal_id)
             s.commits.commit(s.company, OWNER)
         except BaseException:
             if s.company.write_transaction:
@@ -863,6 +866,12 @@ def _finish(s, ctx, batch_id: str, reversal_id: str, batch: dict, then: Callable
     with s.commits.operation(OWNER, s.company):
         s.company.raw.execute('BEGIN IMMEDIATE')
         try:
+            # Read again inside the transaction: a second finish (a retry that raced the first) would release the
+            # batch's effects twice and write its records back over later changes.
+            if s.company.conn.execute(sa.select(c.batches.c.state).where(c.batches.c.id == batch_id)).scalar() \
+                    == 'reversed':
+                raise BookflowError('E_VALIDATION', message=f"Batch {batch_id} was already reversed.",
+                                    details={'field': 'batch', 'state': 'reversed'})
             event_id = write_event_to(s.company, ctx, 'batch reverse', summary,
                                       [Touched('batch', batch_id, 'update', None, None, {'state': 'reversed'},
                                                {'state': batch['state']}, db='company')],

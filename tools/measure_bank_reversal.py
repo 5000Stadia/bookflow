@@ -1,6 +1,6 @@
 """Timings of reversing a bank import (R108 increment 2, design/bank-feeds.md §6 and §10.11): one size per process.
 
-    python tools/measure_bank_reversal.py LINES [WORKDIR] [--created N] [--move]
+    python tools/measure_bank_reversal.py LINES [WORKDIR] [--created N] [--move] [--first-call]
 
 Builds a fresh data root under WORKDIR (default: a temporary folder; use the root NVMe), a company on the general chart
 with a bank account holding 200 journal entries (which the statement's first 200 lines match), imports an OFX statement
@@ -10,7 +10,8 @@ Times, in seconds: `bank-feed reverse --dry-run` (the plan, every inverse delete
 one slice (each created entry deleted by `journal delete`, then the lines hidden, matches undone and the account record
 restored in one transaction). With ``--move`` the same is timed as `bank-feed move` to a second bank account (the
 reversal, then the stored lines imported there in the transaction that finishes it). Prints one JSON line, with the
-peak resident memory of the process.
+peak resident memory of the process. With ``--first-call`` the real call is the first slice only (the default
+``--limit``, carrying the dry run's fingerprint), as a person or agent runs it: how long before the first answer.
 """
 import json
 import os
@@ -32,6 +33,7 @@ def main():
     if '--created' in sys.argv:
         args.remove(str(created))
     moving = '--move' in sys.argv
+    first_call = '--first-call' in sys.argv
     lines = int(args[0])
     work = Path(args[1]) if len(args) > 1 else Path(tempfile.mkdtemp(prefix='bf-bank-reverse-'))
     root = work / f'root-{lines}-{created}'
@@ -71,7 +73,8 @@ def main():
             '<ACCTID>99990001\n</BANKACCTFROM>\n<BANKTRANLIST>\n' + ''.join(body)
             + '</BANKTRANLIST>\n</STMTRS></STMTTRNRS></BANKMSGSRSV1>\n</OFX>\n')
     done = run('bank-feed import', dict(account=bank, content=text, limit=0))
-    out = {'lines': lines, 'matched': done['counts']['matched'], 'created': created, 'move': moving}
+    out = {'lines': lines, 'matched': done['counts']['matched'], 'created': created, 'move': moving,
+           'first_call': first_call}
     other = run('account create', dict(name='Measure savings', type='bank'))['id']
     t = time.perf_counter()
     made = [run('journal post', dict(date='2026-11-02', memo='created', lines=[
@@ -93,6 +96,17 @@ def main():
     plan = plan['reversal'] if moving else plan
     assert not plan['blockers'], plan['blockers'][:3]
     t = time.perf_counter()
+    if first_call:
+        result = run(name, dict(data, fingerprint=plan['fingerprint']))
+        out['first_call_s'] = round(time.perf_counter() - t, 3)
+        result = result['reversal'] if moving else result
+        out['first_call_deleted'] = result['reversed_now']
+        out['ms_per_deleted_entry'] = round(1000 * out['first_call_s'] / max(1, result['reversed_now']), 1)
+        out['peak_rss_mb'] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024)
+        print(json.dumps(out))
+        if len(args) <= 1:
+            shutil.rmtree(work, ignore_errors=True)
+        return
     result = run(name, dict(data, fingerprint=plan['fingerprint'], limit=max(1, created)))
     out['reverse_s'] = round(time.perf_counter() - t, 3)
     if moving:
