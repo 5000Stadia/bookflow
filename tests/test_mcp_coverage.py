@@ -404,7 +404,9 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 4239 -> 4253 (R108 inc 1, measured): the null branches of the bank inbox commands' optional inputs -- bank-feed
     # import's content and attachment (2), show's state and cursor (2), query's account and cursor (2), bank-line
     # query's account, state, import_id, date_from, date_to, text, amount and cursor (8). No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==4253
+    # 4253 -> 4256 (R107 inc 3 review, measured): import decide 4 -> 7, the null branches of `answers` and of each
+    # answer's target and input. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==4256
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

@@ -345,63 +345,86 @@ def plan_decide(s, ctx, inp) -> dict:
         seen.add(key)
         out.append({'ref': ref, 'action': action, 'target': target, 'input': extra})
 
+    asked: list[tuple[dict, str, str | None, dict | None]] = []
     for text in inp.map or ():
         if '=' not in text:
             raise BookflowError('E_VALIDATION', message=f'A map is "file text=existing name"; got {text!r}.',
                                 details={'field': 'map', 'value': text})
         left, target = text.split('=', 1)
         ref, _ = _find(pending, left, 'map')
-        target = target.strip()
-        if books.resolve(ref['target'], target) is None:
-            hint = books.suggestions(ref['target'], target)
-            raise BookflowError('E_VALIDATION', message=(
-                f"No {ref['target'].replace('-', ' ')} {target!r} to map {ref['value']!r} to"
-                + (f"; did you mean {', '.join(map(repr, hint))}?" if hint else '.')),
-                details={'field': 'map', 'value': target, 'suggestions': hint})
-        add(ref, 'map', target)
+        asked.append((ref, 'map', target.strip(), None))
     given = {norm_key(k): dict(v) for k, v in (inp.create_input or {}).items()}
     for text in inp.create or ():
         ref, _ = _find(pending, text, 'create')
-        extra = given.get(norm_key(text)) or given.get(norm_key(ref['value'])) or {}
-        how = imports.creatable(ref['target'])
-        if how == 'never':
-            raise BookflowError('E_VALIDATION', message=(
-                f"An import never creates {ref['target']}s (an {ref['target']} is set up with its own command); map "
-                f"{ref['value']!r} to an existing one or skip its rows."), details={'field': 'create',
-                                                                                   'target': ref['target']})
-        alike = books.look_alikes(ref['target'], ref['value'])
-        if ref['target'] in ('customer', 'vendor') and alike:
-            raise BookflowError('E_VALIDATION', message=(
-                f"{ref['value']!r} looks like {', '.join(map(repr, alike))}; map it to one of them, or create the "
-                f"{ref['target']} with its own command if it is really new."),
-                details={'field': 'create', 'look_alikes': alike})
-        body = {**extra, 'name': ref['value']}
-        try:
-            batches.run_nested(s, ctx, f"{ref['target']} create", body, source_ref=f"import:{run['id']}",
-                               dry_run=True)
-        except BookflowError as error:
-            raise BookflowError('E_VALIDATION', message=(
-                f"Creating {ref['target'].replace('-', ' ')} {ref['value']!r} would be refused: {error.message} "
-                f"Give the rest of `{ref['target']} create`'s input in create_input: "
-                f'{{"{ref["value"]}": {{...}}}}.'),
-                details={'field': 'create', 'code': error.code, 'create': how}) from None
-        add(ref, 'create', ref['value'], extra or None)
+        asked.append((ref, 'create', None, given.get(norm_key(text)) or given.get(norm_key(ref['value']))))
     for text in inp.skip or ():
         ref, _ = _find(pending, text, 'skip')
-        add(ref, 'skip')
+        asked.append((ref, 'skip', None, None))
+    for a in inp.answers or ():
+        # As data: the field and the exact text name the reference, so no text needs quoting.
+        hits = [r for r in pending if r['field'] == a.field and norm_key(r['value']) == norm_key(a.value)]
+        if not hits:
+            listed = '; '.join(f"{r['column'] or r['field']}:{r['value']}" for r in pending[:20]) or 'none'
+            raise BookflowError('E_VALIDATION', message=f'{a.value!r} in {a.field} names no unknown reference this '
+                                f'run waits on (waiting: {listed}).',
+                                details={'field': 'answers', 'value': a.value, 'ref': {'field': a.field,
+                                                                                       'value': a.value}})
+        if a.action == 'map' and not (a.target or '').strip():
+            raise BookflowError('E_VALIDATION', message=f'Name the existing record to use for {a.value!r}.',
+                                details={'field': 'answers', 'ref': {'field': a.field, 'value': a.value}})
+        asked.append((hits[0], a.action, (a.target or '').strip() or None, a.input))
+    for ref, action, target, extra in asked:
+        where = {'ref': {'field': ref['field'], 'value': ref['value']}}
+        if action == 'map':
+            # A typed name is a read of that list: a caller who may not read it cannot probe its names this way.
+            batches.require_read(s, f"{ref['target']} show")
+            if books.resolve(ref['target'], target) is None:
+                hint = books.suggestions(ref['target'], target)
+                raise BookflowError('E_VALIDATION', message=(
+                    f"No {ref['target'].replace('-', ' ')} {target!r} to map {ref['value']!r} to"
+                    + (f"; did you mean {', '.join(map(repr, hint))}?" if hint else '.')),
+                    details={'field': 'map', 'value': target, 'suggestions': hint, **where})
+            add(ref, 'map', target)
+        elif action == 'create':
+            extra = dict(extra or {})
+            how = imports.creatable(ref['target'])
+            if how == 'never':
+                raise BookflowError('E_VALIDATION', message=(
+                    f"An import never creates {ref['target']}s (an {ref['target']} is set up with its own command); "
+                    f"map {ref['value']!r} to an existing one or skip its rows."),
+                    details={'field': 'create', 'target': ref['target'], **where})
+            alike = books.look_alikes(ref['target'], ref['value'])
+            if ref['target'] in ('customer', 'vendor') and alike:
+                raise BookflowError('E_VALIDATION', message=(
+                    f"{ref['value']!r} looks like {', '.join(map(repr, alike))}; map it to one of them, or create the "
+                    f"{ref['target']} with its own command if it is really new."),
+                    details={'field': 'create', 'look_alikes': alike, **where})
+            body = {**extra, 'name': ref['value']}
+            try:
+                batches.run_nested(s, ctx, f"{ref['target']} create", body, source_ref=f"import:{run['id']}",
+                                   dry_run=True)
+            except BookflowError as error:
+                raise BookflowError('E_VALIDATION', message=(
+                    f"Creating {ref['target'].replace('-', ' ')} {ref['value']!r} would be refused: {error.message} "
+                    f"Give the rest of `{ref['target']} create`'s input in create_input: "
+                    f'{{"{ref["value"]}": {{...}}}}.'),
+                    details={'field': 'create', 'code': error.code, 'create': how, **where}) from None
+            add(ref, 'create', ref['value'], extra or None)
+        else:
+            add(ref, 'skip')
     if not out:
         raise BookflowError('E_VALIDATION', message='Give at least one map, create or skip.', details={'field': 'map'})
-    if inp.remember and not any(d['action'] == 'map' for d in out):
-        raise BookflowError('E_VALIDATION', message='`remember` keeps maps (in the source\'s value maps); this call '
-                            'maps nothing.', details={'field': 'remember'})
+    # `remember` keeps maps, in the source's value maps; creates and skips are answered for this run only (a record
+    # created is found by its name next time), so a call with none has nothing to remember and is not refused.
+    wanted = inp.remember and any(d['action'] == 'map' for d in out)
     remember = None
-    if inp.remember and _norm(run['source']) == _norm(default_source(run['kind'])):
+    if wanted and _norm(run['source']) == _norm(default_source(run['kind'])):
         raise BookflowError('E_VALIDATION', message=(
             f"`remember` saves the maps in the run's source, and this run names none (it is keyed under the shared "
             f"{run['source']!r}, which any {run['kind']} file would match). Preview the file with `source` naming where "
             'it comes from, then decide with `remember`; or decide without it.'),
             details={'field': 'remember', 'source': run['source']})
-    if inp.remember:
+    if wanted:
         source = _source_row(s, run['source'], required=False)
         recipe = latest(s, source) if source is not None and source['active'] else _from_run(run)
         recipe = {k: recipe[k] for k in _SAME}

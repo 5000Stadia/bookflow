@@ -916,3 +916,80 @@ Each finding has a test that failed before its fix (`test_import_rules.py`, `tes
   1.49 s), still within the target of a few seconds.
 - **Permissions**: the eight commands of increment 2 move from `import-v1` (restored as merged) to
   `import-mapping-v1` (above). The migration is co0110, on main's co0109 (delivery batches).
+
+## As built: increment 3
+
+- **One page, `/c/<company>/import`** (`adapters/workbench/import_pages.py`, `templates/import.html`, `static/import.css`
+  and `import.js`), reached from the Company menu ("Import records from a file") and an **Import…** link on each of the
+  17 list kinds' list pages. Steps: **File** (kind; choose, drop or paste; a pasted table shows at once as a table, in
+  the browser, before anything is posted; a template download per kind), **Check** (counts bar; every problem at once,
+  grouped by column in the file's order, with row numbers and the exact cell; the columns as rows at 1440 and as cards
+  at 390, each with three samples and a field picker; the formats, saved mapping and unknown references to decide),
+  **Preview** (counts per outcome, refused rows, a sample of the exact records, and one confirmation naming the count:
+  "Import 4 records"), **Run** (a progress card), **Done** (counts, refused rows, "Save this mapping as", Undo). At
+  390 px the steps are a vertical stepper and nothing scrolls sideways (asserted at every step).
+- **Only the registry's commands.** The page runs `import kinds`, `template`, `check`, `preview`, `decide`, `run`,
+  `cancel`, `reverse`, `errors`, `show` and `import-mapping save`; no migration, no new permission layer, and the
+  page's writes need the grants the commands need. Decided: the check's answers are given beside the problems, and
+  the Preview button runs `import preview` then, if the run waits, `import decide` with the page's answers in the same
+  post (decisions need a stored run, so they cannot be made before a preview). A term is created as standard terms
+  due in N days (the page asks N); a list whose create needs more than a name is offered map or skip only.
+- **The file is an attachment.** A chosen file or a pasted table is kept as an attachment on the company
+  (`attachment add company_info`, through the same published transfer the HTTP route uses) and the import reads it by
+  id through `tabular.read`: text in any encoding the reader detects (the cp1252 note shows), or `.xlsx`. Uploads over
+  16 MB (the commands' own `content` limit) are refused before anything is stored. Corrected files are uploaded on the
+  Check step; the columns chosen by hand carry over (one the new file lacks is dropped).
+- **htmx for every post**, multipart where a file goes; refusals answer 200 with the error in place on the step they
+  came from (a file that was chosen stays chosen). Each answer that names a run pushes `?run=<id>`, so a reload, or
+  opening the page again after a lock screen, lands on the run's step; a `running` run then continues by itself (one
+  slice of 100 rows or 4 seconds per request, `hx-trigger="load"`), and Pause stops asking. Nothing imports while the
+  page is closed.
+- **All or nothing stays the default.** A file with problems cannot preview; "Import the other N rows only" is its own
+  button (`partial`), and its refused rows download from the Preview and Done steps as `import errors`' CSV (UTF-8
+  with a byte order mark so a spreadsheet reads accents; its formula guard unchanged). Downloads are plain GET links
+  (reads need no workbench header).
+- **Undo** plans first (`import reverse` dry run): "Undo reverses all 5 records it made or changed", then one
+  confirmation; a blocked plan lists each blocker with what clears it, and nothing changes. A long reversal continues
+  by slices as the run does.
+- **`import check` gains `samples`**: up to three distinct non-blank values per column, as the file has them (cut at
+  60 characters), for the Columns step. `docs/cli/import.md` regenerated.
+- **Tests:** `tests/test_import_pages_browser.py` (real Chrome, 1440 and 390): criterion 1's customer file
+  (Windows-1252, semicolons, renamed headers, a day-first date on a job row, parenthesized negatives with decimal
+  commas, two unknown terms) uploaded with a junk amount and an unmapped name; the check lists both; the columns are
+  mapped on the page; the corrected file is uploaded; 'Net 30 days' is mapped and 'Due in 60' created; the formula row
+  is left out by the partial button; the preview's counts and sample; Import; the refused row downloaded by a real
+  click (its `=1+2` written `'=1+2`); the mapping saved; Undo confirmed and every record inactive. A pasted vendor
+  table imports the same way, and a run left after one row resumes when its page is opened again. Screens:
+  `/tmp/m4-shots/import3/`.
+- **The review of increment 3** (`notes/reviews/r107-inc3-review.md`), each with a test that failed before:
+  - *A true confirmation.* `import show` (and so preview and decide) gains `outlook`: what a run would land with the
+    answers given so far, row by row: `create`, `update`, `answered` (waiting rows whose references are all mapped or
+    created), `land` (the three), `left_out` (a skip), `waiting`, `unchanged`, `differs`, `missing`, `refused`. The
+    counts bar, the heading and the button use it: "Import 4 vendors (2 left out as you chose)?".
+  - *No dead ends.* `import check` applies `customer create`'s job rule (job fields and inherited address or contacts
+    need a parent), so check and run agree. What still reaches Preview refused (a record that `differs`, say) is
+    listed with its reason and the same two ways on as Check: the corrected file and Check again, or "Import the
+    other N rows only" (a partial preview of the same file, mapping, formats and answers). No disabled button.
+  - *By hand.* "Map the columns below by hand" sends every column as shown, so no saved mapping is asked about again;
+    an empty choice is sent as "not imported" and kept on every later check.
+  - *Cancel and Undo.* A stopped, paused, cancelled or failed run that made records offers Undo (with who ran it).
+    Cancel says what happens first: a partial run's records stay until undone; an all-or-nothing run's are undone.
+  - *Answers kept.* `import decide` gains `answers`, each naming its field and the exact text (no "=" or "Column:"
+    parsing); a refusal names the reference (`details.ref`). A wrong answer cancels the run made to take it and shows
+    Check again with every answer as given and the refusal beside it. `import check` gains `choices`: the active
+    records of each list the caller may read (up to 2000), the "Use" picker's options. A typed target is a read of
+    its list. `remember` with only creates and skips remembers nothing and is not refused.
+  - *Due days* for a new term come from its words: the first number ("Net45" 45), 0 for receipt or COD, else 30.
+  - *Import files are not attachments.* Chosen here: `attachment add` with `record_type: import_file` (linked to the
+    company, captioned with the kind, never `attachment link`ed), no migration. `attachment get`, `text` and `list`
+    show such a file only to a caller who may read its kind. Adding one unlinks the same person's earlier file of the
+    kind and anyone's older than 7 days, unless a run landed records from it (or is running); a file the check refuses
+    is unlinked at once. Unlinked bodies go with `attachment collect`.
+  - *Stale confirm.* A run that lands nothing ends "Nothing new to import: all rows were already in", without Save
+    mapping or Undo.
+  - *Lows.* A post over 18 MB is refused from its Content-Length, and the body is read no further than that; a form
+    over 4,000 fields (a file over about 1,000 columns wide) is refused on the page. At 390 px every link and choice is at
+    least 44 px tall, problem groups collapse with counts once there are over 12, the questions come before the column
+    cards, and the partial choice is set apart. A reload keeps the preview's sample (from its stored rows).
+    "E-mail address", "Client" and "Job started" are guessed (a customer's aliases sit beside the party ones in
+    `import_kinds.py`).

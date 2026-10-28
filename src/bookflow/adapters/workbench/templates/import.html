@@ -1,0 +1,204 @@
+{% extends "base.html" %}{% block title %}Import {{ kind_label|lower }}{% endblock %}{% block body %}
+<link rel="stylesheet" href="{{ static_urls['import.css'] }}"><script src="{{ static_urls['import.js'] }}" defer></script>
+{% set post = '/c/' ~ company_id ~ '/import' %}
+{% set index = steps|map(attribute=0)|list %}{% set at = index.index(step) %}
+{% set r = result.run if result is defined and result else none %}
+{% macro htmx() %}method="post" enctype="multipart/form-data" action="{{ post }}" hx-post="{{ post }}" hx-encoding="multipart/form-data" hx-target="#import-workspace" hx-select="#import-workspace" hx-swap="outerHTML"{% endmacro %}
+{% macro reference_choices(refs) %}{% set prior_all = answers if answers is defined and answers else {} %}{% set choices = (check.choices if check is defined and check else {}) or {} %}
+{% for target in refs|map(attribute='target')|unique %}<datalist id="ref-choices-{{ target }}">{% for name in choices.get(target, []) %}<option value="{{ name }}">{% endfor %}</datalist>{% endfor %}
+<ol class="import-refs" data-import-refs>{% for u in refs %}{% set n = loop.index0 %}{% set can_create = u.create == 'from the name' or (u.target == 'term' and u.create != 'never') %}{% set prior = prior_all.get((u.field, u.value)) %}
+{% set picked = prior.action if prior else ('map' if u.suggestions else ('create' if can_create else 'skip')) %}
+<li class="import-ref{{ ' has-error' if error_ref and error_ref.field == u.field and error_ref.value == u.value }}" data-import-ref="{{ u.value }}" data-import-ref-field="{{ u.field }}"><input type="hidden" name="refvalue:{{ n }}" value="{{ u.value }}"><input type="hidden" name="reffield:{{ n }}" value="{{ u.field }}"><input type="hidden" name="reftarget_kind:{{ n }}" value="{{ u.target }}">
+<p><strong>&lsquo;{{ u.value }}&rsquo;</strong> in {{ u.column or field_label(u.field) }} is not a {{ u.target|replace('-', ' ') }} yet <span class="muted">(row{{ 's' if (u.row_count or u.rows|length) > 1 }} {{ rows_text(u.rows) }})</span>.{% if u.look_alikes %} <span class="warn">Looks like {{ u.look_alikes|join(', ') }}.</span>{% endif %}</p>
+{% if error_ref and error_ref.field == u.field and error_ref.value == u.value %}<p class="import-ref-error" role="alert" data-ref-error>{{ error.message }}</p>{% endif %}
+<div class="import-ref-choice" role="radiogroup" aria-label="What to do with {{ u.value }}">
+<label class="choice"><input type="radio" name="ref:{{ n }}" value="map" {% if picked == 'map' %}checked{% endif %} data-ref-map> Use</label>
+<input name="reftarget:{{ n }}" list="ref-choices-{{ u.target }}" value="{{ prior.target if prior else (u.suggestions[0] if u.suggestions else '') }}" aria-label="Existing {{ u.target|replace('-', ' ') }} to use for {{ u.value }}" placeholder="{{ 'search your ' ~ u.target|replace('-', ' ') ~ 's' if choices.get(u.target) else 'an existing ' ~ u.target|replace('-', ' ') }}" autocomplete="off" data-ref-target>
+{% if can_create %}<label class="choice"><input type="radio" name="ref:{{ n }}" value="create" {% if picked == 'create' %}checked{% endif %} data-ref-create> Create it</label>{% if u.target == 'term' %}<label class="choice">due in <input type="number" name="refdays:{{ n }}" value="{{ prior.days if prior and prior.days else due_days(u.value) }}" min="0" max="999" class="days" aria-label="Days until due for the new term {{ u.value }}"> days</label>{% endif %}{% endif %}
+<label class="choice"><input type="radio" name="ref:{{ n }}" value="skip" {% if picked == 'skip' %}checked{% endif %} data-ref-skip> Leave its rows out</label>
+</div></li>{% endfor %}</ol>
+{% endmacro %}
+{% macro undo_section(r, made) %}{% set batch = r.batch or {} %}
+{% if batch.id and can_write and (made or batch.state != 'live') %}<section class="workspace-card import-undo" data-import-undo>
+{% set by = (r.created_by_name or 'someone') ~ ' on ' ~ (r.created_at or '')[:10] %}
+{% if undo and undo.state == 'planned' %}{% set plan = undo.plan %}
+<h2>Undo this import?</h2><p data-import-undo-who>Imported by {{ by }}{% if r.reason %} ({{ r.reason }}){% endif %}.</p><p>Undo reverses all {{ plan.steps|length }} record{{ 's' if plan.steps|length != 1 }} it made or changed: a record it made is renamed and made inactive (kept in its history), so the corrected file can import again.</p>
+<form {{ htmx() }} class="import-actions"><input type="hidden" name="action" value="undo"><input type="hidden" name="run" value="{{ r.id }}"><input type="hidden" name="fingerprint" value="{{ plan.fingerprint or '' }}"><button type="submit" class="danger-button" data-import-undo-confirm>Undo the whole import</button></form>
+{% elif undo and undo.state == 'blocked' %}<h2>Undo is blocked</h2><p>Nothing was changed. Clear these first:</p>
+<ul data-import-blockers>{% for b in undo.blockers[:50] %}<li>{{ b.message }}{% if b.clears %} <span class="muted">({{ b.clears }})</span>{% endif %}</li>{% else %}<li>{{ undo.error.message }}</li>{% endfor %}</ul>
+<form {{ htmx() }}><input type="hidden" name="action" value="undo-plan"><input type="hidden" name="run" value="{{ r.id }}"><button type="submit" data-import-undo-plan>Try Undo again</button></form>
+{% elif batch.state == 'reversing' or (undo and undo.state == 'reversing') %}<h2>Undoing…</h2>
+{% if undo and undo.result %}<p>{{ undo.result.reversed_now }} undone; {{ undo.result.remaining }} to go.</p>{% endif %}
+<form {{ htmx() }}><input type="hidden" name="action" value="undo"><input type="hidden" name="run" value="{{ r.id }}"><button type="submit" data-import-undo-continue>Continue</button></form>
+{% if undo and undo.auto %}<div hidden hx-post="{{ post }}" hx-vals='{"action": "undo", "run": "{{ r.id }}"}' hx-trigger="load delay:150ms" hx-target="#import-workspace" hx-select="#import-workspace" hx-swap="outerHTML"></div>{% endif %}
+{% elif batch.state in ('reversed', 'reversed_partly') %}<h2>Undone</h2><p data-import-undone>The import was reversed as one unit. Its records are inactive, renamed, and kept in their history.</p>
+{% elif batch.state == 'live' and made %}<h2>Undo</h2><p class="muted import-small">Reverses the {{ made }} record{{ 's' if made != 1 }} this import made or changed, as one unit{% if r.state != 'done' %}, though it did not finish{% endif %}. It is refused, naming the record, if anything has used or changed a record since.</p>
+<form {{ htmx() }}><input type="hidden" name="action" value="undo-plan"><input type="hidden" name="run" value="{{ r.id }}"><button type="submit" data-import-undo-plan>Undo this import</button></form>{% endif %}
+</section>{% endif %}
+{% endmacro %}
+<section id="import-workspace" class="import" data-import-step="{{ step }}" data-company="{{ company_id }}">
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/company">Company</a> / Import</nav>
+<h1>Import {{ kind_label|lower }}</h1>
+<ol class="import-steps" aria-label="Import steps">{% for key, label in steps %}<li class="{{ 'is-done' if loop.index0 < at else ('is-current' if loop.index0 == at else 'is-next') }}"{% if loop.index0 == at %} aria-current="step"{% endif %} data-step="{{ key }}"><span class="step-num" aria-hidden="true">{{ '✓' if loop.index0 < at else loop.index }}</span><span class="step-label">{{ label }}</span></li>{% endfor %}</ol>
+{% if error %}<div role="alert" class="error" data-import-error><strong>{{ error.message or error.code }}</strong>{% for f in (error.details or {}).get('fields', []) if f.problem %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}{% for b in (error.details or {}).get('blockers', [])[:20] %}<br>{{ b.message }}{% if b.clears %} ({{ b.clears }}){% endif %}{% endfor %}</div>{% endif %}
+{% if message %}<p role="status" class="import-note" data-import-message>{{ message }}</p>{% endif %}
+
+{% if step == 'file' %}
+<form class="import-form workspace-card" {{ htmx() }} data-import-file-form>
+<input type="hidden" name="action" value="check">
+<label class="import-field">What the file holds
+<select name="kind" data-import-kind>{% for k in kinds %}<option value="{{ k.kind }}" {% if k.kind == kind %}selected{% endif %}>{{ k.label }}</option>{% endfor %}</select></label>
+<div class="import-drop" data-import-drop>
+<label class="import-field">Choose a file<input type="file" name="file" accept="{{ file_types }}" data-import-file></label>
+<p class="muted">CSV or tab-separated text, or an Excel .xlsx workbook (saved values; no formula runs), up to {{ max_mb }} MB. You can also drop the file here.</p>
+</div>
+<label class="import-field">Or paste a table<textarea name="paste" rows="6" spellcheck="false" placeholder="Copy the rows in your spreadsheet, header row first, and paste them here." data-import-paste>{{ values.get('paste', '') }}</textarea></label>
+<div class="import-paste-preview" data-paste-preview hidden></div>
+<details class="import-more"><summary>Where it comes from, and why</summary>
+<label class="import-field">Source name <input name="source" value="{{ values.get('source', '') }}" placeholder="e.g. Old system customer export" maxlength="200"></label>
+<p class="muted">Name it to save its column mapping and answers; next month's file with the same columns then maps itself.</p>
+<label class="import-field">Reason <input name="ctx:reason" value="{{ values.get('ctx:reason', '') }}" placeholder="Bring in our customer list" maxlength="200"></label></details>
+<p class="import-actions"><button type="submit" class="primary-button" data-import-check>Check the file</button>
+<a href="{{ post }}/template/{{ kind }}.csv" data-import-template download>Download a template</a></p>
+</form>
+{% endif %}
+
+{% if step == 'check' %}{% set c = check %}
+{% set decide_formats = c.decisions|selectattr('decision', 'in', ['decimal', 'date_order', 'mapping'])|list %}
+<div class="import-bar" data-import-bar><span><strong>{{ c.rows }}</strong> row{{ 's' if c.rows != 1 }}</span>
+<span class="{{ 'bad' if c.problems_total else 'good' }}"><strong>{{ c.problems_total }}</strong> problem{{ 's' if c.problems_total != 1 }}</span>
+<span><strong>{{ c.to_decide|length }}</strong> to decide</span></div>
+<p class="import-file-name">{{ chosen.file_name or 'File' }}{% if c.matched and c.matched.match in ('exact', 'confirmed') %} · mapped by your saved mapping &lsquo;{{ c.matched.source }}&rsquo;{% endif %}</p>
+{% for n in c.notes %}<p class="muted import-small">{{ n }}</p>{% endfor %}
+<form class="import-form" {{ htmx() }} data-import-check-form>
+<input type="hidden" name="kind" value="{{ kind }}"><input type="hidden" name="attachment" value="{{ chosen.attachment }}"><input type="hidden" name="file_name" value="{{ chosen.file_name }}">
+<input type="hidden" name="source" value="{{ values.get('source', '') }}"><input type="hidden" name="ctx:reason" value="{{ values.get('ctx:reason', '') }}">
+{% for key in ('decimal', 'date_order', 'mapping') if raw.get(key) and not decide_formats|selectattr('decision', 'equalto', key)|list %}<input type="hidden" name="{{ key }}" value="{{ raw[key] }}">{% endfor %}
+
+{% if c.clean %}<p class="import-note" data-import-clean>No problems: every one of the {{ c.rows }} rows fits its fields{{ '. Answer the questions below, then preview' if c.unknown_references or decide_formats else '' }}.</p>{% endif %}
+{% if not c.clean %}
+<section class="workspace-card import-problems" data-import-problems aria-labelledby="problems-head">
+<h2 id="problems-head">{{ c.problems_total }} problem{{ 's' if c.problems_total != 1 }}{% if c.rows_with_problems %} in {{ c.rows_with_problems }} of {{ c.rows }} rows{% endif %}</h2>
+<p>Nothing is imported until every row is right. Correct these in your file, then check it again.</p>
+{% set long = c.problems_total > 12 %}
+{% for g in problem_groups %}<details class="import-problem-group" data-problem-column="{{ g.column }}" {% if not long or loop.first %}open{% endif %}><summary><h3>{{ g.column or 'Mapping' }}</h3> <span class="muted">{{ g.count }} problem{{ 's' if g.count != 1 }}{% if g.rows %} in {{ g.rows }} row{{ 's' if g.rows != 1 }}{% endif %}</span></summary><ul>
+{% for p in g.entries %}<li>{% if p.rows %}<span class="rows">Row{{ 's' if p.rows|length > 1 }} {{ rows_text(p.rows) }}</span>: {% endif %}{{ p.message }}{% if p.value is not none and p.value != '' and ("'" ~ p.value ~ "'") not in p.message %} <code>&lsquo;{{ p.value }}&rsquo;</code>{% endif %}</li>{% endfor %}
+</ul></details>{% endfor %}
+<div class="import-reupload" data-import-reupload><h3>Check the corrected file</h3>
+<label class="import-field">Corrected file<input type="file" name="file" accept="{{ file_types }}" data-import-file></label>
+<label class="import-field">or paste it<textarea name="paste" rows="3" spellcheck="false" data-import-paste></textarea></label>
+<p class="import-actions"><button type="submit" name="action" value="check" class="primary-button" data-import-recheck>Check again</button></p></div>
+{% if c.rows_with_problems and c.rows_with_problems < c.rows and not (problem_groups|selectattr('column', 'equalto', '')|list) %}<div class="import-partial" data-import-partial-choice><h3>Or leave those rows out</h3>
+<p class="muted import-small">Importing the other rows leaves the {{ c.rows_with_problems }} with problems out; the next step shows exactly what lands, and lets you download the rows left out as a file to correct and import again.</p>
+<p class="import-actions"><button type="submit" name="action" value="preview-partial" data-import-partial>Import the other {{ c.rows - c.rows_with_problems }} row{{ 's' if c.rows - c.rows_with_problems != 1 }} only</button></p></div>{% endif %}
+</section>
+{% endif %}
+
+{% if c.dropped %}<details class="workspace-card import-dropped" data-import-dropped><summary>{{ c.dropped_total }} character{{ 's' if c.dropped_total != 1 }} no text field can hold will be dropped</summary><ul>{% for d in c.dropped[:50] %}<li>Row {{ d.row }}, {{ d.column }}, position {{ d.position }}: {{ d.name or d.character }}{% if d.replaced_with %} (becomes a space){% endif %}</li>{% endfor %}</ul></details>{% endif %}
+
+{% if decide_formats %}<section class="workspace-card" data-import-formats><h2>Before the preview</h2>
+{% for d in decide_formats %}<p>{{ d.message }}</p>
+{% if d.decision == 'decimal' %}<label class="import-field">Amounts use <select name="decimal"><option value=".">a point for decimals (1,234.56)</option><option value=",">a comma for decimals (1.234,56)</option></select></label>
+{% elif d.decision == 'date_order' %}<label class="import-field">Dates are <select name="date_order"><option value="MDY">month first (03/04 is March 4)</option><option value="DMY">day first (03/04 is 3 April)</option><option value="YMD">year first</option></select></label>
+{% elif d.decision == 'mapping' %}<fieldset class="import-choices"><legend>Columns</legend>{% for m in d.candidates %}<label class="choice"><input type="radio" name="mapping" value="{{ m.source }}" {% if loop.first %}checked{% endif %}> Use the saved mapping &lsquo;{{ m.source }}&rsquo;{% if m.new %} (new: {{ m.new|join(', ') }}){% endif %}</label>{% endfor %}<label class="choice"><input type="radio" name="mapping" value=""> Map the columns below by hand</label></fieldset>{% endif %}
+{% endfor %}</section>{% endif %}
+
+<details class="workspace-card import-columns-card" data-import-columns {% if not c.clean or c.mapping.columns|length < 1 or (c.problems and not c.problems[0].rows) %}open{% endif %}><summary><h2>Columns</h2> <span class="muted">{{ c.mapping.columns|length }} of {{ c.samples|length }} mapped{% if c.mapping.unmapped %}; not imported: {{ c.mapping.unmapped|join(', ') }}{% endif %}</span></summary>
+<p class="muted import-small">Each column of the file, a few of its values, and the field it fills. Required: {% for f in fields if f.required %}{{ f.label }}{% if not loop.last %}, {% endif %}{% endfor %}.</p>
+<div class="import-columns" role="list">{% for header, values in c.samples.items() %}{% set n = loop.index0 %}{% set path = c.mapping.columns.get(header) or '' %}
+<div class="import-column" role="listitem" data-import-column="{{ header }}"><input type="hidden" name="colname:{{ n }}" value="{{ header }}"><input type="hidden" name="was:{{ n }}" value="{{ path }}">{% if (c.mapping.found_by or {}).get(header) == 'given' or header in (raw.get('columns') or {}) %}<input type="hidden" name="given:{{ n }}" value="1">{% endif %}
+<div class="col-head"><strong>{{ header }}</strong>{% if (c.mapping.found_by or {}).get(header) %} <small class="muted">({{ {'synonym': 'guessed', 'exact': 'matched', 'saved': 'saved mapping', 'given': 'chosen'}.get(c.mapping.found_by[header], c.mapping.found_by[header]) }})</small>{% endif %}</div>
+<div class="col-samples">{% for v in values %}<span>{{ v }}</span>{% else %}<span class="muted">(empty)</span>{% endfor %}</div>
+<label class="col-field"><span class="col-field-label">Imports into<span class="hidden-text"> (for {{ header }})</span></span><select name="col:{{ n }}" data-import-field="{{ header }}"><option value="">— not imported —</option>{% for f in fields %}<option value="{{ f.path }}" {% if f.path == path %}selected{% endif %}>{{ f.label }}{{ ' *' if f.required }}</option>{% endfor %}</select></label>
+</div>{% endfor %}</div>
+<p class="import-actions"><button type="submit" name="action" value="check" data-import-recheck-columns>Check again with these columns</button></p>
+</details>
+
+{% if c.unknown_references %}<section class="workspace-card" data-import-decisions><h2>Not in your lists yet</h2>
+<p>Say what each value means. Nothing is created or skipped until you preview and import.</p>
+{{ reference_choices(c.unknown_references) }}
+{% if values.get('source') %}<label class="choice"><input type="checkbox" name="remember" checked> Remember these answers for &lsquo;{{ values.get('source') }}&rsquo;</label>{% endif %}
+</section>{% endif %}
+{% if c.clean %}<p class="import-actions import-next"><button type="submit" name="action" value="preview" class="primary-button" data-import-preview>Preview the import</button><span class="muted import-small">The preview writes nothing to the books.</span></p>{% endif %}
+</form>
+<p class="import-small"><a href="{{ post }}?kind={{ kind }}" data-import-restart>Start over with another file</a></p>
+{% endif %}
+
+{% if step == 'preview' and r %}{% set waiting = result.decisions|selectattr('decision', 'equalto', 'reference')|list %}
+{% set cv = counts_view(result.counts, answered=not waiting) %}{% set o = result.outlook or {} %}{% set will = o.get('land', 0) %}
+{% set blocked = r.atomic and o.get('refused', 0) %}
+{% if o %}{% set cv = [] %}{% for key, label in [('create', 'will be created'), ('update', 'will be updated'), ('answered', 'will run with your answers'), ('left_out', 'left out as you chose'), ('waiting', 'waiting on a decision'), ('unchanged', 'already in the books'), ('differs', 'differ from the record'), ('missing', 'no record to update'), ('refused', 'refused')] if o.get(key) %}{% set _ = cv.append({'key': key, 'label': label, 'value': o[key]}) %}{% endfor %}{% endif %}
+<div class="import-bar" data-import-bar>{% for c in cv %}<span class="{{ 'bad' if c.key == 'refused' else '' }}" data-count="{{ c.key }}"><strong>{{ c.value }}</strong> {{ c.label|lower }}</span>{% endfor %}</div>
+<p class="import-file-name">{{ r.file_name or 'File' }} · {{ r.rows }} rows{% if not r.atomic %} · the other rows only{% endif %}</p>
+{% for n in result.notes %}<p class="muted import-small">{{ n }}</p>{% endfor %}
+{% if waiting %}<form class="workspace-card import-form" {{ htmx() }} data-import-decide-form><input type="hidden" name="action" value="decide"><input type="hidden" name="run" value="{{ r.id }}">
+<h2>Not in your lists yet</h2>{{ reference_choices(waiting) }}
+<p class="import-actions"><button type="submit" class="primary-button" data-import-decide>Use these answers</button></p></form>{% endif %}
+{% if result.refused %}<section class="workspace-card import-problems" data-import-refused><h2>{{ o.get('refused', 0) }} row{{ 's' if o.get('refused', 0) != 1 }} refused</h2>
+{% if blocked %}<p data-import-blocked>The books would refuse {{ 'this row' if o.get('refused', 0) == 1 else 'these rows' }}, so nothing is imported as the file is: all or nothing. Correct {{ 'it' if o.get('refused', 0) == 1 else 'them' }} and check the file again, or import the other rows only.</p>{% endif %}
+<ul>{% for row in result.refused[:50] %}<li><span class="rows">Row {{ row.row }}</span>{% if row.column %}, {{ row.column }}{% endif %}: {{ row.message[(row.column ~ ': ')|length:] if row.column and row.message.startswith(row.column ~ ': ') else row.message }}</li>{% endfor %}</ul>
+<p><a href="{{ post }}/{{ r.id }}/refused.csv" download data-import-refused-download>Download the refused rows</a> <span class="muted import-small">(their own columns plus why; correct them and import that file the same way)</span></p>
+{% if blocked %}{% set m = result.mapping %}<form class="import-form" {{ htmx() }} data-import-refused-form>
+<input type="hidden" name="kind" value="{{ r.kind }}"><input type="hidden" name="attachment" value="{{ r.attachment }}"><input type="hidden" name="file_name" value="{{ r.file_name or '' }}"><input type="hidden" name="source" value="{{ r.source }}">
+{% if m.saved and m.saved.source %}<input type="hidden" name="mapping" value="{{ m.saved.source }}">{% else %}{% for header, path in (m.columns or {}).items() %}<input type="hidden" name="colname:{{ loop.index0 }}" value="{{ header }}"><input type="hidden" name="col:{{ loop.index0 }}" value="{{ path }}"><input type="hidden" name="given:{{ loop.index0 }}" value="1">{% endfor %}{% for header in m.unmapped or [] %}<input type="hidden" name="colname:u{{ loop.index0 }}" value="{{ header }}"><input type="hidden" name="col:u{{ loop.index0 }}" value=""><input type="hidden" name="given:u{{ loop.index0 }}" value="1">{% endfor %}{% endif %}
+{% if (m.formats or {}).get('decimal') %}<input type="hidden" name="decimal" value="{{ m.formats.decimal }}">{% endif %}{% if (m.formats or {}).get('date_order') %}<input type="hidden" name="date_order" value="{{ m.formats.date_order }}">{% endif %}
+{% for u in result.unknown_references if u.decided %}<input type="hidden" name="refvalue:{{ loop.index0 }}" value="{{ u.value }}"><input type="hidden" name="reffield:{{ loop.index0 }}" value="{{ u.field }}"><input type="hidden" name="reftarget_kind:{{ loop.index0 }}" value="{{ u.target }}"><input type="hidden" name="ref:{{ loop.index0 }}" value="{{ u.decided.action }}">{% if u.decided.action == 'map' %}<input type="hidden" name="reftarget:{{ loop.index0 }}" value="{{ u.decided.target }}">{% endif %}{% if (u.decided.input or {}).get('due_days') is not none %}<input type="hidden" name="refdays:{{ loop.index0 }}" value="{{ u.decided.input.due_days }}">{% endif %}{% endfor %}
+<div class="import-reupload" data-import-reupload><h3>Check the corrected file</h3>
+<label class="import-field">Corrected file<input type="file" name="file" accept="{{ file_types }}" data-import-file></label>
+<p class="import-actions"><button type="submit" name="action" value="check" class="primary-button" data-import-recheck>Check again</button></p></div>
+{% if r.rows > o.get('refused', 0) %}<div class="import-partial" data-import-partial-choice><h3>Or leave {{ 'that row' if o.get('refused', 0) == 1 else 'those rows' }} out</h3>
+<p class="muted import-small">The next preview shows exactly what lands without {{ 'it' if o.get('refused', 0) == 1 else 'them' }}.</p>
+<p class="import-actions"><button type="submit" name="action" value="preview-partial" data-import-partial>Import the other {{ r.rows - o.get('refused', 0) }} row{{ 's' if r.rows - o.get('refused', 0) != 1 }} only</button></p></div>{% endif %}
+</form>{% endif %}</section>{% endif %}
+{% if sample %}<section class="workspace-card" data-import-sample><h2>A sample of what will be {{ 'created' if o.get('create') else 'written' }}</h2>
+<div class="import-sample">{% for srow in sample[:5] %}<dl class="import-record"><dt>Row</dt><dd>{{ srow.row }}</dd>{% for key, value in srow.input.items() %}{% if value is mapping %}{% for k2, v2 in value.items() %}<dt>{{ field_label(key ~ '.' ~ k2) }}</dt><dd>{{ v2 }}</dd>{% endfor %}{% else %}<dt>{{ field_label(key) }}</dt><dd>{{ value }}</dd>{% endif %}{% endfor %}</dl>{% endfor %}</div></section>{% endif %}
+{% if not waiting and not blocked %}{% set noun = kind_label|lower if will != 1 else 'record' %}
+{% set parts = [] %}{% if o.get('create') %}{% set _ = parts.append(o.create ~ ' will be created') %}{% endif %}{% if o.get('update') %}{% set _ = parts.append(o.update ~ ' will be updated') %}{% endif %}{% if o.get('answered') %}{% set _ = parts.append(o.answered ~ ' will run with your answers') %}{% endif %}
+{% set left = [] %}{% if o.get('left_out') %}{% set _ = left.append(o.left_out ~ ' left out as you chose') %}{% endif %}{% if o.get('refused') %}{% set _ = left.append(o.refused ~ ' refused, left out') %}{% endif %}{% if o.get('unchanged') %}{% set _ = left.append(o.unchanged ~ ' already in the books') %}{% endif %}{% if o.get('differs') %}{% set _ = left.append(o.differs ~ ' differ from the record and stay as they are') %}{% endif %}{% if o.get('missing') %}{% set _ = left.append(o.missing ~ ' have no record to update') %}{% endif %}
+<form class="workspace-card import-confirm" {{ htmx() }} data-import-confirm><input type="hidden" name="action" value="start"><input type="hidden" name="run" value="{{ r.id }}">
+{% if will %}<h2 data-import-confirm-head>Import {{ will }} {{ noun }}{% if left %} ({{ left|join('; ') }}){% endif %}?</h2>
+<p data-import-confirm-detail>{{ parts|join('; ') }}.</p>
+<p class="muted import-small">This is a lasting change to your books. Afterwards one Undo reverses the whole import.</p>
+<p class="import-actions"><button type="submit" class="primary-button" data-import-start>Import {{ will }} {{ noun }}</button></p>
+{% else %}<h2>Nothing to import</h2><p data-import-nothing>No row would land{% if left %}: {{ left|join('; ') }}{% endif %}.</p>{% endif %}
+</form>{% endif %}
+<p class="import-small"><a href="{{ post }}?kind={{ kind }}" data-import-restart>Start over with another file</a></p>
+{% endif %}
+
+{% if step == 'run' and r %}{% set total = r.rows %}{% set left = result.counts.get('not_run', 0) %}{% set done = total - left %}{% set made = made_count(result.counts) %}
+<section class="workspace-card import-progress" data-import-progress aria-live="polite">
+<h2>{{ 'Importing…' if auto else ('Paused' if r.state in ('running', 'stopped') else 'Importing') }}</h2>
+<progress max="{{ total or 1 }}" value="{{ done }}" aria-label="Rows imported">{{ done }} of {{ total }}</progress>
+<p><strong data-import-done-count>{{ done }}</strong> of {{ total }} rows{% for c in counts_view(result.counts) if c.key != 'not_run' %} · {{ c.value }} {{ c.label|lower }}{% endfor %}</p>
+{% if r.state == 'stopped' %}<p class="warn">The run stopped after too many refusals. Look at the refused rows, then resume, cancel, or undo what it made.</p>{% endif %}
+{% set noun = kind_label|lower if made != 1 else 'record' %}
+<form {{ htmx() }} class="import-actions"><input type="hidden" name="run" value="{{ r.id }}">
+{% if auto %}<button type="submit" name="action" value="pause" data-import-pause>Pause</button>{% else %}<button type="submit" name="action" value="continue" class="primary-button" data-import-resume>Resume</button>{% endif %}
+<button type="submit" name="action" value="cancel" data-import-cancel hx-confirm="{{ 'Cancel the import?' if not made else ('Cancel the import? The ' ~ made ~ ' ' ~ noun ~ ' it made so far are undone: all or nothing lands none.' if r.atomic else 'Cancel the import? The ' ~ made ~ ' ' ~ noun ~ ' already made stay until you undo them.') }}">Cancel</button></form>
+{% if made and not auto %}<p class="import-small" data-import-cancel-says>{{ ('Cancel undoes the ' ~ made ~ ' ' ~ noun ~ ' it made so far (all or nothing).') if r.atomic else ('Cancel keeps the ' ~ made ~ ' ' ~ noun ~ ' already made; Undo below reverses them.') }}</p>{% endif %}
+<p class="muted import-small">Nothing imports while this page is closed; open it again to carry on where it stopped.</p>
+{% if auto %}<div hidden hx-post="{{ post }}" hx-vals='{"action": "continue", "run": "{{ r.id }}"}' hx-trigger="load delay:150ms" hx-target="#import-workspace" hx-select="#import-workspace" hx-swap="outerHTML" data-import-auto></div>{% endif %}
+</section>
+{% if not auto %}{{ undo_section(r, made) }}{% endif %}
+{% endif %}
+
+{% if step == 'done' and r %}{% set cv = counts_view(result.counts) %}{% set batch = r.batch or {} %}{% set made = made_count(result.counts) %}
+{% set empty = r.state == 'done' and not made and batch.state not in ('reversed', 'reversed_partly') %}
+<div class="import-bar" data-import-bar>{% for c in cv %}<span class="{{ 'bad' if c.key == 'refused' else '' }}" data-count="{{ c.key }}"><strong>{{ c.value }}</strong> {{ c.label|lower }}</span>{% endfor %}</div>
+<section class="workspace-card" data-import-result="{{ r.state }}">
+<h2>{% if batch.state in ('reversed', 'reversed_partly') %}Import undone{% elif empty %}Nothing new to import{% elif r.state == 'done' %}Import finished{% elif r.state == 'cancelled' %}Import cancelled{% elif r.state == 'rolled_back' %}Import rolled back: nothing was kept{% else %}Import failed{% endif %}</h2>
+{% if empty %}<p data-import-nothing-new>Nothing new was imported: {% if result.counts.get('already_in') or result.counts.get('unchanged') or result.counts.get('exists') %}all rows were already in{% else %}no row landed{% endif %}{% if result.counts.get('already_in') %} (another import brought them in first){% endif %}.</p>{% endif %}
+<p>{{ r.file_name or 'File' }} · {{ r.rows }} rows · {{ kind_label }}</p>
+{% if result.counts.get('refused') or result.counts.get('skipped') %}<p><a href="{{ post }}/{{ r.id }}/refused.csv" download data-import-refused-download>Download the refused rows</a> <span class="muted import-small">to correct and import again (only those rows import)</span></p>{% endif %}
+<p><a href="/c/{{ company_id }}/{{ kind }}" data-import-records>Open the {{ kind_label|lower }} list</a></p>
+</section>
+{% if r.state == 'done' and made and batch.state not in ('reversed', 'reversed_partly') and can_write %}
+<form class="workspace-card import-form" {{ htmx() }} data-import-save-form><input type="hidden" name="action" value="save-mapping"><input type="hidden" name="run" value="{{ r.id }}">
+<h2>Save this mapping</h2><p class="muted import-small">Next time, a file with the same columns maps itself, with these answers.</p>
+<label class="import-field">Save as <input name="save_as" value="{{ r.source if not r.source.endswith(' import') else '' }}" placeholder="e.g. Old system customer export" maxlength="200" required data-import-save-name></label>
+<p class="import-actions"><button type="submit" class="primary-button" data-import-save>Save mapping</button></p></form>
+{% endif %}
+{{ undo_section(r, made) }}
+<p class="import-small"><a href="{{ post }}?kind={{ kind }}" data-import-restart>Import another file</a></p>
+{% endif %}
+</section>{% endblock %}
