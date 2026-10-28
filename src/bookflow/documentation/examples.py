@@ -1902,3 +1902,17 @@ EXAMPLES.update({
     'delivery batch-cancel': Example('bookflow delivery batch-cancel B-1001' + _C + ' --reason "Wrong month" --json',
                                      {'batch': 'B-1001'}),
 })
+
+# The bank inbox (R108 increment 1).
+_BANK_IMPORT = '01J9ZK4QF8T7E2V5N3B6C1D0BF'
+EXAMPLES.update({
+    'bank-feed import': Example('bookflow bank-feed import --account Checking --attachment 01J9ZK4QF8T7E2V5N3B6C1D0AT'
+                                ' --company "Demo Plumbing Co" --reason "September checking statement" --dry-run --json',
+                                {'account': 'Checking', 'attachment': '01J9ZK4QF8T7E2V5N3B6C1D0AT'}),
+    'bank-feed show': Example('bookflow bank-feed show ' + _BANK_IMPORT + ' --state waiting --company "Demo Plumbing Co"'
+                              ' --json', {'import_id': _BANK_IMPORT, 'state': 'waiting'}),
+    'bank-feed query': Example('bookflow bank-feed query --account Checking --company "Demo Plumbing Co" --json',
+                               {'account': 'Checking'}),
+    'bank-line query': Example('bookflow bank-line query --account Checking --state waiting --company "Demo Plumbing Co"'
+                               ' --json', {'account': 'Checking', 'state': 'waiting'}),
+})

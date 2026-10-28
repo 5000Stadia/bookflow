@@ -199,7 +199,7 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
         'delivery draft', 'delivery-template create', 'shipment create',
     )),
     'not-a-record': frozenset((
-        'import preview', 'import run', 'import cancel', 'import reverse',
+        'import preview', 'import run', 'import cancel', 'import reverse', 'bank-feed import',
         'account activate', 'accountant reclassify', 'accountant-copy changes', 'accountant-copy import',
         'assembly build', 'assembly update', 'attachment link', 'barcode generate', 'batch-invoice retry',
         'bill payment apply', 'bill update', 'billing-group rename', 'bin activate', 'bin update', 'budget fill',
