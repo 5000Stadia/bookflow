@@ -2579,6 +2579,24 @@ MATRIX['pick-list cancel'] = dict(_PICK_WRITE, E_VERSION_CONFLICT='a stale expec
 MATRIX['pick-list show'] = {'E_RECORD_NOT_FOUND': 'unknown pick list', 'E_FEATURE_DISABLED': 'picking is off'}
 MATRIX['pick-list query'] = {'E_RECORD_NOT_FOUND': 'unknown site or order', 'E_VALIDATION': 'invalid input',
                              'E_FEATURE_DISABLED': 'picking is off'}
+# Imports and reversible batches (R107 increments 0 and 1).
+_IMPORT_WRITE = {
+    'E_VALIDATION': 'no file or two, an unknown kind or column or path, an unreadable file, a run cancelled or done',
+    'E_RECORD_NOT_FOUND': 'unknown run or attachment',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+MATRIX['import preview'] = dict(_IMPORT_WRITE, E_IO='an attachment body collected',
+                                E_AMOUNT_PRECISION='more decimals than the currency allows (per row, as a refusal)')
+MATRIX['import run'] = dict(_IMPORT_WRITE)
+MATRIX['import cancel'] = dict(_IMPORT_WRITE)
+MATRIX['import reverse'] = dict(_IMPORT_WRITE, E_BATCH_BLOCKED='a record edited since or in use, a later live batch, '
+                                'or an inverse command the caller may not run',
+                                E_VERSION_CONFLICT='the batch changed since the dry run that gave --fingerprint')
+MATRIX['import kinds'] = {}
+MATRIX['import template'] = {'E_VALIDATION': 'unknown kind'}
+for _name in ('import show', 'import query', 'import rows', 'import errors', 'batch show', 'batch query'):
+    MATRIX[_name] = {'E_VALIDATION': 'invalid input', 'E_RECORD_NOT_FOUND': 'unknown run or batch'}
 MATRIX['report shipped-not-invoiced'] = {'E_RECORD_NOT_FOUND': 'unknown customer', 'E_VALIDATION': 'invalid input'}
 MATRIX['shipment invoice'] = {
     'E_VALIDATION': 'an invoice dated before the ship date, nothing left to invoice',

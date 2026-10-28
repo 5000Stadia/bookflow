@@ -1753,6 +1753,29 @@ EXAMPLES.update({
                                            {'as_of': '2026-12-12'}),
 })
 
+# Imports and reversible batches (R107 increments 0 and 1).
+_RUN = '01J9ZK4QF8T7E2V5N3B6C1D0AR'
+EXAMPLES.update({
+    'import kinds': Example('bookflow import kinds' + _C + ' --json', {}),
+    'import template': Example('bookflow import template customer' + _C + ' --json', {'kind': 'customer'}),
+    'import preview': Example('bookflow import preview --kind customer --content "$(cat customers.csv)" --source '
+                              '"Old system customers"' + _C + ' --reason "Customer list from the old system" --json',
+                              {'kind': 'customer', 'content': 'Name,Email\nAcme Plumbing,ap@acme.test\n',
+                               'source': 'Old system customers'}),
+    'import run': Example('bookflow import run ' + _RUN + _C + ' --reason "Customer list" --json', {'run': _RUN}),
+    'import cancel': Example('bookflow import cancel ' + _RUN + _C + ' --json', {'run': _RUN}),
+    'import reverse': Example('bookflow import reverse ' + _RUN + _C + ' --reason "Terms were mapped wrongly" --dry-run '
+                              '--json', {'run': _RUN}),
+    'import show': Example('bookflow import show ' + _RUN + _C + ' --json', {'run': _RUN}),
+    'import query': Example('bookflow import query --kind customer' + _C + ' --json', {'kind': 'customer'}),
+    'import rows': Example('bookflow import rows ' + _RUN + ' --status refused' + _C + ' --json',
+                           {'run': _RUN, 'status': 'refused'}),
+    'import errors': Example('bookflow import errors ' + _RUN + _C + ' --json', {'run': _RUN}),
+    'batch show': Example('bookflow batch show 01J9ZK4QF8T7E2V5N3B6C1D0BT' + _C + ' --json',
+                          {'batch': '01J9ZK4QF8T7E2V5N3B6C1D0BT'}),
+    'batch query': Example('bookflow batch query --kind import' + _C + ' --json', {'kind': 'import'}),
+})
+
 # Pick lists (R181 increment 3).
 EXAMPLES.update({
     'pick-list create': Example('bookflow pick-list create --site Warehouse --ready' + _C

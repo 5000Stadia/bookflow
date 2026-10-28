@@ -83,7 +83,9 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +3 owner-link, agent run and reconcile discard (R183).
     # +4 shipment returns (R181 increment 2): shipment return, shipment-return void/show/query.
     # +6 pick lists (R181 increment 3): pick-list create/enter/close/cancel/show/query.
-    assert len(rows) == 761
+    # +12 imports and batches (R107 increments 0 and 1): import kinds/template/preview/run/show/query/rows/errors/
+    # reverse/cancel, batch show/query.
+    assert len(rows) == 773
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
@@ -366,7 +368,11 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # shipment-return void's expected_version, the query filters, and company update's invoice_when_shipping -- their
     # null branches. No new variant kind. 3965 -> 3966: report shipped-not-invoiced pages, its cursor's null branch.
     # 3966 -> 3991 (R181 inc 3, measured): six pick-list commands and shipment post's pick_list and optional sales_order.
-    assert sum(len(group["paths"]) for group in mapped)==3991
+    # 3991 -> 4012 (R107 inc 0-1, measured): the null branches of the import and batch commands' optional inputs --
+    # import preview's content, attachment, file_name, source, columns, constants, key, delimiter, decimal and
+    # date_order (10); import query's kind, state, cursor (3); import rows' phase, status, cursor (3); import reverse's
+    # fingerprint (1); batch query's kind, state, scope, cursor (4). No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==4012
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.
