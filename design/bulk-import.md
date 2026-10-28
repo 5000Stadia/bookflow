@@ -143,6 +143,21 @@ NFC, trim, case-fold and collapsed spaces.
 
 ### Outcomes, atomic or not
 
+> **Decided by Kabe, 2026-10-27, superseding the partial-success default below:** "I think all or nothing seems like
+> the move really. Let's say the name 'Johnson, Beck ♎️' is invalid. Well I'm fine there if we drop the odd character,
+> not fine if we don't import the whole name. A dollar value of $599.♎️56 however indicates the data is junk and we
+> should deny the whole thing until it figures itself out."
+>
+> - **All or nothing is the default.** An import lands every row or none; a refused row refuses the run, and the
+>   preview lists every refused row with its reason so one fix-and-rerun clears them all. Partial success becomes the
+>   opt-in (`--partial`).
+> - **Text keeps its words.** A character a text field cannot hold (NUL and other control characters, except tab and
+>   line breaks where the field allows them) is dropped and the rest of the value imported; the result lists each
+>   dropped character by row, column and position, so nothing changes unseen. Characters a field can hold (accents,
+>   other scripts, symbols, emoji) are kept as written.
+> - **Numbers, money, dates and references are exact or refused.** A stray character in an amount, quantity, date,
+>   rate, id or reference means the data is junk: the row, and so the run, is refused, never repaired.
+
 Per row: `create`/`update` in a preview; then `created`, `updated`, `unchanged`, `exists`, `differs`, `already_in`,
 `skipped` or `refused`, with a stable `code` (the command's error code, or `header_conflict`, `unknown_reference`,
 `bad_value`, `no_key`, `duplicate_in_file`...), a message, the file line and the column.
