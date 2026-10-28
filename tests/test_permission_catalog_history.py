@@ -95,7 +95,10 @@ ACCEPTED = {
     'delivery-v1': (771, '085b7a93194e439557234ed8d88a7d7bdfd39ed06f8b2cbdddb732daca07561b'),
     'packing-v1': (774, '10872774b49e7497c34eccde2882c74e49c36ead5d7d2ff765399dd31fae79c8'),
     'delivery-queue-v1': (785, '2e19e20f01b2cdc3110be9f381a9ec54fa4f7f0ba5ef6880b49189576076554c'),
-    'import-v1': (805, '1616509eb680a5fa68c15ecc5baff0c38b0c601dce487eb9c3e3c968c0c6ebcc'),
+    'import-v1': (797, '0db21ee9713630abf0d4a5d81c282ee608483cd6f16b8a2aa40e3a14712dfe4a'),
+    'worksheet-v1': (799, 'c59d5c63f042353fd78d4e565561f9d0f4560ad8420d56b412915b90f23a4cf4'),
+    'delivery-batch-v1': (806, 'e7d68fa7de0173bbe842091419c3deed98561bc4e07c92cf981e4759e59756b5'),
+    'import-mapping-v1': (814, '66a2d6a6c90f23b6f547ec27aa823a1440b892c22a7bd0b50ce8c142c5dc7b5f'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -226,9 +229,12 @@ CHAIN_ADDITIONS = {
                           'delivery-connection query', 'delivery-connection remove', 'delivery-connection show',
                           'delivery-connection update'},
     'import-v1': {'batch query', 'batch show', 'import cancel', 'import errors', 'import kinds', 'import preview',
-                  'import query', 'import reverse', 'import rows', 'import run', 'import show', 'import template',
-                  'import check', 'import decide', 'import-mapping deactivate', 'import-mapping history',
-                  'import-mapping match', 'import-mapping query', 'import-mapping save', 'import-mapping show'},
+                  'import query', 'import reverse', 'import rows', 'import run', 'import show', 'import template'},
+    'worksheet-v1': {'report order-fulfillment', 'report shipments'},
+    'delivery-batch-v1': {'delivery batch', 'delivery batch-cancel', 'delivery batch-query', 'delivery batch-show', 'delivery flag',
+                          'delivery queue', 'delivery unflag'},
+    'import-mapping-v1': {'import check', 'import decide', 'import-mapping deactivate', 'import-mapping history',
+                          'import-mapping match', 'import-mapping query', 'import-mapping save', 'import-mapping show'},
 }
 
 _ANCESTOR_EDIT = """

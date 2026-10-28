@@ -815,7 +815,7 @@ linear too (20 ms per record; it was 21 to 41), its subtree reads now a range on
 - **Empty is allowed unless truly needed.** `import_kinds.required(kind)` is the create command's own required inputs,
   read from its model; a test asserts it equals the command's for all 17 kinds. Blank cells and absent columns are
   omitted, so a field takes its hand-entry default; only in `create` mode is a blank required cell a problem.
-- **Saved mappings (co0109,** on co0108; `import_sources`, append-only `import_mappings`, immutable `import_decisions`;
+- **Saved mappings (co0110,** on co0109, delivery batches; `import_sources`, append-only `import_mappings`, immutable `import_decisions`;
   guards refuse deletes and any change but a source's active flag and forward version). Fingerprint: SHA-256 of the
   sorted set of normalized headers. A preview with no `mapping` and no `columns` uses the single exact match among the
   kind's active sources (narrowed by `source` when given; the mapping's source becomes the run's, so keys join last
@@ -847,8 +847,10 @@ linear too (20 ms per record; it was 21 to 41), its subtree reads now a range on
   defusedxml is installed, so defusedxml 0.7.1 (PSF licence, no known vulnerabilities) is a dependency too and the
   reader refuses to run if openpyxl is not using it. Dependency et-xmlfile 2.0.0 (MIT, no known vulnerabilities).
   Pinned exactly in `pyproject.toml` and `uv.lock` (`uv add --no-sync`).
-- **Permissions:** the eight commands join layer `import-v1` (805 commands, digest recomputed); `import check` and the
-  mapping reads at member, `import decide`, `import-mapping save` and `deactivate` at standard.
+- **Permissions:** the eight commands are layer `import-mapping-v1` on `delivery-batch-v1` (814 commands, descriptor
+  66a2d6a6; `import-v1` stays as merged, 797, 0db21ee9); `import check` and the mapping reads at member, `import
+  decide`, `import-mapping save` and `deactivate` at standard. The layer re-declares `batches.require_read` with the
+  `show` of every list an import's rows refer to (adding sales tax codes and units of measure).
 
 **Check timings** (`tools/measure_imports.py ROWS --check`, root NVMe, the customer file of the baseline; seconds,
 2026-10-27): 1,000 rows 0.18 (a file with a junk amount in every tenth row: 0.12, 100 problems); 10,000 rows 1.35
@@ -893,6 +895,10 @@ Each finding has a test that failed before its fix (`test_import_rules.py`, `tes
   a text file too (`too_many_rows`). A formula with no saved value (array formulas too) refuses (`unsaved_formula`),
   and so does a saved error such as `#REF!` (`error_value`); damaged XML and a refused entity are "the workbook is
   damaged" (`not_xlsx`). Merged cells read as their first cell; the rest of the merge is blank (read-only mode).
+  Measured (2026-10-28, root NVMe, other builders' tests running): the review's 4.9 KB file (declared `A1:XFD2000`, a
+  value at XFD2000) is refused in under 0.01 s, and with its far value in column B instead it reads its 3 rows in
+  under 0.01 s (was 14.3 s); a 200,000-row, 3-column workbook (12.5 MB zip, no `<dimension>`) is refused at the cap
+  after 1.7 s with peak memory 50 MB (was 75 s and 190 MB to read it all); 20,000 rows read in 1.7 s, 42 MB.
 - **All or nothing is total** (Medium 5). In an atomic run a `differs` row (create mode) and a `skipped` row (update
   mode, no match) are refused unless the caller named the outcome in `allow` (`["differs"]`, `["skipped"]`); the
   preview shows them refused and the run will not start. `import cancel` of an atomic run with a live batch reverses
@@ -905,4 +911,8 @@ Each finding has a test that failed before its fix (`test_import_rules.py`, `tes
   lists only sources of readable kinds; `import check` offers suggestions and look-alikes only from lists the caller
   may read. Constants and a saved mapping's defaults are read and checked as cells are (a problem of the mapping, said
   once). A remembered decision keys on the file's own text (`file_value`), before any value map changed it.
-- **Permissions**: the eight commands of increment 2 move from `import-v1` (restored as merged) to a new layer.
+- **Check timings, after these fixes** (`tools/measure_imports.py ROWS --check`, 2026-10-28, under the same load): the
+  per-row model check costs about a third more: 1,000 rows 0.24 s (junk file 0.19 s); 10,000 rows 1.87 s (junk
+  1.49 s), still within the target of a few seconds.
+- **Permissions**: the eight commands of increment 2 move from `import-v1` (restored as merged) to
+  `import-mapping-v1` (above). The migration is co0110, on main's co0109 (delivery batches).

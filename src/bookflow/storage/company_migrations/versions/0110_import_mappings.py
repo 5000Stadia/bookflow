@@ -8,8 +8,8 @@ metadata.
 """
 from alembic import op
 
-revision = 'co0109'
-down_revision = 'co0108'
+revision = 'co0110'
+down_revision = 'co0109'
 branch_labels = depends_on = None
 
 DDL = ('\nCREATE TABLE import_sources (\n\tid VARCHAR(26) NOT NULL, \n\tname VARCHAR(200) NOT NULL, \n\tname_key VARCHAR(200) NOT NULL, \n\tkind VARCHAR(32) NOT NULL, \n\tactive BOOLEAN NOT NULL, \n\tversion INTEGER NOT NULL, \n\tcreated_at VARCHAR(32) NOT NULL, \n\tcreated_by VARCHAR(26) NOT NULL, \n\tupdated_at VARCHAR(32) NOT NULL, \n\tupdated_by VARCHAR(26) NOT NULL, \n\tPRIMARY KEY (id)\n)\n\n', '\nCREATE TABLE import_mappings (\n\tid VARCHAR(26) NOT NULL, \n\tsource_id VARCHAR(26) NOT NULL, \n\tversion INTEGER NOT NULL, \n\theader_fingerprint VARCHAR(64) NOT NULL, \n\theaders TEXT NOT NULL, \n\tcolumns TEXT NOT NULL, \n\tformats TEXT NOT NULL, \n\tkey_paths TEXT NOT NULL, \n\tmode VARCHAR(8) NOT NULL, \n\ton_unknown VARCHAR(8) NOT NULL, \n\tvalue_maps TEXT NOT NULL, \n\tdefaults TEXT NOT NULL, \n\trun_id VARCHAR(26), \n\tcreated_at VARCHAR(32) NOT NULL, \n\tcreated_by VARCHAR(26) NOT NULL, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(source_id) REFERENCES import_sources (id), \n\tFOREIGN KEY(run_id) REFERENCES import_runs (id)\n)\n\n', "\nCREATE TABLE import_decisions (\n\tid VARCHAR(26) NOT NULL, \n\trun_id VARCHAR(26) NOT NULL, \n\tfield VARCHAR(200) NOT NULL, \n\tvalue TEXT NOT NULL, \n\tvalue_key VARCHAR(400) NOT NULL, \n\taction VARCHAR(8) NOT NULL, \n\ttarget TEXT, \n\tinput TEXT, \n\tremembered BOOLEAN NOT NULL, \n\tcreated_at VARCHAR(32) NOT NULL, \n\tcreated_by VARCHAR(26) NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT ck_import_decision_action CHECK (action IN ('map', 'create', 'skip')), \n\tFOREIGN KEY(run_id) REFERENCES import_runs (id)\n)\n\n")
@@ -25,7 +25,7 @@ def upgrade():
     reserved = set(TABLES) | set(TRIGGERS)
     existing = {name.casefold() for name in connection.exec_driver_sql('SELECT name FROM sqlite_schema').scalars().all()}
     if {name.casefold() for name in reserved} & existing:
-        raise RuntimeError('co0109 reserved object already exists')
+        raise RuntimeError('co0110 reserved object already exists')
     for statement in DDL + INDEXES + GUARDS:
         connection.exec_driver_sql(statement)
 

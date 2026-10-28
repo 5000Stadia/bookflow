@@ -125,7 +125,25 @@ RESOURCE_PAIRS = {
 }
 
 
+def _import_read_pairs():
+    """worksheet-v1 declared batches.require_read: every importable kind's `show`, plus `attachment text`;
+    import-mapping-v1 re-declares it with the `show` of every list an import's rows refer to (`import check` asks
+    whether the caller may read a list before suggesting names from it).
+
+    Derived from the kind declarations, so a kind or reference added without a delta declaring its read fails here."""
+    from bookflow.company import import_kinds, imports
+    commands = {cmd.name: cmd for cmd in registry.all_commands(include_standalone=True)}
+    targets = {t for kind in import_kinds.KINDS.values() for t in imports._references(kind).values()}
+    pairs = set()
+    for name in {'attachment text', *(kind.noun + ' show' for kind in import_kinds.KINDS.values()),
+                 *(t + ' show' for t in targets)}:
+        cmd = commands[name]
+        pairs |= {(cmd.capability, cmd.required_role or 'authenticated'), *cmd.resource_requirements}
+    return pairs
+
+
 def test_every_resource_call_site_has_explicit_owner_disposition():
+    declared = {**RESOURCE_PAIRS, 'batches.require_read': _import_read_pairs()}
     sites = {}
     for folder in ('commands', 'company'):
         for path in sorted((ROOT / 'src/bookflow' / folder).rglob('*.py')):
@@ -148,7 +166,7 @@ def test_every_resource_call_site_has_explicit_owner_disposition():
                 module = '.'.join(path.relative_to(ROOT / 'src').with_suffix('').parts)
                 key = module + '.' + '.'.join(reversed(names))
                 sites.setdefault(key, set()).add((str(path.relative_to(ROOT)), node.lineno))
-                expected = RESOURCE_PAIRS[key.removeprefix('bookflow.company.')]
+                expected = declared[key.removeprefix('bookflow.company.')]
                 if len(node.args) >= 3 and all(isinstance(a, ast.Constant) for a in node.args[1:3]):
                     assert tuple(a.value for a in node.args[1:3]) in expected
     # The tip, for the same reason the descriptor comparison above uses it: the tip is
@@ -158,7 +176,7 @@ def test_every_resource_call_site_has_explicit_owner_disposition():
     # here asked a builder to add the site to the ancestor, which is the one edit that
     # locks activated installations out of their own books.
     inventory = runtime.current_catalog().CATALOG.conditional_sources
-    assert sites.keys() == {'bookflow.company.' + name for name in RESOURCE_PAIRS}
+    assert sites.keys() == {'bookflow.company.' + name for name in declared}
     # Accepted descriptor line coordinates are historical provenance. Blank-line
     # or adjacent code edits cannot require rewriting an installed descriptor.
     # Keep exact owners, source paths and call multiplicities, plus the literal
@@ -166,7 +184,7 @@ def test_every_resource_call_site_has_explicit_owner_disposition():
     assert {s.owner: Counter(path for path, _ in s.call_sites) for s in inventory} == {
         owner: Counter(path for path, _ in locations) for owner, locations in sites.items()}
 
-    assert {s.owner.removeprefix('bookflow.company.'): {(r.capability, r.threshold) for r in s.requirements} for s in inventory} == RESOURCE_PAIRS
+    assert {s.owner.removeprefix('bookflow.company.'): {(r.capability, r.threshold) for r in s.requirements} for s in inventory} == declared
 
 
 def test_exact_requirement_universes_and_effective_literal_migration_seeds():

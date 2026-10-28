@@ -347,6 +347,9 @@ NOT_REFERENCES: dict[tuple[str, str], str] = {
     ('delivery_message_documents', 'attachment_id'): 'a stored file, never a list record',
     ('delivery_messages', 'connection_id'): 'a delivery connection, which no import or batch makes',
     ('delivery_messages', 'message_id'): 'an e-mail Message-ID (text), not a record id',
+    ('delivery_flags', 'source_id'): 'an invoice, sales receipt or estimate flagged Email later, which no import or '
+                                     'batch makes',
+    ('delivery_batches', 'schedule_run_id'): 'a schedule run (delivery increment 4), which no import or batch makes',
     ('shipment_draft_lines', 'root_document_id'): _INTERNAL, ('shipment_draft_lines', 'root_line_id'): _INTERNAL,
     ('shipment_package_contents', 'revision_id'): _INTERNAL, ('shipment_packages', 'revision_id'): _INTERNAL,
     ('shipment_packages', 'shipment_id'): _INTERNAL,

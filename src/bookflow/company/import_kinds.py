@@ -151,7 +151,7 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
         'payment void', 'purchase-order void', 'sales-order void', 'sales-receipt void', 'sales-tax adjustment void',
         'sales-tax payment void', 'shipment void', 'shipment-return void', 'statement-charge void',
         'time-activity void', 'transfer void', 'trip void', 'vendor-credit void',
-        'delivery cancel', 'shipment cancel',
+        'delivery cancel', 'shipment cancel', 'delivery batch-cancel',
     )),
     'merge': frozenset((
         'account merge', 'account unmerge', 'customer merge', 'customer unmerge', 'item merge', 'item unmerge',
@@ -231,6 +231,7 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
         'vendor-credit update', 'vendor-type activate', 'work-order complete', 'work-order copy',
         'work-order invoice', 'work-order purchase-order', 'work-order sales-receipt', 'work-order update',
         'delivery update', 'delivery-template update', 'shipment pack',
+        'delivery flag', 'delivery unflag', 'delivery batch',
     )),
 }
 

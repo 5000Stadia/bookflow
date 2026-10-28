@@ -4,9 +4,7 @@ A new capability, `import` (design/bulk-import.md §8), held at `member` by ever
 admin and owner, as list writes are: `import kinds`, `template`, `show`, `query`, `rows`, `errors` and `batch show`,
 `query` are member reads; `import preview`, `run`, `cancel` and `reverse` are standard writes, each row (and each
 inverse step of a reversal) checked again against its own command's capability, so the importer grants nothing.
-Increment 2 adds to the same layer: `import check` and `import-mapping show`, `history`, `query`, `match` are member
-reads; `import decide` and `import-mapping save`, `deactivate` standard writes (a decision's create runs its own command
-under the caller's grants when the run reaches it). `import.approve` (R187) arrives with document imports. No existing capability, role default or threshold changes,
+`import.approve` (R187) arrives with document imports. No existing capability, role default or threshold changes,
 so a root replacing its catalog with this one suspends no agent and revokes no token.
 """
 from dataclasses import asdict, replace
@@ -23,8 +21,6 @@ _ADDED = (
     ('batch query', 'member', 'plan_batch_query'),
     ('batch show', 'member', 'plan_batch_show'),
     ('import cancel', 'standard', 'plan_import_cancel'),
-    ('import check', 'member', 'plan_import_check'),
-    ('import decide', 'standard', 'plan_import_decide'),
     ('import errors', 'member', 'plan_import_errors'),
     ('import kinds', 'member', 'plan_import_kinds'),
     ('import preview', 'standard', 'plan_import_preview'),
@@ -34,12 +30,6 @@ _ADDED = (
     ('import run', 'standard', 'plan_import_run'),
     ('import show', 'member', 'plan_import_show'),
     ('import template', 'member', 'plan_import_template'),
-    ('import-mapping deactivate', 'standard', 'plan_mapping_deactivate'),
-    ('import-mapping history', 'member', 'plan_mapping_history'),
-    ('import-mapping match', 'member', 'plan_mapping_match'),
-    ('import-mapping query', 'member', 'plan_mapping_query'),
-    ('import-mapping save', 'standard', 'plan_mapping_save'),
-    ('import-mapping show', 'member', 'plan_mapping_show'),
 )
 ADDED_CAPABILITIES = (c.CapabilitySpec('import', ('member', 'standard'), ('member', 'standard')),)
 ADDED_DEFAULTS = (

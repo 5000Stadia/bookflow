@@ -257,11 +257,12 @@ class CompanyUpdateInput(BaseModel):
     invoice_when_shipping: Literal["ask", "always", "never"] | None = Field(None, description="Shipments: after a shipment posts, ask (the default) whether to invoice it now, always offer to, or never; it drives the browser's prompt and the agent's next-command hint. `shipment post` itself does only what it is told.")
     delivery_reply_to: str | None = Field(None, max_length=254, description="Email: the Reply-To address on every message (e.g. accounts@example.com); null for none.")
     delivery_copy_to: str | None = Field(None, max_length=254, description="Email: a Bcc copy of every message to this address; null for none.")
+    delivery_auto_flag_from: str | None = Field(None, min_length=10, max_length=10, description="Email: documents dated on or after this day (YYYY-MM-DD) are to be emailed when the customer prefers email; null is off.")
     pick_and_pack_enabled: bool = Field(None, strict=True, description="Pick lists, draft shipments and boxes as optional layers on shipping: off by default, when `shipment post` ships straight from the order. Turning it off is refused while a pick list or draft shipment is open.")
     weight_unit: str | None = Field(None, min_length=1, max_length=16, description="The one weight unit of item weights and boxes (lb, kg, oz): a label, never converted.")
     shipping_item_id: str | None = Field(None, description="Other-charge or service item a shipment's freight to bill is billed as, by default.")
 
-    @field_validator("legal_name", "tax_id", "industry", "contact_name", "phone", "fax", "email", "website", "timezone", "closing_date", "free_on_board", "finance_charge_annual_rate", "finance_charge_minimum", "finance_charge_account_id", "overdue_notice_minimum", "delivery_reply_to", "delivery_copy_to", mode="before")
+    @field_validator("legal_name", "tax_id", "industry", "contact_name", "phone", "fax", "email", "website", "timezone", "closing_date", "free_on_board", "finance_charge_annual_rate", "finance_charge_minimum", "finance_charge_account_id", "overdue_notice_minimum", "delivery_reply_to", "delivery_copy_to", "delivery_auto_flag_from", mode="before")
     @classmethod
     def _blank(cls, v):
         return _empty_to_none(v)
@@ -314,6 +315,12 @@ def _validate_merged(new: dict[str, Any], s: Session, changed: set[str]) -> None
             ZoneInfo(new["timezone"])
         except (ZoneInfoNotFoundError, ValueError):
             fields.append({"field": "timezone", "problem": f"unknown timezone {new['timezone']!r}"})
+    if new.get("delivery_auto_flag_from") is not None:
+        from datetime import date
+        try:
+            date.fromisoformat(new["delivery_auto_flag_from"])
+        except ValueError:
+            fields.append({"field": "delivery_auto_flag_from", "problem": "must be YYYY-MM-DD"})
     if new.get("closing_date") is not None:
         from datetime import date
         try:

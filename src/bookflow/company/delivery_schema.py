@@ -244,3 +244,60 @@ GUARDED = (
     ('delivery_templates', ('DELETE',), 'templates are deactivated, never deleted'),
     ('delivery_connections', ('DELETE',), 'connections are removed, never deleted'),
 )
+
+
+BATCH_STATES = ('drafting', 'done', 'cancelled')
+FLAG_KINDS = ('invoice', 'sales-receipt', 'estimate')
+
+
+def define_batch_tables(metadata, C, T, common, messages):
+    """Increment 3 (co0109): *Email later* flags, batches, and the batch a message was drafted in."""
+    flags = T('delivery_flags', *common(),
+        C('source_kind', sa.String(16), 'Kind of the document: ' + ', '.join(FLAG_KINDS) + '.', nullable=False),
+        C('source_id', sa.String(26), 'The invoice, sales receipt (transactions) or estimate (work_documents).',
+          nullable=False),
+        C('wanted', sa.Boolean, "True for the anchor's Email later; false for an explicit opt-out, which wins over "
+          "the company's auto-flag date.", nullable=False),
+        sa.CheckConstraint("source_kind IN ('invoice', 'sales-receipt', 'estimate')", name='ck_delivery_flag_kind'),
+        sa.UniqueConstraint('source_kind', 'source_id', name='uq_delivery_flag_source'),
+        description="Email later: one row per document a person flagged to email, or opted out of the company's "
+                    'auto-flag date.')
+    batches = T('delivery_batches', *common(),
+        C('number', sa.String(64), 'Batch number from the delivery-batch sequence (B-1001, ...).', nullable=False),
+        C('kind', sa.String(16), 'Kind of document the batch drafts.', nullable=False),
+        C('selection', sa.Text, 'The selection as asked (queued, unsent, statements, ready notices; filters), a '
+          'JSON object.', nullable=False),
+        C('targets', sa.Text, 'The messages to draft, fixed when the batch began: a JSON array of customers and '
+          'their documents.', nullable=False),
+        C('skipped', sa.Text, 'Who was left out and why (no address, prefers mail, already in the outbox or sent), '
+          'a JSON array.', nullable=False),
+        C('planned', sa.Integer, 'Messages to draft.', nullable=False),
+        C('position', sa.Integer, 'Targets drafted or skipped so far; the next chunk starts here.', nullable=False),
+        C('send', sa.Boolean, 'Release each message as it is drafted.', nullable=False),
+        C('state', sa.String(10), 'drafting, done or cancelled.', nullable=False),
+        C('schedule_run_id', sa.String(26), 'The schedule run that started it (increment 4); null for a person or '
+          'agent.', nullable=True),
+        C('cancelled_reason', sa.String(500), 'Why it was cancelled.', nullable=True),
+        C('go_by', sa.String(26), "The person whose go the batch's releases carry, decided once when it began (a "
+          'person who asked to send); null otherwise, so a later continue never adds a go.', nullable=True),
+        C('fingerprint', sa.String(64), 'SHA-256 of the exact set when it began (documents, versions, recipients); '
+          'a run or continue carrying another is refused.', nullable=False),
+        C('drafted', sa.Text, 'Each message as the batch left it (version, recipients hash, content hash), a JSON '
+          'object by message id: approve and send by batch act only on messages still so.', nullable=False),
+        sa.CheckConstraint("state IN ('drafting', 'done', 'cancelled')", name='ck_delivery_batch_state'),
+        sa.CheckConstraint("(state = 'cancelled') = (cancelled_reason IS NOT NULL)", name='ck_delivery_batch_cancelled'),
+        sa.CheckConstraint("json_valid(selection) AND json_type(selection) = 'object' AND json_valid(targets) AND "
+                           "json_type(targets) = 'array' AND json_valid(skipped) AND json_type(skipped) = 'array' AND "
+                           "json_valid(drafted) AND json_type(drafted) = 'object'",
+                           name='ck_delivery_batch_json'),
+        sa.CheckConstraint('planned >= 0 AND position BETWEEN 0 AND planned', name='ck_delivery_batch_position'),
+        sa.UniqueConstraint('number', name='uq_delivery_batch_number'),
+        description='Batches of drafted messages: what was asked, the messages planned, who was skipped and why, '
+                    'and how far drafting has gone. Cancelled as one unit.')
+    messages.append_column(C('batch_id', sa.String(26), 'The batch that drafted it; null for a single draft.',
+                             sa.ForeignKey('delivery_batches.id'), nullable=True))
+    sa.Index('ix_delivery_messages_batch', messages.c.batch_id)
+    return dict(delivery_flags=flags, delivery_batches=batches)
+
+
+BATCH_TABLES = ('delivery_flags', 'delivery_batches')

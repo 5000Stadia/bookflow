@@ -10,7 +10,7 @@ import bookflow
 from bookflow import BookflowError
 from bookflow.core import registry
 from bookflow.hub import permission_human_admin_catalog as layer, people_only, permission_runtime as runtime
-from bookflow.hub import permission_import_catalog as tip_layer
+from bookflow.hub import permission_import_mapping_catalog as tip_layer
 from tests.conftest import hosted_call, make_agent
 from tests.test_row3_host import hosted  # noqa: F401 - fixture
 
@@ -60,6 +60,9 @@ def test_the_people_only_list_is_the_catalogs_and_covers_every_write_that_change
     # delivery-queue-v1 adds `delivery approve` (a go) and every `delivery-connection` write and check (where mail goes
     # under whose keys); R187 converts them to delivery.send and delivery.connect.
     # import-v1 adds none: an import runs each row's own command, under that command's own capability.
+    # worksheet-v1 adds none: the worksheet and the shipments report are reports.
+    # delivery-batch-v1 adds none: drafting is anyone's, and a batch's send gives a go only as delivery send does.
+    # import-mapping-v1 adds none: a decision's create runs its own command; a saved mapping is the import's own record.
     assert tip is tip_layer and set(layer.CATALOG.admin_actions) <= set(tip.CATALOG.admin_actions)
     assert people_only.people_only_commands() == frozenset(layer.PEOPLE_ONLY_COMMANDS) | {
         'journal restore', 'invoice restore', 'customer merge', 'customer unmerge', 'vendor merge', 'vendor unmerge',

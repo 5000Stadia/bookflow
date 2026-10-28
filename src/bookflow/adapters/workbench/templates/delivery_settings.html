@@ -13,8 +13,10 @@
 <p>From: {{ company.display_name }}{% if info.get('email') %} &lt;{{ info.email }}&gt;{% endif %} (the company's name and email)</p>
 <label>Reply-To <input type="text" name="delivery_reply_to" value="{{ values.get('delivery_reply_to', info.get('delivery_reply_to') or '') }}" placeholder="accounts@example.com"></label>
 <label>Copy every message to (Bcc) <input type="text" name="delivery_copy_to" value="{{ values.get('delivery_copy_to', info.get('delivery_copy_to') or '') }}"></label>
+<label>Email documents dated from <input type="date" name="delivery_auto_flag_from" value="{{ values.get('delivery_auto_flag_from', info.get('delivery_auto_flag_from') or '') }}" data-auto-flag></label>
+<p class="muted">From this day, invoices, receipts and estimates for customers who prefer email are queued to be emailed (blank: only those marked Email later).</p>
 <button type="submit">Save addresses</button></form>
-{% else %}<p>Reply-To: {{ info.get('delivery_reply_to') or 'none' }} · Copy to: {{ info.get('delivery_copy_to') or 'none' }}</p>{% endif %}</section>
+{% else %}<p>Reply-To: {{ info.get('delivery_reply_to') or 'none' }} · Copy to: {{ info.get('delivery_copy_to') or 'none' }} · Email documents dated from: {{ info.get('delivery_auto_flag_from') or 'off' }}</p>{% endif %}</section>
 <section class="workspace-card" aria-label="Templates"><h2>Templates</h2>
 {% for t in templates %}<article data-template="{{ t.name }}"><h3>{{ kind_label[t.kind] }}: {{ t.name }}{% if t.is_default %} (default){% endif %}{% if not t.active %} (inactive){% endif %}</h3>
 {% if editing == t.id and can_write %}<form method="post" action="/c/{{ company_id }}/delivery-settings" hx-post="/c/{{ company_id }}/delivery-settings" hx-target="body" hx-swap="outerHTML" data-template-form><input type="hidden" name="action" value="template"><input type="hidden" name="template" value="{{ t.id }}">

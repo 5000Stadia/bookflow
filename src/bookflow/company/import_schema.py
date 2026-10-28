@@ -16,7 +16,7 @@
 - ``import_keys``: the key ledger. A record an import made, by source and key hash, unique among unreleased keys; a
   reversal releases them (``released_by``), so the corrected file imports again as new.
 
-**Saved mappings and decisions** (co0109, increment 2; ``import_mappings.py``):
+**Saved mappings and decisions** (co0110, increment 2; ``import_mappings.py``):
 
 - ``import_sources``: a named origin of files for one kind. Never deleted; only ``active``, ``version`` and who and
   when changed.

@@ -1753,6 +1753,14 @@ EXAMPLES.update({
                                            {'as_of': '2026-12-12'}),
 })
 
+# The fulfillment worksheet (R181 increment 5).
+EXAMPLES.update({
+    'report order-fulfillment': Example('bookflow report order-fulfillment --status to_pick,picking' + _C + ' --json',
+                                        {'status': 'to_pick,picking'}),
+    'report shipments': Example('bookflow report shipments --date-from 2026-12-01 --date-to 2026-12-12' + _C + ' --json',
+                                {'date_from': '2026-12-01', 'date_to': '2026-12-12'}),
+})
+
 # Draft shipments and packing (R181 increment 4).
 EXAMPLES.update({
     'shipment create': Example('bookflow shipment create --sales-order 1001' + _C
@@ -1892,4 +1900,21 @@ EXAMPLES.update({
     'delivery-connection show': Example('bookflow delivery-connection show Office' + _C + ' --json',
                                         {'connection': 'Office'}),
     'delivery-connection query': Example('bookflow delivery-connection query' + _C + ' --json', {}),
+})
+
+# Document delivery (R112 increment 3): flags, the queue and batches.
+EXAMPLES.update({
+    'delivery flag': Example('bookflow delivery flag invoice DEMO-SALE-INV-ACTIVE' + _C + ' --reason "Email later" --json',
+                             {'kind': 'invoice', 'document': 'DEMO-SALE-INV-ACTIVE'}),
+    'delivery unflag': Example('bookflow delivery unflag invoice DEMO-SALE-INV-ACTIVE' + _C
+                               + ' --reason "They want it by post" --json',
+                               {'kind': 'invoice', 'document': 'DEMO-SALE-INV-ACTIVE'}),
+    'delivery queue': Example('bookflow delivery queue' + _C + ' --json', {}),
+    'delivery batch': Example('bookflow delivery batch --kind statement --period 2026-11 --balance-over 0 --method email'
+                              + _C + ' --dry-run --json',
+                              {'kind': 'statement', 'period': '2026-11', 'balance_over': '0', 'method': 'email'}),
+    'delivery batch-show': Example('bookflow delivery batch-show B-1001' + _C + ' --json', {'batch': 'B-1001'}),
+    'delivery batch-query': Example('bookflow delivery batch-query' + _C + ' --json', {}),
+    'delivery batch-cancel': Example('bookflow delivery batch-cancel B-1001' + _C + ' --reason "Wrong month" --json',
+                                     {'batch': 'B-1001'}),
 })

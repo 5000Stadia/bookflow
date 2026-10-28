@@ -32,6 +32,9 @@ class DraftInput(_Document):
     body: str | None = Field(default=None, max_length=20000, description="Body, instead of the template's.")
     again: bool = Field(default=False, description='A new message for a document already sent or already in the '
                         'outbox; it names the earlier one.')
+    combine: bool = Field(default=False, description='With documents: one message carrying them all, one PDF each.')
+    documents: list[Selector] | None = Field(default=None, max_length=20, description=(
+        'More invoices, sales receipts or estimates of the same kind and customer (needs combine).'))
 
 
 class UpdateInput(_Strict):
@@ -47,7 +50,9 @@ class UpdateInput(_Strict):
 
 
 class SendInput(_Strict):
-    messages: list[Selector] = Field(min_length=1, max_length=100, description='Draft messages to release.')
+    messages: list[Selector] | None = Field(default=None, min_length=1, max_length=100,
+                                            description='Draft messages to release.')
+    batch: Selector | None = Field(default=None, description="A batch's drafts, a chunk per call (B-1001).")
 
 
 class CancelInput(_Strict):
@@ -87,6 +92,7 @@ class QueryInput(_Strict):
     source: Selector | None = Field(default=None, description="Only messages carrying this document's id.")
     date_from: IsoDate | None = Field(default=None, description='Drafted on or after this day.')
     date_to: IsoDate | None = Field(default=None, description='Drafted on or before this day.')
+    batch: Selector | None = Field(default=None, description='Only the messages of this batch (B-1001).')
     limit: int = Field(default=50, ge=1, le=500)
 
 
@@ -172,6 +178,7 @@ class MessageOutput(BaseModel):
     template_id: str | None = None
     template_name: str | None = None
     resend_of: str | None = Field(default=None, description='Number of the earlier message this sends again.')
+    batch: str | None = Field(default=None, description='Number of the batch that drafted it.')
     released_by: str | None = None
     released_at: str | None = None
     go_by: str | None = None

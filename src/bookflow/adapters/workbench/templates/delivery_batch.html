@@ -1,0 +1,56 @@
+{% extends "base.html" %}{% block title %}Email a batch{% endblock %}{% block body %}<style>
+.batch-form{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:end;margin:8px 0 12px}.batch-form label{display:flex;flex-direction:column;gap:2px}
+.batch-form label.inline{flex-direction:row;align-items:center;gap:6px}.batch-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}
+.batch-progress{width:100%;max-width:420px;height:14px}.delivery-note{border-left:3px solid #b58a00;padding:6px 10px;background:#fffbea}
+[data-batch-items] td,[data-batch-skipped] td{overflow-wrap:anywhere}
+</style><section id="delivery-batch">
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/customers">Customers</a> / <a href="/c/{{ company_id }}/delivery">Outbox</a> / Email a batch</nav>
+<h1>Email a batch</h1>
+{% if result %}<p class="notice" role="status" data-batch-result>{{ result }}</p>{% endif %}
+{% if error %}<div role="alert" class="error" data-batch-error><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
+{% if batch %}
+<h2 data-batch-number>Batch {{ batch.number }}</h2>
+{% set done = batch.planned - batch.remaining %}
+<p><progress class="batch-progress" max="{{ batch.planned or 1 }}" value="{{ done }}" data-batch-progress></progress><br>
+{% if batch.state == 'drafting' %}Drafting: {{ done }} of {{ batch.planned }} looked at, {{ batch.drafted }} drafted…{% elif batch.state == 'cancelled' %}Cancelled.{% else %}Done: {{ batch.drafted }} drafted{% if batch.released %}, {{ batch.released }} released{% endif %}{% if batch.skipped %}, {{ batch.skipped|length }} skipped{% endif %}.{% endif %}</p>
+{% if batch.next and not stopped %}<div hx-post="/c/{{ company_id }}/delivery/batch" hx-vals='{"action": "continue", "batch": "{{ batch.number }}", "fingerprint": "{{ batch.fingerprint }}"}' hx-trigger="load delay:50ms" hx-target="body" hx-swap="outerHTML" hx-on::send-error="document.querySelector('[data-batch-network-error]').hidden = false" hx-on::response-error="document.querySelector('[data-batch-network-error]').hidden = false" data-batch-continue></div>{% endif %}
+<p role="alert" class="error" hidden data-batch-network-error>Drafting stopped: the page could not reach Bookflow. Continue picks up where it stopped.</p>
+{% if can_write and batch.state == 'drafting' %}<form method="post" action="/c/{{ company_id }}/delivery/batch" class="batch-actions"><input type="hidden" name="batch" value="{{ batch.number }}"><input type="hidden" name="fingerprint" value="{{ batch.fingerprint }}"><button type="submit" name="action" value="continue" hx-post="/c/{{ company_id }}/delivery/batch" hx-target="body" hx-swap="outerHTML" data-batch-continue-button>Continue drafting</button></form>{% endif %}
+{% if listing and listing.rows %}<div class="table-wrap"><table class="list-table" data-batch-messages><thead><tr><th>Num</th><th>Customer</th><th>Document</th><th>To</th><th>State</th></tr></thead><tbody>
+{% for row in listing.rows %}<tr><td data-label="Num"><a href="/c/{{ company_id }}/delivery/{{ row.number }}">{{ row.number }}</a></td><td data-label="Customer">{{ row.customer_name }}</td><td data-label="Document">{{ row.documents|join(', ') }}</td><td data-label="To">{{ row.to|join(', ') or '—' }}</td><td data-label="State">{{ row.status_label }}</td></tr>{% endfor %}
+</tbody></table></div>{% endif %}
+{% if batch.skipped %}<h3>Skipped</h3><ul data-batch-skipped>{% for item in batch.skipped %}<li>{{ item.customer_name }}: {{ item.documents|join(', ') }} — {{ item.reason_text }}</li>{% endfor %}</ul>{% endif %}
+{% if can_write and batch.batch_id %}<form method="post" action="/c/{{ company_id }}/delivery/batch" class="batch-actions" id="batch-cancel"><input type="hidden" name="batch" value="{{ batch.number }}">
+<a href="/c/{{ company_id }}/delivery?status=all&amp;batch={{ batch.number }}">Open in the outbox</a>
+{% if batch.state != 'cancelled' %}{% if batch.state != 'drafting' %}<button type="submit" name="action" value="send" hx-post="/c/{{ company_id }}/delivery/batch" hx-target="body" hx-swap="outerHTML" data-batch-send>Send the drafts</button>{% endif %}
+<label class="inline">Reason <input name="ctx:reason" size="14" placeholder="Why cancel"></label><button type="submit" name="action" value="cancel" hx-post="/c/{{ company_id }}/delivery/batch" hx-target="body" hx-swap="outerHTML" data-batch-cancel>Cancel the batch</button>{% endif %}
+</form>{% endif %}
+{% else %}
+<form method="get" action="/c/{{ company_id }}/delivery/batch" class="batch-form" data-batch-selection>
+<label>Email <select name="selection">{% for key, label in (('queued', 'Documents to be emailed'), ('unsent', 'Unsent documents'), ('statement', 'Statements'), ('notice', 'Ready overdue notices')) %}<option value="{{ key }}" {% if selection == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+{% if selection in ('queued', 'unsent') %}<label>Kind <select name="kind">{% if selection == 'queued' %}<option value="">Any</option>{% endif %}{% for k in ('invoice', 'sales-receipt', 'estimate') %}<option value="{{ k }}" {% if values.get('kind') == k %}selected{% endif %}>{{ kind_label[k] }}</option>{% endfor %}</select></label>
+<label>Dated from <input type="date" name="date_from" value="{{ values.get('date_from', '') }}"></label><label>to <input type="date" name="date_to" value="{{ values.get('date_to', '') }}"></label>
+<label class="inline"><input type="checkbox" name="combine" {% if values.get('combine') == 'on' %}checked{% endif %}> One email per customer</label>{% endif %}
+{% if selection == 'statement' %}<label>Month <input type="month" name="period" value="{{ values.get('period', '') }}" data-batch-period></label><label>Balance over <input name="balance_over" value="{{ values.get('balance_over', '') }}" size="8" placeholder="0.00"></label>
+<label class="inline"><input type="checkbox" name="method" value="email" {% if values.get('method') == 'email' %}checked{% endif %}> Only customers who prefer email</label>{% endif %}
+<label>Customer <input name="customer" value="{{ values.get('customer', '') }}" size="14"></label>
+<button type="submit" data-batch-preview-button>Preview</button></form>
+{% if preview %}
+<form method="post" action="/c/{{ company_id }}/delivery/batch" data-batch-preview>
+{% for key in ('selection', 'kind', 'date_from', 'date_to', 'period', 'balance_over', 'method', 'customer', 'combine') %}{% if values.get(key) %}<input type="hidden" name="{{ key }}" value="{{ values[key] }}">{% endif %}{% endfor %}
+<input type="hidden" name="fingerprint" value="{{ preview.fingerprint }}">
+{% for b in preview.open_batches %}<p class="delivery-note" data-batch-open="{{ b }}">Batch {{ b }} over this selection is still drafting. <a href="/c/{{ company_id }}/delivery/batch?batch={{ b }}" data-batch-open-link>Continue batch {{ b }}</a> rather than start another.</p>{% endfor %}
+<h2 data-batch-count>{{ preview.planned }} email{{ '' if preview.planned == 1 else 's' }} to draft</h2>
+{% if preview.would_draft %}<div class="table-wrap"><table class="list-table" data-batch-items><thead><tr><th><span class="visually-hidden">Include</span></th><th>Customer</th><th>Document</th><th>To</th></tr></thead><tbody>
+{% for item in preview.would_draft %}<tr><td><input type="hidden" name="key" value="{{ item.key }}"><input type="hidden" name="seen" value="{{ item.fingerprint }}"><input type="checkbox" name="keep" value="{{ item.key }}" checked aria-label="Email {{ item.customer_name }}"></td><td data-label="Customer">{{ item.customer_name }}</td><td data-label="Document">{{ item.documents|join(', ') }}</td><td data-label="To">{{ item.to|join(', ') }}</td></tr>{% endfor %}
+</tbody></table></div>{% endif %}
+{% if preview.skipped %}<h3 data-batch-skipped-heading>Skipped ({{ preview.skipped|length }})</h3><div class="table-wrap"><table class="list-table" data-batch-skipped><thead><tr><th>Customer</th><th>Document</th><th>Why</th></tr></thead><tbody>
+{% for item in preview.skipped %}<tr><td data-label="Customer">{{ item.customer_name }}</td><td data-label="Document">{{ item.documents|join(', ') }}</td><td data-label="Why">{{ item.reason_text }}</td></tr>{% endfor %}
+</tbody></table></div>{% endif %}
+{% set notes = namespace(text=[]) %}{% for w in preview.warnings if 'still drafting' not in w %}{% set notes.text = notes.text + [w] %}{% endfor %}{% if notes.text %}<p class="delivery-note">{{ notes.text|join(' ') }}</p>{% endif %}
+{% if can_write and preview.would_draft %}<div class="batch-actions">{% if is_person %}<label class="inline"><input type="checkbox" name="send" data-batch-send-too> Send them too</label>{% endif %}
+<button type="submit" name="action" value="draft" hx-post="/c/{{ company_id }}/delivery/batch" hx-target="body" hx-swap="outerHTML" data-batch-draft>Draft the emails</button></div>
+<p class="muted">Nothing leaves this machine until a sending connection is set up; drafts wait in the outbox.</p>{% endif %}
+</form>{% endif %}
+{% endif %}
+</section>{% endblock %}

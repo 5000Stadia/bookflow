@@ -4,7 +4,7 @@
 
 ## `import cancel`
 
-Stop an import run; what it made stays (reverse it with `import reverse`).
+Stop an import run. All or nothing undoes what it made; a partial run keeps it (`import reverse` undoes it).
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -207,7 +207,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
-| `ok` | boolean | yes | no | — | True when no cell has a problem (unknown references ask, they do not fail). |
+| `ok` | boolean | yes | no | — | True only when the file can be previewed and run as it is: no cell has a problem and nothing waits on a decision (`to_decide`). |
+| `clean` | boolean | yes | no | — | True when no cell has a problem; decisions may still be pending. |
+| `to_decide` | array[object[string, any]] | yes | no | — | Decisions to make before the run: a decimal mark, a date order, which saved mapping, each unknown reference (map, create or skip). |
 | `kind` | string | yes | no | — | The kind. |
 | `source` | string | yes | no | — | The source the rows would be keyed in. |
 | `rows` | integer | yes | no | — | Data rows read. |
@@ -228,6 +230,7 @@ Example JSON output:
 
 ```json
 {
+  "clean": false,
   "decisions": [],
   "dropped": [],
   "dropped_total": 1,
@@ -243,6 +246,7 @@ Example JSON output:
   "rows_with_problems": 1,
   "source": "value",
   "summary": [],
+  "to_decide": [],
   "unknown_references": []
 }
 ```
@@ -663,6 +667,7 @@ The same example as complete `bookflow_run` arguments:
 | `file_name` | `--file-name` | string \| null | no | yes | null | A label for the file in results. |
 | `partial` | `--partial` | boolean | no | no | false | False (the default): all or nothing. A file the check finds any problem in is refused whole, a run starts only when its preview refused no row, and a row refused while running undoes the run. True: each bad row is refused alone and the others import. |
 | `stop_after_refusals` | `--stop-after-refusals` | integer | no | no | 100 | Refusals in one `import run` call after which a partial run stops itself, keeping what it did.; minimum 1; maximum 100000 |
+| `allow` | `--allow` | array[literal["differs", "skipped"]] | no | no | [] | All or nothing refuses a row that would change nothing because a record with its name differs (`differs`) or, in update mode, matches none (`skipped`); name the outcomes to accept instead. |
 
 ### Command and context options
 

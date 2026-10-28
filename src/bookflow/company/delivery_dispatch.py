@@ -664,12 +664,33 @@ def tick_record(s, system_id, outcomes, reports, now: datetime) -> q.RunOutput:
 
 # ---------------------------------------------------------------- approve and retry
 
+APPROVE_LIMIT = 100
+
+
 def prepare_approve(s, ctx, inp) -> Plan:
     """A person's go for ready messages waiting for one. People-only; R187: ``delivery.send``."""
     t = c.delivery_messages
-    if inp.all_waiting:
-        rows = [dict(r) for r in s.company.conn.execute(sa.select(t).where(t.c.status == 'ready', t.c.go_by.is_(None))
-                                                        .order_by(t.c.released_at, t.c.id).limit(100)).mappings()]
+    batch, warnings = None, []
+    given = [k for k in ('messages', 'all_waiting', 'batch') if getattr(inp, k, None)]
+    if len(given) > 1:
+        raise d._invalid(given[1], 'give one of messages, all_waiting or batch')
+    if getattr(inp, 'batch', None):
+        from bookflow.company import delivery_batches as batches
+        batch, rows, more, skips = batches.bound(s, inp.batch, 'waiting', APPROVE_LIMIT)
+        if skips:
+            warnings.append(f"Not approved, no longer as batch {batch['number']} drafted them: " + '; '.join(skips)
+                            + '.')
+        if more:
+            warnings.append(f"{more} more message(s) in batch {batch['number']} wait for a go: run `delivery approve "
+                            f"--batch {batch['number']}` again.")
+    elif inp.all_waiting:
+        q = sa.select(t).where(t.c.status == 'ready', t.c.go_by.is_(None))
+        rows = [dict(r) for r in s.company.conn.execute(q.order_by(t.c.released_at, t.c.id).limit(
+            APPROVE_LIMIT + 1)).mappings()]
+        if len(rows) > APPROVE_LIMIT:
+            rows = rows[:APPROVE_LIMIT]
+            warnings.append(f'More messages wait for a go than the {APPROVE_LIMIT} approved here: run `delivery '
+                            'approve --all-waiting` again.')
     elif inp.messages:
         rows, seen = [], set()
         for selector in inp.messages:
@@ -679,7 +700,7 @@ def prepare_approve(s, ctx, inp) -> Plan:
                 rows.append(row)
     else:
         raise d._invalid('messages', 'name the messages to approve, or give all_waiting')
-    at, plans, warnings = clock.now_iso(), [], []
+    at, plans = clock.now_iso(), []
     for before in rows:
         if before['status'] != 'ready':
             raise d._conflict(before, problem='only a ready message waits for a go', next_step=(
@@ -692,7 +713,8 @@ def prepare_approve(s, ctx, inp) -> Plan:
     if plans and conns.label(s) == 'none':
         warnings.append(d.NO_CONNECTION)
     outs = [d.project(s, after) for _, after, _, _ in plans]
-    return Plan(q_messages(outs, warnings), dict(plans=plans, summary='approved message(s) ' + ', '.join(
+    return Plan(q_messages(outs, warnings), dict(plans=plans, batch_id=batch['id'] if batch else None,
+                                                 summary='approved message(s) ' + ', '.join(
         a['number'] for _, a, _, _ in plans) if plans else 'approved nothing'))
 
 
@@ -709,6 +731,9 @@ def apply_many(plan, ctx, s) -> Applied:
             raise BookflowError('E_VERSION_CONFLICT', details={'record_type': d.RECORD, 'record_id': before['id']})
         touched += written
         outs.append(d.project(s, after))
+    if plan.data.get('batch_id') and plan.data['plans']:
+        from bookflow.company import delivery_batches as batches
+        touched.append(batches.restamp(s, ctx, plan.data['batch_id'], [a for _, a, _, _ in plan.data['plans']]))
     return Applied(q_messages(outs, plan.preview.warnings), touched, plan.data['summary'])
 
 

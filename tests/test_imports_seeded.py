@@ -78,8 +78,10 @@ def test_random_imports_edits_and_reversals_keep_the_invariants(books, seed):
             ids_before = {n: books.run('customer show', {'customer': n})['id'] for n in names
                           if n in active_customers(books)}
             snapshots = {i: _shown(books, i) for i in ids_before.values()}
+            # A name another source made differs, and the model expects it left as it is: accepted explicitly, as all
+            # or nothing otherwise refuses it.
             preview = books.run('import preview', {'kind': 'customer', 'content': text, 'source': source,
-                                                   'mode': mode})
+                                                   'mode': mode, 'allow': ['differs']})
             run_id = preview['run']['id']
             while True:
                 out = books.run('import run', {'run': run_id, 'limit': rng.choice([1, 2, 50])})
@@ -227,7 +229,7 @@ def test_random_files_meet_kabes_rules(books, seed):
             assert _rule_counts(books) == before  # a refused run changes nothing
             totals['refused'] += 1
             continue
-        assert checked['ok'] and checked['problems'] == []
+        assert checked['clean'] and checked['problems'] == []  # (ok waits on an unknown terms name, if any)
         if saved:
             assert checked['matched']['match'] == 'exact'
         preview = books.run('import preview', request)

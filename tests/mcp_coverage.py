@@ -296,7 +296,9 @@ SHIPMENT_COMMANDS = frozenset(('shipment post', 'shipment update', 'shipment voi
     # R181 increment 3: picking on, a list made, a pick retried, read back, shipped from; another closed, cancelled.
     'pick-list create', 'pick-list enter', 'pick-list show', 'pick-list query', 'pick-list close', 'pick-list cancel',
     # R181 increment 4: a draft made, packed (retried), shipped; another cancelled.
-    'shipment create', 'shipment pack', 'shipment cancel'))
+    'shipment create', 'shipment pack', 'shipment cancel',
+    # R181 increment 5: the worksheet and the shipments report read after the draft ships.
+    'report order-fulfillment', 'report shipments'))
 
 DELIVERY_COMMANDS = frozenset(('delivery draft', 'delivery update', 'delivery send', 'delivery cancel', 'delivery mark-sent',
     'delivery export', 'delivery show', 'delivery query', 'delivery history', 'delivery-template create',
@@ -305,7 +307,10 @@ DELIVERY_COMMANDS = frozenset(('delivery draft', 'delivery update', 'delivery se
     # R112 increment 2: the queue and the transport seam.
     'delivery approve', 'delivery retry', 'delivery run', 'delivery-connection add', 'delivery-connection update',
     'delivery-connection enable', 'delivery-connection disable', 'delivery-connection remove',
-    'delivery-connection check', 'delivery-connection show', 'delivery-connection query'))
+    'delivery-connection check', 'delivery-connection show', 'delivery-connection query',
+    # R112 increment 3: flags, the queue and batches.
+    'delivery flag', 'delivery unflag', 'delivery queue', 'delivery batch', 'delivery batch-show', 'delivery batch-query',
+    'delivery batch-cancel'))
 
 # R107 increments 0 to 2: a file checked, previewed, decided, run, read back, its batch read and reversed; its mapping
 # saved and next month's file run from it; another cancelled.

@@ -179,12 +179,12 @@ def test_co0108_ddl_is_the_metadata():
     assert set(m.PATH_INDEXES) == paths and len(paths) == 8
 
 
-def test_co0109_ddl_is_the_metadata():
+def test_co0110_ddl_is_the_metadata():
     import importlib
     from sqlalchemy.dialects.sqlite import dialect
     from sqlalchemy.schema import CreateIndex, CreateTable
     from bookflow.company import schema as c
-    m = importlib.import_module('bookflow.storage.company_migrations.versions.0109_import_mappings')
+    m = importlib.import_module('bookflow.storage.company_migrations.versions.0110_import_mappings')
     assert m.DDL == tuple(str(CreateTable(c.metadata.tables[t]).compile(dialect=dialect()))
                           for t in reversed(m.TABLES))
     assert set(m.INDEXES) == {str(CreateIndex(i).compile(dialect=dialect())) for t in m.TABLES
