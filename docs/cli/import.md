@@ -82,6 +82,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `dropped` | array[object[string, any]] | no | no | [] | Characters no text field holds, dropped from the file: row, line, column, position, character. |
 | `dropped_total` | integer | no | no | 0 | Characters dropped in all. |
 | `done_now` | integer | no | no | 0 | Rows this call ran. |
+| `outlook` | object[string, integer] | no | no | {} | A preview only: what running it would land with the answers given so far: create, update, answered (rows waiting on a reference, answered with a map or create), land (the three together), left_out (by a skip), waiting (still unanswered), unchanged, differs, missing, refused. |
 | `next` | string \| null | yes | yes | — | The command to run next, or null when the run is finished. |
 
 Example JSON output:
@@ -97,6 +98,7 @@ Example JSON output:
   "matched": null,
   "next": null,
   "notes": [],
+  "outlook": {},
   "refused": [],
   "run": {},
   "sample": [],
@@ -225,12 +227,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `decisions` | array[object[string, any]] | yes | no | — | What must be decided before a preview can run. |
 | `notes` | array[string] | yes | no | — | Things worth knowing: a guessed encoding, rows keyed by content. |
 | `samples` | object[string, array[string]] | no | no | {} | Up to three values of each column, as the file has them. |
+| `choices` | object[string, array[string]] | no | no | {} | For each list an unknown reference may map to and the caller may read: its active records by name (at most 2000), to pick from. |
 | `next` | string \| null | yes | yes | — | What to do next. |
 
 Example JSON output:
 
 ```json
 {
+  "choices": {},
   "clean": false,
   "decisions": [],
   "dropped": [],
@@ -319,7 +323,12 @@ The same example as complete `bookflow_run` arguments:
 | `create` | `--create` | array[string] \| null | no | yes | null | Create these when the run reaches them, through their own create command (never an account or item; a customer or vendor only when nothing looks like it): "Net 45". |
 | `create_input` | `--create-input` | object[string, object[string, any]] \| null | no | yes | null | For a create needing more than a name, the rest of its command's input by file text: {"Net 45": {"kind": "standard", "due_days": 45}}. |
 | `skip` | `--skip` | array[string] \| null | no | yes | null | Leave the rows with this text out. |
-| `remember` | `--remember` | boolean | no | no | false | Also keep the maps in the source's saved mapping (a new version), so the next file does not ask. |
+| `answers[].field` | inside `--answers` JSON array | string | yes | no | — | The input path the unknown reference is in (terms_id).; minimum length 1; maximum length 200 |
+| `answers[].value` | inside `--answers` JSON array | string | yes | no | — | The file text, exactly as `unknown_references` gives it.; minimum length 1; maximum length 1000 |
+| `answers[].action` | inside `--answers` JSON array | literal["map", "create", "skip"] | yes | no | — | Map it to an existing record, create it, or skip its rows. |
+| `answers[].target` | inside `--answers` JSON array | string \| null | no | yes | null | For a map: the existing record. |
+| `answers[].input` | inside `--answers` JSON array | object[string, any] \| null | no | yes | null | For a create needing more than a name, the rest of its command's input: {"kind": "standard", "due_days": 45}. |
+| `remember` | `--remember` | boolean | no | no | false | Also keep the maps in the source's saved mapping (a new version), so the next file does not ask. Creates and skips are not remembered (a created record is found by name next time). |
 
 ### Command and context options
 
@@ -367,6 +376,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `dropped` | array[object[string, any]] | no | no | [] | Characters no text field holds, dropped from the file: row, line, column, position, character. |
 | `dropped_total` | integer | no | no | 0 | Characters dropped in all. |
 | `done_now` | integer | no | no | 0 | Rows this call ran. |
+| `outlook` | object[string, integer] | no | no | {} | A preview only: what running it would land with the answers given so far: create, update, answered (rows waiting on a reference, answered with a map or create), land (the three together), left_out (by a skip), waiting (still unanswered), unchanged, differs, missing, refused. |
 | `next` | string \| null | yes | yes | — | The command to run next, or null when the run is finished. |
 
 Example JSON output:
@@ -382,6 +392,7 @@ Example JSON output:
   "matched": null,
   "next": null,
   "notes": [],
+  "outlook": {},
   "refused": [],
   "run": {},
   "sample": [],
@@ -717,6 +728,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `dropped` | array[object[string, any]] | no | no | [] | Characters no text field holds, dropped from the file: row, line, column, position, character. |
 | `dropped_total` | integer | no | no | 0 | Characters dropped in all. |
 | `done_now` | integer | no | no | 0 | Rows this call ran. |
+| `outlook` | object[string, integer] | no | no | {} | A preview only: what running it would land with the answers given so far: create, update, answered (rows waiting on a reference, answered with a map or create), land (the three together), left_out (by a skip), waiting (still unanswered), unchanged, differs, missing, refused. |
 | `next` | string \| null | yes | yes | — | The command to run next, or null when the run is finished. |
 
 Example JSON output:
@@ -732,6 +744,7 @@ Example JSON output:
   "matched": null,
   "next": null,
   "notes": [],
+  "outlook": {},
   "refused": [],
   "run": {},
   "sample": [],
@@ -1193,6 +1206,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `dropped` | array[object[string, any]] | no | no | [] | Characters no text field holds, dropped from the file: row, line, column, position, character. |
 | `dropped_total` | integer | no | no | 0 | Characters dropped in all. |
 | `done_now` | integer | no | no | 0 | Rows this call ran. |
+| `outlook` | object[string, integer] | no | no | {} | A preview only: what running it would land with the answers given so far: create, update, answered (rows waiting on a reference, answered with a map or create), land (the three together), left_out (by a skip), waiting (still unanswered), unchanged, differs, missing, refused. |
 | `next` | string \| null | yes | yes | — | The command to run next, or null when the run is finished. |
 
 Example JSON output:
@@ -1208,6 +1222,7 @@ Example JSON output:
   "matched": null,
   "next": null,
   "notes": [],
+  "outlook": {},
   "refused": [],
   "run": {},
   "sample": [],
@@ -1316,6 +1331,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `dropped` | array[object[string, any]] | no | no | [] | Characters no text field holds, dropped from the file: row, line, column, position, character. |
 | `dropped_total` | integer | no | no | 0 | Characters dropped in all. |
 | `done_now` | integer | no | no | 0 | Rows this call ran. |
+| `outlook` | object[string, integer] | no | no | {} | A preview only: what running it would land with the answers given so far: create, update, answered (rows waiting on a reference, answered with a map or create), land (the three together), left_out (by a skip), waiting (still unanswered), unchanged, differs, missing, refused. |
 | `next` | string \| null | yes | yes | — | The command to run next, or null when the run is finished. |
 
 Example JSON output:
@@ -1331,6 +1347,7 @@ Example JSON output:
   "matched": null,
   "next": null,
   "notes": [],
+  "outlook": {},
   "refused": [],
   "run": {},
   "sample": [],
