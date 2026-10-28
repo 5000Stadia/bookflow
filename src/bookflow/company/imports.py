@@ -696,6 +696,12 @@ def run_slice(s, ctx, inp, *, interrupt=None) -> dict:
         raise BookflowError('E_VALIDATION', message=('An atomic run starts only when its preview refused no rows; '
                                                      'correct the file and preview again.'),
                             details={'field': 'run', 'refused': _counts(s, run['id'], 'preview')['refused']})
+    if run['batch_id'] is not None:
+        state = s.company.conn.execute(sa.select(c.batches.c.state).where(c.batches.c.id == run['batch_id'])).scalar()
+        if state != 'live':
+            raise BookflowError('E_VALIDATION', message=(f"Run {run['id']}'s batch is {state}; a reversed run is never "
+                                                         'continued. Preview the corrected file again.'),
+                                details={'field': 'run', 'batch_state': state})
     if run['batch_id'] is None:
         batch_id = batches.open_batch(s, ctx, kind='import', label=(
             f"Import of {run['file_name'] or kind.name + 's'} ({run['row_count']} rows)"), scope=f'import:{kind.name}',

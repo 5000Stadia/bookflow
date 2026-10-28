@@ -174,3 +174,14 @@ def test_co0105_ddl_is_the_metadata():
                           for t in reversed(m.TABLES))
     assert set(m.INDEXES) == {str(CreateIndex(i).compile(dialect=dialect())) for t in m.TABLES
                               for i in c.metadata.tables[t].indexes}
+
+
+def test_a_run_stopped_part_way_and_reversed_is_never_continued(books):
+    preview = books.run('import preview', {'kind': 'customer', 'content': rows_file(5)})
+    books.run('import run', {'run': preview['run']['id'], 'limit': 2})
+    out = books.run('import reverse', {'run': preview['run']['id']})
+    assert out['state'] == 'reversed' and out['reversed_now'] == 2
+    assert books.run('import show', {'run': preview['run']['id']})['run']['state'] == 'stopped'
+    error = refusal(lambda: books.run('import run', {'run': preview['run']['id']}))
+    assert error.code == 'E_VALIDATION' and error.details['batch_state'] == 'reversed'
+    assert active_customers(books) == set()
