@@ -443,3 +443,48 @@ class UndoOutput(Model):
     reversal_batch_id: ID | None
     summary: str
     next: str | None = None
+
+
+# ------------------------------------------------------------------ add more details (R108 increment 5)
+
+class DepositLineInput(Model):
+    line: ID = Field(description='A waiting line of money into a bank account.')
+    payments: tuple[ID, ...] = Field(min_length=1, max_length=2000, description=(
+        'The customer payments and sales receipts waiting in Undeposited Funds that this line banked (`deposit '
+        'sources` lists them). They must add up to the line exactly, or name an `adjustment_account` for the difference.'))
+    adjustment_account: str | None = Field(None, min_length=1, max_length=1004, description=(
+        'Enter the difference between the line and the payments as its own row of the deposit, instead of refusing: '
+        'the line more than the payments, other money received, credited to this account (interest, a payment not '
+        'yet entered...); the line less, money kept back from the deposit, debited here (a bank fee, cash back). '
+        'Unsure? Ask the person; never guess.'))
+    adjustment_payee: str | None = Field(None, min_length=1, max_length=1000, description=(
+        'Who the other money came from (needed when the line is more than the payments).'))
+    adjustment_payee_type: Literal['customer', 'vendor', 'employee', 'other_name'] | None = Field(None, description=(
+        'The list adjustment_payee is on; default customer.'))
+    adjustment_memo: str | None = Field(None, max_length=2000)
+    adjustment_class_id: str | None = Field(None, max_length=1004)
+    memo: str | None = Field(None, max_length=2000, description="The deposit's memo; default the bank's text.")
+
+
+class BillRow(Model):
+    bill: str = Field(min_length=1, max_length=1004, description='An open bill (id or number).')
+    amount: str | None = Field(None, max_length=40, description='Paid on it; default everything still open.')
+    discount: str | None = Field(None, max_length=40, description='An early-payment discount taken on it.')
+
+
+class PayBillsLineInput(Model):
+    line: ID = Field(description='A waiting line of money out of a bank or card account.')
+    bills: tuple[BillRow, ...] = Field(min_length=1, max_length=200, description=(
+        "One vendor's open bills this line paid. What they pay must equal the line exactly."))
+    method: str | None = Field(None, min_length=1, max_length=1004, description=(
+        'The payment method (`payment-method query`). Unsure? Ask the person; never guess.'))
+    check_number: str | None = Field(None, min_length=1, max_length=64, description=(
+        'On a check method: the check number (default the account\'s next, as `bill pay` does).'))
+    memo: str | None = Field(None, max_length=2000, description="Default: the bank's text.")
+    discount_account: str | None = Field(None, max_length=1004)
+
+
+class DetailsOutput(SortOutput):
+    line_amount: str = Field('', description="The line's amount, unsigned.")
+    selected: str = Field('', description='What the selected payments or bills come to.')
+    difference: str = Field('', description='The line less the selection; 0.00, or entered as the adjustment.')

@@ -847,3 +847,50 @@ linked lines) equals the books' (those entries' movements on the account, summed
 import reversed returns the books to the entries alone, and replaying only the acts whose batches were never reversed
 gives the same inbox line for line (state, created, ignore reason, entry) and the same books (live entries and every
 account's balance).
+
+## As built: increment 5
+
+- **Two acts beside match, add and ignore** (`company/bank_sort.details`, layer `bank-line-details-v1` on
+  `bulk-edit-v1`, 847 commands, descriptor `c84a4558`; both standard under `bank-feed` with `ledger.read` member,
+  `not-a-record` for imports; no migration, no new column). `bank-line deposit` enters a waiting line of money into a
+  bank account as a deposit of the named customer payments and sales receipts waiting in Undeposited Funds:
+  `deposit post` run as the caller (`batches.run_nested`, `source_ref` `bank-line:<line>`, operation key
+  `bank-line-deposit:<line>:<version>`) with the line's account and date, each payment at its current version, memo
+  default the bank's text. `bank-line pay-bills` enters a waiting line of money out of a bank or card account as `bill
+  pay` from that account on the line's date, with the caller's method, bills (an `amount` per bill for a part payment,
+  a `discount`), `check_number` and memo. So the entry is the typed one: a test compares postings and document lines
+  with the same deposit and bill payment typed in (a bill payment's document line names its own bill, so only that
+  description differs). Nothing is checked twice: a payment already deposited, voided or not in Undeposited Funds,
+  more than is open on a bill, a closed period, each refuses with the typed command's own code, and the line waits.
+- **The difference: refused, unless an adjustment is named (decided).** The selection is read by the typed command's
+  own dry run (the deposit's bank total; `bill pay`'s `paid_minor_units`) and compared with the line. A selection that
+  does not come to the line exactly is refused `E_VALIDATION` with the difference remaining in the message and in
+  `details` (`line_amount`, `selected`, `difference`), dry run or not: Bookflow's amounts are exact or refused (as
+  `bank-line add`'s splits), and the anchor's Add More Details [M 627-629] is a deposit form where the person adds the
+  missing row themselves rather than a silent plug. A deposit may name that row: `adjustment_account` (with
+  `adjustment_payee`, `_payee_type`, `_memo`, `_class_id`; flat fields, so the MCP schema gains no new variant kind) enters the difference as part of the same deposit -- the line more than the payments, other money received
+  from the payee (who is asked for, never guessed; default list customer); the line less, money kept back (`cash_back`
+  to the account, a bank fee). A bill payment takes no adjustment: its part payments are named per bill, and a fee
+  is a line of its own. Success returns `difference` `0.00` (or the adjustment's amount).
+- **One line, one payment.** `bill pay` writes one payment per vendor; bills of two vendors (`group_count` above one)
+  are refused naming them, since one bank movement is one payment. A deposit is into a bank account only (a card line,
+  or money out, is refused); bills are paid only from money out.
+- **No method is asked for.** `bank-line pay-bills` without `method` refuses with `details.ask` ["method"], as an add
+  without payee or account does; the method decides whether a check number is taken, so it is never defaulted.
+- **Reversible both ways.** Each act is recorded, as `bank-line add` is, in the posting command's own transaction:
+  on the line's import batch (`bank_line` `updated`, `transaction` `created`) and, decided here, on a `bank-sort` batch
+  of its own (even for one line), so `bank-line undo <batch_id>` takes back that act alone. Either way the entry goes
+  through increment 2's inverse steps: `deposit delete` (preserved history; its payments return to Undeposited
+  Funds), or `bill payment unapply` then `bill payment void` (the bills open again). The line's `added` event carries
+  the command, payee, selection and difference.
+- **Browser.** No bank-line sort page exists yet (increment 7 builds the inbox pages), so no page control was added;
+  both acts appear in the workbench's command forms like every command.
+
+**Tests.** `tests/test_bank_line_details.py`: three received payments deposited from one line with difference 0.00, the
+same postings and document lines as the twin payments typed into `deposit post`, then the import reversed returns all
+three to Undeposited Funds (`deposit sources`) with the deposit deleted with history; two of the three refused showing
+75.50 remaining (dry run too) with the books unchanged; a payment already deposited refused by `deposit post`'s own
+`E_DEPOSIT_SOURCE_*` code; an adjustment asks for its payee, then enters other money of 5.00, and a fee as cash back
+of 5.00; that act undone alone by `bank-line undo`. Bills: no method asks; two vendors refused; a part selection
+refused showing 30.00; marked paid, the typed `bill pay` of twin bills posts the same; undone by `bank-line undo`
+(voided, bills open, line waiting); paid again and the import reversed, the same.

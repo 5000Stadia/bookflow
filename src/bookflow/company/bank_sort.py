@@ -552,6 +552,8 @@ def _created_id(output) -> str:
     out = output.model_dump() if hasattr(output, 'model_dump') else output
     if isinstance(out.get('deposit'), dict):
         return out['deposit']['id']
+    if out.get('payments'):
+        return out['payments'][0]['id']
     return out['id']
 
 
@@ -635,6 +637,173 @@ def add(s, ctx, inp, *, dry_run: bool) -> dict:
                 summary=f'{len(entered)} line(s) entered: ' + ', '.join(
                     f'{e.command.split()[0]} {e.entry_id}' for e in entered[:5]) + ('...' if len(entered) > 5 else '')
                 + '.', next=(f'`bank-line undo {sort_id}` undoes this batch' if sort_id else None))
+
+
+# ------------------------------------------------------------------ add more details (increment 5)
+
+def _difference(s, line: dict, selected: int, what: str, *, hint: str) -> BookflowError:
+    places = bank_feeds._currency_places(s, line['account_id'])
+    total = abs(line['amount'])
+    money = lambda units: bank_feeds.decimal(units, places)
+    return BookflowError('E_VALIDATION', message=(
+        f"The selected {what} come to {money(selected)}; {_label(s, line)} is {money(total)}: a difference of "
+        f"{money(total - selected)} remaining. {hint}"), details={
+        'field': what, 'fields': [{'field': what, 'problem': f'difference {money(total - selected)} remaining'}],
+        'line': line['id'], 'line_amount': money(total), 'selected': money(selected),
+        'difference': money(total - selected)})
+
+
+def _deposit_plan(s, ctx, line: dict, inp: m.DepositLineInput) -> dict:
+    """`deposit post` of the selected Undeposited Funds payments into the line's account on the line's date. The
+    payments must come to the line exactly; a difference is refused, showing it, unless the caller names an
+    adjustment: then it is one more row of the deposit (other money in, or money kept back), never guessed."""
+    account = _account(s, line['account_id'])
+    if account['type'] == 'credit_card' or line['amount'] <= 0:
+        raise _refuse('line', f'{_label(s, line)} is not money into a bank account; only such a line is a deposit.',
+                      line=line['id'])
+    if len(set(inp.payments)) != len(inp.payments):
+        raise _refuse('payments', 'A payment is named twice.')
+    rows = {r['id']: dict(r) for r in s.company.conn.execute(sa.select(
+        c.transactions.c.id, c.transactions.c.type, c.transactions.c.version).where(
+        c.transactions.c.id.in_(list(inp.payments)))).mappings()}
+    sources = []
+    for n, pid in enumerate(inp.payments):
+        row = rows.get(pid)
+        if row is None:
+            raise BookflowError('E_RECORD_NOT_FOUND', details={'record_type': 'payment', 'selector': pid,
+                                                                'field': f'payments[{n}]'})
+        if row['type'] not in ('payment', 'sales_receipt'):
+            raise _refuse(f'payments[{n}]', f"{pid} is a {row['type'].replace('_', ' ')}, not a customer payment or "
+                                            'sales receipt waiting in Undeposited Funds.')
+        sources.append({'source_type': row['type'], 'source': pid, 'expected_version': row['version']})
+    memo = inp.memo if inp.memo is not None else ((line['payee'] or line['memo'] or '').strip() or None)
+    document = {'mode': 'inline', 'deposit_to': account['id'], 'date': line['date'], 'memo': memo,
+                'sources': sources}
+    payload = {'operation_key': f"bank-line-deposit:{line['id']}:{line['version']}", 'document': document}
+    # What the payments come to, as the deposit itself reads them (a payment already deposited, voided or not in
+    # Undeposited Funds is refused here by `deposit post`'s own code).
+    preview = batches.run_nested(s, ctx, 'deposit post', payload, source_ref=f"bank-line:{line['id']}",
+                                 dry_run=True, recovery=False)
+    selected = preview['deposit']['effective_bank_total']['minor_units']
+    total = line['amount']
+    places = bank_feeds._places(account['currency'])
+    money = lambda units: bank_feeds.decimal(units, places)
+    if total != selected and inp.adjustment_account is None:
+        raise _difference(s, line, selected, 'payments', hint=(
+            'Select payments that add up to the line, or name an `adjustment_account` (and an `adjustment_payee` when '
+            'the line is more) to enter the difference as its own row of the deposit.'))
+    if total != selected:
+        if total > selected:
+            if inp.adjustment_payee is None:
+                raise BookflowError('E_VALIDATION', message=(
+                    f"Who did the other {money(total - selected)} of {_label(s, line)} come from? Ask the person "
+                    'and pass adjustment_payee: Bookflow never guesses.'),
+                    details={'field': 'adjustment_payee', 'fields': [{'field': 'adjustment_payee',
+                                                                      'problem': 'ask the person; never guess'}],
+                             'line': line['id'], 'ask': ['adjustment_payee']})
+            payee_type = inp.adjustment_payee_type or 'customer'
+            payee = _payee(s, inp.adjustment_payee, payee_type)
+            document['additional'] = [{'received_from': {'kind': payee_type, 'id': payee['id']},
+                                       'from_account': inp.adjustment_account, 'amount': money(total - selected),
+                                       **({'memo': inp.adjustment_memo} if inp.adjustment_memo else {}),
+                                       **({'class': inp.adjustment_class_id} if inp.adjustment_class_id else {})}]
+        else:
+            document['cash_back'] = {'account': inp.adjustment_account, 'amount': money(selected - total),
+                                     **({'memo': inp.adjustment_memo} if inp.adjustment_memo else {})}
+    payer = preview['receipts'][0]['received_from'] if preview.get('receipts') else None
+    return {'command': 'deposit post', 'input': payload, 'payee': payer, 'selected': selected}
+
+
+def _bills_plan(s, ctx, line: dict, inp: m.PayBillsLineInput) -> dict:
+    """`bill pay` of the named bills from the line's account on the line's date: one payment to one vendor, paying
+    exactly the line (partial amounts named per bill), or refused showing the difference."""
+    account = _account(s, line['account_id'])
+    if line['amount'] >= 0:
+        raise _refuse('line', f'{_label(s, line)} is not money out; only a payment out pays bills.', line=line['id'])
+    if inp.method is None:
+        raise BookflowError('E_VALIDATION', message=(
+            f'Which payment method paid the bills on {_label(s, line)}? Ask the person and pass method '
+            '(`payment-method query` lists them): Bookflow never guesses.'),
+            details={'field': 'method', 'fields': [{'field': 'method', 'problem': 'ask the person; never guess'}],
+                     'line': line['id'], 'ask': ['method']})
+    memo = inp.memo if inp.memo is not None else ((line['payee'] or line['memo'] or '').strip() or None)
+    payload = {'date': line['date'], 'funding_account': account['id'], 'method': inp.method,
+               'bills': [{'bill': b.bill, **({'amount': b.amount} if b.amount is not None else {}),
+                          **({'discount': b.discount} if b.discount is not None else {})} for b in inp.bills]}
+    for key, value in (('memo', memo), ('check_number', inp.check_number),
+                       ('discount_account', inp.discount_account)):
+        if value is not None:
+            payload[key] = value
+    preview = batches.run_nested(s, ctx, 'bill pay', payload, source_ref=f"bank-line:{line['id']}", dry_run=True,
+                                 recovery=False)
+    if preview['group_count'] != 1:
+        names = sorted({p['vendor_name'] for p in preview['payments']})
+        raise _refuse('bills', f"These bills make {preview['group_count']} payments ({', '.join(names)}); one bank "
+                               'line is one payment to one vendor. Pay the others from their own lines.',
+                      line=line['id'], vendors=names)
+    selected = preview['paid_minor_units']
+    if selected != -line['amount']:
+        raise _difference(s, line, selected, 'bills', hint=(
+            'Name the amount paid on each bill so they add up to the line (a part payment leaves the rest open).'))
+    return {'command': 'bill pay', 'input': payload, 'payee': preview['payments'][0]['vendor_name'],
+            'selected': selected}
+
+
+def details(s, ctx, kind: str, inp, *, dry_run: bool) -> dict:
+    """Add More Details: enter a waiting line as a deposit of selected Undeposited Funds payments (`deposit`) or as
+    a payment of open bills (`bills`), through the typed command run as the caller, so the entry is exactly the one
+    typed. The act is its own bank-sort batch (`bank-line undo` takes it back) and is recorded on the line's import
+    batch, so the import's reversal deletes the deposit (its payments back in Undeposited Funds) or unapplies and
+    voids the payment (its bills open again)."""
+    line = lines(s, [inp.line])[0]
+    _sortable(s, line)
+    plan = (_deposit_plan if kind == 'deposit' else _bills_plan)(s, ctx, line, inp)
+    places = bank_feeds._currency_places(s, line['account_id'])
+    shown = dict(line_amount=bank_feeds.decimal(abs(line['amount']), places),
+                 selected=bank_feeds.decimal(plan['selected'], places),
+                 difference=bank_feeds.decimal(abs(line['amount']) - plan['selected'], places))
+    source_ref = f"bank-line:{line['id']}"
+    if dry_run:
+        batches.run_nested(s, ctx, plan['command'], plan['input'], source_ref=source_ref, dry_run=True,
+                           recovery=False)
+        return dict(lines=(_out(s, {**line, 'state': 'added', 'created': 1, 'payee_display': plan['payee']}),),
+                    entries=(m.Entered(line_id=line['id'], entry_id=None, command=plan['command'],
+                                       input=plan['input']),),
+                    batch_id=None, summary=f"Dry run: {_label(s, line)} would be entered with {plan['command']}. "
+                                           'Nothing was changed.', next='the same call without --dry-run', **shown)
+    how = _how(s)
+    done: dict = {}
+
+    def record(s2, cmd, applied, output):
+        entry_id = _created_id(output)
+        current = lines(s2, [line['id']])[0]
+        if current['version'] != line['version'] or current['state'] != 'waiting' or not current['live']:
+            raise BookflowError('E_VERSION_CONFLICT', message=f"Line {line['id']} changed meanwhile; nothing was "
+                                                              'entered for it.', details={'line': line['id']})
+        batch = _import_batch(s2, current)
+        if batch['state'] != 'live':
+            raise _refuse('line', f"Import {line['import_id']} is being reversed; nothing was entered.")
+        sort_id = _open_sort(s2, ctx, f"Bank inbox: {cmd.name} from line {line['id']}")
+        done['line'] = _write_line(
+            s2, ctx, current, dict(state='added', entry_id=entry_id, movement=None, link_how=how,
+                                   match_reason=f'entered with {cmd.name}', created=1, payee_display=plan['payee'],
+                                   ignore_reason=None, entry_date=line['date']),
+            kind='added', details={'entry': entry_id, 'command': cmd.name, 'payee': plan['payee'], 'how': how,
+                                   'sort_batch': sort_id, 'selected': shown['selected'],
+                                   'difference': shown['difference']},
+            event_id=batches.last_event_id(s2), batch_ids=[batch['id'], sort_id],
+            extra=[('transaction', entry_id, 'created', _version(s2, entry_id))])
+        done.update(entry=entry_id, batch=sort_id)
+
+    batches.run_nested(s, ctx, plan['command'], plan['input'], source_ref=source_ref, recorder=record,
+                       recovery=False)
+    return dict(lines=(_out(s, done['line']),),
+                entries=(m.Entered(line_id=line['id'], entry_id=done['entry'], command=plan['command'],
+                                   input=plan['input']),),
+                batch_id=done['batch'], summary=(
+                    f"{_label(s, line)} entered with {plan['command']} {done['entry']} ({plan['payee']}); "
+                    f"difference {shown['difference']}."),
+                next=f"`bank-line undo {done['batch']}` takes it back", **shown)
 
 
 # ------------------------------------------------------------------ transfers
