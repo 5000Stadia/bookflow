@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block title %}Companies{% endblock %}{% block body %}
+{% extends "base.html" %}{% block title %}Companies{% endblock %}{% block body %}{% if home_unavailable %}<p class="notice home-fallback" role="status" data-home-fallback>Your Home page is not available to you; choose a company.</p>{% endif %}
 <h1>Companies</h1><div class="table-wrap"><table><tr>{% for c in columns or [] %}<th>{{ c | label }}</th>{% endfor %}<th>Company file</th></tr>
 {% for it in companies %}<tr>{% for c in columns or [] %}<td>{% if c == "display_name" %}<a href="/c/{{ it.company_id }}/">{{ it[c] }}</a>{% else %}{{ it[c] if it[c] is not none else "" }}{% endif %}</td>{% endfor %}<td>{% if it.schema_revision != schema_head %}<a href="/hub/upgrade">Update company</a>{% endif %}<details class="technical-details"><summary>Technical details</summary><p>File version <code>{{ it.schema_revision }}</code> · {{ "Current" if it.schema_revision == schema_head else "Update available" }}</p></details></td></tr>{% endfor %}</table></div>
 {% if hub_admin_reader %}<p><a href="/hub/">Administration</a></p>{% endif %}{% endblock %}

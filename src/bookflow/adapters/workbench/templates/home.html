@@ -3,21 +3,24 @@
 {% macro tile(item) %}<a class="flow-tile" href="{{ item.href }}"><span class="flow-tile-title">{{ item.step.action.label }}</span></a>{% endmacro %}
 {% if home_unavailable %}<p class="notice home-fallback" role="status" data-home-fallback>Your Home page is not available to you; showing the Overview.</p>{% endif %}
 <div class="overview-head"><div><p class="page-eyebrow">{{ company.display_name }}</p><h1>Overview</h1></div>
-<section class="quick-actions" aria-labelledby="quick-actions-title"><h2 id="quick-actions-title">Start a transaction</h2><div class="quick-action-grid">
-{% for row in panels %}{% for item in row.chain + row.asides if item.live and item.step.id in ('invoice','receive-payment','bill','write-check') %}<a href="{{ item.href }}"><span aria-hidden="true">＋</span>{{ item.step.action.label }}</a>{% endfor %}{% endfor %}
-</div></section></div>
+{% set quick = [] %}{% for row in panels %}{% for item in row.chain + row.asides if item.live and item.step.id in ('invoice','receive-payment','bill','write-check') %}{% set _ = quick.append(item) %}{% endfor %}{% endfor %}
+{% if quick %}<section class="quick-actions" aria-labelledby="quick-actions-title"><h2 id="quick-actions-title">Start a transaction</h2><div class="quick-action-grid">
+{% for item in quick %}<a href="{{ item.href }}"><span aria-hidden="true">＋</span>{{ item.step.action.label }}</a>{% endfor %}
+</div></section>{% endif %}</div>
 {% if clocks %}<link rel="stylesheet" href="{{ static_urls['timekeeping.css'] }}"><section class="notice clock-banner" role="status" aria-label="Clocked in" data-open-clocks><strong>Clocked in:</strong> {% for c in clocks %}<span data-open-clock="{{ c.employee_id }}">{{ c.employee_name }} since {{ c.clock_in_local[11:] }}{% if c.clock_in_local[:10] != clocks[0].clock_in_local[:10] or c.over_max_shift %} on {{ c.clock_in_local[:10] }}{% endif %}{% if c.over_max_shift %} (past the maximum shift){% endif %}</span>{% if not loop.last %}, {% endif %}{% endfor %} <a class="button" href="/c/{{ company_id }}/clock" data-clock-link>Time clock</a></section>{% endif %}
 {# The figures and lists run reports; they arrive after the page so the tasks never wait on them. #}
 <div class="overview-live" hx-get="/c/{{ company_id }}/_overview" hx-trigger="load" hx-swap="outerHTML" hx-on::response-error="this.querySelector('.overview-loading').textContent = 'Figures could not be loaded just now.'"><p class="overview-loading muted" role="status">Loading figures…</p></div>
 {# Every task, as compact links grouped by area. #}
-<h2 class="overview-section-title">All tasks</h2>
+{# A panel with no tile this reader may open is not shown, nor the heading when none is left. #}
+{% set shown_panels = [] %}{% for row in panels %}{% if (row.chain + row.asides) | selectattr('live') | rejectattr('step.id', 'equalto', 'invoice') | list %}{% set _ = shown_panels.append(row) %}{% endif %}{% endfor %}
+{% if shown_panels %}<h2 class="overview-section-title">All tasks</h2>
 <div class="flow-board">
-{% for row in panels %}<section class="nav-group flow-panel" aria-labelledby="flow-panel-{{ row.panel.id }}">
+{% for row in shown_panels %}<section class="nav-group flow-panel" aria-labelledby="flow-panel-{{ row.panel.id }}">
 <div class="flow-panel-head">{{ icon(row.panel.id) }}<h3 id="flow-panel-{{ row.panel.id }}">{{ row.panel.title }}</h3></div>
 {# Create an invoice is the first quick action above, so its panel tile would repeat it. #}
 <ul class="flow-steps">{% for item in row.chain if item.live and item.step.id != 'invoice' %}<li class="flow-step">{{ tile(item) }}</li>{% endfor %}</ul>
 {% if row.asides | selectattr('live') | list %}<ul class="flow-asides">{% for item in row.asides if item.live %}<li>{{ tile(item) }}</li>{% endfor %}</ul>{% endif %}
 </section>{% endfor %}
-</div>
+</div>{% endif %}
 {% if (navigation or {}).get('advanced', true) %}<p class="workspace-footer"><a href="/c/{{ company_id }}/_all">Advanced tools</a></p>{% endif %}
 {% endblock %}

@@ -54,29 +54,45 @@ class Effective:
 
 def effective_for(s, user_id: str, company_id: str) -> Effective:
     """The person's effective capabilities in the company, computed as `membership effective` computes them."""
+    return effective_in(s.hub, user_id, company_id)
+
+
+def effective_in(db, user_id: str, company_id: str, principal: str | None = None) -> Effective:
+    """Effective capabilities read from a hub database. With ``principal`` (an agent acting for a person) each
+    requirement is the actor-and-principal intersection the command boundary enforces (`permission_policy.execution`),
+    not the agent's own admissions."""
     from bookflow.hub import permission_policy as policy, permission_runtime as runtime
-    from bookflow.hub.permission_access import activated
     from bookflow.hub.permission_catalog import ScopeKey
-    from dataclasses import asdict
-    if not activated(s):
+    raw = db.raw
+    if not raw.execute("SELECT 1 FROM main.sqlite_master WHERE type='table' AND name='permission_state'").fetchone() or \
+            raw.execute('SELECT mode FROM main.permission_state WHERE id=1').fetchone() != ('policy_v1',):
         return Effective(company_id, None)
-    raw = s.hub.raw
     opened = not raw.in_transaction  # a write's plan runs before its transaction; the observation needs one
     if opened:
         raw.execute("BEGIN")
     try:
-        observed = runtime.observe_current(s.hub).snapshot
-        rows = policy.admissions(observed.comparison, phase='old', subject=user_id, scope=ScopeKey('company', company_id))
+        comparison = runtime.observe_current(db).snapshot.comparison
+        scope = ScopeKey('company', company_id)
+        if user_id not in comparison.subjects or scope not in comparison.scopes:
+            return Effective(company_id, [])
+        rows = policy.admissions(comparison, phase='old', subject=user_id, scope=scope)
+        if principal is not None and principal in comparison.subjects:
+            admitted = {row.requirement: policy.execution(comparison, phase='old', actor=user_id, bound_human=principal,
+                                                          scope=scope, requirement=row.requirement).intersection_admitted
+                        for row in rows}
+        else:
+            admitted = {row.requirement: row.admitted for row in rows}
     finally:
         if opened and raw.in_transaction:
             raw.execute("ROLLBACK")
-    return Effective(company_id, [asdict(row) for row in rows])
+    return Effective(company_id, [{"requirement": {"capability": r.capability, "threshold": r.threshold}, "admitted": ok}
+                                  for r, ok in admitted.items()])
 
 
-def permits_for(s, user_id: str, company: dict[str, Any]) -> Callable[[Any], bool]:
+def permits_for(s, user_id: str, company: dict[str, Any], effective: Effective | None = None) -> Callable[[Any], bool]:
     """Whether the person may run a company command there: effective capabilities, else (legacy) their role."""
     from bookflow.hub import access
-    effective = effective_for(s, user_id, company["id"])
+    effective = effective_for(s, user_id, company["id"]) if effective is None else effective
     user = s.hub.raw.execute("SELECT hub_admin, active FROM main.users WHERE id=?", (user_id,)).fetchone()
     hub_admin = bool(user and user[0])
     best = None
@@ -96,6 +112,23 @@ def permits_for(s, user_id: str, company: dict[str, Any]) -> Callable[[Any], boo
             return False
         return access.role_satisfies(best, "company", cmd.required_role, hub_admin)
     return permits
+
+
+def reader_for(s, user_id: str, company: dict[str, Any]):
+    """The person as the workbench's menus see them (`home.Reader`): their effective capabilities, and whether they
+    administer the company's people (membership.grant there, or user.manage)."""
+    from bookflow.adapters.workbench import home as Home
+    from bookflow.hub import access
+    effective = effective_for(s, user_id, company["id"])
+    permits = permits_for(s, user_id, company, effective)
+    user = s.hub.raw.execute("SELECT hub_admin FROM main.users WHERE id=?", (user_id,)).fetchone()
+    administers = effective.holds("membership.grant")
+    if administers is None:
+        roles = [r[0] for r in s.hub.raw.execute(
+            "SELECT role FROM main.memberships WHERE user_id=? AND revoked_at IS NULL AND ((scope_type='company' AND "
+            "scope_id=?) OR (scope_type='organization' AND scope_id=?))", (user_id, company["id"], company["organization_id"]))]
+        administers = any(access.ROLE_RANK[r] >= access.ROLE_RANK["admin"] for r in roles)
+    return Home.Reader(company["id"], permits, administers=bool(administers or (user and user[0])))
 
 
 def read(s, user_id: str) -> dict[str, Any] | None:
@@ -118,7 +151,7 @@ def availability(s, user_id: str, home: dict[str, Any] | None) -> tuple[bool, st
     if row is None or (row[3] or "").startswith("trash/"):
         return False, "the company is no longer here", None
     company = dict(id=row[0], organization_id=row[1], display_name=row[2])
-    opened = Home.page_open(company["id"], home["path"], permits_for(s, user_id, company))
+    opened = Home.page_open(company["id"], home["path"], reader_for(s, user_id, company))
     if opened is None:
         return False, "the page is not a workbench page", company
     if not opened:

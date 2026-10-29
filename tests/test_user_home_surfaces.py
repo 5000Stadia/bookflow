@@ -29,7 +29,7 @@ def test_the_same_home_through_python_cli_http_and_mcp(root, tmp_path):
                 cleared = await call(surface, 'user home clear', {})
                 after = await call(surface, 'user home show', {})
                 results[surface] = (
-                    (done['changed'], done['home']['path'], done['home']['available']),
+                    (done['changed'], done['home']['page'], done['home']['available']),
                     (shown['home']['url'], shown['home']['available'], shown['home']['version']),
                     refused.get('code') or refused.get('error', {}).get('code'),
                     (cleared['changed'], cleared['home']),

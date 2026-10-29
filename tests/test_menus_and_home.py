@@ -168,7 +168,7 @@ def test_set_accepts_only_a_page_the_person_may_open_and_another_persons_needs_u
     assert "Home page for" in row.text
     saved = owner.post(f"/c/{cid}/users/home", headers=H, data={"user": "rod", "page": "_group/items", "action": "set"})
     assert saved.status_code == 200 and "data-user-home-result" in saved.text
-    assert owner.post("/commands/user.home.show", headers=H, json={"user": "rod"}).json()["home"]["path"] == "_group/items"
+    assert owner.post("/commands/user.home.show", headers=H, json={"user": "rod"}).json()["home"]["page"] == "_group/items"
     # It still checks the clerk's own capabilities, not the administrator's.
     wrong = owner.post("/commands/user.home.set", headers=H, json={"user": "rod", "page": "report/profit-and-loss",
                                                                   "company": cid})

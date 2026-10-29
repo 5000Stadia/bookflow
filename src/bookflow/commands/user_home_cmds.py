@@ -53,8 +53,8 @@ class HomeShowInput(_Who):
 class HomeView(BaseModel):
     company_id: str
     company_name: str | None = Field(None, description="Null when the company is no longer here.")
-    path: str = Field(description="The page under /c/<company>/; empty for the Overview.")
-    url: str = Field(description="Where the Home button and signing in land: /c/<company>/<path>.")
+    page: str = Field(description="The page under /c/<company>/; empty for the Overview.")
+    url: str = Field(description="Where the Home button and signing in land: /c/<company>/<page>.")
     available: bool = Field(description="Whether the person may open it now; when false they land on the Overview.")
     unavailable_reason: str | None = None
     version: int
@@ -80,12 +80,15 @@ def _target(s, selector: str | None) -> dict[str, Any]:
 
 
 def authorize(inp, ctx: Context, s) -> dict[str, Any]:
-    """Self always; another person only with user.manage, for a person and an agent alike."""
-    person = _target(s, inp.user)
-    if person["id"] != s.actor.id:
+    """Self always; another person only with user.manage, for a person and an agent alike. The capability is asked
+    before the name is looked up, so whether someone exists is answered only to those who may manage them."""
+    from bookflow.commands.host_cmds import _is_self
+    if inp.user is not None and not _is_self(s, inp.user):
         from bookflow.hub.capabilities import require_hub
         require_hub(s, "user.manage", getattr(s, "_permission_command", None) or "user home set")
-        if person["kind"] != "human":
+    person = _target(s, inp.user)
+    if person["id"] != s.actor.id:
+        if person["kind"] != "human" and not isinstance(inp, HomeShowInput):  # reading an agent's own Home is fine
             raise BookflowError("E_VALIDATION", details={"fields": [
                 {"field": "user", "problem": "a Home belongs to a person; an agent has no workbench to land in"}]})
     return person
@@ -97,7 +100,7 @@ def _view(s, user_id: str, home: dict[str, Any] | None) -> HomeView | None:
     available, why, company = homes.availability(s, user_id, home)
     url = f"/c/{home['company_id']}/" + (home["path"] if home["path"] else "")
     return HomeView(company_id=home["company_id"], company_name=company["display_name"] if company else None,
-                    path=home["path"], url=url, available=available, unavailable_reason=why, version=home["version"])
+                    page=home["path"], url=url, available=available, unavailable_reason=why, version=home["version"])
 
 
 def _check_version(home, expected: int | None) -> None:
@@ -113,7 +116,8 @@ def _company_and_path(s, inp: HomeSetInput) -> tuple[dict[str, Any], str]:
     if page.startswith("/c/"):
         rest = page[3:]
         named, _, page = rest.partition("/")
-        if selector is not None and named and selector != named:
+        if selector is not None and named and resolve_company(s, selector, "option")["id"] != \
+                resolve_company(s, named, "option")["id"]:
             raise BookflowError("E_VALIDATION", details={"fields": [
                 {"field": "company", "problem": "the page's path names a different company"}]})
         selector = selector or named or None

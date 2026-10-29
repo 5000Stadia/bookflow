@@ -758,14 +758,15 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             Display.NEGATIVES.set((result.get("info") or {}).get("negative_number_style") or "minus")
         return result
 
-    _effective_cache: dict[tuple[str, str], tuple[str, Any]] = {}
+    _effective_cache: dict[tuple[str, str | None, str], tuple[str, Any]] = {}
     _effective_lock = threading.Lock()
 
     def _authority_token() -> str | None:
         import sqlite3
         from contextlib import closing
         try:
-            with closing(sqlite3.connect(f"file:{host.data_root / 'hub.db'}?mode=ro", uri=True, timeout=0.5)) as db:
+            uri = (host.data_root / "hub.db").resolve().as_uri() + "?mode=ro"  # percent-encodes '#', '?', '%'
+            with closing(sqlite3.connect(uri, uri=True, timeout=0.5)) as db:
                 row = db.execute("SELECT token FROM authority_generation WHERE id=1").fetchone()
         except sqlite3.Error:
             return None
@@ -778,21 +779,30 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         if cached is None or cached.company_id != company_id:
             # Reused across requests only while the hub's authority generation token is unchanged: triggers redraw it
             # on any write to users, memberships, companies, grants or the permission state (hub0014).
-            key, token = (credential(request).user_id, company_id), _authority_token()
+            reader = credential(request)
+            key, token = (reader.user_id, reader.on_behalf_of, company_id), _authority_token()
             with _effective_lock:
                 held = _effective_cache.get(key)
             if token is not None and held is not None and held[0] == token:
                 cached = held[1]
             else:
                 try:
-                    cached = Effective.from_output(run(request, "membership effective", {"company": company_id}, None))
+                    cred = credential(request)
+                    if cred.actor_kind != "human" and cred.on_behalf_of:
+                        # An agent's pages offer what it may run for its principal: the boundary's intersection.
+                        from bookflow.adapters.http.app import _reader_hub
+                        from bookflow.hub.user_homes import effective_in
+                        with _reader_hub(host) as db:
+                            cached = effective_in(db, cred.user_id, company_id, cred.on_behalf_of)
+                    else:
+                        cached = Effective.from_output(run(request, "membership effective", {"company": company_id}, None))
                     if token is not None:
                         with _effective_lock:
                             if len(_effective_cache) > 512:
                                 _effective_cache.clear()
                             _effective_cache[key] = (token, cached)
-                except BookflowError:
-                    cached = Effective(company_id, None)  # unanswerable: the role decides; the boundary still guards
+                except Exception:  # unanswerable: the role decides; the command boundary still guards
+                    cached = Effective(company_id, None)
             request.state.effective = cached
         EFFECTIVE.set(cached)
         return cached
@@ -802,18 +812,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         cached = getattr(request.state, "navigation", None)
         if cached is not None and cached[0] == company_view["company_id"]:
             return cached[1]
-        cred = credential(request)
-        effective = effective_capabilities(request, company_view["company_id"])
-        permits = company_permits(request, company_view)
-        rows = Home.company_rows(permits)
-        menu = Home.offered_menu(company_view["company_id"], permits, rows)
-        role = company_view.get("role")
-        administers = effective.holds("membership.grant")
-        if administers is None:
-            administers = role in ("admin", "owner")
-        nav = dict(menu=menu, minimal=not menu,
-                   users=bool(administers or cred.hub_admin),
-                   advanced=any(command.is_write for verbs in rows.values() for command in verbs))
+        reader = company_permits(request, company_view)
+        menu = Home.offered_menu(company_view["company_id"], reader)
+        nav = dict(menu=menu, minimal=not menu, users=reader.flag("users"), advanced=reader.flag("advanced"))
         request.state.navigation = (company_view["company_id"], nav)
         return nav
 
@@ -1013,7 +1014,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return RedirectResponse(f"/c/{items[0]['company_id']}/{fallback}", status_code=303)
         if last in ids:
             return RedirectResponse(f"/c/{last}/{fallback}", status_code=303)
-        return render("picker.html", request, companies=items, columns=list_columns(items), schema_head=migrate.HEADS["company"])
+        return render("picker.html", request, companies=items, columns=list_columns(items), schema_head=migrate.HEADS["company"],
+                      home_unavailable=bool(chosen))
 
     @app.post("/home", response_class=HTMLResponse)
     async def make_this_page_my_home(request: Request):
@@ -1051,9 +1053,20 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         return render("index.html", request, company=None, groups=_grouped_nouns(nouns, company=False))
 
     def company_permits(request: Request, show: dict[str, Any]):
-        """One home for what this company and this credential offer; the grid and the board share it."""
-        is_hub_admin = credential(request).hub_admin
-        return lambda cmd: _company_offers(cmd, show, hub_admin=is_hub_admin)
+        """One home for what this company and this credential offer; the grid, the board, the menus, the finder and
+        Home share it (a `Home.Reader`, kept for the request)."""
+        cached = getattr(request.state, "reader", None)
+        if cached is not None and cached.company_id == show["company_id"]:
+            return cached
+        cred = credential(request)
+        effective = effective_capabilities(request, show["company_id"])
+        administers = effective.holds("membership.grant")
+        if administers is None:
+            administers = show.get("role") in ("admin", "owner")
+        reader = Home.Reader(show["company_id"], lambda cmd: _company_offers(cmd, show, hub_admin=cred.hub_admin),
+                             administers=bool(administers or cred.hub_admin))
+        request.state.reader = reader
+        return reader
 
     def company_noun_rows(request: Request, show: dict[str, Any]) -> list[tuple[str, list[registry.Command]]]:
         """The company's nouns and the verbs this credential may use, as the grid has always built them."""
