@@ -2851,3 +2851,18 @@ MATRIX['bulk-edit columns'] = {'E_VALIDATION': 'unknown kind'}
 for _name in ('bulk-edit grid', 'bulk-edit show'):
     MATRIX[_name] = {'E_VALIDATION': 'invalid input or column', 'E_RECORD_NOT_FOUND': 'unknown grid edit or record'}
 MATRIX['bulk-edit query'] = {'E_VALIDATION': 'invalid input or cursor'}
+# Add more details (R108 increment 5): a deposit of Undeposited Funds payments, bills marked paid.
+_BANK_DETAILS = {**_BANK_POST,
+                 'E_VALIDATION': 'a line not waiting, not money in (deposit) or out (bills), a selection that does not '
+                                 'come to the line (the difference shown), bills of two vendors, no method or '
+                                 'adjustment payee given (ask)',
+                 'E_VALUE_RANGE': "an amount out of range for the posting command",
+                 'E_DEPOSIT_SOURCE_INELIGIBLE': 'a receipt not waiting in Undeposited Funds (deposit post\'s own)',
+                 'E_DEPOSIT_SOURCE_CLAIMED': 'a payment already deposited (deposit post\'s own refusal)',
+                 'E_DEPOSIT_SOURCE_INVALID': 'a receipt that cannot be deposited (deposit post\'s own)',
+                 'E_DEPOSIT_DATE_BEFORE_SOURCE': 'the line is dated before a payment it banks',
+                 'E_APPLICATION_CAPACITY': 'more than is open on a bill (bill pay\'s own refusal)',
+                 'E_APPLICATION_INCOMPATIBLE': 'a bill of another currency or payable account',
+                 'E_APPLICATION_INACTIVE': 'a bill voided or deleted'}
+MATRIX['bank-line deposit'] = dict(_BANK_DETAILS)
+MATRIX['bank-line pay-bills'] = dict(_BANK_DETAILS)

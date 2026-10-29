@@ -650,8 +650,8 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   signed-in actor; for anyone else `hub.capabilities.require_hub(s, "user.manage")` (the check `user deactivate`
   uses) runs before the name is looked up, so who exists is answered only to those who may manage them. `user.manage`
   may read an agent's Home but not set or clear one. The output's field is `page` (a field named `path` is redacted
-  from non-administrators as a filesystem path). Layer `user-home-v1` on `bulk-edit-v1` (848 commands, descriptor
-  4ea8923b). `--page` is the part after `/c/<company>/` or the whole path (the company then comes from it, and a
+  from non-administrators as a filesystem path). Layer `user-home-v1` on `bank-line-details-v1` (850 commands, descriptor
+  e3ca5ecf). `--page` is the part after `/c/<company>/` or the whole path (the company then comes from it, and a
   `--company` naming the same company by name agrees). A page is accepted only if `home.page_commands` resolves it
   (the Overview, `_all`, `find`, `_registers`, `audit`, a `_group/<slug>`, any destination a tile or section link
   declares, or a noun's list, `<noun>/<verb>`, record or record-verb page) and the target's `Reader` opens it; the

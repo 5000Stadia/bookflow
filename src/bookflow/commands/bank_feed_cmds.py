@@ -179,7 +179,8 @@ def _sorter(name, model, work, description, errors=_SORT_ERRORS, output=m.SortOu
     def planner(inp, ctx, s):
         if s.dry_run:
             return Plan(output(**work(s, ctx, inp, dry_run=True)), {'input': inp})
-        return Plan(output(**_PENDING_SORT) if output is m.SortOutput else output(**_pending_undo(inp)), {'input': inp})
+        return Plan(output(**_PENDING_SORT) if issubclass(output, m.SortOutput) else output(**_pending_undo(inp)),
+                    {'input': inp})
 
     def applier(plan, ctx, s):
         applied = _finalized(s, ctx, name.replace(' ', '.'), lambda: work(s, ctx, plan.data['input'], dry_run=False),
@@ -233,3 +234,29 @@ bank_line_undo = _sorter('bank-line undo', m.UndoInput,
                          lambda s, ctx, inp, dry_run: _sort_module().undo(s, ctx, inp, dry_run=dry_run), _UNDO,
                          errors=['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_BATCH_BLOCKED', 'E_VERSION_CONFLICT'],
                          output=m.UndoOutput, positional=('batch',))
+
+_DETAILS = (" The selection must come to the line exactly; otherwise it is refused showing the difference remaining "
+            "(`details.difference`). The act is its own batch (`bank-line undo <batch_id>` takes it back) and is "
+            "recorded on the line's import, so reversing the import takes it back too.")
+_DEPOSIT = ("Add more details: enter a waiting bank line of money in as a deposit of the customer payments and sales "
+            "receipts waiting in Undeposited Funds that it banked, run as you with `deposit post` on the line's "
+            "account and date, so the deposit is exactly the one you would type. A payment already deposited is "
+            "refused by `deposit post`'s own code. `adjustment_account` enters a difference as one more row (other money "
+            "received from a payee, or money kept back such as a bank fee) instead of refusing." + _DETAILS
+            + ' Example: {"line": "01J...", "payments": ["01J...", "01J...", "01J..."]}.')
+_PAY_BILLS = ("Add more details: mark open bills paid from a waiting bank or card line of money out, run as you "
+              "with `bill pay` from the line's account on its date, so the payment is exactly the one you would "
+              "type. One line is one payment to one vendor; name `amount` per bill for a part payment. No method: "
+              "refused, asking -- ask the person, never guess." + _DETAILS
+              + ' Example: {"line": "01J...", "bills": [{"bill": "01J..."}], "method": "Bank Transfer"}.')
+_DETAIL_ERRORS = [*_POST_ERRORS, 'E_VALUE_RANGE', 'E_DEPOSIT_SOURCE_INELIGIBLE', 'E_DEPOSIT_SOURCE_CLAIMED',
+                  'E_DEPOSIT_SOURCE_INVALID', 'E_DEPOSIT_DATE_BEFORE_SOURCE', 'E_APPLICATION_CAPACITY',
+                  'E_APPLICATION_INCOMPATIBLE', 'E_APPLICATION_INACTIVE']
+bank_line_deposit = _sorter('bank-line deposit', m.DepositLineInput,
+                            lambda s, ctx, inp, dry_run: _sort_module().details(s, ctx, 'deposit', inp,
+                                                                                dry_run=dry_run),
+                            _DEPOSIT, errors=_DETAIL_ERRORS, output=m.DetailsOutput)
+bank_line_pay_bills = _sorter('bank-line pay-bills', m.PayBillsLineInput,
+                              lambda s, ctx, inp, dry_run: _sort_module().details(s, ctx, 'bills', inp,
+                                                                                  dry_run=dry_run),
+                              _PAY_BILLS, errors=_DETAIL_ERRORS, output=m.DetailsOutput)

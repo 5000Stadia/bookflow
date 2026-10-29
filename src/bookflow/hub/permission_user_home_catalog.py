@@ -1,4 +1,4 @@
-"""Add each person's Home (R191, design/point-of-sale.md §8) without rewriting any accepted descriptor. Chained on bulk-edit-v1 (R107 increment 6).
+"""Add each person's Home (R191, design/point-of-sale.md §8) without rewriting any accepted descriptor. Chained on bank-line-details-v1 (R108 increment 5).
 
 `user home set`, `show` and `clear` are hub commands under the existing capability `user`, open to every signed-in
 actor (threshold `authenticated`, as `user set-password` is): one's own Home is self-service; another person's needs
@@ -10,10 +10,10 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_bulk_edit_catalog as previous, permission_catalog as c
+from . import permission_bank_line_details_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = '426d16db06973a0946261de9b4645f7795925992'
+SOURCE_COMMIT = '0b3769e84c061467ebb6e11adfdc75cf8ba5d443'
 _FILE = 'src/bookflow/commands/user_home_cmds.py'
 _OWNER = f'bookflow.commands.user_home_cmds.authorize|{_FILE}'
 AUTHORIZATION = ("any signed-in person or agent for their own Home; another person's needs user.manage (an installation "
