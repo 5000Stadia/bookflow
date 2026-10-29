@@ -221,10 +221,10 @@ The same example as complete `bookflow_run` arguments:
 | `line` | `--line` | string | yes | no | — | A waiting line of money into a bank account.; pattern "^[0-9A-HJKMNP-TV-Z]{26}$" |
 | `payments` | `--payments` | array[string] | yes | no | — | The customer payments and sales receipts waiting in Undeposited Funds that this line banked (`deposit sources` lists them). They must add up to the line exactly, or name an `adjustment_account` for the difference. |
 | `adjustment_account` | `--adjustment-account` | string \| null | no | yes | null | Enter the difference between the line and the payments as its own row of the deposit, instead of refusing: the line more than the payments, other money received, credited to this account (interest, a payment not yet entered...); the line less, money kept back from the deposit, debited here (a bank fee, cash back). Unsure? Ask the person; never guess. |
-| `adjustment_payee` | `--adjustment-payee` | string \| null | no | yes | null | Who the other money came from (needed when the line is more than the payments). |
+| `adjustment_payee` | `--adjustment-payee` | string \| null | no | yes | null | Who the other money came from (needed when the line is more than the payments; refused on money kept back). |
 | `adjustment_payee_type` | `--adjustment-payee-type` | literal["customer", "vendor", "employee", "other_name"] \| null | no | yes | null | The list adjustment_payee is on; default customer. |
 | `adjustment_memo` | `--adjustment-memo` | string \| null | no | yes | null | — |
-| `adjustment_class_id` | `--adjustment-class-id` | string \| null | no | yes | null | — |
+| `adjustment_class_id` | `--adjustment-class-id` | string \| null | no | yes | null | The other money row's class (a cash-back row takes none, so it is refused there). |
 | `memo` | `--memo` | string \| null | no | yes | null | The deposit's memo; default the bank's text. |
 
 ### Command and context options
@@ -728,7 +728,7 @@ The same example as complete `bookflow_run` arguments:
 | `bills[].amount` | inside `--bills` JSON array | string \| null | no | yes | null | Paid on it; default everything still open. |
 | `bills[].discount` | inside `--bills` JSON array | string \| null | no | yes | null | An early-payment discount taken on it. |
 | `method` | `--method` | string \| null | no | yes | null | The payment method (`payment-method query`). Unsure? Ask the person; never guess. |
-| `check_number` | `--check-number` | string \| null | no | yes | null | On a check method: the check number (default the account's next, as `bill pay` does). |
+| `check_number` | `--check-number` | string \| null | no | yes | null | On a check method from a bank account: the check number. Default the line's own number; a line with none is refused, asking (never the chequebook's next number for a cheque the bank has already shown). |
 | `memo` | `--memo` | string \| null | no | yes | null | Default: the bank's text. |
 | `discount_account` | `--discount-account` | string \| null | no | yes | null | — |
 
