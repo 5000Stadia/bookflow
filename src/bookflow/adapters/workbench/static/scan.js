@@ -98,7 +98,8 @@
     });
     form.requestSubmit(form.querySelector('[type="submit"]') || undefined);
     return swapped.then(() => {
-      document.querySelector('[data-scan][data-scan-mode="count"] [data-scan-input]')?.focus();
+      // A camera scan leaves the focus alone: on a phone, focusing the field would open the keyboard over the camera.
+      if (!want.camera) document.querySelector('[data-scan][data-scan-mode="count"] [data-scan-input]')?.focus();
       return want.quantity;
     });
   }
@@ -121,7 +122,7 @@
     });
     form.requestSubmit(form.querySelector('[type="submit"]') || undefined);
     return swapped.then(() => {
-      document.querySelector('[data-scan][data-scan-mode="pick"] [data-scan-input]')?.focus();
+      if (!want.camera) document.querySelector('[data-scan][data-scan-mode="pick"] [data-scan-input]')?.focus();
       // The list refused it (an item not on it, a number held elsewhere): the page says why; nothing was added.
       return document.querySelector('[data-pick] [role=alert]') ? null : want.quantity;
     });
@@ -140,14 +141,15 @@
   // One scan at a time, in the order they were typed: a scanner can send the next code before the
   // last look-up has answered, and each must land on its own line.
   const queues = new WeakMap();
-  function enqueue(field, input, text) {
+  function enqueue(field, input, text, camera) {
     const previous = queues.get(field) || Promise.resolve();
-    const next = previous.then(() => look(field, input, text)).catch(() => {});
+    const next = previous.then(() => look(field, input, text, camera)).catch(() => {});
     queues.set(field, next);
     return next;
   }
 
-  async function look(field, input, text) {
+  // `camera` is true for a code the camera read (camera-scan.js): the same look-up and placing, without moving focus.
+  async function look(field, input, text, camera) {
     if (text === undefined) { text = input.value; input.value = ''; }
     if (!field.isConnected) {
       // The page was swapped while this scan waited its turn (a count entry): use the field that replaced it.
@@ -156,10 +158,13 @@
     }
     if (!text.trim()) return;
     const want = parse(text);
+    want.camera = !!camera;
     const keepTyped = () => {
       // Nothing typed is lost: the code goes back in the field unless something new is already there.
       if (!input.value) input.value = text;
       if (document.activeElement === input) input.select();
+      // A camera code is selected without focusing (no phone keyboard), so the next scan typed there replaces it.
+      else if (camera && input.value === text) { try { input.setSelectionRange(0, text.length); } catch (error) { /* not focusable */ } }
     };
     if (want.refused) {
       say(field, 'A quantity of ' + escape(want.quantity) + ' adds nothing. Type a quantity above 0 before the *.', 'error');
@@ -238,5 +243,7 @@
       event.stopImmediatePropagation();
     }
   }, true);
-  window.bookflowScan = {parse, look: (field, input) => { const text = input.value; input.value = ''; return enqueue(field, input, text); }};
+  window.bookflowScan = {parse, look: (field, input) => { const text = input.value; input.value = ''; return enqueue(field, input, text); },
+    // A code from the camera, queued behind any typed ones and handled exactly as if it had been typed and entered.
+    scan: (field, text) => enqueue(field, field.querySelector('[data-scan-input]'), text, true)};
 })();

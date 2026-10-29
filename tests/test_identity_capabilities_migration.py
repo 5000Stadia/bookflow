@@ -58,7 +58,10 @@ def test_seed_is_exactly_the_registry_gap_and_nothing_else():
     assert HUB0013.revision in known_revisions("hub")
     assert "bookflow.core.registry" not in inspect.getsource(HUB0013)
     previous, projection = set(_previous_seed()), set(_registry_role_capability_projection())
-    assert set(HUB0013.ROLE_CAPABILITY_SEED) == projection - previous
+    # A subset, not equality: capabilities added after the seed regime (import, bank-feed,
+    # bulk-edit) reach roles through their permission layer's defaults, never a hub seed
+    # (test_migration_chain.test_frozen_role_capability_seed_matches_registry holds that half).
+    assert set(HUB0013.ROLE_CAPABILITY_SEED) <= projection - previous
     assert previous - projection == set()
     assert len(HUB0013.ROLE_CAPABILITY_SEED) == len(set(HUB0013.ROLE_CAPABILITY_SEED)) == 6
     # The lockout this closes: every role administering memberships, hub admins administering users.

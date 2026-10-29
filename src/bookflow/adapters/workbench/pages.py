@@ -7,6 +7,7 @@ from bookflow.adapters.workbench import date_defaults as DateDefaults
 
 import json
 import hashlib
+import re
 import secrets
 import threading
 import time
@@ -658,13 +659,18 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js", "timekeeping.css", "scan.js", "counts.css", "picks.css", "import.css", "import.js", "item-picture.js", "bulk-edit.css", "bulk-edit.js")
+        for name in ("workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js", "timekeeping.css", "scan.js", "counts.css", "picks.css", "import.css", "import.js", "item-picture.js", "camera-scan.js", "camera-scan.css", "scan-decoder-native.js", "scan-decoder-zxing-wasm.js", "secure-context.js", "bulk-edit.css", "bulk-edit.js")
     }
+    # The Scan field macro (scan_field.html) is imported without the page's context, so its camera scripts come
+    # from the environment; their URLs depend only on the files' bytes.
+    env.globals["camera_scan_urls"] = {name: static_urls[name] for name in (
+        "camera-scan.js", "camera-scan.css", "scan-decoder-native.js", "scan-decoder-zxing-wasm.js", "secure-context.js")}
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
         if not ctx.get("company_id") and request.cookies.get(LAST_COMPANY):
             ctx.setdefault("header_company_id", request.cookies.get(LAST_COMPANY))  # hub pages keep the company links
         company_view = getattr(request.state, "workbench_company", None)
+        ctx.setdefault('scan_decoders', getattr(request.app.state, 'scan_decoders', ''))
         ctx['company_today'] = DateDefaults.company_today(company_view) if company_view and company_view.get('company_id') == ctx.get('company_id') else ''
         ctx['math_currencies'] = {code: value[0] for code, value in CURRENCIES.items()}
         ctx['math_company_currency'] = (company_view or {}).get('home_currency', '') if company_view and company_view.get('company_id') == ctx.get('company_id') else ''
@@ -977,10 +983,36 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     @permission_read_package(host)
     def static(name: str):
         p = HERE / "static" / name
-        if not p.exists() or "/" in name:
+        # Only a regular file directly in static/: a folder (vendor, ".."), a missing name or a nested path is 404.
+        if "/" in name or "\\" in name or name in (".", "..") or not p.is_file() or p.resolve().parent != (HERE / "static").resolve():
             return Response(status_code=404)
         media = "text/css" if name.endswith(".css") else "application/javascript"
         return Response(p.read_bytes(), media_type=media, headers={"Cache-Control": "max-age=3600"})
+
+    # Vendored third-party files (R190): static/vendor/<package>/<version>/<file>, each folder with its licence and
+    # VENDORED.md. A version's files never change, so they cache for good; .wasm goes out as application/wasm so
+    # the browser can compile it while it streams.
+    vendor_root = (HERE / "static" / "vendor").resolve()
+    vendor_media = {".js": "application/javascript", ".wasm": "application/wasm", ".md": "text/plain; charset=utf-8"}
+    vendor_licences = ("LICENSE", "LICENSE.md", "LICENSE.txt", "COPYING")
+    vendor_part = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]*$")
+
+    @app.get("/static/vendor/{package}/{version}/{name}")
+    @permission_read_package(host)
+    def static_vendor(package: str, version: str, name: str):
+        # Plain names only (no separator, encoded or not, no ".."), one of the served kinds, a regular file that is
+        # no link and has no link on its way, inside the vendor folder.
+        if not all(vendor_part.match(part) and ".." not in part for part in (package, version, name)):
+            return Response(status_code=404)
+        media = "text/plain; charset=utf-8" if name in vendor_licences else vendor_media.get(Path(name).suffix)
+        steps = (vendor_root / package, vendor_root / package / version, vendor_root / package / version / name)
+        if media is None or any(step.is_symlink() for step in steps) or not steps[-1].is_file():
+            return Response(status_code=404)
+        p = steps[-1].resolve()
+        if not p.is_relative_to(vendor_root):
+            return Response(status_code=404)
+        return Response(p.read_bytes(), media_type=media, headers={
+            "Cache-Control": "public, max-age=31536000, immutable", "X-Content-Type-Options": "nosniff"})
 
     @app.get("/login", response_class=HTMLResponse)
     @permission_read_package(host)
