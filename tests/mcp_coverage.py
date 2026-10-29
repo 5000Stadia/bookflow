@@ -328,7 +328,9 @@ BANK_FEED_COMMANDS = frozenset(('bank-feed import', 'bank-feed show', 'bank-feed
                                 'bank-feed reverse', 'bank-feed move',  # R108 increment 2: moved, then undone
                                 # R108 increment 3: sorting the inbox.
                                 'bank-line match', 'bank-line unmatch', 'bank-line ignore', 'bank-line add',
-                                'bank-line transfer', 'bank-line undo'))
+                                'bank-line transfer', 'bank-line undo',
+                                # R108 increment 5: add more details.
+                                'bank-line deposit', 'bank-line pay-bills'))
 
 # R114 increment 1: an item's picture uploaded, chosen from its files, read by a reader of items, and removed.
 ITEM_PICTURE_COMMANDS = frozenset(('item picture set', 'item picture use', 'item picture get', 'item picture clear'))

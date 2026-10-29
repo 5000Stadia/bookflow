@@ -266,8 +266,8 @@ asks for those specifics and never fills them in by guessing. The agent guide sa
 
 ## As built: increment 2 (automation) (2026-10-28)
 
-- **Layer `automation-v1`** on `bulk-edit-v1` (`hub/permission_automation_catalog.py`, 848 commands, descriptor
-  `4a7b11fd`). It registers `automate.bank-rule` and `automate.invoice` (held by a person at standard, as
+- **Layer `automation-v1`** on `bank-line-details-v1` (`hub/permission_automation_catalog.py`, 850 commands, descriptor
+  `cffced1d`; re-chained from `bulk-edit-v1` when main brought R108 increment 5). It registers `automate.bank-rule` and `automate.invoice` (held by a person at standard, as
   `automate.delivery` from increment 1 is; by an agent only by grant), and `automation list`, `show` (member) and
   `pause` (standard) under a new capability `automation` (member and standard, as list reads and writes). Each rule is
   then checked against its own kind's commands (`company/automation.require_command`: the kind's `show` to read it, its

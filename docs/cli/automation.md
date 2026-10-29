@@ -114,7 +114,7 @@ Example JSON output:
 
 ## `automation pause`
 
-Pause a live automation: it runs nothing until a holder of its automate.<kind> capability makes it live again. Open to anyone who may edit the rule (stopping is safe); its establisher gets one to-do. Example: {"kind": "delivery", "rule": "Daily invoices"}.
+Pause a live automation: it acts for nobody until a holder of its automate.<kind> capability makes it live again (a paused delivery schedule may still draft messages; it sends nothing). Open to anyone who may edit the rule (stopping is safe); its establisher gets one to-do. Example: {"kind": "delivery", "rule": "Daily invoices"}.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
