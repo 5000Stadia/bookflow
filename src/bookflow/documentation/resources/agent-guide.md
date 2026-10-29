@@ -1003,6 +1003,19 @@ or lists it creates, an opening) gets one check of its exact details, from the p
 before `import run`. `import reverse --dry-run`, then `import reverse`, undoes a whole run; it is refused,
 naming the payment, while a payment is applied to one of its invoices.
 
+## Changing many records at once
+
+"Raise every price in the Fixtures category by 5 percent" is `bulk-edit preview --kind item` with the list's own
+filter (`--filter`, or `--query` text, or named `--records`) and an operation (`{"op": "percent", "field":
+"price", "by": "5"}`; add `"round": "0.05"` when asked), then `bulk-edit apply`. `bulk-edit columns` names the
+fields; amounts round half-up to the cent. The preview is the diff: each record's value before and after, the
+totals, and any record its update would refuse. A plainly named edit just runs. An edit that sets how the
+business works from then on (new prices, terms or credit limits on many records) gets one check of its exact
+details first: show the owner the diff's count, a few before-and-after pairs and the totals, then apply. Report
+what `apply` returns, including any record refused because someone changed it meanwhile. "Undo that price
+change" is `bulk-edit reverse --dry-run`, then `bulk-edit reverse`; a record changed since is named and nothing
+changes, and `--skip-changed` restores the rest only when the owner agrees to leave those.
+
 ## Reading a bank statement from a file
 
 When the owner says the statement is in your input folder, attach the file once and import it by its

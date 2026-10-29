@@ -38,6 +38,7 @@ def test_upgrading_backfills_designations_and_marks_unreadable_books_unverified(
         # Back to hub0015, as a hub upgraded from before R121 would be.
         hub.execute('DROP TABLE company_accountants')
         hub.execute('DROP TABLE company_accountant_sync')
+        hub.execute('DROP TABLE user_homes')  # hub0017 (R191) comes after it
         hub.execute("UPDATE alembic_version SET version_num='hub0015'")
     with open_database(root / 'hub.db', writable=True) as db:
         assert migrate_to_head(db, 'hub', tmp_path) == ('hub0015', HEADS['hub'])

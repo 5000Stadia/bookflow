@@ -1943,6 +1943,7 @@ EXAMPLES.update({
 _BANK_IMPORT = '01J9ZK4QF8T7E2V5N3B6C1D0BF'
 _BANK_LINE = '01J9ZK4QF8T7E2V5N3B6C1D0BG'
 _BANK_ENTRY = '01J9ZK4QF8T7E2V5N3B6C1D0BH'
+_BULK_EDIT = '01J9ZK4QF8T7E2V5N3B6C1D0BE'
 _BANK_SORT = '01J9ZK4QF8T7E2V5N3B6C1D0BJ'
 EXAMPLES.update({
     'bank-feed import': Example('bookflow bank-feed import --account Checking --attachment 01J9ZK4QF8T7E2V5N3B6C1D0AT'
@@ -1978,6 +1979,24 @@ EXAMPLES.update({
                                   {'line': _BANK_LINE, 'to': 'Savings'}),
     'bank-line undo': Example('bookflow bank-line undo ' + _BANK_SORT + ' --company "Demo Plumbing Co"'
                               ' --reason "Wrong account on the batch" --dry-run --json', {'batch': _BANK_SORT}),
+    # R107 increment 6: a grid edit, previewed as a diff, applied as one batch and reversed as one.
+    'bulk-edit columns': Example('bookflow bulk-edit columns item --company "Demo Plumbing Co" --json', {'kind': 'item'}),
+    'bulk-edit grid': Example('bookflow bulk-edit grid customer --columns \'["terms_id","credit_limit"]\' --limit 200'
+                              ' --company "Demo Plumbing Co" --json',
+                              {'kind': 'customer', 'columns': ['terms_id', 'credit_limit'], 'limit': 200}),
+    'bulk-edit preview': Example('bookflow bulk-edit preview item --query Fixture --operations \'[{"op": "percent",'
+                                 ' "field": "price", "by": "5", "round": "0.05"}]\' --company "Demo Plumbing Co"'
+                                 ' --reason "Fixture prices up 5 percent" --json',
+                                 {'kind': 'item', 'query': 'Fixture', 'operations': [
+                                     {'op': 'percent', 'field': 'price', 'by': '5', 'round': '0.05'}]}),
+    'bulk-edit apply': Example('bookflow bulk-edit apply ' + _BULK_EDIT + ' --company "Demo Plumbing Co"'
+                               ' --reason "Fixture prices up 5 percent" --json', {'run': _BULK_EDIT}),
+    'bulk-edit reverse': Example('bookflow bulk-edit reverse ' + _BULK_EDIT + ' --company "Demo Plumbing Co"'
+                                 ' --reason "Wrong category repriced" --dry-run --json', {'run': _BULK_EDIT}),
+    'bulk-edit show': Example('bookflow bulk-edit show ' + _BULK_EDIT + ' --outcome conflict'
+                              ' --company "Demo Plumbing Co" --json', {'run': _BULK_EDIT, 'outcome': 'conflict'}),
+    'bulk-edit query': Example('bookflow bulk-edit query --kind item --company "Demo Plumbing Co" --json',
+                               {'kind': 'item'}),
 })
 # R114 increment 1: the item's picture -- a photo uploaded, an image already attached chosen, or the picture removed.
 EXAMPLES.update({

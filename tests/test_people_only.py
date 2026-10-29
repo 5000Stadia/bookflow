@@ -31,8 +31,8 @@ FIVE = {"user set-password", "token issue", "agent assign", "agent authorize", "
 def test_the_people_only_list_is_exactly_the_five_and_every_other_entry_is_a_capability():
     registry.load_all()
     tip = runtime.current_catalog()
-    # item-picture-v1 (R114) sits on capabilities-v1 and adds no people-only act: a picture is an item edit; nor does
-    # user-home-v1 (R191) on it: one's own Home is self-service and another's is user.manage, a capability.
+    # item-picture-v1 (R114) and bulk-edit-v1 add no people-only act; nor does
+    # user-home-v1 (R191) on bulk-edit-v1: one's own Home is self-service and another's is user.manage, a capability.
     assert tip is runtime.known_catalog(c.USER_HOME_POLICY_VERSION)
     assert people_only.people_only_commands() == FIVE == set(layer.STAYS_HUMAN)
     assert sorted(a.key for a in tip.CATALOG.admin_actions if a.human_only) == sorted(
@@ -379,7 +379,7 @@ def test_a_root_activated_at_the_previous_catalog_upgrades_with_nothing_broader_
                                                      "expected_catalog_sha256": state["catalog_sha256"]}, headers=REASON)
         assert upgraded["changed"] and upgraded["affected_agents"] == []
         with sqlite3.connect((root / "hub.db").as_uri() + "?mode=ro", uri=True) as db:
-            # Activation takes the tip: user-home-v1 (R191) on item-picture-v1 (R114) on capabilities-v1, neither
+            # Activation takes the tip: user-home-v1 (R191) on bulk-edit-v1 on item-picture-v1 (R114), none
             # adding a people-only act.
             assert db.execute("SELECT catalog_version FROM permission_state").fetchone() == ("user-home-v1",)
             assert db.execute("SELECT count(*) FROM agent_authority WHERE suspended_at IS NOT NULL AND agent_user_id=?",

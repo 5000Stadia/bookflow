@@ -84,6 +84,7 @@ def _import_kind(noun: str) -> bool:
 
 
 env.globals["import_kind"] = _import_kind
+env.globals["bulk_edit_kind"] = lambda noun: noun in ("customer", "vendor", "item", "account")  # R107 inc 6
 # Money and dates as a person reads them; display only, never input or export.
 env.filters.update(Display.FILTERS)
 # What an audit event did and who did it, in plain words; the stored summary is unchanged.
@@ -657,7 +658,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js", "timekeeping.css", "scan.js", "counts.css", "picks.css", "import.css", "import.js", "item-picture.js")
+        for name in ("workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js", "timekeeping.css", "scan.js", "counts.css", "picks.css", "import.css", "import.js", "item-picture.js", "bulk-edit.css", "bulk-edit.js")
     }
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
@@ -757,15 +758,41 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             Display.NEGATIVES.set((result.get("info") or {}).get("negative_number_style") or "minus")
         return result
 
+    _effective_cache: dict[tuple[str, str], tuple[str, Any]] = {}
+    _effective_lock = threading.Lock()
+
+    def _authority_token() -> str | None:
+        import sqlite3
+        from contextlib import closing
+        try:
+            with closing(sqlite3.connect(f"file:{host.data_root / 'hub.db'}?mode=ro", uri=True, timeout=0.5)) as db:
+                row = db.execute("SELECT token FROM authority_generation WHERE id=1").fetchone()
+        except sqlite3.Error:
+            return None
+        return row[0] if row else None
+
     def effective_capabilities(request: Request, company_id: str):
         """The reader's effective capabilities in the company, computed once per request (`membership effective`)."""
         from bookflow.hub.user_homes import Effective
         cached = getattr(request.state, "effective", None)
         if cached is None or cached.company_id != company_id:
-            try:
-                cached = Effective.from_output(run(request, "membership effective", {"company": company_id}, None))
-            except BookflowError:
-                cached = Effective(company_id, None)  # unanswerable: the role decides; the command boundary still guards
+            # Reused across requests only while the hub's authority generation token is unchanged: triggers redraw it
+            # on any write to users, memberships, companies, grants or the permission state (hub0014).
+            key, token = (credential(request).user_id, company_id), _authority_token()
+            with _effective_lock:
+                held = _effective_cache.get(key)
+            if token is not None and held is not None and held[0] == token:
+                cached = held[1]
+            else:
+                try:
+                    cached = Effective.from_output(run(request, "membership effective", {"company": company_id}, None))
+                    if token is not None:
+                        with _effective_lock:
+                            if len(_effective_cache) > 512:
+                                _effective_cache.clear()
+                            _effective_cache[key] = (token, cached)
+                except BookflowError:
+                    cached = Effective(company_id, None)  # unanswerable: the role decides; the boundary still guards
             request.state.effective = cached
         EFFECTIVE.set(cached)
         return cached
@@ -874,6 +901,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     item_picture_context = ItemPicturePages.mount(app, render=render, run=run, credential=credential,
         page_error=page_error, host=host, make_context=make_context,
         role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
+    # R107 increment 6: editing many records at once (grid, changes, done and undo), on the bulk-edit commands.
+    from bookflow.adapters.workbench import bulk_edit_pages as BulkEditPages
+    BulkEditPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                        role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R181 increment 4: the pack screen and the packing slip (the slip shows whatever the switch says).
     from bookflow.adapters.workbench import shipment_pack_pages as ShipmentPackPages
     ShipmentPackPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,

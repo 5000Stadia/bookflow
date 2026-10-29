@@ -634,6 +634,15 @@ time: S 30-60 min, M 1.5-2.5 h, L 4-6 h.
    `bulk-edit reverse` with its refusals and `--skip-changed`; the grid page and phone cards; `approve`. *Done when* criterion 7 holds in the browser and over MCP and
    20 items are repriced from a phone; criterion 11 holds for the repricing. *Tests:* rounding (half-up on the currency's places), merge and conflict
    rows, a refused row in the middle, reverse after a later edit, the grid at 300 and 2,000 rows (time recorded).
+
+   > **Changed by Kabe, 2026-10-28.** `bulk-edit approve` and the agent threshold (§8's "a bulk-edit changing more
+   > than 100 records ... stops in `waiting`") are dropped, as for document imports: sensitivity is impact, never
+   > quantity, and whether an actor may bulk-edit is a permission like any other ([principal
+   > directives](principal-directives.md), R187): the `bulk-edit` capability beside each record's own `update`
+   > capability. In place of approval, the agent guide teaches the rule: an edit that sets how the business works
+   > from then on (new terms or prices on many records) gets one clear check of its exact details, from the preview's
+   > diff and totals, with the principal before it runs; a plainly named edit just runs. Neither `import.approve` nor
+   > K1 applies to grid edits.
 7. **Guided opening balances (L).** Migration 7; the `entered_*` kinds and readers; `basis` on tie-out;
    `opening-draft`; the guided page; `accept_differences`. *Done when* criterion 6 holds and the same data moved in
    through `cutover` from anchor-style exports yields the same books. *Tests:* each exception of docs/cutover.md
@@ -1142,3 +1151,117 @@ tests running; seconds, 2026-10-28):
 
 The run costs about 0.19 s per invoice at both sizes (a fifth less than looping the command, which opens a session
 per call), the preview about 0.055 s per invoice, and the reversal about 0.15 s per invoice (one delete each).
+
+## As built: increment 6
+
+- **Migration co0116** (on co0115; numbered co0115 until item pictures took that number at the merge): `bulk_edit_runs` (one grid edit: the selection, what was asked, its label, the
+  count of records it leaves as they are; only state, version and the batch, once set, change) and `bulk_edit_rows`
+  (its diff, one row per record changed or refused, with field, before and after, input-shaped and as shown, the
+  version the preview read, and the apply outcome written once: `updated`, `merged`, `conflict`, `refused`,
+  `not_run`). Nothing is deleted. `bulk_edit_rows.record_id` is ledger history (`NOT_REFERENCES`), never a use of
+  the record.
+- **Commands** (`company/bulk_edit.py`, `commands/bulk_edit_cmds.py`): `bulk-edit columns`, `grid`, `show`, `query`
+  (member reads) and `preview`, `apply`, `reverse` (standard writes), under the new capability `bulk-edit` (layer
+  `bulk-edit-v1`, re-chained at the merges onto `item-picture-v1`: 845 commands, descriptor c4664e87), each record checked again by its own
+  `update` and `show`. No `approve`, no threshold (Kabe's 2026-10-28 ruling above).
+- **Columns** are the update command's scalar inputs that its `show` also gives, so a reversal can restore each
+  exactly: never nested records (addresses, contacts, members, vendor profiles, site settings), never an account's
+  `type`; custom fields as `custom:<name>`, by their definition. Decided: an address's lines are not columns here
+  (an update of part of a nested address would need its own restoring rule); `cycle_class` is left out because
+  `item show` does not give it back.
+- **Selection** is the list's own `query` (its filters and search text, paged), or named records (id, full name, an
+  account's number), at most 5,000. **Operations** expand to values before anything is stored: cell edits first,
+  then a paste (by header, a Name column picking the record; or by position over the columns shown), then column
+  operations in order (`set`, `clear`, `copy_down`, `replace`, `add`, `multiply`, `percent`, `set_from`). Numbers
+  are Decimals at 60 digits, never floats; a computed amount rounds half-up (away from zero at the half) to the
+  currency's places, a count to a whole number, another decimal to six places, or to the `round` step asked
+  ("0.05"). A blank has nothing to add to or multiply and stays blank. References are typed by name and resolved by
+  the import's own resolver; an unknown one refuses the preview with suggestions. Money totals before and after are
+  Python integers (millionths), never SQL sums.
+- **Preview** reads each record as its `show` gives it (the show planner, in this session, after one read check),
+  works out every field before and after, and dry-runs the record's `update` with the version it read: a refused
+  record keeps the command's code (`E_NAME_TAKEN`, `E_VALIDATION`...). All or nothing refuses the preview itself
+  when any record would be refused.
+- **Apply** sends exactly the diff, one ordinary `update` per record with the previewed `expected_version`, source
+  reference `bulk-edit:<run>`: another edit to other fields merges (the row shows `merged` and the versions), one to
+  the same field refuses that record (`conflict`, the command's message naming who and when) and the rest go on;
+  the run ends `applied` or `applied_partly`. Each update's batch effect (the prior values, read from `show` just
+  before it, through the import's `before_values`) and its row outcome are written in the update's own transaction.
+  All or nothing undoes what it changed through the batch at the first refusal (`rolled_back`, the rest `not_run`;
+  `failed` if that undo is refused). A killed apply resumes at the first row without an outcome.
+- **Reverse** is the batch ledger's, looping its slices in one call. `skip_changed` (new in `batches.reverse`)
+  leaves every record changed since (`edited_again`, `later_batch`), returns them as `skipped`, and ends the batch
+  `reversed_partly`; any other blocker still refuses the whole. Blockers are given back named for a person (record,
+  who by name, when).
+- **A fix in the shared plan** (found by the seeded test, seed 107): "edited again" compared a record's version with
+  its newest effect in any batch, so an edit typed between two batches became invisible once the later batch was
+  reversed (its reversal left the version compared with), and reversing the earlier batch wrote over it. The plan
+  now walks the writes recorded on the record since the batch's own (`batches._chains`): each must follow the one
+  before (version plus one, or the same for a write that changed nothing), and a later batch whose change still
+  stands (live, part way, or partly reversed without reaching the record) blocks as `later_batch`. Imports and bank
+  sorts get the same check; documents keep their revision check.
+- **The page** `/c/<company>/bulk-edit` ("Edit many…" on the customer, vendor, item and account lists): Grid
+  (search, inactive, columns; a cell is sent only once it changes, so a 2,000-row grid posts what was typed; the
+  column operation and the paste above the grid), Changes (each record before and after, money totals, refusals;
+  one confirmation, "Change 20 items"), Done (outcomes; Undo plans first; a blocked plan names each record changed
+  since and offers "Leave 1, undo the other 19"). htmx for every post; a refusal answers 200 in place. At 390 px
+  each record is a card and nothing scrolls sideways. Screens: `/tmp/m4-shots/bulkedit/`.
+- **Agent guide:** "Changing many records at once": a plainly named edit just runs; one that sets how the business
+  works from then on gets one check of its exact diff and totals with the owner first.
+- **Tests:** `tests/test_bulk_edit.py` (criterion 7 and 11 on 300 items: 300 pairs and 300 audit events, item 17
+  merged then conflicting, reverse refused naming it, `skip_changed` restoring 299, a clean reversal equal to the
+  snapshot; rounding; a refused record in the middle; paste, copy down, set from; customer terms by name; a custom
+  field; grants; an edit between two batches; the seeded property: random grid edits, edits by another user
+  between preview and apply, single edits and reversals, after every step each item equals a replay of the writes
+  still standing), `tests/test_bulk_edit_surfaces.py` (Python, CLI, HTTP and MCP alike),
+  `tests/test_bulk_edit_browser.py` (20 items repriced and undone in real Chrome at 1440 and 390).
+
+### As built: the review of increment 6 (`notes/reviews/r107-inc6-review.md`)
+
+Kabe's rule governs each fix: every batch is reversible as one unit, a preview shows exactly what will change, and
+nothing ever ends up changed but impossible to undo.
+
+- **An unfinished apply is never undone in part** (high). `bulk-edit reverse` refuses a run still `applying`,
+  saying to finish it (`bulk-edit apply <run>`) or cancel it (`bulk-edit apply <run> --cancel`). Cancel marks the
+  rows still waiting `not_run` and reverses what landed through the batch, as one unit; the run ends `cancelled`
+  (a new state in co0116), or `failed` with its batch still live if that reversal is refused, so Undo finishes it
+  later. An apply refuses to resume once its batch is no longer live (the run ends `cancelled`, the rest
+  `not_run`), and the ledger itself (`batches.record_effect`, shared by imports and bank sorts) refuses an effect
+  written into a batch that is not live, so a write can never land in a closed batch.
+- **Counts are the whole edit's** (medium). Lists stay capped at 50 for display, but a blocked reversal says the
+  true total (`details.total`), a plan gives `remaining` (every record it restores) and `skipped_total`, and the
+  page's "Undo restores all N", "N changed since" and "Leave K, undo the other M" use them.
+- **The browser apply runs in slices** (medium). `bulk-edit apply --limit N` changes at most N records and leaves
+  the run `applying`; the page applies 50 at a time (about 2 s), each its own command, so the single writer is free between
+  slices, and shows a progress bar (`counts.pending`). A reload, or a stopped apply, shows "Still applying" with
+  Finish applying and Cancel, never Undo; a reload that arrives while a slice is still writing waits for it (up to
+  20 s) instead of showing the busy refusal.
+- **Big lists on a phone** (medium). The grid shows 50 records a page (`bulk-edit grid --offset`, default `limit`
+  50, `total` the whole selection), with "Only the 50 shown" or "All N matching" for what a change covers; Preview
+  and Apply sit in a bar fixed to the foot of the screen; Changes and Done list 50 rows at a time (`show --cursor`)
+  with a filter by outcome, and every count is the whole edit's. Checked in Chrome at 390 px with 2,000 items.
+- **Lows.** A `later_batch` blocker says what clears it: "reverse batch X first" only while X can be reversed;
+  once X was reversed partly without reaching the record, it says that change stands and the record can only be
+  put right by hand or left (`batch_reversible`). `skip_changed` leaves only record-level changes: never the
+  ordering rule of a strict kind (a later live batch in a bank import's scope). A paste without a header row over a
+  filter or search needs the grid's `selection_fingerprint` (the selection's records in order) and is refused if
+  the records changed since; named `records` need none. The 300-item test has its own 900 s timeout.
+- **Also found:** every grid cell rendered blank (in Jinja `r.values` is a dict's `values` method); the template now
+  reads `r['values']`, and the browser test checks a cell's value.
+- **Tests:** in `tests/test_bulk_edit.py`, an unfinished apply refused undo until it is finished or cancelled; an
+  apply refused once its batch is not live (and the ledger's own refusal); true totals on 60 items with 55 edited
+  since; grid pages and the paste fingerprint; a later batch named only when it can be reversed; a strict kind's
+  ordering never skipped. In `tests/test_bulk_edit_browser.py`, 2,000 items at 390 px: 50 cards, the bar in view,
+  "All 2000 matching", the changes paged, the apply in slices, a reload part way showing Still applying, then done.
+  After merging main (7f307eb8, item pictures), the migration is co0116 on co0115 and `bulk-edit-v1` sits on `item-picture-v1` (845 commands, descriptor c4664e87).
+
+**Timings** (`tools/measure_bulk_edit.py ROWS`, root NVMe, service items, three columns, a 5 percent rise rounded
+to 0.05 over every item; seconds, 2026-10-28):
+
+| Rows | Grid (command) | Grid page render | Page HTML | Preview | Apply | Reverse dry run | Reverse | Peak RSS |
+|---|---|---|---|---|---|---|---|---|
+| 300 | 0.78 | 0.05 | 185 KB | 3.85 | 11.52 | 3.13 | 14.81 | 317 MB |
+| 2,000 | 4.48 | 0.16 | 1.1 MB | 24.66 | 71.96 | 18.24 | 59.69 | 320 MB |
+
+Linear: the grid costs about 2.3 ms a record (each read through `item show`), the preview 12 ms (read and dry-run),
+the apply 36 ms (a read for the prior values and the update with its audit event), the reversal 30 to 49 ms.

@@ -357,6 +357,7 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
         'import-mapping deactivate', 'bank-feed import', 'bank-feed reverse', 'bank-feed move',
         'bank-line match', 'bank-line unmatch', 'bank-line ignore', 'bank-line add', 'bank-line transfer',
         'bank-line undo',
+        'bulk-edit preview', 'bulk-edit apply', 'bulk-edit reverse',
         'account activate', 'accountant reclassify', 'accountant-copy changes', 'accountant-copy import',
         'assembly build', 'assembly update', 'attachment link', 'barcode generate', 'batch-invoice retry',
         'bill payment apply', 'bill update', 'billing-group rename', 'bin activate', 'bin update', 'budget fill',

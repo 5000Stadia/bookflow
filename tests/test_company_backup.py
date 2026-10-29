@@ -202,10 +202,16 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0111 = importlib.import_module("bookflow.storage.company_migrations.versions.0111_delivery_schedules")
     co0112 = importlib.import_module("bookflow.storage.company_migrations.versions.0112_bank_feeds")
     co0113 = importlib.import_module("bookflow.storage.company_migrations.versions.0113_import_documents")
+    co0116 = importlib.import_module("bookflow.storage.company_migrations.versions.0116_bulk_edit")
     co0115 = importlib.import_module("bookflow.storage.company_migrations.versions.0115_item_pictures")
 
     def older(conn):
-        # Newest first: co0115 (on co0114) added two item columns and their indexes.
+        # Newest first: co0116 (on co0115): its guards, then its two tables (children first).
+        for trigger in co0116.TRIGGERS:
+            conn.execute(f"DROP TRIGGER {trigger}")
+        for table in co0116.TABLES:
+            conn.execute(f"DROP TABLE {table}")
+        # Then co0115 (on co0114) added two item columns and their indexes.
         for index in co0115.INDEX_NAMES:
             conn.execute(f"DROP INDEX {index}")
         for column in co0115.NAMES:
@@ -471,7 +477,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))
     restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older",
                                               "organization": "Older Books Organization"})
-    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0115"
+    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0116"
     folder = _folder(client, restored["company_id"])
     # The migration took its verified backup of the restored database first, as every migration does.
     assert list((folder / "backups").glob("*-from-co0062.db"))

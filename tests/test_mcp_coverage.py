@@ -99,8 +99,9 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +2 reverse and move (R108 increment 2): bank-feed reverse, bank-feed move.
     # +6 sorting the inbox (R108 increment 3): bank-line match, unmatch, ignore, add, transfer, undo.
     # +4 the item picture (R114 increment 1): item picture set, use, get, clear.
+    # +7 grid edits (R107 increment 6): bulk-edit columns, grid, preview, apply, reverse, show, query.
     # +3 each person's Home (R191): user home set, show, clear.
-    assert len(rows) == 847
+    assert len(rows) == 854
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
@@ -419,7 +420,14 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 4285 -> 4286 (R108 inc 3 review fixes, measured): bank-line query's entry_gone filter -- its null branch.
     # 4286 -> 4291 (R114 inc 1, measured): item picture set and use 2 each (expected_version, thumbnail_attachment),
     # clear 1 (expected_version) -- their null branches. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==4291
+    # 4291 -> 4309 (R107 inc 6, measured per command): bulk-edit preview 9 (query, records, paste, paste_columns,
+    # and each operation's by, round, find, replace, from), grid 3 (query, records, columns), query 3 (kind, state,
+    # cursor), show 2 (outcome, cursor), reverse 1 (fingerprint) -- their null branches. No new variant kind.
+    # 4309 -> 4311 (R107 inc 6 review fixes): bulk-edit preview's selection_fingerprint and apply's limit -- their
+    # null branches.
+    # 4311 -> 4317 (R191, measured): user home set 3 (user, company, expected_version), clear 2 (user,
+    # expected_version), show 1 (user) -- their null branches. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==4317
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

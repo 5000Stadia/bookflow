@@ -553,12 +553,12 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
 - **Home.** Storage is hub0017 on hub0016: a new table `user_homes` (user_id primary key, company_id, path, version,
   set_at, set_by, set_via) rather than the `users.home_*` columns sketched in §8, so setting a Home never moves a
   user's version, which the permission audit reads as part of a person's authority, and no existing table changes.
-  No company migration (bulk edit keeps co0116). Commands `user home set --page PATH [--company C] [--user U]`,
+  No company migration (the head stays bulk edit's co0116). Commands `user home set --page PATH [--company C] [--user U]`,
   `user home show [--user U]`, `user home clear [--user U]`: hub, capability `user`, threshold `authenticated`; one's
   own is self-service for any signed-in actor; another person's (set, show or clear) calls
   `hub.capabilities.require_hub(s, "user.manage")`, the check `user deactivate` uses, so an installation
   administrator or an agent granted `user.manage` acting for one passes and nobody else; a target must be a person.
-  Layer `user-home-v1` on `item-picture-v1` (841 commands, descriptor 9cfd9e91). `--page` is the path after
+  Layer `user-home-v1` on `bulk-edit-v1` (848 commands, descriptor 4ea8923b). `--page` is the path after
   `/c/<company>/` or the whole `/c/<company>/...` path (the company then comes from it). A page is accepted only if
   `home.page_commands` resolves it (the Overview, `_all`, `find`, `_registers`, `audit`, a visible `_group/<slug>`,
   any destination a tile or section link declares, or a noun's list, `<noun>/<verb>`, record `<noun>/<id>` or
@@ -592,7 +592,10 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   `reports`; a denied write form refused up front; a report Home landed on after signing in and from the Home
   button, `next=` winning; a revoked Home falling back with its line; set refusals, `user.manage` for another's,
   the Users & permissions control), `tests/test_home_browser.py` (Chrome at 390 px: Make this page my Home on a
-  report, then the Home button from the customer list; nothing scrolls sideways).
+  report, then the Home button from the customer list; nothing scrolls sideways), `tests/test_user_home_surfaces.py`
+  (set, show, a refusal and clear, alike through Python, the CLI, HTTP and MCP). Effective capabilities are reused
+  across requests per (person, company) while the hub's authority generation token is unchanged, so a page costs
+  one `membership effective` only after a permission change.
 
 ## 16. Open questions
 
