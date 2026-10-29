@@ -342,7 +342,7 @@ def test_a_delivery_schedule_is_an_automation_end_to_end(hosted):  # noqa: F811
     # The clerk loses the capability: a reader sees only that it would pause, an administrator why; the next firing
     # pauses it with the reason and a to-do.
     _grant(hosted, users['clerk'], 'standard', denies=['automate.delivery'])
-    seen = hosted.ok('automation.show', rule, company=cid, headers=as_viewer)
+    seen = hosted.ok('automation.show', rule, company=cid, headers={'Authorization': as_viewer['Authorization']})
     assert seen['would_pause'] == 'its establisher no longer holds the authority'
     shown = hosted.ok('automation.show', rule, company=cid, headers=hosted.bearer)
     assert 'denied automate.delivery' in shown['would_pause']
@@ -469,7 +469,8 @@ def test_a_root_activated_before_the_capability_keeps_its_people_holding_it(root
                          headers=as_person)
         assert made['state'] == 'live'
         handle.host.schedule_now(now=datetime(2026, 6, 2, 12, tzinfo=timezone.utc))
-        shown = hosted.ok('delivery-schedule.show', name, company=company, headers=as_person)
+        shown = hosted.ok('delivery-schedule.show', name, company=company,
+                          headers={'Authorization': as_person['Authorization']})
         assert shown['state'] == 'live' and shown['paused_reason'] is None
     finally:
         handle.stop()
