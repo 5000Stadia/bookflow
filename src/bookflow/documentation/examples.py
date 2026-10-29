@@ -2011,3 +2011,13 @@ EXAMPLES.update({
     'item picture get': Example(f'bookflow item picture get {ID} --out sealant.jpg --company "Demo Plumbing Co" --json',
                                 {'attachment': ID}),
 })
+# R187 increment 2: automations across kinds; each kind's own command makes a rule live.
+EXAMPLES.update({
+    'automation list': Example('bookflow automation list --state live --company "Demo Plumbing Co" --json',
+                               {'state': 'live'}),
+    'automation show': Example('bookflow automation show delivery "Daily invoices" --company "Demo Plumbing Co" --json',
+                               {'kind': 'delivery', 'rule': 'Daily invoices'}),
+    'automation pause': Example('bookflow automation pause delivery "Daily invoices" --company "Demo Plumbing Co"'
+                                ' --reason "Customer list under review" --json',
+                                {'kind': 'delivery', 'rule': 'Daily invoices'}),
+})

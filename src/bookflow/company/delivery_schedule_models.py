@@ -54,8 +54,9 @@ class ScheduleUpdateInput(_Fields):
     kind: Kind | None = None
     no_end: bool = Field(default=False, description='Clear stop_date and remaining_runs.')
     confirm: str | None = Field(default=None, max_length=64, description=(
-        "A live schedule stays live through a change only when a person passes the fingerprint of the check the dry "
-        'run shows for the changed schedule; otherwise the change returns it to draft.'))
+        "A live schedule stays live through a change only when a holder of automate.delivery passes the fingerprint "
+        "of the check the dry run shows for the changed schedule; otherwise the change returns it to draft. On a "
+        "draft or paused send schedule, a holder's confirm makes it live, as delivery-schedule live does."))
     expected_version: int | None = Field(default=None, ge=1)
 
 

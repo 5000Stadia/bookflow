@@ -100,7 +100,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +6 sorting the inbox (R108 increment 3): bank-line match, unmatch, ignore, add, transfer, undo.
     # +4 the item picture (R114 increment 1): item picture set, use, get, clear.
     # +7 grid edits (R107 increment 6): bulk-edit columns, grid, preview, apply, reverse, show, query.
-    assert len(rows) == 851
+    # +3 automations (R187 increment 2): automation list, show, pause.
+    assert len(rows) == 854
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
@@ -424,7 +425,8 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # cursor), show 2 (outcome, cursor), reverse 1 (fingerprint) -- their null branches. No new variant kind.
     # 4309 -> 4311 (R107 inc 6 review fixes): bulk-edit preview's selection_fingerprint and apply's limit -- their
     # null branches.
-    assert sum(len(group["paths"]) for group in mapped)==4311
+    # 4311 -> 4313 (R187 inc 2, measured): automation list's kind and state -- their null branches. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==4313
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

@@ -2851,3 +2851,13 @@ MATRIX['bulk-edit columns'] = {'E_VALIDATION': 'unknown kind'}
 for _name in ('bulk-edit grid', 'bulk-edit show'):
     MATRIX[_name] = {'E_VALIDATION': 'invalid input or column', 'E_RECORD_NOT_FOUND': 'unknown grid edit or record'}
 MATRIX['bulk-edit query'] = {'E_VALIDATION': 'invalid input or cursor'}
+# Automations (R187 increment 2).
+MATRIX['automation list'] = {'E_VALIDATION': 'unknown kind, state or limit'}
+MATRIX['automation show'] = {'E_VALIDATION': 'unknown kind', 'E_RECORD_NOT_FOUND': 'unknown rule',
+                             'E_PERMISSION': "a caller the kind's own show does not admit"}
+MATRIX['automation pause'] = {'E_VALIDATION': 'unknown kind', 'E_RECORD_NOT_FOUND': 'unknown rule',
+                              'E_PERMISSION': "a caller the kind's own update does not admit",
+                              'E_VERSION_CONFLICT': 'the rule changed meanwhile',
+                              'E_IDEMPOTENCY_MISMATCH': 'a reused key with other input',
+                              'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+                              'E_DIRECTIVE_INACTIVE': 'deactivated --directive'}
