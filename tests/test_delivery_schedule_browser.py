@@ -29,7 +29,8 @@ def test_a_send_schedule_saved_checked_and_turned_on(register_browser, width):
     b.wait_for('!!document.querySelector("[data-schedules-link] a")', timeout=30)
     b.evaluate('document.querySelector("[data-schedules-link] a").click()')
     b.wait_for('!!document.querySelector("[data-schedule-form]")', timeout=30)
-    assert 'No schedules yet' in _text(b)
+    # The demo seeds one paused draft-mode schedule (R112 inc 5, c59d1d84); it is listed, and ours joins it.
+    assert 'Daily invoice emails' in _text(b) and 'No schedules yet' not in _text(b)
     # The form, filled and saved: a real htmx submit.
     b.evaluate('''(() => { window.__sameDocument = true;
         document.querySelector("#schedule-form").open = true;

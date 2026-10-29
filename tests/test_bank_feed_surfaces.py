@@ -3,7 +3,8 @@
 Each surface gets an identical demo copy. It previews the sample OFX statement into Checking, imports it, refuses the
 same file again and an OFX file for another account number, then reads the import back through show and query and
 the inbox through bank-line query; moves it and undoes that (increment 2); imports it again and sorts it: a match and
-its unmatch, a --lines ignore undone, an add that asks, then a check added and a transfer sent (increment 3). Every
+its unmatch, a --lines ignore undone, an add that asks, then a check added and a transfer sent (increment 3); before
+those, a bill paid from the fee and a deposit with an adjustment previewed, and a short deposit refused (increment 5). Every
 surface must end with the same counts, keys and refusals.
 """
 import anyio
@@ -16,7 +17,7 @@ SURFACES = ('python', 'cli', 'http', 'mcp')
 COMMANDS = frozenset(('bank-feed import', 'bank-feed show', 'bank-feed query', 'bank-line query',
                       'bank-feed move', 'bank-feed reverse',
                       'bank-line match', 'bank-line unmatch', 'bank-line ignore', 'bank-line add', 'bank-line transfer',
-                      'bank-line undo'))
+                      'bank-line undo', 'bank-line deposit', 'bank-line pay-bills'))
 
 
 @pytest.mark.timeout(900)
@@ -59,6 +60,20 @@ def test_the_same_bank_import_through_python_cli_http_and_mcp(root, tmp_path):
                 ignored = await call(surface, 'bank-line ignore', {'lines': [fee], 'ignore_reason': 'other'})
                 sort_plan = await call(surface, 'bank-line undo', {'batch': ignored['batch_id']}, dry_run=True)
                 sort_undone = await call(surface, 'bank-line undo', {'batch': ignored['batch_id']})
+                # Increment 5: the fee previewed as a bill paid, the deposit as a deposit of a received payment
+                # (dry runs, so the add and transfer below go on as before); short of the line, refused.
+                bill = await call(surface, 'bill post', {'vendor': 'Central Supply', 'date': '2026-04-01', 'expenses': [
+                    {'account': 'Bank Fees', 'amount': '12.00'}]})
+                paid_plan = await call(surface, 'bank-line pay-bills', {'line': fee, 'bills': [{'bill': bill['id']}],
+                                                                        'method': 'Bank Transfer'}, dry_run=True)
+                received = await call(surface, 'payment receive', {
+                    'customer': 'Riverside Apartments', 'date': '2026-04-20', 'amount': '150.00',
+                    'payment_method': 'Cash', 'operation_key': f'surface-{surface}'})
+                short = await call(surface, 'bank-line deposit', {'line': deposit, 'payments': [received['id']]},
+                                   rejected=True)
+                deposit_plan = await call(surface, 'bank-line deposit', {
+                    'line': deposit, 'payments': [received['id']],
+                    'adjustment_account': 'Bank Fees', 'adjustment_payee': 'Riverside Apartments'}, dry_run=True)
                 asked = await call(surface, 'bank-line add', {'line': fee, 'account': 'Bank Fees'}, rejected=True)
                 add = {'line': fee, 'payee': 'Central Supply', 'account': 'Bank Fees'}
                 add_plan = await call(surface, 'bank-line add', add, dry_run=True)
@@ -68,7 +83,8 @@ def test_the_same_bank_import_through_python_cli_http_and_mcp(root, tmp_path):
                                         listed=listed, inbox=inbox, move_plan=move_plan, moved=moved,
                                         undo_plan=undo_plan, undone=undone, matched=matched, unmatched=unmatched,
                                         ignored=ignored, sort_plan=sort_plan, sort_undone=sort_undone, asked=asked,
-                                        add_plan=add_plan, added=added, sent=sent)
+                                        add_plan=add_plan, added=added, sent=sent, paid_plan=paid_plan,
+                                        short=short, deposit_plan=deposit_plan)
             return results
         finally:
             await matrix.close()
@@ -93,6 +109,9 @@ def test_the_same_bank_import_through_python_cli_http_and_mcp(root, tmp_path):
         assert r['add_plan']['entries'][0]['command'] == 'check post' and r['add_plan']['entries'][0]['entry_id'] is None
         assert (r['added']['lines'][0]['state'], r['added']['entries'][0]['command']) == ('added', 'check post')
         assert (r['sent']['lines'][0]['state'], r['sent']['entries'][0]['command']) == ('transfer', 'transfer post')
+        assert (r['paid_plan']['entries'][0]['command'], r['paid_plan']['difference']) == ('bill pay', '0.00')
+        assert '50.00 remaining' in str(r['short']), surface
+        assert (r['deposit_plan']['selected'], r['deposit_plan']['difference']) == ('150.00', '50.00'), surface
         moves.add((r['added']['summary'][:20], r['sent']['entries'][0]['input']['amount']))
         shapes.add((tuple(sorted(r['done']['counts'].items())), tuple(v['line_key'] for v in r['done']['lines']),
                     tuple((v['date'], v['amount'], v['state']) for v in r['inbox']['lines'])))

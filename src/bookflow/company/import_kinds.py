@@ -356,7 +356,7 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
         'import preview', 'import run', 'import cancel', 'import reverse', 'import decide', 'import-mapping save',
         'import-mapping deactivate', 'bank-feed import', 'bank-feed reverse', 'bank-feed move',
         'bank-line match', 'bank-line unmatch', 'bank-line ignore', 'bank-line add', 'bank-line transfer',
-        'bank-line undo',
+        'bank-line undo', 'bank-line deposit', 'bank-line pay-bills',
         'bulk-edit preview', 'bulk-edit apply', 'bulk-edit reverse',
         'opening-draft create', 'opening-draft update', 'opening-draft discard', 'opening-draft plan',
         'opening-draft apply', 'opening-draft reverse',

@@ -28,6 +28,7 @@ Serve every routed command over HTTP and the loopback socket, holding the data-r
 | `allow_network` | `--allow-network` | boolean | no | no | false | Allow a bind address outside loopback |
 | `secure_cookies` | `--secure-cookies` | boolean \| null | no | yes | null | Set Secure on the session cookie; defaults on for non-loopback binds and for an https public origin |
 | `public_origin` | `--public-origin` | string \| null | no | yes | null | The https://host[:port] a TLS proxy in front of this host serves (for example what `colony serve` prints); links, the printed address and Origin checks use it, and the host then binds 127.0.0.1 only. Defaults to [host] public_origin in config.toml |
+| `scan_decoders` | `--scan-decoders` | string \| null | no | yes | null | The camera scanner's decoders, tried in order in the browser, comma-separated: native (the browser's BarcodeDetector) and zxing-wasm (vendored, works offline). Defaults to the environment variable BOOKFLOW_SCAN_DECODERS, else native,zxing-wasm |
 | `background` | `--background` | boolean | no | no | false | Start the host as a background process, wait until it answers, print its address and return; its log is host.log in the data root |
 
 ### Command and context options
@@ -52,6 +53,7 @@ This command has no HTTP route.
 | `pid` | integer | yes | no | — | — |
 | `secure_cookies` | boolean | yes | no | — | — |
 | `public_origin` | string \| null | no | yes | null | The configured public origin, when the host sits behind a TLS proxy |
+| `scan_decoders` | string | no | no | "native,zxing-wasm" | The camera scanner's decoder order the pages carry |
 | `companies_migrated` | array[string] | yes | no | — | — |
 | `companies_failed` | array[object[string, string]] | yes | no | — | — |
 | `warnings` | array[string] | no | no | [] | — |
@@ -66,6 +68,7 @@ Example JSON output:
   "log": null,
   "pid": 1,
   "public_origin": null,
+  "scan_decoders": "native,zxing-wasm",
   "secure_cookies": false,
   "socket": null,
   "url": null,

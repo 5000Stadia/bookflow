@@ -1337,7 +1337,7 @@ the apply 36 ms (a read for the prior values and the update with its audit event
   with no old books" teaches one check of the exact details with the owner before `apply` (the date, the plan's counts
   and totals, which checks are given and which derived), then apply on their yes; `accept_differences` is the owner's
   decision. `plan` and `apply` help say the same.
-- **Permissions:** layer `opening-draft-v1` on `bulk-edit-v1` (854 commands, descriptor 432aed74): `show` and `query`
+- **Permissions:** layer `opening-draft-v1` on `bank-line-details-v1` (re-chained at the merge of main 0b3769e8; 856 commands, descriptor c0042254): `show` and `query`
   member reads, the other seven standard, all under `import`; the new capability above. No existing capability, role
   default or threshold changes.
 - **The page** `/c/<company>/opening` (Company menu: "Opening balances"; `opening_pages.py`, `opening.html`,
