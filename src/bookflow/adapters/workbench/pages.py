@@ -890,7 +890,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     @permission_read_package(host)
     def static(name: str):
         p = HERE / "static" / name
-        if not p.exists() or "/" in name:
+        # Only a regular file directly in static/: a folder (vendor, ".."), a missing name or a nested path is 404.
+        if "/" in name or "\\" in name or name in (".", "..") or not p.is_file() or p.resolve().parent != (HERE / "static").resolve():
             return Response(status_code=404)
         media = "text/css" if name.endswith(".css") else "application/javascript"
         return Response(p.read_bytes(), media_type=media, headers={"Cache-Control": "max-age=3600"})
@@ -899,18 +900,23 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     # VENDORED.md. A version's files never change, so they cache for good; .wasm goes out as application/wasm so
     # the browser can compile it while it streams.
     vendor_root = (HERE / "static" / "vendor").resolve()
-    vendor_media = {".js": "application/javascript", ".wasm": "application/wasm", ".md": "text/plain; charset=utf-8",
-                    "": "text/plain; charset=utf-8"}
+    vendor_media = {".js": "application/javascript", ".wasm": "application/wasm", ".md": "text/plain; charset=utf-8"}
+    vendor_licences = ("LICENSE", "LICENSE.md", "LICENSE.txt", "COPYING")
     vendor_part = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]*$")
 
     @app.get("/static/vendor/{package}/{version}/{name}")
     @permission_read_package(host)
     def static_vendor(package: str, version: str, name: str):
+        # Plain names only (no separator, encoded or not, no ".."), one of the served kinds, a regular file that is
+        # no link and has no link on its way, inside the vendor folder.
         if not all(vendor_part.match(part) and ".." not in part for part in (package, version, name)):
             return Response(status_code=404)
-        p = (vendor_root / package / version / name).resolve()
-        media = vendor_media.get(p.suffix)
-        if media is None or not p.is_file() or not p.is_relative_to(vendor_root):
+        media = "text/plain; charset=utf-8" if name in vendor_licences else vendor_media.get(Path(name).suffix)
+        steps = (vendor_root / package, vendor_root / package / version, vendor_root / package / version / name)
+        if media is None or any(step.is_symlink() for step in steps) or not steps[-1].is_file():
+            return Response(status_code=404)
+        p = steps[-1].resolve()
+        if not p.is_relative_to(vendor_root):
             return Response(status_code=404)
         return Response(p.read_bytes(), media_type=media, headers={
             "Cache-Control": "public, max-age=31536000, immutable", "X-Content-Type-Options": "nosniff"})

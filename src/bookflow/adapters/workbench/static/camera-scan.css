@@ -21,3 +21,5 @@
 .camera-using { color: #bbb; font-size: .85rem; }
 .camera-controls [data-camera-close] { margin-left: auto; }
 .camera-overlay[data-camera-mode="photo"] { height: auto; min-height: 0; }
+/* While the camera is open the page keeps room below its content for the overlay, so nothing stays hidden under it. */
+html.camera-open body { padding-bottom: calc(var(--camera-overlay-height, 50vh) + 1rem); }

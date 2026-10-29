@@ -25,10 +25,11 @@
   const KEY_ORDER = 'bookflow.scan.decoders';
   const KEY_SOUND = 'bookflow.scan.sound';
   const KEY_WHY = 'bookflow.scan.photo-why-shown';
+  // Tuning for the phone trial.
   const FRAME_MS = 125;            // about 8 decodes a second
-  const LEFT_FRAME_DECODES = 3;    // a code not read in 3 decodes in a row has left the frame
-  const SAME_CODE_MS = 1500;       // ... or, once missed at least once, may be taken again after 1.5 s
+  const LEFT_FRAME_DECODES = 5;    // a code unread in 5 decodes in a row (about 0.6 s) has left the frame
   const IDLE_MS = 60000;           // a minute with no code stops the camera
+  const BROKEN_DETECTS = 10;       // a decoder whose detect() throws this many times in a row is passed over
   const PHOTO_WHY = 'Live scanning needs a secure connection. Until Bookflow is set up with HTTPS, each tap takes one photo.';
 
   const stored = {
@@ -45,6 +46,7 @@
   const decoders = new Map();
   let registerOrder = null;
   let chosen = null;     // {decoder, key}
+  const broken = new Map();   // name -> why: decoders that kept failing on this page are skipped
 
   function order({device: useDevice = true} = {}) {
     const device = useDevice ? names(stored.get('localStorage', KEY_ORDER)) : [];
@@ -57,13 +59,14 @@
 
   async function choose() {
     const wanted = order().names;
-    const key = wanted.join(',');
+    const key = wanted.join(',') + '|' + [...broken.keys()].join(',');
     if (chosen && chosen.key === key) return chosen.decoder;
     chosen = null;
     const tried = [];
     for (const name of wanted) {
       const decoder = decoders.get(name);
       if (!decoder) { tried.push(name + ' is not installed'); continue; }
+      if (broken.has(name)) { tried.push(name + ' ' + broken.get(name)); continue; }
       try {
         if (!(await decoder.available())) { tried.push(name + ' is not available in this browser'); continue; }
         await decoder.load();
@@ -91,8 +94,6 @@
     // This device's override (the overlay's Decoder menu): a name list, or '' for the host's order.
     setDeviceOrder(text) { stored.set('localStorage', KEY_ORDER, names(text).join(',')); },
   };
-  for (const decoder of window.bookflowDecoderPending || []) window.bookflowDecoders.register(decoder);
-  window.bookflowDecoderPending = [];
 
   // ---------------------------------------------------------------- the camera button
   const hasCamera = () => !!navigator.mediaDevices || !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
@@ -116,9 +117,12 @@
   });
 
   // ---------------------------------------------------------------- the overlay
+  // `session` changes on every open and close: a code read in one session is never delivered in another.
+  // `start` changes on every start and stop of the live camera: only the newest start owns the camera.
   const state = {
     overlay: null, target: null, mode: null, stream: null, running: false, timer: null, idle: null,
-    decoder: null, memory: null, chain: Promise.resolve(), audio: null, busy: false,
+    decoder: null, seen: new Map(), chain: Promise.resolve(), audio: null, session: 0, start: 0, failures: 0,
+    typed: '',
   };
   const part = name => state.overlay.querySelector(`[data-camera-${name}]`);
 
@@ -162,8 +166,11 @@
       window.bookflowDecoders.setDeviceOrder(event.target.value);
       changeDecoder();
     });
-    overlay.addEventListener('keydown', event => { if (event.key === 'Escape') close(); });
     refreshMenu();
+    // The page keeps the space the overlay covers, so its last lines can scroll clear of it.
+    const room = () => document.documentElement.style.setProperty('--camera-overlay-height', overlay.offsetHeight + 'px');
+    if (window.ResizeObserver) new ResizeObserver(room).observe(overlay);
+    overlay.addEventListener('transitionend', room);
     return overlay;
   }
 
@@ -188,6 +195,9 @@
 
   function open(target) {
     build();
+    state.session += 1;
+    state.chain = Promise.resolve();
+    state.typed = '';
     state.target = target;
     state.overlay.hidden = false;
     document.documentElement.classList.add('camera-open');
@@ -226,11 +236,15 @@
 
   function close() {
     stop();
+    state.session += 1;            // codes read before Close are dropped, not delivered after it
+    state.chain = Promise.resolve();
+    state.typed = '';
     if (state.overlay) state.overlay.hidden = true;
     document.documentElement.classList.remove('camera-open');
   }
 
   function stop() {
+    state.start += 1;              // a start still waiting for its decoder or camera is now stale
     state.running = false;
     clearTimeout(state.timer);
     clearTimeout(state.idle);
@@ -242,39 +256,52 @@
     }
   }
 
+  // Only the newest start owns the camera. A start replaced by another, or by Close, asks for no camera, stops any
+  // stream it is handed late, and runs no decode loop.
   async function startLive() {
     stop();
+    const mine = state.start;
+    const stale = () => mine !== state.start || state.overlay.hidden;
     part('restart').hidden = true;
     flash('Starting the camera…', 'busy');
+    let decoder;
     try {
-      state.decoder = await choose();
+      decoder = await choose();
     } catch (error) {
+      if (stale()) return;
       refreshMenu();
       flash(error.message, 'error');
       return;
     }
+    if (stale()) return;
+    state.decoder = decoder;
     refreshMenu();
+    let stream;
     try {
-      state.stream = await navigator.mediaDevices.getUserMedia({
+      stream = await navigator.mediaDevices.getUserMedia({
         audio: false, video: {facingMode: {ideal: 'environment'}, width: {ideal: 1280}, height: {ideal: 720}}});
     } catch (error) {
+      if (stale()) return;
       flash('The camera did not open (' + (error.name || error) + '). Allow the camera for this site, or type the code.', 'error');
       part('restart').hidden = false;
       return;
     }
-    if (state.overlay.hidden) { stop(); return; }   // closed while the camera was asked for
+    if (stale()) { for (const track of stream.getTracks()) track.stop(); return; }
+    state.stream = stream;
     const video = part('video');
-    video.srcObject = state.stream;
+    video.srcObject = stream;
     try { await video.play(); } catch (error) { /* autoplay with muted video is allowed; ignore */ }
-    const track = state.stream.getVideoTracks()[0];
+    if (stale()) return;            // stop() has ended this stream's tracks
+    const track = stream.getVideoTracks()[0];
     const caps = track && track.getCapabilities ? track.getCapabilities() : {};
     part('torch').hidden = !caps.torch;
     part('torch').setAttribute('aria-pressed', 'false');
-    state.memory = null;
+    state.seen = new Map();
+    state.failures = 0;
     state.running = true;
     flash('Point the camera at a barcode.', '');
     idle();
-    tick();
+    tick(mine);
   }
 
   async function changeDecoder() {
@@ -303,67 +330,89 @@
     } catch (error) { part('torch').hidden = true; }
   }
 
-  async function tick() {
-    if (!state.running) return;
+  async function tick(mine) {
+    if (!state.running || mine !== state.start) return;
     const started = performance.now();
     const video = part('video');
+    const decoder = state.decoder;
     let codes = [];
     if (video.readyState >= 2 && video.videoWidth) {
-      try { codes = await state.decoder.detect(video); } catch (error) { codes = []; }
+      try {
+        codes = await decoder.detect(video);
+        state.failures = 0;
+      } catch (error) {
+        codes = [];
+        state.failures += 1;
+        if (state.failures >= BROKEN_DETECTS && mine === state.start) {
+          // A decoder that keeps failing on this device is passed over for the next in the order.
+          broken.set(decoder.name, 'kept failing (' + (error && error.message || error) + ')');
+          chosen = null;
+          flash(decoder.name + ' kept failing here; trying the next decoder.', 'error');
+          startLive();
+          return;
+        }
+      }
     }
-    if (!state.running) return;
+    if (!state.running || mine !== state.start) return;
     see(codes.map(code => code.text));
-    state.timer = setTimeout(tick, Math.max(0, FRAME_MS - (performance.now() - started)));
+    state.timer = setTimeout(() => tick(mine), Math.max(0, FRAME_MS - (performance.now() - started)));
   }
 
-  // De-duplication: a code still in the frame is not taken again. It is taken again once it has left the frame (not
-  // read in LEFT_FRAME_DECODES decodes in a row), or once SAME_CODE_MS have passed since it was taken and it has been
-  // missed at least once since; so holding a can still is one scan, and scanning it again adds one.
+  // De-duplication, per code: a code in view is taken once, whatever else is in the frame, and is taken again only
+  // after it has itself left the frame (unread in LEFT_FRAME_DECODES decodes in a row). There is no time-based
+  // re-take while it stays in view, so holding a can still is one scan and scanning it again adds one.
   function see(texts) {
-    const now = performance.now();
-    const memory = state.memory;
-    let again = false;
-    if (memory) {
-      const present = texts.includes(memory.code);
-      again = present && (memory.streak >= LEFT_FRAME_DECODES || (memory.missed && now - memory.takenAt >= SAME_CODE_MS));
-      if (present) memory.streak = 0;
-      else { memory.streak += 1; memory.missed = true; }
+    const present = new Set(texts);
+    for (const [code, entry] of state.seen) {
+      if (present.has(code)) continue;
+      entry.absent += 1;
+      if (entry.absent >= LEFT_FRAME_DECODES) state.seen.delete(code);
     }
-    const text = texts.find(t => !memory || t !== memory.code || again);
-    if (text === undefined) return;
-    state.memory = {code: text, takenAt: now, streak: 0, missed: false};
-    idle();
-    take(text);
+    for (const code of present) {
+      const entry = state.seen.get(code);
+      if (entry) { entry.absent = 0; continue; }
+      state.seen.set(code, {absent: 0});
+      idle();
+      take(code);
+    }
   }
 
-  // A code read (live or from a photo) goes the way a typed one goes, one at a time, in the order read.
-  function take(text) {
-    state.chain = state.chain.then(() => deliver(text)).catch(() => {});
+  // A code read (live or from a photo) goes the way a typed one goes, one at a time, in the order read, to the field
+  // it was read for, and only while the overlay that read it is still open.
+  function take(text, target = state.target) {
+    const session = state.session;
+    state.chain = state.chain.then(() => deliver(text, target, session)).catch(() => {});
     return state.chain;
   }
 
-  function currentScanField() {
-    const target = state.target;
+  function scanField(target) {
     if (!target || target.kind !== 'scan') return null;
     return document.querySelector(`[data-scan][data-scan-mode="${target.mode}"]`);
   }
 
-  async function deliver(text) {
-    const target = state.target;
+  // The field the overlay was opened for has gone (a pick list completed, a page left): say so and stop the camera.
+  function fieldGone() {
+    stop();
+    flash('There is nothing to scan into on this page any more. The camera has stopped.', 'error');
+  }
+
+  async function deliver(text, target, session) {
+    if (session !== state.session) return;
     let found = false;
     let label = text;
     if (target.kind === 'scan') {
-      const field = currentScanField();
-      if (!field || !window.bookflowScan || !window.bookflowScan.scan) return;
+      const field = scanField(target);
+      if (!field || !window.bookflowScan || !window.bookflowScan.scan) { fieldGone(); return; }
       await window.bookflowScan.scan(field, text);
-      const status = (currentScanField() || field).querySelector('[data-scan-status]');
+      if (session !== state.session) return;
+      const status = (scanField(target) || field).querySelector('[data-scan-status]');
       found = !!status && status.dataset.kind === 'ok';
       label = status ? status.innerText : text;
     } else {
       // A plain scan input (the pack screen): the code is typed into it and its form submitted, as Enter would.
       const input = document.querySelector(target.selector);
       const form = input && input.closest('form');
-      if (!form) return;
+      if (!form) { fieldGone(); return; }
       input.value = text;
       const swapped = new Promise(resolve => {
         const done = () => { document.removeEventListener('htmx:afterSettle', done); clearTimeout(timer); resolve(); };
@@ -372,6 +421,7 @@
       });
       form.requestSubmit(form.querySelector('[type="submit"]') || undefined);
       await swapped;
+      if (session !== state.session) return;
       const alert = document.querySelector('[role=alert]');
       found = !alert;
       label = alert ? alert.innerText.split('\n')[0] : (document.querySelector('[role=status]')?.innerText || text);
@@ -408,6 +458,51 @@
     await take(codes[0].text);
   }
 
+  // ---------------------------------------------------------------- a keyboard scanner beside the camera
+  // While the overlay is open, Escape closes it, and a keyboard-mode scanner's keys that land on no text field (the
+  // focus is on a button after a tap) are gathered and entered in the Scan field on Enter, exactly as if typed there.
+  // The field is not focused, so a phone's keyboard does not rise over the camera.
+  const editable = element => element && (element.isContentEditable
+    || /^(INPUT|TEXTAREA|SELECT)$/.test(element.tagName) && !/^(button|checkbox|radio|submit|file)$/i.test(element.type || ''));
+  document.addEventListener('keydown', event => {
+    if (!state.overlay || state.overlay.hidden) return;
+    if (event.key === 'Escape') { event.preventDefault(); close(); return; }
+    if (editable(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.key === 'Enter') {
+      const text = state.typed;
+      state.typed = '';
+      if (!text) return;
+      event.preventDefault();
+      typed(text, state.target);
+    } else if (event.key.length === 1) {
+      event.preventDefault();
+      state.typed += event.key;
+    }
+  }, true);
+
+  function typed(text, target) {
+    if (target.kind === 'scan') {
+      const field = scanField(target);
+      const input = field && field.querySelector('[data-scan-input]');
+      if (!input) return;
+      input.value = text;
+      window.bookflowScan.look(field, input);
+    } else {
+      const input = document.querySelector(target.selector);
+      const form = input && input.closest('form');
+      if (!form) return;
+      input.value = text;
+      form.requestSubmit(form.querySelector('[type="submit"]') || undefined);
+    }
+  }
+
+  // The pack screen marks its code field autofocus, which would raise a phone's keyboard over the camera after each
+  // entry; while the camera is open the swapped-in page takes no autofocus.
+  document.addEventListener('htmx:beforeSwap', event => {
+    if (!state.overlay || state.overlay.hidden || typeof event.detail.serverResponse !== 'string') return;
+    event.detail.serverResponse = event.detail.serverResponse.replace(/(<[^>]*?)\sautofocus(?:=(?:""|''|"autofocus"))?(?=[\s/>])/gi, '$1');
+  });
+
   // ---------------------------------------------------------------- sound and vibration
   function tone(frequency, at, length) {
     const audio = state.audio;
@@ -439,4 +534,7 @@
   }
 
   window.bookflowCamera = {open, close, take, signals: [], get mode() { return state.mode; }};
+  // Adapters that loaded before this file queued themselves.
+  for (const decoder of window.bookflowDecoderPending || []) window.bookflowDecoders.register(decoder);
+  window.bookflowDecoderPending = [];
 })();

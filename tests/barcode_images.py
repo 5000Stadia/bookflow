@@ -41,6 +41,16 @@ def ean13_image(code: str, size: tuple[int, int], *, module: int = 2) -> Image.I
     return image
 
 
+def stacked(codes: tuple[str, ...], size: tuple[int, int]) -> Image.Image:
+    """Several codes in one picture, one above another (two labels in one frame)."""
+    width, height = size
+    image = Image.new('L', size, 255)
+    band = height // len(codes)
+    for i, code in enumerate(codes):
+        image.paste(ean13_image(code, (width, band)), (0, i * band))
+    return image
+
+
 def photo(path: Path, code: str) -> Path:
     """A PNG "photo" of one code, as a phone would hand the page."""
     image = Image.new('RGB', (800, 600), (236, 233, 226))
@@ -50,7 +60,8 @@ def photo(path: Path, code: str) -> Path:
 
 
 def y4m(path: Path, segments: list[tuple[str | None, int]], *, size: tuple[int, int] = (320, 240), fps: int = 5) -> Path:
-    """A grey 4:2:0 Y4M video: each segment is (code or None for a blank frame, number of frames)."""
+    """A grey 4:2:0 Y4M video: each segment is (a code, a tuple of codes shown together, or None for a blank frame,
+    number of frames)."""
     width, height = size
     chroma = bytes([128]) * ((width // 2) * (height // 2) * 2)
     blank = Image.new('L', size, 255).tobytes()
@@ -59,7 +70,8 @@ def y4m(path: Path, segments: list[tuple[str | None, int]], *, size: tuple[int, 
         out.write(f'YUV4MPEG2 W{width} H{height} F{fps}:1 Ip A1:1 C420jpeg\n'.encode())
         for code, count in segments:
             if code not in frames:
-                frames[code] = ean13_image(code, size).tobytes() if code else blank
+                frames[code] = (stacked(code, size) if isinstance(code, tuple) else ean13_image(code, size)).tobytes() \
+                    if code else blank
             for _ in range(count):
                 out.write(b'FRAME\n' + frames[code] + chroma)
     return path

@@ -163,6 +163,8 @@
       // Nothing typed is lost: the code goes back in the field unless something new is already there.
       if (!input.value) input.value = text;
       if (document.activeElement === input) input.select();
+      // A camera code is selected without focusing (no phone keyboard), so the next scan typed there replaces it.
+      else if (camera && input.value === text) { try { input.setSelectionRange(0, text.length); } catch (error) { /* not focusable */ } }
     };
     if (want.refused) {
       say(field, 'A quantity of ' + escape(want.quantity) + ' adds nothing. Type a quantity above 0 before the *.', 'error');
