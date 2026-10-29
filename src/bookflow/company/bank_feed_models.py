@@ -458,11 +458,12 @@ class DepositLineInput(Model):
         'yet entered...); the line less, money kept back from the deposit, debited here (a bank fee, cash back). '
         'Unsure? Ask the person; never guess.'))
     adjustment_payee: str | None = Field(None, min_length=1, max_length=1000, description=(
-        'Who the other money came from (needed when the line is more than the payments).'))
+        'Who the other money came from (needed when the line is more than the payments; refused on money kept back).'))
     adjustment_payee_type: Literal['customer', 'vendor', 'employee', 'other_name'] | None = Field(None, description=(
         'The list adjustment_payee is on; default customer.'))
     adjustment_memo: str | None = Field(None, max_length=2000)
-    adjustment_class_id: str | None = Field(None, max_length=1004)
+    adjustment_class_id: str | None = Field(None, max_length=1004, description=(
+        'The other money row\'s class (a cash-back row takes none, so it is refused there).'))
     memo: str | None = Field(None, max_length=2000, description="The deposit's memo; default the bank's text.")
 
 
@@ -479,7 +480,8 @@ class PayBillsLineInput(Model):
     method: str | None = Field(None, min_length=1, max_length=1004, description=(
         'The payment method (`payment-method query`). Unsure? Ask the person; never guess.'))
     check_number: str | None = Field(None, min_length=1, max_length=64, description=(
-        'On a check method: the check number (default the account\'s next, as `bill pay` does).'))
+        "On a check method from a bank account: the check number. Default the line's own number; a line with none "
+        "is refused, asking (never the chequebook's next number for a cheque the bank has already shown)."))
     memo: str | None = Field(None, max_length=2000, description="Default: the bank's text.")
     discount_account: str | None = Field(None, max_length=1004)
 

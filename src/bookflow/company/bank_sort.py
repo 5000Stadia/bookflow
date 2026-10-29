@@ -688,6 +688,19 @@ def _deposit_plan(s, ctx, line: dict, inp: m.DepositLineInput) -> dict:
     total = line['amount']
     places = bank_feeds._places(account['currency'])
     money = lambda units: bank_feeds.decimal(units, places)
+    given = [f for f in ('adjustment_account', 'adjustment_payee', 'adjustment_payee_type', 'adjustment_memo',
+                         'adjustment_class_id') if getattr(inp, f) is not None]
+    if total == selected and given:
+        raise _refuse(given[0], f'The payments come to {_label(s, line)} exactly: there is no difference to adjust, '
+                                f"so {', '.join(given)} would be dropped. Leave them out.", line=line['id'])
+    if total < selected:
+        # Money kept back is a cash-back row: an account and a memo, no payee and no class.
+        dropped = [f for f in ('adjustment_payee', 'adjustment_payee_type', 'adjustment_class_id')
+                   if getattr(inp, f) is not None]
+        if dropped:
+            raise _refuse(dropped[0], f'The line is less than the payments, so the difference is money kept back '
+                                      f"(cash back), which takes an account and a memo only: {', '.join(dropped)} "
+                                      'would be dropped. Leave them out.', line=line['id'])
     if total != selected and inp.adjustment_account is None:
         raise _difference(s, line, selected, 'payments', hint=(
             'Select payments that add up to the line, or name an `adjustment_account` (and an `adjustment_payee` when '
@@ -726,11 +739,25 @@ def _bills_plan(s, ctx, line: dict, inp: m.PayBillsLineInput) -> dict:
             '(`payment-method query` lists them): Bookflow never guesses.'),
             details={'field': 'method', 'fields': [{'field': 'method', 'problem': 'ask the person; never guess'}],
                      'line': line['id'], 'ask': ['method']})
+    from bookflow.company import bill_payments
+    cheque = bill_payments._method(s, inp.method).kind == 'check' and account['type'] != 'credit_card'
+    number = inp.check_number
+    if cheque and number is None:
+        # The bank has shown this cheque: its number is the line's, never the chequebook's next.
+        if line['number'].strip().isdigit() and line['kind'].upper() in ('', 'CHECK'):
+            number = line['number'].strip()
+        else:
+            raise BookflowError('E_VALIDATION', message=(
+                f'Which check number paid the bills on {_label(s, line)}? The line carries none; ask the person and '
+                'pass check_number (the chequebook\'s next number is never used for a cheque the bank has already '
+                'shown).'), details={'field': 'check_number', 'fields': [
+                    {'field': 'check_number', 'problem': 'ask the person; never guess'}],
+                    'line': line['id'], 'ask': ['check_number']})
     memo = inp.memo if inp.memo is not None else ((line['payee'] or line['memo'] or '').strip() or None)
     payload = {'date': line['date'], 'funding_account': account['id'], 'method': inp.method,
                'bills': [{'bill': b.bill, **({'amount': b.amount} if b.amount is not None else {}),
                           **({'discount': b.discount} if b.discount is not None else {})} for b in inp.bills]}
-    for key, value in (('memo', memo), ('check_number', inp.check_number),
+    for key, value in (('memo', memo), ('check_number', number),
                        ('discount_account', inp.discount_account)):
         if value is not None:
             payload[key] = value

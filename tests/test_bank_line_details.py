@@ -9,15 +9,15 @@ the payments to Undeposited Funds and leaves the bills open again.
 """
 import json
 
-from tests.test_bank_feeds import books, csv_file, run, table
+from tests.test_bank_feeds import books, csv_file, ofx, run, table
 from tests.test_bank_feed_reversal import grant
 from tests.test_bank_line_sort import entry, imp, inbox_line, line_of, refused, source_ref
 from tests.test_payment_receipts import method
 from tests.test_service_sales_lifecycle import sale  # noqa: F401 - fixture
 
 
-def receive(client, sale, cash, amount, key):
-    return run(client, 'payment receive', dict(customer=sale['customer'], date='2026-10-02', amount=amount,
+def receive(client, sale, cash, amount, key, day='2026-10-02'):
+    return run(client, 'payment receive', dict(customer=sale['customer'], date=day, amount=amount,
                                                payment_method=cash, operation_key=key))['id']
 
 
@@ -31,7 +31,8 @@ def test_a_deposit_line_matches_three_payments_with_no_difference_and_reversal_r
     cash = method(client)
     three = [receive(client, sale, cash, a, f'r108-5-{n}') for n, a in enumerate(('100.00', '250.00', '75.50'))]
     twins = [receive(client, sale, cash, a, f'r108-5-twin-{n}') for n, a in enumerate(('100.00', '250.00', '75.50'))]
-    small, spare = receive(client, sale, cash, '55.00', 'r108-5-small'), receive(client, sale, cash, '100.00', 'r108-5-spare')
+    small, spare = (receive(client, sale, cash, a, f'r108-5-{k}') for k, a in (('small', '55.00'), ('spare', '100.00')))
+    start = balances(client)
     done = imp(client, 'Checking', csv_file([('2026-10-07', 'DEPOSIT', '425.50'), ('2026-10-08', 'DEPOSIT', '60.00'),
                                              ('2026-10-09', 'DEPOSIT', '95.00')]))
     line, more, less = (line_of(done, n) for n in (42550, 6000, 9500))
@@ -45,6 +46,11 @@ def test_a_deposit_line_matches_three_payments_with_no_difference_and_reversal_r
         assert with_two.details['difference'] == '75.50' and with_two.details['selected'] == '350.00'
         assert '75.50 remaining' in with_two.message
     assert books(client) == before and inbox_line(client, line['id'], 'Checking')['state'] == 'waiting'
+
+    # An adjustment with no difference to adjust is refused, naming it, rather than dropped.
+    nothing = refused(client, 'bank-line deposit', dict(line=line['id'], payments=three,
+                                                        adjustment_account='R108 interest'))
+    assert nothing.details['field'] == 'adjustment_account'
 
     # All three: difference 0.00, one deposit, the line added and linked to it.
     preview = run(client, 'bank-line deposit', dict(line=line['id'], payments=three), dry_run=True)
@@ -82,9 +88,19 @@ def test_a_deposit_line_matches_three_payments_with_no_difference_and_reversal_r
                                                   adjustment_payee_type='customer'))
     assert extra['difference'] == '5.00'
     assert extra['entries'][0]['input']['document']['additional'][0]['amount'] == '5.00'
+    # What was posted: the bank moves by exactly the line, the other money credited to the adjustment account.
+    made = extra['entries'][0]['entry_id']
+    assert moved(client, made, 'Checking') == 6000 and moved(client, made, 'R108 interest') == -500
+    # Money kept back takes an account and a memo only: a payee or class there is refused, naming it.
+    for field, value in (('adjustment_payee', sale['customer']), ('adjustment_class_id', 'Operations')):
+        dropped = refused(client, 'bank-line deposit', dict(line=less['id'], payments=[spare],
+                                                            adjustment_account='R108 bank charges', **{field: value}))
+        assert dropped.details['field'] == field
     fee = run(client, 'bank-line deposit', dict(line=less['id'], payments=[spare],
                                                 adjustment_account='R108 bank charges', adjustment_memo='Deposit fee'))
     assert fee['difference'] == '-5.00' and fee['entries'][0]['input']['document']['cash_back']['amount'] == '5.00'
+    made = fee['entries'][0]['entry_id']
+    assert moved(client, made, 'Checking') == 9500 and moved(client, made, 'R108 bank charges') == 500
 
     # Undo the fee act alone: its payment is waiting again, the line too.
     run(client, 'bank-line undo', dict(batch=fee['batch_id']))
@@ -96,6 +112,8 @@ def test_a_deposit_line_matches_three_payments_with_no_difference_and_reversal_r
     waiting = undeposited(client)
     assert all(p in waiting for p in three)
     assert table(client, 'SELECT count(*) FROM deposit_deletions WHERE transaction_id = ?', deposit) == [(1,)]
+    # Criterion 2: every account's balance is as before the import (the typed twin aside).
+    assert balances(client, typed) == start
 
 
 def test_bills_marked_paid_from_a_line_are_the_typed_payment_and_reversal_opens_them_again(client):
@@ -109,6 +127,7 @@ def test_bills_marked_paid_from_a_line_are_the_typed_payment_and_reversal_opens_
         bill(other, '25.00')
     transfer = next(x['id'] for x in run(client, 'payment-method query', dict(limit=50))['items']
                     if x['name'] == 'Bank Transfer')
+    start = balances(client)
     done = imp(client, 'Checking', csv_file([('2026-10-06', 'ONLINE PMT R108 VENDOR', '-100.00')]))
     line = done['lines'][0]
     before = books(client)
@@ -154,6 +173,7 @@ def test_bills_marked_paid_from_a_line_are_the_typed_payment_and_reversal_opens_
     assert run(client, 'bank-feed reverse', dict(import_id=done['import_id']))['state'] == 'reversed'
     assert run(client, 'bill payment show', dict(payment=again['entries'][0]['entry_id']))['status'] == 'voided'
     assert all(run(client, 'bill show', dict(bill=b))['settlement_current']['status'] != 'paid' for b in bills)
+    assert balances(client, typed) == start
 
 
 # ------------------------------------------------------------------ helpers
@@ -177,3 +197,127 @@ def _code_of(client, payment):
                 dict(source_type='payment', source=payment, expected_version=1)])), dry_run=True)
     return raised.value.code
 
+
+
+def moved(client, transaction_id, account):
+    """What an entry moved an account by, debit positive."""
+    return table(client, 'SELECT COALESCE(SUM(p.debit_minor_units - p.credit_minor_units), 0) FROM posting_lines p '
+                         'JOIN accounts a ON a.id = p.account_id WHERE p.transaction_id = ? AND a.full_name = ?',
+                 transaction_id, account)[0][0]
+
+
+def balances(client, *besides):
+    """Every account's balance, leaving out the named entries."""
+    marks = ','.join('?' * len(besides)) or "''"
+    return dict(table(client, 'SELECT account_id, SUM(debit_minor_units - credit_minor_units) FROM posting_lines '
+                              f'WHERE transaction_id NOT IN ({marks}) GROUP BY account_id '
+                              'HAVING SUM(debit_minor_units - credit_minor_units) != 0', *besides))
+
+
+def transfer_method(client):
+    return next(x['id'] for x in run(client, 'payment-method query', dict(limit=50))['items']
+                if x['name'] == 'Bank Transfer')
+
+
+def cheque_method(client):
+    return next(x['id'] for x in run(client, 'payment-method query', dict(limit=50))['items'] if x['name'] == 'Check')
+
+
+def test_a_card_line_a_discount_a_part_payment_and_a_cheque_number_from_the_line(client):
+    vendor = run(client, 'vendor create', dict(name='R108 inc 5 card vendor'))['id']
+
+    def bill(amount):
+        return run(client, 'bill post', dict(vendor=vendor, date='2026-09-20',
+                                             expenses=[dict(account='Office Supplies', amount=amount)]))['id']
+    on_card, discounted, part, by_cheque, unnumbered = bill('50.00'), bill('100.00'), bill('30.00'), bill('80.00'), \
+        bill('15.00')
+    transfer = transfer_method(client)
+    # A card line pays a bill from the card: the card's balance rises by the line, as `bill pay` from the card does.
+    card = imp(client, 'Business Credit Card', ofx([('2026-10-06', '-50.00', 'C9', 'VENDOR CARD')],
+                                                   acct='4111000011112222', card=True))
+    paid = run(client, 'bank-line pay-bills', dict(line=card['lines'][0]['id'], method=transfer,
+                                                   bills=[dict(bill=on_card)]))
+    assert moved(client, paid['entries'][0]['entry_id'], 'Business Credit Card') == -5000
+    assert run(client, 'bill show', dict(bill=on_card))['settlement_current']['status'] == 'paid'
+    # A discount: 100.00 settled by 98.00 paid and 2.00 taken; a part payment leaves the rest open.
+    cheque = ofx([('2026-10-09', '-80.00', 'K1', 'CHECK 4321'), ('2026-10-10', '-15.00', 'K2', 'CHECK')]).replace(
+        '<TRNTYPE>OTHER\n<DTPOSTED>20261009', '<TRNTYPE>CHECK\n<CHECKNUM>4321\n<DTPOSTED>20261009').replace(
+        '<TRNTYPE>OTHER\n<DTPOSTED>20261010', '<TRNTYPE>CHECK\n<DTPOSTED>20261010')
+    done = imp(client, 'Checking', csv_file([('2026-10-07', 'DISC PMT', '-98.00'), ('2026-10-08', 'PART', '-20.00')]))
+    disc = run(client, 'bank-line pay-bills', dict(line=line_of(done, -9800)['id'], method=transfer,
+                                                   bills=[dict(bill=discounted, discount='2.00')]))
+    assert disc['difference'] == '0.00' and moved(client, disc['entries'][0]['entry_id'], 'Checking') == -9800
+    assert run(client, 'bill show', dict(bill=discounted))['settlement_current']['status'] == 'paid'
+    partly = run(client, 'bank-line pay-bills', dict(line=line_of(done, -2000)['id'], method=transfer,
+                                                     bills=[dict(bill=part, amount='20.00')]))
+    assert partly['difference'] == '0.00'
+    assert run(client, 'bill show', dict(bill=part))['settlement_current']['status'] != 'paid'
+    # A cheque the bank has shown keeps its own number, never the chequebook's next; a cheque line without one asks.
+    shown = imp(client, 'Checking', cheque)
+    numbered = run(client, 'bank-line pay-bills', dict(line=line_of(shown, -8000)['id'], method=cheque_method(client),
+                                                       bills=[dict(bill=by_cheque)]))
+    assert numbered['entries'][0]['input']['check_number'] == '4321'
+    assert run(client, 'bill payment show', dict(payment=numbered['entries'][0]['entry_id']))['check_number'] == '4321'
+    before = books(client)
+    asked = refused(client, 'bank-line pay-bills', dict(line=line_of(shown, -1500)['id'], method=cheque_method(client),
+                                                        bills=[dict(bill=unnumbered)]))
+    assert asked.details['ask'] == ['check_number'] and books(client) == before
+
+
+def test_reconciled_and_later_imports_block_undo_and_reverse_and_change_nothing(client, sale):
+    """A reconciled bill payment or transfer is voided by its inverse, which a reconciliation allows by design: the
+    hold is read directly, so neither the act's undo nor the import's reversal goes through."""
+    import pytest
+    from bookflow import BookflowError
+    from bookflow.core.ids import new_id
+    from tests.test_reconcile_import import opening
+    grant(client, 'transaction.deposit.delete')
+    pay = receive(client, sale, method(client), '50.00', 'r108-5-held', '2026-06-02')
+    vendor = run(client, 'vendor create', dict(name='R108 inc 5 held vendor'))['id']
+    bill = run(client, 'bill post', dict(vendor=vendor, date='2026-05-20',
+                                         expenses=[dict(account='Office Supplies', amount='100.00')]))['id']
+    done = imp(client, 'Checking', csv_file([('2026-06-06', 'PMT', '-100.00'), ('2026-06-07', 'DEP', '50.00'),
+                                             ('2026-06-08', 'TO PEB', '-30.00')]))
+    paid = run(client, 'bank-line pay-bills', dict(line=line_of(done, -10000)['id'], method=transfer_method(client),
+                                                   bills=[dict(bill=bill)]))
+    dep = run(client, 'bank-line deposit', dict(line=line_of(done, 5000)['id'], payments=[pay]))
+    sent = run(client, 'bank-line transfer', dict(line=line_of(done, -3000)['id'], to='Payment Example Bank'))
+    made = {e['entries'][0]['entry_id'] for e in (paid, dep, sent)}
+
+    def blocked(name, data, dry_run=False):
+        before = (books(client), table(client, 'SELECT id, state, entry_id FROM bank_lines ORDER BY id'))
+        with pytest.raises(BookflowError) as raised:
+            run(client, name, data, dry_run=dry_run)
+        assert raised.value.code == 'E_BATCH_BLOCKED', raised.value
+        assert (books(client), table(client, 'SELECT id, state, entry_id FROM bank_lines ORDER BY id')) == before
+        return {b['record_id']: b['code'] for b in raised.value.details['blockers']}
+
+    # A later import on the account blocks the reversal; reversed, it no longer does.
+    later = imp(client, 'Checking', csv_file([('2026-06-20', 'LATER', '-1.00')]))
+    assert list(blocked('bank-feed reverse', dict(import_id=done['import_id'])).values()) == ['later_import']
+    run(client, 'bank-feed reverse', dict(import_id=later['import_id']))
+
+    # Reconciled: all three ticked on a finished reconciliation.
+    opening(client)
+    draft = run(client, 'reconcile start', dict(operation_key=new_id(), account='Checking',
+                                                statement_date='2026-06-30', ending_balance='-80.00'))['draft']
+    rows = [x for x in run(client, 'reconcile candidates', dict(draft=draft['id'], limit=200))['items']
+            if any(t in json.dumps(x['movement']) for t in made)]
+    assert len(rows) == 3
+    marked = run(client, 'reconcile mark', dict(
+        operation_key=new_id(), draft=draft['id'], expected_version=draft['version'],
+        entries=[dict(movement=x['movement'], group_fingerprint=x['group_fingerprint'], action='mark')
+                 for x in rows]))['draft']
+    preview = run(client, 'reconcile preview', dict(draft=draft['id'], expected_version=marked['version']))
+    run(client, 'reconcile finish', dict(operation_key=new_id(), draft=draft['id'], expected_version=marked['version'],
+                                         expected_facts_fingerprint=preview['expected_facts_fingerprint'],
+                                         dependency_guard=preview['dependency_guard']))
+    for act in (paid, dep):
+        entry_id = act['entries'][0]['entry_id']
+        for dry in (True, False):
+            assert blocked('bank-line undo', dict(batch=act['batch_id']), dry) == {entry_id: 'entry_reconciled'}
+    for dry in (True, False):
+        assert blocked('bank-feed reverse', dict(import_id=done['import_id']), dry) == {
+            t: 'entry_reconciled' for t in made}
+    assert run(client, 'bill payment show', dict(payment=paid['entries'][0]['entry_id']))['status'] == 'posted'
+    assert run(client, 'bill show', dict(bill=bill))['settlement_current']['status'] == 'paid'

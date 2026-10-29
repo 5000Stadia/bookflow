@@ -870,19 +870,32 @@ account's balance).
   missing row themselves rather than a silent plug. A deposit may name that row: `adjustment_account` (with
   `adjustment_payee`, `_payee_type`, `_memo`, `_class_id`; flat fields, so the MCP schema gains no new variant kind) enters the difference as part of the same deposit -- the line more than the payments, other money received
   from the payee (who is asked for, never guessed; default list customer); the line less, money kept back (`cash_back`
-  to the account, a bank fee). A bill payment takes no adjustment: its part payments are named per bill, and a fee
-  is a line of its own. Success returns `difference` `0.00` (or the adjustment's amount).
+  to the account, a bank fee; that row takes an account and a memo only, so a payee or class there is refused,
+  naming the field). Adjustment fields with no difference to adjust are refused too, never silently dropped. A bill
+  payment takes no adjustment: its part payments are named per bill, and a fee is a line of its own. `difference` is
+  signed, the line less the selection: `0.00`, positive for other money added, negative for money kept back.
 - **One line, one payment.** `bill pay` writes one payment per vendor; bills of two vendors (`group_count` above one)
   are refused naming them, since one bank movement is one payment. A deposit is into a bank account only (a card line,
   or money out, is refused); bills are paid only from money out.
 - **No method is asked for.** `bank-line pay-bills` without `method` refuses with `details.ask` ["method"], as an add
   without payee or account does; the method decides whether a check number is taken, so it is never defaulted.
+- **A cheque keeps the bank's number (review M1).** On a check method from a bank account, `check_number` defaults to
+  the line's own number (a plain number on a CHECK or untyped line, as `bank-line add` reads it); a cheque line with
+  none refuses asking for `check_number`. The chequebook's next number is never used for a cheque the bank has
+  already shown.
 - **Reversible both ways.** Each act is recorded, as `bank-line add` is, in the posting command's own transaction:
   on the line's import batch (`bank_line` `updated`, `transaction` `created`) and, decided here, on a `bank-sort` batch
   of its own (even for one line), so `bank-line undo <batch_id>` takes back that act alone. Either way the entry goes
   through increment 2's inverse steps: `deposit delete` (preserved history; its payments return to Undeposited
   Funds), or `bill payment unapply` then `bill payment void` (the bills open again). The line's `added` event carries
   the command, payee, selection and difference.
+- **A reconciled entry blocks, whatever its inverse (review H1).** `bill payment void` (like `transfer void` and
+  `card-credit void`) is allowed on a reconciled entry by design, and the `unapply` before it moves no money, so the
+  dry run of the first inverse step refused nothing and a reconciled bill payment made from a line could be voided by
+  `bank-line undo` or `bank-feed reverse`, breaking the finished reconciliation. `bank_reversal.entry_plan` now reads
+  the reconciliation hold directly for every family whose inverse includes a void (the query `deposit delete`
+  refuses by: a current member of one of the entry's reconciliation keys) and blocks `entry_reconciled` with its
+  clears text. This covers increments 3's transfers and card credits as well.
 - **Browser.** No bank-line sort page exists yet (increment 7 builds the inbox pages), so no page control was added;
   both acts appear in the workbench's command forms like every command.
 
@@ -893,4 +906,12 @@ three to Undeposited Funds (`deposit sources`) with the deposit deleted with his
 `E_DEPOSIT_SOURCE_*` code; an adjustment asks for its payee, then enters other money of 5.00, and a fee as cash back
 of 5.00; that act undone alone by `bank-line undo`. Bills: no method asks; two vendors refused; a part selection
 refused showing 30.00; marked paid, the typed `bill pay` of twin bills posts the same; undone by `bank-line undo`
-(voided, bills open, line waiting); paid again and the import reversed, the same.
+(voided, bills open, line waiting); paid again and the import reversed, the same. After each reversal every
+account's balance is as before the import (the typed twin aside). The adjustments' postings: the bank moves by
+exactly the line, the difference on the adjustment account; adjustment fields with nothing to adjust, or a payee or
+class on money kept back, refused naming the field. A card line paying a bill from the card, a discount (98.00 paid
+and 2.00 taken settle 100.00), a part payment leaving the rest open, a cheque line's number used, and a cheque line
+without one asking. Blockers (nothing changed by any): a later import blocks the reversal; a reconciled bill
+payment, deposit and one-sided transfer block `bank-line undo` (dry run and real) and `bank-feed reverse` with
+`entry_reconciled`, the bill still paid. A pay-bills line never prints (it carries the bank's number), so no printed-
+cheque blocker applies.
