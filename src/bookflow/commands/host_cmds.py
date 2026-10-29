@@ -965,11 +965,14 @@ def _grant_message(user: dict[str, Any], scope: Scope, role: str, changed: bool,
 
 
 def _person_deny_note(user: dict[str, Any], denies) -> str:
-    """A person holds the capabilities-v1 acts at their role; denying one binds only the agents acting for them."""
+    """A person holds the capabilities-v1 acts at their role; denying one binds only the agents acting for them, except
+    automate.* (establishing) and delivery.send (a person's go), which bind the person too."""
     from bookflow.hub.capabilities import CAPABILITIES
-    named = sorted(x for x in (denies or ()) if x in CAPABILITIES and not x.startswith("automate."))
+    named = sorted(x for x in (denies or ()) if x in CAPABILITIES and not x.startswith("automate.")
+                   and x != "delivery.send")
     automate = sorted(x for x in (denies or ()) if x.startswith("automate."))
-    if user.get("kind") != "human" or not (named or automate):
+    send = "delivery.send" in (denies or ())
+    if user.get("kind") != "human" or not (named or automate or send):
         return ""
     note = ""
     if named:
@@ -980,6 +983,10 @@ def _person_deny_note(user: dict[str, Any], denies) -> str:
         # live, and the live ones they established pause at their next firing.
         note += (f" The deny of {', '.join(automate)} binds {user['username']} too: the automations of that kind "
                  f"{user['username']} made live pause at their next firing, and they cannot make one live.")
+    if send:
+        # delivery_dispatch.go_lost: a person denied delivery.send gives no go, so their own releases wait too.
+        note += (f" The deny of delivery.send binds {user['username']} too: {user['username']}'s go no longer counts, "
+                 "so what they release waits for someone else's, and their send schedules pause.")
     return note
 
 

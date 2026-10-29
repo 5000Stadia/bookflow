@@ -63,7 +63,7 @@ GATE_SOURCE = replace(capabilities_v1.GATE_SOURCE, requirements=tuple(sorted(
 # Each rule is read or paused only by a caller its own kind's commands admit (delivery schedules: `delivery-schedule
 # show` and `update`). A kind added later declares its own commands' requirements in its own delta.
 KIND_SOURCE = c.ResourceSource('bookflow.company.automation.require_command',
-    (('src/bookflow/company/automation.py', 325),),
+    (('src/bookflow/company/automation.py', 401),),
     (c.Requirement('customer', 'member'), c.Requirement('customer', 'standard'),
      c.Requirement('customer-work', 'member'), c.Requirement('ledger.read', 'member')))
 CATALOG = replace(previous.CATALOG, version=c.AUTOMATION_POLICY_VERSION,

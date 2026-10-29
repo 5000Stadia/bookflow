@@ -325,7 +325,7 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
         'schedule cancel', 'ship-method deactivate', 'term deactivate', 'unit-of-measure deactivate',
         'vendor deactivate', 'vendor-credit unapply', 'vendor-type deactivate',
         'delivery-template deactivate', 'delivery-connection disable', 'delivery-connection remove',
-        'delivery-schedule pause', 'item picture clear',
+        'delivery-schedule pause', 'automation pause', 'item picture clear',
     )),
     'needs-a-person': frozenset((
         'accountant mark-entry', 'accountant reviewed-through', 'accountant-copy export', 'assembly finalize',

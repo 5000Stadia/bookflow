@@ -17,8 +17,9 @@ _LIST = ('The automations: rules that write with nobody asking at the time (a se
 _SHOW = ('One automation: what it does unattended, its state, who made it live and when, why it is paused or back in '
          'draft, the capability making it live needs, and the command that does it. Example: {"kind": "delivery", '
          '"rule": "Daily invoices"}.')
-_PAUSE = ('Pause a live automation: it runs nothing until a holder of its automate.<kind> capability makes it live '
-          'again. Open to anyone who may edit the rule (stopping is safe); its establisher gets one to-do. '
+_PAUSE = ('Pause a live automation: it acts for nobody until a holder of its automate.<kind> capability makes it '
+          'live again (a paused delivery schedule may still draft messages; it sends nothing). Open to anyone who '
+          'may edit the rule (stopping is safe); its establisher gets one to-do. '
           'Example: {"kind": "delivery", "rule": "Daily invoices"}.')
 
 
@@ -50,7 +51,7 @@ def plan_pause(inp, ctx, s) -> Plan:
     automation.require_command(s, k.edit_command)
     row = k.get(s, inp.rule)
     if row['state'] != 'live':
-        said = 'It is already paused.' if row['state'] == 'paused' else 'It is a draft: it runs nothing.'
+        said = 'It is already paused.' if row['state'] == 'paused' else 'It is a draft: it sends nothing.'
         return Plan(_output(s, k, row, [said]), dict(idle=True))
     why = f'paused by {automation.name_of(s, s.actor.id)}' + (f': {ctx.reason}' if ctx.reason else '')
     preview = _output(s, k, dict(row, state='paused', paused_reason=why[:500]))
