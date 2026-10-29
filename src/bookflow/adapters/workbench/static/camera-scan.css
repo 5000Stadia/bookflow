@@ -1,0 +1,25 @@
+/* Camera scanning (R190): the Camera button beside each Scan field, and the overlay over the lower half of the screen. */
+.scan-field .scan-camera, .scan-camera { display: inline-flex; align-items: center; gap: .35rem; min-height: 44px; min-width: 44px; padding: .35rem .75rem; margin-top: .35rem; }
+.scan-camera[hidden] { display: none; }
+.camera-overlay { position: fixed; left: 0; right: 0; bottom: 0; height: 50vh; min-height: 18rem; z-index: 1000; display: flex; flex-direction: column; background: #111; color: #fff; box-shadow: 0 -4px 16px rgba(0, 0, 0, .35); font: 15px/1.35 system-ui, sans-serif; }
+.camera-overlay[hidden] { display: none; }
+@media (min-width: 768px) { .camera-overlay { left: auto; width: 28rem; right: 1rem; bottom: 1rem; border-radius: 10px; overflow: hidden; } }
+.camera-view { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; background: #000; }
+.camera-overlay[data-camera-mode="photo"] .camera-view { display: none; }
+.camera-view video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.camera-frame { position: absolute; left: 12%; right: 12%; top: 28%; bottom: 28%; border: 3px solid rgba(255, 255, 255, .9); border-radius: 8px; box-shadow: 0 0 0 999px rgba(0, 0, 0, .25); pointer-events: none; }
+.camera-flash { margin: 0; padding: .5rem .75rem; min-height: 1.4em; font-weight: 600; overflow-wrap: anywhere; }
+.camera-flash[data-kind="ok"] { background: #1e6b34; }
+.camera-flash[data-kind="unknown"], .camera-flash[data-kind="error"] { background: #8a1c1c; }
+.camera-why { margin: 0; padding: .5rem .75rem; background: #3a3220; overflow-wrap: anywhere; }
+.camera-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .5rem .75rem; }
+.camera-controls button { min-height: 44px; min-width: 44px; padding: .35rem .9rem; }
+.camera-controls button[hidden] { display: none; }
+.camera-controls button[aria-pressed="true"] { background: #f5d76e; color: #111; }
+.camera-controls label { display: inline-flex; align-items: center; gap: .3rem; min-height: 44px; }
+.camera-controls select { max-width: 13rem; min-height: 36px; }
+.camera-using { color: #bbb; font-size: .85rem; }
+.camera-controls [data-camera-close] { margin-left: auto; }
+.camera-overlay[data-camera-mode="photo"] { height: auto; min-height: 0; }
+/* While the camera is open the page keeps room below its content for the overlay, so nothing stays hidden under it. */
+html.camera-open body { padding-bottom: calc(var(--camera-overlay-height, 50vh) + 1rem); }

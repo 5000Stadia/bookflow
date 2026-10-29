@@ -8,6 +8,7 @@
 {% if can_pack %}
 <form method="post" action="{{ url }}/pack" hx-post="{{ url }}/pack" hx-target="body" hx-swap="outerHTML" class="pick-entry pack-entry" data-pack-scan>
 <label class="scan">Scan a serial number, lot or item <input name="code" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go" placeholder="WH-1001" autofocus data-pack-code></label>
+<button type="button" class="scan-camera" data-scan-camera data-camera-input="[data-pack-code]" hidden aria-label="Scan with the camera">Camera</button><link rel="stylesheet" href="{{ static_urls['camera-scan.css'] }}"><script src="{{ static_urls['secure-context.js'] }}" defer></script><script src="{{ static_urls['camera-scan.js'] }}" defer></script><script src="{{ static_urls['scan-decoder-native.js'] }}" defer></script><script src="{{ static_urls['scan-decoder-zxing-wasm.js'] }}" defer></script>
 <label class="qty">Box <input name="box" inputmode="numeric" autocomplete="off" value="{{ values.box }}" data-pack-box></label>
 <label class="qty">Quantity <input name="quantity" inputmode="decimal" autocomplete="off" placeholder="1"></label>
 <input type="hidden" name="action" value="scan"><button type="submit" data-pack-put>Put in box</button>

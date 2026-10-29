@@ -194,12 +194,16 @@ class Credential:
             raise BookflowError("E_UNAUTHENTICATED", details={"reason": "credential changed"})
 
 
-def create_app(host, *, secure_cookies: bool, public_origin: str | None = None, bind: str | None = None) -> FastAPI:
+def create_app(host, *, secure_cookies: bool, public_origin: str | None = None, bind: str | None = None,
+               scan_decoders: str | None = None) -> FastAPI:
     """`public_origin` is the normalized https://host[:port] a TLS proxy serves (core.public_origin); `bind` is
-    the host's own address, whose loopback origin stays accepted beside it."""
+    the host's own address, whose loopback origin stays accepted beside it. `scan_decoders` is the camera scanner's
+    decoder order (core.scan_decoders; the flag, else BOOKFLOW_SCAN_DECODERS, else the default), rendered into pages."""
+    from bookflow.core import scan_decoders as sd
     registry.load_all()
     app = FastAPI(title="Bookflow", version=host.version, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.public_origin = public_origin
+    app.state.scan_decoders = sd.resolve(scan_decoders)
     app.add_middleware(CookieRenewalMiddleware, secure_cookies=secure_cookies)
     from bookflow.adapters.http.publication import PublicationMiddleware
     app.add_middleware(PublicationMiddleware, host=host)
