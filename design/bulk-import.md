@@ -1265,3 +1265,103 @@ to 0.05 over every item; seconds, 2026-10-28):
 
 Linear: the grid costs about 2.3 ms a record (each read through `item show`), the preview 12 ms (read and dry-run),
 the apply 36 ms (a read for the prior values and the update with its audit event), the reversal 30 to 49 ms.
+
+## As built: increment 7
+
+- **Migration co0117** (on co0116): `opening_drafts`, one row per draft: the cutover date, each step's rows as pasted
+  text or an attachment id (with a date order when given), the totals the owner gave, the stock items a person
+  confirmed may be made, the clearing account named, the state (`draft`, `planned`, `applying`, `applied`,
+  `rolled_back`, `failed`, `reversed`, `discarded`), the batch once applied, the last plan's or apply's summary, and a
+  version. Guards: never deleted; identity and creation fixed; every change moves the version forward. Decided: the
+  pasted text lives in the draft row (bounded at 2 MB a step), not in an attachment per paste: an update is then one
+  write with its audit event and no orphan files; `cutover apply` still keeps each step's text as a company attachment
+  when it posts, as it keeps any text file, and a step may name an attachment instead.
+- **The entered kinds** (`cutover_sources.py`, read through `tabular.py`, never detected from headings):
+  `entered_balances` (Account by name, number or ID, Balance on the account's own side; a Side column or Debit and
+  Credit columns say otherwise), `entered_open_invoices`, `entered_unpaid_bills` (Customer or Vendor, Number or
+  Reference, Date, Due date or Terms, Open amount, PO, Memo; a negative amount is a credit) and `entered_stock`
+  (Item, Quantity, Total value or Unit cost, both checked against each other). Headers are matched by synonyms; dates
+  read in the column's order, and an all-ambiguous column is refused (`ambiguous_date`) unless `date_order` is given
+  (`CutoverFile.date_order`, entered kinds only). They fill the engine's own `OpenDocument` and `StockRow`; balances
+  become `EnteredBalance` rows, and `cutover.build` turns them into the `TrialBalance` (`_entered_trial_balance`):
+  each account resolved against the chart (an unknown one stays as typed, so `unmapped_account` names it), the side
+  from the account's type, receivables, payables and inventory derived from the documents and stock that post when
+  the owner left them out, and Opening Balance Equity derived as the balancing figure unless an equity account was
+  typed (then `trial_balance_unbalanced` applies). A due date left out is worked out from standard terms (`Net 30`
+  from the date), for the posting and the tie-out's aging alike. A stock row names an existing inventory part (by ID
+  or full name), or is made as a new one when confirmed (`make_items`) with the company's default accounts: the first
+  active income account named for sales (not returns), else the first income account; Cost of Goods Sold; Inventory
+  Asset; its cost the value over the quantity.
+- **`basis`** on every check: `CutoverCheck` (plan), `CutoverTieRow`, `CutoverTieSection` and `CutoverStockSection`,
+  and the tie-out's new `checks` list (one per trial balance figure, given first, each with `tied` and a sentence:
+  "tied to the 12,430.55 you gave", "taken from your invoice list; not independently checked", "worked out as assets
+  less liabilities; not independently checked"). Every figure of an export is `given`, so the anchor-style path reads
+  as before plus the new fields. Decided: `tied` needs every check tied, derived ones too (a derived figure the books
+  do not show means the posting went wrong), and the clearing account at 0.00; this includes design §6's "every given
+  check tied".
+- **Commands** (`company/opening_drafts.py`, `commands/opening_draft_cmds.py`): `opening-draft create`, `update`
+  (carrying `expected_version`; an empty step clears it; back to `draft`), `show` (each step with what its rows alone
+  show to be wrong, by line), `query`, `discard`, `plan` (the engine's plan, state `planned`), `apply`, `tie-out` and
+  `reverse` (added beside §9's list: the domain door to the batch reversal, as `import reverse` and `bulk-edit reverse`
+  are). The totals given become one more `entered_balances` file on the receivables, payables and inventory accounts
+  by ID. `cutover plan/apply/tie-out` is the only thing that posts; the draft adds no posting path.
+- **All or nothing, and a stop continues.** `apply` writes the batch (kind `opening`) and the draft's `applying` in the
+  command's own transaction, then runs `cutover.apply` with a recorder that writes each created record's effect in its
+  step's transaction (`cutover.step_recorder`). A command refused part way (`E_CUTOVER_INCOMPLETE`) reverses the batch
+  at once: `rolled_back`, and the error says nothing of the opening stays; if that undo is itself refused the draft is
+  `failed` and the error names why (`opening-draft reverse` finishes it). A stop any other way (a killed process) leaves
+  `applying` with the batch live, and the same `apply` continues in that batch, every record made before `already_in`.
+- **Reversible as one unit** through the shared ledger: invoices, bills and journals by their families' delete with
+  history kept, credits and stock adjustments by void, customers, vendors, items and terms renamed and deactivated; a
+  record in use since (a payment applied to an opening invoice) refuses the whole with the record named. Records a
+  reversed opening made are no longer `already_in` for a later opening (`Books` passes over created effects of
+  reversed `opening` batches), so a corrected opening posts afresh. Two fixes in the shared plan (`batches._in_use`):
+  a row belonging to a document the same batch made (an opening invoice's lines naming the customer and item it
+  made; a stock placement, through its movement) is no use of the record, and such a record's inverse is probed by
+  running it once those documents are gone, not by a dry run beforehand.
+  *Left for R186:* accounts. An account that has carried postings is never deactivated (accounts keep their
+  history), so the batch does not record the accounts an opening makes; after a reversal the clearing account (and,
+  on an anchor-style draft, any account made from a chart export) stands at 0.00 and the next opening uses it again.
+  Retiring it needs an inverse for "an account whose every posting was reversed", which the accounts module does not
+  have. The undo also needs the caller's own explicit delete grants (`transaction.invoice.delete`, `bill`,
+  `journal_entry`), as every batch reversal does (§8a); without them a refusal part way ends `failed`, naming them.
+- **`accept_differences`: a capability, not people-only.** principal-directives.md keeps people-only for the five acts
+  no capability could make safe; posting an opening that does not tie is not one of them. So it is the capability
+  `opening.accept-differences` (standard; held by standard, admin and owner as before, by an agent only through its
+  principal's explicit grant and while the principal holds it, checked at one declared site,
+  `opening_drafts.require_accept`). It takes the place §4 gave `import.approve`, whose other acts were dropped on
+  2026-10-28. It downgrades only `receivables_do_not_tie`, `payables_do_not_tie`, `inventory_does_not_tie` and
+  `trial_balance_unbalanced` to warnings marked "accepted"; the difference stays in the clearing account, and tie-out
+  says not tied until it is found.
+- **Confirmation (rule ucad913).** No approve step and no threshold. The agent guide's "Opening balances for a business
+  with no old books" teaches one check of the exact details with the owner before `apply` (the date, the plan's counts
+  and totals, which checks are given and which derived), then apply on their yes; `accept_differences` is the owner's
+  decision. `plan` and `apply` help say the same.
+- **Permissions:** layer `opening-draft-v1` on `bulk-edit-v1` (854 commands, descriptor 432aed74): `show` and `query`
+  member reads, the other seven standard, all under `import`; the new capability above. No existing capability, role
+  default or threshold changes.
+- **The page** `/c/<company>/opening` (Company menu: "Opening balances"; `opening_pages.py`, `opening.html`,
+  `opening.css`): with no draft, a short explanation, "opening balances come first; enter later work dated after"
+  (question 6), the start form (date and the totals known) and the drafts; a draft's steps Date and checks, Balances
+  you know, Open invoices, Unpaid bills, Stock (each a grid taking a paste under its shown header, its row count and
+  problems by line; stock with "Make these new items"), and Tie out and post (the plan, the checks given and derived
+  apart, Post naming the date, "post it anyway" only when every blocker is acceptable, then the tie-out given and
+  derived apart, and Undo planning first). htmx for every post; a refusal answers 200 in place; a reload returns to
+  the draft and step. At 390 px the steps stack and nothing scrolls sideways (asserted at every step). Screens:
+  `/tmp/m4-shots/opening/` (each step at 1440 and 390).
+- **Question 7** stands: stock comes in by the stock step (or an `inventory adjust` import), never through the `item`
+  kind.
+- **Exceptions reachable from entered rows** (tested): `unmapped_account`, `missing_open_invoices`,
+  `missing_unpaid_bills`, `missing_inventory_valuation`, the three `*_do_not_tie`, `document_after_cutover`,
+  `document_without_date`, `type_conflict`, `negative_stock`, `possible_duplicate_customer`, `unknown_terms`,
+  `several_trial_balances` (entered balances beside a trial balance export), `trial_balance_unbalanced`,
+  `entries_before_cutover`, `period_closed`, and the new `duplicate_account`, `unreadable_amount`, `ambiguous_date`,
+  `missing_column`, `unknown_item`, `stock_value_mismatch`. The rest of docs/cutover.md's list concerns exports the
+  guided path never reads (IIF lists and their row checks, report titles, dates and totals, reconciliations,
+  uncleared items, Undeposited Funds' report, 1099s) and cannot arise from typed rows.
+- **Tests:** `tests/test_opening_balances.py` (criterion 6 with 4 balances, 12 invoices, 8 bills and 30 stock items
+  worked by hand; a wrong total refused leaving nothing; accepting a difference; a refusal part way rolled back and a
+  stop continued; reversal as one unit and refused naming the payment; typed and derived equity; the reachable
+  exceptions; the same data through `cutover` from anchor-style exports giving identical balances, aging and stock),
+  `tests/test_opening_balances_surfaces.py` (Python, CLI, HTTP and MCP alike), `tests/test_opening_balances_browser.py`
+  (a person pastes, plans, posts and reads the tie-out in real Chrome at 1440 and 390).

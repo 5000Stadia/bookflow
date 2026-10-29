@@ -639,9 +639,11 @@ def _referrers(s, table: str) -> list[tuple[str, str]]:
     return _FK_CACHE[table]
 
 
-def _in_use(s, record_type: str, ids: list[str], made_here: set[str]) -> dict[str, dict]:
+def _in_use(s, record_type: str, ids: list[str], made_here: set[str], by_batch: set[str] | None = None) -> dict[str, dict]:
     """For each created record, what refers to it elsewhere (foreign keys and the declared references without one):
-    per table, the first referring row."""
+    per table, the first referring row. A row of a document the same batch made (an opening's invoice line naming the
+    customer and item the opening made) is no use: the document is reversed first, newest first. Such records are
+    added to ``by_batch``, since their inverse can only be probed once those documents are gone."""
     rec = _record(record_type)
     found: dict[str, dict] = {}
     if not ids:
@@ -652,11 +654,18 @@ def _in_use(s, record_type: str, ids: list[str], made_here: set[str]) -> dict[st
     for table, column in _referrers(s, rec.table.name):
         meta = c.metadata.tables.get(table)
         key = 'id' if meta is not None and 'id' in meta.c else 'rowid'
-        document = 'transaction_id' if meta is not None and 'transaction_id' in meta.c else 'NULL'
+        document = ('transaction_id' if meta is not None and 'transaction_id' in meta.c else
+                    # a placement names its document through the movement it places
+                    '(SELECT m.transaction_id FROM inventory_movements m WHERE m.id = movement_id)'
+                    if meta is not None and 'movement_id' in meta.c and table != 'inventory_movements' else 'NULL')
         sql = (f'SELECT "{column}", {key}, {document} FROM "{table}" '
                f'WHERE "{column}" IN (SELECT value FROM json_each(?))')
         for target, referrer, transaction in s.company.raw.execute(sql, (payload,)).fetchall():
             if referrer in made_here:  # a record the same batch made (a customer using a type it made too)
+                continue
+            if transaction and transaction in made_here:  # a line of a document the same batch made
+                if by_batch is not None:
+                    by_batch.add(target)
                 continue
             uses = found.setdefault(target, {'tables': [], 'rows': [], 'documents': []})
             if transaction and len(uses['documents']) < 3:
@@ -750,8 +759,9 @@ def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
     for g, _, _ in pending:
         by_type.setdefault(g['record_type'], []).append(g['record_id'])
     current = {t: _current(s, t, ids) for t, ids in by_type.items()}
+    by_batch: set[str] = set()
     in_use = {t: _in_use(s, t, [g['record_id'] for g, _, _ in pending if g['record_type'] == t
-                                and g['action'] == 'created'], {i for _, i in made})
+                                and g['action'] == 'created'], {i for _, i in made}, by_batch)
               for t in by_type}
     steps_out, work = [], []
     for g, rec, steps_done in pending:
@@ -811,7 +821,7 @@ def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
                           'steps': [name if name not in ('rename', 'renumber') else f'{rec.noun} update'
                                     for name, _ in steps]})
         work.append((g, rec, row, steps, len(steps_done)))
-        if probe:
+        if probe and g['record_id'] not in by_batch:  # else probed by running, once the batch's documents are gone
             refusal = _probe(s, ctx, batch, g, rec, row, steps, made)
             if refusal is not None:
                 blockers.append(refusal)

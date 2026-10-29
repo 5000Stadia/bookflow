@@ -38,7 +38,8 @@ The same example as complete `bookflow_run` arguments:
 | `files[].attachment` | inside `--files` JSON array | string \| null | no | yes | null | An attachment in this company holding the export file, as `attachment add company_info <company id> FILE` returns it. Give this or `content`. |
 | `files[].content` | inside `--files` JSON array | string \| null | no | yes | null | The export file's text, when it is not an attachment. Give this or `attachment`. |
 | `files[].name` | inside `--files` JSON array | string \| null | no | yes | null | A label for this file in exceptions; defaults to the attachment's file name, else `file N`. |
-| `files[].kind` | inside `--files` JSON array | literal["iif", "trial_balance", "open_invoices", "unpaid_bills", "ar_aging", "ap_aging", "inventory_valuation", "reconciliation_summary", "uncleared", "vendor_1099"] \| null | no | yes | null | What the file is; read from its own headings when omitted. `iif`: a list export (chart of accounts, customers, vendors, items, terms). Report CSV exports: `trial_balance` (Trial Balance, accrual, as of the cutover date), `open_invoices` (Open Invoices), `unpaid_bills` (Unpaid Bills Detail, all dates), `ar_aging` and `ap_aging` (A/R and A/P Aging Summary, optional, used by tie-out), `inventory_valuation` (Inventory Valuation Summary, required when the trial balance carries inventory), `reconciliation_summary` (a bank or card account's Reconciliation Summary of its last reconciled statement), `uncleared` (a transaction report filtered to Cleared: No: the checks, deposits and charges no statement had shown, and the receipts waiting in Undeposited Funds), `vendor_1099` (1099 Summary, January 1 to the cutover date). |
+| `files[].kind` | inside `--files` JSON array | literal["iif", "trial_balance", "open_invoices", "unpaid_bills", "ar_aging", "ap_aging", "inventory_valuation", "reconciliation_summary", "uncleared", "vendor_1099", "entered_balances", "entered_open_invoices", "entered_unpaid_bills", "entered_stock"] \| null | no | yes | null | What the file is; read from its own headings when omitted. `iif`: a list export (chart of accounts, customers, vendors, items, terms). Report CSV exports: `trial_balance` (Trial Balance, accrual, as of the cutover date), `open_invoices` (Open Invoices), `unpaid_bills` (Unpaid Bills Detail, all dates), `ar_aging` and `ap_aging` (A/R and A/P Aging Summary, optional, used by tie-out), `inventory_valuation` (Inventory Valuation Summary, required when the trial balance carries inventory), `reconciliation_summary` (a bank or card account's Reconciliation Summary of its last reconciled statement), `uncleared` (a transaction report filtered to Cleared: No: the checks, deposits and charges no statement had shown, and the receipts waiting in Undeposited Funds), `vendor_1099` (1099 Summary, January 1 to the cutover date). Rows an owner types or pastes, with a header row (never read from headings, so always name the kind): `entered_balances` (Account, Balance: one row per account the owner knows, on the account's own side unless a Side column says debit or credit; receivables, payables and stock left out are totalled from the rows, and equity is worked out unless equity accounts are typed), `entered_open_invoices` (Customer, Number, Date, Due date or Terms, Open amount, PO number, Memo), `entered_unpaid_bills` (Vendor, Reference, Date, Due date or Terms, Open amount, Memo), `entered_stock` (Item, Quantity, Total value or Unit cost). |
+| `files[].date_order` | inside `--files` JSON array | literal["MDY", "DMY", "YMD"] \| null | no | yes | null | Entered kinds only: the order of day and month in the dates when no date tells (03/04/2026). MDY month first, DMY day first, YMD year first. |
 | `mappings.accounts` | `--mappings-accounts` | object[string, string] | no | no | {} | Old-books account, as its file names it (`6700 · Utilities:6710 · Telephone`, `Utilities:Telephone` or `6710`), to a Bookflow account (ID, number or full name), or `create` to make it from the account list. |
 | `mappings.customers` | `--mappings-customers` | object[string, string] | no | no | {} | Old-books customer or `Customer:Job` to a Bookflow customer or job (ID or full name), or `create`. |
 | `mappings.vendors` | `--mappings-vendors` | object[string, string] | no | no | {} | Old-books vendor to a Bookflow vendor (ID or name), or `create`. |
@@ -109,6 +110,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `exceptions[].subject` | string \| null | yes | yes | — | The old-books name it concerns |
 | `checks` | array[object] | yes | no | — | The tie checks the plan can make before anything is written |
 | `checks[].name` | string | yes | no | — | receivables, payables, inventory, trial_balance_total, receivables_total, payables_total, aging |
+| `checks[].basis` | literal["given", "derived"] | no | no | "given" | `given`: a figure from the old books or one the owner gave, checked against the rows or the books; `derived`: worked out from the rows themselves (a total left out, equity), so nothing independent checks it |
 | `checks[].source` | object | yes | no | — | The old books' figure |
 | `checks[].source.amount` | string | yes | no | — | — |
 | `checks[].source.currency` | string | yes | no | — | — |
@@ -288,7 +290,8 @@ The same example as complete `bookflow_run` arguments:
 | `files[].attachment` | inside `--files` JSON array | string \| null | no | yes | null | An attachment in this company holding the export file, as `attachment add company_info <company id> FILE` returns it. Give this or `content`. |
 | `files[].content` | inside `--files` JSON array | string \| null | no | yes | null | The export file's text, when it is not an attachment. Give this or `attachment`. |
 | `files[].name` | inside `--files` JSON array | string \| null | no | yes | null | A label for this file in exceptions; defaults to the attachment's file name, else `file N`. |
-| `files[].kind` | inside `--files` JSON array | literal["iif", "trial_balance", "open_invoices", "unpaid_bills", "ar_aging", "ap_aging", "inventory_valuation", "reconciliation_summary", "uncleared", "vendor_1099"] \| null | no | yes | null | What the file is; read from its own headings when omitted. `iif`: a list export (chart of accounts, customers, vendors, items, terms). Report CSV exports: `trial_balance` (Trial Balance, accrual, as of the cutover date), `open_invoices` (Open Invoices), `unpaid_bills` (Unpaid Bills Detail, all dates), `ar_aging` and `ap_aging` (A/R and A/P Aging Summary, optional, used by tie-out), `inventory_valuation` (Inventory Valuation Summary, required when the trial balance carries inventory), `reconciliation_summary` (a bank or card account's Reconciliation Summary of its last reconciled statement), `uncleared` (a transaction report filtered to Cleared: No: the checks, deposits and charges no statement had shown, and the receipts waiting in Undeposited Funds), `vendor_1099` (1099 Summary, January 1 to the cutover date). |
+| `files[].kind` | inside `--files` JSON array | literal["iif", "trial_balance", "open_invoices", "unpaid_bills", "ar_aging", "ap_aging", "inventory_valuation", "reconciliation_summary", "uncleared", "vendor_1099", "entered_balances", "entered_open_invoices", "entered_unpaid_bills", "entered_stock"] \| null | no | yes | null | What the file is; read from its own headings when omitted. `iif`: a list export (chart of accounts, customers, vendors, items, terms). Report CSV exports: `trial_balance` (Trial Balance, accrual, as of the cutover date), `open_invoices` (Open Invoices), `unpaid_bills` (Unpaid Bills Detail, all dates), `ar_aging` and `ap_aging` (A/R and A/P Aging Summary, optional, used by tie-out), `inventory_valuation` (Inventory Valuation Summary, required when the trial balance carries inventory), `reconciliation_summary` (a bank or card account's Reconciliation Summary of its last reconciled statement), `uncleared` (a transaction report filtered to Cleared: No: the checks, deposits and charges no statement had shown, and the receipts waiting in Undeposited Funds), `vendor_1099` (1099 Summary, January 1 to the cutover date). Rows an owner types or pastes, with a header row (never read from headings, so always name the kind): `entered_balances` (Account, Balance: one row per account the owner knows, on the account's own side unless a Side column says debit or credit; receivables, payables and stock left out are totalled from the rows, and equity is worked out unless equity accounts are typed), `entered_open_invoices` (Customer, Number, Date, Due date or Terms, Open amount, PO number, Memo), `entered_unpaid_bills` (Vendor, Reference, Date, Due date or Terms, Open amount, Memo), `entered_stock` (Item, Quantity, Total value or Unit cost). |
+| `files[].date_order` | inside `--files` JSON array | literal["MDY", "DMY", "YMD"] \| null | no | yes | null | Entered kinds only: the order of day and month in the dates when no date tells (03/04/2026). MDY month first, DMY day first, YMD year first. |
 | `mappings.accounts` | `--mappings-accounts` | object[string, string] | no | no | {} | Old-books account, as its file names it (`6700 · Utilities:6710 · Telephone`, `Utilities:Telephone` or `6710`), to a Bookflow account (ID, number or full name), or `create` to make it from the account list. |
 | `mappings.customers` | `--mappings-customers` | object[string, string] | no | no | {} | Old-books customer or `Customer:Job` to a Bookflow customer or job (ID or full name), or `create`. |
 | `mappings.vendors` | `--mappings-vendors` | object[string, string] | no | no | {} | Old-books vendor to a Bookflow vendor (ID or name), or `create`. |
@@ -351,6 +354,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `exceptions[].subject` | string \| null | yes | yes | — | The old-books name it concerns |
 | `checks` | array[object] | yes | no | — | The tie checks the plan can make before anything is written |
 | `checks[].name` | string | yes | no | — | receivables, payables, inventory, trial_balance_total, receivables_total, payables_total, aging |
+| `checks[].basis` | literal["given", "derived"] | no | no | "given" | `given`: a figure from the old books or one the owner gave, checked against the rows or the books; `derived`: worked out from the rows themselves (a total left out, equity), so nothing independent checks it |
 | `checks[].source` | object | yes | no | — | The old books' figure |
 | `checks[].source.amount` | string | yes | no | — | — |
 | `checks[].source.currency` | string | yes | no | — | — |
@@ -517,7 +521,8 @@ The same example as complete `bookflow_run` arguments:
 | `files[].attachment` | inside `--files` JSON array | string \| null | no | yes | null | An attachment in this company holding the export file, as `attachment add company_info <company id> FILE` returns it. Give this or `content`. |
 | `files[].content` | inside `--files` JSON array | string \| null | no | yes | null | The export file's text, when it is not an attachment. Give this or `attachment`. |
 | `files[].name` | inside `--files` JSON array | string \| null | no | yes | null | A label for this file in exceptions; defaults to the attachment's file name, else `file N`. |
-| `files[].kind` | inside `--files` JSON array | literal["iif", "trial_balance", "open_invoices", "unpaid_bills", "ar_aging", "ap_aging", "inventory_valuation", "reconciliation_summary", "uncleared", "vendor_1099"] \| null | no | yes | null | What the file is; read from its own headings when omitted. `iif`: a list export (chart of accounts, customers, vendors, items, terms). Report CSV exports: `trial_balance` (Trial Balance, accrual, as of the cutover date), `open_invoices` (Open Invoices), `unpaid_bills` (Unpaid Bills Detail, all dates), `ar_aging` and `ap_aging` (A/R and A/P Aging Summary, optional, used by tie-out), `inventory_valuation` (Inventory Valuation Summary, required when the trial balance carries inventory), `reconciliation_summary` (a bank or card account's Reconciliation Summary of its last reconciled statement), `uncleared` (a transaction report filtered to Cleared: No: the checks, deposits and charges no statement had shown, and the receipts waiting in Undeposited Funds), `vendor_1099` (1099 Summary, January 1 to the cutover date). |
+| `files[].kind` | inside `--files` JSON array | literal["iif", "trial_balance", "open_invoices", "unpaid_bills", "ar_aging", "ap_aging", "inventory_valuation", "reconciliation_summary", "uncleared", "vendor_1099", "entered_balances", "entered_open_invoices", "entered_unpaid_bills", "entered_stock"] \| null | no | yes | null | What the file is; read from its own headings when omitted. `iif`: a list export (chart of accounts, customers, vendors, items, terms). Report CSV exports: `trial_balance` (Trial Balance, accrual, as of the cutover date), `open_invoices` (Open Invoices), `unpaid_bills` (Unpaid Bills Detail, all dates), `ar_aging` and `ap_aging` (A/R and A/P Aging Summary, optional, used by tie-out), `inventory_valuation` (Inventory Valuation Summary, required when the trial balance carries inventory), `reconciliation_summary` (a bank or card account's Reconciliation Summary of its last reconciled statement), `uncleared` (a transaction report filtered to Cleared: No: the checks, deposits and charges no statement had shown, and the receipts waiting in Undeposited Funds), `vendor_1099` (1099 Summary, January 1 to the cutover date). Rows an owner types or pastes, with a header row (never read from headings, so always name the kind): `entered_balances` (Account, Balance: one row per account the owner knows, on the account's own side unless a Side column says debit or credit; receivables, payables and stock left out are totalled from the rows, and equity is worked out unless equity accounts are typed), `entered_open_invoices` (Customer, Number, Date, Due date or Terms, Open amount, PO number, Memo), `entered_unpaid_bills` (Vendor, Reference, Date, Due date or Terms, Open amount, Memo), `entered_stock` (Item, Quantity, Total value or Unit cost). |
+| `files[].date_order` | inside `--files` JSON array | literal["MDY", "DMY", "YMD"] \| null | no | yes | null | Entered kinds only: the order of day and month in the dates when no date tells (03/04/2026). MDY month first, DMY day first, YMD year first. |
 | `mappings.accounts` | `--mappings-accounts` | object[string, string] | no | no | {} | Old-books account, as its file names it (`6700 · Utilities:6710 · Telephone`, `Utilities:Telephone` or `6710`), to a Bookflow account (ID, number or full name), or `create` to make it from the account list. |
 | `mappings.customers` | `--mappings-customers` | object[string, string] | no | no | {} | Old-books customer or `Customer:Job` to a Bookflow customer or job (ID or full name), or `create`. |
 | `mappings.vendors` | `--mappings-vendors` | object[string, string] | no | no | {} | Old-books vendor to a Bookflow vendor (ID or name), or `create`. |
@@ -557,6 +562,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `summary` | string | yes | no | — | — |
 | `trial_balance` | object | yes | no | — | — |
 | `trial_balance.source` | string | yes | no | — | What the old books' side was read from |
+| `trial_balance.basis` | literal["given", "derived"] | no | no | "given" | `given`: a figure from the old books or one the owner gave, checked against the rows or the books; `derived`: worked out from the rows themselves (a total left out, equity), so nothing independent checks it; a trial balance holding both says so per row |
 | `trial_balance.source_total` | object | yes | no | — | — |
 | `trial_balance.source_total.amount` | string | yes | no | — | — |
 | `trial_balance.source_total.currency` | string | yes | no | — | — |
@@ -568,6 +574,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `trial_balance.differences` | integer | yes | no | — | Rows that do not tie |
 | `trial_balance.rows` | array[object] | yes | no | — | — |
 | `trial_balance.rows[].name` | string | yes | no | — | The account, customer, job or vendor |
+| `trial_balance.rows[].basis` | literal["given", "derived"] | no | no | "given" | `given`: a figure from the old books or one the owner gave, checked against the rows or the books; `derived`: worked out from the rows themselves (a total left out, equity), so nothing independent checks it |
 | `trial_balance.rows[].record_id` | string \| null | yes | yes | — | The Bookflow record compared; null when nothing in the books stands for it |
 | `trial_balance.rows[].column` | string | yes | no | — | `balance` for the trial balance; total, current, days_1_30, days_31_60, days_61_90 or over_90 for an aging |
 | `trial_balance.rows[].source` | object | yes | no | — | The old books' figure, debit positive on the trial balance |
@@ -584,6 +591,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `trial_balance.rows[].difference.minor_units` | integer | yes | no | — | — |
 | `receivables` | object | yes | no | — | — |
 | `receivables.source` | string | yes | no | — | What the old books' side was read from |
+| `receivables.basis` | literal["given", "derived"] | no | no | "given" | `given`: a figure from the old books or one the owner gave, checked against the rows or the books; `derived`: worked out from the rows themselves (a total left out, equity), so nothing independent checks it; a trial balance holding both says so per row |
 | `receivables.source_total` | object | yes | no | — | — |
 | `receivables.source_total.amount` | string | yes | no | — | — |
 | `receivables.source_total.currency` | string | yes | no | — | — |
@@ -595,6 +603,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `receivables.differences` | integer | yes | no | — | Rows that do not tie |
 | `receivables.rows` | array[object] | yes | no | — | — |
 | `receivables.rows[].name` | string | yes | no | — | The account, customer, job or vendor |
+| `receivables.rows[].basis` | literal["given", "derived"] | no | no | "given" | `given`: a figure from the old books or one the owner gave, checked against the rows or the books; `derived`: worked out from the rows themselves (a total left out, equity), so nothing independent checks it |
 | `receivables.rows[].record_id` | string \| null | yes | yes | — | The Bookflow record compared; null when nothing in the books stands for it |
 | `receivables.rows[].column` | string | yes | no | — | `balance` for the trial balance; total, current, days_1_30, days_31_60, days_61_90 or over_90 for an aging |
 | `receivables.rows[].source` | object | yes | no | — | The old books' figure, debit positive on the trial balance |
@@ -611,6 +620,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `receivables.rows[].difference.minor_units` | integer | yes | no | — | — |
 | `payables` | object | yes | no | — | — |
 | `payables.source` | string | yes | no | — | What the old books' side was read from |
+| `payables.basis` | literal["given", "derived"] | no | no | "given" | `given`: a figure from the old books or one the owner gave, checked against the rows or the books; `derived`: worked out from the rows themselves (a total left out, equity), so nothing independent checks it; a trial balance holding both says so per row |
 | `payables.source_total` | object | yes | no | — | — |
 | `payables.source_total.amount` | string | yes | no | — | — |
 | `payables.source_total.currency` | string | yes | no | — | — |
@@ -622,6 +632,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `payables.differences` | integer | yes | no | — | Rows that do not tie |
 | `payables.rows` | array[object] | yes | no | — | — |
 | `payables.rows[].name` | string | yes | no | — | The account, customer, job or vendor |
+| `payables.rows[].basis` | literal["given", "derived"] | no | no | "given" | `given`: a figure from the old books or one the owner gave, checked against the rows or the books; `derived`: worked out from the rows themselves (a total left out, equity), so nothing independent checks it |
 | `payables.rows[].record_id` | string \| null | yes | yes | — | The Bookflow record compared; null when nothing in the books stands for it |
 | `payables.rows[].column` | string | yes | no | — | `balance` for the trial balance; total, current, days_1_30, days_31_60, days_61_90 or over_90 for an aging |
 | `payables.rows[].source` | object | yes | no | — | The old books' figure, debit positive on the trial balance |
@@ -638,6 +649,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `payables.rows[].difference.minor_units` | integer | yes | no | — | — |
 | `inventory` | object | yes | no | — | — |
 | `inventory.source` | string | yes | no | — | What the old books' side was read from, or `none` when no valuation was given |
+| `inventory.basis` | literal["given", "derived"] | no | no | "given" | `given`: a figure from the old books or one the owner gave, checked against the rows or the books; `derived`: worked out from the rows themselves (a total left out, equity), so nothing independent checks it |
 | `inventory.source_total` | object | yes | no | — | — |
 | `inventory.source_total.amount` | string | yes | no | — | — |
 | `inventory.source_total.currency` | string | yes | no | — | — |
@@ -720,6 +732,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `bank.rows[].tied` | boolean | yes | no | — | The balance ties, every uncleared item is in, and a given last reconciliation is a proven draft or certified |
 | `undeposited` | object | yes | no | — | Undeposited Funds: what the old books held waiting for deposit against the receipts here Make Deposits can pick |
 | `undeposited.source` | string | yes | no | — | What the old books' side was read from |
+| `undeposited.basis` | literal["given", "derived"] | no | no | "given" | `given`: a figure from the old books or one the owner gave, checked against the rows or the books; `derived`: worked out from the rows themselves (a total left out, equity), so nothing independent checks it; a trial balance holding both says so per row |
 | `undeposited.source_total` | object | yes | no | — | — |
 | `undeposited.source_total.amount` | string | yes | no | — | — |
 | `undeposited.source_total.currency` | string | yes | no | — | — |
@@ -731,6 +744,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `undeposited.differences` | integer | yes | no | — | Rows that do not tie |
 | `undeposited.rows` | array[object] | yes | no | — | — |
 | `undeposited.rows[].name` | string | yes | no | — | The account, customer, job or vendor |
+| `undeposited.rows[].basis` | literal["given", "derived"] | no | no | "given" | `given`: a figure from the old books or one the owner gave, checked against the rows or the books; `derived`: worked out from the rows themselves (a total left out, equity), so nothing independent checks it |
 | `undeposited.rows[].record_id` | string \| null | yes | yes | — | The Bookflow record compared; null when nothing in the books stands for it |
 | `undeposited.rows[].column` | string | yes | no | — | `balance` for the trial balance; total, current, days_1_30, days_31_60, days_61_90 or over_90 for an aging |
 | `undeposited.rows[].source` | object | yes | no | — | The old books' figure, debit positive on the trial balance |
@@ -747,6 +761,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `undeposited.rows[].difference.minor_units` | integer | yes | no | — | — |
 | `vendor_1099` | object | yes | no | — | Each vendor on the old books' 1099 Summary: what it shows paid from January 1 to the cutover date against this company's 1099 summary for the same dates |
 | `vendor_1099.source` | string | yes | no | — | What the old books' side was read from |
+| `vendor_1099.basis` | literal["given", "derived"] | no | no | "given" | `given`: a figure from the old books or one the owner gave, checked against the rows or the books; `derived`: worked out from the rows themselves (a total left out, equity), so nothing independent checks it; a trial balance holding both says so per row |
 | `vendor_1099.source_total` | object | yes | no | — | — |
 | `vendor_1099.source_total.amount` | string | yes | no | — | — |
 | `vendor_1099.source_total.currency` | string | yes | no | — | — |
@@ -758,6 +773,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `vendor_1099.differences` | integer | yes | no | — | Rows that do not tie |
 | `vendor_1099.rows` | array[object] | yes | no | — | — |
 | `vendor_1099.rows[].name` | string | yes | no | — | The account, customer, job or vendor |
+| `vendor_1099.rows[].basis` | literal["given", "derived"] | no | no | "given" | `given`: a figure from the old books or one the owner gave, checked against the rows or the books; `derived`: worked out from the rows themselves (a total left out, equity), so nothing independent checks it |
 | `vendor_1099.rows[].record_id` | string \| null | yes | yes | — | The Bookflow record compared; null when nothing in the books stands for it |
 | `vendor_1099.rows[].column` | string | yes | no | — | `balance` for the trial balance; total, current, days_1_30, days_31_60, days_61_90 or over_90 for an aging |
 | `vendor_1099.rows[].source` | object | yes | no | — | The old books' figure, debit positive on the trial balance |
@@ -776,6 +792,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `clearing.amount` | string | yes | no | — | — |
 | `clearing.currency` | string | yes | no | — | — |
 | `clearing.minor_units` | integer | yes | no | — | — |
+| `checks` | array[object] | no | no | [] | Each total checked, given first then derived: every trial balance figure (each account's balance, receivables, payables, stock), so what was proved against a figure someone gave reads apart from what was only taken from the rows. `tied` needs every one to tie and the clearing account at 0.00 |
+| `checks[].name` | string | yes | no | — | What is checked: an account's balance, receivables, payables, stock |
+| `checks[].basis` | literal["given", "derived"] | yes | no | — | `given`: a figure from the old books or one the owner gave, checked against the rows or the books; `derived`: worked out from the rows themselves (a total left out, equity), so nothing independent checks it |
+| `checks[].source` | object | yes | no | — | The figure given or derived |
+| `checks[].source.amount` | string | yes | no | — | — |
+| `checks[].source.currency` | string | yes | no | — | — |
+| `checks[].source.minor_units` | integer | yes | no | — | — |
+| `checks[].books` | object | yes | no | — | Bookflow's figure as of the cutover date |
+| `checks[].books.amount` | string | yes | no | — | — |
+| `checks[].books.currency` | string | yes | no | — | — |
+| `checks[].books.minor_units` | integer | yes | no | — | — |
+| `checks[].difference` | object | yes | no | — | source less books; 0.00 ties |
+| `checks[].difference.amount` | string | yes | no | — | — |
+| `checks[].difference.currency` | string | yes | no | — | — |
+| `checks[].difference.minor_units` | integer | yes | no | — | — |
+| `checks[].tied` | boolean | yes | no | — | — |
+| `checks[].says` | string | yes | no | — | In a sentence, what the check proved: `tied to the 12,430.55 you gave` for a given figure, `taken from your invoice list; not independently checked` for a derived one |
 | `exceptions` | array[object] | yes | no | — | Problems that kept a figure from being compared |
 | `exceptions[].severity` | literal["blocking", "warning", "note"] | yes | no | — | `blocking` stops `cutover apply` until it is fixed or mapped; `warning` is reported and does not stop it; `note` says how something here differs from the old books by design |
 | `exceptions[].code` | string | yes | no | — | Stable name of the exception, e.g. unmapped_account or receivables_do_not_tie |
@@ -795,6 +828,7 @@ Example JSON output:
     "rows": [],
     "source": "value"
   },
+  "checks": [],
   "clearing": {
     "amount": "value",
     "currency": "USD",
@@ -802,6 +836,7 @@ Example JSON output:
   },
   "exceptions": [],
   "inventory": {
+    "basis": "given",
     "books_total": {
       "amount": "value",
       "currency": "USD",
@@ -824,6 +859,7 @@ Example JSON output:
     "source": "value"
   },
   "payables": {
+    "basis": "given",
     "books_total": {
       "amount": "value",
       "currency": "USD",
@@ -839,6 +875,7 @@ Example JSON output:
     }
   },
   "receivables": {
+    "basis": "given",
     "books_total": {
       "amount": "value",
       "currency": "USD",
@@ -856,6 +893,7 @@ Example JSON output:
   "summary": "value",
   "tied": false,
   "trial_balance": {
+    "basis": "given",
     "books_total": {
       "amount": "value",
       "currency": "USD",
@@ -871,6 +909,7 @@ Example JSON output:
     }
   },
   "undeposited": {
+    "basis": "given",
     "books_total": {
       "amount": "value",
       "currency": "USD",
@@ -886,6 +925,7 @@ Example JSON output:
     }
   },
   "vendor_1099": {
+    "basis": "given",
     "books_total": {
       "amount": "value",
       "currency": "USD",
