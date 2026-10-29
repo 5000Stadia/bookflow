@@ -210,12 +210,37 @@ def test_fresh_init_has_current_compatibility_schema(tmp_path):
         assert {"role_capabilities", "features"} <= tables
         assert _pk_columns(conn, "role_capabilities") == ["role", "capability", "required_role"]
         assert _pk_columns(conn, "features") == ["scope_type", "scope_id", "feature"]
-        assert seeded == CURRENT_ROLE_CAPABILITY_SEED
+        # A new install starts activated (R67), so its table is the current catalog's defaults:
+        # the frozen seed plus every default a later permission layer brought.
+        assert set(CURRENT_ROLE_CAPABILITY_SEED) <= set(seeded)
+        assert seeded == tuple(sorted(_catalog_role_defaults()))
         assert conn.execute("SELECT count(*) FROM features").fetchone()[0] == 0
 
 
+def _catalog_role_defaults() -> set[tuple[str, str, str]]:
+    from bookflow.hub import permission_runtime
+
+    return {(x.role, x.requirement.capability, x.requirement.threshold)
+            for x in permission_runtime.current_catalog().CATALOG.defaults}
+
+
 def test_frozen_role_capability_seed_matches_registry():
-    assert CURRENT_ROLE_CAPABILITY_SEED == _registry_role_capability_projection()
+    """The hub seed stopped growing at hub0013; the permission catalog carries every role default since.
+
+    `permission activate` writes `role_capabilities` as the rows already there plus the current
+    catalog's defaults, and a catalog upgrade does the same (both since 2026-09-14), so a capability
+    a later layer adds (`import`, `bank-feed`, `bulk-edit`) reaches a root's roles through its layer,
+    with no hub migration. What must hold: the seed names nothing the registry lacks, and the
+    catalog's defaults are exactly what the registry declares for every command capability, so an
+    activated root denies no role a command it was meant to run.
+    """
+    from bookflow.core.registry import all_commands
+
+    projection = set(_registry_role_capability_projection())
+    assert set(CURRENT_ROLE_CAPABILITY_SEED) <= projection
+    command_capabilities = {command.capability for command in all_commands()}
+    defaults = {row for row in _catalog_role_defaults() if row[1] in command_capabilities}
+    assert defaults == projection
 
 
 def test_populated_hub0004_upgrade_refreshes_complete_capabilities(tmp_path):
