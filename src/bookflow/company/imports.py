@@ -38,6 +38,7 @@ from bookflow.core.ids import new_id
 OWNER = batches.OWNER
 REFUSED_SHOWN = 20
 SAMPLE = 5
+BACKUP_ADVISED = 100  # a preview of more records than this advises `company backup` first (design §5)
 WRITES = ('created', 'updated')
 UNIT_PRICES = frozenset(('price', 'cost'))
 DOC_UNIT_PRICES = frozenset(('unit_price', 'unit_cost', 'price_basis_amount', 'rate', 'estimated_unit_cost'))
@@ -1483,12 +1484,7 @@ def run_slice(s, ctx, inp, *, interrupt=None) -> dict:
     stopped = False
     # A row may refer to a record a later row of the file makes (a job listed before its customer): that row runs
     # first, then this one. `waiting_on` finds the row by what it makes, among the rows not yet run.
-    waiting_on = {}
-    for stored in (_pending_rows(s, run['id'], 10 ** 9) if kind.noun in _references(kind).values() else ()):
-        payload = json.loads(stored['payload']) if stored['payload'] else None
-        text = books.selector(payload) if payload else None
-        if text:
-            waiting_on.setdefault(norm_key(text), stored)
+    waiting_on = _WaitingOn(s, run['id'], books) if kind.noun in _references(kind).values() else {}
     finished: set[int] = set()
 
     def process(stored: dict, chain: tuple = ()) -> RowPlan:
@@ -1569,6 +1565,25 @@ def run_slice(s, ctx, inp, *, interrupt=None) -> dict:
     if state != run['state']:
         _update_run(s, run, state=state)
     return show(s, ctx, run['id'], done_now=done_now)
+
+
+class _WaitingOn:
+    """The rows not yet run, by the record each makes, read only when a row first refers to a record of its own kind
+    that the books lack (a job before its customer): a slice of rows that never do reads none of them. Read once per
+    slice, whole, it cost every slice of a 10,000-row customer file a pass over the rest of the file (increment 5)."""
+
+    def __init__(self, s, run_id: str, books: 'Books'):
+        self.s, self.run_id, self.books, self.rows = s, run_id, books, None
+
+    def get(self, key, default=None):
+        if self.rows is None:
+            self.rows = {}
+            for stored in _pending_rows(self.s, self.run_id, 10 ** 9):
+                payload = json.loads(stored['payload']) if stored['payload'] else None
+                text = self.books.selector(payload) if payload else None
+                if text:
+                    self.rows.setdefault(norm_key(text), stored)
+        return self.rows.get(key, default)
 
 
 class _Refused(Exception):
@@ -1816,10 +1831,12 @@ def show(s, ctx, run_id: str, *, done_now: int = 0, prepared: dict | None = None
             next_ = f'import decide {run_id} (map, create or skip each unknown reference)'
         if mapping.get('decisions'):
             next_ = 'import preview again with ' + ', '.join(d['decision'] for d in mapping['decisions'])
+        elif not waiting and run['state'] == 'previewed' and run['row_count'] > BACKUP_ADVISED:
+            # §5: a preview over 100 records advises a backup first, in `next`; the importer takes none itself.
+            next_ = (f"company backup first ({run['row_count']:,} {'documents' if kinds.is_document(kind) else 'rows'}"
+                     f"; the import takes none), then import run {run_id}")
     elif run['state'] == 'done' and counts.get('refused'):
         next_ = f'import errors {run_id}'
-    if prepared is not None and len(prepared['rows']) > 100:
-        mapping['notes'] = list(mapping.get('notes', [])) + ['Over 100 rows: consider `company backup` first.']
     from bookflow.company.info import principal_names
     by = principal_names(s.company, {run['created_by']}).get(run['created_by'])
     return {

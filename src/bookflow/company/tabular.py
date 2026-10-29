@@ -31,11 +31,22 @@ from bookflow import BookflowError
 DELIMITERS = (',', ';', '\t', '|')
 DELIMITER_NAMES = {',': 'comma', ';': 'semicolon', '\t': 'tab', '|': 'pipe', 'xlsx': 'worksheet'}
 SNIFF_LINES = 50
-MAX_ROWS = 20_000  # data rows one file may hold, text or .xlsx (design §5's starting per-run cap)
+MAX_ROWS = 20_000  # data rows one file may hold, text or .xlsx: the per-run cap (bulk-import.md, increment 5)
 _CP1252_UNDEFINED = frozenset((0x81, 0x8D, 0x8F, 0x90, 0x9D))
 TRUE_WORDS = frozenset(('yes', 'true', '1', 'y', 't', 'on'))
 FALSE_WORDS = frozenset(('no', 'false', '0', 'n', 'f', 'off'))
 
+
+
+def too_many_rows(rows: int, field: str = 'content', **details) -> BookflowError:
+    """A file over the per-run cap, refused before anything is checked: its count and how to split it."""
+    files = -(-rows // MAX_ROWS)
+    return BookflowError('E_VALIDATION', message=(
+        f'The file has {rows:,} rows; one import reads at most {MAX_ROWS:,}. Split it into {files} files of at most '
+        f'{MAX_ROWS:,} rows each, each starting with the header row, and import them one after another as the same '
+        'source: the rows already in are never made twice.'),
+        details={'field': field, 'problem': 'too_many_rows', 'rows': rows, 'max_rows': MAX_ROWS, 'files': files,
+                 **details})
 
 class CellError(Exception):
     """A cell that cannot be read as its field's type: a stable ``code`` and a message a person reads."""
@@ -150,19 +161,20 @@ def read(raw: bytes | str, *, delimiter: str | None = None, header_row: bool = T
                             details={'field': 'delimiter'})
     reader = csv.reader(io.StringIO(text, newline=''), delimiter=delimiter)
     records: list[tuple[int, list[str]]] = []
-    line = 1
+    line, over, limit = 1, 0, MAX_ROWS + skip_rows + (1 if header_row else 0)
     try:
         for cells in reader:
             start, line = line, reader.line_num + 1
             if any(cell.strip() for cell in cells):
-                if len(records) >= MAX_ROWS + skip_rows + (1 if header_row else 0):
-                    raise BookflowError('E_VALIDATION', message=(
-                        f'The file has more than {MAX_ROWS:,} rows, beyond what one import reads; split it into '
-                        'smaller files.'), details={'field': 'content', 'problem': 'too_many_rows'})
+                if len(records) >= limit:
+                    over += 1  # counted, not kept: the refusal says how many rows the file has
+                    continue
                 records.append((start, [unguard(cell) for cell in cells]))
     except csv.Error as exc:
         raise BookflowError('E_VALIDATION', message=f'The file cannot be read as delimited text near line {line}: {exc}',
                             details={'field': 'content', 'line': line}) from None
+    if over:
+        raise too_many_rows(MAX_ROWS + over)
     records = records[skip_rows:]
     if not records:
         raise BookflowError('E_VALIDATION', message='The file has no rows.', details={'field': 'content'})

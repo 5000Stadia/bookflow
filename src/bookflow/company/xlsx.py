@@ -120,6 +120,7 @@ def read(raw: bytes, *, sheet: str | None = None, header_row: bool = True, skip_
     unsaved: list[str] = []
     errors: list[str] = []
     limit = tabular.MAX_ROWS + skip_rows + (1 if header_row else 0)
+    over = 0
     try:
         names = list(paths)
         if not names:
@@ -152,8 +153,8 @@ def read(raw: bytes, *, sheet: str | None = None, header_row: bool = True, skip_
                         held[cell['column']] = text
                 if held:
                     if len(records) >= limit:
-                        raise _refuse(f'The sheet has more than {tabular.MAX_ROWS:,} rows, beyond what one import '
-                                      'reads; split it into smaller files.', problem='too_many_rows', sheet=name)
+                        over += 1  # counted, not kept: the refusal says how many rows the sheet has
+                        continue
                     width = max(held)
                     records.append((line, [held.get(i, '') for i in range(1, width + 1)]))
     except BookflowError:
@@ -163,6 +164,8 @@ def read(raw: bytes, *, sheet: str | None = None, header_row: bool = True, skip_
                       'CSV.', problem='not_xlsx') from None
     finally:
         reader.archive.close()
+    if over:
+        raise tabular.too_many_rows(tabular.MAX_ROWS + over, field='attachment', sheet=name)
     if unsaved:
         raise _refuse(f'{len(unsaved)} cell(s) hold a formula whose result was never saved ('
                       + ', '.join(unsaved[:FORMULA_CELLS_SHOWN]) + '); open the file in a spreadsheet program and save '
