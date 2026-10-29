@@ -23,8 +23,10 @@ def test_email_later_and_a_batch_previewed_drafted_in_chunks_and_cancelled(regis
     b.viewport(width, 900)
     run = lambda name, payload: _command(b, env.site, name, payload)
     write = lambda name, payload: _command(b, env.site, name, payload, **{'X-Bookflow-Reason': 'Browser test'})
+    # Riverside's one invoice is the demo's own DEMO-PIPE-INV-1, already sent by hand (M-1001), so the batch skips it
+    # as sent; Tax Work Example Customer's unsent invoice stands in.
     for name, address, method in (('Lakeside Dental', 'ap@lakeside.example', 'email'),
-                                  ('Riverside Apartments', 'office@riverside.example', 'email'),
+                                  ('Tax Work Example Customer', 'ap@taxwork.example', 'email'),
                                   ('Commercial Example Customer', 'ap@commercial.example', 'mail')):
         write('customer.update', {'customer': name, 'email': address, 'preferred_delivery_method': method})
     invoice = run('invoice.show', {'invoice': 'DEMO-SALE-INV-ACTIVE'})
@@ -52,10 +54,10 @@ def test_email_later_and_a_batch_previewed_drafted_in_chunks_and_cancelled(regis
     _shot(b, width, 'batch-preview')
     if width == 390:
         _fits(b)
-    # Leave Riverside out, then Draft: the page loops through its chunks until done.
+    # Leave Tax Work out, then Draft: the page loops through its chunks until done.
     b.evaluate('''(() => { window.__sameDocument = true;
         const box = [...document.querySelectorAll("[data-batch-items] input[name=keep]")]
-            .find(x => x.closest("tr").innerText.includes("Riverside"));
+            .find(x => x.closest("tr").innerText.includes("Tax Work"));
         box.click(); document.querySelector("[data-batch-draft]").click(); })()''')
     b.wait_for('!!document.querySelector("[data-batch-number]") && !document.querySelector("[data-batch-continue]")'
                ' || !!document.querySelector("[data-batch-error]")', timeout=90)
@@ -88,8 +90,9 @@ def test_a_batch_left_unfinished_is_found_again_and_refusals_keep_the_batch_in_p
     b.viewport(1440, 900)
     run = lambda name, payload: _command(b, env.site, name, payload)
     write = lambda name, payload: _command(b, env.site, name, payload, **{'X-Bookflow-Reason': 'Browser test'})
-    for name, address in (('Lakeside Dental', 'ap@lakeside.example'), ('Riverside Apartments',
-                                                                        'office@riverside.example')):
+    # Riverside's one invoice is already sent in the demo (M-1001); Tax Work Example Customer's stands in.
+    for name, address in (('Lakeside Dental', 'ap@lakeside.example'), ('Tax Work Example Customer',
+                                                                        'ap@taxwork.example')):
         write('customer.update', {'customer': name, 'email': address, 'preferred_delivery_method': 'email'})
     invoice = run('invoice.show', {'invoice': 'DEMO-SALE-INV-ACTIVE'})
 

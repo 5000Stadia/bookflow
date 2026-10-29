@@ -533,6 +533,88 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   1600x1200 and 320x240, headers, the item list, the pick screen, Remove; nothing scrolls sideways; a photo with EXIF
   orientation 6 stored upright; a broken image shows "No picture"; an unswapped failure shows its message).
 
+### As built: increment 2 (camera scanning)
+
+- **The seam.** `static/camera-scan.js` holds the registry (`bookflowDecoders`: `register`, `names`, `order`,
+  `choose`, `active`, `setRegisterOrder`, `setDeviceOrder`) and the overlay; it names no decoder. Each adapter is one
+  file that registers itself: `scan-decoder-native.js` (BarcodeDetector; available when the class exists and offers
+  EAN-13 or Code 128) and `scan-decoder-zxing-wasm.js`. The first name in the order whose `available()` is true is
+  loaded the first time the camera opens; one that fails to load is skipped for the next, and when none works the
+  overlay says so and names why each was passed over. Formats asked for: EAN-13, EAN-8, UPC-A, UPC-E, Code 128, Code
+  39, ITF, QR and DataMatrix, reported in BarcodeDetector's names whichever decoder read them.
+- **The order.** First match wins: this device (`localStorage` `bookflow.scan.decoders`, set from the overlay's
+  *Decoder* menu: "Automatic (…, from the host)" or one decoder only); the register (`setRegisterOrder`, a seam the
+  register increment calls with §2's override; nothing calls it yet); the host (`<meta name="bookflow-scan-decoders">`
+  on every workbench page, from `bookflow serve --scan-decoders`, else `BOOKFLOW_SCAN_DECODERS`, else
+  `native,zxing-wasm`); then that default. `core/scan_decoders.py` refuses an unknown name, a repeat or an empty list
+  (`E_VALIDATION`) when the host starts; `serve` prints the order it carries. No command, permission layer or
+  migration: the setting is the host's, like `--public-origin`.
+- **Vendored zxing-wasm 3.1.5.** `static/vendor/zxing-wasm/3.1.5/`: the IIFE reader (`zxing-reader.js`, 36,583
+  bytes), `zxing_reader.wasm` (966,895 bytes) and the MIT `LICENSE`, with `VENDORED.md` (source, tarball integrity,
+  SHA-256 of each file, and the safety pass). The adapter replaces the module's `locateFile` (its default is
+  jsDelivr) and `instantiateWasm`: streaming compile from the vendored path, else fetch the bytes and compile from an
+  ArrayBuffer. `GET /static/vendor/<package>/<version>/<file>` serves `.js`, `.wasm` (as `application/wasm`), `.md`
+  and a licence file, cached as immutable; plain path parts only, no link on the way, regular files only, everything
+  else 404. The flat `/static/<name>` route now answers only regular files (a folder was a 500). Frames over 1,280 px on a side are scaled down before
+  decoding.
+- **The overlay.** Fixed over the lower half of a phone (a 28 rem panel at the lower right from 768 px), appended to
+  `<html>` rather than `<body>` so it survives the pick and count screens' whole-body swaps. Rear camera
+  (`facingMode: environment`, 1280x720 ideal), a framing box, Torch when the track reports `torch`, about 8 decodes
+  a second, Close and Escape. A code read goes to `bookflowScan.scan(field, text)`, which queues it behind any typed
+  scans and runs scan.js's own `look` (one `barcode lookup`, then the mode's placing); the only difference from a
+  typed scan is that it does not move focus (on a phone that would raise the keyboard over the camera). Found: one
+  1,000 Hz 80 ms beep (Web Audio, made on the tap that opened the overlay), a 40 ms vibration, the field's own message
+  in the overlay. Unknown or refused (the field's status is not "ok", e.g. "Assign to an item" or "Nothing was
+  added"): two 330 Hz 120 ms beeps and a 120-80-120 ms vibration. Sound is a per-device checkbox (default on);
+  vibration ignores it. Sixty seconds with no code stops the camera and offers *Start again*. The pack screen, whose
+  scan input is a plain form field rather than a Scan field, gets the same button: the code is put in its field and
+  the form submitted, as Enter would.
+- **De-duplication (settled by the Navigator for Kabe's "holding a can still is one scan; scanning it again adds
+  one").** Memory is kept per code: every code in view is taken once, whatever else is in the frame (a bin label beside
+  an item, a UPC beside a QR), and is taken again only after that code itself has left the frame, unread for 5 decodes
+  in a row (about 0.6 s at 8 a second). There is no time-based re-take while a code stays in view, so a missed frame
+  never re-arms it. This settles §7's "left the frame or 1.5 s" in favour of "left the frame". The constants
+  (`FRAME_MS`, `LEFT_FRAME_DECODES`, `IDLE_MS`, `BROKEN_DETECTS`) sit at the top of camera-scan.js for the phone trial.
+- **Lifecycle.** Each open and close starts a new session: a code is delivered to the field it was read for, and a
+  code read before Close is dropped, never delivered (or beeped) after it. Only the newest start owns the camera: a
+  start replaced by another (a double tap) or by Close asks for no camera, stops any stream it is handed late and runs
+  no decode loop, so once Close returns every track the page opened has ended. If the field the overlay serves has
+  gone (a pick list completed, the page left), the overlay says so and stops the camera. A decoder whose `detect()`
+  throws 10 times in a row is passed over for the next in the order, with a message.
+- **Keyboard scanner beside the camera.** While the overlay is open, Escape closes it, and a keyboard-mode scanner's
+  keys that land on no text field are gathered and entered in the Scan field on Enter (scan.js's own look-up) without
+  focusing it, so a phone's keyboard never rises over the camera. An unknown camera code is left in the field selected,
+  so the next scan replaces it. The pack screen's `autofocus` is stripped from swapped-in pages while the camera is
+  open. With the camera open the page gets bottom padding the overlay's height, so its last lines scroll clear of it.
+- **No secure context.** `window.isSecureContext` (with `getUserMedia`) decides. Otherwise the button opens the
+  phone's camera for one photo (`accept="image/*" capture="environment"`), decoded through the same decoder
+  (`createImageBitmap` with EXIF orientation, then `detect(canvas)`), then the same path. The overlay shows "Live
+  scanning needs a secure connection. Until Bookflow is set up with HTTPS, each tap takes one photo." once per
+  session (`sessionStorage`), adding "Live scanning works at <origin>." when the host has an https public origin
+  (`/secure-context`). A photo with no barcode says so and buzzes. The button shows where `navigator.mediaDevices`
+  exists or the pointer is coarse (a phone on plain http has no `mediaDevices`).
+- **Tests.** `tests/test_camera_scan_browser.py`, real headless Chrome at 390 px, the fake camera playing a Y4M made
+  at test time by `tests/barcode_images.py`, Chrome resolving no host but 127.0.0.1, and every tone and camera stream
+  the page starts recorded: live on the pick screen, the bin label and the sealant three times fill a two-line list
+  line after line with a 1,000 Hz tone each; live on the count screen, two labels in one frame for 4 s are each
+  counted once; the photo path on the pick screen (page made insecure) with the message once a session, and an
+  unknown code playing two 330 Hz tones, leaving the list unchanged and the code selected in the field; the decoder
+  following `BOOKFLOW_SCAN_DECODERS` from host start to page (default runs a stand-in native, `zxing-wasm` runs
+  zxing-wasm) and the device override; a decoder that will not load, and one whose detect keeps throwing, passed over;
+  close during start-up asking for no camera, a double start and close-and-reopen leaving one live camera and every
+  track `ended` after Close, codes queued before Close not delivered, a keyboard scanner entering a bin label with the
+  overlay open, Escape closing it. `tests/test_camera_scan_vendored.py`: every file under `static/vendor` sits in a
+  folder with a VENDORED.md listing it with its hash; the reader's own wasm hash; no URL in the camera files; the
+  setting's resolution and refusals; `bookflow serve --scan-decoders` checked before anything opens; the vendor and
+  flat static routes refusing traversal, encoded separators, links and unlisted suffixes. The keyboard tests
+  (`test_barcode_scan_browser`, `test_pick_list_browser`, `test_inventory_count_browser`, `test_pack_browser`) pass
+  unchanged.
+- **For Kabe's phone trial (not verified here).** Real cameras on Android Chrome (native) and iOS Safari
+  (zxing-wasm), over `localhost`/HTTPS and plain LAN http; ten items in a row into a cart once the POS exists
+  (criterion 4's cart half waits for increment 5); the beep's audibility and the vibration; torch on a real track;
+  the de-dup constants; and §12's "camera scan to cart line within 500 ms", which is a phone measurement and is not
+  recorded yet. The headless run only shows the path works: the fake camera is a clean synthetic picture.
+
 ## 16. Open questions
 
 Each default stands if nobody decides. K1 and K2 are Kabe's.
