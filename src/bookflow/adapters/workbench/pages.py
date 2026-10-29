@@ -262,6 +262,11 @@ def _tracks_numbers(request, company_id, run):
 EFFECTIVE: ContextVar[Any] = ContextVar("bookflow_effective_capabilities", default=None)
 
 
+def hub_reader_uri(data_root) -> str:
+    """A read-only SQLite address for the hub, with '#', '?' and '%' in the data root percent-encoded."""
+    return (Path(data_root) / "hub.db").resolve().as_uri() + "?mode=ro"
+
+
 def _role_allows(cmd: registry.Command, record: dict[str, Any], *, hub_admin: bool = False) -> bool:
     effective = EFFECTIVE.get()
     if effective is not None and cmd is not None and record.get("company_id") in (None, effective.company_id):
@@ -286,9 +291,7 @@ def _feature_offers(cmd: registry.Command, info: dict[str, Any]) -> bool:
 
 def _company_offers(cmd: registry.Command, company_view: dict[str, Any], *, hub_admin: bool = False) -> bool:
     """Whether a company page may offer this command: the role allows it and the company enables it."""
-    return _role_allows(cmd, company_view, hub_admin=hub_admin) and _feature_offers(cmd, company_view.get("info", {})) and (
-        company_view.get("info", {}).get("estimates_enabled", True)
-        or cmd.name not in ("estimate create", "estimate copy", "proposal estimate"))
+    return _role_allows(cmd, company_view, hub_admin=hub_admin) and Home.features_offer(cmd, company_view.get("info", {}))
 
 
 def _may_publish_presence(record: dict[str, Any], *, hub_admin: bool = False) -> bool:
@@ -771,8 +774,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         import sqlite3
         from contextlib import closing
         try:
-            uri = (host.data_root / "hub.db").resolve().as_uri() + "?mode=ro"  # percent-encodes '#', '?', '%'
-            with closing(sqlite3.connect(uri, uri=True, timeout=0.5)) as db:
+            with closing(sqlite3.connect(hub_reader_uri(host.data_root), uri=True, timeout=0.5)) as db:
                 row = db.execute("SELECT token FROM authority_generation WHERE id=1").fetchone()
         except sqlite3.Error:
             return None
@@ -1266,6 +1268,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             show = run(request, "company show", {}, company_id)
         except BookflowError as e:
             return JSONResponse({"error": e.to_dict()}, status_code=STATUS.get(e.code, 400))
+        if navigation(request, show)["minimal"]:  # nothing to navigate: no finder (design/point-of-sale.md §9)
+            return JSONResponse({"items": []}, headers={"Cache-Control": "no-store"})
         index = Home.finder_index(
             show["company_id"], _grouped_nouns(company_noun_rows(request, show), company=True),
             permits=company_permits(request, show),

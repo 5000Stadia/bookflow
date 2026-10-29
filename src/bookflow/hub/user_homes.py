@@ -91,6 +91,7 @@ def effective_in(db, user_id: str, company_id: str, principal: str | None = None
 
 def permits_for(s, user_id: str, company: dict[str, Any], effective: Effective | None = None) -> Callable[[Any], bool]:
     """Whether the person may run a company command there: effective capabilities, else (legacy) their role."""
+    from bookflow.adapters.workbench import home as Home
     from bookflow.hub import access
     effective = effective_for(s, user_id, company["id"]) if effective is None else effective
     user = s.hub.raw.execute("SELECT hub_admin, active FROM main.users WHERE id=?", (user_id,)).fetchone()
@@ -102,8 +103,10 @@ def permits_for(s, user_id: str, company: dict[str, Any], effective: Effective |
             if best is None or access.ROLE_RANK[role] > access.ROLE_RANK[best]:
                 best = role
 
+    info = _switches(s, company)
+
     def permits(cmd) -> bool:
-        if cmd is None or not (user and user[1]):
+        if cmd is None or not (user and user[1]) or not Home.features_offer(cmd, info):
             return False
         decided = effective.decide(cmd)
         if decided is not None:
@@ -112,6 +115,21 @@ def permits_for(s, user_id: str, company: dict[str, Any], effective: Effective |
             return False
         return access.role_satisfies(best, "company", cmd.required_role, hub_admin)
     return permits
+
+
+def _switches(s, company: dict[str, Any]) -> dict[str, Any]:
+    """The company's feature switches, read from its own books (read-only); the defaults when they cannot be read."""
+    import sqlite3
+    from contextlib import closing
+    row = s.hub.raw.execute("SELECT path FROM main.companies WHERE id=?", (company["id"],)).fetchone()
+    try:
+        uri = (s.data_root / row[0] / "company.db").resolve().as_uri() + "?mode=ro"
+        with closing(sqlite3.connect(uri, uri=True, timeout=0.5)) as db:
+            db.row_factory = sqlite3.Row
+            found = dict(db.execute("SELECT * FROM company_info LIMIT 1").fetchone() or {})
+    except (sqlite3.Error, TypeError, OSError):
+        return {}
+    return {key: bool(found[key]) for key in ("pick_and_pack_enabled", "estimates_enabled") if key in found}
 
 
 def reader_for(s, user_id: str, company: dict[str, Any]):

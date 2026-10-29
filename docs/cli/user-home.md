@@ -74,8 +74,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `home` | object \| null | no | yes | null | Null when no Home is set: signing in lands as it always has. |
 | `home.company_id` | string | yes | no | — | — |
 | `home.company_name` | string \| null | no | yes | null | Null when the company is no longer here. |
-| `home.path` | string | yes | no | — | The page under /c/<company>/; empty for the Overview. |
-| `home.url` | string | yes | no | — | Where the Home button and signing in land: /c/<company>/<path>. |
+| `home.page` | string | yes | no | — | The page under /c/<company>/; empty for the Overview. |
+| `home.url` | string | yes | no | — | Where the Home button and signing in land: /c/<company>/<page>. |
 | `home.available` | boolean | yes | no | — | Whether the person may open it now; when false they land on the Overview. |
 | `home.unavailable_reason` | string \| null | no | yes | null | — |
 | `home.version` | integer | yes | no | — | — |
@@ -200,8 +200,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `home` | object \| null | no | yes | null | Null when no Home is set: signing in lands as it always has. |
 | `home.company_id` | string | yes | no | — | — |
 | `home.company_name` | string \| null | no | yes | null | Null when the company is no longer here. |
-| `home.path` | string | yes | no | — | The page under /c/<company>/; empty for the Overview. |
-| `home.url` | string | yes | no | — | Where the Home button and signing in land: /c/<company>/<path>. |
+| `home.page` | string | yes | no | — | The page under /c/<company>/; empty for the Overview. |
+| `home.url` | string | yes | no | — | Where the Home button and signing in land: /c/<company>/<page>. |
 | `home.available` | boolean | yes | no | — | Whether the person may open it now; when false they land on the Overview. |
 | `home.unavailable_reason` | string \| null | no | yes | null | — |
 | `home.version` | integer | yes | no | — | — |
@@ -315,8 +315,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `home` | object \| null | no | yes | null | Null when no Home is set: signing in lands as it always has. |
 | `home.company_id` | string | yes | no | — | — |
 | `home.company_name` | string \| null | no | yes | null | Null when the company is no longer here. |
-| `home.path` | string | yes | no | — | The page under /c/<company>/; empty for the Overview. |
-| `home.url` | string | yes | no | — | Where the Home button and signing in land: /c/<company>/<path>. |
+| `home.page` | string | yes | no | — | The page under /c/<company>/; empty for the Overview. |
+| `home.url` | string | yes | no | — | Where the Home button and signing in land: /c/<company>/<page>. |
 | `home.available` | boolean | yes | no | — | Whether the person may open it now; when false they land on the Overview. |
 | `home.unavailable_reason` | string \| null | no | yes | null | — |
 | `home.version` | integer | yes | no | — | — |

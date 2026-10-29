@@ -1052,6 +1052,8 @@ def finder_index(company_id: str, grouped, *, permits, heading, plural, selector
     entries: dict[str, dict[str, Any]] = {}
 
     def add(label: str, href: str, section: str, kind: str, *keywords: str) -> None:
+        if not page_allowed(href[len(base):] or "/", permits):
+            return  # a noun's own page may also be a declared page that runs more (the accountant's)
         entry = entries.get(href)
         if entry is None:
             entries[href] = dict(label=label, href=href, section=section, kind=kind, keywords=list(keywords))
@@ -1087,7 +1089,8 @@ def finder_index(company_id: str, grouped, *, permits, heading, plural, selector
                 elif verb.verb == "list":
                     continue
                 elif verb.verb == "show" and not selector(verb, noun):
-                    add(heading(noun, "show"), noun_base + "/self", where, "page", verb.name)
+                    if not verb.input_model.model_fields:  # a show that needs input is a form, not a page to open
+                        add(heading(noun, "show"), noun_base + "/self", where, "page", verb.name)
                 elif verb.verb == "show":
                     # The show form picks one record and opens it.
                     title = heading(noun, "show").lower()
@@ -1162,6 +1165,15 @@ def offered_menu(company_id: str, permits, rows=None) -> list[MenuGroup]:
         return [entry for entry in MENU if permits.flag(f"section:{entry.slug}")]
     rows = company_rows(permits) if rows is None else rows
     return [entry for entry in MENU if section_offers(company_id, entry, permits, rows)]
+
+
+def features_offer(command, info: dict[str, Any]) -> bool:
+    """Whether the company's switches offer the command: pick lists (R181 K3) are off until turned on, and new
+    estimates follow `estimates_enabled`. The workbench and `user home set` both ask this."""
+    if command.name.startswith("pick-list ") and not info.get("pick_and_pack_enabled", False):
+        return False
+    return bool(info.get("estimates_enabled", True)) or command.name not in ("estimate create", "estimate copy",
+                                                                               "proposal estimate")
 
 
 class Reader:
