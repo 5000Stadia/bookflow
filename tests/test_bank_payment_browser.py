@@ -19,7 +19,13 @@ def test_a_bank_payment_reads_as_one_in_the_register_and_on_its_page(register_br
       [r.querySelector('.reg-memo').textContent, r.querySelector('.reg-ref').textContent])""")
     by_memo = {memo: ref for memo, ref in refs}
     assert by_memo['Debit card fuel'].startswith('Bank payment'), refs
-    assert paid['number'] not in by_memo['Debit card fuel'].split(' · ')[0], refs
+    # A bank payment's own result carries no number (R183 fix round 3, 619cb8c0); its journal's document
+    # reference is still there behind it, and the register must not show it as though it were a check number.
+    assert paid['number'] is None, paid
+    rows = _command(b, env.site, 'register.query', {'account': env.bank['id'], 'date_from': '2026-10-01',
+                                                    'date_to': '2026-10-31'})['rows']
+    [reference] = [r['transaction_number'] for r in rows if r['transaction_id'] == paid['id']]
+    assert reference and reference not in by_memo['Debit card fuel'].split(' · ')[0], (reference, refs)
     assert by_memo['Paper cheque'].startswith(f"{cheque['document']['check_number']} · Check"), refs
 
     b.navigate(f"{env.site.base_url}/c/{env.site.company_id}/check/{paid['id']}")
