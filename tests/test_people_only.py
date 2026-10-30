@@ -33,7 +33,9 @@ def test_the_people_only_list_is_exactly_the_five_and_every_other_entry_is_a_cap
     tip = runtime.current_catalog()
     # bulk-edit-v1 (on item-picture-v1) adds none: every record changes through its own update command, as the caller.
     # bank-line-details-v1 (on bulk-edit-v1) adds none: a deposit or bill payment from a line runs its own command.
-    assert tip is runtime.known_catalog(c.BANK_LINE_DETAILS_POLICY_VERSION)
+    # user-home-v1 (R191, on bank-line-details-v1) adds none: one's own Home is self-service and another's is
+    # user.manage, a capability.
+    assert tip is runtime.known_catalog(c.USER_HOME_POLICY_VERSION)
     assert people_only.people_only_commands() == FIVE == set(layer.STAYS_HUMAN)
     assert sorted(a.key for a in tip.CATALOG.admin_actions if a.human_only) == sorted(
         people_only.PEOPLE_ONLY_PREFIX + x for x in FIVE)
@@ -379,7 +381,7 @@ def test_a_root_activated_at_the_previous_catalog_upgrades_with_nothing_broader_
                                                      "expected_catalog_sha256": state["catalog_sha256"]}, headers=REASON)
         assert upgraded["changed"] and upgraded["affected_agents"] == []
         with sqlite3.connect((root / "hub.db").as_uri() + "?mode=ro", uri=True) as db:
-            assert db.execute("SELECT catalog_version FROM permission_state").fetchone() == ("bank-line-details-v1",)  # the tip, on bulk-edit-v1
+            assert db.execute("SELECT catalog_version FROM permission_state").fetchone() == ("user-home-v1",)  # the tip, on bank-line-details-v1
             assert db.execute("SELECT count(*) FROM agent_authority WHERE suspended_at IS NOT NULL AND agent_user_id=?",
                               (agent,)).fetchone() == (0,)
             assert db.execute("SELECT count(*) FROM api_tokens WHERE revoked_at IS NOT NULL").fetchone() == (0,)

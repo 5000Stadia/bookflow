@@ -159,8 +159,10 @@ def test_the_home_window_runs_only_read_commands_while_rendering(hosted, monkeyp
     ran.clear()
     assert browser.get(f"/c/{hosted.company_id}/").status_code == 200
     # The page itself waits on the company and, since R106, who is clocked in (the banner);
-    # the figures load from their own route.
-    assert ran == ["company show", "clock status"], ran
+    # the figures load from their own route. Since R191 the reader's effective capabilities are read once, with the
+    # company (and reused while the hub's authority generation is unchanged), so every menu, tile and control on the
+    # page asks what the command boundary asks.
+    assert [name for name in ran if name != "membership effective"] == ["company show", "clock status"], ran
     assert not any(registry.get(name).is_write for name in ran), ran
     ran.clear()
     assert browser.get(f"/c/{hosted.company_id}/_overview").status_code == 200

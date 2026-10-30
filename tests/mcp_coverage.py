@@ -342,11 +342,14 @@ BIN_COMMANDS = frozenset(('bin activate', 'bin create', 'bin deactivate', 'bin l
     'cycle-class activate', 'cycle-class create', 'cycle-class deactivate', 'cycle-class list', 'cycle-class show',
     'cycle-class update', 'cycle-count classify', 'cycle-count due', 'report items-by-bin'))
 
+# R191: each person's Home, set, shown and cleared.
+USER_HOME_COMMANDS = frozenset(('user home set', 'user home show', 'user home clear'))
+
 # R107 increment 6: grid edits, previewed, applied, shown and reversed.
 BULK_EDIT_COMMANDS = frozenset(('bulk-edit columns', 'bulk-edit grid', 'bulk-edit preview', 'bulk-edit apply',
                                 'bulk-edit reverse', 'bulk-edit show', 'bulk-edit query'))
 
-FROZEN_COMMANDS = BULK_EDIT_COMMANDS | ITEM_PICTURE_COMMANDS | BANK_FEED_COMMANDS | IMPORT_COMMANDS | DELIVERY_COMMANDS | SETUP_TRIAL_COMMANDS | SHIPMENT_COMMANDS | AGENT_SETUP_COMMANDS | VERIFY_COMMANDS | FIFO_COMMANDS | LANDED_COST_COMMANDS | BIN_COMMANDS | SERIAL_LOT_COMMANDS | PERF_COMMANDS | SCHEDULING_COMMANDS | INVENTORY_COUNT_COMMANDS | BARCODE_COMMANDS | CHECK_PRINTING_COMMANDS | ACCOUNTANT_REVIEW_COMMANDS | TIMEKEEPING_COMMANDS | INVENTORY_SITE_COMMANDS | PARTIAL_PO_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
+FROZEN_COMMANDS = USER_HOME_COMMANDS | BULK_EDIT_COMMANDS | ITEM_PICTURE_COMMANDS | BANK_FEED_COMMANDS | IMPORT_COMMANDS | DELIVERY_COMMANDS | SETUP_TRIAL_COMMANDS | SHIPMENT_COMMANDS | AGENT_SETUP_COMMANDS | VERIFY_COMMANDS | FIFO_COMMANDS | LANDED_COST_COMMANDS | BIN_COMMANDS | SERIAL_LOT_COMMANDS | PERF_COMMANDS | SCHEDULING_COMMANDS | INVENTORY_COUNT_COMMANDS | BARCODE_COMMANDS | CHECK_PRINTING_COMMANDS | ACCOUNTANT_REVIEW_COMMANDS | TIMEKEEPING_COMMANDS | INVENTORY_SITE_COMMANDS | PARTIAL_PO_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
 account create
 account deactivate
 account list
@@ -906,6 +909,7 @@ def execution_map():
     from tests.test_bank_feed_surfaces import COMMANDS as BANK_FEED_SURFACE_COMMANDS
     from tests.test_item_pictures_surfaces import COMMANDS as ITEM_PICTURE_SURFACE_COMMANDS
     from tests.test_bulk_edit_surfaces import COMMANDS as BULK_EDIT_SURFACE_COMMANDS
+    from tests.test_user_home_surfaces import COMMANDS as USER_HOME_SURFACE_COMMANDS
     from tests.test_inventory_count_surfaces import COMMANDS as INVENTORY_COUNT_SURFACE_COMMANDS
     from tests.test_scheduling_surfaces import COMMANDS as SCHEDULING_SURFACE_COMMANDS
     from tests.test_perf_surfaces import COMMANDS as PERF_SURFACE_COMMANDS
@@ -1013,6 +1017,7 @@ def execution_map():
                    'tests/test_bank_feed_surfaces.py::test_the_same_bank_import_through_python_cli_http_and_mcp' if cmd.name in BANK_FEED_SURFACE_COMMANDS else  # all four
                    'tests/test_item_pictures_surfaces.py::test_the_same_item_picture_through_python_cli_http_and_mcp' if cmd.name in ITEM_PICTURE_SURFACE_COMMANDS else  # all four
                    'tests/test_bulk_edit_surfaces.py::test_the_same_grid_edit_through_python_cli_http_and_mcp' if cmd.name in BULK_EDIT_SURFACE_COMMANDS else  # all four
+                   'tests/test_user_home_surfaces.py::test_the_same_home_through_python_cli_http_and_mcp' if cmd.name in USER_HOME_SURFACE_COMMANDS else  # all four
                    'tests/test_inventory_count_surfaces.py::test_the_same_count_through_python_cli_http_and_mcp' if cmd.name in INVENTORY_COUNT_SURFACE_COMMANDS else  # all four
                    'tests/test_scheduling_surfaces.py::test_the_same_to_dos_notices_and_reminders_through_python_cli_http_and_mcp' if cmd.name in SCHEDULING_SURFACE_COMMANDS else  # all four
                    'tests/test_perf_surfaces.py::test_the_same_timings_report_through_python_cli_http_and_mcp' if cmd.name in PERF_SURFACE_COMMANDS else  # all four
