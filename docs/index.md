@@ -165,6 +165,7 @@ An AI agent installing Bookflow for someone starts with the agent install page: 
 - [`unit-of-measure query`](cli/unit-of-measure-query.md)
 - [`upgrade`](cli/upgrade.md)
 - [`user`](cli/user.md)
+- [`user home`](cli/user-home.md)
 - [`vehicle`](cli/vehicle.md)
 - [`vendor`](cli/vendor.md)
 - [`vendor query`](cli/vendor-query.md)
@@ -523,4 +524,5 @@ An AI agent installing Bookflow for someone starts with the agent install page: 
 - [`hub/pending_config`](schema/hub/pending_config.md)
 - [`hub/permission_state`](schema/hub/permission_state.md)
 - [`hub/role_capabilities`](schema/hub/role_capabilities.md)
+- [`hub/user_homes`](schema/hub/user_homes.md)
 - [`hub/users`](schema/hub/users.md)

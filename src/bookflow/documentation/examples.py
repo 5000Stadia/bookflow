@@ -2048,3 +2048,10 @@ EXAMPLES.update({
     'item picture get': Example(f'bookflow item picture get {ID} --out sealant.jpg --company "Demo Plumbing Co" --json',
                                 {'attachment': ID}),
 })
+# R191: each person's Home -- the page signing in and the Home button land on.
+EXAMPLES.update({
+    'user home set': Example('bookflow user home set --page report/profit-and-loss --company "Demo Plumbing Co" --json',
+                             {'page': 'report/profit-and-loss', 'company': 'Demo Plumbing Co'}),
+    'user home show': Example('bookflow user home show --json', {}),
+    'user home clear': Example('bookflow user home clear --user jordan --json', {'user': 'jordan'}),
+})

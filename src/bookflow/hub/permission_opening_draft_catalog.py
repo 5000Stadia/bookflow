@@ -1,4 +1,4 @@
-"""Add guided opening balances (R107 increment 7) on bank-line-details-v1, without rewriting any accepted descriptor.
+"""Add guided opening balances (R107 increment 7) on user-home-v1, without rewriting any accepted descriptor.
 
 `opening-draft show` and `query` are member reads and `create`, `update`, `discard`, `plan`, `apply`, `tie-out` and
 `reverse` standard writes, under the existing capability `import` (design/bulk-import.md §8); every posting is the
@@ -13,10 +13,10 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_bank_line_details_catalog as previous, permission_catalog as c
+from . import permission_user_home_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = '0b3769e84c061467ebb6e11adfdc75cf8ba5d443'
+SOURCE_COMMIT = '5c2616b3277b67fba83914f63cbef741b786673f'
 ACCEPT_CAPABILITY = 'opening.accept-differences'
 _OWNER = 'bookflow.commands.opening_draft_cmds.{}|src/bookflow/commands/opening_draft_cmds.py'
 # (name, threshold, planner)

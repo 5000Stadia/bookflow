@@ -1873,47 +1873,62 @@ def test_sigint_wakes_a_live_stream_and_cleans_the_host(root):
     env = provenance.child_env(BOOKFLOW_DATA_ROOT=str(root))
     proc = subprocess.Popen([str(BIN), "serve", "--bind", f"127.0.0.1:{port}"],
                             env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    descriptor = root / "host.json"
-    deadline = time.monotonic() + 10
-    while time.monotonic() < deadline and not descriptor.exists() and proc.poll() is None:
-        time.sleep(0.03)
-    assert descriptor.exists(), proc.communicate(timeout=2)
-    socket_file = json.loads(descriptor.read_text())["socket"]
-    idle_ready = threading.Event()
-    ended = []
-
-    def follow():
-        try:
-            with httpx.stream("GET", f"http://127.0.0.1:{port}/hub-events?after={start}", headers={
-                "Authorization": f"Bearer {issued['secret']}",
-            }, timeout=15) as response:
-                for line in response.iter_lines():
-                    if line == ": ready":
-                        idle_ready.set()
-                    if line.startswith("event: error"):
-                        ended.append(line)
-                        break
-        except Exception as e:  # noqa: BLE001 - surfaced in the assertions and process stderr
-            ended.append(repr(e))
-
-    follower = threading.Thread(target=follow, daemon=True)
-    follower.start()
-    assert idle_ready.wait(5), "the event stream never reached its idle wait"
-    time.sleep(0.75)  # let the generator resume from the ready comment into event.wait()
-    began = time.monotonic()
-    proc.send_signal(signal.SIGINT)
     try:
+        descriptor = root / "host.json"
+
+        def listening() -> bool:
+            try:
+                socket.create_connection(("127.0.0.1", port), timeout=1).close()
+                return True
+            except OSError:
+                return False
+
+        # Startup is bounded by readiness, not a fixed delay: under a loaded machine serve can take well over a
+        # few seconds to write its descriptor and bind. 60 s is the outer limit; an exit ends the wait at once.
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline and proc.poll() is None and not (descriptor.exists() and listening()):
+            time.sleep(0.05)
+        assert proc.poll() is None and descriptor.exists() and listening(), \
+            f"serve not ready (exit {proc.poll()})"
+        socket_file = json.loads(descriptor.read_text())["socket"]
+        idle_ready = threading.Event()
+        ended = []
+
+        def follow():
+            try:
+                with httpx.stream("GET", f"http://127.0.0.1:{port}/hub-events?after={start}", headers={
+                    "Authorization": f"Bearer {issued['secret']}",
+                }, timeout=60) as response:
+                    for line in response.iter_lines():
+                        if line == ": ready":
+                            idle_ready.set()
+                        if line.startswith("event: error"):
+                            ended.append(line)
+                            break
+            except Exception as e:  # noqa: BLE001 - surfaced in the assertions and process stderr
+                ended.append(repr(e))
+
+        follower = threading.Thread(target=follow, daemon=True)
+        follower.start()
+        assert idle_ready.wait(30), f"the event stream never reached its idle wait: {ended}"
+        time.sleep(0.75)  # let the generator resume from the ready comment into event.wait()
+        began = time.monotonic()
+        proc.send_signal(signal.SIGINT)
         proc.wait(timeout=5)
+        follower.join(timeout=3)
+        stderr = proc.stderr.read() if proc.stderr else ""
+        assert proc.returncode == 0, stderr
+        assert time.monotonic() - began < 3
+        assert not descriptor.exists() and not Path(socket_file).exists()
+        assert ended, "the idle stream was not woken during shutdown"
     finally:
+        # Whatever failed above, the server this test started never outlives it.
         if proc.poll() is None:
             proc.kill()
-            proc.wait(timeout=3)
-    follower.join(timeout=3)
-    stderr = proc.stderr.read() if proc.stderr else ""
-    assert proc.returncode == 0, stderr
-    assert time.monotonic() - began < 3
-    assert not descriptor.exists() and not Path(socket_file).exists()
-    assert ended, "the idle stream was not woken during shutdown"
+            proc.wait(timeout=10)
+        for pipe in (proc.stdout, proc.stderr):
+            if pipe:
+                pipe.close()
 
 
 def test_startup_migration_is_attributed_to_the_serving_admin(root):

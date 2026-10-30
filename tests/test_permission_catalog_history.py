@@ -108,7 +108,8 @@ ACCEPTED = {
     'item-picture-v1': (838, 'fb1968ec34b88620255e739d05573fb009d3ac47036745294fd0a6f9c77ac8af'),
     'bulk-edit-v1': (845, 'c4664e87ef03c124012304d580259f65920644ed03c3b0c2cb535f8060e7fe6b'),
     'bank-line-details-v1': (847, 'c84a45585ddc7d4b5e7e1ce602517bfd25f3c76de7bba387ccc0064f8045f6e5'),
-    'opening-draft-v1': (856, 'c00422543f7103ed6c7fb44d524560707fded7d1d80022551ba606150aa24d95'),
+    'user-home-v1': (850, 'e3ca5ecf2483bcf9780cdd3e9300c5a9cb9ac74f02d2a9f29175bfe8f0c98b36'),
+    'opening-draft-v1': (859, 'fd964ee40e58bf0e4a4b370fcfc14f9c3e0e75631510c3c0493085813949924d'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -258,6 +259,7 @@ CHAIN_ADDITIONS = {
     'bulk-edit-v1': {'bulk-edit apply', 'bulk-edit columns', 'bulk-edit grid', 'bulk-edit preview', 'bulk-edit query',
                      'bulk-edit reverse', 'bulk-edit show'},
     'bank-line-details-v1': {'bank-line deposit', 'bank-line pay-bills'},
+    'user-home-v1': {'user home clear', 'user home set', 'user home show'},
     'opening-draft-v1': {'opening-draft apply', 'opening-draft create', 'opening-draft discard', 'opening-draft plan',
                          'opening-draft query', 'opening-draft reverse', 'opening-draft show', 'opening-draft tie-out',
                          'opening-draft update'},
