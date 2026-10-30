@@ -107,6 +107,7 @@ ACCEPTED = {
     'capabilities-v1': (834, 'f639c12bed3999fc17973aa0698198f2af7dc1c111932d1af9c4ac3e58e99c99'),
     'item-picture-v1': (838, 'fb1968ec34b88620255e739d05573fb009d3ac47036745294fd0a6f9c77ac8af'),
     'bulk-edit-v1': (845, 'c4664e87ef03c124012304d580259f65920644ed03c3b0c2cb535f8060e7fe6b'),
+    'bank-line-details-v1': (847, 'c84a45585ddc7d4b5e7e1ce602517bfd25f3c76de7bba387ccc0064f8045f6e5'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -255,6 +256,7 @@ CHAIN_ADDITIONS = {
     'item-picture-v1': {'item picture clear', 'item picture get', 'item picture set', 'item picture use'},
     'bulk-edit-v1': {'bulk-edit apply', 'bulk-edit columns', 'bulk-edit grid', 'bulk-edit preview', 'bulk-edit query',
                      'bulk-edit reverse', 'bulk-edit show'},
+    'bank-line-details-v1': {'bank-line deposit', 'bank-line pay-bills'},
 }
 
 _ANCESTOR_EDIT = """

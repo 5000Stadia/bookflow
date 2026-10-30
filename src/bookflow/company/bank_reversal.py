@@ -199,6 +199,7 @@ def entry_plan(s, ctx, batch: dict, all_effects: list[dict], done: dict, probe, 
             rows[row['id']] = dict(row)
     linked = linked_for(pending_ids)
     ticked = _ticked(s, pending_ids)
+    held = _reconciled(s, pending_ids)
     # ``probe``: True dry-runs every entry's inverse; a number, only that many (the slice this call runs, when a dry
     # run's fingerprint vouches for the rest); False, none.
     budget = None if probe is True else int(probe or 0)
@@ -235,6 +236,15 @@ def entry_plan(s, ctx, batch: dict, all_effects: list[dict], done: dict, probe, 
                 f"unmark it on that draft (`reconcile mark {draft['id']}`, action unmark) or discard the draft "
                 f"(`reconcile discard {draft['id']}`)", seq=e['seq'], draft=draft['id'], account=draft['account']))
             continue
+        if transaction_id in held and any(cmd.endswith(' void') for cmd, _ in inverse):
+            # A void is allowed on a reconciled entry by design, and an unapply before it moves no money, so neither
+            # dry run refuses: the reconciliation's hold is read here, as `deposit delete` reads it.
+            blockers.append(_blocker(
+                CODES['E_RECONCILIATION_DEPENDENCY'], 'transaction', transaction_id,
+                f'{label}: a bank reconciliation holds it (key {held[transaction_id]}); voiding it would break that '
+                'finished reconciliation.', CLEARS['E_RECONCILIATION_DEPENDENCY'], seq=e['seq'],
+                error='E_RECONCILIATION_DEPENDENCY', details={'reconciliation_key_id': held[transaction_id]}))
+            continue
         if not inverse:
             blockers.append(_blocker('no_inverse', 'transaction', transaction_id,
                                      f'{label} has no delete or void this reversal can run.',
@@ -258,6 +268,18 @@ def entry_plan(s, ctx, batch: dict, all_effects: list[dict], done: dict, probe, 
                                          f'{label}: {error.message}', CLEARS.get(error.code), seq=e['seq'],
                                          error=error.code, details=error.details))
     return steps, work, blockers, entries, created
+
+
+def _reconciled(s, ids: list[str]) -> dict[str, str]:
+    """The entries a bank reconciliation holds (a current member of one of their reconciliation keys), each with the
+    key: the query `deposit delete` refuses by."""
+    keys, members = c.reconciliation_keys, c.reconciliation_current_members
+    found: dict[str, str] = {}
+    for chunk in bank_feeds._chunks(list(ids)):
+        for row in s.company.conn.execute(sa.select(keys.c.transaction_id, keys.c.id).join(
+                members, members.c.key_id == keys.c.id).where(keys.c.transaction_id.in_(chunk))).mappings():
+            found.setdefault(row['transaction_id'], row['id'])
+    return found
 
 
 def _step_payload(item: dict, k: int, version: int | None) -> dict:

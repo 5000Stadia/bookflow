@@ -1979,6 +1979,14 @@ EXAMPLES.update({
                                   {'line': _BANK_LINE, 'to': 'Savings'}),
     'bank-line undo': Example('bookflow bank-line undo ' + _BANK_SORT + ' --company "Demo Plumbing Co"'
                               ' --reason "Wrong account on the batch" --dry-run --json', {'batch': _BANK_SORT}),
+    # R108 increment 5: add more details -- a deposit of Undeposited Funds payments, bills marked paid.
+    'bank-line deposit': Example('bookflow bank-line deposit --line ' + _BANK_LINE + ' --payments \'["'
+                                 + _BANK_ENTRY + '"]\' --company "Demo Plumbing Co" --reason "Banked the Riverside'
+                                 ' checks" --dry-run --json', {'line': _BANK_LINE, 'payments': [_BANK_ENTRY]}),
+    'bank-line pay-bills': Example('bookflow bank-line pay-bills --line ' + _BANK_LINE + ' --bills \'[{"bill": "'
+                                   + _BANK_ENTRY + '"}]\' --method "Bank Transfer" --company "Demo Plumbing Co"'
+                                   ' --reason "Paid the supplier online" --dry-run --json',
+                                   {'line': _BANK_LINE, 'bills': [{'bill': _BANK_ENTRY}], 'method': 'Bank Transfer'}),
     # R107 increment 6: a grid edit, previewed as a diff, applied as one batch and reversed as one.
     'bulk-edit columns': Example('bookflow bulk-edit columns item --company "Demo Plumbing Co" --json', {'kind': 'item'}),
     'bulk-edit grid': Example('bookflow bulk-edit grid customer --columns \'["terms_id","credit_limit"]\' --limit 200'

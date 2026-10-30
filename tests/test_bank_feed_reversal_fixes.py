@@ -205,10 +205,10 @@ def test_a_second_finish_is_refused_as_already_reversed(client, monkeypatch):
     done, _ = _with_entries(client, 1)
     real, seen = batches._finish, []
 
-    def twice(s, ctx, batch_id, reversal_id, batch, then=None):
-        out = real(s, ctx, batch_id, reversal_id, batch, then)
+    def twice(s, ctx, batch_id, reversal_id, batch, then=None, state='reversed'):
+        out = real(s, ctx, batch_id, reversal_id, batch, then, state=state)
         with pytest.raises(BookflowError) as again:
-            real(s, ctx, batch_id, reversal_id, batch, None)
+            real(s, ctx, batch_id, reversal_id, batch, None, state=state)
         seen.append(again.value)
         return out
     monkeypatch.setattr(batches, '_finish', twice)
