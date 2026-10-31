@@ -428,11 +428,14 @@ def prepare_depreciate(s, ctx, inp) -> Plan:
 
 
 def apply_depreciate(plan: Plan, ctx, s) -> Applied:
-    from bookflow.company import journals
+    from bookflow.company import batches, journals
     inp = plan.data['input']
     due, currency = _due(s, inp)
     entries = _entries(inp, due)
     journals.open_dates(s, sorted({e['date'] for e in entries}))
+    batch_id = batches._insert_batch(
+        s, ctx, kind='fixed-asset-depreciation', label=f'Depreciation through {inp.through}',
+        scope='fixed-asset:depreciate', ordering='strict', source_type='fixed-asset depreciate') if entries else None
     touched: list[Touched] = []
     for entry in entries:
         fresh = journals.prepare(s, ctx, _journal_input(inp, entry, currency), 'post')
@@ -444,9 +447,12 @@ def apply_depreciate(plan: Plan, ctx, s) -> Applied:
                 for line in entry['lines'] for r in line['rows']]
         applied = journals.persist_prepared(fresh, ctx, s, command_name='fixed-asset depreciate', noun='depreciation entry',
                                             extra=(('fixed_asset_depreciations', 'fixed_asset_depreciation', 'id', rows),))
+        batches.record_effect(s, batch_id, record_type='journal_entry', record_id=header['id'],
+                              action='created', version_after=header['version'], event_id=fresh.data['event'])
         touched.extend(applied.touched)
         entry.update(transaction_id=header['id'], number=header['number'])
-    output = _depreciate_output(inp, entries, currency, written=True)
+    output = _depreciate_output(inp, entries, currency, written=True).model_copy(update={
+        'batch': batch_id, 'next': f'batch reverse {batch_id} --dry-run' if batch_id else None})
     if not entries:
         return Applied(output, [], 'no depreciation to post')
     return Applied(output, touched, output.summary, audited=True)
@@ -567,3 +573,9 @@ def apply_dispose(plan: Plan, ctx, s) -> Applied:
         touched.append(item_touch)
     output = _dispose_output(s, inp, d, transaction_id=header['id'], number=header['number'])
     return Applied(output, touched, output.summary, audited=True)
+
+
+# Journal inverses preserve the depreciation links as history. Newer runs unwind first.
+from bookflow.company import batches as _batches
+_batches.register(_batches.Adapter('fixed-asset-depreciation', release_document_numbers=False,
+                                   ordering='strict', label='Fixed-asset depreciation'))

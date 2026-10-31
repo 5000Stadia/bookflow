@@ -23,6 +23,8 @@ DESCRIPTION = (
     ' date: Accounts Receivable is debited and the finance charge account credited, so it ages, shows on'
     ' `report statement` and is paid like any other charge; void it with `statement-charge void`. A customer'
     ' already charged as of the date is not charged again. A date in a closed period is refused.'
+    ' The output names its batch: `batch reverse <batch> --dry-run` previews reversing every charge and'
+    ' retiring the Finance Charge item if this assessment created it. Later assessments must reverse first.'
 )
 
 ERRORS = ['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE', 'E_AMOUNT_PRECISION', 'E_VALUE_RANGE',

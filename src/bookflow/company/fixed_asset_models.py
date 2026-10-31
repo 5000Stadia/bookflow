@@ -149,6 +149,8 @@ class DepreciationEntry(_Strict):
 
 
 class FixedAssetDepreciateOutput(WriteOutput):
+    batch: str | None = Field(default=None, description="The reversible batch written by this call; absent on previews or no-op calls.")
+    next: str | None = Field(default=None, description="How to preview reversing this batch.")
     through: str
     entry: Literal['per_period', 'combined']
     entries: list[DepreciationEntry]
