@@ -135,25 +135,24 @@ def test_bill_pay_batch_and_payments_roll_back_together(books, monkeypatch):
 
 def test_bill_pay_agent_without_inverse_grant_is_refused(books):
     import os
-    from tests.conftest import make_actor, as_user
-    from bookflow.storage.engine import open_database
-    from bookflow.hub import schema as h
-    from bookflow.core import clock
+    from tests.conftest import make_actor, make_agent, as_user
+    from bookflow.core.config import Config
 
     bills = _bills(books)
     paid = _pay(books, [{'bill': row['id']} for row in bills])
     root = Path(os.environ['BOOKFLOW_DATA_ROOT'])
     owner = make_actor(root, 'reverse-owner', company_role=(books['company'], 'owner'))
-    agent_id = make_actor(root, 'reverse-agent', kind='agent', owner_user_id=owner)
+    agent_id = make_agent(books['client'].run, 'reverse-agent', principals=owner,
+                          company=books['company'], owner=owner)
+    member = next(row for row in books['client'].run('membership list', {'company': books['company']})['items']
+                  if row['user_id'] == agent_id and row['scope_type'] == 'company')
     books['client'].run('membership grant', {
         'user': agent_id, 'company': books['company'], 'role': 'standard',
-        'expected_version': 0, 'denies': ['ledger.post']}, reason='Read batches without posting authority')
-    with open_database(root / 'hub.db', writable=True) as db:
-        db.raw.execute('BEGIN IMMEDIATE')
-        db.conn.execute(h.agent_authority.insert().values(agent_user_id=agent_id, epoch=1))
-        db.conn.execute(h.agent_principals.insert().values(
-            agent_user_id=agent_id, principal_user_id=owner, assigned_by=owner, assigned_at=clock.now_iso()))
-        db.raw.execute('COMMIT')
+        'expected_version': member['version'], 'denies': ['ledger.post']},
+        reason='Read batches without posting authority')
+    config = Config.load(root / 'config.toml')
+    config.set_user('reverse-agent', agent_id)
+    config.save()
     agent = as_user(root, 'reverse-agent')
     before = _snapshot(books)
     for dry_run in (True, False):
