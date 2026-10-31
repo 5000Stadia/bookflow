@@ -42,7 +42,9 @@ sale_complete = command(
     'pos sale complete', scope='company', description=(
         'Complete a POS sale: posts the sales receipt `sales-receipt post` would, through the same core, with the '
         "facts the register fixes (its deposit account, its site, today's date, the chosen customer or its walk-in, "
-        'a payment method it offers), and records the ticket, register, clerk and tender. One payment method: cash '
+        'payment methods it offers), and records the ticket, register, clerk and tenders. Split tenders post an invoice '
+        'Due on receipt and one payment per distinct method in the same transaction. Supply tender for one method, '
+        'or tenders with explicit positive amounts; only cash can give change. One payment method: cash '
         'takes at least the total and returns the change; any other method takes the total, with an optional '
         'reference. expected_total is the total shown (pos sale preview); a different total posts nothing '
         '(E_PREVIEW_STALE). The ticket key is the operation key: completing again with the same key returns the sale '

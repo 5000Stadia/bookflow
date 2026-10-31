@@ -67,6 +67,8 @@ def pdf(receipt):
     line('TOTAL ' + receipt['total'] + ' ' + sale['total']['currency'], True)
     for tender in sale['tenders']:
         line(tender['payment_method']['name'] + ' ' + tender['amount']['amount'])
+        if tender.get('change') and tender['change']['minor_units']:
+            line(tender['payment_method']['name'] + ' change ' + tender['change']['amount'])
     if receipt.get('kind') == 'refund':
         line('Store credit issued' if receipt.get('store_credit') else 'Refund paid')
     else:

@@ -12,9 +12,9 @@ takes one typed at the till.
 in the same transaction as the receipt; a retry with the same key and ticket returns the sale already posted
 (``replayed``), and the same key with a different ticket is refused (E_IDEMPOTENCY_MISMATCH).
 
-**Tender.** Single tender in this increment. Cash takes at least the total and gives the difference as change; any
-other method takes the total, with an optional reference stored as the receipt's payment reference. Tendered and change
-are facts on ``pos_sales``, never postings: the receipt debits the deposit account for the sale total.
+**Tender.** One method posts a sales receipt. Distinct split methods post an invoice Due on receipt and one
+payment per method through the ordinary payment core in the same transaction. Only cash gives change; each split
+pays a positive part. Tendered and change are captured facts; only net applied amounts reach the books.
 """
 from __future__ import annotations
 
@@ -260,22 +260,44 @@ def _minor(amount: str, currency: str) -> int:
 
 
 def tender_facts(s, reg, inp, total: dict) -> dict[str, Any]:
-    method = payment_method(s, reg, inp.tender.payment_method)
-    if not method.get('active', True):
-        raise BookflowError('E_INACTIVE_REFERENCE', details={'field': 'tender.payment_method', 'record_id': method['id']})
     currency, due = total['currency'], total['minor_units']
     if due < 0:
-        raise _invalid('lines', 'the sale totals less than zero; a return is a refund, which arrives later')
-    cash = method['kind'] == 'cash'
-    given = _minor(inp.tender.amount, currency) if inp.tender.amount is not None else due
-    if cash and given < due:
-        raise _invalid('tender.amount', f"{Money(given, currency).amount} is less than the total "
-                       f"{Money(due, currency).amount}", total=Money(due, currency).amount)
-    if not cash and given != due:
-        raise _invalid('tender.amount', f"a {method['name']} payment takes the total, {Money(due, currency).amount}; "
-                       'paying part of it another way (split tender) arrives later', total=Money(due, currency).amount)
-    return dict(method=method, currency=currency, total=due, tendered=given, change=given - due,
-                reference=(inp.tender.reference or '').strip() or None)
+        raise _invalid('lines', 'use a refund for a negative sale')
+    parts = []
+    for tender in inp.tenders or [inp.tender]:
+        method = payment_method(s, reg, tender.payment_method)
+        if not method.get('active', True):
+            raise BookflowError('E_INACTIVE_REFERENCE', details={'field': 'tender.payment_method', 'record_id': method['id']})
+        if inp.tenders and tender.amount is None:
+            raise _invalid('tenders.amount', 'each split payment needs an amount')
+        given = _minor(tender.amount, currency) if tender.amount is not None else due
+        if inp.tenders and given <= 0:
+            raise _invalid('tenders.amount', 'each split payment must be positive')
+        parts.append(dict(method=method, currency=currency, tendered=given, applied=given, change=0,
+                          reference=(tender.reference or '').strip() or None))
+    if len({p['method']['id'] for p in parts}) != len(parts):
+        raise _invalid('tenders', 'use each payment method once; combine amounts for the same method')
+    given = sum(p['tendered'] for p in parts)
+    change = given - due
+    if change < 0:
+        raise _invalid('tender.amount', 'payments are less than the total', total=total['amount'])
+    # Only cash can be handed back. Allocate change backwards over cash entries.
+    left = change
+    for part in reversed(parts):
+        if part['method']['kind'] == 'cash':
+            part['change'] = min(left, max(0, part['applied'] - (1 if inp.tenders else 0)))
+            part['applied'] -= part['change']
+            left -= part['change']
+    if left or inp.tenders and any(p['applied'] <= 0 for p in parts):
+        raise _invalid('tender.amount', 'non-cash payments cannot exceed the total; every split must pay a positive part')
+    return dict(currency=currency, total=due, tendered=given, change=change, parts=parts)
+
+
+def _posting_plan(s, ctx, payload, split):
+    from bookflow.company import sales
+    from bookflow.company.sales_models import InvoicePostInput
+    return (sales.prepare(s, ctx, InvoicePostInput.model_validate(payload), 'invoice', 'post')
+            if split else _sale_plan(s, ctx, payload))
 
 
 def plan_complete(s, ctx, inp) -> Plan:
@@ -291,9 +313,15 @@ def plan_complete(s, ctx, inp) -> Plan:
     reg = register(s, inp.pos_register)
     pos_tickets.check_complete(s, inp.ticket, inp.ticket_version, reg['id'])
     chosen = customer(s, inp.customer)
-    method = payment_method(s, reg, inp.tender.payment_method)
-    payload = receipt_payload(s, inp, reg, method, chosen, (inp.tender.reference or '').strip() or None)
-    plan = _sale_plan(s, ctx, payload)
+    tender = (inp.tenders or [inp.tender])[0]
+    method = payment_method(s, reg, tender.payment_method)
+    payload = receipt_payload(s, inp, reg, method, chosen, (tender.reference or '').strip() or None)
+    split = bool(inp.tenders)
+    if split:
+        for key in ('deposit_to', 'payment_method', 'payment_reference'):
+            payload.pop(key, None)
+        payload.update(terms='Due on receipt', due_date=payload['date'])
+    plan = _posting_plan(s, ctx, payload, split)
     total = plan.preview.total.model_dump(mode='json') if hasattr(plan.preview.total, 'model_dump') else \
         dict(plan.preview.total)
     if Money.parse(inp.expected_total, total['currency']).minor_units != total['minor_units']:
@@ -307,9 +335,10 @@ def plan_complete(s, ctx, inp) -> Plan:
         sales_receipt=Named(id=header.id, name=header.number), customer=_named_customer(chosen),
         clerk_id=s.actor.id, created_at=clock.now_iso(), date=payload['date'], total=Money(facts['total'], facts['currency']).to_dict(),
         tendered=Money(facts['tendered'], facts['currency']).to_dict(),
-        change=Money(facts['change'], facts['currency']).to_dict(), tenders=[_tender_out(facts)],
+        change=Money(facts['change'], facts['currency']).to_dict(), tenders=[_tender_out(p) for p in facts['parts']],
+        document_type='invoice' if split else 'sales_receipt', version=1 + len(facts['parts']) if split else 1,
         warnings=list(header.warnings or []))
-    return Plan(preview, dict(payload=payload, register=reg, customer=chosen, facts=facts, sha=_input_sha(inp), ticket_version=inp.ticket_version))
+    return Plan(preview, dict(payload=payload, split=split, register=reg, customer=chosen, facts=facts, sha=_input_sha(inp), ticket_version=inp.ticket_version))
 
 
 def _named_customer(chosen) -> Named | None:
@@ -319,7 +348,9 @@ def _named_customer(chosen) -> Named | None:
 def _tender_out(facts) -> TenderOutput:
     m = facts['method']
     return TenderOutput(payment_method=PaymentMethodRef(id=m['id'], name=m['name'], kind=m['kind']),
-                        amount=Money(facts['tendered'], facts['currency']).to_dict(), reference=facts['reference'])
+                        amount=Money(facts['tendered'], facts['currency']).to_dict(),
+                        applied=Money(facts['applied'], facts['currency']).to_dict(),
+                        change=Money(facts['change'], facts['currency']).to_dict(), reference=facts['reference'])
 
 
 def apply_complete(plan: Plan, ctx, s) -> Applied:
@@ -336,7 +367,7 @@ def apply_complete(plan: Plan, ctx, s) -> Applied:
         if found['input_sha256'] != inp_sha:
             raise _mismatch(s, found)
         return Applied(sale_output(s, found, replayed=True), [], 'no change')
-    fresh = sales.prepare(s, ctx, _receipt_input(plan.data['payload']), 'sales_receipt', 'post')
+    fresh = _posting_plan(s, ctx, plan.data['payload'], plan.data['split'])
     total = fresh.preview.total
     if total.minor_units != plan.data['facts']['total']:
         raise BookflowError('E_PREVIEW_STALE', details={'total': total.amount})
@@ -346,15 +377,37 @@ def apply_complete(plan: Plan, ctx, s) -> Applied:
     applied = sales.persist_prepared(fresh, ctx, s, command_name=COMMAND)
     header = fresh.data['header']
     facts, reg, chosen = plan.data['facts'], plan.data['register'], plan.data['customer']
+    tender_rows = []
+    for index, part in enumerate(facts['parts']):
+        entry = dict(payment_method_id=part['method']['id'], kind=part['method']['kind'],
+                     amount_minor_units=part['tendered'], applied_minor_units=part['applied'],
+                     change_minor_units=part['change'], reference=part['reference'])
+        if plan.data['split']:
+            from bookflow.company import payments
+            from bookflow.company.payment_models import PaymentReceiveInput
+            version = s.company.conn.execute(sa.select(c.transactions.c.version).where(
+                c.transactions.c.id == header['id'])).scalar_one()
+            payment_input = PaymentReceiveInput(customer=plan.data['payload']['customer'],
+                date=plan.data['payload']['date'], amount=Money(part['applied'], facts['currency']).amount,
+                operation_key=f"pos:{plan.preview.id}:{index}", deposit_to=reg['deposit_account_id'],
+                payment_method=part['method']['id'], reference=part['reference'],
+                applications={'mode': 'inline', 'items': [{'invoice': header['id'],
+                    'expected_version': version, 'amount': Money(part['applied'], facts['currency']).amount}]})
+            from bookflow.company.payment_authority import pos_scope
+            with pos_scope(s, [header['id']], 'pos.sell') as allowed:
+                payment_plan = payments.prepare(s, ctx, payment_input, 'receive')
+                allowed.add(payment_plan.data['header']['id'])
+                paid = payments.apply(payment_plan, ctx, s, command_name=COMMAND)
+            entry['payment_id'] = paid.output.id
+            applied.touched.extend(paid.touched)
+        tender_rows.append(entry)
     row = dict(id=plan.preview.id, created_at=clock.now_iso(), created_by=s.actor.id, created_via=ctx.interface.value,
-               ticket=plan.preview.ticket, input_sha256=inp_sha, register_id=reg['id'], document_type='sales_receipt',
+               ticket=plan.preview.ticket, input_sha256=inp_sha, register_id=reg['id'], document_type='invoice' if plan.data['split'] else 'sales_receipt',
                document_id=header['id'], customer_named=chosen is not None, currency=facts['currency'],
                total_minor_units=facts['total'], tendered_minor_units=facts['tendered'],
-               change_minor_units=facts['change'], tenders=json.dumps([dict(
-                   payment_method_id=facts['method']['id'], kind=facts['method']['kind'],
-                   amount_minor_units=facts['tendered'], reference=facts['reference'])]))
+               change_minor_units=facts['change'], tenders=json.dumps(tender_rows))
     s.company.conn.execute(c.pos_sales.insert().values(**row))
-    summary = f"POS sale on register {reg['name']}: sales receipt {header['number']}"
+    summary = f"POS sale on register {reg['name']}: {row['document_type']} {header['number']}"
     audit.write_event_to(s.company, ctx, COMMAND, summary,
                          [Touched('pos_sale', row['id'], 'create', None, 1, row, db='company'), *ticket_touched],
                          actor_id=s.actor.id, actor_kind=s.actor.kind,
@@ -365,7 +418,7 @@ def apply_complete(plan: Plan, ctx, s) -> Applied:
 
 def sale_output(s, row, *, replayed=False, warnings=None) -> PosSaleOutput:
     t, r = c.transactions, c.transaction_revisions
-    header = s.company.conn.execute(sa.select(t.c.id, t.c.number, r.c.date, r.c.name_id).select_from(
+    header = s.company.conn.execute(sa.select(t.c.id, t.c.number, t.c.version, r.c.date, r.c.name_id).select_from(
         t.join(r, r.c.id == t.c.current_revision_id)).where(t.c.id == row['document_id'])).mappings().first()
     reg = s.company.conn.execute(sa.select(c.pos_registers.c.id, c.pos_registers.c.name).where(
         c.pos_registers.c.id == row['register_id'])).first()
@@ -382,9 +435,13 @@ def sale_output(s, row, *, replayed=False, warnings=None) -> PosSaleOutput:
         m = methods.get(tender['payment_method_id'])
         tenders.append(TenderOutput(payment_method=PaymentMethodRef(
             id=tender['payment_method_id'], name=m[1] if m else '', kind=m[2] if m else tender['kind']),
-            amount=Money(tender['amount_minor_units'], cur).to_dict(), reference=tender.get('reference')))
+            amount=Money(tender['amount_minor_units'], cur).to_dict(),
+            applied=Money(tender.get('applied_minor_units', row['total_minor_units']), cur).to_dict(),
+            change=Money(tender.get('change_minor_units', row['change_minor_units']), cur).to_dict(),
+            reference=tender.get('reference')))
     return PosSaleOutput(id=row['id'], ticket=row['ticket'], pos_register=Named(id=reg[0], name=reg[1]),
                          sales_receipt=Named(id=header['id'], name=header['number']), customer=chosen,
+                         document_type=row['document_type'], version=header['version'],
                          clerk_id=row['created_by'], created_at=row['created_at'], date=header['date'],
                          total=Money(row['total_minor_units'], cur).to_dict(),
                          tendered=Money(row['tendered_minor_units'], cur).to_dict(),

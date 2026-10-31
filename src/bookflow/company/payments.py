@@ -930,7 +930,7 @@ def _prepare(s, ctx, inp, operation):
         discounts=pending_discounts, write_offs=pending_write_offs, account_mutation=account_mutation))
 
 
-def apply(plan, ctx, s):
+def apply(plan, ctx, s, *, command_name=None):
     if plan.data.get('recovered'):
         return Applied(plan.preview, [], 'recovered payment operation')
     fresh = prepare(s, ctx, plan.data['input'], plan.data['operation'])
@@ -998,7 +998,7 @@ def apply(plan, ctx, s):
         selected_header = dict(old, state='consumed', consumed_operation_id=operation['id'],
             updated_at=header['updated_at'], updated_by=s.actor.id, updated_via=ctx.interface.value)
         touched.append(Touched('payment_selection', old['id'], 'update', old['version'], old['version'], selected_header, old, db='company'))
-    audit.write_event_to(s.company, ctx, operation['command'], f"{data['operation']} payment {header['number']}", touched,
+    audit.write_event_to(s.company, ctx, command_name or operation['command'], f"{data['operation']} payment {header['number']}", touched,
         actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=getattr(s, 'directive_code', None), event_id=data['event'])
     if before and header != before:
         s.company.conn.execute(c.transactions.update().where(c.transactions.c.id == header['id']).values(**header))

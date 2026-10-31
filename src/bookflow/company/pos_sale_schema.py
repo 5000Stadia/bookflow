@@ -22,8 +22,7 @@ def define_tables(metadata, C, T):
           'is refused rather than answered with a different sale.', nullable=False),
         C('register_id', sa.String(26), 'Register the sale was rung up on.', sa.ForeignKey('pos_registers.id'),
           nullable=False),
-        C('document_type', sa.String(24), "Document the sale posted: 'sales_receipt' (one payment method); split "
-          "tender's invoice arrives later.", nullable=False),
+        C('document_type', sa.String(24), "Document the sale posted: sales_receipt for one method, invoice for split tenders.", nullable=False),
         C('document_id', sa.String(26), 'The posted document.', sa.ForeignKey('transactions.id'), nullable=False),
         C('customer_named', sa.Boolean, "Whether a customer was chosen; false when the register's walk-in customer "
           'was used (never shown on the POS screen or the receipt).', nullable=False),
@@ -32,7 +31,7 @@ def define_tables(metadata, C, T):
         C('tendered_minor_units', sa.BigInteger, 'Amount tendered in minor units.', nullable=False),
         C('change_minor_units', sa.BigInteger, 'Change given in minor units (tendered less total; cash only).',
           nullable=False),
-        C('tenders', sa.Text, 'JSON list of tenders: payment_method_id, kind, amount_minor_units, reference.',
+        C('tenders', sa.Text, 'JSON tenders: payment_method_id, kind, amount_minor_units, applied_minor_units, change_minor_units, reference; split tenders also carry payment_id.',
           nullable=False),
         sa.CheckConstraint("document_type IN ('sales_receipt', 'invoice')", name='ck_pos_sales_document_type'),
         sa.CheckConstraint('change_minor_units >= 0 AND tendered_minor_units >= total_minor_units',
