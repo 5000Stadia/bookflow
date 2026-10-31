@@ -75,7 +75,7 @@
 #pos .pos-dialog::backdrop { background: rgb(0 0 0 / .35); }
 #pos .pos-dialog h2 { margin: 0 0 .6rem; font-size: 1.2rem; }
 #pos .pos-dialog label { display: flex; flex-direction: column; gap: .2rem; margin: .5rem 0; }
-#pos .pos-dialog input { font-size: 1.15rem; padding: .5rem; min-height: 44px; box-sizing: border-box; width: 100%; }
+#pos .pos-dialog input, #pos .pos-dialog textarea { font-size: 1.15rem; padding: .5rem; min-height: 44px; box-sizing: border-box; width: 100%; }
 #pos .pos-qty { display: flex; gap: .4rem; }
 #pos .pos-qty button { width: 56px; font-size: 1.4rem; }
 #pos .pos-qty input { text-align: center; }
@@ -155,3 +155,15 @@
 @media (min-width: 1600px) {
   #pos .pos-boxes.pos-view-compact { grid-template-columns: repeat(8, minmax(0, 1fr)); }
 }
+
+/* Held tickets remain readable at a phone's width. */
+#pos .pos-topbar { flex-wrap: wrap; }
+#pos .pos-topbar [data-pos-held] { margin-left: auto; }
+#pos .pos-held-list { list-style: none; padding: 0; margin: .5rem 0; max-height: 55vh; overflow-y: auto; }
+#pos .pos-held-list li { padding: .7rem 0; border-bottom: 1px solid var(--pos-line); }
+#pos .pos-held-list b, #pos .pos-held-list span, #pos .pos-held-list small { display: block; }
+#pos .pos-held-list span, #pos .pos-held-list small { color: var(--pos-muted); }
+#pos .pos-held-list li > div { display: flex; gap: .5rem; margin-top: .4rem; }
+#pos .pos-held-list button { flex: 1; }
+#pos .pos-dialog-actions { flex-wrap: wrap; }
+#pos .pos-cart-actions { flex-wrap: wrap; }

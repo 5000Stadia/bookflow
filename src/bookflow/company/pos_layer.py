@@ -88,9 +88,13 @@ def legacy_required_role(cmd) -> str | None:
 
 
 def check_turning_off(s) -> None:
-    """Turning POS off is refused (E_WORK_DEPENDENCY) while a ticket is held or a shift is open. Neither exists yet:
-    held tickets arrive with increment 7 and shifts with increment 10, each adding its check here."""
-    return None
+    """Refuse POS off while a held cart would be hidden."""
+    row = s.company.conn.execute(sa.select(c.pos_tickets.c.id, c.pos_tickets.c.label).where(
+        c.pos_tickets.c.status == 'held').order_by(c.pos_tickets.c.updated_at).limit(1)).mappings().first()
+    if row:
+        raise BookflowError('E_WORK_DEPENDENCY', message=f"Held ticket {row['label']} prevents turning point of sale off. Resume or discard it first.",
+            details={'ticket': row['id'], 'label': row['label'], 'resume_command': 'pos ticket resume',
+                     'discard_command': 'pos ticket discard'})
 
 
 def plan_setup_on(s, ctx) -> Plan | None:

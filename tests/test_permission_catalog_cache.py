@@ -52,7 +52,7 @@ def test_hit_is_identical_to_full_verification(root, monkeypatch):
         assert layer.SOURCE_COMMIT == module.SOURCE_COMMIT
         assert layer.catalog_bundle() == module.catalog_bundle()
         assert layer.MANIFEST.descriptor_sha256 == runtime.ACCEPTED_DESCRIPTOR_SHA256[version]
-    assert runtime.current_catalog() is runtime.known_catalog(c.POS_LAYOUT_POLICY_VERSION)
+    assert runtime.current_catalog() is runtime.known_catalog(c.POS_TICKET_POLICY_VERSION)
     assert runtime.known_catalog('unrecognized-future') is None
 
 
@@ -86,7 +86,7 @@ def test_key_change_leaves_exactly_one_copy_and_nothing_else_touched(root, monke
     assert only.stat().st_size < 4 * 1024 * 1024  # compressed: about 1 MB, not 19 MB
     _fresh_process_state(monkeypatch)
     assert isinstance(runtime._chain(), runtime._CachedChain)
-    assert runtime.current_catalog().MANIFEST == runtime._full_known()[c.POS_LAYOUT_POLICY_VERSION].MANIFEST
+    assert runtime.current_catalog().MANIFEST == runtime._full_known()[c.POS_TICKET_POLICY_VERSION].MANIFEST
 
 
 def test_every_key_input_moves_the_key(monkeypatch):
@@ -215,7 +215,7 @@ def test_concurrent_first_runs_leave_one_valid_file(tmp_path, monkeypatch):
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for _ in range(6)]
     outs = [p.communicate(timeout=600) for p in procs]
     assert all(p.returncode == 0 for p in procs), [o[1][-2000:] for o in outs]
-    tip = runtime.ACCEPTED_DESCRIPTOR_SHA256[c.POS_LAYOUT_POLICY_VERSION]
+    tip = runtime.ACCEPTED_DESCRIPTOR_SHA256[c.POS_TICKET_POLICY_VERSION]
     assert all(o[0].split()[1] == tip for o in outs)
     files = list((tmp_path / 'cache').iterdir())
     assert len(files) == 1 and files[0].name.startswith('permission-catalog-'), files

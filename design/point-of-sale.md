@@ -933,6 +933,62 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   Chrome at 390 and 1440 px, with a second browser reading saved Home and group styles. Screenshots are in
   `/tmp/m4-shots/pos6/`. Real phone hardware and LAN timing targets remain unverified.
 
+### As built: increment 7 (hold and void)
+
+- **Storage.** co0124 on co0123 adds `pos_tickets`, keyed by the same device ticket key used by `pos_sales`.
+  It stores register and optional customer IDs, ordered cart JSON with stable item IDs, label, last held total,
+  status, version and common actor/interface timestamps. Both demo companies acquire the table empty and keep POS
+  off; no demo ticket blocks enabling or disabling the optional layer. No report reads the table yet.
+- **Authority.** New permission layer `pos-ticket-v1` on the merged `pos-layout-v1` tip adds five commands.
+  `pos ticket hold/list/resume/discard` need `pos.sell`; `pos sale void` needs `pos.void`. No merged descriptor
+  changes. The plain clerk's admitted-command pin includes the four ticket commands and excludes void;
+  Clerk with returns admits void. Price override remains increment 5's conditional check and also guards hold.
+- **Ticket lifecycle.** Hold saves a nonempty cart and its preview total without posting or reserving stock.
+  A blank label defaults to hold time and first item. List returns all company held tickets newest first with
+  register, clerk and total. Resume atomically changes `held` to `open`; another device's stale resume is refused.
+  The returned lines retain explicit prices, while omitted prices are resolved afresh by `pos sale preview` before
+  charging. The returned total is explicitly the last held total, not a quote for the resumed sale. Hold uses the
+  existing preview validation, including current item, stock and date checks. Resume itself does not need a valid
+  posting date or active lines, so the clerk can reopen and fix a cart that has become invalid.
+- **Versions and retries.** Resume and discard require `expected_version`; reholding a resumed cart requires its
+  current version. Completion of a persisted ticket requires `ticket_version` and `open` status, and changes it
+  to `completed` in the receipt transaction. A stale device cannot complete a ticket after rehold or discard.
+  Completed-sale retries still return the original sale by the permanent operation key. Ticket mutations accept
+  the ordinary idempotency key; the screen saves the exact pending request and key before sending and retries them
+  after a lost response or reload. Expired or uncached stale requests fail their version/state checks, never
+  reapply a transition. Discard accepts held or open tickets and preserves their audit history. Turning POS off
+  while any ticket is held refuses with its label and ID.
+- **The screen.** Held (n), refreshed when opened, lists the company's tickets. Hold starts a fresh local cart
+  after host confirmation. Resume keeps the ticket's original register and requires an empty device cart there;
+  it never replaces another local sale. Clear on a resumed cart discards it on the host, with one confirmation.
+  A ticket write with an uncertain answer locks editing and offers Finish ticket change. A known stale local copy
+  offers a confirmed Forget this device copy, which leaves the host's ticket alone. Ticket version, customer,
+  explicit prices and serial numbers survive reload and another device.
+- **Void.** The selector accepts a POS sale ID, ticket key, receipt ID or number and refuses ordinary typed
+  receipts. The receipt's `expected_version` and an explicit context reason are required. The command runs
+  `sales.prepare(..., 'sales_receipt', 'void')` and `sales.persist_prepared(..., command_name='pos sale void')`:
+  the same balanced reversal, inventory reversal and immutable history as a typed receipt void, audited as the
+  POS act. Its output contains only sale and receipt identity, status, version and warnings, keeping accounting
+  snapshots and costs out of the returns clerk’s response. A repeat at the current receipt version is a no-op. A banked sale is refused naming its deposit ID
+  and number, including for a returns clerk without ledger access; no other deposit facts are exposed.
+  **Settled:** POS additionally refuses a finished reconciliation's member, whereas the ordinary receipt command
+  permits a reversal with reconciliation warnings. The till offers Void sale only with `pos.void`, a receipt-number
+  dialog with required reason, and a shortcut from the completed-sale screen. A version conflict requires another
+  explicit confirmation; the screen never automatically voids a changed receipt.
+- **Verification.** Ticket core tests check no posting, dry run, cross-client persistence, strict transitions,
+  simultaneous resume, retries, stable identities, original register, repricing, audit and the POS-off dependency.
+  Void tests compare Bookflow's receipt, history, ledger, stock, valuation, tax and Undeposited Funds outputs
+  against a typed-receipt twin, plus deposit and certified reconciliation refusals and clerk authority.
+  Ticket and void surface tests exercise Python, CLI, HTTP and MCP. Real Chrome tests cover cross-device hold,
+  resume, reload, current prices, complete and void at 390 and 1440 px, lost hold/resume responses, discard
+  confirmation, local-cart protection and stale-copy recovery. Screenshots: `/tmp/m4-shots/pos7/`.
+- **Final checks.** After the last code and test edit, the required targeted regression suite plus the page-command
+  declaration check passed: **411 tests**, including all **20 POS browser cases**. Generated documentation was
+  regenerated and `bookflow docs generate --check` passed. Independent read-only source review passed. The six
+  screenshots at 390 and 1440 px were inspected; Unicode and literal-percent void reasons are preserved in audit.
+- **Not verified here.** Physical phone hardware, LAN timing targets and printers. Receipt printing, refunds,
+  shifts and the day summary (including tickets older than seven days) remain their later increments.
+
 ## 16. Open questions
 
 Each default stands if nobody decides. K1 and K2 are Kabe's.

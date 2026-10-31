@@ -2162,3 +2162,18 @@ for _verb in ('enable', 'disable', 'check'):
 EXAMPLES['bank-feed fetch'] = Example(
     'bookflow bank-feed fetch --connection "Checking feed" --company "Demo Plumbing Co" --dry-run --json',
     {'connection': 'Checking feed'})
+
+# R114 increment 7: ticket versions come from hold/list/resume; receipt versions from the sale.
+EXAMPLES.update({
+    'pos ticket hold': Example('bookflow pos ticket hold --ticket counter-cart-1 --label "Casey collecting" '
+        '--lines \'[{"item":"Pipe Sealant","quantity":"2"}]\' --company "Demo Plumbing Co" --json',
+        {'ticket': 'counter-cart-1', 'label': 'Casey collecting', 'lines': [{'item': 'Pipe Sealant', 'quantity': '2'}]}),
+    'pos ticket list': Example('bookflow pos ticket list --company "Demo Plumbing Co" --json', {}),
+    'pos ticket resume': Example('bookflow pos ticket resume counter-cart-1 --expected-version 1 '
+        '--company "Demo Plumbing Co" --json', {'ticket': 'counter-cart-1', 'expected_version': 1}),
+    'pos ticket discard': Example('bookflow pos ticket discard counter-cart-1 --expected-version 2 '
+        '--company "Demo Plumbing Co" --json', {'ticket': 'counter-cart-1', 'expected_version': 2}),
+    'pos sale void': Example('bookflow pos sale void counter-cart-1 --expected-version 1 '
+        '--reason "Customer canceled" --company "Demo Plumbing Co" --json',
+        {'sale': 'counter-cart-1', 'expected_version': 1}),
+})

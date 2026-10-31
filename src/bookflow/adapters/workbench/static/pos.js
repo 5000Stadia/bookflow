@@ -28,20 +28,24 @@
   const cartKey = () => `bookflow.pos.${data.company}.${register.id}.cart`;
   const newTicket = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
     : Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
-  const fresh = () => ({ticket: newTicket(), customer: null, lines: [], pending: null});
+  const fresh = () => ({ticket: newTicket(), customer: null, lines: [], pending: null, ticket_version: null, mutation: null});
   let state = store.get(cartKey()) || fresh();
   let server = null;      // the last preview answer for the cart as it stands
   let offline = false;    // the last request found no host
   let seq = 0, timer = null;
   const save = () => store.set(cartKey(), state);
+  const locked = () => !!(state.pending || state.mutation || state.stale_ticket);
+  let mutationBusy = false, heldTickets = data.held || [], lastSale = null;
 
   // ---- talking to the host: the command API, as the signed-in person
-  async function api(name, body) {
+  async function api(name, body, options = {}) {
     let response;
     try {
       response = await fetch(`/companies/${encodeURIComponent(data.company)}/commands/${name.replaceAll(' ', '.')}`, {
         method: 'POST', credentials: 'same-origin', body: JSON.stringify(body),
-        headers: {'Content-Type': 'application/json', 'X-Bookflow-Workbench': '1', 'X-Bookflow-Client-Name': 'bookflow-workbench'}});
+        headers: {'Content-Type': 'application/json', 'X-Bookflow-Workbench': '1', 'X-Bookflow-Client-Name': 'bookflow-workbench',
+          ...(options.key ? {'Idempotency-Key': options.key} : {}),
+          ...(options.reason ? {'X-Bookflow-Reason': encodeURIComponent(options.reason), 'X-Bookflow-Context-Encoding': 'percent-utf8'} : {})}});
     } catch (error) {
       const failure = new Error('No connection to Bookflow.');
       failure.offline = true;
@@ -63,7 +67,7 @@
   const lineInput = line => {
     const out = {item: line.item_id, quantity: line.quantity};
     if (line.unit_price != null && line.unit_price !== '') out.unit_price = line.unit_price;
-    if (line.serial) out.serial_numbers = [line.serial];
+    if (line.serial) out.serial_numbers = line.serial.split('\n').map(value => value.trim()).filter(Boolean);
     return out;
   };
   const cartInput = () => ({pos_register: register.id, customer: state.customer ? state.customer.id : null,
@@ -71,10 +75,11 @@
 
   function schedule() {
     server = null;
+    seq++;
     save();
     render();
     clearTimeout(timer);
-    if (state.lines.length) timer = setTimeout(preview, 250);
+    if (state.lines.length && !locked()) timer = setTimeout(preview, 250);
   }
 
   async function preview() {
@@ -95,6 +100,7 @@
 
   // ---- ringing up
   function add(item, quantity, serial) {
+    if (locked()) return null;
     quantity = String(quantity || '1');
     const tracked = item.tracking === 'serial';
     let line = tracked ? null : [...state.lines].reverse().find(l => l.item_id === item.id && !l.unit_price && !l.serial);
@@ -247,7 +253,7 @@
       return `<li><button type="button" class="pos-line" data-pos-line="${i}" data-pos-line-item="${escape(line.item_id)}"><span class="pos-line-name">${escape(line.name)}${line.serial ? ` <small>SN ${escape(line.serial)}</small>` : ''}</span><span class="pos-line-qty" data-pos-line-quantity>${escape(line.quantity)} × ${price == null ? '…' : money(price)}</span><span class="pos-line-amount">${amount == null ? '…' : money(amount)}</span></button></li>`;
     }).join('');
     $('[data-pos-empty]').hidden = state.lines.length > 0;
-    const pending = !!state.pending;
+    const pending = locked();
     const confirmed = !!server && state.lines.length > 0;
     const waiting = state.lines.length && !server ? (offline ? 'not confirmed' : 'updating') : '—';
     $('[data-pos-subtotal]').textContent = confirmed ? money(server.subtotal.amount) : waiting;
@@ -255,6 +261,10 @@
     $('[data-pos-total]').textContent = confirmed ? money(server.total.amount) : waiting;
     $('[data-pos-total]').dataset.state = confirmed ? 'confirmed' : (state.lines.length ? (offline ? 'offline' : 'updating') : 'empty');
     $('[data-pos-charge]').disabled = !confirmed || pending;
+    $('[data-pos-hold]').disabled = !state.lines.length || pending;
+    $('[data-pos-clear]').disabled = pending;
+    const registerSelect = $('[data-pos-register-select]');
+    if (registerSelect) registerSelect.disabled = pending;
     const count = units();
     $('[data-pos-bar-count]').textContent = `${count} ${count === 1 ? 'item' : 'items'}`;
     $('[data-pos-bar-total]').textContent = confirmed ? money(server.total.amount) : (state.lines.length ? waiting : money(0));
@@ -262,9 +272,12 @@
     $('[data-pos-customer]').classList.toggle('chosen', !!state.customer);
     if (offline) say('No connection to Bookflow. This sale is kept here; finish it when the connection returns.', true);
     else if ($('[data-pos-connection]').dataset.kind === 'error' && confirmed) say('');
+    root.querySelectorAll('[data-pos-ticket-retry-dialog]').forEach(button => { button.hidden = !state.mutation; });
     const banner = $('[data-pos-pending]');
     banner.hidden = !pending;
-    if (pending) banner.innerHTML = `This sale was sent to be completed and no answer came back. <button type="button" data-pos-retry>Finish the sale</button> sends it again; it is never posted twice.`;
+    if (state.stale_ticket) banner.innerHTML = `This ticket changed on the host. This device’s copy cannot change it. <button type="button" data-pos-forget>Forget this device copy</button> keeps the host’s ticket unchanged.`;
+    else if (state.mutation) banner.innerHTML = `This ticket change has not been confirmed. <button type="button" data-pos-ticket-retry>Finish ticket change</button>. The cart is kept here until Bookflow answers.`;
+    else if (pending) banner.innerHTML = `This sale was sent to be completed and no answer came back. <button type="button" data-pos-retry>Finish the sale</button> sends it again; it is never posted twice.`;
     root.classList.toggle('pos-locked', pending);
   }
 
@@ -329,7 +342,7 @@
     return [...new Set(out)].filter(x => x >= cents).sort((a, b) => a - b);
   }
   function openTender() {
-    if (!server || !state.lines.length || state.pending) return;
+    if (!server || !state.lines.length || locked()) return;
     const dialog = $('[data-pos-tender]');
     dialog.querySelector('[data-pos-tender-total]').textContent = money(server.total.amount);
     dialog.querySelector('[data-pos-methods]').innerHTML = register.methods.map(m => `<button type="button" data-pos-method="${escape(m.id)}" data-kind="${escape(m.kind)}">${escape(m.name)}</button>`).join('');
@@ -380,6 +393,7 @@
         return;
       }
       state.pending = null;
+      if (['E_VERSION_CONFLICT', 'E_WORK_DEPENDENCY'].includes(error.code)) state.stale_ticket = true;
       save();
       status.textContent = error.message;
       if (error.code === 'E_PREVIEW_STALE') schedule();
@@ -391,6 +405,7 @@
     done(sale);
   }
   function done(sale) {
+    lastSale = sale;
     state = fresh();
     server = null;
     save();
@@ -401,12 +416,132 @@
     const paid = sale.tenders.map(t => `${escape(t.payment_method.name)} ${money(t.amount.amount)}${t.reference ? ` (${escape(t.reference)})` : ''}`).join(', ');
     screen.querySelector('[data-pos-done-summary]').innerHTML = `Sales receipt <b data-pos-done-number>${escape(sale.sales_receipt.name)}</b> · Total ${money(sale.total.amount)} · Paid ${paid}${sale.customer ? ` · ${escape(sale.customer.name)}` : ''}${sale.replayed ? ' · already completed' : ''}`;
     screen.dataset.sale = sale.id;
+    const voidButton = $('[data-pos-void-last]');
+    if (voidButton) voidButton.disabled = false;
     screen.hidden = false;
     screen.querySelector('[data-pos-new-sale]').focus();
   }
   function retry() {
     if (state.pending) complete(state.pending);
   }
+
+  // ---- company-held tickets; uncertain writes keep their exact request and retry key on this device
+  function drawHeld() {
+    $('[data-pos-held]').textContent = `Held (${heldTickets.length})`;
+    $('[data-pos-held-list]').innerHTML = heldTickets.map(t => `<li><b>${escape(t.label)}</b><span>${escape(t.pos_register.name)} · ${escape(t.clerk_name || t.clerk_id)} · ${money(t.total.amount)}</span><small>${escape(new Date(t.updated_at || t.created_at).toLocaleString())}</small><div><button type="button" data-pos-resume="${escape(t.id)}">Resume</button><button type="button" data-pos-discard="${escape(t.id)}">Discard</button></div></li>`).join('') || '<li>No held sales.</li>';
+  }
+  async function refreshHeld() {
+    $('[data-pos-held-status]').textContent = 'Refreshing…';
+    try {
+      heldTickets = (await api('pos ticket list', {})).items;
+      drawHeld();
+      $('[data-pos-held-status]').textContent = '';
+    } catch (error) { $('[data-pos-held-status]').textContent = error.message; }
+  }
+  function resumeTicket(id) {
+    const ticket = heldTickets.find(t => t.id === id);
+    if (!ticket || locked()) return;
+    const destination = data.registers.find(r => r.id === ticket.pos_register.id);
+    if (!destination) { $('[data-pos-held-status]').textContent = 'Reload to use this ticket’s register.'; return; }
+    const other = store.get(`bookflow.pos.${data.company}.${destination.id}.cart`);
+    if (state.lines.length || state.ticket_version || (destination.id !== register.id && other && (other.lines.length || other.ticket_version || other.pending || other.mutation))) {
+      $('[data-pos-held-status]').textContent = 'Hold or clear the sale on this device and the ticket’s register before resuming.';
+      return;
+    }
+    ticketMutation('resume', {ticket: id, expected_version: ticket.version});
+  }
+  function ticketMutation(action, body, extra = {}) {
+    if (locked()) return;
+    state.mutation = {action, body, key: newTicket(), ...extra};
+    save();
+    render();
+    finishMutation();
+  }
+  async function finishMutation() {
+    if (!state.mutation || mutationBusy) return;
+    mutationBusy = true;
+    const request = state.mutation;
+    try {
+      const answer = await api('pos ticket ' + request.action, request.body, {key: request.key});
+      if (!answer || !answer.id || !answer.status) {
+        const error = new Error('Bookflow did not confirm the ticket change.'); error.offline = true; throw error;
+      }
+      state.mutation = null;
+      if (request.action === 'resume') {
+        save();
+        register = data.registers.find(r => r.id === answer.pos_register.id) || register;
+        store.set(registerKey, register.id);
+        const select = $('[data-pos-register-select]');
+        if (select) select.value = register.id;
+        state = {...fresh(), ticket: answer.id, ticket_version: answer.version, label: answer.label,
+          customer: answer.customer, lines: answer.lines.map(line => {
+            const item = items.get(line.item) || {};
+            return {key: newTicket(), item_id: line.item, name: item.name || line.item, price: item.price,
+              quantity: line.quantity, unit_price: line.unit_price, serial: (line.serial_numbers || []).join('\n') || null,
+              tracking: item.tracking || 'none', attributes: line.attributes || {}};
+          })};
+        $('[data-pos-held-dialog]').close();
+        root.classList.add('pos-sheet-open');
+      } else if (request.action === 'hold' || request.clear) {
+        state = fresh();
+        $('[data-pos-hold-dialog]').close();
+        root.classList.remove('pos-sheet-open');
+      }
+      offline = false;
+      schedule();
+      refreshHeld();
+    } catch (error) {
+      if (!error.offline) state.mutation = null;
+      if (request.body.ticket === state.ticket && ['E_VERSION_CONFLICT', 'E_WORK_DEPENDENCY'].includes(error.code)) state.stale_ticket = true;
+      save();
+      render();
+      const message = error.offline ? 'No confirmation yet. Your cart is kept here; use Finish ticket change to retry.' : error.message;
+      $('[data-pos-hold-status]').textContent = message;
+      $('[data-pos-held-status]').textContent = message;
+      say(message, true);
+    } finally { mutationBusy = false; }
+  }
+  $('[data-pos-hold-form]').addEventListener('submit', event => {
+    event.preventDefault();
+    if (locked() || !state.lines.length) return;
+    ticketMutation('hold', {...cartInput(), ticket: state.ticket, label: $('[data-pos-hold-label]').value.trim() || null,
+      ...(state.ticket_version ? {expected_version: state.ticket_version} : {})});
+  });
+
+  // ---- voids use the same receipt reversal, with an explicit reason and an explicit retry after any conflict
+  let voidVersion = 1, voidSelector = '', voidBusy = false, voidKey = null;
+  function openVoid(sale) {
+    voidVersion = 1; voidSelector = sale ? sale.sales_receipt.name : ''; voidKey = null;
+    $('[data-pos-void-sale]').value = voidSelector;
+    $('[data-pos-void-reason]').value = '';
+    $('[data-pos-void-status]').textContent = '';
+    $('[data-pos-void-dialog]').showModal();
+  }
+  if (data.can_void) $('[data-pos-void-form]').addEventListener('submit', async event => {
+    event.preventDefault();
+    if (voidBusy) return;
+    const sale = $('[data-pos-void-sale]').value.trim(), reason = $('[data-pos-void-reason]').value.trim();
+    if (!sale || !reason) return;
+    if (sale !== voidSelector) { voidVersion = 1; voidSelector = sale; voidKey = null; }
+    voidBusy = true; $('[data-pos-void-submit]').disabled = true;
+    const status = $('[data-pos-void-status]');
+    status.textContent = 'Voiding…';
+    try {
+      await api('pos sale void', {sale, expected_version: voidVersion}, {reason, key: voidKey || (voidKey = newTicket())});
+      status.textContent = `Sale ${sale} voided. Its reversal and reason are recorded.`;
+      if (lastSale && sale === lastSale.sales_receipt.name) {
+        $('[data-pos-void-last]').disabled = true;
+        $('[data-pos-done-summary]').textContent = `Sales receipt ${sale} — voided`;
+      }
+    } catch (error) {
+      status.textContent = error.message;
+      if (error.code === 'E_VERSION_CONFLICT' && error.details && error.details.current_version) {
+        voidVersion = error.details.current_version;
+        status.textContent += ' Review the changed receipt before choosing Void sale again.';
+      }
+      if (!error.offline) voidKey = null;
+    } finally { voidBusy = false; $('[data-pos-void-submit]').disabled = false; }
+  });
 
   // ---- lookup: every active sales item, by name, SKU, barcode and description
   const scanInput = root.querySelector('[data-scan-input]');
@@ -454,7 +589,7 @@
         $('[data-pos-box-dialog]').close(); openBox(boxById(arranged.id));
       }).catch(() => {});
     }
-    else if (d.posLine !== undefined) { if (!state.pending) openLine(state.lines[Number(d.posLine)]); }
+    else if (d.posLine !== undefined) { if (!locked()) openLine(state.lines[Number(d.posLine)]); }
     else if (target.matches('[data-pos-qty-step]')) {
       const input = $('[data-pos-line-qty]');
       input.value = String(Math.max(1, (Number(input.value) || 0) + Number(d.posQtyStep)));
@@ -466,12 +601,38 @@
       schedule();
     }
     else if (target.matches('[data-pos-line-done]')) { event.preventDefault(); closeLine(true); }
-    else if (target.matches('[data-pos-clear]')) { if (!state.pending && state.lines.length) { state = fresh(); schedule(); } }
+    else if (target.matches('[data-pos-clear]')) {
+      if (locked() || (!state.lines.length && !state.ticket_version)) return;
+      if (state.ticket_version) {
+        if (confirm('Discard this resumed sale? Nothing has been posted.')) ticketMutation('discard', {ticket: state.ticket, expected_version: state.ticket_version}, {clear: true});
+      } else { state = fresh(); schedule(); }
+    }
+    else if (target.matches('[data-pos-hold]')) {
+      if (locked() || !state.lines.length) return;
+      $('[data-pos-hold-label]').value = state.label || '';
+      $('[data-pos-hold-status]').textContent = '';
+      $('[data-pos-hold-dialog]').showModal();
+    }
+    else if (target.matches('[data-pos-held]')) { $('[data-pos-held-dialog]').showModal(); refreshHeld(); }
+    else if (target.matches('[data-pos-held-refresh]')) refreshHeld();
+    else if (d.posResume) resumeTicket(d.posResume);
+    else if (d.posDiscard) {
+      const ticket = heldTickets.find(t => t.id === d.posDiscard);
+      if (ticket && !locked() && confirm(`Discard “${ticket.label}”? Nothing has been posted.`))
+        ticketMutation('discard', {ticket: ticket.id, expected_version: ticket.version});
+    }
+    else if (target.matches('[data-pos-ticket-retry]')) finishMutation();
+    else if (target.matches('[data-pos-forget]')) {
+      if (state.stale_ticket && confirm('Forget only this device’s copy? The ticket on the host will stay unchanged.')) { state = fresh(); schedule(); }
+    }
+    else if (d.posClose) $('[data-pos-' + d.posClose + '-dialog]').close();
+    else if (target.matches('[data-pos-void-open]')) openVoid(null);
+    else if (target.matches('[data-pos-void-last]')) openVoid(lastSale);
     else if (target.matches('[data-pos-charge]')) openTender();
     else if (target.matches('[data-pos-bar]')) root.classList.toggle('pos-sheet-open');
     else if (target.matches('[data-pos-sheet-close]')) root.classList.remove('pos-sheet-open');
     else if (target.matches('[data-pos-customer]')) {
-      if (state.pending) return;
+      if (locked()) return;
       const dialog = $('[data-pos-customer-dialog]');
       $('[data-pos-customer-status]').textContent = '';
       dialog.showModal();
@@ -500,7 +661,8 @@
       if (method.kind === 'cash') tender.amount = amountText(minor(tendered));
       const reference = $('[data-pos-reference]').value.trim();
       if (method.kind !== 'cash' && reference) tender.reference = reference;
-      complete({...cartInput(), ticket: state.ticket, tender, expected_total: server.total.amount});
+      complete({...cartInput(), ticket: state.ticket, tender, expected_total: server.total.amount,
+                ...(state.ticket_version ? {ticket_version: state.ticket_version} : {})});
     }
     else if (target.matches('[data-pos-retry]')) retry();
     else if (target.matches('[data-pos-new-sale]')) { $('[data-pos-done]').hidden = true; scanInput.focus(); }
@@ -575,7 +737,7 @@
   // The Scan field's "pos" mode (scan.js) rings a found code up here: the same path for a scanner and the camera.
   window.bookflowPos = {
     scanned(answer, want) {
-      if (state.pending) return false;
+      if (locked()) return false;
       const known = items.get(answer.item_id) || {id: answer.item_id, name: answer.item_name, price: null, tracking: 'none'};
       if (layoutEditing) {
         scanInput.value = '';
@@ -594,6 +756,7 @@
   };
 
   drawBoxes();
+  drawHeld();
   render();
-  if (state.lines.length && !state.pending) schedule();
+  if (state.lines.length && !locked()) schedule();
 })();

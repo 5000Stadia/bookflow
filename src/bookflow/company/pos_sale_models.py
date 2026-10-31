@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from bookflow.company.items import MoneyOutput
 from bookflow.company.pos_models import Named, PaymentMethodRef
 from bookflow.company.pos_sale_schema import TICKET_PATTERN
+from bookflow.company.journal_models import _Version
 from bookflow.company.sales_models import MAX_SALES_LINES, Quantity, Selector
 from bookflow.company import serial_lot_models as _SL
 
@@ -59,6 +60,7 @@ class Tender(_Strict):
 
 
 class PosSaleCompleteInput(_Cart):
+    ticket_version: _Version | None = Field(None, ge=1, description="Required version for a resumed held ticket.")
     ticket: Ticket
     tender: Tender
     expected_total: Amount = Field(description=(
