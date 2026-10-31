@@ -179,3 +179,8 @@
 #pos .pos-refund-line-fields { display: flex; gap: .6rem; }
 #pos .pos-refund-line-fields label { flex: 1; min-width: 0; }
 #pos .pos-done [data-pos-refund-print] { display: inline-flex; align-items: center; justify-content: center; min-height: 56px; padding: .6rem 1rem; border: 1px solid var(--pos-line); border-radius: .5rem; font-size: 1.2rem; text-decoration: none; }
+
+#pos .pos-payments { list-style: none; margin: .4rem 0; padding: 0; }
+#pos .pos-payments li { display: flex; justify-content: space-between; align-items: center; gap: .5rem; border-bottom: 1px solid var(--pos-line); }
+#pos .pos-payments span { overflow-wrap: anywhere; }
+#pos .pos-tender { max-height: calc(100dvh - 2rem); overflow-y: auto; }
