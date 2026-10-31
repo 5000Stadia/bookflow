@@ -150,6 +150,7 @@ def test_bill_pay_agent_without_inverse_grant_is_refused(books):
         'user': agent_id, 'company': books['company'], 'role': 'standard',
         'expected_version': member['version'], 'denies': ['ledger.post']},
         reason='Read batches without posting authority')
+    books['client'].run('agent authorize', {'agent': agent_id, 'confirm_permitted_use': True})
     config = Config.load(root / 'config.toml')
     config.set_user('reverse-agent', agent_id)
     config.save()

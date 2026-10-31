@@ -186,6 +186,7 @@ def test_agent_without_invoice_delete_grant_is_refused_atomically(books):
     books.client.run('membership grant', {
         'user': agent_id, 'company': books.company, 'role': 'standard', 'expected_version': member['version'],
         'denies': ['transaction.invoice.delete']}, reason='Allow posting but not deletion')
+    books.client.run('agent authorize', {'agent': agent_id, 'confirm_permitted_use': True})
     config = Config.load(books.root / 'config.toml')
     config.set_user('invoice-reverse-agent', agent_id)
     config.save()
