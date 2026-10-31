@@ -110,7 +110,9 @@ ACCEPTED = {
     'bank-line-details-v1': (847, 'c84a45585ddc7d4b5e7e1ce602517bfd25f3c76de7bba387ccc0064f8045f6e5'),
     'user-home-v1': (850, 'e3ca5ecf2483bcf9780cdd3e9300c5a9cb9ac74f02d2a9f29175bfe8f0c98b36'),
     'automation-v1': (853, '4df1e05f0db60c9ac166ce314398120e3065dfb07f205327c81f3d5e5348e7ed'),
-    'bank-rule-v1': (861, '8930d940e6e6111c4de136924c619f0a85db5f0fc1d27b642440d23ec8621c68'),
+    'opening-draft-v1': (862, '56a757a3260e92ca76ffafbf79f7cbcac99198a1c292278998588eef117d9aa2'),
+    'pos-v1': (866, '3d55aae9746f7326fb83eab6d2a48e4d6d100ce35e48f6d845cbff2180dacaf2'),
+    'bank-rule-v1': (874, '12b5f914d21302af037c6cc0b1aeab0ef6912d764015332d7734c12338ad8127'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -262,6 +264,10 @@ CHAIN_ADDITIONS = {
     'bank-line-details-v1': {'bank-line deposit', 'bank-line pay-bills'},
     'user-home-v1': {'user home clear', 'user home set', 'user home show'},
     'automation-v1': {'automation list', 'automation pause', 'automation show'},
+    'opening-draft-v1': {'opening-draft apply', 'opening-draft create', 'opening-draft discard', 'opening-draft plan',
+                         'opening-draft query', 'opening-draft reverse', 'opening-draft show', 'opening-draft tie-out',
+                         'opening-draft update'},
+    'pos-v1': {'pos-register create', 'pos-register list', 'pos-register show', 'pos-register update'},
     'bank-rule-v1': {'bank-rule accept', 'bank-rule apply', 'bank-rule create', 'bank-rule deactivate',
                      'bank-rule decline', 'bank-rule query', 'bank-rule show', 'bank-rule update'},
 }

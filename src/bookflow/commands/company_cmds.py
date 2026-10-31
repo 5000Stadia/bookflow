@@ -259,6 +259,7 @@ class CompanyUpdateInput(BaseModel):
     delivery_copy_to: str | None = Field(None, max_length=254, description="Email: a Bcc copy of every message to this address; null for none.")
     delivery_auto_flag_from: str | None = Field(None, min_length=10, max_length=10, description="Email: documents dated on or after this day (YYYY-MM-DD) are to be emailed when the customer prefers email; null is off.")
     pick_and_pack_enabled: bool = Field(None, strict=True, description="Pick lists, draft shipments and boxes as optional layers on shipping: off by default, when `shipment post` ships straight from the order. Turning it off is refused while a pick list or draft shipment is open.")
+    pos_enabled: bool = Field(None, strict=True, description="Point of sale as an optional layer on sales receipts: off by default. Turning it on the first time makes register Main and its walk-in customer; turning it off keeps the registers, and is refused while a ticket is held or a shift is open.")
     weight_unit: str | None = Field(None, min_length=1, max_length=16, description="The one weight unit of item weights and boxes (lb, kg, oz): a label, never converted.")
     shipping_item_id: str | None = Field(None, description="Other-charge or service item a shipment's freight to bill is billed as, by default.")
     bank_rule_learning: Literal["ask", "always", "never"] | None = Field(None, description="Bank rules: when two adds of a payee in a bank or card account agree, ask (the default: a suggested rule to accept or decline), always (make the rule active at once) or never (learn nothing). A learned rule only proposes; it never adds on its own.")
@@ -282,7 +283,7 @@ NOT_NULLABLE = {
     "sales_tax_enabled", "sales_tax_liability_basis", "sales_tax_remittance_frequency",
     "order_printable_checks", "attachment_max_bytes", "negative_number_style",
     "finance_charge_grace_days", "finance_charge_on_overdue_charges", "finance_charge_from", "finance_charge_mark_to_print",
-    "overdue_notice_frequency", "overdue_notice_template", "invoice_when_shipping", "pick_and_pack_enabled", "weight_unit",
+    "overdue_notice_frequency", "overdue_notice_template", "invoice_when_shipping", "pick_and_pack_enabled", "weight_unit", "pos_enabled",
     "bank_rule_learning", "bank_rule_automation",
 }
 
@@ -351,6 +352,9 @@ def _validate_merged(new: dict[str, Any], s: Session, changed: set[str]) -> None
                 f"Draft shipment {', '.join(drafts[:10])} is still open. Ship it (`shipment post --shipment {drafts[0]}`) "
                 f"or cancel it (`shipment cancel {drafts[0]}`) before turning pick and pack off."),
                 details=dict(problem="an open draft shipment exists", shipments=drafts, reason="draft_shipment_open"))
+    if "pos_enabled" in changed and not new["pos_enabled"]:
+        from bookflow.company import pos_layer
+        pos_layer.check_turning_off(s)
     if "weight_unit" in changed:
         new["weight_unit"] = (new["weight_unit"] or "").strip()
         if not new["weight_unit"]:
@@ -461,8 +465,19 @@ def plan_company_update(inp: CompanyUpdateInput, ctx: Context, s: Session) -> Pl
         closing_warning = _future_closing_warning(new["closing_date"], new.get("timezone"))
         if closing_warning:
             warnings.append(closing_warning)
+    pos_setup = None
+    if "pos_enabled" in changed and new["pos_enabled"]:
+        # Turning POS on the first time makes register Main and its walk-in customer (design/point-of-sale.md §2).
+        from bookflow.company import pos_layer
+        pos_setup = pos_layer.plan_setup_on(s, ctx)
+        if pos_setup is not None:
+            made = pos_setup.preview
+            warnings.append(f"Made register {made.name} and customer {made.walk_in_customer.name} (the walk-in "
+                            "customer a sale with no customer is recorded against).")
+            warnings.extend(made.warnings)
     preview = UpdateOutput(company_id=current["id"], warnings=warnings, **{k: v for k, v in meta.as_dict().items()})
-    return Plan(preview=preview, data={"current": current, "new": new, "changed": sorted(changed), "meta": meta, "warnings": warnings})
+    return Plan(preview=preview, data={"current": current, "new": new, "changed": sorted(changed), "meta": meta, "warnings": warnings,
+                                       "pos_setup": pos_setup})
 
 
 @company_update.applier
@@ -478,6 +493,9 @@ def apply_company_update(plan: Plan, ctx: Context, s: Session) -> Applied:
     s.company.conn.execute(cschema.company_info.update().where(cschema.company_info.c.id == current["id"]).values(**stored_cols))
     snap = {k: v for k, v in logical_cols.items() if k != "display_name"}
     touched = [Touched("company_info", current["id"], "update", current["version"], meta.version, snap, db="company")]
+    if plan.data.get("pos_setup") is not None:
+        from bookflow.company import pos_layer
+        touched += pos_layer.write_setup(plan.data["pos_setup"], ctx, s)
     summary = "updated company info: " + ", ".join(changed)
     return Applied(UpdateOutput(company_id=current["id"], warnings=plan.data["warnings"], **meta.as_dict()), touched, summary)
 

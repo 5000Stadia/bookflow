@@ -1545,6 +1545,9 @@ def plan_party_active_change(
 ) -> PartyActivePlan:
     table = _table(noun)
     requested = _row(db, table, record_id)
+    if noun == "customer" and not active and requested.get("active"):
+        from bookflow.company.pos_layer import refuse_if_used
+        refuse_if_used(db, "customer", record_id, "made inactive")
     if noun in {"customer", "vendor"} and active and not unmerging:
         from bookflow.company.party_merges import live_merge
         if live_merge(db, noun, record_id) is not None:

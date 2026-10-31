@@ -33,6 +33,9 @@ class PermissionOutput(WriteOutput):
     changed: bool = False
     companies_needing_administrator: list[dict] = Field(default_factory=list)
     affected_agents: list[str] = Field(default_factory=list)
+    presets_extended: list[dict] = Field(default_factory=list, description=(
+        'Memberships made from a preset (a POS clerk) whose denies this activation extended, so the new catalog gives '
+        'them nothing `readonly` newly holds: user, scope and the capabilities added to the denies.'))
 
 
 show = command('permission show',scope='hub',capability='user',required_role='hub_admin',
@@ -77,6 +80,7 @@ def preparation(inp,ctx,s,preview):
         raise BookflowError('E_VERSION_CONFLICT',details={'field':'expected_generation'})
     if inp.expected_catalog_sha256 != build.MANIFEST.descriptor_sha256:
         raise BookflowError('E_VALIDATION',message='Executable catalog changed; inspect permission show again.')
+    old_catalog = runtime.catalog_for_root(s.hub).descriptor if activated(s) else None
     if not activated(s) or runtime.catalog_for_root(s.hub).descriptor.version == build.CATALOG.version:
         intent = b.ActivatePolicy(inp.expected_generation,inp.expected_catalog_sha256,tuple(
             b.CompanyAdministrator(x.company_id,x.user_id,b.Absent() if x.expected_version==0 else b.Version(x.expected_version)) for x in inp.administrators))
@@ -90,9 +94,26 @@ def preparation(inp,ctx,s,preview):
         intent = b.ReplaceCatalog(old.stamp.catalog_sha256,build.catalog_bundle(),
             tuple(set(old.role_defaults)|set(build.CATALOG.defaults)))
         prepared = setup.edit(s,ctx,intent,preview=preview)
-    return PermissionOutput(mode='policy_v1',generation=prepared.final.root.stamp.generation,
-        catalog_sha256=build.MANIFEST.descriptor_sha256,changed=prepared.visible.changed,
-        affected_agents=list(prepared.reconciliation.revoke_agents))
+    generation, changed = prepared.final.root.stamp.generation, prepared.visible.changed
+    extended = []
+    if old_catalog is not None:
+        # A clerk made from a preset never gains what a later catalog gives `readonly` (hub/pos_presets.py).
+        from bookflow.hub import pos_presets
+        from types import SimpleNamespace
+        for row in pos_presets.extensions(s.hub, old_catalog, build.CATALOG):
+            extended.append(dict(user=row['username'], scope_type=row['scope_type'], scope_id=row['scope_id'],
+                                 preset=row['preset'], added=row['added']))
+            if preview:
+                continue
+            existing = dict(id=row['membership_id'], version=row['version'], grants=None, denies=None)
+            scope = SimpleNamespace(scope_type=row['scope_type'], scope_id=row['scope_id'])
+            put = setup.membership_intent({'id': row['user_id']}, scope, existing, row['role'], row['grants'],
+                                          row['denies'], row['version'])
+            done = setup.edit(s, ctx, put)
+            generation, changed = done.final.root.stamp.generation, True
+    return PermissionOutput(mode='policy_v1',generation=generation,
+        catalog_sha256=build.MANIFEST.descriptor_sha256,changed=changed,
+        affected_agents=list(prepared.reconciliation.revoke_agents),presets_extended=extended)
 
 
 @activate

@@ -1,4 +1,4 @@
-"""Bank rules and learning (R108 increment 4) on automation-v1, without rewriting any accepted descriptor.
+"""Bank rules and learning (R108 increment 4) on pos-v1 (re-chained from automation-v1 at merge), without rewriting any accepted descriptor.
 
 `bank-rule create`, `update`, `deactivate`, `accept`, `decline` and `apply` are standard writes, and `bank-rule show`
 and `query` member reads, under the existing capability `bank-feed`, with `ledger.read` at `member` beside each, as
@@ -13,10 +13,11 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_automation_catalog as previous, permission_catalog as c
+from . import permission_automation_catalog as automation_layer, permission_pos_catalog as previous
+from . import permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = '06c29f99e0f2ea31a76b3e83877467cab5022c8b'
+SOURCE_COMMIT = 'bd8623a3a6c1ab539bb0dd767282e39823fd419f'
 _OWNER = 'bookflow.commands.bank_rule_cmds.{}|src/bookflow/commands/bank_rule_cmds.py'
 _LEDGER = (c.Requirement('ledger.read', 'member'),)
 # (name, threshold, planner)
@@ -38,8 +39,9 @@ ADDED_ACTIONS = tuple(
     c.CompanyAction(name, tuple(sorted((*_LEDGER, c.Requirement('bank-feed', threshold)),
                                        key=lambda r: r.capability)), True, (_OWNER.format(planner),))
     for name, threshold, planner in _ADDED)
-KIND_SOURCE = replace(previous.KIND_SOURCE, requirements=tuple(sorted(
-    {*previous.KIND_SOURCE.requirements, c.Requirement('bank-feed', 'member'), c.Requirement('bank-feed', 'standard')},
+_KIND = next(x for x in previous.CATALOG.conditional_sources if x.owner == automation_layer.KIND_SOURCE.owner)
+KIND_SOURCE = replace(_KIND, requirements=tuple(sorted(
+    {*_KIND.requirements, c.Requirement('bank-feed', 'member'), c.Requirement('bank-feed', 'standard')},
     key=lambda r: (r.capability, r.threshold))))
 CATALOG = replace(previous.CATALOG, version=c.BANK_RULE_POLICY_VERSION,
     commands=tuple(sorted((*previous.CATALOG.commands, *ADDED_COMMANDS), key=lambda x: x.name)),

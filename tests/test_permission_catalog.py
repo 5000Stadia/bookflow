@@ -120,6 +120,8 @@ RESOURCE_PAIRS = {
     'reconciliation_proposals.preview': {('ledger.post', 'standard')},
     # bank-feed-v1: going on past an account-number mismatch is a connection-level decision.
     'bank_feeds._require_connect': {('bank-feed.connect', 'admin')},
+    # opening-draft-v1: posting an opening that does not tie is a person's act an agent holds only by grant.
+    'opening_drafts.require_accept': {('opening.accept-differences', 'standard')},
     # capabilities-v1: an agent's former people-only act, admitted for it and its principal (hub.capabilities).
     'capability_gate.require_held': {
         ('party.merge', 'standard'), ('list.merge', 'standard'), ('restore.document', 'standard'),
@@ -128,7 +130,12 @@ RESOURCE_PAIRS = {
         ('membership.grant', 'admin'), ('delivery.send', 'standard'), ('delivery.mark-sent', 'standard'),
         ('delivery.connect', 'admin'), ('automate.delivery', 'standard'),
         # automation-v1: the two kinds with no command of their own yet.
-        ('automate.bank-rule', 'standard'), ('automate.invoice', 'standard')},
+        ('automate.bank-rule', 'standard'), ('automate.invoice', 'standard'),
+        # pos-v1: an agent holds a POS capability only by its own grant.
+        ('pos.sell', 'member'), ('pos.void', 'member'), ('pos.refund', 'member'), ('pos.price-override', 'member'),
+        ('pos.layout', 'admin')},
+    # pos-v1: an item read shows costs only with the books, and vendors only with the vendor list.
+    'item_concealment.holds': {('ledger.read', 'member'), ('vendor', 'member')},
     # automation-v1: a rule is read or paused only by a caller its kind's own show and update admit.
     'automation.require_command': {('customer', 'member'), ('customer', 'standard'), ('customer-work', 'member'),
                                    ('ledger.read', 'member'),

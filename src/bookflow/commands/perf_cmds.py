@@ -92,10 +92,19 @@ perf_report = command(
     "perf report", scope="hub", capability="hub",
     description="Report how long commands take: p50, p95 and max per command and surface over a window, "
                 "and the slowest single calls. Times are inside the command (validation through the "
-                "response), with SQL statement counts. Nothing about the books' content is recorded.",
+                "response), with SQL statement counts. Nothing about the books' content is recorded. Outside an "
+                "installation administrator, only calls on companies whose reports the caller may run are counted.",
     authorization="any signed-in person or agent; installation administrators see every company, "
                   "others only calls on companies they can see",
     input_model=PerfReportInput, output_model=PerfReportOutput, error_codes=["E_VALIDATION"])
+
+
+def _reads_reports(s: Session, company) -> bool:
+    """Timings are a report: a company's calls show only to those who may run its reports (R114 inc 4: a POS clerk
+    holding `company` read alone sees none)."""
+    from bookflow.core import registry
+    from bookflow.hub.user_homes import permits_for
+    return permits_for(s, s.actor.id, company)(registry.get("report profit-and-loss"))
 
 
 @perf_report
@@ -105,7 +114,7 @@ def plan_perf_report(inp: PerfReportInput, ctx: Context, s: Session) -> Plan:
     timings.flush()
     companies = None
     if not s.is_hub_admin:
-        companies = store.company_hashes(s.data_root, [r["id"] for r in co.list_visible(s)])
+        companies = store.company_hashes(s.data_root, [r["id"] for r in co.list_visible(s) if _reads_reports(s, r)])
     out = store.report(s.data_root, since=since, command=inp.command, surface=inp.surface,
                        companies=companies, limit=inp.limit, slowest=inp.slowest)
     return Plan(preview=PerfReportOutput(

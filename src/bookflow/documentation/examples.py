@@ -2006,6 +2006,35 @@ EXAMPLES.update({
     'bulk-edit query': Example('bookflow bulk-edit query --kind item --company "Demo Plumbing Co" --json',
                                {'kind': 'item'}),
 })
+# R107 increment 7: guided opening balances, kept as a draft and posted through the cutover engine as one batch.
+_OPENING = '01J9ZK4QF8T7E2V5N3B6C1D0BK'
+EXAMPLES.update({
+    'opening-draft create': Example(
+        'bookflow opening-draft create 2026-09-30 --balances \'{"content": "Account,Balance\\nChecking,12430.55\\n"}\''
+        ' --given \'{"payables": "3100.00"}\' --company "Demo Plumbing Co" --reason "Owner\'s opening figures" --json',
+        {'as_of': '2026-09-30', 'balances': {'content': 'Account,Balance\nChecking,12430.55\n'},
+         'given': {'payables': '3100.00'}}),
+    'opening-draft update': Example(
+        'bookflow opening-draft update ' + _OPENING + ' --expected-version 1 --unpaid-bills \'{"content": '
+        '"Vendor,Reference,Date,Terms,Open amount\\nFerguson Supply,INV-1,09/10/2026,Net 30,3100.00\\n"}\''
+        ' --company "Demo Plumbing Co" --reason "Owner\'s opening figures" --json',
+        {'draft': _OPENING, 'expected_version': 1, 'unpaid_bills': {
+            'content': 'Vendor,Reference,Date,Terms,Open amount\nFerguson Supply,INV-1,09/10/2026,Net 30,3100.00\n'}}),
+    'opening-draft show': Example('bookflow opening-draft show ' + _OPENING + ' --company "Demo Plumbing Co" --json',
+                                  {'draft': _OPENING}),
+    'opening-draft query': Example('bookflow opening-draft query --state planned --company "Demo Plumbing Co" --json',
+                                   {'state': 'planned'}),
+    'opening-draft discard': Example('bookflow opening-draft discard ' + _OPENING + ' --company "Demo Plumbing Co"'
+                                     ' --reason "Started over" --json', {'draft': _OPENING}),
+    'opening-draft plan': Example('bookflow opening-draft plan ' + _OPENING + ' --company "Demo Plumbing Co"'
+                                  ' --reason "Plan the opening" --json', {'draft': _OPENING}),
+    'opening-draft apply': Example('bookflow opening-draft apply ' + _OPENING + ' --company "Demo Plumbing Co"'
+                                   ' --reason "Owner confirmed the plan\'s totals" --json', {'draft': _OPENING}),
+    'opening-draft tie-out': Example('bookflow opening-draft tie-out ' + _OPENING + ' --company "Demo Plumbing Co"'
+                                     ' --json', {'draft': _OPENING}),
+    'opening-draft reverse': Example('bookflow opening-draft reverse ' + _OPENING + ' --company "Demo Plumbing Co"'
+                                     ' --reason "Wrong opening date" --dry-run --json', {'draft': _OPENING}),
+})
 # R114 increment 1: the item's picture -- a photo uploaded, an image already attached chosen, or the picture removed.
 EXAMPLES.update({
     'item picture set': Example('bookflow item picture set "Pipe Sealant" sealant.jpg --company "Demo Plumbing Co"'
@@ -2035,6 +2064,17 @@ EXAMPLES.update({
     'automation pause': Example('bookflow automation pause delivery "Daily invoices" --company "Demo Plumbing Co"'
                                 ' --reason "Customer list under review" --json',
                                 {'kind': 'delivery', 'rule': 'Daily invoices'}),
+})
+# R114 increment 4: the POS layer's registers.
+EXAMPLES.update({
+    'pos-register create': Example('bookflow pos-register create --name "Front counter" --receipt-width 58 '
+                                   '--company "Demo Plumbing Co" --json', {'name': 'Front counter', 'receipt_width': 58}),
+    'pos-register update': Example('bookflow pos-register update Main --receipt-message "Thank you!" '
+                                   '--company "Demo Plumbing Co" --json',
+                                   {'pos_register': 'Main', 'receipt_message': 'Thank you!'}),
+    'pos-register show': Example('bookflow pos-register show Main --company "Demo Plumbing Co" --json',
+                                 {'pos_register': 'Main'}),
+    'pos-register list': Example('bookflow pos-register list --company "Demo Plumbing Co" --json', {}),
 })
 # R108 increment 4: bank rules, written or learned; an auto-add rule made live with one check of its details.
 _SHELL = [{'field': 'payee', 'op': 'contains', 'value': 'SHELL'}]

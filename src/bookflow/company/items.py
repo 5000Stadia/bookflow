@@ -368,8 +368,8 @@ class ItemOutput(StrictModel):
     quantity_committed: str
     quantity_on_order: str
     quantity_pending_build: str
-    average_cost: MoneyOutput
-    inventory_value: MoneyOutput
+    average_cost: MoneyOutput | None  # null to a reader without ledger.read (item_concealment)
+    inventory_value: MoneyOutput | None  # null to a reader without ledger.read (item_concealment)
     inventory_values_available: bool
     bill_of_material_cost: MoneyOutput | None
     combined_percent: str | None

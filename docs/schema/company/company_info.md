@@ -102,5 +102,6 @@ Database: `company`.
 | `delivery_auto_flag_from` | VARCHAR(10) | yes | — | — | — | — | Email: documents dated on or after this day are flagged to email when the customer prefers email (document delivery's queue); null is off. |
 | `weight_unit` | VARCHAR(16) | no | — | — | — | — | The company's one weight unit, a label never converted (lb, kg, oz). |
 | `shipping_item_id` | VARCHAR(26) | yes | — | — | — | items.id | Item freight to bill is billed as by default; null: name it. |
+| `pos_enabled` | BOOLEAN | no | — | — | — | — | Point of sale: the POS screen and its registers as an optional layer on sales receipts; off by default. |
 | `bank_rule_learning` | VARCHAR(8) | no | — | — | — | — | Bank rules: when two adds of a payee agree, ask (the default: a suggested rule to accept or decline), always (make it active) or never (learn nothing). |
 | `bank_rule_automation` | BOOLEAN | no | — | — | — | — | Bank rules: live auto-add and ignore rules act at imports (true, the default); false holds every one back company-wide, their lines waiting with their proposals. |

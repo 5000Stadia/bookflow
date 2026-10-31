@@ -99,6 +99,10 @@ def require_explicit_grant(s: Session, capability: str) -> None:
     There is deliberately no configurable provider, context override or role
     escape here. Tests may monkeypatch this owner in their own process.
     """
+    # The one exception (review M1 of R107 increment 7): a command undoing its own writes in the same call, as its
+    # all-or-nothing promise (batches.reverse(own_writes=True)); the caller had the authority to make them.
+    if capability in (getattr(s, 'own_rollback', None) or ()):
+        return
     from .permission_access import activated, require
     if activated(s):
         return require(s, capability, 'standard')
@@ -156,6 +160,8 @@ def one_authorization(s: Session):
 
 def require_resource(s: Session, capability: str, required_role: str) -> None:
     """Company requirement under the explicitly activated policy, or legacy role floor."""
+    if capability in (getattr(s, 'own_rollback', None) or ()):
+        return  # a command undoing its own writes in the same call (see require_explicit_grant)
     met = getattr(s, '_resource_checks', None)
     if met is not None and (capability, required_role) in met:
         return

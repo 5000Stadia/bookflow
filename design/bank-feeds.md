@@ -918,8 +918,7 @@ cheque blocker applies.
 
 ## As built: increment 4
 
-- **Migration co0119** (on co0116, main's head; co0117 and co0118 are taken by the opening-balances and point-of-sale
-  branches, so this one is renumbered at merge as needed) adds `bank_rules` (one row per rule, never deleted: the
+- **Migration co0119** (on co0118, the POS layer, after co0117 opening drafts) adds `bank_rules` (one row per rule, never deleted: the
   lines it fits, its action, `auto_add`, `priority`, `source`, `status`, `learned_from_batch`, `learned_key`, `edited`,
   and `automation.columns()`), `bank_rule_versions` (append-only: every saved version with who, how and why) and
   `bank_rule_declines` (append-only, unique per account and payee key); on `bank_lines`, `rule_id` (the rule that
@@ -929,8 +928,8 @@ cheque blocker applies.
 - **Two state columns, decided.** `automation.columns()` brings `state` (draft, live, paused), so §5's rule lifecycle is
   `status` (active, suggested, disabled, retired). Only an auto-add or ignore rule is an automation (`automation list`
   shows only those); every other rule stays `draft` and only proposes.
-- **Eight commands** (`company/bank_rules.py`, `commands/bank_rule_cmds.py`; layer `bank-rule-v1` on `automation-v1`,
-  861 commands, descriptor `8930d940`; writes standard and reads member under `bank-feed` with `ledger.read` member,
+- **Eight commands** (`company/bank_rules.py`, `commands/bank_rule_cmds.py`; layer `bank-rule-v1` on `pos-v1`
+  (re-chained from `automation-v1` at merge), 874 commands, descriptor `12b5f914`; writes standard and reads member under `bank-feed` with `ledger.read` member,
   as the inbox's own; the automation kind source's requirements grow by `bank-feed` member and standard):
   `bank-rule create`, `update`, `deactivate`, `accept`, `decline`, `apply`, `show`, `query`. `bank-line add` gains
   `always` (*Always do this*). `company update` gains `bank_rule_learning`.

@@ -94,5 +94,11 @@ def children(noun, inp, session, *, principal_id=None):
     more = len(rows) > inp.limit
     rows = rows[:inp.limit]
     items = [{key: decoders[key](value, row) if key in decoders else value for key, value in row.items() if not key.startswith('__')} for row in rows]
+    if noun == 'item':
+        from bookflow.company.item_concealment import conceal, hidden
+        which = hidden(session)
+        if which[1] and inp.column == 'vendor_profiles':
+            items = []
+        items = [conceal(item, session, which=which) for item in items]
     return ChildrenOutput(record=owner['id'], version=owner['version'], column=inp.column, items=items,
         count=len(items), matching_total=total, next_cursor=continuation(state, len(items), more))

@@ -611,6 +611,7 @@ The sending connections, and the transport kinds this build registers (none: not
 | Kind | read |
 | Required role | member |
 | Capability | company |
+| Additional resources | customer-work: member |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/delivery-connection.query` |
 | External binary body | none |
@@ -882,6 +883,7 @@ Show a sending connection: kind, settings, where its secret is (never the secret
 | Kind | read |
 | Required role | member |
 | Capability | company |
+| Additional resources | customer-work: member |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/delivery-connection.show` |
 | External binary body | none |

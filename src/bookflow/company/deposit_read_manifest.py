@@ -327,6 +327,7 @@ FIELDS = {
         'shipping_item_id': ('str', True, False, 'dependency_field'),
         'bank_rule_learning': ('str', False, False, 'outside_output'),  # R108 increment 4
         'bank_rule_automation': ('bool', False, False, 'outside_output'),
+        'pos_enabled': ('bool', False, False, 'dependency_field'),
     },
     'custom_field_defs': {
         'active': ('bool', False, False, 'dependency_field'),
@@ -427,6 +428,7 @@ FIELDS = {
         'job_sales_rep_id': ('str', True, False, 'dependency_field'),
         'address_mode': ('str', False, False, 'dependency_field'),
         'contact_mode': ('str', False, False, 'dependency_field'),
+        'pos_walk_in': ('bool', False, False, 'outside_output'),
     },
     'deposit_cash_cells': {
         'id': ('str', False, True, 'immutable_image'),

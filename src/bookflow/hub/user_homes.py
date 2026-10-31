@@ -77,8 +77,10 @@ def effective_in(db, user_id: str, company_id: str, principal: str | None = None
             return Effective(company_id, [])
         rows = policy.admissions(comparison, phase='old', subject=user_id, scope=scope)
         if principal is not None and principal in comparison.subjects:
+            # A pos.* capability is an agent's only by its own explicit grant (hub.capabilities), never its role.
             admitted = {row.requirement: policy.execution(comparison, phase='old', actor=user_id, bound_human=principal,
                                                           scope=scope, requirement=row.requirement).intersection_admitted
+                        and (not row.requirement.capability.startswith('pos.') or bool(row.grants))
                         for row in rows}
         else:
             admitted = {row.requirement: row.admitted for row in rows}
@@ -113,7 +115,8 @@ def permits_for(s, user_id: str, company: dict[str, Any], effective: Effective |
             return decided
         if best is None and not hub_admin:
             return False
-        return access.role_satisfies(best, "company", cmd.required_role, hub_admin)
+        from bookflow.company.pos_layer import legacy_required_role
+        return access.role_satisfies(best, "company", legacy_required_role(cmd), hub_admin)
     return permits
 
 
@@ -129,7 +132,8 @@ def _switches(s, company: dict[str, Any]) -> dict[str, Any]:
             found = dict(db.execute("SELECT * FROM company_info LIMIT 1").fetchone() or {})
     except (sqlite3.Error, TypeError, OSError):
         return {}
-    return {key: bool(found[key]) for key in ("pick_and_pack_enabled", "estimates_enabled") if key in found}
+    return {key: bool(found[key]) for key in ("pick_and_pack_enabled", "estimates_enabled", "pos_enabled")
+            if key in found}
 
 
 def reader_for(s, user_id: str, company: dict[str, Any]):

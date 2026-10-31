@@ -328,7 +328,8 @@ The result is kept as an `entered_balances` company attachment, as `cutover appl
 **Tie-out says what it proved.** Each `cutover tie-out` check gains `basis`: `given` (the owner's figure against the
 rows or books) or `derived` (nothing independent). Results and page list them apart: "tied to the 12,430.55 you
 gave" against "taken from your invoice list; not independently checked". `tied` needs every `given` check tied and
-the clearing account at 0.00. Posting an opening that does not tie is a person's act (`accept_differences`).
+the clearing account at 0.00. Posting an opening that does not tie (`accept_differences`) needs the capability
+`opening.accept-differences`: people hold it at standard, an agent only by its principal's grant (as built, increment 7).
 
 **The draft.** Typed rows survive a closed browser in `opening_drafts` (id, `as_of`, entered files as attachment
 ids, owner-given figures, state `draft`/`planned`/`applied`/`discarded`, version). `opening-draft create/update/
@@ -386,6 +387,10 @@ increment is chained on the tip (`import-v1`, `import-mapping-v1`, `import-docs-
 | `import kinds`, `template`, `show`, `query`, `rows`, `errors`; `import-mapping show`, `query`, `history`, `match`; `batch show`, `query`; `bulk-edit columns`, `show`, `query`; `opening-draft show`, `query` | member |
 | `import preview`, `decide`, `run`, `cancel`; `import-mapping save`, `deactivate`; `bulk-edit preview`, `apply`, `reverse`; `import reverse`; `opening-draft` writes, `plan`, `apply`, `tie-out` | standard, `import` or `bulk-edit` plus each row's command authority (an agent may do all of it, within the limits below, without `import.approve`) |
 | `import approve`, `bulk-edit approve`; `accept_differences`; `create_missing` for a party when a look-alike exists; any run above the thresholds | standard plus capability **`import.approve`** (humans hold it; an agent when granted) |
+
+> **Superseded (2026-10-28 and increment 7).** `import.approve` was never built: approval and the size thresholds were
+> dropped for imports and grid edits (see increments 4 and 6), a look-alike is refused for every actor, and
+> `accept_differences` is the capability `opening.accept-differences` (As built: increment 7).
 
 - **An actor without `import.approve` can do the job:** read a messy file, propose a mapping, preview, answer the decisions it can
   (map to an existing name, skip), save the mapping and run. It cannot override a look-alike or post an opening that does
@@ -677,7 +682,8 @@ For the builder, defaults standing unless review finds otherwise:
 
 1. **Ambiguous date order.** *Default:* ask in the preview, never guess; the browser preselects month-first, as
    `reconcile import`'s auto mode reads US dates.
-2. **Row cap per run.** *Default:* 20,000 until increment 5 measures; larger files are split.
+2. **Row cap per run.** *Default:* 20,000 until increment 5 measures; larger files are split. *Set by increment 5:* 10,000, the
+   largest size measured (see As built: increment 5).
 3. **Reverting an import.** *Changed 2026-10-27.* *Default:* every import run and grid edit is reversible as one unit
    through the shared batch mechanism (§8a), with the caller's own grants; the old default (`revert-plan` only) is
    dropped. Reversal is refused while a created record is in use or an edited record changed again; `--skip-changed` is
@@ -1152,6 +1158,100 @@ tests running; seconds, 2026-10-28):
 The run costs about 0.19 s per invoice at both sizes (a fifth less than looping the command, which opens a session
 per call), the preview about 0.055 s per invoice, and the reversal about 0.15 s per invoice (one delete each).
 
+## As built: increment 5
+
+- **What held criterion 8 back.** Throughput already held. Memory did not: at 10,000 customers the run's resident
+  memory climbed from 312 MB to 373 MB over its second half (peak 366-372 MB against 321 MB at 1,000, +14 percent),
+  while Python's allocated blocks grew by more each slice. Tracing one late slice (`tools/diag_import_slices.py 8000
+  13`) showed 0.06 MB still held after a garbage collection: nothing leaked, but each slice's state waited for a full
+  collection. `run_slice`'s `process` calls itself (a row whose referenced record a later row makes runs that row
+  first) and the reference creator set an attribute on itself, so both were reference cycles holding the slice's
+  `Books`, every record of the kind by key, name and id, plus the ledger; the garbage per slice grew with the company,
+  and full collections came rarely among the process's ~800,000 long-lived objects. **Fixed:** the creator is an
+  object (`_ReferenceCreator`), and `run_slice` drops `process` when the slice ends, so a slice's books are freed when
+  it returns. Afterwards resident memory is flat across all slices (311.0 MB on every one of 21 slices at 10,000) and
+  the run is faster: 25.3 ms per customer in the run just after the fix, against 33.0 in the run just before it
+  (both with `--series`, minutes apart on the shared machine).
+- **Pending rows read lazily.** A slice of a kind that can refer to itself (customer, through `parent_id`) read every
+  row not yet run, with its payload, to find a record a later row makes; it now reads them only when a row first
+  refers to such a record that the books lack (`_WaitingOn`). A file without jobs or sub-records never reads them.
+- **Row cap.** A file over the cap is refused at preview by the reader, text or `.xlsx`, before any check: the reader
+  counts the rows past the cap without keeping them, up to twice the cap (`COUNTED_ROWS`; past it the count stops and
+  the refusal says "more than"), and the refusal (`too_many_rows`) gives the count, the cap and the number of files
+  (`details`: `rows`, `more_than`, `max_rows`, `files`), with `field` `attachment` for any attached file (CSV or
+  workbook) and `content` for pasted text. The caller words the split for the kind: a list file is split between rows;
+  a document file **between documents, each document's rows kept in one file**, since a document cut across two files
+  would import short with no error (its rows in the later file hash to the document's key, already in). A text file
+  over 256 MB (`MAX_TEXT_BYTES`, the size an `.xlsx` may unpack to) is refused first (`too_large`). Nothing is stored.
+- **Backup advice.** It was a note; §5 puts it in `next`. A preview of more than 100 rows (documents, for a document
+  kind) still `previewed` returns `next` = `company backup first (N rows; the import takes none), then import run
+  <run>`; once a slice has run, `next` is `import run <run>` again. Opening balances are increment 7's.
+- **Tools.** `tools/measure_import.py customer|invoice N [WORKDIR] [--loop] [--series] [--profile FILE]` measures
+  one kind and size per process: preview, then `import run` called until done at its default slice, resident memory
+  after the preview and after each slice and the process's peak (`ru_maxrss`, read before the loop), then with
+  `--loop` the same single command looped in-process over the same rows in a second company (`client.run`, as a
+  script would; a customer's terms looked up once, as the import resolves them). `tools/diag_import_slices.py` is
+  the tracing diagnostic above. The tool resets the process's resident high-water mark (`VmHWM`, by writing 5 to
+  `/proc/self/clear_refs`) once the companies are made, and reads it after the preview, then (reset again) after the
+  run: the import's own peaks. The process's `ru_maxrss` cannot tell them, since setting up the two companies peaks
+  higher (323-329 MB) than either. `tests/test_import_scale.py` runs the tool small for throughput (300 customers, 30
+  invoices; its own 600 s timeout), both sizes for memory (its own 1,500 s timeout; preview and run high-water marks
+  each within 10 percent), kills a run's process outright (`os._exit`) at three points (inside a row's write
+  transaction, after a committed write, while the outcomes of rows that wrote nothing are stored) and resumes it with
+  each customer, key and batch effect once; runs jobs listed before their customers in slices of one and two rows,
+  killed after a customer's write and before its job's, each made once under the right parent; and checks the cap's
+  wording for a list and a document kind, the bounded count, one field for CSV and workbook attachments, the byte
+  cap and the backup advice.
+
+**Measurements** (`tools/measure_import.py`, one process each, one at a time, root NVMe, other builders' suites
+running; 2026-10-30, after the fix; seconds unless named):
+
+| Run | Parse and guess | Preview | Run | Slices (slowest) | Loop of the command | Run over loop | RSS after preview / after every slice | Peak RSS |
+|---|---|---|---|---|---|---|---|---|
+| 1,000 customers | 0.019 | 7.26 (7.3 ms/row) | 21.81 (21.8 ms/row) | 2 (10.9) | 65.48 (65.5 ms/row) | 0.33 | 292.4 / 292.5-292.9 MB | 323.1 MB |
+| 10,000 customers | 0.052 | 72.73 (7.3 ms/row) | 205.91 (20.6 ms/row) | 20 (16.4) | 798.22 (79.8 ms/row) | 0.26 | 306.8 / 309.1 MB, flat | 323.4 MB |
+| 3,334 invoices of 3 lines (10,002 rows) | 0.048 | 175.91 (17.6 ms/row, 52.8 ms/invoice) | 615.87 (184.7 ms/invoice) | 31 (20.6) | 987.75 (296.3 ms/invoice) | 0.62 | 311.1 / 311.1-311.2 MB, flat | 323.0 MB |
+
+Criterion 8 holds: the run is 0.26 to 0.62 of the looped single command (bound 1.25); peak memory at 10,000 rows is
+0.1 percent above 1,000 (323.4 against 323.1 MB; bound 10 percent), and the most held after any slice 5.5 percent
+above (309.1 against 292.9 MB, the larger company's own lists). Each process's peak is reached while the two
+companies are made, before the import (323.0-323.2 MB), and the import never passes it. Before the fix, the same tool
+at 10,000 customers gave a peak of 366.2 and 371.9 MB in two runs (resident memory after the slices 312 rising to 367
+and 373 MB); 1,000 customers, 320.6 MB. A cProfile of a 1,000-customer run put 84.0 of 84.6 s inside the nested
+command: the importer's own cost per row is small.
+
+**Settings chosen from them:**
+- **Slice: 500 rows or 20 seconds, unchanged.** Measured, a slice ran 10.9 s at most for customers at 1,000 and 16.4
+  s at 10,000 (500 rows each, the count ending it), and 20.6 s for invoices (about 108 per slice, the time ending it);
+  every call stays under 21 s, and memory is the same after every slice, so a larger count would only lengthen
+  calls.
+- **Refusal stop: 100, unchanged.** A refused row costs at most one attempt of its command, so 100 refusals take at
+  most about 2.1 s of customers or 18.5 s of invoices at the measured run costs: a runaway stops within one slice.
+- **Row cap: 10,000 rows** (was 20,000, §12 question 2's starting value), the largest size measured. The preview is
+  one call, linear at 7.3 ms per customer row and 17.6 ms per invoice row, so 10,000 rows is a 73 s or 176 s call; at
+  20,000 it would be twice that, and that size was not measured. A larger file is refused with its count and the
+  split; the rerun-safe key ledger makes importing the pieces one after another safe.
+- **Not changed:** the preview is still one call holding the file's rows; a preview in slices would be the next step
+  past 10,000 rows.
+
+**After the review** (2026-10-30; same tool, one at a time, after the high-water mark reset). The
+peak figures above are each process's `ru_maxrss`, reached while its companies were made, so they could not show the
+import's own peak. Measured as the import's own, the preview at 10,000 customers first peaked 10.4 percent above
+1,000's (324.9 against 294.2 MB; the run 7.2 percent, 315.4 against 294.3); `apply_preview` built every row's stored
+values at once. It builds them 500 at a time now, and the tool no longer holds the loop's 10,000 inputs during the
+import (they are made after the run, with `--loop`):
+
+| Run | Preview | Run | Slices (slowest) | Loop | Run over loop | High-water mark: preview / run | RSS after every slice |
+|---|---|---|---|---|---|---|---|
+| 1,000 customers | 13.30 (13.3 ms/row) | 50.81 (50.8 ms/row) | 3 (20.2) | | | 292.8 / 293.1 MB | 293.1 MB |
+| 10,000 customers | 117.53 (11.8 ms/row) | 327.09 (32.7 ms/row) | 22 (21.1) | | | 312.6 / 308.3 MB | 305.6 MB, flat |
+| 3,333 invoices of 3 lines (9,999 rows; after merging main 57d7cd56) | 170.23 (17.0 ms/row) | 980.26 (294.1 ms/invoice) | 49 (20.9) | 1,314.17 (394.3 ms/invoice) | 0.75 | 310.1 / 309.0 MB | 309.0 MB, flat |
+
+At 10,000 customers the preview's high-water mark is 6.8 percent above 1,000's and the run's 5.2 percent (bound 10).
+The customer rows were taken with heavier load from other suites than the first table (2.3 times its run time per
+row at 1,000), before merging main 57d7cd56; the final test run's memory test checks the same bound after the merge.
+The invoice file is 3,333 invoices since 3,334 (10,002 rows) is now over the cap.
+
 ## As built: increment 6
 
 - **Migration co0116** (on co0115; numbered co0115 until item pictures took that number at the merge): `bulk_edit_runs` (one grid edit: the selection, what was asked, its label, the
@@ -1265,3 +1365,167 @@ to 0.05 over every item; seconds, 2026-10-28):
 
 Linear: the grid costs about 2.3 ms a record (each read through `item show`), the preview 12 ms (read and dry-run),
 the apply 36 ms (a read for the prior values and the update with its audit event), the reversal 30 to 49 ms.
+
+## As built: increment 7
+
+- **Migration co0117** (on co0116): `opening_drafts`, one row per draft: the cutover date, each step's rows as pasted
+  text or an attachment id (with a date order when given), the totals the owner gave, the stock items a person
+  confirmed may be made, the clearing account named, the state (`draft`, `planned`, `applying`, `applied`,
+  `rolled_back`, `failed`, `reversed`, `discarded`), the batch once applied, the last plan's or apply's summary, and a
+  version. Guards: never deleted; identity and creation fixed; every change moves the version forward. Decided: the
+  pasted text lives in the draft row (bounded at 2 MB a step), not in an attachment per paste: an update is then one
+  write with its audit event and no orphan files; `cutover apply` still keeps each step's text as a company attachment
+  when it posts, as it keeps any text file, and a step may name an attachment instead.
+- **The entered kinds** (`cutover_sources.py`, read through `tabular.py`, never detected from headings):
+  `entered_balances` (Account by name, number or ID, Balance on the account's own side; a Side column or Debit and
+  Credit columns say otherwise), `entered_open_invoices`, `entered_unpaid_bills` (Customer or Vendor, Number or
+  Reference, Date, Due date or Terms, Open amount, PO, Memo; a negative amount is a credit) and `entered_stock`
+  (Item, Quantity, Total value or Unit cost, both checked against each other). Headers are matched by synonyms; dates
+  read in the column's order, and an all-ambiguous column is refused (`ambiguous_date`) unless `date_order` is given
+  (`CutoverFile.date_order`, entered kinds only). They fill the engine's own `OpenDocument` and `StockRow`; balances
+  become `EnteredBalance` rows, and `cutover.build` turns them into the `TrialBalance` (`_entered_trial_balance`):
+  each account resolved against the chart (an unknown one stays as typed, so `unmapped_account` names it), the side
+  from the account's type, receivables, payables and inventory derived from the documents and stock that post when
+  the owner left them out, and Opening Balance Equity derived as the balancing figure unless an equity account was
+  typed (then `trial_balance_unbalanced` applies). A due date left out is worked out from standard terms (`Net 30`
+  from the date), for the posting and the tie-out's aging alike. A stock row names an existing inventory part (by ID
+  or full name), or is made as a new one when confirmed (`make_items`) with the company's default accounts: the first
+  active income account named for sales (not returns), else the first income account; Cost of Goods Sold; Inventory
+  Asset; its cost the value over the quantity.
+- **`basis`** on every check: `CutoverCheck` (plan), `CutoverTieRow`, `CutoverTieSection` and `CutoverStockSection`,
+  and the tie-out's new `checks` list (one per trial balance figure, given first, each with `tied` and a sentence:
+  "tied to the 12,430.55 you gave", "taken from your invoice list; not independently checked", "worked out as assets
+  less liabilities; not independently checked"). Every figure of an export is `given`, so the anchor-style path reads
+  as before plus the new fields. Decided: `tied` needs every check tied, derived ones too (a derived figure the books
+  do not show means the posting went wrong), and the clearing account at 0.00; this includes design §6's "every given
+  check tied".
+- **Commands** (`company/opening_drafts.py`, `commands/opening_draft_cmds.py`): `opening-draft create`, `update`
+  (carrying `expected_version`; an empty step clears it; back to `draft`), `show` (each step with what its rows alone
+  show to be wrong, by line), `query`, `discard`, `plan` (the engine's plan, state `planned`), `apply`, `tie-out` and
+  `reverse` (added beside §9's list: the domain door to the batch reversal, as `import reverse` and `bulk-edit reverse`
+  are). The totals given become one more `entered_balances` file on the receivables, payables and inventory accounts
+  by ID. `cutover plan/apply/tie-out` is the only thing that posts; the draft adds no posting path.
+- **All or nothing, and a stop continues.** `apply` writes the batch (kind `opening`) and the draft's `applying` in the
+  command's own transaction, then runs `cutover.apply` with a recorder that writes each created record's effect in its
+  step's transaction (`cutover.step_recorder`). A command refused part way (`E_CUTOVER_INCOMPLETE`) reverses the batch
+  at once: `rolled_back`, and the error says nothing of the opening stays; if that undo is itself refused the draft is
+  `failed` and the error names why (`opening-draft reverse` finishes it). A stop any other way (a killed process) leaves
+  `applying` with the batch live, and the same `apply` continues in that batch, every record made before `already_in`.
+- **Reversible as one unit** through the shared ledger: invoices, bills and journals by their families' delete with
+  history kept, credits and stock adjustments by void, customers, vendors, items and terms renamed and deactivated; a
+  record in use since (a payment applied to an opening invoice) refuses the whole with the record named. Records a
+  reversed opening made are no longer `already_in` for a later opening (`Books` passes over created effects of
+  reversed `opening` batches), so a corrected opening posts afresh. Two fixes in the shared plan (`batches._in_use`):
+  a row belonging to a document the same batch made (an opening invoice's lines naming the customer and item it
+  made; a stock placement, through its movement) is no use of the record, and such a record's inverse is probed by
+  running it once those documents are gone, not by a dry run beforehand.
+  *Left for R186:* accounts. An account that has carried postings is never deactivated (accounts keep their
+  history), so the batch does not record the accounts an opening makes; after a reversal the clearing account (and,
+  on an anchor-style draft, any account made from a chart export) stands at 0.00 and the next opening uses it again.
+  Retiring it needs an inverse for "an account whose every posting was reversed", which the accounts module does not
+  have. A separate `opening-draft reverse` needs the caller's own explicit delete grants for the families it deletes
+  (`transaction.invoice.delete`, `credit_memo`, `bill`, `journal_entry`, `sales_receipt`; vendor credits and stock
+  adjustments are voided under `ledger.post`), as every batch reversal does (§8a). The automatic undo of a refusal
+  part way does not (review M1, below).
+- **`accept_differences`: a capability, not people-only.** principal-directives.md keeps people-only for the five acts
+  no capability could make safe; posting an opening that does not tie is not one of them. So it is the capability
+  `opening.accept-differences` (standard; held by standard, admin and owner as before, by an agent only through its
+  principal's explicit grant and while the principal holds it, checked at one declared site,
+  `opening_drafts.require_accept`). It takes the place §4 gave `import.approve`, whose other acts were dropped on
+  2026-10-28. It downgrades only `receivables_do_not_tie`, `payables_do_not_tie`, `inventory_does_not_tie` and
+  `trial_balance_unbalanced` to warnings marked "accepted"; the difference stays in the clearing account, and tie-out
+  says not tied until it is found.
+- **Confirmation (rule ucad913).** No approve step and no threshold. The agent guide's "Opening balances for a business
+  with no old books" teaches one check of the exact details with the owner before `apply` (the date, the plan's counts
+  and totals, which checks are given and which derived), then apply on their yes; `accept_differences` is the owner's
+  decision. `plan` and `apply` help say the same.
+- **Permissions:** layer `opening-draft-v1`, now on `automation-v1` (re-chained at the merges of main 0b3769e8, 5c2616b3 and 06c29f99; 862 commands): `show` and `query`
+  member reads, the other seven standard, all under `import`; the new capability above. No existing capability, role
+  default or threshold changes.
+- **The page** `/c/<company>/opening` (Company menu: "Opening balances"; `opening_pages.py`, `opening.html`,
+  `opening.css`): with no draft, a short explanation, "opening balances come first; enter later work dated after"
+  (question 6), the start form (date and the totals known) and the drafts; a draft's steps Date and checks, Balances
+  you know, Open invoices, Unpaid bills, Stock (each a grid taking a paste under its shown header, its row count and
+  problems by line; stock with "Make these new items"), and Tie out and post (the plan, the checks given and derived
+  apart, Post naming the date, "post it anyway" only when every blocker is acceptable, then the tie-out given and
+  derived apart, and Undo planning first). htmx for every post; a refusal answers 200 in place; a reload returns to
+  the draft and step. At 390 px the steps stack and nothing scrolls sideways (asserted at every step). Screens:
+  `/tmp/m4-shots/opening/` (each step at 1440 and 390).
+- **Question 7** stands: stock comes in by the stock step (or an `inventory adjust` import), never through the `item`
+  kind.
+- **Exceptions reachable from entered rows** (tested): `unmapped_account`, `missing_open_invoices`,
+  `missing_unpaid_bills`, `missing_inventory_valuation`, the three `*_do_not_tie`, `document_after_cutover`,
+  `document_without_date`, `type_conflict`, `negative_stock`, `possible_duplicate_customer`, `unknown_terms`,
+  `several_trial_balances` (entered balances beside a trial balance export), `trial_balance_unbalanced`,
+  `entries_before_cutover`, `period_closed`, and the new `duplicate_account`, `unreadable_amount`, `ambiguous_date`,
+  `missing_column`, `unknown_item`, `stock_value_mismatch`. The rest of docs/cutover.md's list concerns exports the
+  guided path never reads (IIF lists and their row checks, report titles, dates and totals, reconciliations,
+  uncleared items, Undeposited Funds' report, 1099s) and cannot arise from typed rows.
+- **Tests:** `tests/test_opening_balances.py` (criterion 6 with 4 balances, 12 invoices, 8 bills and 30 stock items
+  worked by hand; a wrong total refused leaving nothing; accepting a difference; a refusal part way rolled back and a
+  stop continued; reversal as one unit and refused naming the payment; typed and derived equity; the reachable
+  exceptions; the same data through `cutover` from anchor-style exports giving identical balances, aging and stock),
+  `tests/test_opening_balances_surfaces.py` (Python, CLI, HTTP and MCP alike), `tests/test_opening_balances_browser.py`
+  (a person pastes, plans, posts and reads the tie-out in real Chrome at 1440 and 390).
+
+### As built: the review of increment 7
+
+Reviewed at 8ce229b4; each finding fixed with a test (`tests/test_opening_balances.py` unless named).
+
+- **H1. Stock sold since blocks the undo** (shared, `batches._document_uses`). A document the batch made that moved an
+  item's stock is in use while a later movement of that item, by a document the batch did not make and still
+  standing, follows it: the refusal names it ("invoice 2001 (it moves Part 10 later)"). This covers a document
+  import's inventory adjustment too. Test: Part 10 sold after the opening.
+- **H2. An undo stopped part way is finished first.** `apply` is refused while the draft's batch is `reversing` or
+  `blocked`; `opening-draft reverse` that stops part way leaves the draft `failed`, whose `next` is reverse; and
+  `cutover`'s `Books` no longer takes as already in any record an undo of an opening touched (record by record, from
+  the reversal batch's effects) or any document since deleted or voided. Test: a killed apply, an undo stopped after
+  one slice, apply refused, the undo finished, the same draft applied again and tied, with a credit memo and a vendor
+  credit (credits on the entered path).
+- **M1. All or nothing for every caller.** Decided by the coordinator: a command's automatic undo of its own writes in
+  the same call, nothing depending on them, is part of its all-or-nothing promise and needs no delete grant (the
+  caller had the authority to write them). `batches.reverse(own_writes=True)` sets that for its run, and
+  `access.require_explicit_grant` honours it for the five document deletes only (`batches.OWN_ROLLBACK_DELETES`); only
+  `opening_drafts._roll_back` passes it. A later, separate reverse still needs the caller's own grants. Test: the
+  default owner, holding no delete grant, refused part way, leaves nothing.
+- **L1.** A record the batch's own documents use is still dry-run in the plan; only its refusal for something other
+  than permission is set aside (it is probed again by running, once those documents are gone).
+- **L2.** Decided: accounts stay unretired (above); `opening-draft reverse` help says so, and its result lists in
+  `stays` what the opening changed outside its batch.
+- **L3.** A second opening is refused at `apply` while another stands (applying, applied or failed), naming it.
+- **L4.** What an opening changes outside its batch is named, not undone: `apply` returns `outside_batch` (the clearing
+  account, a default sales tax item it set, the next invoice number it carried on, the steps kept as attachments),
+  kept in the draft's summary, and `reverse` returns it as `stays`. The draft's state changes inside apply and
+  reverse (applying, applied, rolled back, failed, reversed) each write an audit event.
+- **L5.** An undo that finishes on a draft that never finished applying returns it to `rolled_back`, editable and
+  applied again with nothing pasted anew; an applied opening undone ends `reversed`.
+- **L6.** `require_accept` answers `principal_lacks_capability` when the principal does not hold the capability; the
+  stale `import.approve` mentions are corrected (principal-directives.md §4 and §6, §8 here marked superseded), and
+  §6's "a person's act" now names the capability. Test: an agent through HTTP, ungranted, granted with a principal
+  who lacks it, granted with one who holds it (a dry run), and a person.
+- **L7.** The same-books test compares every aging bucket and each invoice's date and due date too; the reversal
+  test asserts the blocker names the payment on invoice 1012; a new stock item's cost rounds half-up.
+- **Import reversal** (`tests/test_import_documents.py`): a customer `create_missing` made for its own invoice is no
+  use of it, and a payment applied later to that invoice is named.
+
+### As built: the verification of the review fixes (at 2e7fedab)
+
+- **M1, a resumed apply.** The automatic undo passes `own_writes` only when this call opened the batch: every record
+  in it is then this call's own. An apply that resumes a batch an earlier call began (perhaps another person's, or
+  an agent's principal's) undoes a refusal only under the caller's own delete grants; without them the draft ends
+  `failed`, the error names the grants, and nothing is deleted in the caller's name. The count of records undone is
+  read from the batch. Tests: a clerk with no delete grant, and an agent over HTTP, each resuming a stopped opening.
+- **N1, no dead end.** Decided by the coordinator: the shared plan (`batches.plan`) passes over a created document
+  already voided or deleted (by hand, since): nothing of it is left to undo, so the reversal and the automatic undo
+  finish. `opening-draft reverse` on a draft whose batch is already reversed only marks the draft; `discard` takes a
+  `failed` or `applying` draft once nothing of its batch stands. Test: a stopped apply, invoices deleted and voided by
+  hand, apply again, ending `rolled_back` with nothing in the books, then discarded.
+- **N2, the stock check is linear.** `_document_uses` reads each item's movements after the batch's first once, the
+  batch's own documents left out in SQL, and keeps three names per document (by bisection), in place of a pairwise
+  join. Test (`tests/test_batches.py`): 2,000 and 4,000 documents on one item with one later sale; every document is
+  held by it, in 0.015 s and 0.086 s (measured 2026-10-30; the pairwise join took 3.8 s at 600 rows), one name per
+  document.
+- **Low.** An applied opening whose undo took more than one run ends `reversed`; one that never finished applying
+  ends `rolled_back` (decided by whether it was ever applied).
+- **Permissions:** after the merge of main 06c29f99 (R187 automation), `opening-draft-v1` sits on `automation-v1`
+  (862 commands).

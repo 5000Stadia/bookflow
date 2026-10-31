@@ -1016,6 +1016,26 @@ what `apply` returns, including any record refused because someone changed it me
 change" is `bulk-edit reverse --dry-run`, then `bulk-edit reverse`; a record changed since is named and nothing
 changes, and `--skip-changed` restores the rest only when the owner agrees to leave those.
 
+## Opening balances for a business with no old books
+
+"Starting from nothing: the bank has 12,430.55, I owe 3,100 on bills, here are the invoices and the stock" is
+`opening-draft create` with the cutover date and each step the owner gives as rows with a header row: `balances`
+(Account, Balance: every bank, card, loan and other balance they know; a card or loan is what they owe),
+`open_invoices`, `unpaid_bills` and `stock`, pasted text in `content`. Put a total they state (receivables, payables,
+stock value) in `given`, so the rows are checked against it; a total left out is taken from the rows and labelled
+`derived`. Equity is worked out unless they name equity accounts. Then `opening-draft plan`: read `blocking` first,
+fix each with `opening-draft update` (carrying `expected_version`), and plan again until `ready`. A stock item that
+is not an item yet is made only when the owner confirms it (`make_items`).
+
+An opening sets how the books start, so before `opening-draft apply` check its exact details with the owner once:
+the date, the counts and totals from the plan, and which checks are `given` (proved against a figure they gave) and
+which `derived` (taken from their rows). Apply on their yes; do not ask again. Then `opening-draft tie-out` and
+report `tied`, the given checks ("tied to the 12,430.55 you gave") and the derived ones apart. A refusal part way
+undoes the whole opening; a stop continues on the next `apply`. When a given total does not tie, say so and ask
+whether to correct it; posting it anyway (`accept_differences`, the difference left in the clearing account) is the
+owner's decision, and an agent needs the capability `opening.accept-differences` from its principal for it.
+"Undo the opening" is `opening-draft reverse --dry-run`, then `opening-draft reverse`; what blocks it is named.
+
 ## Reading a bank statement from a file
 
 When the owner says the statement is in your input folder, attach the file once and import it by its
@@ -1518,3 +1538,17 @@ Balance Equity outside the move-in, an agent's round, unexplained month-end amou
 bank account, and a customer balance an agent wrote off, or a charge it waived, with a receipt of 0.00 (`write_off`). Your write's result carries a warning when it lands there. Nothing is refused;
 the owner reviews it (`review mark`, a person's step). `report prior-balances` shows any
 reconciled or closed balance that has moved since, with the entries that moved it.
+
+## Point of sale
+
+Point of sale is a person's checkout on a phone, tablet or till, and an optional layer: while `company show` says
+`pos_enabled` is false every `pos*` command refuses with `E_FEATURE_DISABLED`. To record a sale, use `sales-receipt
+post` as always, POS on or off. Each POS act is a capability your principal grants on your membership (`pos.sell`,
+`pos.void`, `pos.refund`, `pos.price-override`, `pos.layout`); your role never gives you one. With `pos.sell`,
+`pos-register list` answers which tills there are, where each one's takings are deposited and which payment methods
+it takes; `pos-register create` and `update` need `pos.layout`.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "pos-register list", "input": {}}
+```

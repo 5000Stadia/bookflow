@@ -103,6 +103,14 @@ MATRIX = {
     "user deactivate": {"E_PERMISSION": "not a human hub administrator, a never-activated installation, or the last active installation administrator",
                         "E_USER_NOT_FOUND": "no such person", "E_VALIDATION": "an agent (use agent deactivate), or yourself",
                         "E_VERSION_CONFLICT": "stale --expected-version"},
+    "opening-draft create": {"E_DIRECTIVE_INACTIVE": "the cited directive is no longer active", "E_DIRECTIVE_NOT_FOUND": "no such directive", "E_RECORD_NOT_FOUND": "no such opening draft"},
+    "opening-draft update": {"E_DIRECTIVE_INACTIVE": "the cited directive is no longer active", "E_DIRECTIVE_NOT_FOUND": "no such directive", "E_RECORD_NOT_FOUND": "no such opening draft", "E_VERSION_CONFLICT": "stale --expected-version"},
+    "opening-draft discard": {"E_DIRECTIVE_INACTIVE": "the cited directive is no longer active", "E_DIRECTIVE_NOT_FOUND": "no such directive", "E_RECORD_NOT_FOUND": "no such opening draft"},
+    "opening-draft plan": {"E_DIRECTIVE_INACTIVE": "the cited directive is no longer active", "E_DIRECTIVE_NOT_FOUND": "no such directive", "E_RECORD_NOT_FOUND": "no such opening draft"},
+    "opening-draft apply": {"E_CUTOVER_BLOCKED": "the plan has blockers, or the opening does not tie without accept_differences", "E_CUTOVER_INCOMPLETE": "a step was refused part way; what this call posted was rolled back", "E_DIRECTIVE_INACTIVE": "the cited directive is no longer active", "E_DIRECTIVE_NOT_FOUND": "no such directive", "E_RECORD_NOT_FOUND": "no such opening draft", "E_VERSION_CONFLICT": "stale --expected-version"},
+    "opening-draft reverse": {"E_BATCH_BLOCKED": "something later depends on what the opening posted", "E_DIRECTIVE_INACTIVE": "the cited directive is no longer active", "E_DIRECTIVE_NOT_FOUND": "no such directive", "E_RECORD_NOT_FOUND": "no such opening draft", "E_VERSION_CONFLICT": "stale --expected-version"},
+    "opening-draft show": {"E_RECORD_NOT_FOUND": "no such opening draft"},
+    "opening-draft tie-out": {"E_QUERY_STALE": "the draft changed since the tie-out was read", "E_RECORD_NOT_FOUND": "no such opening draft"},
     "user home set": {"E_PERMISSION": "another person's Home without user.manage, or a Home for an agent",
                       "E_USER_NOT_FOUND": "no such person", "E_VALIDATION": "not a workbench page, or one the person may not open",
                       "E_VERSION_CONFLICT": "stale --expected-version", "E_COMPANY_NOT_FOUND": "no such company",
@@ -2902,3 +2910,19 @@ for _name in ('bank-rule deactivate', 'bank-rule accept', 'bank-rule decline', '
     MATRIX[_name] = dict(_BANK_RULE)
 MATRIX['bank-rule show'] = {'E_VALIDATION': 'invalid input', 'E_RECORD_NOT_FOUND': 'unknown rule'}
 MATRIX['bank-rule query'] = {'E_VALIDATION': 'invalid input or cursor', 'E_RECORD_NOT_FOUND': 'unknown account'}
+# The POS layer (R114 increment 4): registers.
+_POS_WRITE = {
+    'E_VALIDATION': 'a deposit account that is not Undeposited Funds or a bank, a refund account that is not a bank, a '
+                    'payment method named twice, an unknown decoder',
+    'E_RECORD_NOT_FOUND': 'unknown register, site, account, payment method or customer',
+    'E_NAME_TAKEN': 'another register has the name',
+    'E_INACTIVE_REFERENCE': 'an inactive account, payment method or customer',
+    'E_FEATURE_DISABLED': 'POS is off for the company',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+    'E_IDEMPOTENCY_MISMATCH': 'a reused operation key with other input',
+}
+MATRIX['pos-register create'] = dict(_POS_WRITE)
+MATRIX['pos-register update'] = dict(_POS_WRITE, E_VERSION_CONFLICT='changed since the version read')
+MATRIX['pos-register show'] = {'E_RECORD_NOT_FOUND': 'unknown register', 'E_FEATURE_DISABLED': 'POS is off'}
+MATRIX['pos-register list'] = {'E_FEATURE_DISABLED': 'POS is off for the company'}

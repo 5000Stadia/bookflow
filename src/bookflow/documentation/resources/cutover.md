@@ -69,6 +69,30 @@ Over MCP, attach each export first, then pass only attachment ids. The ids stay 
 
 When the MCP server has no input directory, give a file once as its text (`{"content": "...", "name": "trial_balance.csv"}`): `cutover apply` keeps it as an attachment and returns its id in `files[].attachment` for every later call. Copy the text exactly; a retyped row with a tab added or dropped is refused as `row_width` or `row_shifted`.
 
+## Opening balances without old books
+
+A business with no old books gives what it knows instead of exports, as rows with a header row (pasted from a
+spreadsheet, or typed). Each kind is named in `kind`, never read from headings:
+
+| `kind` | Columns |
+|---|---|
+| `entered_balances` | Account (name, number or ID), Balance: one row per account the owner knows, on the account's own side (a card or loan is what is owed); a Side column (debit or credit), or Debit and Credit columns, say otherwise |
+| `entered_open_invoices` | Customer, Number, Date, Due date or Terms, Open amount (a credit is negative), PO number, Memo |
+| `entered_unpaid_bills` | Vendor, Reference, Date, Due date or Terms, Open amount, Memo |
+| `entered_stock` | Item, Quantity, Total value or Unit cost |
+
+The trial balance is built from them: each balance on its account; receivables, payables and inventory, when not
+given, taken from the open invoices, unpaid bills and stock rows; equity worked out as assets less liabilities to
+Opening Balance Equity, unless equity accounts are typed, when the rows must balance themselves
+(`trial_balance_unbalanced`). Every account must already be in the chart. A stock item must already be an inventory
+part, unless it is confirmed to be made. Dates that could be day-first or month-first need `date_order`.
+`opening-draft` keeps such rows as a draft and runs `plan`, `apply` and `tie-out` on them as one batch that
+reverses as one unit; see `bookflow opening-draft --help`.
+
+Every check says what it proved: `basis` is `given` for a figure the old books or the owner gave, checked against
+the rows or the books, and `derived` for one worked out from the rows themselves, which nothing independent
+checks. Every figure of an export is `given`.
+
 ## `cutover plan`
 
 Reads the files and returns, writing nothing:
@@ -124,7 +148,7 @@ Compares the books as of `as_of` with the old books:
 - `vendor_1099`: each vendor on the old books' 1099 Summary against `report vendor-1099-summary` here for January 1 to `as_of`.
 - `clearing`: the clearing account's balance.
 
-`tied` is true when every compared figure matches to the cent, every list field compared matches, the clearing account is 0.00, and each bank and card account ties with its uncleared items in and, given its Reconciliation Summary, its opening proven. With `detail` `differences` (the default) only rows that do not match are listed; `all` lists every compared row.
+`tied` is true when every compared figure matches to the cent (each listed in `checks`, given before derived, with a sentence saying what it proved), every list field compared matches, the clearing account is 0.00, and each bank and card account ties with its uncleared items in and, given its Reconciliation Summary, its opening proven. With `detail` `differences` (the default) only rows that do not match are listed; `all` lists every compared row.
 
 ## The year's 1099 payments
 
@@ -177,4 +201,6 @@ Compares the books as of `as_of` with the old books:
 | `open_balance_changed` | warning | A document brought in earlier now shows another open balance in the old books |
 | `sales_tax_disabled` | warning | The old books charge sales tax and this company has it turned off |
 | `possible_duplicate_vendor`, `possible_duplicate_customer` | warning | Two vendors (or two customers) look like one party, such as `Midland Electric Supply` and `Midland Elec. Supply`; both come in as they are, and the exception names both so the owner can say whether they are one |
+| `duplicate_account`, `missing_account`, `missing_column`, `missing_amount`, `missing_item`, `unreadable_side`, `unreadable_date`, `ambiguous_date`, `stock_value_mismatch` | blocking | Entered rows: an account given twice, a row without its account, amount or item, a header without a required column, a side that is neither debit nor credit, a date that is no date or could be read either way, or a quantity times unit cost that is not the total value given |
+| `unknown_item` | blocking | An entered stock row names no item here and was not confirmed to be made (`make_items`) |
 | `sales_tax_default` | note | The company has sales tax on and no default sales tax item, and the move-in leaves exactly one: `cutover apply` makes it the company default (`default_sales_tax_item` in its result), so the first invoice does not need one named |

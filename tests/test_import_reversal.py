@@ -131,7 +131,7 @@ def test_an_atomic_undo_that_is_refused_fails_the_run_and_changes_nothing(books,
     preview = books.run('import preview', {'kind': 'customer-type', 'content': 'Name,Parent\nTwo,\nKid,Q\n',
                                            'source': 'second'})
     books.run('customer-type deactivate', {'customer_type': 'Q'})
-    monkeypatch.setattr(batches, '_in_use', lambda s, rt, ids, made: {i: {'tables': ['notes'], 'rows': [],
+    monkeypatch.setattr(batches, '_in_use', lambda s, rt, ids, made, by_batch=None: {i: {'tables': ['notes'], 'rows': [],
                                                                           'documents': []} for i in ids})
     out = books.run('import run', {'run': preview['run']['id']})
     assert out['run']['state'] == 'failed' and out['run']['batch']['state'] == 'live'
@@ -333,3 +333,4 @@ def test_hierarchy_rows_read_the_subtree_by_its_path_range(books):
     with engine.connect() as connection:
         rows = list_service._hierarchy_rows(connection, c.metadata.tables['customers'], {'path': root})
     assert [r['name'] for r in rows] == ['Root', 'Kid']
+

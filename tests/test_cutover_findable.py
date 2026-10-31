@@ -39,12 +39,20 @@ def test_import_leads_to_the_import_commands():
 
 @pytest.mark.parametrize("words", ["migrate", "migrat", "migration", "move in", "switch from", "convert",
                                    "conversion", "IIF", "QuickBooks", "opening balance", "opening balances",
-                                   "opening", "old books", "set up from", "import from QuickBooks"])
+                                   "old books", "set up from", "import from QuickBooks"])
 def test_migration_words_lead_to_cutover_first(words):
     from bookflow.adapters.mcp.catalog import list_commands
     page = list_commands(prefix=words)
     assert page["match"] == "keywords"
     assert [row["name"] for row in page["commands"]][:3] == ["cutover plan", "cutover apply", "cutover tie-out"], words
+
+
+def test_opening_alone_names_the_guided_opening_commands():
+    """Since R107 increment 7, `opening` is the start of a noun: `opening-draft`, opening balances for a business with
+    no old books, which posts through the cutover engine."""
+    from bookflow.adapters.mcp.catalog import list_commands
+    names = [row["name"] for row in list_commands(prefix="opening")["commands"]]
+    assert {"opening-draft create", "opening-draft plan", "opening-draft apply", "opening-draft tie-out"} <= set(names)
 
 
 def test_cutover_plan_says_what_it_is_for_and_the_guide_points_there():

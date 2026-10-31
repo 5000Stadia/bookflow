@@ -203,11 +203,13 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0112 = importlib.import_module("bookflow.storage.company_migrations.versions.0112_bank_feeds")
     co0113 = importlib.import_module("bookflow.storage.company_migrations.versions.0113_import_documents")
     co0116 = importlib.import_module("bookflow.storage.company_migrations.versions.0116_bulk_edit")
+    co0118 = importlib.import_module("bookflow.storage.company_migrations.versions.0118_pos_layer")
+    co0117 = importlib.import_module("bookflow.storage.company_migrations.versions.0117_opening_drafts")
     co0115 = importlib.import_module("bookflow.storage.company_migrations.versions.0115_item_pictures")
     co0119 = importlib.import_module("bookflow.storage.company_migrations.versions.0119_bank_rules")
 
     def older(conn):
-        # Newest first: co0119 (on co0116): its guards and indexes, the learning preference, the line's answer (its
+        # Newest first: co0119 (on co0118): its guards and indexes, the learning preference, the line's answer (its
         # rule_id, a foreign key DROP COLUMN refuses, goes with co0112's bank_lines below), then its three tables.
         for trigger in co0119.TRIGGERS:
             conn.execute(f"DROP TRIGGER {trigger}")
@@ -217,6 +219,20 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
         conn.execute("ALTER TABLE company_info DROP COLUMN bank_rule_automation")
         conn.execute("ALTER TABLE bank_lines DROP COLUMN answer")
         conn.execute("ALTER TABLE bank_lines DROP COLUMN payee_key")
+        # Then co0118 (on co0117): its guard, its table, then the switch column and the walk-in flag.
+        for trigger in co0118.TRIGGERS:
+            conn.execute(f"DROP TRIGGER {trigger}")
+        for table in co0118.TABLES:
+            conn.execute(f"DROP TABLE {table}")
+        for column in co0118.COMPANY_COLUMNS:
+            conn.execute(f"ALTER TABLE company_info DROP COLUMN {column}")
+        for column in co0118.CUSTOMER_COLUMNS:
+            conn.execute(f"ALTER TABLE customers DROP COLUMN {column}")
+        # Then co0117 (on co0116): its guards, then its table.
+        for trigger in co0117.TRIGGERS:
+            conn.execute(f"DROP TRIGGER {trigger}")
+        for table in co0117.TABLES:
+            conn.execute(f"DROP TABLE {table}")
         # Then co0116 (on co0115): its guards, then its two tables (children first).
         for trigger in co0116.TRIGGERS:
             conn.execute(f"DROP TRIGGER {trigger}")

@@ -14,8 +14,27 @@ def activated(session):
     return row == ('policy_v1',)
 
 
+UPGRADE_STEP = ('An installation administrator runs `permission show`, then `permission activate` with its generation '
+                'and catalog digest.')
+
+
+def upgrade_required(capability, required_role=None):
+    """A requirement the root's activated catalog does not know yet: Bookflow was upgraded since the permission rules
+    were last activated (for example the POS layer's capabilities, pos-v1)."""
+    return BookflowError('E_PERMISSION', message=(
+        f'{capability} is not in this installation\'s permission rules yet: Bookflow was upgraded since they were last '
+        f'activated. {UPGRADE_STEP}'), details={'capability': capability, 'required_role': required_role,
+                                                 'reason': 'catalog_upgrade_required', 'next_step': UPGRADE_STEP})
+
+
 def translate(error):
     category, field = error.args
+    if category == 'unknown_capability':
+        raise BookflowError('E_VALIDATION', message=(
+            f'A capability in {field} is not in this installation\'s permission rules. If it is new in this version of '
+            f'Bookflow (such as pos.sell), {UPGRADE_STEP[0].lower() + UPGRADE_STEP[1:]}'),
+            details={'fields': [{'field': field, 'problem': category}], 'reason': 'catalog_upgrade_required',
+                     'next_step': UPGRADE_STEP}) from None
     if category == 'conflict':
         raise BookflowError('E_VERSION_CONFLICT', details={'field':field}) from None
     if category in ('not_administrator', 'unavailable_target', 'protected_identity'):
@@ -32,6 +51,8 @@ def require(session, capability, required_role):
             return operation.require_company(session.company_row['id'],
                 catalog.Requirement(capability, required_role))
     except admin.AdministrationError as exc:
+        if exc.category == 'invalid_input' and exc.field == 'requirement':
+            raise upgrade_required(capability, required_role) from None
         if exc.category == 'unavailable_target':
             # Blueprint 4.3b: the refusal names the capability, in either mode.
             raise BookflowError('E_PERMISSION', details={'capability': capability, 'required_role': required_role,

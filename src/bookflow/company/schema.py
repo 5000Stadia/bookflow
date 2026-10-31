@@ -1303,6 +1303,14 @@ sa.Index("ix_items_picture_thumbnail_attachment_id", items.c.picture_thumbnail_a
 # Grid edits (co0116, R107 increment 6): a selection's diff, applied as one reversible batch.
 from bookflow.company import bulk_edit_schema as _bulk_edit_schema
 globals().update(_bulk_edit_schema.define_tables(metadata, _column, _table))
+# Guided opening balances (co0117, R107 increment 7): an owner's typed opening, posted through the cutover engine.
+from bookflow.company import opening_draft_schema as _opening_draft_schema
+globals().update(_opening_draft_schema.define_tables(metadata, _column, _table))
+# The POS layer (co0118, R114 increment 4): the switch and the registers.
+from bookflow.company import pos_schema as _pos_schema
+globals().update(_pos_schema.define_tables(metadata, _column, _table, _common))
+company_info.append_column(_pos_schema.company_info_column(_column))
+customers.append_column(_pos_schema.customers_column(_column))
 # Bank rules and learning (co0119, R108 increment 4): rules, their versions, declined keys; a line's rule and answer.
 from bookflow.company import bank_rule_schema as _bank_rule_schema
 globals().update(_bank_rule_schema.define_tables(metadata, _column, _table))

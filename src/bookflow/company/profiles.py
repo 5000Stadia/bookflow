@@ -781,6 +781,9 @@ def plan_profile_active_change(
     requested = _row(db, table, record_id)
     if bool(requested["active"]) is active:
         return ProfileActivePlan(noun, record_id, active, ())
+    if noun == "payment-method" and not active:
+        from bookflow.company.pos_layer import refuse_if_used
+        refuse_if_used(db, "payment-method", record_id, "made inactive")
 
     rows = [requested]
     if noun in HIERARCHICAL_NOUNS:

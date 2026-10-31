@@ -95,6 +95,7 @@ def test_every_hand_authored_fence_is_classified():
             ("illustrative", "json"),  # a pick list and its entries (R181)
             ("illustrative", "json"),  # packing a heater into box 2 (R181)
             ("illustrative", "json"),  # the fulfillment worksheet (R181)
+            ("illustrative", "json"),  # the registers, for an agent granted pos.sell (R114)
         ],
         "agent-install.md": [("illustrative", "sh"), ("illustrative", "sh"), ("illustrative", "json"), ("illustrative", "sh")],
         # Seed/serve, documentation generation, and financial statement examples.

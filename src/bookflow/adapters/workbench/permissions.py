@@ -54,6 +54,9 @@ def install(app, *, run, render, page_error):
         home = home_of(request, selected)
         agents, agent_admin = agent_panel(request, rows, current)
         controls = grant_controls()
+        from bookflow.hub import pos_presets
+        pos_on = bool(run(request, 'company show', {}, company_id).get('info', {}).get('pos_enabled'))
+        presets = [(key, label) for key, (label, _) in pos_presets.PRESETS.items()] if pos_on else []
         from bookflow.adapters.workbench import admin as Admin
         lookup = lambda name, raw: run(request, name, raw, None)  # noqa: E731
         people = []
@@ -64,10 +67,23 @@ def install(app, *, run, render, page_error):
             people = sorted({(row['username'], row['display_name']) for row in known.values()}, key=lambda x: x[1].lower())
         selected_name = next((row['display_name'] for row in rows if selected in (row['user_id'], row['username'])),
                              next((label for value, label in people if value == selected), selected))
+        ceiling = None
+        if values.get('applied_preset') and selected:
+            from bookflow.hub import pos_presets
+            for row in rows:
+                if row['scope_type'] == 'organization' and row['active'] and selected in (row['user_id'], row['username']):
+                    kept = pos_presets.kept_through(row['role'], row.get('grants') or (), values['applied_preset'])
+                    if kept:
+                        ceiling = (f"{row['display_name']} also has {Admin.ROLES.get(row['role'], row['role'])} access "
+                                   f"through the organization {row['scope_name']}, so after this preset they keep: "
+                                   f"{', '.join(kept)}. To make them a clerk here alone, change the organization "
+                                   "membership too.")
         return render('permissions.html',request,company_id=company_id,company_label=current['company_name'],
+            preset_ceiling=ceiling,
             admin=Admin, people=people, selected_name=selected_name,
             current=current,rows=rows,values=values,result=result,error=error,effective=effective,
             agents=agents,agent_admin=agent_admin,home=home,home_result=getattr(request.state,'home_result',None),
+            presets=presets,
             delete_grants=controls,delete_nouns=', '.join(label.lower() for _,label in controls),
             shown_capabilities=('ledger.read','ledger.post')+CAPS,
             status_code=409 if error and error['code']=='E_VERSION_CONFLICT' else 400 if error else 200)
@@ -156,6 +172,16 @@ def install(app, *, run, render, page_error):
             values[key] = key in form
         result = error = None
         try:
+            if values.get('action') == 'preset':
+                # A POS clerk preset (design/point-of-sale.md §9): fill the form from it and preview; Save applies
+                # it and sets the person's Home to the POS page.
+                from bookflow.hub import pos_presets
+                chosen = pos_presets.preset(str(values.get('preset') or ''))
+                values.update(role=chosen['role'], applied_preset=chosen['name'], action='preview',
+                              other_grants=json.dumps(chosen['grants']),
+                              other_denies=json.dumps([x for x in chosen['denies'] if x not in ('ledger.post','ledger.read')]),
+                              allow_read='ledger.read' not in chosen['denies'],
+                              allow_post='ledger.post' not in chosen['denies'], **{key: False for key in FIELDS})
             grants = json.loads(values.get('other_grants','[]'))
             denies = json.loads(values.get('other_denies','[]'))
             if not isinstance(grants,list) or not isinstance(denies,list):
@@ -167,6 +193,8 @@ def install(app, *, run, render, page_error):
             if action not in ('preview','save','revoke'):
                 raise ValueError
             grants = [x for x in grants if not (x in ('ledger.post','ledger.read') and x in denies)]
+            if values.get('role') != 'readonly':
+                grants = [x for x in grants if not x.startswith('preset.')]  # off readonly: no longer a preset clerk
             denies = [x for x in denies if x not in [cap for cap,key in zip(CAPS,FIELDS) if values[key]]]
             if action != 'revoke':
                 raw.update(role=values['role'],grants=grants,denies=denies)
@@ -174,6 +202,18 @@ def install(app, *, run, render, page_error):
                 headers={'X-Bookflow-Reason':values.get('reason') or None},dry_run=action=='preview')
             if action != 'preview':
                 values['expected_version'] = result['version']
+            if action == 'save' and values.get('applied_preset'):
+                from bookflow.hub import pos_presets
+                try:
+                    out = run(request,'user home set',{'user':values['user'],'company':company_id,
+                                                       'page':pos_presets.HOME},None)
+                    request.state.home_result = dict(ok=True,message=out['message'])
+                except BookflowError as exc:
+                    request.state.home_result = dict(ok=False,message='Home not set: '+exc.message,
+                                                     page=pos_presets.HOME)
+                values['applied_preset'] = ''
+            elif action == 'save':
+                values['applied_preset'] = ''
         except (ValueError,KeyError,TypeError):
             error = BookflowError('E_VALIDATION',message='Choose a user, role and observed membership version.').to_dict()
         except BookflowError as exc:

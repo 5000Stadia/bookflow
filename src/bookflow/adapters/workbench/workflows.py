@@ -56,12 +56,14 @@ def company_form_groups(leaves):
         pick_and_pack_enabled='Use pick lists and packing (pick and box before shipping; off ships straight from the order)',
         weight_unit='Weight unit (lb, kg, oz)', shipping_item_id='Freight to bill is billed as',
         delivery_reply_to='Reply-To on every email', delivery_copy_to='Copy every email to (Bcc)',
+        pos_enabled='Use point of sale (ring up sales on a phone, tablet or till; off records sales as sales receipts only)',
         bank_rule_learning='When two bank lines of a payee are added the same way, learn a rule',
         bank_rule_automation='Let live auto-add and ignore bank rules act at imports')
     payment_preferences = {'automatically_apply_payments', 'automatically_calculate_payments', 'use_undeposited_funds_for_payments'}
     display_preferences = {'negative_number_style'}
     shipping_preferences = {'invoice_when_shipping', 'pick_and_pack_enabled', 'weight_unit', 'shipping_item_id'}
     email_preferences = {'delivery_reply_to', 'delivery_copy_to'}
+    sales_preferences = {'pos_enabled'}
     banking_preferences = {'bank_rule_learning', 'bank_rule_automation'}
     finance_preferences = {'finance_charge_annual_rate', 'finance_charge_minimum', 'finance_charge_grace_days',
         'finance_charge_account_id', 'finance_charge_on_overdue_charges', 'finance_charge_from', 'finance_charge_mark_to_print'}
@@ -71,17 +73,17 @@ def company_form_groups(leaves):
         if leaf['path'] in labels:
             leaf['label'] = labels[leaf['path']]
     groups = [dict(title=title, open=True, leaves=[leaf for leaf in leaves if leaf['path'] in fields])
-        for title, fields in [('Customer work preferences', preferences), ('Customer payment preferences', payment_preferences),
+        for title, fields in [('Customer work preferences', preferences), ('Sales', sales_preferences), ('Customer payment preferences', payment_preferences),
             ('Finance charges', finance_preferences), ('Reminders and overdue notices', reminder_preferences),
             ('Shipping and fulfillment', shipping_preferences), ('Email and sending', email_preferences),
             ('Reports and lists', display_preferences), ('Banking', banking_preferences),
             ('Company information', {leaf['path'] for leaf in leaves} - preferences - payment_preferences - display_preferences
-             - finance_preferences - reminder_preferences - shipping_preferences - email_preferences
+             - finance_preferences - reminder_preferences - shipping_preferences - email_preferences - sales_preferences
              - banking_preferences)]]
     return [group for group in groups if group['leaves'] or group['title'] not in ('Reports and lists', 'Finance charges',
                                                                                    'Reminders and overdue notices',
                                                                                    'Shipping and fulfillment',
-                                                                                   'Email and sending', 'Banking')]
+                                                                                   'Email and sending', 'Sales', 'Banking')]
 
 
 def customer_form_groups(leaves: list[dict[str, Any]]) -> list[dict[str, Any]]:

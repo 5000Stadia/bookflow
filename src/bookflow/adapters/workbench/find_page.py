@@ -46,7 +46,7 @@ def view(result, form, company_id):
     return {**result, 'rows': rows, 'next_url': following}
 
 
-def install(app, *, host, run, render, page_error):
+def install(app, *, host, run, render, page_error, may=None):
     from fastapi import Request
     from fastapi.responses import HTMLResponse
     from bookflow.core.permission_package import read_endpoint
@@ -59,6 +59,11 @@ def install(app, *, host, run, render, page_error):
             show = run(request, 'company show', {}, company_id)
         except BookflowError as error:
             return page_error(request, error)
+        if may is not None and not may(request, show, 'transaction find'):
+            # A reader who may not search transactions (a POS clerk) gets the refusal page up front.
+            return page_error(request, BookflowError('E_PERMISSION', message=(
+                'Finding transactions needs permission to read the books here.'),
+                details={'capability': 'ledger.read', 'required_role': 'member'}), company_id=show['company_id'])
         raw, form = inputs(request.query_params)
         found, error = None, None
         if request.query_params:
