@@ -598,7 +598,7 @@ def _owner_unchanged(db, merge: dict[str, Any], ref: dict[str, Any]) -> bool:
     return written is not None and now is not None and int(written[0]) == int(now[0])
 
 
-def plan_unmerge(db, kind: str, merged_selector: str) -> UnmergePlan:
+def plan_unmerge(db, kind: str, merged_selector: str, *, check_barcode: bool = True) -> UnmergePlan:
     merged = _resolve(db, kind, merged_selector)
     merge = live_merge(db, kind, merged["id"])
     if merge is None:
@@ -606,7 +606,7 @@ def plan_unmerge(db, kind: str, merged_selector: str) -> UnmergePlan:
         if last is None or last["merged_id"] != merged["id"]:
             raise _refuse(f"this {kind} is not merged into another one", merged_id=merged["id"])
         return UnmergePlan(kind, merged, None, last)
-    if kind == "item" and (merge["deactivated_merged"] or merged.get("active")) and merged.get("barcode"):
+    if check_barcode and kind == "item" and (merge["deactivated_merged"] or merged.get("active")) and merged.get("barcode"):
         from bookflow.company import items  # R104: unmerging may not bring back a code another item now holds
         try:
             items.assert_barcode_available(db, merged["barcode"], exclude_id=merged["id"], reactivating=merged["full_name"])

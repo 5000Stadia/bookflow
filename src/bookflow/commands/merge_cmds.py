@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from bookflow.company import list_merges, party_merges
+from bookflow.company import list_merges, party_merges, merge_batches
 from bookflow.core.registry import Applied, Plan, command
 
 
@@ -37,6 +37,8 @@ class DocumentCount(_Strict):
 
 
 class MergeOutput(_Strict):
+    batch_id: str | None = Field(default=None, description="Shared reversal batch; null for a new merge preview or a legacy merge.")
+    next: str | None = None
     merge_id: str | None = Field(description="The merge; null only in a dry run of a new merge.")
     changed: bool = Field(description="False when this exact merge already stands; nothing was written.")
     merged_id: str
@@ -65,9 +67,9 @@ def _commands(kind: str):
         description=(f"Merge a duplicate {kind} into another. Nothing posted changes: every report, balance, aging "
                      f"and {balance} read shows the merged {kind}'s documents under the survivor, and the merged "
                      f"{kind} is made inactive and hidden. People only, with a reason; `--dry-run` previews what "
-                     f"moves and the balance after. Undo with `{kind} unmerge`."),
+                     f"moves and the balance after. The output names its batch; `batch reverse` previews and reverses the complete merge, or refuses every blocker. Native `{kind} unmerge` also remains available."),
         input_model=MergeInput, output_model=MergeOutput, writes={"company"}, positional=["merged", "into"],
-        accepts_idempotency_key=True,
+        accepts_idempotency_key=True, plan_in_write=True,
         error_codes=["E_RECORD_NOT_FOUND", "E_MERGE_REFUSED", "E_REASON_REQUIRED", "E_ACTIVE_DEPENDENTS",
                      "E_RECORD_IN_USE"])
 
@@ -81,9 +83,14 @@ def _commands(kind: str):
     def apply_merge(plan: Plan, ctx, s) -> Applied:
         planned = plan.data["plan"]
         if not planned.changed:
-            return Applied(plan.preview, [], "already merged")
+            found = merge_batches.existing(s.company, kind, planned.existing["id"])
+            batch_id = found[0] if found else None
+            return Applied(plan.preview.model_copy(update={"batch_id": batch_id,
+                "next": f"batch reverse {batch_id} --dry-run" if batch_id else None}), [], "already merged")
         merge_id, touched = party_merges.apply_merge(s, ctx, planned, f"{kind} merge")
-        out = plan.preview.model_copy(update={"merge_id": merge_id})
+        batch_id = merge_batches.record(s, ctx, kind, merge_id, planned)
+        out = plan.preview.model_copy(update={"merge_id": merge_id, "batch_id": batch_id,
+                                              "next": f"batch reverse {batch_id} --dry-run"})
         return Applied(out, touched, f"merged {kind} {planned.merged['name']} into {planned.survivor['name']}",
                        audited=True)
 
@@ -91,7 +98,7 @@ def _commands(kind: str):
         description=(f"Undo a {kind} merge: the merged {kind} reads as itself again and is made active again if "
                      f"the merge made it inactive. Nothing posted changes. People only, with a reason."),
         input_model=UnmergeInput, output_model=UnmergeOutput, writes={"company"}, positional=["merged"],
-        accepts_idempotency_key=True,
+        accepts_idempotency_key=True, plan_in_write=True,
         error_codes=["E_RECORD_NOT_FOUND", "E_MERGE_REFUSED", "E_REASON_REQUIRED", "E_INACTIVE_REFERENCE"])
 
     @unmerge
@@ -137,6 +144,8 @@ class ReferenceOut(_Strict):
 
 
 class ListMergeOutput(_Strict):
+    batch_id: str | None = Field(default=None, description="Shared reversal batch; null for a new merge preview or a legacy merge.")
+    next: str | None = None
     merge_id: str | None = Field(description="The merge; null only in a dry run of a new merge.")
     changed: bool = Field(description="False when this exact merge already stands; nothing was written.")
     merged_id: str
@@ -176,9 +185,9 @@ def _list_commands(kind: str):
                      f"{_LIST_EFFECTS[kind]}, and the merged {kind} is made inactive and hidden. A saved document "
                      f"that names it saves with the survivor when next edited. People only, with a reason; "
                      f"`--dry-run` previews what moves, every reference re-pointed and any conflict. Undo with "
-                     f"`{kind} unmerge`."),
+                     f"`batch reverse` using the output batch_id; it refuses if any reference would be kept. Native `{kind} unmerge` also remains available."),
         input_model=MergeInput, output_model=ListMergeOutput, writes={"company"}, positional=["merged", "into"],
-        accepts_idempotency_key=True,
+        accepts_idempotency_key=True, plan_in_write=True,
         error_codes=["E_RECORD_NOT_FOUND", "E_MERGE_REFUSED", "E_REASON_REQUIRED"])
 
     @merge
@@ -191,9 +200,14 @@ def _list_commands(kind: str):
     def apply_merge(plan: Plan, ctx, s) -> Applied:
         planned = plan.data["plan"]
         if not planned.changed:
-            return Applied(plan.preview, [], "already merged")
+            found = merge_batches.existing(s.company, kind, planned.existing["id"])
+            batch_id = found[0] if found else None
+            return Applied(plan.preview.model_copy(update={"batch_id": batch_id,
+                "next": f"batch reverse {batch_id} --dry-run" if batch_id else None}), [], "already merged")
         merge_id, touched = list_merges.apply_merge(s, ctx, planned, f"{kind} merge")
-        out = plan.preview.model_copy(update={"merge_id": merge_id})
+        batch_id = merge_batches.record(s, ctx, kind, merge_id, planned)
+        out = plan.preview.model_copy(update={"merge_id": merge_id, "batch_id": batch_id,
+                                              "next": f"batch reverse {batch_id} --dry-run"})
         return Applied(out, touched, f"merged {kind} {planned.merged['full_name']} into {planned.survivor['full_name']}",
                        audited=True)
 
@@ -202,7 +216,7 @@ def _list_commands(kind: str):
                      f"merge made it inactive, and every reference the merge re-pointed is put back unless it has "
                      f"been changed since. Nothing posted changes. People only, with a reason."),
         input_model=UnmergeInput, output_model=ListUnmergeOutput, writes={"company"}, positional=["merged"],
-        accepts_idempotency_key=True,
+        accepts_idempotency_key=True, plan_in_write=True,
         error_codes=["E_RECORD_NOT_FOUND", "E_MERGE_REFUSED", "E_REASON_REQUIRED"])
 
     @unmerge

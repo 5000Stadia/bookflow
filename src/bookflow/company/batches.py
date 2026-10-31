@@ -75,6 +75,7 @@ class Adapter:
 ADAPTERS: dict[str, Adapter] = {}
 # A fresh CLI process may load only `batch`, not the command that originally wrote it.
 ADAPTER_MODULES = {
+    **{f'{kind}-merge': 'merge_batches' for kind in ('customer', 'vendor', 'account', 'item')},
     'import': 'imports', 'bulk-edit': 'bulk_edit', 'opening': 'opening_drafts',
     'bank-import': 'bank_feeds', 'bank-sort': 'bank_feeds', 'automation': 'automation',
     'batch-invoice': 'batch_invoicing', 'bill-pay': 'bill_payments',

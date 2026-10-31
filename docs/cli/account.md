@@ -801,7 +801,7 @@ Example JSON output:
 
 ## `account merge`
 
-Merge a duplicate account into another of the same type. Nothing posted changes: every report, balance, register and filter shows the merged account's postings under the survivor; item, vendor, account and preference fields naming it are re-pointed to the survivor, and the merged account is made inactive and hidden. A saved document that names it saves with the survivor when next edited. People only, with a reason; `--dry-run` previews what moves, every reference re-pointed and any conflict. Undo with `account unmerge`.
+Merge a duplicate account into another of the same type. Nothing posted changes: every report, balance, register and filter shows the merged account's postings under the survivor; item, vendor, account and preference fields naming it are re-pointed to the survivor, and the merged account is made inactive and hidden. A saved document that names it saves with the survivor when next edited. People only, with a reason; `--dry-run` previews what moves, every reference re-pointed and any conflict. Undo with `batch reverse` using the output batch_id; it refuses if any reference would be kept. Native `account unmerge` also remains available.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -870,6 +870,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `batch_id` | string \| null | no | yes | null | Shared reversal batch; null for a new merge preview or a legacy merge. |
+| `next` | string \| null | no | yes | null | — |
 | `merge_id` | string \| null | yes | yes | — | The merge; null only in a dry run of a new merge. |
 | `changed` | boolean | yes | no | — | False when this exact merge already stands; nothing was written. |
 | `merged_id` | string | yes | no | — | — |
@@ -908,6 +910,7 @@ Example JSON output:
 
 ```json
 {
+  "batch_id": null,
   "changed": false,
   "document_count": 1,
   "documents": [],
@@ -915,6 +918,7 @@ Example JSON output:
   "merged_balance": null,
   "merged_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "merged_name": "value",
+  "next": null,
   "notes": [],
   "references": [],
   "survivor_balance": null,
