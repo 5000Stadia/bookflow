@@ -42,7 +42,7 @@ ADDED_ACTIONS = tuple(
     for name, threshold, planner in _ADDED)
 # `apply` with accept_differences asks for the capability at one declared site.
 ACCEPT_SOURCE = c.ResourceSource('bookflow.company.opening_drafts.require_accept',
-                                 (('src/bookflow/company/opening_drafts.py', 297),),
+                                 (('src/bookflow/company/opening_drafts.py', 303),),
                                  (c.Requirement(ACCEPT_CAPABILITY, 'standard'),))
 CATALOG = replace(previous.CATALOG, version=c.OPENING_DRAFT_POLICY_VERSION,
     commands=tuple(sorted((*previous.CATALOG.commands, *ADDED_COMMANDS), key=lambda x: x.name)),

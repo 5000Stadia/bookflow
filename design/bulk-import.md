@@ -328,7 +328,8 @@ The result is kept as an `entered_balances` company attachment, as `cutover appl
 **Tie-out says what it proved.** Each `cutover tie-out` check gains `basis`: `given` (the owner's figure against the
 rows or books) or `derived` (nothing independent). Results and page list them apart: "tied to the 12,430.55 you
 gave" against "taken from your invoice list; not independently checked". `tied` needs every `given` check tied and
-the clearing account at 0.00. Posting an opening that does not tie is a person's act (`accept_differences`).
+the clearing account at 0.00. Posting an opening that does not tie (`accept_differences`) needs the capability
+`opening.accept-differences`: people hold it at standard, an agent only by its principal's grant (as built, increment 7).
 
 **The draft.** Typed rows survive a closed browser in `opening_drafts` (id, `as_of`, entered files as attachment
 ids, owner-given figures, state `draft`/`planned`/`applied`/`discarded`, version). `opening-draft create/update/
@@ -386,6 +387,10 @@ increment is chained on the tip (`import-v1`, `import-mapping-v1`, `import-docs-
 | `import kinds`, `template`, `show`, `query`, `rows`, `errors`; `import-mapping show`, `query`, `history`, `match`; `batch show`, `query`; `bulk-edit columns`, `show`, `query`; `opening-draft show`, `query` | member |
 | `import preview`, `decide`, `run`, `cancel`; `import-mapping save`, `deactivate`; `bulk-edit preview`, `apply`, `reverse`; `import reverse`; `opening-draft` writes, `plan`, `apply`, `tie-out` | standard, `import` or `bulk-edit` plus each row's command authority (an agent may do all of it, within the limits below, without `import.approve`) |
 | `import approve`, `bulk-edit approve`; `accept_differences`; `create_missing` for a party when a look-alike exists; any run above the thresholds | standard plus capability **`import.approve`** (humans hold it; an agent when granted) |
+
+> **Superseded (2026-10-28 and increment 7).** `import.approve` was never built: approval and the size thresholds were
+> dropped for imports and grid edits (see increments 4 and 6), a look-alike is refused for every actor, and
+> `accept_differences` is the capability `opening.accept-differences` (As built: increment 7).
 
 - **An actor without `import.approve` can do the job:** read a messy file, propose a mapping, preview, answer the decisions it can
   (map to an existing name, skip), save the mapping and run. It cannot override a look-alike or post an opening that does
@@ -1323,8 +1328,10 @@ the apply 36 ms (a read for the prior values and the update with its audit event
   history), so the batch does not record the accounts an opening makes; after a reversal the clearing account (and,
   on an anchor-style draft, any account made from a chart export) stands at 0.00 and the next opening uses it again.
   Retiring it needs an inverse for "an account whose every posting was reversed", which the accounts module does not
-  have. The undo also needs the caller's own explicit delete grants (`transaction.invoice.delete`, `bill`,
-  `journal_entry`), as every batch reversal does (§8a); without them a refusal part way ends `failed`, naming them.
+  have. A separate `opening-draft reverse` needs the caller's own explicit delete grants for the families it deletes
+  (`transaction.invoice.delete`, `credit_memo`, `bill`, `journal_entry`, `sales_receipt`; vendor credits and stock
+  adjustments are voided under `ledger.post`), as every batch reversal does (§8a). The automatic undo of a refusal
+  part way does not (review M1, below).
 - **`accept_differences`: a capability, not people-only.** principal-directives.md keeps people-only for the five acts
   no capability could make safe; posting an opening that does not tie is not one of them. So it is the capability
   `opening.accept-differences` (standard; held by standard, admin and owner as before, by an agent only through its
@@ -1337,7 +1344,7 @@ the apply 36 ms (a read for the prior values and the update with its audit event
   with no old books" teaches one check of the exact details with the owner before `apply` (the date, the plan's counts
   and totals, which checks are given and which derived), then apply on their yes; `accept_differences` is the owner's
   decision. `plan` and `apply` help say the same.
-- **Permissions:** layer `opening-draft-v1` on `bank-line-details-v1` (re-chained at the merge of main 0b3769e8; 856 commands, descriptor c0042254): `show` and `query`
+- **Permissions:** layer `opening-draft-v1` on `user-home-v1` (re-chained at the merges of main 0b3769e8 and 5c2616b3; 859 commands, descriptor 91a7dc32): `show` and `query`
   member reads, the other seven standard, all under `import`; the new capability above. No existing capability, role
   default or threshold changes.
 - **The page** `/c/<company>/opening` (Company menu: "Opening balances"; `opening_pages.py`, `opening.html`,
@@ -1365,3 +1372,43 @@ the apply 36 ms (a read for the prior values and the update with its audit event
   exceptions; the same data through `cutover` from anchor-style exports giving identical balances, aging and stock),
   `tests/test_opening_balances_surfaces.py` (Python, CLI, HTTP and MCP alike), `tests/test_opening_balances_browser.py`
   (a person pastes, plans, posts and reads the tie-out in real Chrome at 1440 and 390).
+
+### As built: the review of increment 7
+
+Reviewed at 8ce229b4; each finding fixed with a test (`tests/test_opening_balances.py` unless named).
+
+- **H1. Stock sold since blocks the undo** (shared, `batches._document_uses`). A document the batch made that moved an
+  item's stock is in use while a later movement of that item, by a document the batch did not make and still
+  standing, follows it: the refusal names it ("invoice 2001 (it moves Part 10 later)"). This covers a document
+  import's inventory adjustment too. Test: Part 10 sold after the opening.
+- **H2. An undo stopped part way is finished first.** `apply` is refused while the draft's batch is `reversing` or
+  `blocked`; `opening-draft reverse` that stops part way leaves the draft `failed`, whose `next` is reverse; and
+  `cutover`'s `Books` no longer takes as already in any record an undo of an opening touched (record by record, from
+  the reversal batch's effects) or any document since deleted or voided. Test: a killed apply, an undo stopped after
+  one slice, apply refused, the undo finished, the same draft applied again and tied, with a credit memo and a vendor
+  credit (credits on the entered path).
+- **M1. All or nothing for every caller.** Decided by the coordinator: a command's automatic undo of its own writes in
+  the same call, nothing depending on them, is part of its all-or-nothing promise and needs no delete grant (the
+  caller had the authority to write them). `batches.reverse(own_writes=True)` sets that for its run, and
+  `access.require_explicit_grant` honours it for the five document deletes only (`batches.OWN_ROLLBACK_DELETES`); only
+  `opening_drafts._roll_back` passes it. A later, separate reverse still needs the caller's own grants. Test: the
+  default owner, holding no delete grant, refused part way, leaves nothing.
+- **L1.** A record the batch's own documents use is still dry-run in the plan; only its refusal for something other
+  than permission is set aside (it is probed again by running, once those documents are gone).
+- **L2.** Decided: accounts stay unretired (above); `opening-draft reverse` help says so, and its result lists in
+  `stays` what the opening changed outside its batch.
+- **L3.** A second opening is refused at `apply` while another stands (applying, applied or failed), naming it.
+- **L4.** What an opening changes outside its batch is named, not undone: `apply` returns `outside_batch` (the clearing
+  account, a default sales tax item it set, the next invoice number it carried on, the steps kept as attachments),
+  kept in the draft's summary, and `reverse` returns it as `stays`. The draft's state changes inside apply and
+  reverse (applying, applied, rolled back, failed, reversed) each write an audit event.
+- **L5.** An undo that finishes on a draft that never finished applying returns it to `rolled_back`, editable and
+  applied again with nothing pasted anew; an applied opening undone ends `reversed`.
+- **L6.** `require_accept` answers `principal_lacks_capability` when the principal does not hold the capability; the
+  stale `import.approve` mentions are corrected (principal-directives.md §4 and §6, §8 here marked superseded), and
+  §6's "a person's act" now names the capability. Test: an agent through HTTP, ungranted, granted with a principal
+  who lacks it, granted with one who holds it (a dry run), and a person.
+- **L7.** The same-books test compares every aging bucket and each invoice's date and due date too; the reversal
+  test asserts the blocker names the payment on invoice 1012; a new stock item's cost rounds half-up.
+- **Import reversal** (`tests/test_import_documents.py`): a customer `create_missing` made for its own invoice is no
+  use of it, and a payment applied later to that invoice is named.

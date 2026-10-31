@@ -96,7 +96,7 @@ def plan_apply(inp, ctx, s) -> Plan:
 
 def apply_apply(plan: Plan, ctx, s) -> Applied:
     draft, result = od.apply(plan.data['planned'], ctx, s)
-    out = m.ApplyOutput(draft=od.out(s, draft), apply=result)
+    out = m.ApplyOutput(draft=od.out(s, draft), apply=result, outside_batch=od.outside_batch(result))
     return Applied(out, [], result.summary, finalized=True, audited=True)
 
 
@@ -180,10 +180,13 @@ opening_draft_tie_out = command(
     '`tied` needs every check tied and the clearing account at 0.00. Writes nothing.'))(plan_tie_out)
 opening_draft_reverse = _write(
     'opening-draft reverse', 'Undo an applied opening as one unit through its batch, for as long as nothing later '
-    'depends on it: each invoice, bill and journal deleted with its history kept, each stock adjustment voided, each '
-    'customer, vendor, item, term and account it made renamed and deactivated. Refused (E_BATCH_BLOCKED), naming '
-    'each record and what clears it, while one is in use (a payment applied to an opening invoice) or was changed '
-    'since; then nothing changes. --dry-run shows the plan and a fingerprint. Confirm with your principal first.',
+    'depends on it: each invoice, credit memo, bill, journal and sales receipt deleted with its history kept, each '
+    'vendor credit and stock adjustment voided, each customer, vendor, item and term it made renamed and deactivated. '
+    'Accounts are not retired (an account keeps its history): the clearing account stays at 0.00 for the next '
+    'opening; `stays` lists that and anything else the opening set outside its batch. Refused (E_BATCH_BLOCKED), '
+    'naming each record and what clears it, while one is in use (a payment applied to an opening invoice, stock it '
+    'brought in sold since) or was changed since; then nothing changes. Needs your own delete grants for those '
+    'families. --dry-run shows the plan and a fingerprint. Confirm with your principal first.',
     m.ReverseInput, m.ReverseOutput, plan_reverse, apply_reverse, positional=('draft',),
     errors=('E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_BATCH_BLOCKED', 'E_VERSION_CONFLICT'))
 

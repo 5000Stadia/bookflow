@@ -149,6 +149,9 @@ class PlanOutput(BaseModel):
 class ApplyOutput(BaseModel):
     draft: DraftOutput
     apply: CutoverApplyOutput | None = Field(description='What the cutover engine posted; null for a dry run of a blocked plan')
+    outside_batch: list[str] = Field(default_factory=list, description=(
+        'What the opening changed that undoing it leaves as it is: the clearing account (at 0.00 once undone), a '
+        'default sales tax item it set, the next invoice number it carried on, the steps kept as attachments'))
 
 
 class TieOutOutput(BaseModel):
@@ -167,6 +170,8 @@ class ReverseOutput(BaseModel):
     fingerprint: str | None = Field(description='Pass to the real run so it refuses if the opening changed since.')
     reversal_batch: str | None = Field(description='The batch recording the reversal, once begun.')
     event_id: str | None = Field(description='Audit event that finished the reversal.')
+    stays: list[str] = Field(default_factory=list, description=(
+        'What the opening changed outside its batch, which this undo leaves as it is'))
 
 
 STEPS_HELP = _STEPS

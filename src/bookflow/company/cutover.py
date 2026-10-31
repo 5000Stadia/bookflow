@@ -104,11 +104,12 @@ class Books:
         self.places = minor_units_of(self.currency)
         self.roles = {a["system_role"]: a for a in self.accounts if a["system_role"]}
         self.links: dict[str, list[tuple[str, str]]] = defaultdict(list)
-        # A record an opening made and its reversal retired (R107 increment 7) is no longer in: a later opening makes
-        # it again rather than finding it.
+        # A record an opening made that an undo of it touched (R107 increment 7), and any document since deleted or
+        # voided, is no longer in: a later opening makes it again rather than finding it (review H2).
         retired = {row[0] for row in s.company.raw.execute(
-            "SELECT f.record_id FROM batch_effects f JOIN batches b ON b.id = f.batch_id "
-            "WHERE b.kind = 'opening' AND b.state = 'reversed' AND f.action = 'created'")}
+            "SELECT f.record_id FROM batch_effects f JOIN batches r ON r.id = f.batch_id "
+            "JOIN batches b ON b.id = r.reversal_of WHERE b.kind = 'opening' "
+            "UNION SELECT id FROM transactions WHERE status IN ('voided', 'deleted')")}
         for ref, record_type, record_id in s.company.raw.execute(
                 "SELECT e.source_ref, n.record_type, n.record_id FROM audit_events e "
                 "JOIN audit_entries n ON n.event_id = e.id WHERE e.source_ref LIKE 'cutover:%' ORDER BY e.seq, n.rowid"):
@@ -1745,7 +1746,9 @@ def _entered_item(built: Built, row: src.StockRow):
         return None
     from decimal import Decimal
     quantity = Decimal(row.quantity)
-    cost = _amount_text(built, int(row.value / quantity)) if quantity > 0 else _amount_text(built, 0)
+    from decimal import ROUND_HALF_UP
+    cost = (_amount_text(built, int((Decimal(row.value) / quantity).quantize(Decimal(1), ROUND_HALF_UP)))
+            if quantity > 0 else _amount_text(built, 0))
     payload = {"name": row.item.rsplit(":", 1)[-1], "type": "inventory_part", "description": row.item,
                "price": _amount_text(built, 0), "income_account_id": income["id"], "cogs_account_id": cogs["id"],
                "asset_account_id": asset["id"], "cost": cost, "purchase_description": row.item}

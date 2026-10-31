@@ -199,6 +199,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `apply.already_in` | integer | yes | no | — | Records earlier runs had made |
 | `apply.clearing_account_id` | string \| null | yes | yes | — | The clearing account |
 | `apply.default_sales_tax_item` | string \| null | no | yes | null | The sales tax item this run made the company's default, because it is the only one and the company had none, so the first invoice needs no tax item named; null when it set no default |
+| `outside_batch` | array[string] | no | no | [] | What the opening changed that undoing it leaves as it is: the clearing account (at 0.00 once undone), a default sales tax item it set, the next invoice number it carried on, the steps kept as attachments |
 
 Example JSON output:
 
@@ -221,7 +222,8 @@ Example JSON output:
     "summary": null,
     "updated_at": "2026-01-01T00:00:00Z",
     "version": 1
-  }
+  },
+  "outside_batch": []
 }
 ```
 
@@ -962,7 +964,7 @@ Example JSON output:
 
 ## `opening-draft reverse`
 
-Undo an applied opening as one unit through its batch, for as long as nothing later depends on it: each invoice, bill and journal deleted with its history kept, each stock adjustment voided, each customer, vendor, item, term and account it made renamed and deactivated. Refused (E_BATCH_BLOCKED), naming each record and what clears it, while one is in use (a payment applied to an opening invoice) or was changed since; then nothing changes. --dry-run shows the plan and a fingerprint. Confirm with your principal first.
+Undo an applied opening as one unit through its batch, for as long as nothing later depends on it: each invoice, credit memo, bill, journal and sales receipt deleted with its history kept, each vendor credit and stock adjustment voided, each customer, vendor, item and term it made renamed and deactivated. Accounts are not retired (an account keeps its history): the clearing account stays at 0.00 for the next opening; `stays` lists that and anything else the opening set outside its batch. Refused (E_BATCH_BLOCKED), naming each record and what clears it, while one is in use (a payment applied to an opening invoice, stock it brought in sold since) or was changed since; then nothing changes. Needs your own delete grants for those families. --dry-run shows the plan and a fingerprint. Confirm with your principal first.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -1062,6 +1064,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `fingerprint` | string \| null | yes | yes | — | Pass to the real run so it refuses if the opening changed since. |
 | `reversal_batch` | string \| null | yes | yes | — | The batch recording the reversal, once begun. |
 | `event_id` | string \| null | yes | yes | — | Audit event that finished the reversal. |
+| `stays` | array[string] | no | no | [] | What the opening changed outside its batch, which this undo leaves as it is |
 
 Example JSON output:
 
@@ -1092,6 +1095,7 @@ Example JSON output:
   "reversal_batch": null,
   "reversed_now": 1,
   "state": "value",
+  "stays": [],
   "steps": []
 }
 ```

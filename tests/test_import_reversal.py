@@ -333,3 +333,4 @@ def test_hierarchy_rows_read_the_subtree_by_its_path_range(books):
     with engine.connect() as connection:
         rows = list_service._hierarchy_rows(connection, c.metadata.tables['customers'], {'path': root})
     assert [r['name'] for r in rows] == ['Root', 'Kid']
+

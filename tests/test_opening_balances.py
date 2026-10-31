@@ -10,6 +10,7 @@ receivables and payables totals; stock is left to the rows (derived). So assets 
 import pytest
 
 from bookflow import BookflowError
+from tests.test_row3_host import hosted  # noqa: F401 - fixture
 
 COMPANY = "Fresh Start"
 AS_OF = "2026-09-30"
@@ -91,7 +92,7 @@ def _grant_deletes(fresh):
                   if x["scope_type"] == "company" and x["scope_id"] == company)
     client.membership.grant(user=member["user_id"], company=company, expected_version=member["version"],
                             grants=["transaction.invoice.delete", "transaction.bill.delete",
-                                    "transaction.journal_entry.delete"])
+                                    "transaction.journal_entry.delete", "transaction.credit_memo.delete"])
 
 
 def _draft(run, **overrides):
@@ -182,7 +183,7 @@ def test_a_wrong_total_refuses_and_leaves_nothing(fresh):
     assert run("opening-draft show", dict(draft=draft["id"]))["state"] == "planned"
 
 
-def test_accepting_differences_is_a_persons_act_and_the_difference_stays_in_clearing(fresh):
+def test_accepting_differences_posts_and_the_difference_stays_in_clearing(fresh):
     run = fresh["run"]
     draft = _draft(run, given={"receivables": "17,010.00", "payables": "7500"})
     applied = run("opening-draft apply", dict(draft=draft["id"], accept_differences=True), reason="Owner accepts 10.00")
@@ -207,7 +208,7 @@ def test_a_refusal_part_way_undoes_everything_and_a_stop_continues(fresh, monkey
             raise BookflowError("E_VALIDATION", message="refused for the test.")
         return real(s, ctx, step, payload, recorder)
     monkeypatch.setattr(cutover, "_run_step", refusing)
-    _grant_deletes(fresh)
+    # The default owner holds no delete grant: the undo is the apply's own all-or-nothing promise (review M1).
     before = _balances(run)
     customers = _customers(run)
     with pytest.raises(BookflowError) as stopped:
@@ -245,7 +246,15 @@ def test_an_applied_opening_reverses_as_one_unit_or_names_what_blocks_it(fresh):
     _grant_deletes(fresh)
     customers = _customers(run)
     draft = _draft(run)
-    run("opening-draft apply", dict(draft=draft["id"]), reason="Post it")
+    posted = run("opening-draft apply", dict(draft=draft["id"]), reason="Post it")
+    assert any("clearing account" in note for note in posted["outside_batch"])
+    assert any("next invoice number" in note for note in posted["outside_batch"])
+    # A company has one opening: a second is refused while this one stands, naming it (review L3).
+    second = _draft(run)
+    with pytest.raises(BookflowError) as standing:
+        run("opening-draft apply", dict(draft=second["id"]), reason="A second opening")
+    assert standing.value.details["standing"] == draft["id"] and draft["id"] in standing.value.message
+    run("opening-draft discard", dict(draft=second["id"]), reason="Not needed")
     try:
         plan = run("opening-draft reverse", dict(draft=draft["id"]), dry_run=True, reason="Undo the opening")
     except BookflowError as error:
@@ -253,6 +262,7 @@ def test_an_applied_opening_reverses_as_one_unit_or_names_what_blocks_it(fresh):
     assert not plan["blockers"] and plan["remaining"] > 60
     done = run("opening-draft reverse", dict(draft=draft["id"], fingerprint=plan["fingerprint"]), reason="Undo the opening")
     assert done["draft"]["state"] == "reversed" and done["state"] == "reversed"
+    assert any("clearing account" in note for note in done["stays"])
     assert _balances(run) == {} and _customers(run) == customers
     # Started again, it posts afresh (what the reversal retired is not taken as already in), and once a payment is
     # applied to an opening invoice the reversal is refused naming it, changing nothing.
@@ -271,7 +281,16 @@ def test_an_applied_opening_reverses_as_one_unit_or_names_what_blocks_it(fresh):
     with pytest.raises(BookflowError) as blocked:
         run("opening-draft reverse", dict(draft=again["id"]), reason="Undo the opening")
     assert blocked.value.code == "E_BATCH_BLOCKED"
-    assert any("Lakeside" in str(b) or "1004" in str(b) for b in blocked.value.details["blockers"])
+    held = [b for b in blocked.value.details["blockers"] if b["code"] == "in_use"]
+    assert any("invoice 1012" in b["message"] and "payment" in b["message"] for b in held), held
+    # Stock it brought in, sold since: the sale holds it, named (review H1).
+    run("customer create", {"name": "Walk In Buyer"})
+    run("invoice post", dict(customer="Walk In Buyer", date="2026-10-05", number="2001",
+                             lines=[dict(item="Part 10", quantity="6", unit_price="5.00")]), reason="A sale")
+    with pytest.raises(BookflowError) as sold:
+        run("opening-draft reverse", dict(draft=again["id"]), dry_run=True, reason="Undo the opening")
+    held = [b for b in sold.value.details["blockers"] if b["code"] == "in_use"]
+    assert any("invoice 2001" in b["message"] and "Part 10" in b["message"] for b in held), held
     assert run("opening-draft show", dict(draft=again["id"]))["state"] == "applied"
     assert _balances(run)["Accounts Receivable"] == 1_700_000  # as of the opening date; the payment came after
 
@@ -410,6 +429,7 @@ def test_the_same_data_through_cutover_from_anchor_style_exports_yields_the_same
     draft = _draft(run)
     run("opening-draft apply", dict(draft=draft["id"]), reason="Post it")
     entered = _books(run)
+    entered_aging, entered_due = _aging(run), _due_dates(run)
 
     client.run("company new", dict(organization="Demo Holdings LLC", legal_name="Fresh Exports LLC",
                                    display_name="Fresh Exports", home_currency="USD", timezone="America/Chicago"))
@@ -429,3 +449,109 @@ def test_the_same_data_through_cutover_from_anchor_style_exports_yields_the_same
     other("cutover apply", dict(as_of=AS_OF, files=files), reason="Move in from the exports")
     assert other("cutover tie-out", dict(as_of=AS_OF, files=files))["tied"]
     assert _books(other) == entered
+    assert _aging(other) == entered_aging  # every bucket, not only the totals
+    assert _due_dates(other) == entered_due
+
+
+def _aging(run):
+    money = lambda row: {k: v["minor_units"] for k, v in row.items() if isinstance(v, dict) and "minor_units" in v}
+    return ({r["current_customer_label"]: money(r) for r in run("report ar-aging", dict(as_of=AS_OF, limit=200))["rows"]},
+            {r["current_vendor_name"]: money(r) for r in run("report ap-aging", dict(as_of=AS_OF, limit=200))["rows"]})
+
+
+def _due_dates(run):
+    return {n: (shown["date"], shown["due_date"]) for n in (str(x) for x in range(1001, 1013))
+            for shown in [run("invoice show", {"invoice": n})]}
+
+
+def test_an_undo_stopped_part_way_is_finished_before_anything_posts_again(fresh, monkeypatch):
+    """Review H2 and L5, with credits on both sides: a killed apply, an undo that stops part way (the draft is
+    `failed` and apply is refused), the undo finished (back to `rolled_back`, nothing pasted anew), and the same
+    draft applied again ties, the credit memo and vendor credit with it."""
+    from bookflow.company import batches, cutover
+    run = fresh["run"]
+    _grant_deletes(fresh)
+    invoices = INVOICES + [("Adams, Rachel", "CM-1", "09/25/2026", "", "", "-112.50")]
+    bills = BILLS + [("Office Depot", "VC-1", "09/20/2026", "", "", "-200.00")]
+    draft = _draft(run, open_invoices={"content": invoices_text(invoices)}, unpaid_bills={"content": bills_text(bills)},
+                   given={})
+    real = cutover._run_step
+
+    class Killed(Exception):
+        pass
+
+    def killed(s, ctx, step, payload, recorder=None):
+        if step.kind == "inventory_adjustment":
+            raise Killed()
+        return real(s, ctx, step, payload, recorder)
+    monkeypatch.setattr(cutover, "_run_step", killed)
+    with pytest.raises(Killed):
+        run("opening-draft apply", dict(draft=draft["id"]), reason="Post it")
+    monkeypatch.setattr(cutover, "_run_step", real)
+    real_reverse = batches.reverse
+    calls = {"n": 0}
+
+    def one_slice(*a, **k):
+        calls["n"] += 1
+        if calls["n"] > 1:
+            raise BookflowError("E_BATCH_BLOCKED", message="stopped for the test", details={"blockers": []})
+        return real_reverse(*a, **{**k, "limit": 5})
+    monkeypatch.setattr(batches, "reverse", one_slice)
+    with pytest.raises(BookflowError) as stopped:
+        run("opening-draft reverse", dict(draft=draft["id"]), reason="Undo")
+    assert calls["n"] == 2, stopped.value.details  # one slice ran, the next was stopped
+    monkeypatch.setattr(batches, "reverse", real_reverse)
+    shown = run("opening-draft show", dict(draft=draft["id"]))
+    assert shown["state"] == "failed" and shown["next"] == f"opening-draft reverse {draft['id']}"
+    with pytest.raises(BookflowError) as refused:
+        run("opening-draft apply", dict(draft=draft["id"]), reason="Continue")
+    assert refused.value.code == "E_VALIDATION"
+    done = run("opening-draft reverse", dict(draft=draft["id"]), reason="Finish the undo")
+    assert done["state"] == "reversed" and done["draft"]["state"] == "rolled_back"
+    assert _balances(run) == {}
+    again = run("opening-draft apply", dict(draft=draft["id"]), reason="Post it again")
+    assert again["draft"]["state"] == "applied" and again["apply"]["already_in"] == 1  # the clearing account
+    tie = run("opening-draft tie-out", dict(draft=draft["id"]))["tie_out"]
+    assert tie["tied"], tie["summary"]
+    books = _balances(run)
+    assert books["Accounts Receivable"] == 1_700_000 - 11_250 and books["Accounts Payable"] == -(750_000 - 20_000)
+    # The credits come back out with the rest: the credit memo deleted, the vendor credit voided.
+    plan = run("opening-draft reverse", dict(draft=draft["id"]), dry_run=True, reason="Undo")
+    steps = {s["record_type"]: s["steps"] for s in plan["steps"]}
+    assert steps["credit_memo"][-1] == "credit-memo delete" and steps["vendor_credit"][-1] == "vendor-credit void"
+
+
+def test_an_agent_accepts_differences_only_when_its_principal_granted_it(hosted):
+    """Review L6: `accept_differences` for an agent: refused ungranted, refused when its principal lacks it, admitted
+    once granted (a dry run, so nothing posts); a person is never asked."""
+    from tests.conftest import hosted_call, make_agent
+    from tests.test_people_only import REASON, _bearer, _grant
+    cid = hosted.company_id
+    hosted.ok("user.add", {"username": "principal-p", "company": cid, "role": "owner", "password": "pw-principal-p-12345"},
+              headers=REASON)
+    q = hosted.ok("user.add", {"username": "principal-q", "company": cid, "role": "admin",
+                               "password": "pw-principal-q-12345"}, headers=REASON)["user_id"]
+    _grant(hosted, q, "admin", denies=["opening.accept-differences"])
+    agent = make_agent(hosted_call(hosted), "opening-agent", principals="principal-p", company=cid, role="admin")
+    other = make_agent(hosted_call(hosted), "opening-agent-q", principals="principal-q", company=cid, role="admin")
+    as_agent, as_other = _bearer(hosted, agent, "principal-p"), _bearer(hosted, other, "principal-q")
+    draft = hosted.ok("opening-draft.create", {"as_of": "2024-12-31", "given": {"receivables": "10.00"},
+                                               "open_invoices": {"content": "Customer,Number,Date,Open amount\n"
+                                                                            "Gate Cafe,G-1,12/14/2024,5.00\n"}},
+                      company=cid, headers=REASON)["id"]
+    body = {"draft": draft, "accept_differences": True}
+    path = f"/companies/{cid}/commands/opening-draft.apply?dry_run=true"
+
+    def call(headers):
+        return hosted.api.post(path, json=body, headers={**REASON, **headers})
+    r = call(as_agent)
+    assert r.status_code == 403 and r.json()["details"]["reason"] == "capability_not_granted", r.text
+    assert "opening.accept-differences" in r.json()["message"]
+    _grant(hosted, agent, "admin", grants=["opening.accept-differences"])
+    _grant(hosted, other, "admin", grants=["opening.accept-differences"])
+    r = call(as_other)
+    assert r.status_code == 403 and r.json()["details"]["reason"] == "principal_lacks_capability", r.text
+    r = call(as_agent)
+    assert r.status_code == 200 and '"accepted: ' in r.text, r.text
+    r = call(_bearer(hosted, "principal-p"))
+    assert r.status_code == 200, r.text

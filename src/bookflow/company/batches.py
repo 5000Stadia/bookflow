@@ -513,6 +513,25 @@ def _document_uses(s, rec: DocumentRecord, ids: list[str], made_here: set[str]) 
             if table not in uses['tables']:
                 uses['tables'].append(table)
             uses['rows'].append({'table': table, 'column': paid, 'id': application, 'transaction_id': payer})
+    # Stock it moved that a later document moved again (sold, adjusted, transferred): undoing it would leave that
+    # later movement without the units it took, so the later document holds it (R107 increment 7 review, H1).
+    sql = ('SELECT DISTINCT m1.transaction_id, t.id, t.type, t.number, i.full_name FROM inventory_movements m1 '
+           'JOIN inventory_movements m2 ON m2.item_id = m1.item_id AND m2.sequence > m1.sequence '
+           'AND m2.transaction_id IS NOT m1.transaction_id '
+           'JOIN transactions t ON t.id = m2.transaction_id JOIN items i ON i.id = m1.item_id '
+           'WHERE m1.transaction_id IN (SELECT value FROM json_each(?)) AND m2.reverses_movement_id IS NULL '
+           'AND NOT EXISTS (SELECT 1 FROM inventory_movements r WHERE r.reverses_movement_id = m2.id) '
+           "AND t.status NOT IN ('voided', 'deleted') ORDER BY m2.sequence")
+    for target, later, kind, number, item in s.company.raw.execute(sql, (json.dumps(ids),)).fetchall():
+        if later in made_here:
+            continue
+        uses = found.setdefault(target, {'tables': [], 'rows': [], 'documents': []})
+        text = f"{kind.replace('_', ' ')} {number or later} (it moves {item} later)"
+        if text not in uses['documents'] and len(uses['documents']) < 3:
+            uses['documents'].append(text)
+        if 'inventory_movements' not in uses['tables']:
+            uses['tables'].append('inventory_movements')
+        uses['rows'].append({'table': 'inventory_movements', 'column': 'item_id', 'id': later, 'transaction_id': later})
     return found
 
 
@@ -821,9 +840,11 @@ def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
                           'steps': [name if name not in ('rename', 'renumber') else f'{rec.noun} update'
                                     for name, _ in steps]})
         work.append((g, rec, row, steps, len(steps_done)))
-        if probe and g['record_id'] not in by_batch:  # else probed by running, once the batch's documents are gone
+        if probe:
             refusal = _probe(s, ctx, batch, g, rec, row, steps, made)
-            if refusal is not None:
+            # A record the batch's own documents use is probed again by running, once those are gone: its dry run
+            # now counts only for the caller's grant (review L1).
+            if refusal is not None and (g['record_id'] not in by_batch or refusal['code'] == 'E_PERMISSION'):
                 blockers.append(refusal)
     return {'batch': batch, 'steps': steps_out, 'blockers': blockers, 'fingerprint': _fingerprint(steps_out),
             'work': work, 'records': len(groups), 'pending': len(pending)}
@@ -956,6 +977,9 @@ def refuse(found: dict) -> BookflowError:
 
 # ------------------------------------------------------------------ reversing
 
+# The deletes a command's own all-or-nothing undo runs (``reverse(own_writes=True)``).
+OWN_ROLLBACK_DELETES = frozenset(f'transaction.{family}.delete' for family in (
+    'invoice', 'credit_memo', 'sales_receipt', 'bill', 'journal_entry'))
 CHANGED = ('edited_again', 'later_batch')  # what skip_changed leaves: a record changed since the batch
 
 
@@ -969,8 +993,11 @@ def _skippable(blocker: dict, adapter: Adapter) -> bool:
 def reverse(s, ctx, batch_id: str, *, reason: str | None, dry_run: bool = False, limit: int = DEFAULT_SLICE,
             fingerprint: str | None = None, interrupt: Callable[[int], None] | None = None,
             then: Callable[[], Any] | None = None, on_begin: Callable[[Any, str], None] | None = None,
-            skip_changed: bool = False) -> dict:
-    """Reverse a batch (or its next slice). ``skip_changed`` (grid edits) reverses every record but those changed since
+            skip_changed: bool = False, own_writes: bool = False) -> dict:
+    """Reverse a batch (or its next slice). ``own_writes``: the command that made the batch is undoing its own writes in
+    the same call, nothing depending on them, as its all-or-nothing promise (an opening refused part way); the
+    caller had the authority to write them, so their deletes need no separate delete grant here (review M1). A
+    later, separate reversal never passes it. ``skip_changed`` (grid edits) reverses every record but those changed since
     (``CHANGED`` blockers: edited again, or touched by a later live batch): they are left as they are, returned as
     ``skipped``, and the batch ends ``reversed_partly``; any other blocker still refuses the whole. ``interrupt`` is a
     test hook called after each record; ``then`` runs
@@ -982,6 +1009,14 @@ def reverse(s, ctx, batch_id: str, *, reason: str | None, dry_run: bool = False,
     carries, else by the first slice. A later slice re-checks only what can have changed since: each record's
     version against its newest effect, what uses a created record, and later batches. An inverse command refused
     while running stops the slice there with the record named; what ran stays reversed and the state `reversing`."""
+    if own_writes:
+        saved = getattr(s, 'own_rollback', None)
+        s.own_rollback = OWN_ROLLBACK_DELETES
+        try:
+            return reverse(s, ctx, batch_id, reason=reason, dry_run=dry_run, limit=limit, fingerprint=fingerprint,
+                           interrupt=interrupt, then=then, on_begin=on_begin, skip_changed=skip_changed)
+        finally:
+            s.own_rollback = saved
     batch = _batch(s, batch_id)
     adapter = adapter_for(batch['kind'])
     starting = batch['state'] not in ('reversing', 'blocked')
