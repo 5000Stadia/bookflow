@@ -109,10 +109,10 @@ def test_plain_clerk_refused_returns_clerk_allowed(hosted):
     cid = hosted.company_id
     _pos(hosted, True)
     cart = {'lines': [{'item': 'Pipe Sealant', 'quantity': '2'}]}
-    preview = hosted.ok('pos.sale.preview', cart)
+    preview = hosted.ok('pos.sale.preview', cart, company=cid)
     sold = hosted.ok('pos.sale.complete', dict(cart, ticket='returns-authority-sale',
-        expected_total=preview['total']['amount'], tender={'payment_method': 'Cash'}), headers=HEADERS)
-    source = hosted.ok('pos.refund.lines', {'sale': sold['id']})['lines'][0]['source_line']
+        expected_total=preview['total']['amount'], tender={'payment_method': 'Cash'}), company=cid, headers=HEADERS)
+    source = hosted.ok('pos.refund.lines', {'sale': sold['id']}, company=cid)['lines'][0]['source_line']
     for preset, username, permitted in [('pos-clerk', 'plain-refund', False), ('pos-clerk-returns', 'returns-refund', True)]:
         settings = pos_presets.preset(preset)
         user = hosted.ok('user.add', {'username': username, 'password': _password(username), 'company': cid,
