@@ -262,7 +262,7 @@ def test_the_clerk_preset_holds_company_item_and_pos_sell_and_lands_on_the_pos(h
         assert refused.status_code == 403 and refused.json()['code'] == 'E_PERMISSION', (verb, refused.text)
     from bookflow.core.transfer_protocol import encode_input
     from tests.test_item_pictures import png
-    refused = fresh.post(f"/companies/{cid}/transfers/pos-box.picture.set", headers={**H, **REASON,
+    refused = fresh.post(f"/companies/{cid}/transfers/pos-box.picture.set", headers={**H, **REASON, 'Content-Type': 'application/octet-stream',
         'X-Bookflow-Input': encode_input({'pos_box': box, 'expected_version': layout['version'],
                                         'original_filename': 'forbidden.png'})}, content=png())
     assert refused.status_code == 403 and refused.json()['code'] == 'E_PERMISSION', refused.text
@@ -333,6 +333,8 @@ def test_every_pos_command_names_its_pos_capability():
     from bookflow.hub import permission_pos_sale_catalog as sale_layer
     expected = {name: (cap, threshold) for name, cap, threshold, _ in layer._ADDED}
     expected.update({name: ('pos.sell', 'member') for name, _, _ in sale_layer._ADDED})   # increment 5
+    from bookflow.hub import permission_pos_layout_catalog as layout_layer
+    expected.update({name: (cap, threshold) for name, _, cap, threshold, _ in layout_layer._ADDED})
     assert named == expected
     # The POS layer is decided by capability, not noun: the gate and the switch find each command by its capability.
     from bookflow.adapters.workbench import home as Home

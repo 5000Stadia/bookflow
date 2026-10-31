@@ -82,7 +82,9 @@ def prepare_set(inp, ctx, s):
     from bookflow.core.transfers import TransferPreparation
     pos_layer.require_enabled(s)
     files._pending(s)
-    _info, rows, _before = layout.begin(s, ctx, inp.expected_version)
+    # Transfer preparation is also repeated when publishing the committed response. Check the target here,
+    # not the write's version: plan_picture_set performs the CAS before changing the layout.
+    _info, rows = layout.state(s)
     layout._group(rows, inp.pos_box)
     store, limit = files._store_limit(s)
     return TransferPreparation(store, min(limit, pics.PICTURE_MAX_BYTES))

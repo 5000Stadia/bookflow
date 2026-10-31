@@ -770,6 +770,15 @@ def _read_calls(hosted):
         "X-Bookflow-Reason": "Read parity", "Content-Type": "application/octet-stream"}, content=png())
     assert uploaded.status_code == 200, uploaded.text
     calls["item picture get"] = ({"attachment": uploaded.json()["picture"]["attachment_id"]}, cid)
+    # A group image is readable only while POS is enabled and a group currently displays it.
+    info = hosted.info()
+    hosted.ok("company.update", {"pos_enabled": True, "expected_version": info["info_version"]}, company=cid)
+    layout = hosted.ok("pos-box.list", {}, company=cid)
+    attachment_id = uploaded.json()["picture"]["attachment_id"]
+    hosted.ok("pos-box.create", {"kind": "group", "label": "Read parity pictures",
+                                "picture_attachment": attachment_id, "expected_version": layout["version"]}, company=cid)
+    calls["pos-box list"] = ({}, cid)
+    calls["pos-box picture get"] = ({"attachment": attachment_id}, cid)
     documented = _documented_read_calls(hosted, set(calls))
     DOCUMENTED_READS.clear()
     DOCUMENTED_READS.update(documented)

@@ -78,7 +78,7 @@ def output(s, info, rows, extra_pictures=None):
         c.attachments.c.id.in_(wanted))).mappings()} if wanted else {}
     pictures.update(extra_pictures or {})
     boxes = []
-    for row in rows:
+    for row in sorted(rows, key=lambda row: (row['parent_id'] or '', row['position'], row['id'])):
         pic = pictures.get(row['picture_attachment_id'])
         shown = m.Picture(attachment_id=pic['id'], sha256=pic['sha256'], media_type=pic['media_type'],
             size_bytes=pic['size_bytes'], url=f"/c/{s.company_row['id']}/pos/picture/{pic['id']}/{pic['sha256']}") if pic else None

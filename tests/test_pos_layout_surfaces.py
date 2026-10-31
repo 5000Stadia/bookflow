@@ -33,9 +33,9 @@ def test_the_same_layout_through_python_cli_http_and_mcp(root, tmp_path):
                                                        'expected_version': layout['version']})
                 layout = await call('pos-box view', {'pos_box': group, 'style': 'list',
                                                      'expected_version': layout['version']})
-                stale = await call('pos-box move', {'pos_box': box, 'parent': None, 'position': 0,
+                stale = await call('pos-box move', {'pos_box': box, 'position': 0,
                                                     'expected_version': layout['version'] - 1}, rejected=True)
-                layout = await call('pos-box move', {'pos_box': box, 'parent': None, 'position': 0,
+                layout = await call('pos-box move', {'pos_box': box, 'position': 0,
                                                     'expected_version': layout['version']})
                 layout = await call('pos-box remove', {'pos_box': box, 'expected_version': layout['version']})
                 shown = await call('pos-box list')
