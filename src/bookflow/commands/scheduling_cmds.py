@@ -40,8 +40,10 @@ DESCRIPTIONS = {
         ' `bookflow serve` does by itself on the notice schedule. One notice per customer or job whose open invoices'
         ' and statement charges at least `overdue_notice_days` past due total at least the minimum (and whose whole'
         ' balance is above zero), for this period of the schedule (the month, or the week from Monday). A customer'
-        ' that already has a notice for the period -- ready, sent or dismissed -- gets no second one. Nothing is'
-        ' sent: each notice waits in `notice list` with a printable statement or letter (`print_path`).'),
+        ' that already has an unreversed notice for the period -- ready, sent or dismissed -- gets no second one. Nothing is'
+        ' sent: each notice waits in `notice list` with a printable statement or letter (`print_path`). '
+        'The output names its batch; batch reverse dismisses its ready notices and releases their periods. '
+        'A notice already sent blocks reversal: sent mail cannot be recalled.'),
     'notice list': (
         'List overdue notices: ready to send by default, or sent, dismissed or all. Each carries the customer, the'
         ' overdue balance and documents captured when it was generated, the letter text, and `print_path`, the'
@@ -50,6 +52,10 @@ DESCRIPTIONS = {
     'notice mark-sent': (
         'Record that a ready notice has been sent -- printed and mailed, emailed by hand, or otherwise (`method`).'
         ' Bookflow did not send it; this records that a person (or a delivery step outside Bookflow) did.'),
+    'notice reverse': (
+        'Dismiss a ready notice and release its period so a corrected notice can be generated. '
+        'The original notice and its period remain in history. Sent mail cannot be recalled. '
+        'Use batch reverse to reverse an entire generation run.'),
     'notice dismiss': (
         'Set a ready notice aside without sending it, with a note saying why. It stays on the record as dismissed,'
         ' and no new notice is generated for that customer until the next notice period.'),
@@ -119,9 +125,10 @@ notice_list = _read('notice list', NoticeListInput, NoticeListOutput, notices.pa
 notice_show = _read('notice show', NoticeShowInput, NoticeOutput, notices.show, ['notice'], 'customer')
 notice_mark_sent = _notice_write('mark-sent', NoticeMarkSentInput)
 notice_dismiss = _notice_write('dismiss', NoticeDismissInput)
+notice_reverse = _notice_write('reverse', NoticeDismissInput)
 
 reminders_list = _read('reminders', RemindersInput, RemindersOutput, reminders.reminders, [], 'ledger.read',
                        errors=['E_VALIDATION'])
 
 SCHEDULING_COMMANDS = [todo_create, todo_update, todo_complete, todo_show, todo_list,
-                       notice_generate, notice_list, notice_show, notice_mark_sent, notice_dismiss, reminders_list]
+                       notice_generate, notice_list, notice_show, notice_mark_sent, notice_dismiss, notice_reverse, reminders_list]

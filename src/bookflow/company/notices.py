@@ -13,9 +13,10 @@ payments already cover what it owes is not dunned, the embarrassment the anchor 
 
 **When.** A notice answers one period of the schedule: the month of A, or the week of A from Monday.
 The scheduler (``company/scheduler.py``) runs this at most once a minute, and
-``(customer_id, period_key)`` is unique, so the first run of a period generates that period's
+``(customer_id, period_key)`` is unique among unreleased notices, so the first run of a period generates that period's
 notices and every later run finds them already there -- including a notice a person dismissed,
-which stays dismissed until the next period. `notice generate` runs the same thing by hand.
+which stays dismissed until the next period. A reversal releases the original period while
+keeping the dismissed notice in history. `notice generate` runs the same thing by hand.
 
 **What is generated** is a row in the ``notice`` queue with the overdue documents captured at A
 and a printable PDF (``print_path``): the statement, from the oldest overdue document's date to A,
@@ -130,7 +131,7 @@ def _new_rows(s, ctx, as_of, p):
     key = period_key(as_of, p['frequency'])
     candidates = compute(s, as_of, p)
     have = {row[0] for row in s.company.conn.execute(
-        sa.select(c.overdue_notices.c.customer_id).where(c.overdue_notices.c.period_key == key))}
+        sa.select(c.overdue_notices.c.customer_id).where(c.overdue_notices.c.period_key == key, c.overdue_notices.c.period_released == False))}
     at, via = clock.now_iso(), ctx.interface.value
     rows = []
     for cand in candidates:
@@ -142,7 +143,7 @@ def _new_rows(s, ctx, as_of, p):
                          overdue_minor_units=cand['overdue'], balance_minor_units=cand['balance'], currency=p['currency'],
                          oldest_due_date=cand['oldest_due_date'], days_overdue=cand['days_overdue'],
                          documents=json.dumps(cand['documents'], sort_keys=True, separators=(',', ':')),
-                         status='ready', sent_at=None, sent_by=None, sent_method=None, dismissed_reason=None))
+                         status='ready', period_released=False, sent_at=None, sent_by=None, sent_method=None, dismissed_reason=None))
     return key, rows, len(candidates) - len(rows)
 
 
@@ -164,6 +165,7 @@ def scheduled(s, ctx, as_of) -> dict[str, Any]:
             from bookflow.core.dispatch import _upsert_principals
             _upsert_principals(s, ctx)
             touched = _insert(s, rows)
+            batch_id = _record_generation(s, ctx, rows, key)
             write_event_to(s.company, ctx, 'notice generate', f'generated {len(rows)} overdue notice(s) for {key}',
                            touched, actor_id=s.actor.id, actor_kind=s.actor.kind, event_id=new_id())
             s.commits.commit(s.company, 'scheduler.write')
@@ -173,7 +175,9 @@ def scheduled(s, ctx, as_of) -> dict[str, Any]:
         if s.company.write_transaction:
             s.company.raw.rollback()
         raise
-    return {'enabled': True, 'period_key': key, 'generated': len(rows), 'already_for_period': already}
+    return {'enabled': True, 'period_key': key, 'generated': len(rows), 'already_for_period': already,
+            'batch_id': batch_id if rows else None,
+            'next': f'batch reverse {batch_id}' if rows else None}
 
 
 # ---------------------------------------------------------------- projection
@@ -206,7 +210,7 @@ def project(s, row, names=None, company_name=None) -> dict[str, Any]:
     name = names.get(row['customer_id']) or row['customer_id']
     company_id = (s.company_row or {}).get('id', '')
     return dict(common_out(s, row), customer_id=row['customer_id'], customer_name=name,
-                period_key=row['period_key'], as_of=row['as_of'], template=row['template'],
+                period_key=row['period_key'], period_released=row.get('period_released', False), as_of=row['as_of'], template=row['template'],
                 statement_from=row['statement_from'], overdue=_money(row['overdue_minor_units'], row['currency']),
                 balance=_money(row['balance_minor_units'], row['currency']), oldest_due_date=row['oldest_due_date'],
                 days_overdue=row['days_overdue'],
@@ -254,7 +258,9 @@ def prepare_generate(s, ctx, inp) -> Plan:
 def apply_generate(plan, ctx, s) -> Applied:
     rows = plan.data['rows']
     touched = _insert(s, rows) if rows else []
-    return Applied(plan.preview.model_copy(update={'dry_run': False}), touched,
+    batch_id = _record_generation(s, ctx, rows, plan.data['key']) if rows else None
+    return Applied(plan.preview.model_copy(update={'dry_run': False, 'batch_id': batch_id,
+                   'next': f'batch reverse {batch_id}' if batch_id else None}), touched,
                    f"generated {len(rows)} overdue notice(s) for {plan.data['key']}")
 
 
@@ -265,6 +271,10 @@ def prepare_write(s, ctx, inp, verb) -> Plan:
         raise BookflowError('E_VERSION_CONFLICT', details={
             'record_type': RECORD, 'record_id': before['id'], 'expected_version': inp.expected_version,
             'current_version': before['version'], 'updated_by': before['updated_by'], 'updated_via': before['updated_via']})
+    if verb == 'reverse' and before['status'] == 'sent':
+        raise BookflowError('E_WORK_DEPENDENCY', message=(
+            f"Notice {before['id']} to {_names(s, [before])[before['customer_id']]} was sent; sent mail cannot be recalled."),
+            details={'record_type': RECORD, 'record_id': before['id'], 'status': 'sent'})
     if before['status'] != 'ready':
         raise _invalid('notice', f"is {before['status']}; only a notice ready to send can be marked sent or dismissed")
     from bookflow.company import delivery
@@ -283,6 +293,8 @@ def prepare_write(s, ctx, inp, verb) -> Plan:
         row.update(status='sent', sent_at=at, sent_by=s.actor.id, sent_method=inp.method)
     else:
         row.update(status='dismissed', dismissed_reason=(inp.note or ctx.reason or '').strip()[:280] or None)
+        if verb == 'reverse':
+            row['period_released'] = True
     return Plan(NoticeWriteOutput(**project(s, row), dry_run=s.dry_run), dict(row=row, before=before, verb=verb))
 
 
@@ -336,3 +348,60 @@ def page(s, inp):
                                    .where(c.overdue_notices.c.status == 'ready')).one()
     return NoticeListOutput(items=[project(s, row, names, company_name) for row in rows], count=len(rows),
                             truncated=truncated, ready_total=_money(total[0], total[1]) if total[1] else None)
+
+
+# ---------------------------------------------------------------- reversible generation
+
+def _record_generation(s, ctx, rows, key):
+    from bookflow.company import batches
+    batch_id = batches._insert_batch(s, ctx, kind='notice-generate', label=f'Overdue notices for {key}',
+                                     scope=f'notice:{key}', ordering='strict', source_type='notice_generate')
+    for row in rows:
+        batches.record_effect(s, batch_id, record_type=RECORD, record_id=row['id'], action='created',
+                              version_after=row['version'])
+    return batch_id
+
+
+def _reversal_plan(s, ctx, batch, effects, done, probe, blockers):
+    from bookflow.company import batches, delivery
+    steps, work = [], []
+    pending = [effect for effect in reversed(effects) if not done.get((effect['record_type'], effect['record_id']))]
+    for effect in pending:
+        row = _row(s, effect['record_id'])
+        name = f"Notice {row['id']} to {_names(s, [row])[row['customer_id']]} for {row['period_key']}"
+        payload = {'notice': row['id'], 'expected_version': row['version'], 'note': f"Reversed batch {batch['id']}"}
+        step = dict(seq=effect['seq'], record_type=RECORD, record_id=row['id'], name=name,
+                    action='created', version=row['version'], steps=['notice reverse'])
+        steps.append(step)
+        work.append(dict(step, payload=payload, effect=effect))
+        live = delivery.live_for_notice(s, row['id'])
+        if row['status'] == 'sent':
+            blockers.append(dict(step, code='sent', message=f'{name} was sent; sent mail cannot be recalled.'))
+        elif row['version'] != effect['version_after']:
+            blockers.append(dict(step, code='edited_again', message=f'{name} was changed since the batch.'))
+        elif live is not None:
+            blockers.append(dict(step, code='E_WORK_DEPENDENCY', message=(
+                f"{name} is held by email message {live['number']} ({live['status']}); cancel that message first.")))
+        elif probe:
+            try:
+                batches.run_nested(s, ctx, 'notice reverse', payload, source_ref=f"reverse:{batch['id']}",
+                                   dry_run=True, recovery=False)
+            except BookflowError as error:
+                blockers.append(dict(step, code=error.code, message=f'{name}: {error.message}', details=error.details))
+    return dict(steps=steps, work=work, blockers=blockers, records=len(effects), pending=len(pending))
+
+
+def _reverse_one(s, ctx, batch, reversal_id, item):
+    from bookflow.company import batches
+    def record(session, cmd, applied, output):
+        batches.record_effect(session, reversal_id, record_type=RECORD, record_id=item['record_id'],
+                              action='reversed', version_after=output['version'],
+                              before={'of_seq': item['seq'], 'step': 0, 'command': cmd.name},
+                              event_id=batches.last_event_id(session))
+    batches.run_nested(s, ctx, 'notice reverse', item['payload'], source_ref=f"reverse:{batch['id']}",
+                       recorder=record, recovery=False)
+
+
+from bookflow.company import batches as _batches
+_batches.register(_batches.Adapter('notice-generate', ordering='strict', planner=_reversal_plan, runner=_reverse_one,
+                                  reader=lambda s, batch: _batches.require_read(s, 'notice show')))

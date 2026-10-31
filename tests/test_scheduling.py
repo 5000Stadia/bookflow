@@ -453,7 +453,9 @@ def test_notices_follow_the_policy_once_per_period_and_a_dismissed_one_stays_dis
               reason='Turn on collection notices')
 
     first = tick(books, '2026-03-05')['notices']
-    assert first == {'enabled': True, 'period_key': '2026-03-01', 'generated': 1, 'already_for_period': 0}
+    assert {k: v for k, v in first.items() if k not in ('batch_id', 'next')} == {
+        'enabled': True, 'period_key': '2026-03-01', 'generated': 1, 'already_for_period': 0}
+    assert first['next'] == f"batch reverse {first['batch_id']}"
     [notice] = books.run('notice list', {})['items']
     assert notice['customer_name'] == 'Rivera Construction' and notice['overdue']['amount'] == '500.00'
     assert notice['days_overdue'] == 32 and notice['template'] == 'letter' and notice['status'] == 'ready'
@@ -509,7 +511,10 @@ def test_co0085_is_exactly_the_current_metadata_and_a_fresh_company_reaches_it(t
     compiled = tuple(str(CreateTable(c.metadata.tables[name]).compile(dialect=dialect())) for name in tables)
     indexes = tuple(str(CreateIndex(index).compile(dialect=dialect())) for name in tables
                     for index in sorted(c.metadata.tables[name].indexes, key=lambda index: index.name))
-    assert m.DDL == compiled and m.INDEXES == indexes
+    # co0124 replaces only the notice dedupe with a partial unique index.
+    assert tuple(ddl for ddl in m.DDL if 'CREATE TABLE overdue_notices' not in ddl) == tuple(
+        ddl for ddl in compiled if 'CREATE TABLE overdue_notices' not in ddl)
+    assert m.INDEXES == tuple(ddl for ddl in indexes if 'uq_overdue_notice_period' not in ddl)
     assert set(m.COLUMNS) <= set(c.company_info.c.keys())
     with open_database(tmp_path / 'fresh.db', writable=True, create=True) as db:
         assert migrate_to_head(db, 'company', None) == (None, HEADS['company'])

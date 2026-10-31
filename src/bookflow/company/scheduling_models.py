@@ -106,6 +106,7 @@ class NoticeDocument(BaseModel):
 
 
 class NoticeOutput(CommonOut):
+    period_released: bool = Field(False, description="True when reversal released this period for a corrected generation run.")
     customer_id: str
     customer_name: str
     period_key: str
@@ -172,12 +173,14 @@ class NoticePolicyOutput(BaseModel):
 
 
 class NoticeGenerateOutput(WriteOutput):
+    batch_id: str | None = Field(None, description="The reversible generation batch; null when nothing was generated or for a preview.")
+    next: str | None = Field(None, description="Command to reverse the generated notices and release their periods.")
     as_of: str
     period_key: str | None
     policy: NoticePolicyOutput
     generated: list[NoticeOutput]
     generated_count: int
-    already_for_period: int = Field(description='Customers who qualify but already have a notice (ready, sent or dismissed) for this period.')
+    already_for_period: int = Field(description='Customers who qualify but already have an unreleased notice (ready, sent or dismissed) for this period.')
 
 
 # ---------------------------------------------------------------- reminders

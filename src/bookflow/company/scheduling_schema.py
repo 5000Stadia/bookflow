@@ -13,8 +13,9 @@ the company's policy, for that schedule's period (``period_key``: the first day 
 the Monday of the week). A notice is a document ready to send -- a statement, or a short letter --
 that waits in the ``notice`` queue until a person marks it sent or dismisses it. Nothing here
 sends anything: delivery belongs to document delivery (R112), which reads the same queue. The
-unique ``(customer_id, period_key)`` pair is what makes generation idempotent, and what keeps a
-dismissed notice dismissed for the rest of its period.
+unique ``(customer_id, period_key)`` pair among unreleased notices makes generation idempotent
+and keeps an ordinarily dismissed notice dismissed for the rest of its period. Reversal keeps
+the original notice and period in history while releasing that pair for corrected generation.
 """
 import sqlalchemy as sa
 
@@ -74,7 +75,9 @@ def define_tables(metadata, C, T, common):
         C('sent_by', sa.String(26), 'User who marked it sent; null until then.', nullable=True),
         C('sent_method', sa.String(16), 'How it went out, as the person marking it said: print, email or other; null until sent.', nullable=True),
         C('dismissed_reason', sa.String(280), 'Why it was dismissed; null unless dismissed.', nullable=True),
-        sa.UniqueConstraint('customer_id', 'period_key', name='uq_overdue_notice_period'),
+        C('period_released', sa.Boolean, 'True when reversed; the original period remains history and a corrected notice may be generated.', nullable=False, server_default=sa.text('0')),
+        sa.Index('uq_overdue_notice_period', 'customer_id', 'period_key', unique=True, sqlite_where=sa.text('period_released = 0')),
+        sa.CheckConstraint('period_released IN (0, 1) AND (period_released = 0 OR status = \'dismissed\')', name='ck_overdue_notice_released'),
         sa.CheckConstraint('length(period_key) = 10 AND length(as_of) = 10 AND length(statement_from) = 10'
                            ' AND length(oldest_due_date) = 10', name='ck_overdue_notice_dates'),
         sa.CheckConstraint(_in('template', NOTICE_TEMPLATES), name='ck_overdue_notice_template'),
@@ -86,7 +89,7 @@ def define_tables(metadata, C, T, common):
         sa.CheckConstraint('days_overdue >= 1', name='ck_overdue_notice_days'),
         sa.CheckConstraint("json_valid(documents) AND json_type(documents) = 'array'", name='ck_overdue_notice_documents'),
         sa.Index('ix_overdue_notices_status_as_of', 'status', 'as_of'),
-        description='Overdue notices the scheduler generated: one per customer and notice period, waiting to be sent or dismissed.')
+        description='Overdue notice history: one unreleased notice per customer and period; reversal dismisses and releases the period for corrected generation.')
 
     authority = T('scheduled_revision_authority',
         C('revision_id', sa.String(26), 'Memorized transaction revision an agent saved.', primary_key=True),
