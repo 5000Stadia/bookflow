@@ -28,8 +28,12 @@ import unicodedata
 from dataclasses import dataclass, field
 from datetime import date
 
+from bookflow import BookflowError
+
 KINDS = ("iif", "trial_balance", "open_invoices", "unpaid_bills", "ar_aging", "ap_aging", "inventory_valuation",
          "reconciliation_summary", "uncleared", "vendor_1099")
+# Plain rows an owner types or pastes (R107 increment 7, design/bulk-import.md §6): stated by `kind`, never detected.
+ENTERED_KINDS = ("entered_balances", "entered_open_invoices", "entered_unpaid_bills", "entered_stock")
 
 # The desktop product's account type codes, and the Bookflow type each one is.
 ACCOUNT_TYPES = {
@@ -73,6 +77,7 @@ class SourceFile:
     attachment: str | None = None
     detected: bool = False
     rows: int = 0
+    date_order: str | None = None  # entered kinds: MDY, DMY or YMD when the dates alone cannot tell
 
 
 @dataclass
@@ -97,6 +102,7 @@ class TrialBalanceRow:
     credit: int
     file: str
     line: int
+    basis: str = "given"  # `derived` for a figure Bookflow worked out (a total from the rows, equity), else `given`
 
     @property
     def net(self) -> int:
@@ -146,6 +152,18 @@ class StockRow:
     item: str
     quantity: str  # decimal text, as the report printed it
     value: int
+    file: str
+    line: int
+    entered: bool = False  # typed by the owner: the item is one this company already has (or makes on confirmation)
+
+
+@dataclass
+class EnteredBalance:
+    """One balance the owner knows: an account (name, number or ID) and its balance, on the account's own side
+    unless `side` says which; resolved against the chart when the move-in is planned."""
+    account: str
+    amount: int
+    side: str | None  # debit, credit, or None for the account's natural side
     file: str
     line: int
 
@@ -228,6 +246,9 @@ class Sources:
     open_items: list[OpenItem] = field(default_factory=list)
     open_item_files: list[str] = field(default_factory=list)
     vendor_1099: list[Vendor1099Summary] = field(default_factory=list)
+    entered_balances: list[EnteredBalance] = field(default_factory=list)
+    entered_balance_files: list[str] = field(default_factory=list)
+    entered_document_files: list[str] = field(default_factory=list)
     product: str | None = None
     problems: list[Problem] = field(default_factory=list)
 
@@ -983,6 +1004,261 @@ def read_vendor_1099(source: SourceFile, out: Sources, places: int) -> None:
     out.vendor_1099.append(report)
 
 
+# ---------------------------------------------------------------- rows the owner types (R107 increment 7)
+
+# Each entered kind's columns: field -> the headers that name it (normalized as tabular.normalize_header does).
+ENTERED_COLUMNS = {
+    "entered_balances": {
+        "account": ("account", "account name", "account number", "name", "number", "acct"),
+        "balance": ("balance", "amount", "opening balance", "ending balance"),
+        "side": ("side", "debit/credit", "dr/cr", "debit or credit"),
+        "debit": ("debit", "dr"), "credit": ("credit", "cr")},
+    "entered_open_invoices": {
+        "party": ("customer", "customer name", "customer:job", "customer/job", "client", "name"),
+        "number": ("number", "invoice", "invoice number", "invoice no", "num", "no", "#"),
+        "date": ("date", "invoice date"), "due_date": ("due date", "due"), "terms": ("terms",),
+        "open": ("open amount", "open balance", "amount due", "balance", "amount", "open"),
+        "po": ("po number", "po", "p.o.", "p.o. number", "p. o. #", "customer po"), "memo": ("memo", "note", "notes")},
+    "entered_unpaid_bills": {
+        "party": ("vendor", "vendor name", "supplier", "name"),
+        "number": ("reference", "ref", "ref no", "bill number", "bill no", "vendor invoice", "number", "num", "no"),
+        "date": ("date", "bill date"), "due_date": ("due date", "due"), "terms": ("terms",),
+        "open": ("open amount", "open balance", "amount due", "balance", "amount", "open"),
+        "memo": ("memo", "note", "notes")},
+    "entered_stock": {
+        "item": ("item", "item name", "product", "name", "sku"),
+        "quantity": ("quantity on hand", "quantity", "qty", "on hand", "qty on hand"),
+        "value": ("total value", "value", "asset value", "total"),
+        "cost": ("unit cost", "cost", "avg cost", "average cost")},
+}
+ENTERED_REQUIRED = {"entered_balances": ("account",), "entered_open_invoices": ("party", "date", "open"),
+                    "entered_unpaid_bills": ("party", "date", "open"), "entered_stock": ("item", "quantity")}
+_ENTERED_WHAT = {"entered_balances": "balances", "entered_open_invoices": "open invoices",
+                 "entered_unpaid_bills": "unpaid bills", "entered_stock": "stock"}
+
+
+def entered_header(kind: str) -> list[str]:
+    """The plain header a person pastes under, one name per field, for a template or the guided page."""
+    return {"entered_balances": ["Account", "Balance"],
+            "entered_open_invoices": ["Customer", "Number", "Date", "Due date", "Terms", "Open amount", "PO number", "Memo"],
+            "entered_unpaid_bills": ["Vendor", "Reference", "Date", "Due date", "Terms", "Open amount", "Memo"],
+            "entered_stock": ["Item", "Quantity", "Total value", "Unit cost"]}[kind]
+
+
+def _entered_table(source: SourceFile, out: Sources):
+    """The rows of an entered file through the shared reader (tabular.py), each field's column found by its header.
+
+    Returns (columns, rows) or None when the file cannot be read or lacks a required column (said as a problem)."""
+    from bookflow.company import tabular
+    try:
+        table = tabular.read(source.text)
+    except BookflowError as error:
+        out.problems.append(Problem("blocking", "unreadable_report", error.message, "Paste the rows with a header row.",
+                                    file=source.name))
+        return None
+    names = ENTERED_COLUMNS[source.kind]
+    columns: dict[str, int] = {}
+    for index, header in enumerate(table.headers):
+        found = tabular.normalize_header(header)
+        for field_, synonyms in names.items():
+            if field_ not in columns and found in synonyms:
+                columns[field_] = index
+                break
+    required = ENTERED_REQUIRED[source.kind]
+    missing = [f for f in required if f not in columns]
+    if source.kind == "entered_balances" and "balance" not in columns and not {"debit", "credit"} & set(columns):
+        missing.append("balance")
+    if source.kind == "entered_stock" and "value" not in columns and "cost" not in columns:
+        missing.append("total value or unit cost")
+    if missing:
+        out.problems.append(Problem("blocking", "missing_column",
+            f"the {_ENTERED_WHAT[source.kind]} have no {', '.join(m.replace('_', ' ') for m in missing)} column",
+            "Start the rows with a header row: " + ", ".join(entered_header(source.kind)) + ".", file=source.name))
+        return None
+    for position, width in table.width_errors.items():
+        line = table.rows[position - 1][0]
+        out.problems.append(Problem("blocking", "row_width",
+            f"the row has {width} cells and the header {len(table.headers)}", "Paste the rows again as they are.",
+            file=source.name, line=line))
+    return columns, table.rows
+
+
+def _cell(cells: list[str], columns: dict[str, int], name: str) -> str:
+    index = columns.get(name)
+    return cells[index].strip() if index is not None and index < len(cells) else ""
+
+
+def _entered_money(source: SourceFile, out: Sources, text: str, line: int, places: int, what: str) -> int | None:
+    from bookflow.company import tabular
+    try:
+        return tabular.parse_money(text, places)
+    except tabular.CellError as error:
+        out.problems.append(Problem("blocking", "unreadable_amount", f"{what}: {error.message}",
+                                    "Type the amount as digits with one decimal mark.", file=source.name, line=line))
+        return None
+
+
+def _date_order(source: SourceFile, out: Sources, rows, columns) -> str | None:
+    from bookflow.company import tabular
+    values = [_cell(cells, columns, name) for _, cells in rows for name in ("date", "due_date")]
+    try:
+        found = tabular.date_order(values)
+    except tabular.CellError as error:
+        out.problems.append(Problem("blocking", "ambiguous_date", error.message, "Give every date in one order.",
+                                    file=source.name))
+        return None
+    if source.date_order:
+        if found and found != "YMD" and found != source.date_order and source.date_order != "YMD":
+            out.problems.append(Problem("blocking", "ambiguous_date",
+                f"the dates read {'day' if found == 'DMY' else 'month'} first, but date_order says otherwise",
+                "Correct date_order or the dates.", file=source.name))
+            return None
+        return source.date_order
+    if found is None:
+        out.problems.append(Problem("blocking", "ambiguous_date",
+            "every date could be day-first or month-first (such as 03/04/2026)",
+            "Give date_order: MDY for month first, DMY for day first.", file=source.name))
+    return found
+
+
+def read_entered_balances(source: SourceFile, out: Sources, places: int) -> None:
+    table = _entered_table(source, out)
+    if table is None:
+        return
+    columns, rows = table
+    count = 0
+    for line, cells in rows:
+        account = _cell(cells, columns, "account")
+        balance_text = _cell(cells, columns, "balance")
+        debit_text, credit_text = _cell(cells, columns, "debit"), _cell(cells, columns, "credit")
+        if not account and not (balance_text or debit_text or credit_text):
+            continue
+        if not account:
+            out.problems.append(Problem("blocking", "missing_account", "a balance has no account", file=source.name, line=line))
+            continue
+        side = _cell(cells, columns, "side").lower() or None
+        if side in ("dr", "debit", "d"):
+            side = "debit"
+        elif side in ("cr", "credit", "c"):
+            side = "credit"
+        elif side is not None:
+            out.problems.append(Problem("blocking", "unreadable_side", f"side {side!r} is neither debit nor credit",
+                                        file=source.name, line=line, subject=account))
+            continue
+        if balance_text:
+            amount = _entered_money(source, out, balance_text, line, places, account)
+        else:
+            debit = _entered_money(source, out, debit_text, line, places, account) if debit_text else 0
+            credit = _entered_money(source, out, credit_text, line, places, account) if credit_text else 0
+            if debit is None or credit is None:
+                continue
+            amount, side = debit - credit, "debit"
+        if amount is None:
+            continue
+        if side is not None and amount < 0:
+            amount, side = -amount, ("credit" if side == "debit" else "debit")
+        out.entered_balances.append(EnteredBalance(account, amount, side, source.name, line))
+        count += 1
+    source.rows = count
+    out.entered_balance_files.append(source.name)
+
+
+def read_entered_documents(source: SourceFile, out: Sources, side: str, places: int) -> None:
+    from bookflow.company import tabular
+    table = _entered_table(source, out)
+    if table is None:
+        return
+    columns, rows = table
+    order = _date_order(source, out, rows, columns)
+    parsed: list[OpenDocument] = []
+    for line, cells in rows:
+        party = _cell(cells, columns, "party")
+        open_text = _cell(cells, columns, "open")
+        if not party and not open_text:
+            continue
+        if not party:
+            out.problems.append(Problem("blocking", "document_without_name",
+                f"{'an invoice' if side == 'receivable' else 'a bill'} has no {'customer' if side == 'receivable' else 'vendor'}",
+                file=source.name, line=line))
+            continue
+        dates = {}
+        for name in ("date", "due_date"):
+            try:
+                dates[name] = tabular.parse_date(_cell(cells, columns, name), order) if order or not _cell(cells, columns, name) else None
+            except tabular.CellError as error:
+                out.problems.append(Problem("blocking", "unreadable_date", error.message, file=source.name, line=line,
+                                            subject=party))
+                dates[name] = None
+        if not open_text:
+            out.problems.append(Problem("blocking", "missing_amount", f"{party}'s row has no open amount",
+                                        file=source.name, line=line, subject=party))
+            continue
+        balance = _entered_money(source, out, open_text, line, places, party)
+        if balance is None:
+            continue
+        number = _cell(cells, columns, "number") or None
+        kind = ("Invoice" if balance >= 0 else "Credit Memo") if side == "receivable" else ("Bill" if balance >= 0 else "Credit")
+        parsed.append(OpenDocument(side, clean_path(party), kind, dates["date"], number, dates["due_date"],
+                                   _cell(cells, columns, "terms") or None, _cell(cells, columns, "po") or None, None,
+                                   _cell(cells, columns, "memo") or None, balance, None, source.name, line))
+    source.rows = len(parsed)
+    out.documents.extend(parsed)
+    (out.receivable_files if side == "receivable" else out.payable_files).append(source.name)
+    out.entered_document_files.append(source.name)
+
+
+def read_entered_stock(source: SourceFile, out: Sources, places: int) -> None:
+    from decimal import ROUND_HALF_UP, Decimal
+    from bookflow.company import tabular
+    table = _entered_table(source, out)
+    if table is None:
+        return
+    columns, rows = table
+    count = 0
+    for line, cells in rows:
+        item = _cell(cells, columns, "item")
+        quantity_text = _cell(cells, columns, "quantity")
+        if not item and not quantity_text:
+            continue
+        if not item:
+            out.problems.append(Problem("blocking", "missing_item", "a stock row has no item", file=source.name, line=line))
+            continue
+        try:
+            quantity = tabular.parse_decimal(quantity_text) or "0"
+        except tabular.CellError as error:
+            out.problems.append(Problem("blocking", "unreadable_quantity", f"{item}: {error.message}",
+                                        file=source.name, line=line, subject=item))
+            continue
+        if not re.fullmatch(r"-?\d+(\.\d{1,6})?", quantity):
+            out.problems.append(Problem("blocking", "unreadable_quantity", f"{item}: not a quantity: {quantity_text!r}",
+                                        file=source.name, line=line, subject=item))
+            continue
+        value_text, cost_text = _cell(cells, columns, "value"), _cell(cells, columns, "cost")
+        value = _entered_money(source, out, value_text, line, places, item) if value_text else None
+        if value_text and value is None:
+            continue
+        if cost_text:
+            try:
+                cost = tabular.parse_decimal(cost_text.replace("$", "")) or "0"
+            except tabular.CellError as error:
+                out.problems.append(Problem("blocking", "unreadable_amount", f"{item}: {error.message}",
+                                            file=source.name, line=line, subject=item))
+                continue
+            worked = int((Decimal(quantity) * Decimal(cost) * 10 ** places).quantize(Decimal(1), ROUND_HALF_UP))
+            if value is not None and value != worked:
+                out.problems.append(Problem("blocking", "stock_value_mismatch",
+                    f"{item}: {quantity} at {cost} is {_show(worked, places)}, but its total value says {_show(value, places)}",
+                    "Give the total value or the unit cost, or correct one of them.", file=source.name, line=line, subject=item))
+                continue
+            value = worked if value is None else value
+        if value is None:
+            value = 0
+        out.stock.append(StockRow(clean_path(item), quantity, value, source.name, line, entered=True))
+        count += 1
+    source.rows = count
+    out.stock_files.append(source.name)
+
+
 def _show(minor: int, places: int) -> str:
     sign = "-" if minor < 0 else ""
     whole, fraction = divmod(abs(minor), 10 ** places)
@@ -1020,4 +1296,10 @@ def read(files: list[SourceFile], places: int) -> Sources:
             read_open_items(source, out, places)
         elif kind == "vendor_1099":
             read_vendor_1099(source, out, places)
+        elif kind == "entered_balances":
+            read_entered_balances(source, out, places)
+        elif kind in ("entered_open_invoices", "entered_unpaid_bills"):
+            read_entered_documents(source, out, "receivable" if kind == "entered_open_invoices" else "payable", places)
+        elif kind == "entered_stock":
+            read_entered_stock(source, out, places)
     return out

@@ -664,6 +664,7 @@ SECTIONS: tuple[Section, ...] = (
             Action("Back up the company", WRITE, ("company backup",), "/company/backup"),
             Action("Restore a backup", WRITE, ("company restore",), "/company/restore"),
             Action("Import records from a file", WRITE, ("import preview",), "/import"),
+            Action("Opening balances", WRITE, ("opening-draft create",), "/opening"),
             Action("Accountant review and copy", READ, ("accountant-copy status",), "/accountant"),
             Action("Settings and lists", READ, (), "/_group/settings"),
         ),
