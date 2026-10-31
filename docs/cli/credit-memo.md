@@ -392,7 +392,7 @@ Example JSON output:
 
 ## `credit-memo post`
 
-Credit a customer. Each line debits the income account the sale used and the tax liabilities it charged, and Accounts Receivable is credited the total, so the customer owes that much less. Saving it applies nothing to any invoice: the credit stands available until it is applied or refunded. A credit memo takes the next number from the invoice series, so invoices and credits read as one unbroken run of numbers to a customer; give `number` to set one yourself, and a number already used by an invoice or another credit is refused. Each row of `lines` is either an item you name -- `item`, `quantity`, and a price exactly as an invoice line takes one -- or a return: `source_invoice` and `source_line` naming a line of a posted invoice, with `quantity` saying how much of it comes back. A returned row is priced entirely from what that invoice captured, so it takes no price, no amount and no tax code, and changing the item price or the tax rate afterwards moves none of its cents. Return the same line again and you get the next units of it; ask for more than that line has left to give back and the whole credit is refused, so nothing is written. One credit memo is all returns or all named items: the tax calculation rounds across a whole document, so a document holding both would carry a tax total that is neither. Returning a line whose item carries stock puts the goods back with the money, in this one document: the quantity goes back on hand and its cost comes out of cost of goods sold and back into the inventory asset, at what that invoice line actually took out of stock -- not at the price on the credit and not at what the item is worth today. Return half a line and half that cost comes back; return the rest later and the two halves add up to exactly what went out. Voiding the credit takes the quantity and the cost out again, and is refused, naming the date, if the goods have already been sold on. Not supported in this release, and refused rather than approximated: a price allowance against a source line without returning any of it; a line that names a stock-carrying item instead of returning the invoice line it was sold on, because a price is not a cost and nothing here guesses one -- name `source_invoice` and `source_line` to return it, or credit the money with a service or non-stock item and bring the quantity back with `inventory adjust`, which takes the value you say it is worth; a credit from one customer settling another customer or job; cash-basis tax filing treatment today; and printing, which the document print work owns.
+Credit a customer. Each line debits the income account the sale used and the tax liabilities it charged, and Accounts Receivable is credited the total, so the customer owes that much less. Saving it applies nothing to any invoice: the credit stands available until it is applied or refunded. A credit memo takes the next number from the invoice series, so invoices and credits read as one unbroken run of numbers to a customer; give `number` to set one yourself, and a number already used by an invoice or another credit is refused. Each row of `lines` is either an item you name -- `item`, `quantity`, and a price exactly as an invoice line takes one -- or a return: `source_invoice` and `source_line` naming a line of a posted invoice or sales receipt, with `quantity` saying how much of it comes back. A returned row is priced entirely from what that sale captured, so it takes no price, no amount and no tax code, and changing the item price or the tax rate afterwards moves none of its cents. Return the same line again and you get the next units of it; ask for more than that line has left to give back and the whole credit is refused, so nothing is written. One credit memo is all returns or all named items: the tax calculation rounds across a whole document, so a document holding both would carry a tax total that is neither. Returning a line whose item carries stock puts the goods back with the money, in this one document: the quantity goes back on hand and its cost comes out of cost of goods sold and back into the inventory asset, at what that invoice line actually took out of stock -- not at the price on the credit and not at what the item is worth today. Return half a line and half that cost comes back; return the rest later and the two halves add up to exactly what went out. Voiding the credit takes the quantity and the cost out again, and is refused, naming the date, if the goods have already been sold on. Not supported in this release, and refused rather than approximated: a price allowance against a source line without returning any of it; an unlinked stock item without return_cost, the explicitly entered total inventory value (price is not a cost); a credit from one customer settling another customer or job; cash-basis tax filing treatment today; and printing, which the document print work owns.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -427,12 +427,13 @@ The same example as complete `bookflow_run` arguments:
 | `customer` | `--customer` | string | yes | no | — | minimum length 1; maximum length 1004 |
 | `lines[].line_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].item` | inside `--lines` JSON array | string \| null | no | yes | null | — |
-| `lines[].source_invoice` | inside `--lines` JSON array | string \| null | no | yes | null | — |
+| `lines[].source_invoice` | inside `--lines` JSON array | string \| null | no | yes | null | Source invoice or sales receipt ID or number; use an ID when the number is ambiguous. |
 | `lines[].source_line` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].quantity` | inside `--lines` JSON array | string | no | no | "1" | — |
 | `lines[].unit` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].unit_price` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
 | `lines[].net_amount` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
+| `lines[].return_cost` | inside `--lines` JSON array | string \| object \| null | no | yes | null | Total inventory value of a standalone stocked return, explicitly valued when no original sale is known. Required for standalone stocked items; unavailable on linked returns, which recover the sale's cost. |
 | `lines[].description` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].class_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].tax_code` | inside `--lines` JSON array | string \| null | no | yes | null | — |
@@ -829,6 +830,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].class_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].class_name` | string \| null | yes | yes | — | — |
 | `revision.lines[].source_transaction_id` | string \| null | yes | yes | — | — |
+| `revision.lines[].source_document_type` | literal["invoice", "sales_receipt"] \| null | no | yes | null | Document family of the returned source, when linked. |
 | `revision.lines[].source_revision_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].source_line_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].item_snapshot` | object | yes | no | — | — |
@@ -906,6 +908,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.return_cost_minor_units` | integer \| null | no | yes | null | Explicit total value of an unlinked stocked credit memo return. |
 | `revision.lines[].item_snapshot.price_basis_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.standard_price_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.cost_fraction` | integer \| null | no | yes | null | — |
@@ -1845,6 +1848,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].class_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].class_name` | string \| null | yes | yes | — | — |
 | `revision.lines[].source_transaction_id` | string \| null | yes | yes | — | — |
+| `revision.lines[].source_document_type` | literal["invoice", "sales_receipt"] \| null | no | yes | null | Document family of the returned source, when linked. |
 | `revision.lines[].source_revision_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].source_line_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].item_snapshot` | object | yes | no | — | — |
@@ -1922,6 +1926,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.return_cost_minor_units` | integer \| null | no | yes | null | Explicit total value of an unlinked stocked credit memo return. |
 | `revision.lines[].item_snapshot.price_basis_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.standard_price_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.cost_fraction` | integer \| null | no | yes | null | — |
@@ -2258,7 +2263,7 @@ Example JSON output:
 
 ## `credit-memo update`
 
-Correct a credit memo with an immutable revision and exact reversal/replacement postings. Omitted lines retain their captured amounts and source intervals; supplied lines replace the grid, retaining named line_id values. Return claims are released and retaken atomically. Existing applications and refunds are retained with replacement attribution when their combined use fits the corrected total. A used credit requires a reason, unchanged customer/receivable/currency, and a date no later than its earliest use; all affected dates must be open. Related invoice and refund versions advance. If a use spans replacement lines, its application is cancelled and replaced by one application per line; invoice settlement exposes the current application IDs for later unapply. An unused standalone credit may change customer or receivable account; linked returns keep exact source ownership. Stock follows the corrected grid: whatever the previous revision brought back is taken out again and the corrected grid brings back what it now returns, at the cost its source invoice lines took out -- including a correction that leaves the grid out and only moves the date, which moves the goods to that date too. A correction that would post a line *naming* a stock-carrying item is refused, whether you supply it or it is retained, because a price is not a cost: return the invoice line instead, or put the credit on a non-stock item. Returning an invoice line whose cost is still provisional -- it took its item below zero and no receipt has filled all of that yet -- gives back its unfilled units first at the provisional cost they went out at, so no later receipt trues those up; anything returned beyond them comes back at its share of the settled cost. Preview with expected_version, then save with expected_facts_fingerprint and an idempotency key reused for retries.
+Correct a credit memo with an immutable revision and exact reversal/replacement postings. Omitted lines retain their captured amounts and source intervals; supplied lines replace the grid, retaining named line_id values. Return claims are released and retaken atomically. Existing applications and refunds are retained with replacement attribution when their combined use fits the corrected total. A used credit requires a reason, unchanged customer/receivable/currency, and a date no later than its earliest use; all affected dates must be open. Related invoice and refund versions advance. If a use spans replacement lines, its application is cancelled and replaced by one application per line; invoice settlement exposes the current application IDs for later unapply. An unused standalone credit may change customer or receivable account; linked returns keep exact source ownership. Stock follows the corrected grid: whatever the previous revision brought back is taken out again and the corrected grid brings back what it now returns, at the cost its source invoice lines took out -- including a correction that leaves the grid out and only moves the date, which moves the goods to that date too. An unlinked stock line needs an explicit return_cost total; retained lines keep that captured value. Changing its item or quantity requires a new value. Returning an invoice line whose cost is still provisional -- it took its item below zero and no receipt has filled all of that yet -- gives back its unfilled units first at the provisional cost they went out at, so no later receipt trues those up; anything returned beyond them comes back at its share of the settled cost. Preview with expected_version, then save with expected_facts_fingerprint and an idempotency key reused for retries.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -2293,12 +2298,13 @@ The same example as complete `bookflow_run` arguments:
 | `customer` | `--customer` | string \| null | no | yes | null | — |
 | `lines[].line_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].item` | inside `--lines` JSON array | string \| null | no | yes | null | — |
-| `lines[].source_invoice` | inside `--lines` JSON array | string \| null | no | yes | null | — |
+| `lines[].source_invoice` | inside `--lines` JSON array | string \| null | no | yes | null | Source invoice or sales receipt ID or number; use an ID when the number is ambiguous. |
 | `lines[].source_line` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].quantity` | inside `--lines` JSON array | string | no | no | "1" | — |
 | `lines[].unit` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].unit_price` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
 | `lines[].net_amount` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
+| `lines[].return_cost` | inside `--lines` JSON array | string \| object \| null | no | yes | null | Total inventory value of a standalone stocked return, explicitly valued when no original sale is known. Required for standalone stocked items; unavailable on linked returns, which recover the sale's cost. |
 | `lines[].description` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].class_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].tax_code` | inside `--lines` JSON array | string \| null | no | yes | null | — |
@@ -2698,6 +2704,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].class_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].class_name` | string \| null | yes | yes | — | — |
 | `revision.lines[].source_transaction_id` | string \| null | yes | yes | — | — |
+| `revision.lines[].source_document_type` | literal["invoice", "sales_receipt"] \| null | no | yes | null | Document family of the returned source, when linked. |
 | `revision.lines[].source_revision_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].source_line_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].item_snapshot` | object | yes | no | — | — |
@@ -2775,6 +2782,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.return_cost_minor_units` | integer \| null | no | yes | null | Explicit total value of an unlinked stocked credit memo return. |
 | `revision.lines[].item_snapshot.price_basis_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.standard_price_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.cost_fraction` | integer \| null | no | yes | null | — |
@@ -3541,6 +3549,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].class_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].class_name` | string \| null | yes | yes | — | — |
 | `revision.lines[].source_transaction_id` | string \| null | yes | yes | — | — |
+| `revision.lines[].source_document_type` | literal["invoice", "sales_receipt"] \| null | no | yes | null | Document family of the returned source, when linked. |
 | `revision.lines[].source_revision_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].source_line_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].item_snapshot` | object | yes | no | — | — |
@@ -3618,6 +3627,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.return_cost_minor_units` | integer \| null | no | yes | null | Explicit total value of an unlinked stocked credit memo return. |
 | `revision.lines[].item_snapshot.price_basis_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.standard_price_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.cost_fraction` | integer \| null | no | yes | null | — |

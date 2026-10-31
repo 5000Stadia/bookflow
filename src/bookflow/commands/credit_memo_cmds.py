@@ -14,8 +14,8 @@ from bookflow.company.credit_models import (
 _LINES = (
     ' Each row of `lines` is either an item you name -- `item`, `quantity`, and a price exactly'
     ' as an invoice line takes one -- or a return: `source_invoice` and `source_line` naming a'
-    ' line of a posted invoice, with `quantity` saying how much of it comes back. A returned row'
-    ' is priced entirely from what that invoice captured, so it takes no price, no amount and no'
+    ' line of a posted invoice or sales receipt, with `quantity` saying how much of it comes back. A returned row'
+    ' is priced entirely from what that sale captured, so it takes no price, no amount and no'
     ' tax code, and changing the item price or the tax rate afterwards moves none of its cents.'
     ' Return the same line again and you get the next units of it; ask for more than that line'
     ' has left to give back and the whole credit is refused, so nothing is written.'
@@ -33,11 +33,8 @@ _STOCK = (
 )
 _LIMITS = (
     ' Not supported in this release, and refused rather than approximated: a price allowance'
-    ' against a source line without returning any of it; a line that names a stock-carrying'
-    ' item instead of returning the invoice line it was sold on, because a price is not a cost'
-    ' and nothing here guesses one -- name `source_invoice` and `source_line` to return it, or'
-    ' credit the money with a service or non-stock item and bring the quantity back with'
-    ' `inventory adjust`, which takes the value you say it is worth; a credit from one customer'
+    ' against a source line without returning any of it; an unlinked stock item without'
+    ' return_cost, the explicitly entered total inventory value (price is not a cost); a credit from one customer'
     ' settling another customer or job; cash-basis tax filing treatment'
     ' today; and printing, which the document print work owns.'
 )
@@ -206,9 +203,8 @@ credit_memo_update = command(
                  ' is taken out again and the corrected grid brings back what it now returns, at'
                  ' the cost its source invoice lines took out -- including a correction that'
                  ' leaves the grid out and only moves the date, which moves the goods to that'
-                 ' date too. A correction that would post a line *naming* a stock-carrying item'
-                 ' is refused, whether you supply it or it is retained, because a price is not a'
-                 ' cost: return the invoice line instead, or put the credit on a non-stock item.'
+                 ' date too. An unlinked stock line needs an explicit return_cost total; retained'
+                 ' lines keep that captured value. Changing its item or quantity requires a new value.'
                  ' Returning an invoice line whose cost is still provisional -- it took its item'
                  ' below zero and no receipt has filled all of that yet -- gives back its unfilled'
                  ' units first at the provisional cost they went out at, so no later receipt trues'

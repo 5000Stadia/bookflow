@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Literal
+import json
 
 import sqlalchemy as sa
 from pydantic import BaseModel, ConfigDict, Field
@@ -95,6 +96,14 @@ def prepare(s, ctx, inp):
     pos_layer.require_enabled(s)
     sale = resolve(s, inp.sale)
     document = sale['document_id']
+    returned = s.company.conn.execute(sa.select(c.pos_refunds).where(
+        c.pos_refunds.c.sale_id == sale['sale_id']).limit(1)).mappings().first()
+    if returned:
+        facts = json.loads(returned['result_json'])
+        name = (facts.get('refund') or facts['credit_memo'])['name']
+        raise BookflowError('E_WORK_DEPENDENCY', message=(
+            f'This sale has refund {name} ({returned["id"]}) and cannot be voided. '
+            'Ask the bookkeeper to resolve the return.'), details={'refund_id': returned['id'], 'refund_number': name})
     receipt = SalesReceiptVoidInput(sales_receipt=document, expected_version=inp.expected_version)
     plan = sales.prepare(s, ctx, receipt, 'sales_receipt', 'void')
     if plan.preview.changed:

@@ -216,7 +216,7 @@ def _profile(s, data, header, revision, pending, currency):
             'the captured customer is not the one the document names')
 
 
-def _source_worth(s, source, given):
+def _source_worth(s, source, given, *, pos_credit=None):
     """Read what one captured source is worth again, from storage, in this transaction.
 
     Both kinds answer the same four things: the permanent key that says whose money it is, the
@@ -228,7 +228,7 @@ def _source_worth(s, source, given):
 
     if source.credit_memo_id is not None:
         facts = credits.facts(s, effects.rows(
-            s, c.transactions, c.transactions.c.id == source.credit_memo_id)[0], write=True)
+            s, c.transactions, c.transactions.c.id == source.credit_memo_id)[0], write=True, pos_credit=pos_credit)
         require(facts['key']['id'] == source.credit_source_key_id,
                 'a captured source names another credit')
         components = facts['components']
@@ -276,7 +276,7 @@ def _consumptions(s, data, header, revision, rows, currency, given=None):
     # not both post.
     per_component = {}
     for source in captured.sources:
-        key, status, available, remaining = _source_worth(s, source, given)
+        key, status, available, remaining = _source_worth(s, source, given, pos_credit=data.get('pos_credit'))
         require(key['party_id'] == profile['party_id']
                 and key['ar_account_id'] == profile['ar_account_id']
                 and key['currency'] == currency,

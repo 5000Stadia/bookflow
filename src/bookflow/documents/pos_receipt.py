@@ -48,12 +48,13 @@ def pdf(receipt):
     for address in receipt['address']:
         line(address)
     if receipt['phone']: line(receipt['phone'])
+    if receipt.get('kind') == 'refund': line('REFUND', True)
     if receipt['reprint']: line('Reprint', True)
     if receipt['status'] == 'voided': line('VOID', True)
     sale = receipt['sale']
     line(sale['created_at'])
     line(sale['pos_register']['name'] + ' · ' + receipt['clerk'])
-    line('Receipt ' + receipt['number'])
+    line(('Credit memo ' if receipt.get('kind') == 'refund' else 'Receipt ') + receipt['number'])
     if receipt['customer']: line(receipt['customer'])
     rows.append(Spacer(1, 6))
     for item in receipt['lines']:
@@ -66,10 +67,13 @@ def pdf(receipt):
     line('TOTAL ' + receipt['total'] + ' ' + sale['total']['currency'], True)
     for tender in sale['tenders']:
         line(tender['payment_method']['name'] + ' ' + tender['amount']['amount'])
-    line('Change due ' + sale['change']['amount'])
+    if receipt.get('kind') == 'refund':
+        line('Store credit issued' if receipt.get('store_credit') else 'Refund paid')
+    else:
+        line('Change due ' + sale['change']['amount'])
     if receipt['message']: line(receipt['message'])
     sizes = [flow.wrap(available, 1000000) for flow in rows]
-    drawing = barcode(receipt['number'])
+    drawing = None if receipt.get('kind') == 'refund' else barcode(receipt['number'])
     scale = min(1, available / drawing.width) if drawing else 1
     barheight = drawing.height * scale if drawing else 0
     height = 2 * margin + sum(h for w, h in sizes) + barheight + 10

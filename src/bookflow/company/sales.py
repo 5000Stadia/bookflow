@@ -783,6 +783,17 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
         return Plan(SalesWriteOutput(**summary(old_header, old_revision, profile_row(s, old_revision)),
             revision=revision_output(s, old_revision), changed=False, warnings=warnings),
             dict(input=inp, operation=operation, document_type=document_type, changed=False))
+    if operation in ('void', 'update') and document_type == 'sales_receipt':
+        claims = c.credit_source_claims
+        released = sa.select(claims.c.reverses_claim_id).where(claims.c.kind == 'release')
+        memos = s.company.conn.execute(sa.select(c.transactions.c.number).join(
+            claims, claims.c.credit_transaction_id == c.transactions.c.id).where(
+            claims.c.source_transaction_id == old_header['id'], claims.c.kind == 'claim',
+            claims.c.id.notin_(released)).distinct()).scalars().all()
+        if memos:
+            raise BookflowError('E_WORK_DEPENDENCY', message=(
+                f"Credit memo {', '.join(memos)} returns this sale; resolve the return before changing the sale."),
+                details={'credit_memos': memos, 'reason': 'sale_returned'})
     if operation == 'void' and document_type == 'invoice':
         # A credit memo that took stock back against this invoice stands on its sale: voiding the invoice
         # under it would orphan the return's cost of goods sold credit (and, on billed shipments, count the
