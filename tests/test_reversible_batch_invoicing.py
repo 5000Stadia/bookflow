@@ -42,7 +42,8 @@ def test_invoice_batch_lists_exact_effects_and_restores_books(books):
     assert all(step['steps'][-1] == 'invoice delete' for step in preview['steps'])
     assert reverse(books, batch)['state'] == 'reversed'
     assert _nets(books) == before == {}
-    assert [_due(books, identifier) for identifier in ids] == [0, 0]
+    assert [books.run('invoice show', {'invoice': identifier, 'include_deleted': True})
+            ['settlement_current']['due_minor_units'] for identifier in ids] == [0, 0]
     with db(books) as conn:
         assert conn.execute('SELECT * FROM inventory_movements').fetchall() == stock_before
     assert books.run('batch-invoice show', {'batch': out['batch_id']})['created_count'] == 2
@@ -59,6 +60,7 @@ def test_invoice_batch_blocker_changes_nothing_and_names_it(books, blocker):
             'deposit_to': 'Undeposited Funds', 'operation_key': 'batch-blocker',
             'payment_method': 'Check', 'applications': {'mode': 'inline', 'items': [
                 {'invoice': first, 'expected_version': shown['version'], 'amount': '10'}]}})
+        payment = books.run('payment show', {'payment': payment['id']})
     else:
         books.run('company update', {'closing_date': '2026-03-31'})
     before = unchanged(books)
@@ -174,16 +176,21 @@ def test_agent_without_invoice_delete_grant_is_refused_atomically(books):
 
     out = post(books)
     owner = make_actor(books.root, 'invoice-reverse-owner', company_role=(books.company, 'owner'))
+    owner_member = next(row for row in books.client.run('membership list', {'company': books.company})['items']
+                        if row['user_id'] == owner and row['scope_type'] == 'company')
+    books.client.run('membership grant', {'user': owner, 'company': books.company,
+                                        'expected_version': owner_member['version'],
+                                        'grants': ['transaction.invoice.delete']})
     agent_id = make_actor(books.root, 'invoice-reverse-agent', kind='agent', owner_user_id=owner)
-    books.client.run('membership grant', {
-        'user': agent_id, 'company': books.company, 'role': 'standard', 'expected_version': 0,
-        'denies': ['transaction.invoice.delete']}, reason='Allow posting but not deletion')
     with open_database(books.root / 'hub.db', writable=True) as connection:
         connection.raw.execute('BEGIN IMMEDIATE')
         connection.conn.execute(h.agent_authority.insert().values(agent_user_id=agent_id, epoch=1))
         connection.conn.execute(h.agent_principals.insert().values(
             agent_user_id=agent_id, principal_user_id=owner, assigned_by=owner, assigned_at=clock.now_iso()))
         connection.raw.execute('COMMIT')
+    books.client.run('membership grant', {
+        'user': agent_id, 'company': books.company, 'role': 'standard', 'expected_version': 0,
+        'denies': ['transaction.invoice.delete']}, reason='Allow posting but not deletion')
     agent = as_user(books.root, 'invoice-reverse-agent')
     before = unchanged(books)
     for dry_run in (True, False):
