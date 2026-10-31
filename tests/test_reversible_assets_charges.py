@@ -172,7 +172,7 @@ def test_finance_charge_existing_item_is_not_retired(charge_books):
                                            ('charge_books', 'ledger.post')])
 def test_agent_without_inverse_grant_cannot_reverse_adopter(request, fixture, denied):
     import os
-    from tests.conftest import make_actor, make_agent, as_user
+    from tests.conftest import make_actor, make_agent
     from bookflow.core.config import Config
     b = request.getfixturevalue(fixture)
     if fixture == 'asset_books':
@@ -200,12 +200,17 @@ def test_agent_without_inverse_grant_cannot_reverse_adopter(request, fixture, de
     config = Config.load(root / 'config.toml')
     config.set_user('reverse-agent', agent_id)
     config.save()
-    agent = as_user(root, 'reverse-agent')
+    from bookflow.core import registry
+    from bookflow.core.context import Context, Interface
+    from bookflow.core.dispatch import run as dispatch_run
     before = _snapshot(b)
     for dry_run in (True, False):
         with pytest.raises(BookflowError) as caught:
-            agent.run('batch reverse', {'batch': out['batch']}, company=b['company'], reason='undo the named batch',
-                      dry_run=dry_run)
+            ctx = Context.new(Interface.python, 'reversal grant witness', on_behalf_of=owner,
+                              reason='Undo the named batch')
+            dispatch_run(registry.get('batch reverse'), {'batch': out['batch']}, ctx, data_root=str(root),
+                         company_selector=b['company'], company_source='option', dry_run=dry_run,
+                         _login='reverse-agent')
         assert caught.value.code == 'E_BATCH_BLOCKED'
         assert any(x['code'] == 'E_PERMISSION' for x in caught.value.details['blockers'])
         assert _snapshot(b) == before
