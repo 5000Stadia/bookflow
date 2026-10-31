@@ -1705,9 +1705,12 @@ _RECONCILE_ERRORS = {
 }
 for _verb in ("opening start", "start", "mark", "finish", "discard"):
     MATRIX["reconcile " + _verb] = dict(_RECONCILE_ERRORS)
-# `reconcile import` starts and marks through the same aggregate, and reads exact money from a file.
+# `reconcile import` starts and marks through the same aggregate, reading a file or the bank inbox.
+# Inbox validation names statement_date for an invalid period, ending_balance when supplied with a draft,
+# and from_inbox while the source import is reversing or blocked.
 MATRIX["reconcile import"] = {
     **_RECONCILE_ERRORS,
+    "E_VALIDATION": "invalid statement input, mixed file/inbox sources, invalid inbox period, missing date/balance, ending_balance with an inbox draft, or reversing/blocked inbox source",
     "E_AMOUNT_PRECISION": "a statement amount with more decimal places than the account's currency has",
 }
 

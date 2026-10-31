@@ -38,7 +38,7 @@ def known_line_ids(conn, account_id):
 
 
 def store(conn, *, identity, account_id, draft_id, parsed_format, file_sha256, statement_date, ending_balance,
-          suggest_days, line_count, lines, made):
+          suggest_days, line_count, lines, made, bank_line_ids=None):
     """One import row and the lines the draft does not hold yet; returns how many lines were new."""
     held = set(conn.execute(sa.select(c.statement_lines.c.line_id)
                             .where(c.statement_lines.c.draft_id == draft_id)).scalars())
@@ -51,7 +51,8 @@ def store(conn, *, identity, account_id, draft_id, parsed_format, file_sha256, s
         conn.execute(c.statement_lines.insert(), [dict(
             import_id=identity, ordinal=n, account_id=account_id, draft_id=draft_id,
             line_id=v.line_id, fitid=v.fitid, date=v.date, amount=v.amount, payee=v.payee,
-            memo=v.memo, number=v.number) for n, v in enumerate(new)])
+            memo=v.memo, number=v.number, bank_line_id=(bank_line_ids or {}).get(v.line_id))
+            for n, v in enumerate(new)])
     return identity, len(new)
 
 
@@ -88,3 +89,15 @@ def gaps(s, snapshot, draft):
 
 def now():
     return clock.now_iso()
+
+
+def standing_draft():
+    """SQL predicate: a draft still open or consumed by a certificate that is still active."""
+    drafts = c.reconciliation_drafts
+    revisions = c.reconciliation_draft_revisions
+    certificates = c.reconciliation_certificates
+    active = c.reconciliation_active_certificates
+    certified = sa.exists(sa.select(sa.literal(1)).select_from(
+        certificates.join(revisions, revisions.c.id == certificates.c.origin_draft_revision_id)
+        .join(active, active.c.certificate_id == certificates.c.id)).where(revisions.c.draft_id == drafts.c.id))
+    return sa.or_(drafts.c.state == 'open', sa.and_(drafts.c.state == 'consumed', certified))

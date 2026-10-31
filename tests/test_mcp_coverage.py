@@ -449,6 +449,7 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 4431 -> 4444 (R114 inc 5, measured): pos sale preview and complete (pos_register, customer, each line's
     # unit_price and serial_numbers, payment_method; the tender's amount and reference) and pos customer add's phone and
     # email -- their null branches. No new variant kind.
+    # R108 increment 6 adds from_inbox, a plain bool; result notes add no material input node.
     assert sum(len(group["paths"]) for group in mapped)==4444
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as

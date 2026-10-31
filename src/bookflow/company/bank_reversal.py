@@ -13,7 +13,7 @@ says what each effect's inverse is:
 
 **What blocks it** is computed by the plan, never by a parallel dependency engine: a later live import on the account
 (``later_import``), an entry edited since (``entry_edited``), an entry another account's live line is linked to
-(``entry_linked``), a line copied into a reconciliation's statement (``statement_copy``, once increment 6 records the
+(``entry_linked``), a line copied into a reconciliation's statement (``statement_copy``, increment 6 records the
 copy), and, for everything else, the inverse command's own refusal from a dry run, reported by name (``entry_reconciled``,
 ``entry_deposited``, ``entry_applied``, ``no_authority``, ``period_closed``).
 
@@ -160,15 +160,19 @@ def _plan(s, ctx, batch: dict, all_effects: list[dict], done: dict, probe: bool,
     steps, work, more, entries, created = entry_plan(s, ctx, batch, all_effects, done, probe,
                                                      lambda ids: _linked(s, imp, ids))
     blockers += more
-    # A line copied into a reconciliation's statement (increment 6 records the copy on `statement_lines`).
-    if 'bank_line_id' in c.statement_lines.c:
-        copied = conn.execute(sa.select(c.statement_lines.c.bank_line_id, c.statement_lines.c.draft_id).join(
-            c.bank_lines, c.bank_lines.c.id == c.statement_lines.c.bank_line_id).where(
-            c.bank_lines.c.import_id == imp['id'])).first()
-        if copied is not None:
-            blockers.append(_blocker('statement_copy', 'bank_line', copied[0],
-                                     f'a line of this import is in reconciliation draft {copied[1]}.',
-                                     'not clearable while that draft exists', draft=copied[1]))
+    # Copies hold their source import while their reconciliation still stands.
+    from bookflow.company.statement_store import standing_draft
+    copied = conn.execute(sa.select(c.statement_lines.c.bank_line_id, c.statement_lines.c.draft_id).join(
+        c.bank_lines, c.bank_lines.c.id == c.statement_lines.c.bank_line_id).join(
+        c.reconciliation_drafts, c.reconciliation_drafts.c.id == c.statement_lines.c.draft_id).where(
+        c.bank_lines.c.import_id == imp['id'], standing_draft()).order_by(
+            c.statement_lines.c.draft_id, c.statement_lines.c.bank_line_id)).first()
+    if copied is not None:
+        blockers.append(_blocker('statement_copy', 'bank_line', copied[0],
+                                 f'a line of this import is in reconciliation draft {copied[1]}.',
+                                 f'`reconcile discard {copied[1]}` if open; a certified statement blocks '
+                                 'while that reconciliation stands',
+                                 draft=copied[1]))
     lines, matches = _inbox_counts(s, imp['id'])
     inbox = {'seq': 0, 'record_type': 'bank_feed_import', 'record_id': imp['id'], 'name': f"import {imp['id']}",
              'action': 'created', 'version': lines,

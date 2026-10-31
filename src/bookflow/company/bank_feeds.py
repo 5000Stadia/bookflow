@@ -180,19 +180,15 @@ def _live_by_fitid(conn, account_id: str, fitids) -> dict[str, list[dict]]:
 def _standing_statement(conn, account_id: str, line_ids) -> dict[str, list[dict]]:
     """Lines of this account's reconciliation statements under these ids, from a standing draft only: one still
     open, or one consumed by a certificate that still stands. A canceled (discarded) draft's lines hold nothing."""
-    t = c.metadata.tables
-    drafts, revisions = t['reconciliation_drafts'], t['reconciliation_draft_revisions']
-    certificates, active = t['reconciliation_certificates'], t['reconciliation_active_certificates']
-    certified = sa.exists(sa.select(sa.literal(1)).select_from(
-        certificates.join(revisions, revisions.c.id == certificates.c.origin_draft_revision_id)
-        .join(active, active.c.certificate_id == certificates.c.id)).where(revisions.c.draft_id == drafts.c.id))
+    from bookflow.company.statement_store import standing_draft
+    drafts = c.reconciliation_drafts
     found: dict[str, list[dict]] = {}
     for chunk in _chunks(line_ids):
         for row in conn.execute(sa.select(c.statement_lines.c.line_id, c.statement_lines.c.amount,
                                           c.statement_lines.c.date).select_from(
                 c.statement_lines.join(drafts, drafts.c.id == c.statement_lines.c.draft_id)).where(
                 c.statement_lines.c.account_id == account_id, c.statement_lines.c.line_id.in_(chunk),
-                sa.or_(drafts.c.state == 'open', sa.and_(drafts.c.state == 'consumed', certified)))).mappings():
+                standing_draft())).mappings():
             found.setdefault(row['line_id'], []).append(dict(row))
     return found
 
