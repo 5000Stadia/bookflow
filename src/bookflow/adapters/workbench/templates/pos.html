@@ -53,6 +53,7 @@
     <p>Save this sale for anyone at this company to resume. No payment or stock is posted.</p>
     <label>Label (optional) <input data-pos-hold-label maxlength="200" placeholder="Time and first item"></label>
     <p data-pos-hold-status role="status"></p>
+    <button type="button" data-pos-ticket-retry data-pos-ticket-retry-dialog hidden>Try again</button>
     <div class="pos-dialog-actions"><button type="button" data-pos-close="hold">Back</button><button type="submit" class="primary" data-pos-hold-save>Hold sale</button></div>
   </form>
 </dialog>
@@ -60,6 +61,7 @@
   <h2>Held sales</h2><p>Resume at today’s prices. Hold or clear your current sale first.</p>
   <ul class="pos-held-list" data-pos-held-list></ul>
   <p data-pos-held-status role="status"></p>
+  <button type="button" data-pos-ticket-retry data-pos-ticket-retry-dialog hidden>Try again</button>
   <div class="pos-dialog-actions"><button type="button" data-pos-held-refresh>Refresh</button><button type="button" data-pos-close="held">Close</button></div>
 </dialog>
 {% if pos_data.can_void %}

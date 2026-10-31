@@ -61,6 +61,7 @@ def test_hold_reload_resume_on_another_device_reprice_complete_and_void(browser_
         assert 'Alex — back after lunch' in first.evaluate('document.querySelector("[data-pos-held-list]").textContent')
         assert 'Main' in first.evaluate('document.querySelector("[data-pos-held-list]").textContent')
         _fits(first)
+        first.wait_for('document.querySelector("[data-pos-held-status]").textContent === ""')
         shot(first, 'held', width)
         # A later price is applied when another device resumes, not stored as a typed override.
         item = _command(first, site, 'item.show', {'item': 'Mainline Clearing'})
@@ -93,12 +94,15 @@ def test_hold_reload_resume_on_another_device_reprice_complete_and_void(browser_
         assert _receipts(second, site) == before + 1
         receipt_number = second.evaluate('document.querySelector("[data-pos-done-number]").textContent')
         click(second, '[data-pos-void-last]')
-        second.evaluate('document.querySelector("[data-pos-void-reason]").value = "Customer changed their mind"')
+        reason = '客户取消 — customer’s literal %20 reference'
+        second.evaluate(f'document.querySelector("[data-pos-void-reason]").value = {json.dumps(reason)}')
         second.evaluate('document.querySelector("[data-pos-void-form]").requestSubmit()')
         second.wait_for('document.querySelector("[data-pos-void-status]").textContent.includes("voided")', timeout=20)
         _fits(second)
         shot(second, 'voided', width)
         assert _command(second, site, 'sales-receipt.show', {'sales_receipt': receipt_number})['status'] == 'voided'
+        events = _command(second, site, 'audit.list', {'command': 'pos sale void', 'limit': 20})['items']
+        assert events and events[0]['reason'] == reason
     finally:
         if second:
             second.close()

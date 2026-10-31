@@ -340,6 +340,8 @@ def test_every_pos_command_names_its_pos_capability():
     expected.update({name: ('pos.sell', 'member') for name, _, _ in sale_layer._ADDED})   # increment 5
     from bookflow.hub import permission_pos_layout_catalog as layout_layer
     expected.update({name: (cap, threshold) for name, _, cap, threshold, _ in layout_layer._ADDED})
+    expected.update({f'pos ticket {verb}': ('pos.sell', 'member') for verb in ('hold', 'list', 'resume', 'discard')})
+    expected['pos sale void'] = ('pos.void', 'member')
     assert named == expected
     # The POS layer is decided by capability, not noun: the gate and the switch find each command by its capability.
     from bookflow.adapters.workbench import home as Home

@@ -45,7 +45,7 @@
         method: 'POST', credentials: 'same-origin', body: JSON.stringify(body),
         headers: {'Content-Type': 'application/json', 'X-Bookflow-Workbench': '1', 'X-Bookflow-Client-Name': 'bookflow-workbench',
           ...(options.key ? {'Idempotency-Key': options.key} : {}),
-          ...(options.reason ? {'X-Bookflow-Reason': options.reason} : {})}});
+          ...(options.reason ? {'X-Bookflow-Reason': encodeURIComponent(options.reason), 'X-Bookflow-Context-Encoding': 'percent-utf8'} : {})}});
     } catch (error) {
       const failure = new Error('No connection to Bookflow.');
       failure.offline = true;
@@ -272,6 +272,7 @@
     $('[data-pos-customer]').classList.toggle('chosen', !!state.customer);
     if (offline) say('No connection to Bookflow. This sale is kept here; finish it when the connection returns.', true);
     else if ($('[data-pos-connection]').dataset.kind === 'error' && confirmed) say('');
+    root.querySelectorAll('[data-pos-ticket-retry-dialog]').forEach(button => { button.hidden = !state.mutation; });
     const banner = $('[data-pos-pending]');
     banner.hidden = !pending;
     if (state.stale_ticket) banner.innerHTML = `This ticket changed on the host. This device’s copy cannot change it. <button type="button" data-pos-forget>Forget this device copy</button> keeps the host’s ticket unchanged.`;
