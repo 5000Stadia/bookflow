@@ -38,6 +38,7 @@ from bookflow.core.ids import new_id
 OWNER = batches.OWNER
 REFUSED_SHOWN = 20
 SAMPLE = 5
+BACKUP_ADVISED = 100  # a preview of more records than this advises `company backup` first (design §5)
 WRITES = ('created', 'updated')
 UNIT_PRICES = frozenset(('price', 'cost'))
 DOC_UNIT_PRICES = frozenset(('unit_price', 'unit_cost', 'price_basis_amount', 'rate', 'estimated_unit_cost'))
@@ -963,8 +964,21 @@ def read_table(s, inp) -> tuple[tabular.Table, str | None]:
         attachment_name = row['original_filename']
     else:
         raw = inp.content
-    table = tabular.read(raw, delimiter=inp.delimiter, header_row=inp.header_row, skip_rows=inp.skip_rows,
-                         sheet=inp.sheet)
+    try:
+        table = tabular.read(raw, delimiter=inp.delimiter, header_row=inp.header_row, skip_rows=inp.skip_rows,
+                             sheet=inp.sheet)
+    except BookflowError as error:
+        # One field for a text file and a workbook alike, and the split said for the kind: a document kind's file is
+        # cut only between documents.
+        field = 'attachment' if inp.attachment is not None else 'content'
+        details = error.details or {}
+        if details.get('problem') == 'too_many_rows':
+            extra = {k: v for k, v in details.items() if k == 'sheet'}
+            raise tabular.too_many_rows(details['rows'], more=details['more_than'], field=field,
+                                        documents=kinds.is_document(kinds.kind(inp.kind)), **extra) from None
+        if details.get('problem') == 'too_large':
+            raise tabular.too_large(details['bytes'], field=field) from None
+        raise
     return table, attachment_name
 
 
@@ -1259,9 +1273,10 @@ def apply_preview(s, ctx, prepared: dict) -> dict:
         encoding=table.encoding, delimiter=table.delimiter, row_count=len(prepared['rows']),
         stop_after_refusals=inp.stop_after_refusals, batch_id=None, reason=ctx.reason, version=1, created_at=at,
         created_by=s.actor.id, created_via=str(getattr(ctx.interface, 'value', ctx.interface))[:16], updated_at=at))
-    values = [_row_values(prepared['run_id'], plan, 'preview', at, keep=True) for plan in prepared['rows']]
-    for start in range(0, len(values), 500):
-        s.company.conn.execute(sa.insert(c.import_rows), values[start:start + 500])
+    rows = prepared['rows']
+    for start in range(0, len(rows), 500):  # built 500 at a time, not every row's at once
+        s.company.conn.execute(sa.insert(c.import_rows), [_row_values(prepared['run_id'], plan, 'preview', at, keep=True)
+                                                          for plan in rows[start:start + 500]])
     for ref in prepared['create']:
         s.company.conn.execute(sa.insert(c.import_decisions).values(
             id=new_id(), run_id=prepared['run_id'], field=ref['field'], value=ref['value'],
@@ -1483,12 +1498,7 @@ def run_slice(s, ctx, inp, *, interrupt=None) -> dict:
     stopped = False
     # A row may refer to a record a later row of the file makes (a job listed before its customer): that row runs
     # first, then this one. `waiting_on` finds the row by what it makes, among the rows not yet run.
-    waiting_on = {}
-    for stored in (_pending_rows(s, run['id'], 10 ** 9) if kind.noun in _references(kind).values() else ()):
-        payload = json.loads(stored['payload']) if stored['payload'] else None
-        text = books.selector(payload) if payload else None
-        if text:
-            waiting_on.setdefault(norm_key(text), stored)
+    waiting_on = _WaitingOn(s, run['id'], books) if kind.noun in _references(kind).values() else {}
     finished: set[int] = set()
 
     def process(stored: dict, chain: tuple = ()) -> RowPlan:
@@ -1546,29 +1556,53 @@ def run_slice(s, ctx, inp, *, interrupt=None) -> dict:
             raise _Refused(plan)
         return plan
 
-    for stored in _pending_rows(s, run['id'], inp.limit):
-        if stored['row_no'] in finished:
-            continue  # ran already, ahead of its turn, for a row that needed it
-        try:
-            plan = process(stored)
-        except _Refused as refused:
-            _insert_rows(s, buffered)
-            return _roll_back(s, ctx, run, refused.plan)
-        done_now += 1
-        if plan.status == 'refused':
-            refused_now += 1
-            if refused_now >= run['stop_after_refusals']:
-                stopped = True
-        if interrupt is not None:
-            interrupt(done_now)
-        if stopped or time.monotonic() > deadline:
-            break
+    try:
+        for stored in _pending_rows(s, run['id'], inp.limit):
+            if stored['row_no'] in finished:
+                continue  # ran already, ahead of its turn, for a row that needed it
+            try:
+                plan = process(stored)
+            except _Refused as refused:
+                _insert_rows(s, buffered)
+                return _roll_back(s, ctx, run, refused.plan)
+            done_now += 1
+            if plan.status == 'refused':
+                refused_now += 1
+                if refused_now >= run['stop_after_refusals']:
+                    stopped = True
+            if interrupt is not None:
+                interrupt(done_now)
+            if stopped or time.monotonic() > deadline:
+                break
+    finally:
+        # `process` calls itself (a row's reference made first), so it is a reference cycle holding the slice's books
+        # and pending rows: broken here, they are freed when the slice returns, not at the next full collection.
+        process = None  # noqa: F841
     _insert_rows(s, buffered)
     remaining = len(_pending_rows(s, run['id'], 1))
     state = 'stopped' if stopped and remaining else ('done' if not remaining else 'running')
     if state != run['state']:
         _update_run(s, run, state=state)
     return show(s, ctx, run['id'], done_now=done_now)
+
+
+class _WaitingOn:
+    """The rows not yet run, by the record each makes, read only when a row first refers to a record of its own kind
+    that the books lack (a job before its customer): a slice of rows that never do reads none of them. Read once per
+    slice, whole, it cost every slice of a 10,000-row customer file a pass over the rest of the file (increment 5)."""
+
+    def __init__(self, s, run_id: str, books: 'Books'):
+        self.s, self.run_id, self.books, self.rows = s, run_id, books, None
+
+    def get(self, key, default=None):
+        if self.rows is None:
+            self.rows = {}
+            for stored in _pending_rows(self.s, self.run_id, 10 ** 9):
+                payload = json.loads(stored['payload']) if stored['payload'] else None
+                text = self.books.selector(payload) if payload else None
+                if text:
+                    self.rows.setdefault(norm_key(text), stored)
+        return self.rows.get(key, default)
 
 
 class _Refused(Exception):
@@ -1609,11 +1643,21 @@ def _recheck(s, run: dict, kind: kinds.Kind, books: Books, columns: dict[str, st
 
 
 def _reference_creator(s, ctx, run: dict, books: Books):
-    """Makes a reference decided `create` when its first row runs: its own create command, nested as the rows are,
-    with its own audit event, recorded in the run's batch so the run's reversal retires it too."""
-    from bookflow.company import lists
+    return _ReferenceCreator(s, ctx, run, books)
 
-    def create(target: str, path: str, value: str, decision: dict) -> str | None:
+
+class _ReferenceCreator:
+    """Makes a reference decided `create` when its first row runs: its own create command, nested as the rows are,
+    with its own audit event, recorded in the run's batch so the run's reversal retires it too. An object, not a
+    closure that set an attribute on itself: that closure was a reference cycle holding the slice's books (every
+    record of the kind) until a full garbage collection, and at 10,000 rows those piled up (increment 5)."""
+
+    def __init__(self, s, ctx, run: dict, books: Books):
+        self.s, self.ctx, self.run, self.books, self.row = s, ctx, run, books, 0
+
+    def __call__(self, target: str, path: str, value: str, decision: dict) -> str | None:
+        from bookflow.company import lists
+        s, run = self.s, self.run
         definition = lists.get_list_definition(target)
         body = {**(decision.get('input') or {}), 'name': decision.get('target') or value}
 
@@ -1623,14 +1667,12 @@ def _reference_creator(s, ctx, run: dict, books: Books):
                                       record_id=output['id'], action='created', version_after=output.get('version'),
                                       before=None, event_id=batches.last_event_id(s_))
         try:
-            output = batches.run_nested(s, ctx, f'{target} create', body,
-                                        source_ref=f"import:{run['id']}:{create.row}", recorder=record)
+            output = batches.run_nested(s, self.ctx, f'{target} create', body,
+                                        source_ref=f"import:{run['id']}:{self.row}", recorder=record)
         except BookflowError:
             return None  # the row is refused as an unknown reference; `import decide` dry-ran this create
-        books.add_reference(target, body['name'], output['id'])
+        self.books.add_reference(target, body['name'], output['id'])
         return output['id']
-    create.row = 0
-    return create
 
 
 def _start(s, ctx, run: dict, kind: kinds.Kind) -> None:
@@ -1816,10 +1858,12 @@ def show(s, ctx, run_id: str, *, done_now: int = 0, prepared: dict | None = None
             next_ = f'import decide {run_id} (map, create or skip each unknown reference)'
         if mapping.get('decisions'):
             next_ = 'import preview again with ' + ', '.join(d['decision'] for d in mapping['decisions'])
+        elif not waiting and run['state'] == 'previewed' and run['row_count'] > BACKUP_ADVISED:
+            # §5: a preview over 100 records advises a backup first, in `next`; the importer takes none itself.
+            next_ = (f"company backup first ({run['row_count']:,} {'documents' if kinds.is_document(kind) else 'rows'}"
+                     f"; the import takes none), then import run {run_id}")
     elif run['state'] == 'done' and counts.get('refused'):
         next_ = f'import errors {run_id}'
-    if prepared is not None and len(prepared['rows']) > 100:
-        mapping['notes'] = list(mapping.get('notes', [])) + ['Over 100 rows: consider `company backup` first.']
     from bookflow.company.info import principal_names
     by = principal_names(s.company, {run['created_by']}).get(run['created_by'])
     return {
