@@ -865,7 +865,8 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   agents answer from receipts rather than ring up. `import_kinds.NOT_IMPORTABLE` lists `pos sale complete` and `pos
   customer add`.
 - **Timings (§12), measured by `test_pos_sale_browser.py` in headless desktop Chrome on loopback, not a phone:**
-  TIMINGS. The phone figures are Kabe's trial.
+  a tap shows its line in 0.9 ms (target 100 ms), the host's total in 222 ms (median of 5; target 400 ms), and
+  Complete reaches the change screen in 464 ms (target 1.5 s). The phone figures are Kabe's trial.
 - **Tests.** `tests/test_pos_sale.py`: the twin property (two byte-identical demo roots; 14 generated carts of
   stocked, service, non-inventory, discount, subtotal and 0.00-priced lines, a price level, a price rule, taxed,
   exempt and walk-in customers, cash, card and check; each receipt, the trial balance, the general ledger, stock and
