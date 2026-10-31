@@ -514,7 +514,7 @@ def test_co0085_is_exactly_the_current_metadata_and_a_fresh_company_reaches_it(t
     compiled = tuple(str(CreateTable(c.metadata.tables[name]).compile(dialect=dialect())) for name in tables)
     indexes = tuple(str(CreateIndex(index).compile(dialect=dialect())) for name in tables
                     for index in sorted(c.metadata.tables[name].indexes, key=lambda index: index.name))
-    # co0126 replaces only the notice dedupe with a partial unique index.
+    # co0128 replaces only the notice dedupe with a partial unique index.
     assert tuple(ddl for ddl in m.DDL if 'CREATE TABLE overdue_notices' not in ddl) == tuple(
         ddl for ddl in compiled if 'CREATE TABLE overdue_notices' not in ddl)
     assert m.INDEXES == tuple(ddl for ddl in indexes if 'uq_overdue_notice_period' not in ddl)

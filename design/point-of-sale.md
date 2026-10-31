@@ -1048,6 +1048,137 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   1440 px. Generated documentation passes `bookflow docs generate --check`. Independent source review passed;
   the seven screenshots under `/tmp/m4-shots/pos8/` were inspected. Test hosts and browsers were closed.
 
+### As built: increment 9 (refunds)
+
+- **Commands and authority.** `pos refund` posts receipt-linked or no-receipt returns under `pos.refund`.
+  `pos refund lines` resolves the printed receipt number, POS sale ID or ticket key and returns line identities,
+  captured prices and remaining quantities; `pos refund show` reads a completed return; `pos refund receipt`
+  supplies its printable facts. New immutable layer `pos-refund-v1` follows `pos-receipt-v1`. Plain clerks cannot
+  refund; Clerk with returns can. No-receipt returns and their entered prices belong to the returns capability,
+  without a separate price-override grant. Agents need an explicit `pos.refund` grant.
+- **One accounting transaction.** The command calls the ordinary credit-memo and customer-refund cores, including
+  their independent posting validations, inside the command's writer transaction. The register fixes today's date,
+  inventory site and refund bank account. Cash chooses an active cash-kind method offered by the register; Original
+  uses the sale's captured method, even if it is no longer offered, but refuses an inactive method. Both leave the
+  register's refund account. Card references are recorded; no processor is contacted. Audit events for the memo,
+  stock, payout and POS return name `pos refund` and retain the acting clerk and interface.
+- **Partial returns.** The credit core's `source_invoice` selector now also accepts a sales receipt. Its existing
+  endpoint claims divide the captured net, sales tax and issued stock cost, including prior hand-entered credit
+  memos. A second partial return can claim only the remaining quantity. Discounts stay in their affected item nets;
+  subtotal and discount rows are not independently returned. Ordinary receipt corrections and voids refuse active
+  credit claims. The till refuses a corrected receipt and directs the bookkeeper to its corrected credit-memo path.
+  A POS sale with any recorded POS refund refuses void, naming that refund; a voided sale refuses returns.
+- **No receipt.** Returned individual items use current pricing or an entered price. For stocked items the POS
+  resolves the selling unit through the credit core, then values the returned base quantity at current company-wide
+  average cost. With no positive stock it uses the item's current purchase cost, or zero when absent. This is an
+  estimate for an unknown sale, distinct from a receipt return's captured issue cost. The ordinary credit-memo line
+  accepts explicit total `return_cost` and captures it for corrections, stock valuation and reversal. A price alone
+  still cannot value a standalone stocked credit. Groups are returned as their individual items.
+- **Store credit.** The memo stays open without a payout. It requires a named customer; the shared walk-in cannot
+  own a shopper's credit. The refusal explains this. This includes a regular customer configured as a register's
+  walk-in and an anonymous original sale whose register's walk-in was later changed. Anonymous names are omitted
+  from the till result and printed refund.
+- **Storage and recovery.** co0126 on co0125 adds insert-only `pos_refunds`, linking register, optional original sale,
+  credit memo, optional payout and captured till result. Its unique permanent operation key and request hash prevent
+  duplicate posting across retries, clerks and devices; a changed request under that key is refused. `expected_total`
+  guards a reviewed total but is excluded from retry identity. The migration also widens the existing credit-claim
+  source-type guard to receipts, retaining its other ownership and release guards. Both demo companies acquire the
+  empty table and keep POS off.
+- **The screen and receipt.** Refund appears on the till and completed-sale screen only with returns authority.
+  Receipt Scan uses increment 8's barcode/camera input; the picker shows sold and available quantities. No receipt
+  offers item lookup, quantity, optional price and customer selection. Review shows server subtotal, tax and total;
+  confirmation shows Refund paid or Store credit issued. A lost answer preserves the exact request on the device
+  and offers retry after reload. `/pos/receipt/<refund>?refund=true` and its PDF use the existing thermal route,
+  prominently marked REFUND, with the credit memo number, original return facts and named customer only. Refund
+  copies omit the barcode: credit memo and sale receipt numbers have separate sequences, so encoding the memo
+  number could select an unrelated sale when scanned at the till.
+- **Limits.** As with ordinary credit memos, a return must have a positive monetary total; a free-line-only stock
+  return needs the bookkeeper's inventory adjustment. Split-tender sales remain increment 11. Physical printers,
+  real phone hardware and LAN timing targets have not been verified in this increment.
+
+### As built: increment 10 (day close)
+
+- **Commands and authority.** `report pos-day`, `pos shift open` and `pos shift close` use `pos.sell`;
+  a plain clerk can count the drawer. `pos deposit prepare` and the ordinary `deposit post` require
+  `ledger.post`. The new immutable `pos-day-v1` permission layer follows `pos-refund-v1`; existing
+  layers are unchanged. An agent needs an explicit `pos.sell` grant to answer drawer questions.
+- **Counts and recovery.** co0127 on co0126 adds `pos_shifts` and nullable `shift_id` on sales and
+  refunds. Both demo companies acquire empty shift state and keep POS off. A counted register must
+  have an open shift before a sale or return; a unique partial index permits only one. Opening float
+  and closing count have permanent operation keys. A retry returns the original shift, while changed
+  inputs refuse. Counting posts nothing. Expected cash is float plus cash tendered minus change and
+  cash refunds; counted minus expected is the over/short. There is no paid-out feature in this design.
+  A database guard permits one close and no deletion; the close captures an immutable Z-report.
+- **The report.** A register/day report shows gross sales, discounts, tax, sale and void counts,
+  net-of-change tender amounts, refunds by method, expected cash and held/open tickets, flagging
+  those older than seven days. An explicit shift includes its complete overnight activity. Day views
+  include shifts spanning the selected date. Voids remove the original receipt's contribution and
+  appear separately on its accounting date. Uncounted corrected documents use current accounting
+  facts; counted documents refuse corrections, and closed-shift documents refuse voids, through the
+  ordinary accounting commands too. Open-shift voided refund payouts no longer reduce drawer cash.
+- **Make Deposits.** `pos deposit prepare` returns an ordinary deposit document with selected methods'
+  undeposited receipts (cash by default), defaulting the bank to the register's refund account. An
+  overage becomes other money from **Cash Over and Short**, a shortage cash back to it. This named
+  expense account is created through the ordinary account core on first need. Opening float remains
+  in the till. Cash refunds already credit the bank: the deposit banks gross receipts plus/minus the
+  difference, and the deposit and refund entries together give net cash; subtracting the refund again
+  from the deposit would count it twice. An overnight shift's deposit date is no earlier than its
+  receipts or close. Already banked sources are excluded, and the ordinary deposit claim/version
+  checks prevent stale hand-offs from banking them twice.
+- **Bundle safeguards.** Counted shifts must close before hand-off. A nonzero difference requires the whole cash bundle: selecting only some cash
+  methods, a partly banked cash bundle, or a date slice of an overnight shift refuses with guidance.
+  Use the complete shift for overnight counts. A hand-off with no eligible receipts refuses; a
+  difference without any cash receipts needs a hand-entered deposit after review. Card-only deposits
+  leave the drawer difference for the cash bundle. The existing deposit form remains editable and its
+  ordinary preview/post validations apply.
+- **The screen.** The till has Open shift, Close shift and Day summary. Float/count entry uses money
+  fields; denomination entry is omitted. A lost answer preserves the exact operation and locks its
+  count until retried, including after reload. Day summary offers date selection, per-method totals,
+  shift counts, old tickets and a method selector for Make deposit. The hand-off preselects the existing
+  Make Deposits form's sources and over/short rows for review and ordinary posting.
+- **Limits.** Physical phone hardware, LAN timing targets, actual printers and bank reconciliation on
+  a live company remain unverified. Split tender is increment 11; its payment identities must remain
+  available to the deposit hand-off when the branches are integrated.
+
+### As built: increment 11 (split tender)
+
+- **Taking payment.** Add another payment records a positive partial amount and reference, then shows the balance
+  for the next method. Two through twenty distinct methods are accepted; repeated methods are refused, so a single
+  method always remains a sales receipt. The device keeps the payment draft across reload and the exact completed
+  request across an uncertain answer. Only cash can give change; every split must contribute a positive net amount.
+- **Posting.** Existing `pos sale complete` accepts either `tender` or `tenders`. A split calls the ordinary invoice
+  core with Due on receipt and today's due date, then the ordinary payment core once per method, applying each net
+  amount to that invoice and depositing it to the register's account. The whole operation shares one writer
+  transaction. Payment methods and references remain separate for Make Deposits. The existing permanent ticket key
+  returns the original sale and tenders on retry. No migration or new command is needed. New immutable permission layer `pos-split-v1` (chained on `pos-day-v1` at integration) records the internal
+  scoped payment authorization source; no clerk grants change.
+- **Facts and authority.** Insert-only tender JSON adds payment IDs and each tender's net applied amount and change.
+  Sale output adds `document_type` and the current `version`; `sales_receipt` remains the document identity field for
+  compatibility and can identify an invoice. The clerk needs only `pos.sell`. Internal payment authorization is bound
+  to the current session and explicitly selected sale documents; it grants no general invoice or payment access.
+  Invoice and payment audit events retain `pos sale complete` and the acting clerk/interface.
+- **Void.** Split void checks every payment for deposits and finished reconciliation, refuses later payment edits,
+  foreign allocations and return claims, then unapplies and voids every payment before voiding the invoice. All
+  reversals share one transaction and retain `pos sale void` audit attribution. The screen uses the actual invoice
+  version after settlement. A retry at the resulting current version changes nothing.
+- **Refund decision.** Original refunds use the original tender order, each capped at its net payment less earlier
+  Original payouts; cash change is never refundable. One credit memo funds as many customer refunds as needed,
+  atomically, from the register's refund bank account. Cash and store-credit returns consume source line quantities
+  but do not consume a particular original method's capacity. An inactive selected original method refuses the
+  return rather than silently choosing another. Review and the refund receipt list every payout. Cash override and
+  named-customer store credit retain increment 9's behavior. Refund `tenders` is the complete payout list;
+  `payment_method` and `refund` are first-payout compatibility fields. Day-summary integration must aggregate
+  the list, falling back to the legacy single payout when absent.
+- **Receipts.** The existing HTML/PDF thermal route lists all tenders, their cash change and the total change.
+  Reprints retain captured amounts; split receipts print and encode `INV:<original invoice number>` to distinguish the invoice sequence from the
+  sales-receipt sequence. Bare number selectors continue to name sales receipts; splits use their printed `INV:`
+  number or stable sale, ticket or document ID. Original numbers survive renumbering.
+- **Verification.** Generated-cart twins compare a split against hand-entered invoices and payments, including
+  stock, valuation, tax, receivables, ledger and Undeposited Funds. Targeted checks cover two and three tenders,
+  cash change, retry, atomic rollback, clerk access, split void and partial split refunds. Browser checks at 390 and
+  1440 px save screenshots under `/tmp/m4-shots/pos11/`. Final counts are recorded after the merged regression run.
+- **Not verified here.** Physical printers, phone hardware, LAN timing targets and the parallel increment 10 integration.
+
 ## 16. Open questions
 
 Each default stands if nobody decides. K1 and K2 are Kabe's.

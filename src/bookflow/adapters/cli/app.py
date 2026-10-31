@@ -188,7 +188,7 @@ def _input_value(annotation: Any, value: Any, path: str) -> Any:
         raise BookflowError("E_VALIDATION", details={"fields": [{"field": path, "problem": "expected an integer"}]}) from None
 
 
-def _build_command(cmd: registry.Command):
+def _build_command(cmd: registry.Command, *, parent_command: bool = False):
     leaves = _flatten(cmd.input_model)
     leaves.sort(key=lambda leaf: cmd.positional.index(leaf[0]) if leaf[0] in cmd.positional else len(cmd.positional))
     transfer = cmd.transfer
@@ -261,6 +261,8 @@ def _build_command(cmd: registry.Command):
         params.append(inspect.Parameter("company", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--company", help="Company id, Organization/Company, or display name; else BOOKFLOW_COMPANY, else the saved default", metavar="TEXT"), annotation=str | None))
 
     def run(**kw: Any) -> None:
+        if parent_command and click_globals.get_current_context().invoked_subcommand is not None:
+            return
         ctx_obj = click_globals.get_current_context().obj or {}
         # `agent run` is read by a program: its stdout is the result as JSON and nothing else (R183).
         as_json = kw.pop("json_", False) or ctx_obj.get("json", False) or cmd.name == "agent run"
@@ -569,9 +571,19 @@ def build_app(target: str | None = None, full: bool = False) -> typer.Typer:
         # the complete applicable command surface for help and usage errors.
         selected = [cmd for cmd in commands if target == cmd.name or target.startswith(cmd.name + " ")]
         if selected:
-            commands = [max(selected, key=lambda cmd: len(cmd.name))]
+            chosen = max(selected, key=lambda cmd: len(cmd.name))
+            commands = [chosen, *[cmd for cmd in commands
+                                  if target == chosen.name and cmd.name.startswith(chosen.name + " ")]]
+    parent_commands = {cmd.name for cmd in commands
+                       if any(other.name.startswith(cmd.name + " ") for other in commands)}
     for cmd in commands:
-        fn = _build_command(cmd)
+        fn = _build_command(cmd, parent_command=cmd.name in parent_commands)
+        if cmd.name in parent_commands:
+            group_for(cmd.name).callback(invoke_without_command=True, no_args_is_help=False,
+                                         help=cmd.description, epilog=fn.__epilog__)(fn)
+            built.add(cmd.noun)
+            built.add(cmd.name)
+            continue
         if not cmd.verb:
             app.command(cmd.noun, help=cmd.description, epilog=fn.__epilog__)(fn)
             built.add(cmd.noun)

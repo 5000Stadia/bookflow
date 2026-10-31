@@ -120,8 +120,11 @@ ACCEPTED = {
     'pos-ticket-v1': (898, '6639dc50b25389df49db0c4bd6e45d637a6271a4c9f81c8abd579abfb0d7ff35'),
     'pos-ticket-takeover-v1': (899, 'bdcea7f8d98d6854d5ecc001b00e4b59f81288ef06af360288f8a2ce28e17bf3'),
     'pos-receipt-v1': (900, '00cfad8461346685e3de9485e8c900e23808206a65626cb72960aec0444a5a06'),
-    'reversible-batch-v1': (901, '264327f74d986c67f768948104712e4517f0b2634b4f5100b8467eb32870f9c3'),
-    'notice-reversal-v1': (902, '225eaef82f7cde2926e87ed711995792ef3f592d91c4bb56e96ab09359c3ba5e'),
+    'pos-refund-v1': (904, '469328cc54c3746bbb7e25fae4c5773e0123f935f5eba136a7a5349491097184'),
+    'pos-day-v1': (908, '4dfeb905ccc2dcf9451f2c7021c9b042016f48382d40b394fa6e73dfa962729b'),
+    'pos-split-v1': (908, '73027f1c23b43bf348babaa0afffdfc3bd15d53f52a62b6ab2e9a00685972480'),
+    'reversible-batch-v1': (909, 'b6ab69b716a3b999e88d86716f54fef5fcc7174768f3f0f6e4c073ce8cf515ce'),
+    'notice-reversal-v1': (910, 'a8255242bbbb0b1a4ac0f5eaf8aa62a5cb84c291a7a03316584b2bbf06b67932'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -288,6 +291,9 @@ CHAIN_ADDITIONS = {
     'pos-ticket-v1': {'pos ticket hold', 'pos ticket list', 'pos ticket resume', 'pos ticket discard', 'pos sale void'},
     'pos-ticket-takeover-v1': {'pos ticket take-over'},
     'pos-receipt-v1': {'pos receipt show'},
+    'pos-refund-v1': {'pos refund', 'pos refund lines', 'pos refund show', 'pos refund receipt'},
+    'pos-day-v1': {'pos shift open', 'pos shift close', 'report pos-day', 'pos deposit prepare'},
+    'pos-split-v1': set(),  # scoped split-sale payment composition
     'reversible-batch-v1': {'batch reverse'},
     'notice-reversal-v1': {'notice reverse'},
 }

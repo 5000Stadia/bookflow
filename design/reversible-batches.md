@@ -78,7 +78,7 @@ after one check, and refuses plainly when a payment has since been applied.
   bulk-edit doors retain their aggregate grants and run lifecycle through registry delegation.
 - Every remaining inverse is dry-run under the caller's authority on every call, including resumed slices and calls
   carrying a fingerprint. The outer command requires only the `import` member capability used by batch show/query.
-  `reversible-batch-v1` is a new permission layer on `pos-layout-v1`; accepted layers are unchanged. Help and the agent
+  `reversible-batch-v1` is a new permission layer on `pos-split-v1` (built on `pos-layout-v1`, rechained at integration); accepted layers are unchanged. Help and the agent
   guide mark reversal confirm-first unless the principal plainly named the act, and explain irreversible outputs.
 - Invoice post and retry each create a separate shared batch linked by `source_type=invoice_batch` and `source_id`
   to their invoice run. Each successful invoice's effect is inside `_write_one`'s savepoint.
@@ -130,7 +130,7 @@ demo-reset or checkpoint behavior in this increment. A separate reference-year p
   atomically. Ordinary dismissal still reserves that period. Sent notices refuse with their identity and
   “sent mail cannot be recalled”; later changes and live delivery dependencies also block. Notice batches
   unwind newest first within their period. Corrected runs retain dismissed history and create new notices.
-- Migration `co0126` (built as co0124, renumbered at integration after co0125) adds `overdue_notices.period_released` and a partial unique period index, preserving the
+- Migration `co0128` (built as co0124, renumbered at integration after co0127) adds `overdue_notices.period_released` and a partial unique period index, preserving the
   original period on historical rows. `notice-reversal-v1` adds the inverse command on the accepted
   `reversible-batch-v1` permission layer. No accepted permission layer is changed.
 - Tests exercise exact before-images and effect lists, atomic named refusals, interrupted reversal and resumption,

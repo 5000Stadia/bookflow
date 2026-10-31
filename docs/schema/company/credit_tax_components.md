@@ -24,4 +24,4 @@ Database: `company`.
 | `tax_minor_units` | BIGINT | no | — | — | — | — | Captured home-currency component tax reversed by this credit; zero is retained. |
 | `component_snapshot` | TEXT | no | — | — | — | — | Versioned typed JSON object of captured tax item, agency and liability labels. |
 | `posting_source_id` | VARCHAR(26) | yes | — | — | — | posting_line_sources.id | Exact tax liability attribution row this component was posted through; null only on a retained zero-tax cell, which posts no leg. |
-| `source_tax_component_id` | VARCHAR(26) | yes | — | — | — | — | Exact captured source invoice tax cell; null on a standalone credit. |
+| `source_tax_component_id` | VARCHAR(26) | yes | — | — | — | — | Exact captured source sale tax cell; null on a standalone credit. |

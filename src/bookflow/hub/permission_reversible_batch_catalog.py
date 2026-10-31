@@ -1,8 +1,8 @@
-"""Generic batch reversal on the accepted POS receipt layer; inverse grants remain independent."""
+"""Generic batch reversal on the accepted POS split-tender layer; inverse grants remain independent."""
 from dataclasses import asdict, replace
 import hashlib
 import json
-from . import permission_pos_receipt_catalog as previous, permission_catalog as c
+from . import permission_pos_split_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
 SOURCE_COMMIT = 'ee8d6caf1d3de5b8b175dacd4a26a397029f7da2'

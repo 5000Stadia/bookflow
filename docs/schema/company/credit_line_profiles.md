@@ -28,7 +28,7 @@ Database: `company`.
 | `gross_minor_units` | BIGINT | no | — | — | — | — | Home-currency line net plus tax. |
 | `item_snapshot` | TEXT | no | — | — | — | — | Versioned typed JSON object of resolved item, account, unit, pricing and tax rules. |
 | `posting_source_id` | VARCHAR(26) | yes | — | — | — | posting_line_sources.id | Exact income attribution row this line net was posted through; null only when the line is worth nothing and posts no leg. |
-| `source_transaction_id` | VARCHAR(26) | yes | — | — | — | document_line_identities.transaction_id, sales_line_profiles.transaction_id | Source invoice this line returns; null on a standalone credit. |
-| `source_revision_id` | VARCHAR(26) | yes | — | — | — | sales_line_profiles.revision_id | Exact captured source invoice revision; null on a standalone credit. |
+| `source_transaction_id` | VARCHAR(26) | yes | — | — | — | document_line_identities.transaction_id, sales_line_profiles.transaction_id | Source sale this line returns; null on a standalone credit. |
+| `source_revision_id` | VARCHAR(26) | yes | — | — | — | sales_line_profiles.revision_id | Exact captured source sale revision; null on a standalone credit. |
 | `source_document_line_id` | VARCHAR(26) | yes | — | — | — | sales_line_profiles.document_line_id | Exact captured source commercial line; null on a standalone credit. |
 | `source_line_id` | VARCHAR(26) | yes | — | — | — | document_line_identities.id | Permanent source line occurrence; null on a standalone credit. |

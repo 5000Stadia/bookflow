@@ -6,9 +6,36 @@ permission system; callers enforce the returned existing resource requirements.
 from bookflow.company.party_merges import family_cte
 import sqlalchemy as sa
 import json
-
+from contextlib import contextmanager
+from contextvars import ContextVar
 from bookflow.company import schema as c
 from bookflow.hub.access import require_resource
+
+_POS_SCOPE = ContextVar("pos_payment_scope", default=None)
+
+
+@contextmanager
+def pos_scope(s, transaction_ids, capability):
+    """Internal composition only: POS-selected documents, never general ledger access.
+
+    The caller obtains IDs from its newly posted invoice or insert-only POS sale facts.
+    The context is connection-bound and cannot authorize any other document or work graph.
+    """
+    if capability not in {"pos.sell", "pos.void"}:
+        raise ValueError("not a POS payment capability")
+    from bookflow.company import pos_layer
+    from bookflow.hub import capabilities
+    pos_layer.require_enabled(s)
+    pos_layer.require_seller(s, capability)
+    capabilities.require_company(s, "pos sale complete" if capability == "pos.sell" else "pos sale void", capability)
+    require_resource(s, capability, "member")
+    allowed = set(transaction_ids)
+    token = _POS_SCOPE.set((s, allowed))
+    try:
+        yield allowed
+    finally:
+        _POS_SCOPE.reset(token)
+
 
 
 def work_link_predicate(transaction_id):
@@ -58,6 +85,11 @@ def requirements(db, transaction_ids, *, write=False, cache=None):
 
 
 def authorize(s, transaction_ids, *, write=False):
+    transaction_ids = tuple(transaction_ids)
+    scope = _POS_SCOPE.get()
+    if (scope is not None and scope[0] is s and set(transaction_ids) <= scope[1]
+            and not linked_work_required(s.company, transaction_ids)):
+        return
     for resource, role in requirements(s.company, transaction_ids, write=write):
         require_resource(s, resource, role)
 

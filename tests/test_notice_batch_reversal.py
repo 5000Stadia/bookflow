@@ -132,7 +132,7 @@ def test_notice_reverse_through_python_cli_http_and_mcp(root, tmp_path):
     anyio.run(witness)
 
 
-def test_live_notice_delivery_blocks_and_populated_co0125_upgrade_keeps_references(books):
+def test_live_notice_delivery_blocks_and_populated_co0127_upgrade_keeps_references(books):
     import importlib
     from pathlib import Path
     from bookflow.storage.engine import open_database
@@ -151,7 +151,7 @@ def test_live_notice_delivery_blocks_and_populated_co0125_upgrade_keeps_referenc
     path = Path(books.run('company show', {})['path']) / 'company.db'
     frozen = importlib.import_module('bookflow.storage.company_migrations.versions.0085_scheduling')
     old_ddl = next(ddl for ddl in frozen.DDL if 'CREATE TABLE overdue_notices' in ddl)
-    # Recreate the actual co0125 table definition, preserving a notice with a live inbound delivery FK.
+    # Recreate the actual co0127 table definition, preserving a notice with a live inbound delivery FK.
     import sqlite3
     with sqlite3.connect(path) as db:
         db.execute('PRAGMA foreign_keys=OFF')
@@ -163,9 +163,9 @@ def test_live_notice_delivery_blocks_and_populated_co0125_upgrade_keeps_referenc
         for ddl in frozen.INDEXES:
             if ' ON overdue_notices ' in ddl:
                 db.execute(ddl)
-        db.execute("UPDATE alembic_version SET version_num='co0125'")
+        db.execute("UPDATE alembic_version SET version_num='co0127'")
     with open_database(path, writable=True) as db:
-        assert migrate_to_head(db, 'company', None) == ('co0125', 'co0126')
+        assert migrate_to_head(db, 'company', None) == ('co0127', 'co0128')
         assert db.raw.execute('PRAGMA foreign_key_check').fetchall() == []
         assert db.raw.execute('SELECT period_released FROM overdue_notices WHERE id=?', (notice['id'],)).fetchone() == (0,)
     assert books.run('delivery show', {'message': message['id']})['id'] == message['id']
@@ -177,7 +177,7 @@ def test_notice_reversal_migration_matches_metadata():
     from sqlalchemy.schema import CreateIndex, CreateTable
     from sqlalchemy.dialects.sqlite import dialect
     from bookflow.company import schema as c
-    migration = importlib.import_module('bookflow.storage.company_migrations.versions.0126_notice_reversal')
+    migration = importlib.import_module('bookflow.storage.company_migrations.versions.0128_notice_reversal')
     assert migration.DDL == str(CreateTable(c.overdue_notices).compile(dialect=dialect()))
     assert migration.INDEXES == tuple(str(CreateIndex(index).compile(dialect=dialect()))
                                       for index in sorted(c.overdue_notices.indexes, key=lambda i: i.name))

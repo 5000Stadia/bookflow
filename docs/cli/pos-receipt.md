@@ -67,9 +67,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `sale.pos_register` | object | yes | no | — | — |
 | `sale.pos_register.id` | string | yes | no | — | — |
 | `sale.pos_register.name` | string | yes | no | — | — |
-| `sale.sales_receipt` | object | yes | no | — | The sales receipt posted: its id, and its number as `name`. |
+| `sale.sales_receipt` | object | yes | no | — | Posted sale document identity (invoice for a split sale); retained field name for compatibility. |
 | `sale.sales_receipt.id` | string | yes | no | — | — |
 | `sale.sales_receipt.name` | string | yes | no | — | — |
+| `sale.document_type` | literal["sales_receipt", "invoice"] | no | no | "sales_receipt" | — |
+| `sale.version` | integer | no | no | 1 | — |
 | `sale.customer` | object \| null | yes | yes | — | The chosen customer; null for the walk-in. |
 | `sale.customer.id` | string | yes | no | — | — |
 | `sale.customer.name` | string | yes | no | — | — |
@@ -97,6 +99,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `sale.tenders[].amount.amount` | string | yes | no | — | — |
 | `sale.tenders[].amount.currency` | string | yes | no | — | — |
 | `sale.tenders[].amount.minor_units` | integer | yes | no | — | — |
+| `sale.tenders[].applied` | object \| null | no | yes | null | — |
+| `sale.tenders[].applied.amount` | string | yes | no | — | — |
+| `sale.tenders[].applied.currency` | string | yes | no | — | — |
+| `sale.tenders[].applied.minor_units` | integer | yes | no | — | — |
+| `sale.tenders[].change` | object \| null | no | yes | null | — |
+| `sale.tenders[].change.amount` | string | yes | no | — | — |
+| `sale.tenders[].change.currency` | string | yes | no | — | — |
+| `sale.tenders[].change.minor_units` | integer | yes | no | — | — |
 | `sale.tenders[].reference` | string \| null | yes | yes | — | — |
 | `sale.replayed` | boolean | no | no | false | True when this ticket had already completed: this is that sale, and nothing new was posted. |
 | `sale.warnings` | array[string] | no | no | [] | — |
@@ -147,6 +157,7 @@ Example JSON output:
     "created_at": "2026-01-01T00:00:00Z",
     "customer": null,
     "date": "2026-01-01",
+    "document_type": "sales_receipt",
     "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "pos_register": {
       "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -169,6 +180,7 @@ Example JSON output:
       "currency": "USD",
       "minor_units": 1
     },
+    "version": 1,
     "warnings": []
   },
   "status": "value",

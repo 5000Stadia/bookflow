@@ -815,11 +815,11 @@ def test_the_command_help_says_what_the_command_actually_does():
     update = credit_memo_cmds.credit_memo_update.description
     assert 'Stock follows the corrected grid' in update
     assert 'leaves the grid out and only moves the date, which moves the goods to that' in update
-    # What it says is refused is only the unlinked line, and it names the same two ways out.
-    assert 'names a stock-carrying item instead of returning the invoice line' in post
+    # An unknown sale needs a stated value; a known sale keeps its original cost.
+    assert 'an unlinked stock item without return_cost' in post
     assert 'a credit memo moves no inventory and restores no cost' not in update
     assert 'moving the inventory back and restoring the cost is not built' not in post
-    for remedy in ('source_invoice', 'source_line', 'inventory adjust'):
+    for remedy in ('source_invoice', 'source_line', 'return_cost'):
         assert remedy in message and remedy in post
 
 

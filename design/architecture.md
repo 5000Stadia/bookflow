@@ -4075,8 +4075,10 @@ the shape `bills.py` established for the payable. Saving a credit applies nothin
 
 **Two documents in one noun, told apart by what a line claims.** A *standalone* line names its
 own item and is priced by `sales_defaults.resolve_line` and the same tax calculator an invoice
-uses. A *returned* line names a source invoice line and is priced by nothing at all: every net
-and tax cent is taken from what that invoice captured. A document is all of one kind, and mixing
+uses. A *returned* line names a source invoice or sales receipt line and is priced by nothing at all: every net
+and tax cent is taken from what that sale captured. `source_invoice` accepts either document type;
+ambiguous numbers require an ID. Receipt returns keep exact customer and currency ownership; their
+credit uses Accounts Receivable rather than the receipt's deposit account. A document is all of one kind, and mixing
 is refused — the tax calculator rounds across a whole document, so a document holding one
 calculated cell and one captured cell would carry a tax total that is neither.
 
@@ -4140,20 +4142,18 @@ movement the previous revision wrote and takes the new grid's; a void reverses i
 quantity at the value it left at. `purchases-by-item` and `purchases-by-vendor` net the return
 against what was bought; `stock-status` and `inventory-valuation` read it from the movements.
 
-**A credited line that *names* a stock item is still refused.** A standalone line carries an
-item, a quantity and a price, and a price is not a cost. Nothing in Bookflow derives what an
-unlinked quantity coming in is worth: every receipt in the ledger states its value because
-somebody knew it — a bill line states what was paid, and `inventory adjust` requires
-`value_change` from the person entering it. Picking a rule here instead would be a second answer
-to a question the stock ledger already answers one way, and a wrong cost put into stock is
-invisible to the person who typed a price. So `credits._refuse_stocked` refuses it with
-`unlinked_stocked_credit_unsupported`, naming the line, the item and both ways out: return the
-invoice line with `source_invoice` and `source_line`, or credit the money with a non-stock item
-and bring the quantity back with `inventory adjust`. A returned line whose capture holds no
-asset or cost-of-goods account is refused as `stocked_capture_incomplete`, for the plainer
-reason that there is nothing to post the cost between. The stock-carrying set is the item
-master's own `TRACKED_TYPES`, read where `sales_defaults.resolve_line` reads it, because a
-second list here is the list the next stock-carrying type is silently left out of.
+**A credited line that names a stock item states its inventory value.** A standalone stocked
+line requires `return_cost`, the total value of the quantity coming back, separately from its
+selling price. The line snapshot captures `return_cost_minor_units`; its receipt movement debits
+Inventory Asset and credits Cost of Goods Sold by that amount. A correction retaining the grid
+keeps the value; changing the item or quantity requires a newly entered value. Omitting it is
+`unlinked_stocked_credit_unsupported`, naming the alternatives: return the original sale with
+`source_invoice` and `source_line`, state `return_cost`, or use a non-stock credit plus an explicit
+`inventory adjust`. POS no-receipt returns supply current average cost for the resolved base
+quantity, falling back to the item's purchase cost when no positive stock exists. This is a
+stated estimate, not recovery of an unknown sale's cost. A linked return still derives its cost
+from the original issue. Either kind requires captured asset and cost-of-goods accounts
+(`stocked_capture_incomplete` when missing), using the item registry's `TRACKED_TYPES`.
 
 **What is judged is the grid that would be posted, not the grid that was typed.**
 `credits._refuse_stocked_document` runs in `credits.prepare` at the one boundary every written
@@ -4395,12 +4395,11 @@ reconciliation fence of its own.
 
 A refund's source is a credit memo only; refunding unapplied payment overage needs
 `payment_facts.available` to gain the consumption term and is not built. There is no recovery
-family. Price allowances against a source line, a credited line that *names* a stock item
-instead of returning one, cross-party (parent↔job) credit, cash-basis treatment, the refund's
-reconciliation producer and print are outside the release entirely and are refused rather than
-approximated; the command help says so, and says why — for the stock item, that a price is not
-a cost and nothing here guesses one, with `source_invoice`/`source_line` and `inventory adjust`
-named as the two ways out. Returning a stocked invoice line is built and moves the stock.
+family. Price allowances against a source line, cash-basis treatment, the refund's
+reconciliation producer and print are outside this release. Standalone stocked credits require
+an explicit `return_cost`; linked invoice and sales receipt returns recover original issue cost.
+A POS return composes its credit and payout in one transaction, or leaves store credit for a
+named customer; the shared walk-in cannot own store credit.
 
 ## The three credit documents in the browser
 
@@ -5322,7 +5321,7 @@ application and notice generation. The item adopters use `reversal_registry.py` 
 seeded cycle classes retire after their item references are restored. `bank_rule_reversal.py` restores
 waiting-line proposals and rule ids with the caller's bank-line undo authority. `notices.py` uses the
 audited `notice reverse` command to dismiss ready notices and release their dedupe period. Migration
-`co0124` preserves original periods with a released flag and partial unique index. The new permission
+`co0128` preserves original periods with a released flag and partial unique index. The new permission
 layer is `notice-reversal-v1`, on `reversible-batch-v1`. The complete behavior and boundaries are in
 [reversible-batches.md](reversible-batches.md#as-built-increment-2).
 
@@ -5333,3 +5332,16 @@ layer is `notice-reversal-v1`, on `reversible-batch-v1`. The complete behavior a
 The adapter enumerates native unmerge's retained references, name collisions, original document version changes
 and later live aliases into the survivor before invoking unmerge under the caller's grant. A write-lock recheck
 and completion effect share the inverse transaction. `design/reversible-batches.md` describes strict eligibility.
+
+## POS day close (R114 increment 10)
+
+`company/pos_day.py` owns register/day reporting and nonposting shift open/close; its typed contracts
+are in `pos_day_models.py`. `pos_shifts` stores opening facts and a single immutable closing snapshot,
+with `pos_sales.shift_id` and `pos_refunds.shift_id` captured in each accounting transaction.
+`company/pos_deposits.py` prepares the existing deposit core's `InlineDocument`, including the named
+Cash Over and Short account mutation when needed. It never creates a second receipt or posts a
+separate kind of deposit. `commands/pos_day_cmds.py` and `pos_deposit_cmds.py` expose these through
+all adapters; `permission_pos_day_catalog.py` adds the immutable catalog layer. `static/pos-day.js`
+provides till controls and durable count retry; `deposit-picker.js` continues the hand-off in Make
+Deposits. Accounting/date/variance rules and limits are specified in
+[point-of-sale.md, increment 10](point-of-sale.md#as-built-increment-10-day-close).

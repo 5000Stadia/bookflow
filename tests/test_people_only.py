@@ -39,7 +39,8 @@ def test_the_people_only_list_is_exactly_the_five_and_every_other_entry_is_a_cap
     # pos-v1 (R114 inc 4, on opening-draft-v1) adds none: its five capabilities are grantable, and an agent needs an
     # explicit grant of each (hub.capabilities).
     # pos-layout-v1 (R114 increment 6, on bank-source-v1) adds no people-only acts.
-    # reversible-batch-v1 and notice-reversal-v1 (R186) add no people-only act or inverse grant.
+    # pos-ticket-v1 adds hold, resume, discard and void under grantable POS capabilities.
+    # reversible-batch-v1 and notice-reversal-v1 (R186, on pos-split-v1) add no people-only act or inverse grant.
     assert tip is runtime.known_catalog(c.NOTICE_REVERSAL_POLICY_VERSION)
     assert people_only.people_only_commands() == FIVE == set(layer.STAYS_HUMAN)
     assert sorted(a.key for a in tip.CATALOG.admin_actions if a.human_only) == sorted(

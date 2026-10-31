@@ -109,16 +109,16 @@ def profile_row(s, revision):
 def _source_line(s, invoice_selector, line_selector, profile):
     """The captured source cell a returned line prices itself from, or a typed refusal."""
     from bookflow.company import sales
-    header = sales.resolve(s, invoice_selector, 'invoice')
+    header = sales.resolve(s, invoice_selector, ('invoice', 'sales_receipt'))
     if header['status'] != 'posted':
-        raise _invalid('source_invoice', 'a voided invoice has nothing to return')
+        raise _invalid('source_invoice', 'a voided sale has nothing to return')
     revision = journals.revision(s, header)
     source_profile = sales.profile_row(s, revision)
     # Exact party, exact receivable, exact currency. Moving credit between a parent and a job
     # needs a balanced transfer document, which this release does not have; guessing that the
     # two are interchangeable would credit the wrong account and the wrong customer at once.
     if (source_profile['customer_id'] != profile.customer.id
-            or source_profile['control_account_id'] != profile.control_account.id
+            or (header['type'] == 'invoice' and source_profile['control_account_id'] != profile.control_account.id)
             or revision['currency'] != s.company.conn.execute(
                 sa.select(c.company_info.c.home_currency)).scalar_one()):
         raise _invalid('source_invoice', 'return a line of an invoice for this exact customer, '
@@ -227,33 +227,15 @@ def _article(item_type):
 
 
 def _refuse_stocked(profile, field, source=None):
-    """Refuse a credited stock line this release still cannot put back on the shelf.
+    """A linked stock return recovers its sale's cost; an unlinked one states its value.
 
-    A **returned** line is built and is not refused. It names the invoice line it gives back,
-    and that line's own issue says what came off the shelf and what the shelf lost, so the
-    credit posts the exact inverse: the quantity in, and that issue's own posted cost out of
-    cost of goods sold and back into the inventory asset. ``_stock_entries`` does it.
-
-    A **standalone** line names an item, a quantity and a price, and a price is not a cost.
-    Nothing in Bookflow derives what an unlinked quantity coming in is worth: every receipt
-    the stock ledger holds states its value, because somebody knew it -- a bill line states
-    what was paid for the goods, and ``inventory adjust`` requires ``value_change`` from the
-    person entering it. Picking a rule here instead -- today's average, the item's standard
-    cost -- would be a second answer to a question the ledger already answers one way, and a
-    wrong cost put into stock is not visible to the person who typed a price. So the line is
-    refused and the two ways that do work are named.
-
-    A returned line whose captured facts carry no inventory-asset or cost-of-goods account is
-    refused for the plainer reason that there is nothing to post the cost between. That is
-    what a revision captured before those accounts were captured looks like.
-
-    The stock-carrying set is the item master's own, read through the same name the sales
-    grid and the stock ledger read, because a second list here is the list the next
-    stock-carrying type is silently left out of.
+    Price never supplies stock value. A standalone stocked credit needs an explicit
+    return_cost captured on its line; without it, retain the actionable refusal. Every
+    stocked return also needs the asset and cost-of-goods accounts captured on the item.
     """
     if profile.item_type not in TRACKED_TYPES:
         return
-    if source is None:
+    if source is None and profile.return_cost_minor_units is None:
         raise BookflowError('E_VALIDATION', message=(
             f'Credit this item by returning the invoice line it was sold on. The line at '
             f'`{field}` names "{profile.item.label}", {_article(profile.item_type)} item, and '
@@ -261,7 +243,7 @@ def _refuse_stocked(profile, field, source=None):
             'price does not say and Bookflow never guesses. Name `source_invoice` and '
             '`source_line` and the credit puts the money and the goods back together, at what '
             'that invoice line actually took out of stock. If there is no invoice line to '
-            'return, credit the money with a service or non-stock item and bring the quantity '
+            'return, supply return_cost with the total inventory value, or credit the money with a service or non-stock item and bring the quantity '
             'back with `inventory adjust`, which takes the value you say it is worth.'),
             details={'fields': [{'field': field, 'problem': 'this item carries stock'}],
                      'reason': 'unlinked_stocked_credit_unsupported',
@@ -322,8 +304,16 @@ def _stock_entries(s, lines, *, date):
         if facts.item_type not in inventory.TRACKED_TYPES:
             continue
         source = line['source']
-        if source is None:      # refused by `_refuse_stocked` before any of this is reached
-            raise BookflowError('E_INTERNAL', message='A standalone credit line carries stock.')
+        if source is None:
+            entry = inventory_effects.Entry(
+                key=line['envelope']['id'], item_id=facts.item.id, item_name=facts.item.label,
+                kind='receipt', quantity_microunits=line['base_quantity_microunits'],
+                asset_account_id=facts.asset_account.id, offset_account_id=facts.cogs_account.id,
+                class_id=line['envelope']['class_id'], value_minor_units=facts.return_cost_minor_units,
+                site_id=line.get('site_id'), line_identity=line['envelope'].get('line_id'),
+                numbers=line.get('numbers'))
+            entries.append(entry)
+            continue
         issue = inventory_effects.live_issue(s, source['transaction_id'], source['document_line_id'])
         shipped = False
         if issue is None:
@@ -441,6 +431,19 @@ def commercial(s, inp, *, document_id, pending, previous=None):
                     resolved['item_id'] = resolved['profile'].item.id
                 resolved['line_id'] = line_id
                 resolved['source'] = None
+                if entered.return_cost is not None:
+                    if group is not None or resolved['profile'].item_type not in TRACKED_TYPES:
+                        raise _invalid('lines.return_cost', 'only a standalone stocked item takes a return cost')
+                    from bookflow.company.sales_models import money
+                    resolved['profile'].return_cost_minor_units = calc.nonnegative(
+                        money(entered.return_cost, info['home_currency'], 'return_cost').minor_units, 'return_cost')
+                elif line_id and saved.get(line_id):
+                    prior_facts = SalesLineProfile.model_validate_json(saved[line_id]['item_snapshot'])
+                    if prior_facts.return_cost_minor_units is not None:
+                        if (resolved['base_quantity_microunits'] != saved[line_id]['base_quantity_microunits']
+                                or resolved['item_id'] != saved[line_id]['item_id']):
+                            raise _invalid('lines.return_cost', 'enter the total return cost when changing item or quantity')
+                        resolved['profile'].return_cost_minor_units = prior_facts.return_cost_minor_units
                 resolved['intervals'] = ()
                 resolved['claim_rows'] = []
                 lines.append(resolved)
@@ -590,6 +593,8 @@ def prepare(s, ctx, inp, *, previous=None):
                   status='posted', voided_at=None, voided_by=None, void_reason=None, void_posting_batch_id=None)
     pending = {table: [] for table, _, _ in TABLE_KINDS}
     if previous:
+        from bookflow.company.pos_day import guard_closed_document
+        guard_closed_document(s, previous['header']['id'], correcting=True)
         header = dict(previous['header'], version=previous['header']['version'] + 1,
                       updated_at=at, updated_by=s.actor.id, updated_via=ctx.interface.value)
         from bookflow.company.credit_corrections import release_claims
@@ -865,6 +870,8 @@ def prepare_void(s, ctx, inp, *, posting=True):
     """
     source = facts(s, inp.credit_memo, write=True, posting=posting)
     old_header, revision = source['header'], source['revision']
+    from bookflow.company.pos_day import guard_closed_document
+    guard_closed_document(s, old_header['id'])
     from bookflow.company.prepayments import guard_draw_change
     guard_draw_change(s, old_header['id'], 'voided')
     from bookflow.company.credit_transfers import guard_document
@@ -935,7 +942,7 @@ def _void_current(source):
         available_minor_units=0, capacity=zero, applied=zero, refunded=zero, available=zero)
 
 
-def apply(plan, ctx, s):
+def apply(plan, ctx, s, *, command_name=None):
     # Rebuilt inside the writer transaction: the residue on a source line, the number and the
     # open period are only decisive here, and the preview read them before anyone held the lock.
     operation = plan.data['operation']
@@ -947,7 +954,7 @@ def apply(plan, ctx, s):
     from bookflow.company.credit_restatement import Companion
     if fresh.preview.facts_fingerprint != plan.preview.facts_fingerprint:
         raise BookflowError('E_PREVIEW_STALE', details={'reason': 'credit_facts'})
-    command_name = 'credit-memo ' + operation
+    command_name = command_name or 'credit-memo ' + operation
     applied = effects.persist(fresh, ctx, s, command_name=command_name, table_kinds=TABLE_KINDS,
                               companion=Companion(fresh.data.get('restatement') or {}))
     # The document is written and none of the three writes above writes stock; this is the one
@@ -1037,6 +1044,9 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
                               c.credit_source_claims.c.credit_revision_id == revision['id'],
                               c.credit_source_claims.c.kind == 'claim', order=c.credit_source_claims.c.id)
     profiles = {row['document_line_id']: row for row in details}
+    source_ids = {row['source_transaction_id'] for row in details if row['source_transaction_id']}
+    source_types = dict(s.company.conn.execute(sa.select(c.transactions.c.id, c.transactions.c.type).where(
+        c.transactions.c.id.in_(source_ids))).all()) if source_ids else {}
     lines = []
     from bookflow.company.sales import shown_amount
     from bookflow.company import serial_lots
@@ -1064,6 +1074,7 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
                                       'base_quantity_microunits', 'pricing_basis', 'net_minor_units',
                                       'tax_minor_units', 'gross_minor_units', 'source_transaction_id',
                                       'source_revision_id', 'source_line_id')},
+            source_document_type=source_types.get(detail['source_transaction_id']),
             quantity=format_quantity_micro_units(detail['quantity_microunits']),
             base_quantity=format_quantity_micro_units(detail['base_quantity_microunits']),
             unit_price=unit_price.to_dict(unit_price.row_units(detail, 'unit_price'), currency)
@@ -1150,7 +1161,7 @@ def current_key(s, components, pending=None):
     return (rows or effects.rows(s, c.credit_source_keys, c.credit_source_keys.c.id == identifier))[0]
 
 
-def facts(s, selector, *, write=False, posting=True):
+def facts(s, selector, *, write=False, posting=True, pos_credit=None):
     """The one place a credit's remaining worth is computed, for every caller.
 
     Available is capacity less active applications less active refund consumptions. Both
@@ -1167,7 +1178,27 @@ def facts(s, selector, *, write=False, posting=True):
     """
     from bookflow.company.payment_authority import authorize
     header = resolve(s, selector) if isinstance(selector, str) else selector
-    authorize(s, [header['id']], write=write and posting)
+    if pos_credit is None:
+        authorize(s, [header['id']], write=write and posting)
+    else:
+        # Internal composition only: this exact credit was just posted by this clerk in
+        # this POS request. No existing credit or ordinary refund input gets this admission.
+        from bookflow.company import pos_layer
+        pos_layer.require_enabled(s)
+        pos_layer.require_seller(s, 'pos.refund')
+        from bookflow.hub.access import require_resource
+        require_resource(s, 'pos.refund', 'member')
+        credit_id, request_id = pos_credit
+        event = s.company.conn.execute(sa.select(c.audit_events.c.id).join(
+            c.transaction_revisions, c.transaction_revisions.c.audit_event_id == c.audit_events.c.id).where(
+            c.transaction_revisions.c.id == header['current_revision_id'],
+            c.transaction_revisions.c.transaction_id == credit_id,
+            c.transaction_revisions.c.revision_number == 1,
+            c.audit_events.c.command == 'pos refund', c.audit_events.c.request_id == request_id,
+            c.audit_events.c.actor_id == s.actor.id)).first()
+        if not write or header['id'] != credit_id or header['version'] != 1 or event is None:
+            raise BookflowError('E_PERMISSION', message='POS may refund only the credit created by this return.',
+                                details={'capability': 'ledger.post'})
     if write:
         # A deleted credit is retained history: this is the one seam every writer that
         # could change or spend it comes through -- void, correct, apply, unapply, refund.

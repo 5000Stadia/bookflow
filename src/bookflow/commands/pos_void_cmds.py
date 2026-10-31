@@ -10,9 +10,10 @@ def plan_void(inp, ctx, s):
 sale_void = command(
     'pos sale void', scope='company', description=(
         'Void a completed POS sale through the same reversal as sales-receipt void, with a required context reason '
-        'and receipt expected_version. The sale selector accepts the POS sale ID, ticket key, receipt ID or number; '
+        'and document expected_version (use the current version from sale output). A split reverses all payments '
+        'and its invoice together. Select by POS sale ID, ticket key, document ID, receipt number or INV:invoice-number; '
         'an ordinary typed receipt is refused. Keeps the original receipt and immutable reversal history. '
-        'A deposited sale is refused naming its deposit; a reconciled sale is refused. Needs pos.void, not pos.sell '
+        'A deposited sale is refused naming its deposit; a reconciled sale is refused. A sale with a POS refund is refused naming the refund. Needs pos.void, not pos.sell '
         'or ledger.post. Off unless company setting pos_enabled is on (E_FEATURE_DISABLED).'),
     input_model=pos_void.PosSaleVoidInput, output_model=pos_void.PosSaleVoidOutput,
     writes={'company'}, required_role='member', capability='pos.void', accepts_idempotency_key=True,

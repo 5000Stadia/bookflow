@@ -89,6 +89,11 @@ def legacy_required_role(cmd) -> str | None:
 
 def check_turning_off(s) -> None:
     """Refuse POS off while any outstanding cart would be hidden."""
+    shifts = s.company.conn.execute(sa.select(c.pos_shifts.c.id, c.pos_shifts.c.register_id).where(
+        c.pos_shifts.c.closed_at.is_(None))).mappings().all()
+    if shifts:
+        raise BookflowError('E_WORK_DEPENDENCY', message='Close the open POS shifts before turning point of sale off.',
+                            details={'shifts': [dict(x) for x in shifts], 'close_command': 'pos shift close'})
     rows = s.company.conn.execute(sa.select(c.pos_tickets.c.id, c.pos_tickets.c.label).where(
         c.pos_tickets.c.status.in_(('held', 'open'))).order_by(c.pos_tickets.c.updated_at)).mappings().all()
     if rows:

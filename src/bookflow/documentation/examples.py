@@ -2191,3 +2191,37 @@ EXAMPLES['pos ticket take-over'] = Example(
 EXAMPLES['pos receipt show'] = Example(
     'bookflow pos receipt show counter-cart-1 --reprint --company "Demo Plumbing Co" --json',
     {'sale': 'counter-cart-1', 'reprint': True})
+
+# R114 increment 9: preview a return, then submit the same operation key with its expected total.
+EXAMPLES.update({
+    'pos refund': Example(
+        'bookflow pos refund --operation-key counter-return-1 --pos-register Main '
+        '--lines \'[{"item":"Pipe Sealant","quantity":"1"}]\' --settlement cash '
+        '--dry-run --company "Demo Plumbing Co" --json',
+        {'operation_key': 'counter-return-1', 'pos_register': 'Main',
+         'lines': [{'item': 'Pipe Sealant', 'quantity': '1'}], 'settlement': 'cash'}),
+    'pos refund lines': Example(
+        'bookflow pos refund lines --sale counter-cart-1 --company "Demo Plumbing Co" --json',
+        {'sale': 'counter-cart-1'}),
+    'pos refund show': Example(
+        'bookflow pos refund show --refund counter-return-1 --company "Demo Plumbing Co" --json',
+        {'refund': 'counter-return-1'}),
+    'pos refund receipt': Example(
+        'bookflow pos refund receipt counter-return-1 --reprint --company "Demo Plumbing Co" --json',
+        {'sale': 'counter-return-1', 'reprint': True}),
+})
+
+EXAMPLES.update({
+    'pos shift open': Example(
+        'bookflow pos shift open --pos-register Main --float 50.00 --operation-key morning-1 --company "Demo Plumbing Co" --json',
+        {'pos_register': 'Main', 'float': '50.00', 'operation_key': 'morning-1'}),
+    'pos shift close': Example(
+        'bookflow pos shift close --shift 01J00000000000000000000000 --counted 149.50 --operation-key evening-1 --company "Demo Plumbing Co" --json',
+        {'shift': '01J00000000000000000000000', 'counted': '149.50', 'operation_key': 'evening-1'}),
+    'report pos-day': Example(
+        'bookflow report pos-day --pos-register Main --date 2026-10-31 --company "Demo Plumbing Co" --json',
+        {'pos_register': 'Main', 'date': '2026-10-31'}),
+    'pos deposit prepare': Example(
+        'bookflow pos deposit prepare --pos-register Main --date 2026-10-31 --company "Demo Plumbing Co" --json',
+        {'pos_register': 'Main', 'date': '2026-10-31'}),
+})

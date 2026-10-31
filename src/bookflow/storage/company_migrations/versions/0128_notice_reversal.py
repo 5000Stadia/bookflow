@@ -1,12 +1,12 @@
-"""co0126: preserve notice history while releasing reversed periods for regeneration.
+"""co0128: preserve notice history while releasing reversed periods for regeneration.
 
 Frozen DDL replaces the period uniqueness constraint with a partial unique index.
 Existing notices retain their identities and references; none is released on upgrade.
 """
 from alembic import op
 
-revision = 'co0126'
-down_revision = 'co0125'
+revision = 'co0128'
+down_revision = 'co0127'
 branch_labels = depends_on = None
 TABLES = TRIGGERS = ()
 COLUMNS = ('period_released',)
@@ -18,7 +18,7 @@ COPY_COLUMNS = 'id, version, created_at, created_by, created_via, updated_at, up
 def upgrade():
     conn = op.get_bind()
     if 'period_released' in {row[1] for row in conn.exec_driver_sql('PRAGMA table_info(overdue_notices)')}:
-        raise RuntimeError('co0126 reserved column already exists')
+        raise RuntimeError('co0128 reserved column already exists')
     conn.exec_driver_sql(DDL.replace('CREATE TABLE overdue_notices', 'CREATE TABLE overdue_notices_new', 1))
     conn.exec_driver_sql(f'INSERT INTO overdue_notices_new ({COPY_COLUMNS}) SELECT {COPY_COLUMNS} FROM overdue_notices')
     conn.exec_driver_sql('DROP TABLE overdue_notices')

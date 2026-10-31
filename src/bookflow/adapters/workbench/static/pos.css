@@ -87,9 +87,10 @@
 #pos .pos-tender-total { font-size: 1.1rem; margin: 0 0 .6rem; }
 #pos .pos-tender-total b { display: block; font-size: 2.4rem; font-variant-numeric: tabular-nums; }
 #pos .pos-methods, #pos .pos-quick { display: flex; flex-wrap: wrap; gap: .4rem; margin: .4rem 0; }
-#pos .pos-methods button { flex: 1 1 6rem; font-size: 1.05rem; }
+#pos .pos-methods button { flex: 1 1 8rem; min-width: min(100%, 8rem); font-size: 1.05rem;
+  word-break: normal; overflow-wrap: break-word; }
 #pos .pos-methods button[aria-pressed="true"] { background: var(--pos-accent); color: #fff; border-color: var(--pos-accent); }
-#pos .pos-quick button { flex: 1 1 4.5rem; }
+#pos .pos-quick button { flex: 1 0 auto; min-width: 6rem; white-space: nowrap; }
 #pos .pos-keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem; }
 #pos .pos-keypad button { min-height: 64px; font-size: 1.4rem; }
 #pos .pos-change-due { font-size: 1.2rem; margin: .6rem 0 0; }
@@ -169,3 +170,26 @@
 #pos .pos-cart-actions { flex-wrap: wrap; }
 /* The change screen's receipt opens a printable page in its own tab. */
 #pos .pos-done [data-pos-print] { display: inline-flex; align-items: center; justify-content: center; min-height: 56px; min-width: 12rem; padding: .6rem 1rem; border: 1px solid var(--pos-line); border-radius: .5rem; font-size: 1.2rem; text-decoration: none; background: white; color: var(--pos-accent); }
+
+/* Returns use the same full-screen confirmation and a scrollable line picker on phones. */
+#pos .pos-refund { max-height: calc(100dvh - 2rem); overflow-y: auto; }
+#pos .pos-refund fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+#pos .pos-refund-lines { list-style: none; padding: 0; }
+#pos .pos-refund-lines li { padding: .5rem 0; border-bottom: 1px solid var(--pos-line); }
+#pos .pos-refund-lines small { display: block; color: var(--pos-muted); }
+#pos .pos-refund-line-fields { display: flex; gap: .6rem; }
+#pos .pos-refund-line-fields label { flex: 1; min-width: 0; }
+#pos .pos-done [data-pos-refund-print] { display: inline-flex; align-items: center; justify-content: center; min-height: 56px; padding: .6rem 1rem; border: 1px solid var(--pos-line); border-radius: .5rem; font-size: 1.2rem; text-decoration: none; }
+
+/* Day close uses the same touch targets on a phone and at the counter. */
+#pos .pos-day { max-height: calc(100dvh - 2rem); overflow-y: auto; width: min(42rem, calc(100vw - 2rem)); }
+#pos .pos-day dl div { display: flex; justify-content: space-between; gap: 1rem; padding: .25rem 0; }
+#pos .pos-day dd { margin: 0; font-variant-numeric: tabular-nums; }
+#pos .pos-day ul { padding-left: 1.2rem; }
+#pos .pos-day [data-pos-deposit-methods] label { flex-direction: row; align-items: center; }
+#pos .pos-day [data-pos-deposit-methods] input { width: auto; }
+#pos [data-pos-day-deposit] { display: inline-flex; align-items: center; min-height: 44px; padding: .4rem .8rem; }
+#pos .pos-payments { list-style: none; margin: .4rem 0; padding: 0; }
+#pos .pos-payments li { display: flex; justify-content: space-between; align-items: center; gap: .5rem; border-bottom: 1px solid var(--pos-line); }
+#pos .pos-payments span { overflow-wrap: anywhere; }
+#pos .pos-tender { max-height: calc(100dvh - 2rem); overflow-y: auto; }

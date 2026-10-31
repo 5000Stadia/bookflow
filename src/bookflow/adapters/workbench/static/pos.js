@@ -282,6 +282,20 @@
     else if (state.mutation) banner.innerHTML = `This ticket change has not been confirmed. <button type="button" data-pos-ticket-retry>Finish ticket change</button>. The cart is kept here until Bookflow answers.`;
     else if (pending) banner.innerHTML = `This sale was sent to be completed and no answer came back. <button type="button" data-pos-retry>Finish the sale</button> sends it again; it is never posted twice.`;
     root.classList.toggle('pos-locked', pending);
+    const tenderDialog = $('[data-pos-tender]');
+    tenderDialog.querySelectorAll('input, button[type="button"]').forEach(control => { control.disabled = pending; });
+    tenderDialog.querySelector('[data-pos-tender-retry]').hidden = !state.pending;
+    tenderDialog.querySelector('[data-pos-tender-retry]').disabled = completionBusy;
+    tenderDialog.querySelector('[data-pos-complete]').hidden = !!state.pending;
+    if (!server) {
+      tenderDialog.querySelector('[data-pos-complete]').disabled = true;
+      tenderDialog.querySelector('[data-pos-add-payment]').disabled = true;
+    }
+    if (!pending && server && tenderDialog.open) {
+      tenderDialog.querySelector('[data-pos-tender-total]').textContent = money(server.total.amount);
+      tenderDialog.querySelectorAll('[data-pos-method]').forEach(button => { button.disabled = payments.some(p => p.payment_method === button.dataset.posMethod); });
+      change();
+    }
   }
 
   // ---- the line keypad
@@ -334,7 +348,13 @@
   }
 
   // ---- taking payment
-  let method = null, tendered = '';
+  let method = null, tendered = '', payments = [], completionBusy = false;
+  const balance = () => minor(server.total.amount) - payments.reduce((n, p) => n + minor(p.amount), 0);
+  const paymentKey = () => JSON.stringify([cartInput(), server.total.amount]);
+  function savePayments() {
+    state.payment_draft = {key: paymentKey(), payments};
+    save();
+  }
   const places = () => ((server.total.amount.split('.')[1]) || '').length;
   const minor = text => Math.round(Number(text || 0) * 10 ** places());
   const amountText = cents => (cents / 10 ** places()).toFixed(places());
@@ -346,34 +366,56 @@
   }
   function openTender() {
     if (!server || !state.lines.length || locked()) return;
+    payments = state.payment_draft?.key === paymentKey() ? [...state.payment_draft.payments] : [];
     const dialog = $('[data-pos-tender]');
     dialog.querySelector('[data-pos-tender-total]').textContent = money(server.total.amount);
     dialog.querySelector('[data-pos-methods]').innerHTML = register.methods.map(m => `<button type="button" data-pos-method="${escape(m.id)}" data-kind="${escape(m.kind)}">${escape(m.name)}</button>`).join('');
-    dialog.querySelector('[data-pos-quick]').innerHTML = quickAmounts(server.total.amount).map((cents, i) => `<button type="button" data-pos-quick-amount="${amountText(cents)}">${i === 0 ? 'Exact' : money(amountText(cents))}</button>`).join('');
     dialog.querySelector('[data-pos-tender-status]').textContent = '';
     pick(register.methods[0]);
     if (!dialog.open) dialog.showModal();
   }
   function pick(m) {
+    if (m && payments.some(p => p.payment_method === m.id)) m = register.methods.find(candidate => !payments.some(p => p.payment_method === candidate.id));
     method = m || null;
     const dialog = $('[data-pos-tender]');
-    dialog.querySelectorAll('[data-pos-method]').forEach(b => b.setAttribute('aria-pressed', String(!!m && b.dataset.posMethod === m.id)));
+    dialog.querySelectorAll('[data-pos-method]').forEach(b => {
+      b.setAttribute('aria-pressed', String(!!m && b.dataset.posMethod === m.id));
+      b.disabled = payments.some(p => p.payment_method === b.dataset.posMethod);
+    });
     const cash = !!m && m.kind === 'cash';
     dialog.querySelector('[data-pos-cash]').hidden = !cash;
     dialog.querySelector('[data-pos-reference-row]').hidden = !m || cash;
-    tendered = '';
-    dialog.querySelector('[data-pos-tendered]').value = '';
+    tendered = cash ? '' : amountText(balance());
+    dialog.querySelector('[data-pos-tendered]').value = tendered;
+    dialog.querySelector('[data-pos-reference]').value = '';
+    dialog.querySelector('[data-pos-quick]').innerHTML = quickAmounts(amountText(balance())).map((cents, i) => `<button type="button" data-pos-quick-amount="${amountText(cents)}">${i === 0 ? 'Exact' : money(amountText(cents))}</button>`).join('');
     change();
   }
   function change() {
     const dialog = $('[data-pos-tender]');
     const cash = method && method.kind === 'cash';
-    const due = minor(server.total.amount), given = minor(tendered);
-    const covers = !cash || (tendered !== '' && given >= due);
-    dialog.querySelector('[data-pos-change-due]').textContent = cash && tendered !== '' && given >= due ? money(amountText(given - due)) : '—';
+    const due = balance(), given = minor(tendered);
+    const valid = /^\d+(\.\d{1,2})?$/.test(tendered) && Number.isSafeInteger(given) && given >= 0;
+    const covers = valid && (cash ? given >= due : given === due);
+    dialog.querySelector('[data-pos-payments]').innerHTML = payments.map((p, i) => {
+      const name = register.methods.find(m => m.id === p.payment_method)?.name || '';
+      return `<li><span>${escape(name)} ${money(p.amount)}${p.reference ? ` (${escape(p.reference)})` : ''}</span><button type="button" data-pos-remove-payment="${i}" aria-label="Remove payment ${i + 1}">Remove</button></li>`;
+    }).join('');
+    dialog.querySelector('[data-pos-balance-row]').hidden = !payments.length;
+    dialog.querySelector('[data-pos-balance]').textContent = money(amountText(due));
+    dialog.querySelector('[data-pos-change-due]').textContent = cash && covers ? money(amountText(given - due)) : '—';
     dialog.querySelector('[data-pos-complete]').disabled = !method || !covers;
+    dialog.querySelector('[data-pos-add-payment]').disabled = !method || !valid || given <= 0 || given >= due || payments.length >= register.methods.length - 1;
+  }
+  function currentPayment() {
+    const tender = {payment_method: method.id, amount: amountText(minor(tendered))};
+    const reference = $('[data-pos-reference]').value.trim();
+    if (method.kind !== 'cash' && reference) tender.reference = reference;
+    return tender;
   }
   async function complete(body) {
+    if (completionBusy) return;
+    completionBusy = true;
     const dialog = $('[data-pos-tender]');
     const status = dialog.querySelector('[data-pos-tender-status]');
     state.pending = body;
@@ -389,6 +431,7 @@
         throw failure;
       }
     } catch (error) {
+      completionBusy = false;
       if (error.offline) {
         offline = true;
         status.textContent = 'No connection to Bookflow. This sale is kept here; finish it when the connection returns.';
@@ -403,10 +446,12 @@
       render();
       return;
     }
+    completionBusy = false;
     offline = false;
     if (dialog.open) dialog.close();
     done(sale);
   }
+  const receiptNumber = sale => `${sale.document_type === 'invoice' ? 'INV:' : ''}${sale.sales_receipt.name}`;
   function done(sale) {
     lastSale = sale;
     state = fresh();
@@ -417,8 +462,8 @@
     const screen = $('[data-pos-done]');
     $('[data-pos-print]').href = `/c/${encodeURIComponent(data.company)}/pos/receipt/${encodeURIComponent(sale.id)}`;
     screen.querySelector('[data-pos-done-change]').textContent = money(sale.change.amount);
-    const paid = sale.tenders.map(t => `${escape(t.payment_method.name)} ${money(t.amount.amount)}${t.reference ? ` (${escape(t.reference)})` : ''}`).join(', ');
-    screen.querySelector('[data-pos-done-summary]').innerHTML = `Sales receipt <b data-pos-done-number>${escape(sale.sales_receipt.name)}</b> · Total ${money(sale.total.amount)} · Paid ${paid}${sale.customer ? ` · ${escape(sale.customer.name)}` : ''}${sale.replayed ? ' · already completed' : ''}`;
+    const paid = sale.tenders.map(t => `${escape(t.payment_method.name)} ${money(t.amount.amount)}${t.reference ? ` (${escape(t.reference)})` : ''}${t.change?.minor_units ? ` (change ${money(t.change.amount)})` : ''}`).join(', ');
+    screen.querySelector('[data-pos-done-summary]').innerHTML = `Receipt <b data-pos-done-number>${escape(receiptNumber(sale))}</b> · Total ${money(sale.total.amount)} · Paid ${paid}${sale.customer ? ` · ${escape(sale.customer.name)}` : ''}${sale.replayed ? ' · already completed' : ''}`;
     screen.dataset.sale = sale.id;
     const voidButton = $('[data-pos-void-last]');
     if (voidButton) voidButton.disabled = false;
@@ -526,9 +571,10 @@
     } catch (error) { $('[data-pos-reprint-status]').textContent = error.message; }
   });
   // ---- voids use the same receipt reversal, with an explicit reason and an explicit retry after any conflict
-  let voidVersion = 1, voidSelector = '', voidBusy = false, voidKey = null;
+  let voidVersion = 1, voidSelector = '', voidSaleId = null, voidBusy = false, voidKey = null;
   function openVoid(sale) {
-    voidVersion = 1; voidSelector = sale ? sale.sales_receipt.name : ''; voidKey = null;
+    voidSaleId = sale?.id || null;
+    voidVersion = sale?.version || 1; voidSelector = sale ? receiptNumber(sale) : ''; voidKey = null;
     $('[data-pos-void-sale]').value = voidSelector;
     $('[data-pos-void-reason]').value = '';
     $('[data-pos-void-status]').textContent = '';
@@ -539,16 +585,16 @@
     if (voidBusy) return;
     const sale = $('[data-pos-void-sale]').value.trim(), reason = $('[data-pos-void-reason]').value.trim();
     if (!sale || !reason) return;
-    if (sale !== voidSelector) { voidVersion = 1; voidSelector = sale; voidKey = null; }
+    if (sale !== voidSelector) { voidSaleId = null; voidVersion = 1; voidSelector = sale; voidKey = null; }
     voidBusy = true; $('[data-pos-void-submit]').disabled = true;
     const status = $('[data-pos-void-status]');
     status.textContent = 'Voiding…';
     try {
-      await api('pos sale void', {sale, expected_version: voidVersion}, {reason, key: voidKey || (voidKey = newTicket())});
+      await api('pos sale void', {sale: voidSaleId || sale, expected_version: voidVersion}, {reason, key: voidKey || (voidKey = newTicket())});
       status.textContent = `Sale ${sale} voided. Its reversal and reason are recorded.`;
-      if (lastSale && sale === lastSale.sales_receipt.name) {
+      if (lastSale && (voidSaleId === lastSale.id || sale === receiptNumber(lastSale))) {
         $('[data-pos-void-last]').disabled = true;
-        $('[data-pos-done-summary]').textContent = `Sales receipt ${sale} — voided`;
+        $('[data-pos-done-summary]').textContent = `Receipt ${sale} — voided`;
       }
     } catch (error) {
       status.textContent = error.message;
@@ -673,13 +719,21 @@
       input.value = d.posKey === '⌫' ? input.value.slice(0, -1) : input.value + d.posKey;
       tendered = input.value; change();
     }
+    else if (target.matches('[data-pos-add-payment]')) {
+      payments.push(currentPayment());
+      savePayments();
+      pick(register.methods.find(m => !payments.some(p => p.payment_method === m.id)) || register.methods[0]);
+    }
+    else if (target.matches('[data-pos-remove-payment]')) {
+      payments.splice(Number(d.posRemovePayment), 1);
+      savePayments();
+      pick(method);
+    }
     else if (target.matches('[data-pos-complete]')) {
       if (!server || !method) return;
-      const tender = {payment_method: method.id};
-      if (method.kind === 'cash') tender.amount = amountText(minor(tendered));
-      const reference = $('[data-pos-reference]').value.trim();
-      if (method.kind !== 'cash' && reference) tender.reference = reference;
-      complete({...cartInput(), ticket: state.ticket, tender, expected_total: server.total.amount,
+      const tender = currentPayment();
+      const paymentInput = payments.length ? {tenders: [...payments, tender]} : {tender};
+      complete({...cartInput(), ticket: state.ticket, ...paymentInput, expected_total: server.total.amount,
                 ...(state.ticket_version ? {ticket_version: state.ticket_version} : {})});
     }
     else if (target.matches('[data-pos-retry]')) retry();
@@ -768,6 +822,7 @@
       lookup();
       return line.quantity;
     },
+    register: () => register,
     state: () => JSON.parse(JSON.stringify(state)),
     server: () => server,
     layout: () => JSON.parse(JSON.stringify(data.layout)),
