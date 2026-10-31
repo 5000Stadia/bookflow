@@ -139,9 +139,15 @@ def test_same_rule_changed_fields_refresh_and_reverse(client):
     assert proposals(client) == before
 
 
-def test_undo_decision_then_reverse_proposals(client):
+@pytest.mark.parametrize('batch_decision', [True, False])
+def test_undo_decision_then_reverse_proposals(client, batch_decision):
     before, applied, _ = setup(client)
-    decision = run(client, 'bank-line ignore', {'line': applied['lines'][0]['line_id'], 'ignore_reason': 'other'})
-    run(client, 'bank-line undo', {'batch': decision['batch_id']})
+    line = applied['lines'][0]['line_id']
+    selector = {'lines': [line]} if batch_decision else {'line': line}
+    decision = run(client, 'bank-line ignore', {**selector, 'ignore_reason': 'other'})
+    if batch_decision:
+        run(client, 'bank-line undo', {'batch': decision['batch_id']})
+    else:
+        run(client, 'bank-line unmatch', {'line': line})
     run(client, 'batch reverse', {'batch': applied['batch_id']})
     assert proposals(client) == before
