@@ -89,7 +89,7 @@ def _grant_deletes(fresh):
     state = client.permission.show()
     client.permission.activate(expected_generation=state["generation"], expected_catalog_sha256=state["catalog_sha256"])
     member = next(x for x in client.membership.list(company=company)["items"]
-                  if x["scope_type"] == "company" and x["scope_id"] == company)
+                  if x["scope_type"] == "company" and x["scope_id"] == company and x["role"] == "owner")
     client.membership.grant(user=member["user_id"], company=company, expected_version=member["version"],
                             grants=["transaction.invoice.delete", "transaction.bill.delete",
                                     "transaction.journal_entry.delete", "transaction.credit_memo.delete"])
@@ -555,3 +555,148 @@ def test_an_agent_accepts_differences_only_when_its_principal_granted_it(hosted)
     assert r.status_code == 200 and '"accepted: ' in r.text, r.text
     r = call(_bearer(hosted, "principal-p"))
     assert r.status_code == 200, r.text
+
+
+def _kill_at_stock(monkeypatch):
+    from bookflow.company import cutover
+    real = cutover._run_step
+
+    class Killed(Exception):
+        pass
+
+    def killed(s, ctx, step, payload, recorder=None):
+        if step.kind == "inventory_adjustment":
+            raise Killed()
+        return real(s, ctx, step, payload, recorder)
+    monkeypatch.setattr(cutover, "_run_step", killed)
+    return real, Killed
+
+
+def test_a_resumed_apply_refused_part_way_needs_the_callers_own_grants_to_undo(fresh, root, monkeypatch):
+    """Verification M1: the owner's apply stops after the invoices and bills; a clerk with no delete grant resumes it and
+    a later step is refused. The automatic undo is the command's own promise only for its own call's writes, so here
+    it is refused for want of the clerk's grants, naming them, and nothing of the owner's is deleted in the clerk's
+    name; the owner, who holds the grants, finishes the undo."""
+    from bookflow.company import cutover
+    from tests.conftest import as_user, make_actor
+    run = fresh["run"]
+    company_id = run("company show")["company_id"]
+    draft = _draft(run)
+    real, Killed = _kill_at_stock(monkeypatch)
+    with pytest.raises(Killed):
+        run("opening-draft apply", dict(draft=draft["id"]), reason="Post it")
+    make_actor(root, "clerk", company_role=(company_id, "standard"))
+    clerk = as_user(root, "clerk")
+    calls = {"n": 0}
+
+    def refusing(s, ctx, step, payload, recorder=None):
+        if step.kind == "inventory_adjustment":
+            calls["n"] += 1
+            if calls["n"] == 3:
+                raise BookflowError("E_VALIDATION", message="refused for the test.")
+        return real(s, ctx, step, payload, recorder)
+    monkeypatch.setattr(cutover, "_run_step", refusing)
+    with pytest.raises(BookflowError) as stopped:
+        clerk.run("opening-draft apply", dict(draft=draft["id"]), company=COMPANY, reason="Continue the opening")
+    details = stopped.value.details
+    assert details["rolled_back"] is False and details["draft_state"] == "failed", details
+    assert "transaction." in json_text(details["undo_refused"]) and ".delete" in json_text(details["undo_refused"])
+    assert run("invoice show", {"invoice": "1001"})["status"] == "posted"  # nothing deleted in the clerk's name
+    monkeypatch.setattr(cutover, "_run_step", real)
+    _grant_deletes(fresh)
+    done = run("opening-draft reverse", dict(draft=draft["id"]), reason="Finish the undo")
+    assert done["draft"]["state"] == "rolled_back" and _balances(run) == {}
+
+
+def json_text(value):
+    import json
+    return json.dumps(value, default=str)
+
+
+def test_an_agent_resuming_a_persons_stopped_opening_cannot_undo_it_without_grants(hosted, monkeypatch):
+    """Verification M1 for an agent: a person's apply stops (not a refusal); the agent resumes it and a later invoice is
+    refused. The undo needs the agent's own delete grants, so nothing the person posted is deleted."""
+    from bookflow.company import cutover
+    from tests.conftest import hosted_call, make_agent
+    from tests.test_people_only import REASON, _bearer
+    cid = hosted.company_id
+    hosted.ok("user.add", {"username": "principal-p", "company": cid, "role": "owner",
+                           "password": "pw-principal-p-12345"}, headers=REASON)
+    agent = make_agent(hosted_call(hosted), "resume-agent", principals="principal-p", company=cid, role="standard")
+    as_agent, as_person = _bearer(hosted, agent, "principal-p"), _bearer(hosted, "principal-p")
+
+    def call(name, body, who):
+        return hosted.api.post(f"/companies/{cid}/commands/{name}", json=body, headers={**REASON, **who})
+    content = ("Customer,Number,Date,Open amount\nGate Cafe,G-1,12/14/2024,5.00\nGate Cafe,G-2,12/15/2024,6.00\n"
+               "Gate Cafe,G-3,12/16/2024,7.00\n")
+    draft = call("opening-draft.create", {"as_of": "2024-12-31", "open_invoices": {"content": content}}, as_person).json()["id"]
+    real_step, real_stopped = cutover._run_step, cutover._stopped
+
+    def stop_at(number):
+        def step(s, ctx, st, payload, recorder=None):
+            if st.kind == "invoice" and st.name.startswith(f"Invoice {number}"):
+                raise BookflowError("E_VALIDATION", message="refused for the test.")
+            return real_step(s, ctx, st, payload, recorder)
+        return step
+    monkeypatch.setattr(cutover, "_run_step", stop_at("G-2"))
+    monkeypatch.setattr(cutover, "_stopped", lambda step, error, created: BookflowError(
+        "E_VERSION_CONFLICT", message="stopped for the test (not a refusal)."))
+    assert call("opening-draft.apply", {"draft": draft}, as_person).status_code != 200
+    monkeypatch.setattr(cutover, "_stopped", real_stopped)
+    monkeypatch.setattr(cutover, "_run_step", stop_at("G-3"))
+    r = call("opening-draft.apply", {"draft": draft}, as_agent)
+    details = r.json().get("details") or {}
+    assert details.get("rolled_back") is False and details.get("draft_state") == "failed", r.text
+    shown = hosted.ok("invoice.show", {"invoice": "G-1"}, company=cid)
+    assert shown["status"] == "posted"
+
+
+def test_a_stopped_opening_whose_documents_were_voided_by_hand_rolls_back_cleanly(fresh, monkeypatch):
+    """Verification N1: a stopped apply; invoice 1003 deleted and 1004 voided by hand; apply again. Whatever that apply
+    does, the undo passes over the documents already gone and finishes, so the draft is `rolled_back` (nothing
+    stands) and discard is reachable: no state is a dead end."""
+    from bookflow.company import cutover
+    run = fresh["run"]
+    _grant_deletes(fresh)
+    draft = _draft(run)
+    real, Killed = _kill_at_stock(monkeypatch)
+    with pytest.raises(Killed):
+        run("opening-draft apply", dict(draft=draft["id"]), reason="Post it")
+    monkeypatch.setattr(cutover, "_run_step", real)
+    v = run("invoice show", {"invoice": "1003"})["version"]
+    run("invoice delete", {"invoice": "1003", "expected_version": v}, reason="by hand")
+    v = run("invoice show", {"invoice": "1004"})["version"]
+    run("invoice void", {"invoice": "1004", "expected_version": v}, reason="by hand")
+    try:
+        run("opening-draft apply", dict(draft=draft["id"]), reason="Continue")
+        run("opening-draft reverse", dict(draft=draft["id"]), reason="Undo it")
+    except BookflowError as error:
+        assert error.details.get("rolled_back") is True, (error.code, error.message, error.details)
+    shown = run("opening-draft show", dict(draft=draft["id"]))
+    assert shown["state"] == "rolled_back" and _balances(run) == {}, shown["state"]
+    assert run("opening-draft discard", dict(draft=draft["id"]), reason="Start again")["state"] == "discarded"
+
+
+def test_an_applied_opening_undone_in_two_runs_ends_reversed(fresh, monkeypatch):
+    """Verification low: applied, the undo stops after one slice (failed), then finishes: `reversed`, not
+    `rolled_back`."""
+    from bookflow.company import batches
+    run = fresh["run"]
+    _grant_deletes(fresh)
+    draft = _draft(run)
+    run("opening-draft apply", dict(draft=draft["id"]), reason="Post it")
+    real_reverse = batches.reverse
+    calls = {"n": 0}
+
+    def one_slice(*a, **k):
+        calls["n"] += 1
+        if calls["n"] > 1:
+            raise BookflowError("E_BATCH_BLOCKED", message="stopped for the test", details={"blockers": []})
+        return real_reverse(*a, **{**k, "limit": 5})
+    monkeypatch.setattr(batches, "reverse", one_slice)
+    with pytest.raises(BookflowError):
+        run("opening-draft reverse", dict(draft=draft["id"]), reason="Undo")
+    monkeypatch.setattr(batches, "reverse", real_reverse)
+    assert run("opening-draft show", dict(draft=draft["id"]))["state"] == "failed"
+    done = run("opening-draft reverse", dict(draft=draft["id"]), reason="Finish the undo")
+    assert done["draft"]["state"] == "reversed"

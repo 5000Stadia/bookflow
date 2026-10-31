@@ -110,7 +110,7 @@ ACCEPTED = {
     'bank-line-details-v1': (847, 'c84a45585ddc7d4b5e7e1ce602517bfd25f3c76de7bba387ccc0064f8045f6e5'),
     'user-home-v1': (850, 'e3ca5ecf2483bcf9780cdd3e9300c5a9cb9ac74f02d2a9f29175bfe8f0c98b36'),
     'automation-v1': (853, '4df1e05f0db60c9ac166ce314398120e3065dfb07f205327c81f3d5e5348e7ed'),
-    'opening-draft-v1': (862, 'e10a15f6114f576e30a37c038cbe2cab744a362a18f8ff308334da290c6e8637'),
+    'opening-draft-v1': (862, '56a757a3260e92ca76ffafbf79f7cbcac99198a1c292278998588eef117d9aa2'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores

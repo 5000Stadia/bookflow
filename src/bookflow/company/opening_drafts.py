@@ -220,7 +220,10 @@ def write(s, draft_id: str, changes: dict) -> None:
 
 def prepare_discard(s, inp) -> tuple[dict, dict]:
     draft = row(s, inp.draft)
-    if draft['state'] in ('applying', 'applied', 'failed'):
+    nothing_stands = _batch_state(s, draft['batch_id']) in (None, 'reversed') or not s.company.conn.execute(
+        sa.select(sa.func.count()).select_from(c.batch_effects).where(c.batch_effects.c.batch_id == draft['batch_id'])
+    ).scalar()
+    if draft['state'] == 'applied' or (draft['state'] in ('applying', 'failed') and not nothing_stands):
         raise BookflowError('E_VALIDATION', message=(
             f"Opening draft {draft['id']} is {draft['state']}: what it posted stays until `opening-draft reverse "
             f"{draft['id']}` undoes it as one unit; discard it after that."), details={'field': 'draft', 'state': draft['state']})
@@ -402,19 +405,20 @@ def apply(planned, ctx, s) -> tuple[dict, Any]:
         if current['version'] != draft['version']:
             raise BookflowError('E_VERSION_CONFLICT', message=f"Opening draft {draft['id']} changed meanwhile; apply again.",
                                 details={'record_type': 'opening_draft', 'record_id': draft['id']})
-        batch_id = current['batch_id']
+        batch_id, opened = current['batch_id'], False
         if _batch_state(s, batch_id) != 'live':
-            batch_id = batches._insert_batch(s, ctx, kind=KIND, label=current['label'], scope=f'opening:{current["id"]}',
-                                             ordering='record', source_type='opening_draft', source_id=current['id'],
-                                             reason=ctx.reason)
+            batch_id, opened = batches._insert_batch(s, ctx, kind=KIND, label=current['label'],
+                                                     scope=f'opening:{current["id"]}', ordering='record',
+                                                     source_type='opening_draft', source_id=current['id'],
+                                                     reason=ctx.reason), True
         _mark(s, ctx, current['id'], {'state': 'applying', 'batch_id': batch_id}, 'opening-draft apply', 'applying')
-        return batch_id
+        return batch_id, opened
     # The batch and the draft's `applying` commit in the command's own transaction, before the first posting; the
     # cutover engine then opens and commits one transaction per posting.
     with s.commits.operation(OWNER, s.hub, s.company):
         try:
             _upsert_principals(s, ctx)
-            batch_id = begin()
+            batch_id, opened = begin()
             s.commits.commit(s.company, OWNER)
         except BaseException:
             if s.company.write_transaction:
@@ -427,7 +431,7 @@ def apply(planned, ctx, s) -> tuple[dict, Any]:
     except BookflowError as error:
         if error.code != 'E_CUTOVER_INCOMPLETE':
             raise
-        _roll_back(s, ctx, draft['id'], batch_id, error)
+        _roll_back(s, ctx, draft['id'], batch_id, error, own=opened)
         raise
     result = applied.output
     stays = outside_batch(result)
@@ -439,13 +443,17 @@ def apply(planned, ctx, s) -> tuple[dict, Any]:
     return row(s, draft['id']), result
 
 
-def _roll_back(s, ctx, draft_id: str, batch_id: str, error: BookflowError) -> None:
-    """All or nothing: a refusal part way undoes what the opening posted, through its batch, in the same call. That
-    undo is the command's own promise, so its deletes need no delete grant of the caller's (review M1)."""
+def _roll_back(s, ctx, draft_id: str, batch_id: str, error: BookflowError, *, own: bool) -> None:
+    """All or nothing: a refusal part way undoes what the opening posted, through its batch. When this call opened the
+    batch, every record in it is this call's own writes, and the undo is the command's own promise: its deletes need
+    no delete grant of the caller's (review M1). When the call resumed a batch an earlier call began (perhaps someone
+    else's), the undo needs the caller's own grants, like any reversal, or the draft ends `failed` naming them."""
+    undone = s.company.conn.execute(sa.select(sa.func.count()).select_from(c.batch_effects).where(
+        c.batch_effects.c.batch_id == batch_id)).scalar()
     try:
         while True:
             done = batches.reverse(s, ctx, batch_id, reason='Undo an opening that stopped part way', dry_run=False,
-                                   limit=batches.DEFAULT_SLICE, own_writes=True)
+                                   limit=batches.DEFAULT_SLICE, own_writes=own)
             if done['state'] != 'reversing':
                 break
         state, undo = 'rolled_back', None
@@ -454,7 +462,7 @@ def _roll_back(s, ctx, draft_id: str, batch_id: str, error: BookflowError) -> No
                                  'blockers': (refused.details or {}).get('blockers')}
     _transaction(s, lambda: _mark(s, ctx, draft_id, {'state': state}, 'opening-draft apply',
                                   'rolled back' if state == 'rolled_back' else 'failed to roll back'))
-    created = (error.details or {}).get('created', 0)
+    created = undone
     if state == 'rolled_back':
         error.message = (error.message.split(' The ')[0] + f" All or nothing: the {created} record(s) it had posted were "
                          "undone as one unit, so nothing of this opening stays in the books. Fix the cause and apply again.")
@@ -486,6 +494,15 @@ def reverse(s, ctx, inp, *, dry_run: bool) -> tuple[dict, dict]:
         raise BookflowError('E_VALIDATION', message=(
             f"Opening draft {draft['id']} is {draft['state']}; only an applied opening is reversed."),
             details={'field': 'draft', 'state': draft['state']})
+    # An applied opening undone ends `reversed`, however many runs the undo took; one that never finished applying
+    # returns to `rolled_back` (review L5).
+    ended = 'reversed' if draft['applied_at'] else 'rolled_back'
+    if _batch_state(s, draft['batch_id']) == 'reversed':  # undone already (a mark that never landed): no dead end
+        if not dry_run:
+            _transaction(s, lambda: _mark(s, ctx, draft['id'], {'state': ended}, 'opening-draft reverse', 'reversed'))
+        return row(s, draft['id']), {'batch': {'id': draft['batch_id']}, 'state': 'reversed', 'reversed_now': 0,
+                                     'remaining': 0, 'steps': [], 'blockers': [], 'fingerprint': None,
+                                     'reversal_batch': None, 'event_id': None, 'stays': []}
     fingerprint = inp.fingerprint
     try:
         while True:
@@ -500,8 +517,7 @@ def reverse(s, ctx, inp, *, dry_run: bool) -> tuple[dict, dict]:
                                           'undo stopped part way for'))
         raise
     if not dry_run and done['state'] == 'reversed':
-        state = 'reversed' if draft['state'] == 'applied' else 'rolled_back'
-        _transaction(s, lambda: _mark(s, ctx, draft['id'], {'state': state}, 'opening-draft reverse', 'reversed'))
+        _transaction(s, lambda: _mark(s, ctx, draft['id'], {'state': ended}, 'opening-draft reverse', 'reversed'))
     done = dict(done)
     done['stays'] = (json.loads(draft['summary']) if draft['summary'] else {}).get('outside_batch') or [
         'the clearing account, at 0.00 (accounts keep their history)']

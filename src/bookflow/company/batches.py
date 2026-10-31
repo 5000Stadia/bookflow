@@ -514,24 +514,43 @@ def _document_uses(s, rec: DocumentRecord, ids: list[str], made_here: set[str]) 
                 uses['tables'].append(table)
             uses['rows'].append({'table': table, 'column': paid, 'id': application, 'transaction_id': payer})
     # Stock it moved that a later document moved again (sold, adjusted, transferred): undoing it would leave that
-    # later movement without the units it took, so the later document holds it (R107 increment 7 review, H1).
-    sql = ('SELECT DISTINCT m1.transaction_id, t.id, t.type, t.number, i.full_name FROM inventory_movements m1 '
-           'JOIN inventory_movements m2 ON m2.item_id = m1.item_id AND m2.sequence > m1.sequence '
-           'AND m2.transaction_id IS NOT m1.transaction_id '
-           'JOIN transactions t ON t.id = m2.transaction_id JOIN items i ON i.id = m1.item_id '
-           'WHERE m1.transaction_id IN (SELECT value FROM json_each(?)) AND m2.reverses_movement_id IS NULL '
-           'AND NOT EXISTS (SELECT 1 FROM inventory_movements r WHERE r.reverses_movement_id = m2.id) '
-           "AND t.status NOT IN ('voided', 'deleted') ORDER BY m2.sequence")
-    for target, later, kind, number, item in s.company.raw.execute(sql, (json.dumps(ids),)).fetchall():
-        if later in made_here:
+    # later movement without the units it took, so the later document holds it (R107 increment 7 review, H1). Linear:
+    # one pass over each item's movements after the batch's first, the batch's own documents left out in SQL, and
+    # each target keeps the first three it finds.
+    import bisect
+    firsts = s.company.raw.execute(
+        'SELECT m.transaction_id, m.item_id, MAX(m.sequence) FROM inventory_movements m '
+        'WHERE m.transaction_id IN (SELECT value FROM json_each(?)) GROUP BY m.transaction_id, m.item_id',
+        (json.dumps(ids),)).fetchall()
+    by_item: dict[str, list[tuple[int, str]]] = {}
+    for target, item, sequence in firsts:
+        by_item.setdefault(item, []).append((sequence, target))
+    made = json.dumps(sorted(made_here))
+    for item, targets in by_item.items():
+        later = s.company.raw.execute(
+            'SELECT m.sequence, t.id, t.type, t.number FROM inventory_movements m JOIN transactions t '
+            'ON t.id = m.transaction_id WHERE m.item_id = ? AND m.sequence > ? AND m.reverses_movement_id IS NULL '
+            'AND m.transaction_id NOT IN (SELECT value FROM json_each(?)) '
+            'AND NOT EXISTS (SELECT 1 FROM inventory_movements r WHERE r.reverses_movement_id = m.id) '
+            "AND t.status NOT IN ('voided', 'deleted') ORDER BY m.sequence",
+            (item, min(seq for seq, _ in targets), made)).fetchall()
+        if not later:
             continue
-        uses = found.setdefault(target, {'tables': [], 'rows': [], 'documents': []})
-        text = f"{kind.replace('_', ' ')} {number or later} (it moves {item} later)"
-        if text not in uses['documents'] and len(uses['documents']) < 3:
-            uses['documents'].append(text)
-        if 'inventory_movements' not in uses['tables']:
-            uses['tables'].append('inventory_movements')
-        uses['rows'].append({'table': 'inventory_movements', 'column': 'item_id', 'id': later, 'transaction_id': later})
+        name = s.company.raw.execute('SELECT full_name FROM items WHERE id = ?', (item,)).fetchone()[0]
+        sequences = [row[0] for row in later]
+        for sequence, target in targets:
+            at = bisect.bisect_right(sequences, sequence)
+            if at >= len(later):
+                continue
+            uses = found.setdefault(target, {'tables': [], 'rows': [], 'documents': []})
+            if 'inventory_movements' not in uses['tables']:
+                uses['tables'].append('inventory_movements')
+            for _, other, kind, number in later[at:at + 3]:
+                text = f"{kind.replace('_', ' ')} {number or other} (it moves {name} later)"
+                if text not in uses['documents'] and len(uses['documents']) < 3:
+                    uses['documents'].append(text)
+                uses['rows'].append({'table': 'inventory_movements', 'column': 'item_id', 'id': other,
+                                     'transaction_id': other})
     return found
 
 
@@ -626,6 +645,8 @@ def _current(s, record_type: str, ids: list[str]) -> dict[str, dict]:
     t = rec.table
     active = t.c.active if 'active' in t.c else sa.literal(True).label('active')
     cols = [t.c.id, t.c.version, t.c.updated_by, t.c.updated_at, active, t.c[rec.name_field]]
+    if getattr(rec, 'document', False) and t.name == 'transactions':
+        cols.append(t.c.status)
     out = {}
     for start in range(0, len(ids), 500):
         chunk = ids[start:start + 500]
@@ -788,6 +809,8 @@ def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
         if row is None:
             blockers.append(_blocker(g, rec, 'E_RECORD_NOT_FOUND', f"{rec.noun} {g['record_id']} no longer exists."))
             continue
+        if g['action'] == 'created' and row.get('status') in ('voided', 'deleted'):
+            continue  # voided or deleted since, by hand: nothing of it is left to undo (R107 increment 7 verification)
         label = f"{rec.noun} {row[rec.name_field]}"
         last = latest.get(g['key'])
         chain = chains.get(g['key']) if not getattr(rec, 'document', False) else None

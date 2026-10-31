@@ -1344,7 +1344,7 @@ the apply 36 ms (a read for the prior values and the update with its audit event
   with no old books" teaches one check of the exact details with the owner before `apply` (the date, the plan's counts
   and totals, which checks are given and which derived), then apply on their yes; `accept_differences` is the owner's
   decision. `plan` and `apply` help say the same.
-- **Permissions:** layer `opening-draft-v1` on `user-home-v1` (re-chained at the merges of main 0b3769e8 and 5c2616b3; 859 commands, descriptor 91a7dc32): `show` and `query`
+- **Permissions:** layer `opening-draft-v1`, now on `automation-v1` (re-chained at the merges of main 0b3769e8, 5c2616b3 and 06c29f99; 862 commands): `show` and `query`
   member reads, the other seven standard, all under `import`; the new capability above. No existing capability, role
   default or threshold changes.
 - **The page** `/c/<company>/opening` (Company menu: "Opening balances"; `opening_pages.py`, `opening.html`,
@@ -1412,3 +1412,25 @@ Reviewed at 8ce229b4; each finding fixed with a test (`tests/test_opening_balanc
   test asserts the blocker names the payment on invoice 1012; a new stock item's cost rounds half-up.
 - **Import reversal** (`tests/test_import_documents.py`): a customer `create_missing` made for its own invoice is no
   use of it, and a payment applied later to that invoice is named.
+
+### As built: the verification of the review fixes (at 2e7fedab)
+
+- **M1, a resumed apply.** The automatic undo passes `own_writes` only when this call opened the batch: every record
+  in it is then this call's own. An apply that resumes a batch an earlier call began (perhaps another person's, or
+  an agent's principal's) undoes a refusal only under the caller's own delete grants; without them the draft ends
+  `failed`, the error names the grants, and nothing is deleted in the caller's name. The count of records undone is
+  read from the batch. Tests: a clerk with no delete grant, and an agent over HTTP, each resuming a stopped opening.
+- **N1, no dead end.** Decided by the coordinator: the shared plan (`batches.plan`) passes over a created document
+  already voided or deleted (by hand, since): nothing of it is left to undo, so the reversal and the automatic undo
+  finish. `opening-draft reverse` on a draft whose batch is already reversed only marks the draft; `discard` takes a
+  `failed` or `applying` draft once nothing of its batch stands. Test: a stopped apply, invoices deleted and voided by
+  hand, apply again, ending `rolled_back` with nothing in the books, then discarded.
+- **N2, the stock check is linear.** `_document_uses` reads each item's movements after the batch's first once, the
+  batch's own documents left out in SQL, and keeps three names per document (by bisection), in place of a pairwise
+  join. Test (`tests/test_batches.py`): 2,000 and 4,000 documents on one item with one later sale; every document is
+  held by it, in 0.015 s and 0.086 s (measured 2026-10-30; the pairwise join took 3.8 s at 600 rows), one name per
+  document.
+- **Low.** An applied opening whose undo took more than one run ends `reversed`; one that never finished applying
+  ends `rolled_back` (decided by whether it was ever applied).
+- **Permissions:** after the merge of main 06c29f99 (R187 automation), `opening-draft-v1` sits on `automation-v1`
+  (862 commands).
