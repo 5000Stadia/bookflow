@@ -87,9 +87,10 @@
 #pos .pos-tender-total { font-size: 1.1rem; margin: 0 0 .6rem; }
 #pos .pos-tender-total b { display: block; font-size: 2.4rem; font-variant-numeric: tabular-nums; }
 #pos .pos-methods, #pos .pos-quick { display: flex; flex-wrap: wrap; gap: .4rem; margin: .4rem 0; }
-#pos .pos-methods button { flex: 1 1 6rem; font-size: 1.05rem; }
+#pos .pos-methods button { flex: 1 1 8rem; min-width: min(100%, 8rem); font-size: 1.05rem;
+  word-break: normal; overflow-wrap: break-word; }
 #pos .pos-methods button[aria-pressed="true"] { background: var(--pos-accent); color: #fff; border-color: var(--pos-accent); }
-#pos .pos-quick button { flex: 1 1 4.5rem; }
+#pos .pos-quick button { flex: 1 0 auto; min-width: 6rem; white-space: nowrap; }
 #pos .pos-keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem; }
 #pos .pos-keypad button { min-height: 64px; font-size: 1.4rem; }
 #pos .pos-change-due { font-size: 1.2rem; margin: .6rem 0 0; }
