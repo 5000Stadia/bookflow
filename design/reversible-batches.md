@@ -130,7 +130,7 @@ demo-reset or checkpoint behavior in this increment. A separate reference-year p
   atomically. Ordinary dismissal still reserves that period. Sent notices refuse with their identity and
   “sent mail cannot be recalled”; later changes and live delivery dependencies also block. Notice batches
   unwind newest first within their period. Corrected runs retain dismissed history and create new notices.
-- Migration `co0124` adds `overdue_notices.period_released` and a partial unique period index, preserving the
+- Migration `co0126` (built as co0124, renumbered at integration after co0125) adds `overdue_notices.period_released` and a partial unique period index, preserving the
   original period on historical rows. `notice-reversal-v1` adds the inverse command on the accepted
   `reversible-batch-v1` permission layer. No accepted permission layer is changed.
 - Tests exercise exact before-images and effect lists, atomic named refusals, interrupted reversal and resumption,
