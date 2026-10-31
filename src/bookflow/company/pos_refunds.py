@@ -96,7 +96,7 @@ def lines(s, inp):
     customer = s.company.conn.execute(sa.select(c.customers).where(c.customers.c.id == revision['name_id'])).mappings().one()
     method = json.loads(sale['tenders'])[0]['payment_method_id']
     method_row = s.company.conn.execute(sa.select(c.payment_methods).where(c.payment_methods.c.id == method)).mappings().one()
-    return m.PosRefundLinesOutput(sale_id=sale['id'], receipt_number=header['number'],
+    return m.PosRefundLinesOutput(sale_id=sale['id'], receipt_number=('INV:' if sale['document_type'] == 'invoice' else '') + header['number'],
         pos_register=Named(id=reg['id'], name=reg['name']), customer=_customer(s, customer) if sale['customer_named'] else None,
         payment_method=PaymentMethodRef(id=method, name=method_row['name'], kind=method_row['kind']), lines=result)
 
@@ -120,6 +120,49 @@ def _unlinked_cost(s, item, wanted, date):
         return round_ratio_half_even(value * wanted, stock)
     else:
         return round_ratio_half_even((unit_price.row_units(item, 'cost') or 0) * wanted, 1000000 * unit_price.SCALE)
+
+
+def _payouts(s, sale, reg, inp, total):
+    if inp.settlement == 'store_credit':
+        return []
+    if not reg['refund_account_id']:
+        raise _invalid('pos_register', 'Set a cash refund bank account on this register before refunding money.')
+    refunds._funding(s, reg['refund_account_id'], total.currency)
+    if inp.settlement == 'cash':
+        offered = [row for row in pos_sales._offered(s, reg) if row['active'] and row['kind'] == 'cash']
+        if not offered:
+            raise _invalid('settlement', 'This register offers no active cash payment method.')
+        allocations = [(None, offered[0]['id'], total.minor_units)]
+    else:
+        tenders = json.loads(sale['tenders'])
+        spent = {}
+        for raw in s.company.conn.execute(sa.select(c.pos_refunds.c.result_json).where(
+                c.pos_refunds.c.sale_id == sale['id'])).scalars():
+            previous = json.loads(raw)
+            if previous['settlement'] != 'original':
+                continue
+            for tender in previous.get('tenders') or [dict(tender_index=0, amount=previous['total'])]:
+                index = tender['tender_index']
+                spent[index] = spent.get(index, 0) + tender['amount']['minor_units']
+        allocations, left = [], total.minor_units
+        for index, tender in enumerate(tenders):
+            paid = tender.get('applied_minor_units', tender['amount_minor_units'] -
+                              (sale['change_minor_units'] if tender['kind'] == 'cash' else 0))
+            amount = min(left, max(0, paid - spent.get(index, 0)))
+            if amount:
+                allocations.append((index, tender['payment_method_id'], amount))
+                left -= amount
+            if not left:
+                break
+        if left:
+            raise _invalid('settlement', 'The original tenders have no remaining capacity for this refund. Ask the bookkeeper to resolve earlier returns.')
+    result = []
+    for index, method_id, amount in allocations:
+        method = refunds._method(s, method_id)
+        result.append(m.RefundTenderOutput(tender_index=index,
+            payment_method=PaymentMethodRef(id=method.id, name=method.label, kind=method.kind),
+            amount=Money(amount, total.currency).to_dict(), reference=inp.reference))
+    return result
 
 
 def prepare(s, ctx, inp):
@@ -180,24 +223,12 @@ def prepare(s, ctx, inp):
         raise _invalid('lines', 'A POS return must have a positive total.')
     if inp.expected_total is not None and Money.parse(inp.expected_total, currency).minor_units != total.minor_units:
         raise BookflowError('E_PREVIEW_STALE', details={'total': total.amount, 'expected_total': inp.expected_total})
-    method = None
-    if inp.settlement != 'store_credit':
-        if not reg['refund_account_id']:
-            raise _invalid('pos_register', 'Set a cash refund bank account on this register before refunding money.')
-        refunds._funding(s, reg['refund_account_id'], currency)
-        if inp.settlement == 'original':
-            method_id = json.loads(sale['tenders'])[0]['payment_method_id']
-        else:
-            offered = [row for row in pos_sales._offered(s, reg) if row['active'] and row['kind'] == 'cash']
-            if not offered:
-                raise _invalid('settlement', 'This register offers no active cash payment method.')
-            method_id = offered[0]['id']
-        method_facts = refunds._method(s, method_id)
-        method = PaymentMethodRef(id=method_facts.id, name=method_facts.label, kind=method_facts.kind)
+    payouts = _payouts(s, sale, reg, inp, total)
+    method = payouts[0].payment_method if payouts else None
     out = m.PosRefundOutput(id=new_id(), operation_key=inp.operation_key, sale_id=sale['id'] if sale else None,
         pos_register=Named(id=reg['id'], name=reg['name']), customer=_customer(s, customer) if not sale or sale['customer_named'] else None,
         credit_memo=Named(id=credit.preview.id, name=credit.preview.number), date=date, created_at=clock.now_iso(),
-        clerk_id=s.actor.id, settlement=inp.settlement, payment_method=method, reference=inp.reference,
+        clerk_id=s.actor.id, settlement=inp.settlement, payment_method=method, reference=inp.reference, tenders=payouts,
         lines=[m.RefundLineOutput(source_line=line.source_line_id, item_id=line.item_id,
             item_name=line.item_snapshot.item.label, quantity=line.quantity, unit_price=source_prices.get(line.source_line_id) or (line.unit_price.model_dump() if line.unit_price else None),
             net=line.net.model_dump(), tax=line.tax.model_dump()) for line in credit.preview.revision.lines],
@@ -213,14 +244,17 @@ def apply(plan, ctx, s):
         raise BookflowError('E_PREVIEW_STALE', details={'total': fresh.preview.total.amount})
     credit = credits.apply(fresh.data['credit'], ctx, s, command_name='pos refund')
     out = fresh.preview.model_copy(update={'credit_memo': Named(id=credit.output.id, name=credit.output.number)})
-    paid = None
-    if out.settlement != 'store_credit':
-        refund_input = CustomerRefundPostInput(date=out.date, sources=[{'credit_memo': credit.output.id}],
-            funding_account=fresh.data['register']['refund_account_id'], method=out.payment_method.id,
-            reference=out.reference)
+    payments = []
+    for tender in out.tenders:
+        refund_input = CustomerRefundPostInput(date=out.date, sources=[{
+            'credit_memo': credit.output.id, 'amount': tender.amount.amount}],
+            funding_account=fresh.data['register']['refund_account_id'], method=tender.payment_method.id,
+            reference=tender.reference)
         paid = refunds.apply(refunds.prepare(s, ctx, refund_input, 'post',
             pos_credit=(credit.output.id, ctx.request_id)), ctx, s, command_name='pos refund')
-        out.refund = Named(id=paid.output.id, name=paid.output.number)
+        tender.refund = Named(id=paid.output.id, name=paid.output.number)
+        payments.append(paid)
+    out.refund = out.tenders[0].refund if out.tenders else None
     row = dict(id=out.id, operation_key=out.operation_key, input_sha256=_hash(fresh.data['input']),
         register_id=out.pos_register.id, sale_id=out.sale_id, credit_memo_id=out.credit_memo.id,
         refund_id=out.refund.id if out.refund else None, customer_named=out.customer is not None,
@@ -231,7 +265,7 @@ def apply(plan, ctx, s):
     audit.write_event_to(s.company, ctx, 'pos refund', summary,
         [Touched('pos_refund', out.id, 'create', None, 1, row, db='company')],
         actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=getattr(s, 'directive_code', None))
-    hooks = [a.after_commit for a in (credit, paid) if a and a.after_commit]
+    hooks = [a.after_commit for a in (credit, *payments) if a and a.after_commit]
     def after_commit():
         for hook in hooks:
             hook()
