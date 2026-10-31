@@ -1303,6 +1303,7 @@ PAGE_RUNS: dict[str, tuple[str, ...]] = {
     '/job-type': ('job-type query', 'job-type query options'),
     '/journal/post': ('custom-field list',),
     '/mileage': ('customer list', 'item list', 'mileage-rate list', 'vehicle list'),
+    '/opening': ('opening-draft query',),
     '/other-name': ('other-name query', 'other-name query options'),
     '/other-name/create': ('custom-field list',),
     '/payment': ('payment-method list',),
@@ -1347,7 +1348,11 @@ def page_allowed(destination: str, permits, lookup=None) -> bool:
     flag = PAGE_FLAGS.get(key) or (f"section:{key[8:]}" if key.startswith("/_group/") else None)
     if flag is None:
         return True
-    return permits.flag(flag) if isinstance(permits, Reader) else True
+    if isinstance(permits, Reader):
+        return permits.flag(flag)
+    # A bare predicate (a section page's links): "some company write" is still decidable from it (R114 inc 4: All
+    # commands answers the refusal page without one, so it is not linked either).
+    return Reader("", permits).flag(flag) if flag == "advanced" else True
 
 
 # Pages that are not a noun's own page, and the command each one reads. A Home may be any of these, any destination

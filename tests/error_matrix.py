@@ -2902,6 +2902,7 @@ _POS_WRITE = {
     'E_FEATURE_DISABLED': 'POS is off for the company',
     'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
     'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+    'E_IDEMPOTENCY_MISMATCH': 'a reused operation key with other input',
 }
 MATRIX['pos-register create'] = dict(_POS_WRITE)
 MATRIX['pos-register update'] = dict(_POS_WRITE, E_VERSION_CONFLICT='changed since the version read')

@@ -20,7 +20,7 @@
 <div class="finder-box"><svg class="icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg><input id="finder-input" type="search" role="combobox" aria-expanded="true" aria-controls="finder-results" aria-autocomplete="list" aria-label="Find a task or command" placeholder="Find a task or command" autocomplete="off" spellcheck="false"><button type="button" class="finder-close" data-finder-close>Close</button></div>
 <ul class="finder-results" id="finder-results" role="listbox" aria-label="Tasks and commands"></ul>
 <p class="finder-status" id="finder-status" role="status"></p>
-<p class="finder-footer"><a href="/c/{{ hc }}/_all">All commands</a><span class="finder-hint">↑ ↓ to move · Enter to open · Esc to close</span></p>
+<p class="finder-footer">{% if nav.get('advanced', true) %}<a href="/c/{{ hc }}/_all">All commands</a>{% endif %}<span class="finder-hint">↑ ↓ to move · Enter to open · Esc to close</span></p>
 </dialog>{% endif %}
 <main id="main-content" tabindex="-1">{% block body %}{% endblock %}</main>
 <noscript><p class="warn">Enable JavaScript in your browser to enter and save changes.</p></noscript>
