@@ -313,7 +313,8 @@ def test_interrupt_after_durable_unmerge_resumes_without_repeating(books, monkey
 
 
 @pytest.mark.parametrize('kind', KINDS)
-def test_original_document_changed_since_merge_blocks_reversal(books, kind):
+@pytest.mark.parametrize('change', ('edit', 'delete'))
+def test_original_document_changed_since_merge_blocks_reversal(books, kind, change):
     merged, survivor = _setup(books, kind)
     if kind == 'item':
         # Stocked items with history cannot merge; service history can and must remain intact.
@@ -328,7 +329,10 @@ def test_original_document_changed_since_merge_blocks_reversal(books, kind):
             document = db.execute('SELECT id FROM transactions WHERE type=? ORDER BY rowid LIMIT 1', ('journal_entry' if family == 'journal' else family,)).fetchone()[0]
         command, selector = family + ' update', family
     made = _merge(books, kind, merged, survivor)
-    _run(books, command, {selector: document, 'expected_version': 1, 'memo': 'Corrected after merge'})
+    if change == 'delete':
+        _run(books, command.replace(' update', ' delete'), {selector: document, 'expected_version': 1})
+    else:
+        _run(books, command, {selector: document, 'expected_version': 1, 'memo': 'Corrected after merge'})
     _refused_unchanged(books, made['batch_id'], document)
 
 
