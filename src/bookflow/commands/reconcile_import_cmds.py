@@ -55,13 +55,18 @@ class CsvMapping(m.Model):
 
 class ImportInput(m.Dated):
     account: m.AccountSelector
+    from_inbox: bool = Field(False, description=(
+        "Use live bank inbox lines, including ignored lines, after the previous statement or opening date "
+        "through statement_date (or the draft closing date). Give no file or CSV options. "
+        "With start, supply statement_date and ending_balance; with draft, use its period. "
+        "Matches are read afresh; no inbox decision is changed."))
     content: str | None = Field(None, min_length=1, max_length=5_000_000,
                                 description=("The statement file's text, exactly as downloaded from the bank. "
-                                             "Give this or `attachment`."),
+                                             "Give this, `attachment`, or `from_inbox`."),
                                 json_schema_extra={'multiline': True, 'text_file': '.csv,.ofx,.qfx,.txt,text/csv,text/plain'})
     attachment: str | None = Field(None, min_length=1, max_length=26, description=(
         "An attachment in this company holding the statement file, as `attachment add company_info <company id> FILE` "
-        "returns its id (over MCP the file goes in that command's transport.input_file). Give this or `content`."))
+        "returns its id (over MCP the file goes in that command's transport.input_file). Give this, `content`, or `from_inbox`."))
     format: Literal['auto', 'ofx', 'qfx', 'csv'] = Field(
         'auto', description='File format; auto tells OFX/QFX (an <OFX> element) from CSV.')
     csv_mapping: CsvMapping = Field(default_factory=CsvMapping,
@@ -86,8 +91,15 @@ class ImportInput(m.Dated):
 
     @model_validator(mode='after')
     def target(self):
-        if (self.content is None) == (self.attachment is None):
+        if not self.from_inbox and (self.content is None) == (self.attachment is None):
             raise ValueError('give exactly one of content or attachment')
+        if self.from_inbox and (self.content is not None or self.attachment is not None):
+            raise ValueError('give exactly one of content, attachment or from_inbox')
+        if self.from_inbox and (self.format != 'auto' or self.csv_mapping != CsvMapping()
+                                or self.mapping_name or self.save_mapping):
+            raise ValueError('from_inbox takes no file format or CSV mapping options')
+        if self.from_inbox and self.draft is None and self.statement_date is None:
+            raise ValueError('from_inbox needs statement_date or draft')
         if self.draft is not None and self.start:
             raise ValueError('give draft or start, not both')
         if self.suggest_days < self.match_days:
@@ -140,7 +152,7 @@ class ImportCounts(m.Model):
 class ImportOutput(m.Model):
     account_id: m.ID
     currency: m.Currency
-    format: Literal['ofx', 'qfx', 'csv']
+    format: Literal['ofx', 'qfx', 'csv', 'inbox']
     statement_date: str | None
     ending_balance: m.Units | None = Field(description='Minor units, in the reconciliation\'s sign (what a card owes is positive).')
     counts: ImportCounts
@@ -334,7 +346,8 @@ def _prepare(inp, ctx, s, ids):
     else:
         text = inp.content
     try:
-        parsed = files.parse(text, inp.format, places, mapping)
+        parsed = (files.Statement(format='inbox', lines=()) if inp.from_inbox
+                  else files.parse(text, inp.format, places, mapping))
     except BookflowError as error:
         if inp.attachment is None or error.code != 'E_VALIDATION':
             raise
@@ -366,7 +379,11 @@ def _prepare(inp, ctx, s, ids):
             raise BookflowError('E_RECONCILIATION_DRAFT_STATE', message=(
                 'draft must be an open statement reconciliation on this account'))
         statement_date = draft.header.statement_date
+        if inp.from_inbox:
+            ending = draft.header.entered_balance
     elif inp.start:
+        if inp.from_inbox and ending is None:
+            raise files.invalid('ending_balance', 'The inbox gives no ending balance; pass ending_balance from the statement.')
         if statement_date is None or ending is None:
             raise files.invalid('ending_balance' if statement_date else 'statement_date',
                                 ('a CSV statement does not say its statement date; pass statement_date, the closing date printed '
@@ -384,6 +401,11 @@ def _prepare(inp, ctx, s, ids):
             draft = drafts.start(snapshot, start_input, identity=ids['draft'],
                                  revision_id=ids['start_revision'], opening_draft=opening_draft)
             started = start_input
+    bank_line_ids = {}
+    if inp.from_inbox:
+        from bookflow.company import statement_inbox
+        parsed, text, bank_line_ids = statement_inbox.read(
+            s, snapshot, account_id, statement_date, draft, opening_draft)
     cutoff = statement_date or max((v.date for v in parsed.lines), default=None)
     if cutoff is None:
         raise files.invalid('content', 'the file has no transactions')
@@ -476,7 +498,7 @@ def _prepare(inp, ctx, s, ids):
     return dict(output=output, text=text, account_id=account_id, started=started, start_value=draft if started else None,
                 opening_draft=opening_draft, marks=marks, parsed=parsed, lines=lines, mapping=mapping,
                 draft_id=value.id if value is not None else None, ending=ending,
-                statement_date=statement_date)
+                statement_date=statement_date, bank_line_ids=bank_line_ids)
 
 
 def _commit(s, ctx, operation, *, account_id, operation_id, event_id, kind, summary, document,
@@ -528,7 +550,8 @@ ERRORS = sorted(set(rc.ERRORS) | {'E_AMOUNT_PRECISION'})
 
 reconcile_import = command(
     'reconcile import', scope='company',
-    description='Read a bank or credit card statement file (OFX, QFX or CSV; pasted text, or an attachment by id) against the account: '
+    description='Read a bank or credit card statement file (OFX, QFX or CSV; pasted text, or an attachment by id) against the account, '
+                'or use from_inbox with statement_date and ending_balance (start) or an existing draft; '
                 'each line comes back matched to one entry, suggested, unmatched (enter it), or already '
                 'reconciled. Nothing is posted. With start (or draft) the matched entries are ticked on a '
                 'statement reconciliation, started from the file\'s statement date and ending balance; finish '
@@ -623,6 +646,7 @@ def _store(s, ctx, inp, prepared, summary):
                     file_sha256=hashlib.sha256(prepared['text'].encode()).hexdigest(),
                     statement_date=prepared['statement_date'], ending_balance=prepared['ending'],
                     suggest_days=inp.suggest_days, line_count=len(prepared['lines']), lines=new_lines,
+                    bank_line_ids=prepared['bank_line_ids'],
                     made=dict(created_at=at, created_by=actor.id if actor else None,
                               created_via=ctx.interface.value, audit_event_id=event))
     if saving:

@@ -38,8 +38,8 @@ def test_the_people_only_list_is_exactly_the_five_and_every_other_entry_is_a_cap
     # automation-v1 (on user-home-v1) adds none: automate.bank-rule and automate.invoice are capabilities, not acts.
     # pos-v1 (R114 inc 4, on opening-draft-v1) adds none: its five capabilities are grantable, and an agent needs an
     # explicit grant of each (hub.capabilities).
-    # bank-rule-v1 (R108 increment 4, on pos-v1) adds none: making a rule live is automate.bank-rule.
-    assert tip is runtime.known_catalog(c.BANK_RULE_POLICY_VERSION)
+    # bank-reconcile-v1 (R108 increment 6, on bank-rule-v1) adds no people-only acts.
+    assert tip is runtime.known_catalog(c.BANK_RECONCILE_POLICY_VERSION)
     assert people_only.people_only_commands() == FIVE == set(layer.STAYS_HUMAN)
     assert sorted(a.key for a in tip.CATALOG.admin_actions if a.human_only) == sorted(
         people_only.PEOPLE_ONLY_PREFIX + x for x in FIVE)
@@ -385,7 +385,7 @@ def test_a_root_activated_at_the_previous_catalog_upgrades_with_nothing_broader_
                                                      "expected_catalog_sha256": state["catalog_sha256"]}, headers=REASON)
         assert upgraded["changed"] and upgraded["affected_agents"] == []
         with sqlite3.connect((root / "hub.db").as_uri() + "?mode=ro", uri=True) as db:
-            assert db.execute("SELECT catalog_version FROM permission_state").fetchone() == ("bank-rule-v1",)  # the tip, on pos-v1
+            assert db.execute("SELECT catalog_version FROM permission_state").fetchone() == ("bank-reconcile-v1",)  # the tip, on bank-rule-v1
             assert db.execute("SELECT count(*) FROM agent_authority WHERE suspended_at IS NOT NULL AND agent_user_id=?",
                               (agent,)).fetchone() == (0,)
             assert db.execute("SELECT count(*) FROM api_tokens WHERE revoked_at IS NOT NULL").fetchone() == (0,)

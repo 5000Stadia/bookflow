@@ -97,7 +97,7 @@ card's flipped).
 |---|---|
 | `waiting` | Imported; no decision. May carry a **proposal**: a suggested entry, or a payee, account and class from a rule or from history, with the reason |
 | `matched` | Linked to an existing entry. `how`: `auto` (the matcher's unique strong match at import), `person`, `agent` or `rule`. The entry is untouched |
-| `added` | An entry was created from the line; the line holds its id. This is the only state that can block a reversal |
+| `added` | An entry was created from the line; the line holds its id. The created entry can block a reversal independently of a statement copy |
 | `transfer` | Linked to a transfer entry between two of the company's accounts, with the other end's line when it is in the inbox (§4) |
 | `ignored` | Set aside with a reason (`already_entered`, `not_ours`, `duplicate`, `other`); can return to `waiting` |
 | `settled` | The matcher found the entry already cleared by a certified statement; nothing to do |
@@ -244,7 +244,7 @@ this one brought in, so reversing the earlier would leave the later one's overla
 | `entry_applied` | Something was applied against a created entry (a payment to a bill, a credit used) | `bill-payment unapply`, `payment unapply` |
 | `entry_edited` | A created entry has a revision after the one the import made | delete it yourself, or leave it and ignore the import |
 | `entry_linked` | A created transfer entry is matched by a line of another account's live import | reverse that import first |
-| `statement_copy` | A line was copied into a reconciliation's `statement_lines` | not clearable while that draft exists; the plan names it |
+| `statement_copy` | A line was copied into a standing reconciliation's `statement_lines` | `reconcile discard` if open; a certified statement holds the copy while active; the plan names the draft |
 | `no_authority` | The caller lacks the delete grant (`transaction.<family>.delete`) for a created entry's family | a person with the grant |
 
 Everything else is not a blocker: decisions on lines that created nothing (match, ignore, unmatch) are undone with the
@@ -1049,3 +1049,52 @@ local skip, the next import on the host acting older lines first within the slic
 back with its `--lines` undo and its import's reversal; the company setting holding rules back; `automation list` from
 a fresh CLI process; an agent establisher paused when its principal is narrowed.
 `tests/test_bank_rule_surfaces.py` runs the eight through Python, CLI, HTTP and MCP, editing conditions too.
+
+## As built: increment 6
+
+- **Migration co0120**, on co0119: nullable `statement_lines.bank_line_id`, a foreign key to the inbox line,
+  indexed for reversal lookup. Existing file lines keep null. `statement_imports.format` also accepts `inbox`;
+  its table is rebuilt with its existing rows, indexes and triggers (including local ones) retained. Statement lines and mappings
+  keep their append-only guards. No ledger posting changes.
+- **`reconcile import --from-inbox`** uses live inbox lines on the selected account, after the previous statement
+  closing date (or opening date) through the requested closing date, inclusive. With `draft`, its header and base
+  define that period; with `start`, give `statement_date` and `ending_balance`. A review without either uses the
+  current chain and requires `statement_date`. The first period requires the account's adopted opening or its one
+  open opening draft. Invalid periods and stale draft chains refuse. The inbox never supplies a closing balance.
+- **Decided: all live states are evidence**, including ignored lines. Ignoring an inbox task does not remove a bank
+  statement line. The shared matcher reads the current books afresh; no saved inbox link is treated as a clearing
+  instruction, and no inbox state is changed. Bank signs remain on returned lines; card signs flip only for matching
+  and the stored statement, as they do for a file. Reused-FITID suffixes and CSV occurrence keys remain intact.
+- **One existing reconciliation path.** The source becomes `statement_files.Line` values, then the existing matching,
+  draft start, marking, gap detection and `statement_store.store` path runs unchanged. Copy provenance is written
+  with the statement in the same transaction. Repeating the import stores and marks nothing twice; a line already
+  stored from a file is not relabeled. Empty periods can start an empty draft and create no statement import.
+  File and CSV options with `from_inbox` refuse. Paging fingerprints include the period and immutable source identities,
+  so new evidence invalidates an old cursor. Reads are repeated inside the write; a partial import reversal refuses
+  copying until it finishes.
+- **`statement_copy`** now names the source bank line and reconciliation draft. It blocks reversal and move while
+  the draft is open or consumed by an active certificate, using the same standing-draft predicate as inbox dedupe.
+  `reconcile discard` releases an open draft's hold while retaining its copies as history. A certified statement
+  keeps the hold while active; no public undo command is added by this increment. Strict newest-first ordering and
+  the other reversal blockers are unchanged.
+- **Permissions.** New layer `bank-reconcile-v1` on `bank-rule-v1`, 874 commands, descriptor `4a5a917f`.
+  Only the inbox input additionally asks for `bank-feed` at member; file imports retain their existing authority.
+  Every merged descriptor stays unchanged. There is no new write command: `reconcile import` remains `not-a-record`
+  in `import_kinds`. No deposit read-manifest table gained a column, so its pins remain unchanged.
+- **Checks.** `test_bank_reconcile.py` covers file/inbox draft equality, bank and card signs, unchanged books,
+  repeat copies, source identities, period boundaries, ignored lines, reversed and other-account lines, paging,
+  incompatible file inputs, empty periods, partial-reversal refusal, discard releasing the hold, and Python, CLI,
+  HTTP and MCP. `test_bank_reconcile_lifecycle.py` covers full certification, its retained blocker, the next period,
+  conditional permission denial, and migration of populated statement tables with rows and append-only guards intact.
+  The existing reconciliation golden tests remain unchanged. Public undo is unavailable and is not exercised.
+
+**Final verification (2026-10-31).** After the last code edit, the required 56-file targeted run through `bf-suite.sh`:
+541 passed, 11 failed, 74 errors, 1 skipped, in 2312.55 seconds. All 85 failures/errors were the sandbox refusing
+socket operations with `PermissionError: [Errno 1] Operation not permitted`, so hosted HTTP/MCP and browser runtime
+checks remain unverified here. Of the 19 new tests, 18 passed; the four-surface harness could not start its host.
+The standalone CLI witness passed, as did file-import golden outputs, full reconciliation, conditional permission
+checks, populated migration preservation, backup rewind/restore, audit guards, and catalog/cache/history checks.
+The skipped indexed-reconciliation oracle test requires `BOOKFLOW_R180_ORACLE_ROOT`, which was not supplied.
+The bank browser file was excluded as requested; the whole suite was not run. Generated docs were regenerated and
+`bookflow docs generate --check` passed after the last code edit. Independent static review passed. No public undo
+path was exercised because no public undo command exists.

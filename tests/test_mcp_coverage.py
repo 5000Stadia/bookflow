@@ -445,6 +445,7 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # same nine, name, expected_version) -- their null branches. No new variant kind.
     # 4392 -> 4431 (R108 inc 4): the eight bank-rule commands' optional fields and each condition's value_to (their
     # null branches), and company update's bank_rule_learning. No new variant kind.
+    # R108 increment 6: reconcile import gains from_inbox, a plain bool; no new material schema node.
     assert sum(len(group["paths"]) for group in mapped)==4431
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as

@@ -119,6 +119,7 @@ RESOURCE_PAIRS = {
     'reconciliation_adapters.prepare_prospective': {('customer-work', 'member')},
     'reconciliation_proposals.preview': {('ledger.post', 'standard')},
     # bank-feed-v1: going on past an account-number mismatch is a connection-level decision.
+    'statement_inbox.require_inbox': {('bank-feed', 'member')},
     'bank_feeds._require_connect': {('bank-feed.connect', 'admin')},
     # opening-draft-v1: posting an opening that does not tie is a person's act an agent holds only by grant.
     'opening_drafts.require_accept': {('opening.accept-differences', 'standard')},

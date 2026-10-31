@@ -650,7 +650,7 @@ Example JSON output:
 
 ## `reconcile import`
 
-Read a bank or credit card statement file (OFX, QFX or CSV; pasted text, or an attachment by id) against the account: each line comes back matched to one entry, suggested, unmatched (enter it), or already reconciled. Nothing is posted. With start (or draft) the matched entries are ticked on a statement reconciliation, started from the file's statement date and ending balance; finish it with `reconcile preview` and `reconcile finish`. Safe to run again: nothing already true is repeated. Use --dry-run to preview.
+Read a bank or credit card statement file (OFX, QFX or CSV; pasted text, or an attachment by id) against the account, or use from_inbox with statement_date and ending_balance (start) or an existing draft; each line comes back matched to one entry, suggested, unmatched (enter it), or already reconciled. Nothing is posted. With start (or draft) the matched entries are ticked on a statement reconciliation, started from the file's statement date and ending balance; finish it with `reconcile preview` and `reconcile finish`. Safe to run again: nothing already true is repeated. Use --dry-run to preview.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -681,8 +681,9 @@ The same example as complete `bookflow_run` arguments:
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `account` | `--account` | string | yes | no | — | Bank or credit card account ID or canonical full name.; minimum length 1; maximum length 1000 |
-| `content` | `--content` | string \| null | no | yes | null | The statement file's text, exactly as downloaded from the bank. Give this or `attachment`. |
-| `attachment` | `--attachment` | string \| null | no | yes | null | An attachment in this company holding the statement file, as `attachment add company_info <company id> FILE` returns its id (over MCP the file goes in that command's transport.input_file). Give this or `content`. |
+| `from_inbox` | `--from-inbox` | boolean | no | no | false | Use live bank inbox lines, including ignored lines, after the previous statement or opening date through statement_date (or the draft closing date). Give no file or CSV options. With start, supply statement_date and ending_balance; with draft, use its period. Matches are read afresh; no inbox decision is changed. |
+| `content` | `--content` | string \| null | no | yes | null | The statement file's text, exactly as downloaded from the bank. Give this, `attachment`, or `from_inbox`. |
+| `attachment` | `--attachment` | string \| null | no | yes | null | An attachment in this company holding the statement file, as `attachment add company_info <company id> FILE` returns its id (over MCP the file goes in that command's transport.input_file). Give this, `content`, or `from_inbox`. |
 | `format` | `--format` | literal["auto", "ofx", "qfx", "csv"] | no | no | "auto" | File format; auto tells OFX/QFX (an <OFX> element) from CSV. |
 | `csv_mapping.date` | `--csv-mapping-date` | string | no | no | "" | Header of the posted-date column.; maximum length 200 |
 | `csv_mapping.amount` | `--csv-mapping-amount` | string | no | no | "" | Header of a signed amount column (positive = money in).; maximum length 200 |
@@ -744,7 +745,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 |---|---|---|---|---|---|
 | `account_id` | string | yes | no | — | — |
 | `currency` | string | yes | no | — | — |
-| `format` | literal["ofx", "qfx", "csv"] | yes | no | — | — |
+| `format` | literal["ofx", "qfx", "csv", "inbox"] | yes | no | — | — |
 | `statement_date` | string \| null | yes | yes | — | — |
 | `ending_balance` | integer \| null | yes | yes | — | Minor units, in the reconciliation's sign (what a card owes is positive). |
 | `counts` | object | yes | no | — | — |

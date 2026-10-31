@@ -2,7 +2,7 @@
 
 # `company.statement_imports`
 
-One imported bank statement file, kept as the lines a reconciliation draft was built from.
+One imported bank statement source, kept as the lines a reconciliation draft was built from.
 
 Database: `company`.
 
@@ -11,12 +11,12 @@ Database: `company`.
 | `id` | VARCHAR(26) | no | — | primary key 1 | — | — | Stable ULID of this import. |
 | `account_id` | VARCHAR(26) | no | — | — | — | accounts.id | Bank or credit card account the statement is for. |
 | `draft_id` | VARCHAR(26) | no | — | — | ix_statement_imports_draft | reconciliation_drafts.id | Statement reconciliation draft the lines were imported into. |
-| `format` | TEXT | no | — | — | — | — | File format: ofx, qfx or csv. |
-| `file_sha256` | TEXT | no | — | — | — | — | SHA-256 of the file text as given; the file itself is not kept. |
+| `format` | TEXT | no | — | — | — | — | Source format: ofx, qfx, csv or inbox. |
+| `file_sha256` | TEXT | no | — | — | — | — | SHA-256 of the file text or the selected inbox evidence and period; file text is not kept. |
 | `statement_date` | TEXT | no | — | — | — | — | Statement date the import used. |
 | `ending_balance` | INTEGER | yes | — | — | — | — | Ending balance in minor units, in the reconciliation's sign; null when the file gave none. |
 | `suggest_days` | INTEGER | no | — | — | — | — | Date window, in days, a line may support a ticked movement within. |
-| `line_count` | INTEGER | no | — | — | — | — | Lines in the file after FITID dedupe. |
+| `line_count` | INTEGER | no | — | — | — | — | Lines in the source after dedupe. |
 | `created_at` | TEXT | no | — | — | — | — | UTC timestamp of the import. |
 | `created_by` | VARCHAR(26) | yes | — | — | — | — | Actor who imported it. |
 | `created_via` | TEXT | no | — | — | — | — | Interface it came through. |

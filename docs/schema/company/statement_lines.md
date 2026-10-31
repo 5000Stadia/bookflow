@@ -13,6 +13,7 @@ Database: `company`.
 | `account_id` | VARCHAR(26) | no | — | — | ix_statement_lines_account_line | accounts.id | Account the line belongs to (copied from the import for lookup). |
 | `draft_id` | VARCHAR(26) | no | — | unique with draft_id + line_id | — | reconciliation_drafts.id | Draft the line belongs to (copied from the import for lookup). |
 | `line_id` | TEXT | no | — | unique with draft_id + line_id | ix_statement_lines_account_line | — | FITID-based id, or a stable hash of the line when the bank gave no FITID. |
+| `bank_line_id` | VARCHAR(26) | yes | — | — | ix_statement_lines_bank_line | bank_lines.id | Inbox line copied into this statement; null for a file import. |
 | `fitid` | TEXT | yes | — | — | — | — | The bank's own transaction id; null when the file had none. |
 | `date` | TEXT | no | — | — | — | — | Posted date, YYYY-MM-DD. |
 | `amount` | INTEGER | no | — | — | — | — | Minor units in the reconciliation's sign (a card charge is positive). |
