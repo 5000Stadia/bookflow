@@ -126,7 +126,9 @@ def test_plain_clerk_can_count_but_cannot_prepare_or_post_deposit(hosted):
         shift = opened.json()['id']
         closed = call('pos.shift.close', {'shift': shift, 'counted': '50', 'operation_key': 'clerk-close'})
         assert closed.status_code == 200, closed.text
-        assert call('report.pos-day', {'shift': shift}).status_code == 200
+        # A read takes no reason header (E_USAGE): send only the workbench headers.
+        report = api.post(f'/companies/{hosted.company_id}/commands/report.pos-day', headers=H, json={'shift': shift})
+        assert report.status_code == 200, report.text
         denied = call('pos.deposit.prepare', {'shift': shift})
         assert denied.status_code == 403 and denied.json()['details']['capability'] == 'ledger.post'
         denied = call('deposit.post', {'operation_key': 'clerk-deposit-denied',
