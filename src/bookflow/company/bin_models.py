@@ -205,6 +205,8 @@ class ClassifyRow(_Strict):
 
 
 class ClassifyOutput(_Strict):
+    batch_id: str | None = Field(None, description='The reversible classification batch; null for no changes or preview.')
+    next: str | None = Field(None, description='Command to preview restoring the prior classes.')
     date_from: str
     date_to: str
     total_issued_cost: JournalMoneyOutput

@@ -210,7 +210,7 @@ Example JSON output:
 
 ## `bank-rule apply`
 
-Read the rules over the waiting lines again: each line's rule proposal becomes the first rule that fits now (decided lines are never touched; nothing is added or ignored). With rule, only the lines that rule gains or loses. --dry-run lists what would change. Example: {"rule": "Shell fuel"}.
+Read the rules over the waiting lines again: each line's rule proposal becomes the first rule that fits now (decided lines are never touched; nothing is added or ignored). With rule, only the lines that rule gains or loses. --dry-run lists what would change. Each changed run returns its batch_id; batch reverse restores prior proposals while its lines are still waiting and unchanged. Example: {"rule": "Shell fuel"}.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -281,6 +281,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `batch_id` | string \| null | no | yes | null | Shared reversible batch; null for a dry run or no changes. |
 | `lines` | array[object] | yes | no | — | The waiting lines whose rule proposal changes (changed, unless a dry run). |
 | `lines[].line_id` | string | yes | no | — | — |
 | `lines[].date` | string | yes | no | — | — |
@@ -298,6 +299,7 @@ Example JSON output:
 
 ```json
 {
+  "batch_id": null,
   "lines": [],
   "next": null,
   "read": 1,

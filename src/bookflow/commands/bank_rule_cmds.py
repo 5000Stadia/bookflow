@@ -42,7 +42,8 @@ _QUERY = ("List bank rules in the order they are tried, one account's (with the 
           '`--status suggested` lists the learned suggestions waiting for an answer.')
 _APPLY = ("Read the rules over the waiting lines again: each line's rule proposal becomes the first rule that fits "
           "now (decided lines are never touched; nothing is added or ignored). With rule, only the lines that rule "
-          'gains or loses. --dry-run lists what would change. Example: {"rule": "Shell fuel"}.')
+          'gains or loses. --dry-run lists what would change. Each changed run returns its batch_id; '
+          'batch reverse restores prior proposals while its lines are still waiting and unchanged. Example: {"rule": "Shell fuel"}.')
 
 
 def _output(s, result: dict) -> m.RuleOutput:

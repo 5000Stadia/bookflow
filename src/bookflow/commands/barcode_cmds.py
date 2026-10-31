@@ -82,6 +82,8 @@ class SkippedItem(AssignedCode):
 
 
 class BarcodeGenerateOutput(_Strict):
+    batch_id: str | None = Field(None, description="The reversible batch; null for a preview or no changes.")
+    next: str | None = Field(None, description="Command to preview reversing this run.")
     assigned: list[AssignedCode] = Field(description="Each item given a code, with its new EAN-13.")
     skipped: list[SkippedItem] = Field(description="Named items left as they are: one that has a code keeps it.")
     next_number: int = Field(description="The company counter after this run: the next code's serial number.")
@@ -108,7 +110,8 @@ barcode_generate = command(
     description=("Give items without a code an EAN-13 barcode in the restricted-circulation range (prefix 2, for "
                  "the company's own labels), numbered from the company counter with its check digit. Existing codes "
                  "never change: a named item that has one is skipped and listed. Each change is an item update in "
-                 "the item's history. `--dry-run` shows the codes it would assign."),
+                 "the item's history. `--dry-run` shows the codes it would assign. The result names a batch; "
+                 "`batch reverse` restores the prior codes unless an item has since changed."),
     input_model=BarcodeGenerateInput, output_model=BarcodeGenerateOutput, writes={"company"}, positional=[],
     accepts_idempotency_key=True,
     error_codes=["E_RECORD_NOT_FOUND", "E_INACTIVE_REFERENCE", "E_VALIDATION"])
@@ -125,9 +128,11 @@ def plan_generate(inp: BarcodeGenerateInput, ctx, s) -> Plan:
 @barcode_generate.applier
 def apply_generate(plan: Plan, ctx, s) -> Applied:
     planned: dict[str, Any] = plan.data["plan"]
-    touched = barcodes.apply_generate(s, planned)
+    touched, batch_id = barcodes.apply_generate(s, ctx, planned)
+    out = plan.preview.model_copy(update={'batch_id': batch_id,
+        'next': f'bookflow batch reverse {batch_id} --dry-run' if batch_id else None})
     count = len(planned["assigned"])
-    return Applied(plan.preview, touched, f"generated {count} barcode{'' if count == 1 else 's'}" if count else "no change")
+    return Applied(out, touched, f"generated {count} barcode{'' if count == 1 else 's'}" if count else "no change")
 
 
 BARCODE_COMMANDS = [barcode_lookup, barcode_generate]

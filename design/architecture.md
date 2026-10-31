@@ -5314,3 +5314,14 @@ as statement files; its import batch and cursor commit together. Fetched live-ru
 committed with the page and `bank_rules.run_live(fetched=True)` runs after the import. Restore and
 attach disable every connection and discard staged approval. Provider conformance lives in
 `tests/bankfeed_source_contract.py`; all providers used by the tests are test-only.
+
+## Reversible field and notice batches (R186 increment 2)
+
+`company/batches.py` loads adapters for barcode generation, cycle-count classification, bank-rule
+application and notice generation. The item adopters use `reversal_registry.py` before-image updates;
+seeded cycle classes retire after their item references are restored. `bank_rule_reversal.py` restores
+waiting-line proposals and rule ids with the caller's bank-line undo authority. `notices.py` uses the
+audited `notice reverse` command to dismiss ready notices and release their dedupe period. Migration
+`co0124` preserves original periods with a released flag and partial unique index. The new permission
+layer is `notice-reversal-v1`, on `reversible-batch-v1`. The complete behavior and boundaries are in
+[reversible-batches.md](reversible-batches.md#as-built-increment-2).

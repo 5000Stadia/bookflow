@@ -84,6 +84,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
+| `period_released` | boolean | no | no | false | True when reversal released this period for a corrected generation run. |
 | `customer_id` | string | yes | no | — | — |
 | `customer_name` | string | yes | no | — | — |
 | `period_key` | string | yes | no | — | — |
@@ -147,6 +148,7 @@ Example JSON output:
     "minor_units": 1
   },
   "period_key": "value",
+  "period_released": false,
   "print_path": "value",
   "sent_at": null,
   "sent_by": null,
@@ -198,7 +200,7 @@ Example JSON output:
 
 ## `notice generate`
 
-Generate overdue notices now, by the company's overdue notice preferences -- what the scheduler in `bookflow serve` does by itself on the notice schedule. One notice per customer or job whose open invoices and statement charges at least `overdue_notice_days` past due total at least the minimum (and whose whole balance is above zero), for this period of the schedule (the month, or the week from Monday). A customer that already has a notice for the period -- ready, sent or dismissed -- gets no second one. Nothing is sent: each notice waits in `notice list` with a printable statement or letter (`print_path`).
+Generate overdue notices now, by the company's overdue notice preferences -- what the scheduler in `bookflow serve` does by itself on the notice schedule. One notice per customer or job whose open invoices and statement charges at least `overdue_notice_days` past due total at least the minimum (and whose whole balance is above zero), for this period of the schedule (the month, or the week from Monday). A customer that already has an unreversed notice for the period -- ready, sent or dismissed -- gets no second one. Nothing is sent: each notice waits in `notice list` with a printable statement or letter (`print_path`). The output names its batch; batch reverse dismisses its ready notices and releases their periods. A notice already sent blocks reversal: sent mail cannot be recalled.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -268,6 +270,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 |---|---|---|---|---|---|
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
+| `batch_id` | string \| null | no | yes | null | The reversible generation batch; null when nothing was generated or for a preview. |
+| `next` | string \| null | no | yes | null | Command to reverse the generated notices and release their periods. |
 | `as_of` | string | yes | no | — | — |
 | `period_key` | string \| null | yes | yes | — | — |
 | `policy` | object | yes | no | — | — |
@@ -288,6 +292,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `generated[].updated_at` | string | yes | no | — | — |
 | `generated[].updated_by` | string | yes | no | — | — |
 | `generated[].updated_via` | string | yes | no | — | — |
+| `generated[].period_released` | boolean | no | no | false | True when reversal released this period for a corrected generation run. |
 | `generated[].customer_id` | string | yes | no | — | — |
 | `generated[].customer_name` | string | yes | no | — | — |
 | `generated[].period_key` | string | yes | no | — | — |
@@ -323,7 +328,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `generated[].letter` | string | yes | no | — | The text of the notice as a letter; a statement notice prints the statement with this as its covering note. |
 | `generated[].print_path` | string | yes | no | — | Browser path of the printable PDF (relative to the host). |
 | `generated_count` | integer | yes | no | — | — |
-| `already_for_period` | integer | yes | no | — | Customers who qualify but already have a notice (ready, sent or dismissed) for this period. |
+| `already_for_period` | integer | yes | no | — | Customers who qualify but already have an unreleased notice (ready, sent or dismissed) for this period. |
 
 Example JSON output:
 
@@ -331,9 +336,11 @@ Example JSON output:
 {
   "already_for_period": 1,
   "as_of": "value",
+  "batch_id": null,
   "dry_run": false,
   "generated": [],
   "generated_count": 1,
+  "next": null,
   "period_key": null,
   "policy": {
     "days_overdue": null,
@@ -446,6 +453,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].updated_at` | string | yes | no | — | — |
 | `items[].updated_by` | string | yes | no | — | — |
 | `items[].updated_via` | string | yes | no | — | — |
+| `items[].period_released` | boolean | no | no | false | True when reversal released this period for a corrected generation run. |
 | `items[].customer_id` | string | yes | no | — | — |
 | `items[].customer_name` | string | yes | no | — | — |
 | `items[].period_key` | string | yes | no | — | — |
@@ -609,6 +617,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
+| `period_released` | boolean | no | no | false | True when reversal released this period for a corrected generation run. |
 | `customer_id` | string | yes | no | — | — |
 | `customer_name` | string | yes | no | — | — |
 | `period_key` | string | yes | no | — | — |
@@ -672,6 +681,203 @@ Example JSON output:
     "minor_units": 1
   },
   "period_key": "value",
+  "period_released": false,
+  "print_path": "value",
+  "sent_at": null,
+  "sent_by": null,
+  "sent_method": null,
+  "statement_from": "value",
+  "status": "ready",
+  "template": "statement",
+  "updated_at": "2026-01-01T00:00:00Z",
+  "updated_by": "value",
+  "updated_via": "cli",
+  "version": 1,
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+| `E_WORK_DEPENDENCY` | The accepted or linked work prevents this change; inspect the related document. |
+
+## `notice reverse`
+
+Dismiss a ready notice and release its period so a corrected notice can be generated. The original notice and its period remain in history. Sent mail cannot be recalled. Use batch reverse to reverse an entire generation run.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | customer |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/notice.reverse` |
+| External binary body | none |
+
+### CLI
+
+`bookflow notice reverse 01JNOTICE00000000000000000 --note "Corrected run" --company "Demo Plumbing Co"`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "notice reverse", "input": {"notice": "01JNOTICE00000000000000000", "note": "Corrected run"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `notice` | `NOTICE` | string | yes | no | — | The notice, by id.; minimum length 1; maximum length 200 |
+| `note` | `--note` | string \| null | no | yes | null | Why it is not being sent (e.g. 'called them, paying Friday'). |
+| `expected_version` | `--expected-version` | integer \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/notice.reverse`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `id` | string | yes | no | — | — |
+| `version` | integer | yes | no | — | — |
+| `created_at` | string | yes | no | — | — |
+| `created_by` | string | yes | no | — | — |
+| `created_via` | string | yes | no | — | — |
+| `updated_at` | string | yes | no | — | — |
+| `updated_by` | string | yes | no | — | — |
+| `updated_via` | string | yes | no | — | — |
+| `period_released` | boolean | no | no | false | True when reversal released this period for a corrected generation run. |
+| `customer_id` | string | yes | no | — | — |
+| `customer_name` | string | yes | no | — | — |
+| `period_key` | string | yes | no | — | — |
+| `as_of` | string | yes | no | — | — |
+| `template` | literal["statement", "letter"] | yes | no | — | — |
+| `statement_from` | string | yes | no | — | — |
+| `overdue` | object | yes | no | — | — |
+| `overdue.amount` | string | yes | no | — | — |
+| `overdue.currency` | string | yes | no | — | — |
+| `overdue.minor_units` | integer | yes | no | — | — |
+| `balance` | object | yes | no | — | — |
+| `balance.amount` | string | yes | no | — | — |
+| `balance.currency` | string | yes | no | — | — |
+| `balance.minor_units` | integer | yes | no | — | — |
+| `oldest_due_date` | string | yes | no | — | — |
+| `days_overdue` | integer | yes | no | — | — |
+| `documents` | array[object] | yes | no | — | — |
+| `documents[].transaction_id` | string | yes | no | — | — |
+| `documents[].document_type` | string | yes | no | — | — |
+| `documents[].number` | string \| null | yes | yes | — | — |
+| `documents[].date` | string | yes | no | — | — |
+| `documents[].due_date` | string | yes | no | — | — |
+| `documents[].open_balance` | object | yes | no | — | — |
+| `documents[].open_balance.amount` | string | yes | no | — | — |
+| `documents[].open_balance.currency` | string | yes | no | — | — |
+| `documents[].open_balance.minor_units` | integer | yes | no | — | — |
+| `documents[].days_overdue` | integer | yes | no | — | — |
+| `status` | literal["ready", "sent", "dismissed"] | yes | no | — | — |
+| `sent_at` | string \| null | yes | yes | — | — |
+| `sent_by` | string \| null | yes | yes | — | — |
+| `sent_method` | string \| null | yes | yes | — | — |
+| `dismissed_reason` | string \| null | yes | yes | — | — |
+| `letter` | string | yes | no | — | The text of the notice as a letter; a statement notice prints the statement with this as its covering note. |
+| `print_path` | string | yes | no | — | Browser path of the printable PDF (relative to the host). |
+
+Example JSON output:
+
+```json
+{
+  "as_of": "value",
+  "balance": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "created_at": "2026-01-01T00:00:00Z",
+  "created_by": "value",
+  "created_via": "cli",
+  "customer_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "customer_name": "value",
+  "days_overdue": 1,
+  "dismissed_reason": null,
+  "documents": [],
+  "dry_run": false,
+  "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "letter": "value",
+  "oldest_due_date": "2026-01-01",
+  "overdue": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "period_key": "value",
+  "period_released": false,
   "print_path": "value",
   "sent_at": null,
   "sent_by": null,
@@ -787,6 +993,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
+| `period_released` | boolean | no | no | false | True when reversal released this period for a corrected generation run. |
 | `customer_id` | string | yes | no | — | — |
 | `customer_name` | string | yes | no | — | — |
 | `period_key` | string | yes | no | — | — |
@@ -849,6 +1056,7 @@ Example JSON output:
     "minor_units": 1
   },
   "period_key": "value",
+  "period_released": false,
   "print_path": "value",
   "sent_at": null,
   "sent_by": null,

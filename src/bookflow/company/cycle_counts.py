@@ -61,9 +61,16 @@ def _rows(s, *where):
 
 
 def seed_rows(s, ctx):
-    """The default classes to store when the company has none yet (the first write that needs one stores them)."""
-    if _rows(s):
-        return []
+    """Defaults for first use, or after reversal retired all prior seeded classes."""
+    stored = _rows(s)
+    if stored:
+        # Retired defaults stay in history; a corrected run can seed fresh defaults.
+        retired = set(s.company.conn.execute(sa.select(c.batch_effects.c.record_id).join(
+            c.batches, c.batches.c.id == c.batch_effects.c.batch_id).where(
+                c.batches.c.kind == 'cycle-count-classify', c.batches.c.state == 'reversed',
+                c.batch_effects.c.record_type == 'cycle_class', c.batch_effects.c.action == 'created')).scalars())
+        if not all(not row['active'] and row['id'] in retired for row in stored):
+            return []
     at = clock.now_iso()
     out = []
     for name, days, description in DEFAULTS:
@@ -74,7 +81,9 @@ def seed_rows(s, ctx):
 
 
 def insert_seed(s, rows):
-    if not rows or _rows(s):
+    existing = {row['name_key'] for row in _rows(s)}
+    rows = [row for row in rows if row['name_key'] not in existing]
+    if not rows:
         return []
     s.company.conn.execute(c.cycle_classes.insert(), rows)
     return [Touched('cycle_class', row['id'], 'create', None, 1, row, db='company') for row in rows]
@@ -84,7 +93,7 @@ def resolve(s, selector, *, field='cycle_class', active=True, seed=()):
     """A class by id or name; ``seed`` (rows about to be stored) is searched when the company has none yet."""
     text = str(selector).strip()
     t = c.cycle_classes
-    candidates = _rows(s) or list(seed)
+    candidates = [*_rows(s), *seed]
     row = None
     if is_ulid(text):
         row = next((r for r in candidates if r['id'] == normalize_ulid(text)), None)
@@ -139,7 +148,7 @@ def _bumped(row, s, ctx):
 
 def _name(s, name, own=None, seed=()):
     display, key = normalize_display_name(name, field='name')
-    for row in _rows(s) or list(seed):
+    for row in [*_rows(s), *seed]:
         if row['name_key'] == key and row['id'] != own:
             raise BookflowError('E_NAME_TAKEN', details={'record_type': 'cycle_class', 'name': display,
                                                          'record_id': row['id']})
@@ -304,7 +313,15 @@ def apply_classify(plan, ctx, s) -> Applied:
     from bookflow.commands.item_cmds import _touched
     from bookflow.company import items as item_service
     out, changes, seed = classify(s, ctx, plan.data['input'], apply_it=True)
+    from bookflow.company import batches
+    if not changes:
+        return Applied(out, [], 'no change')
+    batch_id = batches._insert_batch(s, ctx, kind='cycle-count-classify', label='Cycle-count classification',
+                                    scope='cycle-count-classify', ordering='record', source_type='cycle_count_classify')
     touched = insert_seed(s, seed)
+    for record in touched:
+        batches.record_effect(s, batch_id, record_type='cycle_class', record_id=record.record_id,
+                              action='created', version_after=1)
     for item, proposed in changes:
         update = item_service.plan_item_update(s.company, item['id'], {'cycle_class_id': proposed['id']},
                                                actor_id=s.actor.id, via=ctx.interface.value)
@@ -312,6 +329,11 @@ def apply_classify(plan, ctx, s) -> Applied:
             continue
         item_service.persist_item_update(s.company, update)
         touched.append(_touched(update.mutation))
+        batches.record_effect(s, batch_id, record_type='item', record_id=item['id'], action='updated',
+                              version_after=update.mutation.after['version'],
+                              before={'cycle_class': update.mutation.before['cycle_class_id'] or ''})
+    out = out.model_copy(update={'batch_id': batch_id,
+                                'next': f'bookflow batch reverse {batch_id} --dry-run'})
     if not touched:
         return Applied(out, [], 'no change')
     return Applied(out, touched, f'classified {len(changes)} items for cycle counts')
@@ -425,3 +447,7 @@ def next_due_items(s, site_id, date, limit):
     (R104 increment 5 review: a 30-item rotation keeps every class within its interval plus one round)."""
     rows, _ = due_rows(s, site_id, date, ahead=ROUND_AHEAD)
     return [dict(id=row.item_id, full_name=row.item_name) for row in rows[:limit or DEFAULT_LIMIT]]
+
+
+from bookflow.company import batches as _batches
+_batches.register(_batches.Adapter('cycle-count-classify', label='Cycle-count classification'))

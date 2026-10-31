@@ -212,6 +212,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     def older(conn):
         # co0125 device identity is removed with co0124 held carts, which reference registers and customers.
         conn.execute("DROP TABLE pos_tickets")
+        # co0126's released-period flag and index go with overdue_notices below.
         # co0123: layout boxes refer to items and attachments; drop them before older tables.
         conn.execute("DROP TABLE pos_boxes")
         conn.execute("ALTER TABLE company_info DROP COLUMN pos_home_view_style")
@@ -524,7 +525,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))
     restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older",
                                               "organization": "Older Books Organization"})
-    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0125"
+    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0126"
     folder = _folder(client, restored["company_id"])
     # The migration took its verified backup of the restored database first, as every migration does.
     assert list((folder / "backups").glob("*-from-co0062.db"))

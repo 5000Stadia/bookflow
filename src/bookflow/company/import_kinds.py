@@ -320,7 +320,7 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
         'customer unlink-vendor', 'customer-credit unapply', 'customer-message deactivate',
         'customer-type deactivate', 'cycle-class deactivate', 'directive deactivate', 'employee deactivate',
         'inventory-count cancel', 'inventory-site deactivate', 'item deactivate', 'item-category deactivate',
-        'job-type deactivate', 'memorized skip', 'notice dismiss', 'other-name deactivate', 'payment recovery abort',
+        'job-type deactivate', 'memorized skip', 'notice dismiss', 'notice reverse', 'other-name deactivate', 'payment recovery abort',
         'payment selection clear', 'payment unapply', 'payment-method deactivate', 'pick-list cancel',
         'pick-list close', 'prepayment unapply', 'price-level deactivate', 'price-rule deactivate',
         'purchase-order close-lines', 'reconcile discard', 'sales-rep deactivate', 'sales-tax-code deactivate',

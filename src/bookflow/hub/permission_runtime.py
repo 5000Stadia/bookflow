@@ -189,6 +189,7 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.BANK_RULE_POLICY_VERSION: '12b5f914d21302af037c6cc0b1aeab0ef6912d764015332d7734c12338ad8127',
     c.POS_SALE_POLICY_VERSION: '1462bee09d7343f15fdc015fa86a114e30671e8d73fc2bab7f5e75444d0450cf',
     c.BANK_RECONCILE_POLICY_VERSION: '8673bd998c7e077061301d0bfaea5af7b33cbd3eb773f89dd0e6fdcdbf026e42',
+    c.NOTICE_REVERSAL_POLICY_VERSION: '567ccbe86942f97a5209adab2b7c659ec13e0b7893fa5f039a24a0ef106a751a',
     c.REVERSIBLE_BATCH_POLICY_VERSION: '8a3e694684db93beb8b6dd75961286d1a2106bf19e335efc7a99e86c1ad8a589',
     c.POS_RECEIPT_POLICY_VERSION: '00cfad8461346685e3de9485e8c900e23808206a65626cb72960aec0444a5a06',
     c.POS_TICKET_TAKEOVER_POLICY_VERSION: 'bdcea7f8d98d6854d5ecc001b00e4b59f81288ef06af360288f8a2ce28e17bf3',
@@ -360,6 +361,7 @@ def _full_known():
     from . import permission_pos_sale_catalog
     from . import permission_bank_reconcile_catalog
     from . import permission_pos_ticket_catalog, permission_pos_ticket_takeover_catalog, permission_pos_receipt_catalog
+    from . import permission_notice_reversal_catalog
     from . import permission_reversible_batch_catalog
     from . import permission_pos_layout_catalog
     from . import permission_bank_source_catalog
@@ -457,6 +459,7 @@ def _full_known():
         c.POS_TICKET_TAKEOVER_POLICY_VERSION: permission_pos_ticket_takeover_catalog,
         c.POS_RECEIPT_POLICY_VERSION: permission_pos_receipt_catalog,
         c.POS_LAYOUT_POLICY_VERSION: permission_pos_layout_catalog,
+        c.NOTICE_REVERSAL_POLICY_VERSION: permission_notice_reversal_catalog,
         c.REVERSIBLE_BATCH_POLICY_VERSION: permission_reversible_batch_catalog,
         c.BANK_SOURCE_POLICY_VERSION: permission_bank_source_catalog,
     }
@@ -619,7 +622,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.REVERSIBLE_BATCH_POLICY_VERSION)
+    return known_catalog(c.NOTICE_REVERSAL_POLICY_VERSION)
 
 
 def catalog_for_root(tx):

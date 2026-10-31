@@ -159,7 +159,8 @@ classify = _write(
     'months to today), the ABC way: ranked by issued cost, the items making the first 80% (a_share) are A, the next '
     '15% (b_share) B, the rest C, an item that issued nothing C. Count differences and inventory adjustments do not '
     'count as issued. The dry run lists each item, its share and its proposed class; running it sets the classes as '
-    'item updates. Example: `bookflow cycle-count classify --dry-run`.',
+    'item updates. The result names a reversible batch: reversal restores prior classes and retires defaults '
+    'seeded by this run once unused. Example: `bookflow cycle-count classify --dry-run`.',
     m.ClassifyInput, m.ClassifyOutput, plan_classify, cycle_counts.apply_classify,
     errors=['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE'])
 due = _read(

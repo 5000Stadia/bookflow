@@ -42,6 +42,8 @@ class ListRecord:
 
 @lru_cache(maxsize=None)
 def list_record(record_type: str) -> ListRecord | None:
+    if record_type == 'cycle_class':
+        return ListRecord('cycle-class', c.cycle_classes, 'name', 'name')
     from bookflow.company import lists
     for definition in lists.all_list_definitions():
         if definition.record_type == record_type:
