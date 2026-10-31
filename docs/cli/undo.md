@@ -4,7 +4,7 @@
 
 ## `undo`
 
-Compensate an eligible Row 5 list audit event without deleting history.
+Undo one change to a list record (an eligible audit event) without deleting history. A whole import, grid edit or opening is undone as one unit instead: `import reverse`, `bulk-edit reverse` or `opening-draft reverse` (`batch query` lists them).
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

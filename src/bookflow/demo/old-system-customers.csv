@@ -1,0 +1,8 @@
+Client;E-mail address;Telephone;Street;Town;St;Zip;Pay terms;Credit limit;Job started;Job of
+Café Lumière;cafe@example.test;(555) 010-2231;14 Rue Street;Springfield;IL;02134;Net 30 days;1.250,00;;
+Müller Bäckerei;baker@example.test;555 0199;8 Mill Lane;Springfield;IL;62704;Net 30;2.500,00;;
+Søren Hansen Design;soren@example.test;;301 Oak Ave;Shelbyville;IL;62565;COD;500,00;;
+Zoë Ålvarez;zoe@example.test;555-0142;77 Elm Ct;Springfield;IL;62701;Net 30 days;;;
+Northside Dental Group;office@northside.example;555-0177;900 Lake Rd;Capital City;IL;62711;Net 15;10.000,00;;
+Terrace fit-out;;;;;;;Net 30 days;;25/03/2026;Café Lumière
+Kitchen remodel;;;;;;;Net 30;;03/11/2026;Northside Dental Group

@@ -17,7 +17,12 @@ _PREVIEW = (
     '`{"Cust Name": "name"}`); each row is keyed (name by default) so a re-run of the same `source` never '
     'duplicates, and runs through its command in dry-run. Returns counts, the mapping, unknown references with '
     'suggestions, the first refused rows with line, column, code and reason, and a sample of the exact inputs; then '
-    '`import run`. Example: {"kind": "customer", "content": "Name,Email\\nAcme,ap@acme.test\\n"}.')
+    '`import run`. Send it without dry_run: it writes nothing to the books either way, but only a real call saves '
+    'the run that `import decide` and `import run` continue. Before running, an import that sets how the business '
+    'works from then on (customers with their terms, a mapping next month\'s file will use) gets one check with the '
+    'owner of its exact details from this preview: the counts and how each unknown value is mapped; a value with no '
+    'plain match is asked about, never guessed. A plainly named small import just runs. '
+    'Example: {"kind": "customer", "content": "Name,Email\\nAcme,ap@acme.test\\n"}.')
 _RUN = (
     'Run the next slice of a previewed import: each row through its ordinary command, written with its audit event, '
     'its key and its batch effect in one transaction. Returns counts, `state` (running, stopped, done) and `next`; '
@@ -290,7 +295,9 @@ import_check = _read('import check', 'Check a file before importing it, running 
                      errors=('E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_IO'))
 import_decide = _write('import decide', 'Decide the unknown references a previewed run waits on: map text to an '
                        'existing record, create it when the run reaches it, or skip its rows; `remember` keeps the maps '
-                       'in the source\'s saved mapping. Example: {"run": "01J...", "map": ["Net 30 days=Net 30"], '
+                       'in the source\'s saved mapping. The answers are the owner\'s: a suggestion is not one, so map '
+                       'a value yourself only when the match is plain, and ask about the rest. '
+                       'Example: {"run": "01J...", "map": ["Net 30 days=Net 30"], '
                        '"remember": true}.', m.ImportDecideInput, m.ImportRunOutput, plan_import_decide,
                        apply_import_decide, positional=('run',))
 import_mapping_save = _write('import-mapping save', 'Save a run\'s mapping (columns, key, formats, constants, value '

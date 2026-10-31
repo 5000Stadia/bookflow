@@ -12,7 +12,8 @@ class _Input(BaseModel):
 
 class Selection(_Input):
     filter: list[str] = Field(default_factory=list, max_length=20, description=(
-        "The list's own `query` filters (`customer query --help`), e.g. [\"category_id=Fixtures\"]."))
+        "The list's own `query` filters (`item query options` lists them), e.g. [\"category_id=Fixtures\"]: a reference "
+        "filter takes the record's name or id."))
     query: str | None = Field(None, max_length=200, description='Search text, as the list\'s `query` takes it.')
     include_inactive: bool = Field(False, description='Include inactive records.')
     records: list[str] | None = Field(None, max_length=5000, description=(
@@ -100,7 +101,8 @@ class ApplyInput(RunSelector):
 class ReverseInput(RunSelector):
     skip_changed: bool = Field(False, description=(
         'Reverse every record except those edited again since (they are left as they are and listed; the batch is '
-        'then reversed_partly). Without it, one such record refuses the whole reversal, naming it.'))
+        'then reversed_partly). Without it, one such record refuses the whole reversal, naming it. Those later edits '
+        'are someone\'s decision: report them, and pass this only when the owner agrees to leave them.'))
     fingerprint: str | None = Field(None, min_length=64, max_length=64, description=(
         'The `fingerprint` a dry run returned; the reversal is refused if the batch changed since.'))
 

@@ -257,7 +257,9 @@ class ImportTemplateOutput(BaseModel):
     header: list[str] = Field(description='A header row that maps without asking.')
     example: list[str] = Field(description='One example row.')
     content: str = Field(description='Header and example as CSV text.')
-    fields: list[dict[str, Any]] = Field(description='Every mappable input path, its type and whether required.')
+    fields: list[dict[str, Any]] = Field(description=(
+        'Every mappable input path (`field`, the name `columns` maps a header to), its type, whether required, and what a '
+        'reference names.'))
 
 
 class ImportRunOutput(BaseModel):

@@ -2062,7 +2062,7 @@ Example JSON output:
 
 ## `vendor update`
 
-Update a vendor.
+Update a vendor. To change many vendors at once (a category repriced, new terms for a group), use `bulk-edit preview` (kind vendor) then `bulk-edit apply`: one batch with a before-and-after diff, undone whole by `bulk-edit reverse`.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

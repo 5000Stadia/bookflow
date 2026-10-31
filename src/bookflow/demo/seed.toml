@@ -2770,3 +2770,17 @@ reason = "Draft each day's queued invoice emails"
 command = "delivery-schedule pause"
 input = { schedule = "Daily invoice emails" }
 reason = "Hold it until the owner has looked"
+
+# R107 increment 8: files to import. A customer list from an old program (Windows-1252, semicolons, renamed headers,
+# day-first dates, decimal commas, two jobs, and two terms the company does not have: "Net 30 days" and "COD"), and a
+# supplier list as cells pasted from a spreadsheet (tab text, one unknown term). Attached to the company so an agent
+# finds them with `attachment list company_info <company id>`; nothing is imported.
+[[commands]]
+command = "attachment add"
+body_fixture = "old-system-customers.csv"
+input = { record_type = "company_info", record_id = "${annotation_company.company_id}", original_filename = "old-system-customers.csv", media_type = "text/csv", caption = "Customer list exported from the old system, to import" }
+
+[[commands]]
+command = "attachment add"
+body_fixture = "new-suppliers-pasted.txt"
+input = { record_type = "company_info", record_id = "${annotation_company.company_id}", original_filename = "new-suppliers-pasted.txt", media_type = "text/plain", caption = "New suppliers, pasted from a spreadsheet, to import" }

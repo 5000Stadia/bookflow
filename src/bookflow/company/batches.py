@@ -740,6 +740,15 @@ def released_name(name: str, batch_id: str) -> str:
     return (name or '')[:200 - len(suffix)].rstrip() + suffix
 
 
+def _where_changed(noun: str, record_id: str) -> str:
+    """Where a caller reads a later change: the record's own history when it has one, else its show and the audit list
+    (R107 closing trial: an item blocker named `item history`, which does not exist)."""
+    from bookflow.core import registry
+    if registry.get(f'{noun} history') is not None:
+        return f'`{noun} history {record_id}` shows the change'
+    return f'`{noun} show {record_id}` shows its values now and `audit list` who changed it'
+
+
 def _blocker(effect: dict, rec: ListRecord | None, code: str, message: str, *, clears: str | None = None,
              **extra) -> dict:
     out = {'seq': effect.get('seq'), 'record_type': effect.get('record_type'), 'record_id': effect.get('record_id'),
@@ -846,8 +855,8 @@ def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
             blockers.append(_blocker(g, rec, 'edited_again',
                                      f"{label} was changed since the batch (version {row['version']}, the batch left "
                                      f"{expected}), by {row['updated_by']} at {row['updated_at']}.",
-                                     clears=f"`{rec.noun} history {g['record_id']}` shows the change; undo it or keep "
-                                            "the batch", changed_by=row['updated_by'], changed_at=row['updated_at']))
+                                     clears=_where_changed(rec.noun, g['record_id']) + "; undo it or keep the batch",
+                                     changed_by=row['updated_by'], changed_at=row['updated_at']))
             continue
         use = in_use[g['record_type']].get(g['record_id']) if g['action'] == 'created' else None
         if use is not None:

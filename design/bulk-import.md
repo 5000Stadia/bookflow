@@ -1529,3 +1529,66 @@ Reviewed at 8ce229b4; each finding fixed with a test (`tests/test_opening_balanc
   ends `rolled_back` (decided by whether it was ever applied).
 - **Permissions:** after the merge of main 06c29f99 (R187 automation), `opening-draft-v1` sits on `automation-v1`
   (862 commands).
+
+## As built: increment 8 and the closing trial
+
+- **Command finder.** Owner words lead the catalog search when no command name starts with them: csv, spreadsheet,
+  excel, xlsx, paste, customer, vendor, supplier, item and price list, load, export from (import); starting from
+  nothing, from scratch, no old books, new business, start fresh (opening-draft); reprice, prices, price change, raise
+  prices, mass update, bulk edit, edit many (bulk-edit); undo import, that import was wrong (import reverse, batch);
+  undo that price change (bulk-edit reverse). "opening balance" still leads to the move-in, with the guided opening
+  after it, and the move-in words now list import after cutover. A longer phrase outranks a shorter one in the query,
+  so "undo import" leads to `import reverse`, not the move-in that "import" alone means. The MCP list tool's
+  description names the prefixes import, opening-draft and bulk-edit beside cutover.
+- **Agent guide.** "Importing a list from a file" is new (finding the attachment, preview, decide, the one check,
+  run, the error file, saving the mapping, next month's file, undoing a run, `batch query`); the document chapter
+  says an unknown customer is reported and asked about; the opening chapter says a due date or terms column is
+  needed. Because the guide is not served over MCP, the rules an MCP-only agent needs also live in command help:
+  `import preview` (send it without dry_run; one check of the exact details before a run that sets how the business
+  works; never guess a value with no plain match), `import decide`, `bulk-edit reverse` (report records edited
+  since and ask before `skip_changed`), each list's `update` (many at once is bulk-edit) and `undo` (a whole
+  import, grid edit or opening is undone by its own reverse).
+- **NOT_IMPORTABLE reviewed.** Every company write is a kind's create or update or is classified with a reason
+  (the completeness test enforces it). Moved: `attachment add` and `note add` from not-yet to not-a-record (a file
+  or text on a record that exists, like an item's picture). The rest stand as classified.
+- **README.** Moving in no longer names the anchor product, says a business with no old books opens from what the
+  owner knows, and a new feature line covers importing and editing many records; the availability paragraph says the
+  demo holds files to import.
+- **Demo.** The demo company carries two attachments on the company record, found with `attachment list
+  company_info <company id>`: `old-system-customers.csv` (Windows-1252, semicolons, renamed headers, day-first job
+  dates, decimal commas, two jobs, unknown terms "Net 30 days" and "COD") and `new-suppliers-pasted.txt` (tab text,
+  one unknown term). Nothing is imported. Seed transfers may send any packaged file in `DEMO_BODY_FIXTURES`.
+- **Fixes from the trial** (`tests/test_import_close.py`):
+  - *A row an earlier run of its source made is compared* (§2 "Existing records" said only rows no import made
+    are). It was `already_in` unread, so next month's changed phone was invisible and mode update never reached it.
+    Now, when it differs, it stays `already_in` in create and upsert (a re-run never refuses or rewrites its own
+    rows; upsert over its own source makes only what is missing), with code `changed_since`, the fields named in its
+    message and a preview note; mode `update` changes it. A row whose references cannot be resolved now is simply
+    already in, as before. Decided here (reversible): upsert does not update its own rows, so the seeded model of
+    increment 1 holds unchanged.
+  - `import template` fields also carry `field`: every key named `path` is nulled in replies to anyone but a hub
+    admin (blueprint 5.4), so over MCP the template named no field.
+  - A column holding values that no field takes is named in the preview notes, unless mapped to null.
+  - Header synonyms `St` (state) and `Contact person`; opening stock `Cost each`, `each`, `cost per unit`.
+  - Bulk-edit filters take a reference by name (`category_id=Fixtures`); an unknown name is refused, where it matched
+    nothing silently. The preview's example filter (`category=Fixtures`) did not exist.
+  - The edited-again blocker names `<noun> history` only where that command exists, else `show` and `audit list`.
+
+**The closing trial** (notes/trials/r107-trial/results.md): fresh colony-routine helpers with only Bookflow's three
+MCP tools (through a wrapper), a fresh company with no books in the demo organization, a messy customer file, next
+month's file, an invoice file, a pasted bank balance, bills and stock, and the Fixtures category. Four of the seven
+prompts were right on the first attempt: "that import was wrong" (show, dry run, reverse), "same export as last
+month" (the saved mapping matched; 4 created, 7 already in), the opening from nothing (one check of the exact details
+with given and derived apart, apply, tie-out tied) and the invoice file (keyed by number; the unknown customer named
+and asked about, never made). Wrong first time, right after the fixes in fresh sessions: the customer list (it
+guessed an unknown term and ran without the one check), repricing the category (it found only `item update` and
+made twelve of them) and undoing the price change (it passed `skip_changed` before asking, twice; right once the
+command's own help said to ask). The owner's check afterwards: records and terms as answered, the saved mapping used
+again, the trial balance and the tie-out's two given and three derived checks, 36 grid-edit audit events and 22
+restoring ones with the owner's later edits left, and the wrongly mapped import's 12 records off the lists with its
+batch reversed. The trial's server and data were stopped and deleted.
+
+*Left for later:* the agent guide over MCP; `customer list` and `item list` returning fewer items than their count;
+`audit list` with no limit; `item query` filters by name; opening documents not reading the party's terms and new
+vendors not getting the pasted terms; a warning when an invoice import takes stock below zero; `import query` showing a
+reversed run as `done`.

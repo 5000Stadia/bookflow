@@ -133,14 +133,29 @@ def _registry_digest(contract):
 # Everyday words for command nouns whose registered names do not contain them. Each phrase lists
 # the commands it means, most useful first; they lead a search page ahead of plain word matches.
 _MOVE_IN = ("cutover plan", "cutover apply", "cutover tie-out")
+_FILE_IN = ("import preview", "import kinds", "import template", "import run", "import", "import-mapping")
+_OPENING = ("opening-draft create", "opening-draft plan", "opening-draft apply", "opening-draft tie-out", "opening-draft")
+_MANY = ("bulk-edit preview", "bulk-edit apply", "bulk-edit reverse", "bulk-edit")
 KEYWORDS = {
     "credit card": ("card-charge", "card-credit"), "cc": ("card-charge", "card-credit"),
     "tax": ("sales-tax", "sales-tax-code", "report income-tax-summary"),
     "vat": ("sales-tax", "sales-tax-code"), "gst": ("sales-tax", "sales-tax-code"),
     **dict.fromkeys(("import", "migrate", "migration", "move in", "move-in", "moving in", "switch from",
                      "convert", "conversion", "iif", "quickbooks", "quickbooks desktop", "qb", "qbd",
-                     "opening balance", "opening balances", "old books", "set up from", "setup from",
-                     "bring over"), _MOVE_IN),
+                     "old books", "set up from", "setup from", "bring over"), _MOVE_IN + _FILE_IN),
+    # R107: a business with no old books opens from what the owner knows; a file of records from any program is an
+    # import; many records changed at once is a grid edit.
+    **dict.fromkeys(("opening balance", "opening balances"), _MOVE_IN + _OPENING),
+    **dict.fromkeys(("starting from nothing", "start from nothing", "from scratch", "no old books", "new business",
+                     "starting balances", "start fresh"), _OPENING),
+    **dict.fromkeys(("csv", "spreadsheet", "excel", "xlsx", "paste", "pasted", "customer list", "vendor list",
+                     "supplier list", "item list", "price list", "export from", "load"), _FILE_IN),
+    **dict.fromkeys(("undo import", "undo the import", "undo that import", "reverse import", "reverse that import",
+                     "import was wrong"), ("import reverse", "batch")),
+    **dict.fromkeys(("reprice", "re-price", "prices", "price change", "raise prices", "raise every price", "change prices",
+                     "every price", "mass update", "mass edit", "mass change", "bulk edit", "bulk update",
+                     "bulk change", "edit many", "change many", "grid edit"), _MANY),
+    **dict.fromkeys(("undo price change", "undo that price change", "undo the price change"), ("bulk-edit reverse",)),
     # R112: owners say email, not delivery; "every month" means a schedule.
     **dict.fromkeys(("email", "e-mail", "mail", "outbox", "send email"), ("delivery", "delivery-schedule", "delivery-template")),
     **dict.fromkeys(("recurring", "repeat", "every month", "monthly", "automatic"), ("delivery-schedule", "memorized")),
@@ -152,7 +167,8 @@ def _words(text):
 
 
 def _keyword_rank(query, name):
-    """The position of name among the commands a keyword in the query means, or None.
+    """Where name ranks among the commands a keyword in the query means, or None: (minus the phrase's word count, the
+    position in its list), so the longest phrase leads.
 
     A keyword counts when it is the whole query, appears in it as whole words ("import from
     quickbooks"), or the query is the start of a keyword of four or more letters ("migrat").
@@ -168,7 +184,9 @@ def _keyword_rank(query, name):
             continue
         for rank, noun in enumerate(nouns):
             if name == noun or name.startswith(noun + " "):
-                best = rank if best is None else min(best, rank)
+                # A longer phrase is the more specific: "undo import" ranks ahead of "import".
+                here = (-len(words.split()), rank)
+                best = here if best is None else min(best, here)
     return best
 
 
@@ -232,7 +250,7 @@ def list_commands(*, prefix=None, limit=20, cursor=None):
         # keyword means come first, in its order. Deterministic, so cursors still hold.
         found = [row for row in rows if keyword_match(prefix, row["name"])]
         ranks = {row["name"]: _keyword_rank(prefix, row["name"]) for row in found}
-        matched = sorted(found, key=lambda row: (ranks[row["name"]] is None, ranks[row["name"]] or 0))
+        matched = sorted(found, key=lambda row: (ranks[row["name"]] is None, ranks[row["name"]] or (0, 0)))
         searched = bool(matched)
     rows = matched
     if offset > len(rows):

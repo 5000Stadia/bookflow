@@ -46,6 +46,8 @@ engine = lazy("bookflow.storage.engine")
 migrate = lazy("bookflow.storage.migrate")
 
 VIA = lambda ctx: ctx.interface.value  # noqa: E731
+# Packaged files a demo seed command may send as its body (R107 increment 8 adds a messy customer file and a paste).
+DEMO_BODY_FIXTURES = frozenset(("example.pdf", "old-system-customers.csv", "new-suppliers-pasted.txt"))
 
 
 # ---------------------------------------------------------------- init
@@ -1112,8 +1114,9 @@ def _apply_seed_history(s: Session, ctx: Context, seed: dict[str, Any], row: dic
             if cmd.is_write and s.company is not None and not s.company.writable:
                 s.close_company()
             if cmd.transfer is not None:
-                if cmd.transfer.direction != "input" or entry.get("body_fixture") != "example.pdf":
-                    raise ValueError("demo transfers require the packaged example.pdf fixture")
+                fixture = entry.get("body_fixture")
+                if cmd.transfer.direction != "input" or fixture not in DEMO_BODY_FIXTURES:
+                    raise ValueError("demo transfers require a packaged demo fixture: " + ", ".join(sorted(DEMO_BODY_FIXTURES)))
                 from importlib.resources import files
                 from bookflow.core.transfers import InputBody, TransferResource, prepare
                 from bookflow.core.transfer_resources import TransferLease
@@ -1125,7 +1128,7 @@ def _apply_seed_history(s: Session, ctx: Context, seed: dict[str, Any], row: dic
                 try:
                     s.transfer = TransferResource(lease, prepared.store)
                     body = InputBody(s.transfer, prepared.limit, False)
-                    with files("bookflow.demo").joinpath("example.pdf").open("rb") as source:
+                    with files("bookflow.demo").joinpath(fixture).open("rb") as source:
                         body.receive(source)
                     body.complete()
                     output = run_in_session(cmd, cmd.input_model.model_validate(raw_input), seed_ctx, s)
