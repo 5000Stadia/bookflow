@@ -134,7 +134,7 @@ RESOURCE_PAIRS = {
         ('automate.bank-rule', 'standard'), ('automate.invoice', 'standard'),
         # pos-v1: an agent holds a POS capability only by its own grant.
         ('pos.sell', 'member'), ('pos.void', 'member'), ('pos.refund', 'member'), ('pos.price-override', 'member'),
-        ('pos.layout', 'admin')},
+        ('pos.layout', 'admin'), ('bank-feed.connect', 'admin')},
     # pos-v1: an item read shows costs only with the books, and vendors only with the vendor list.
     'item_concealment.holds': {('ledger.read', 'member'), ('vendor', 'member')},
     'pos_sales.require_price_override': {('pos.price-override', 'member')},  # a typed POS price (R114 inc 5)

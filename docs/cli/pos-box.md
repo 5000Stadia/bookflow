@@ -85,6 +85,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].position` | integer | yes | no | — | — |
 | `items[].kind` | literal["group", "item"] | yes | no | — | — |
 | `items[].item` | string \| null | yes | yes | — | — |
+| `items[].inactive` | boolean | yes | no | — | Item or its category is inactive; the till skips this box, the editor allows removal. |
 | `items[].label` | string \| null | yes | yes | — | — |
 | `items[].colour` | string \| null | yes | yes | — | — |
 | `items[].picture` | object \| null | yes | yes | — | — |
@@ -209,6 +210,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].position` | integer | yes | no | — | — |
 | `items[].kind` | literal["group", "item"] | yes | no | — | — |
 | `items[].item` | string \| null | yes | yes | — | — |
+| `items[].inactive` | boolean | yes | no | — | Item or its category is inactive; the till skips this box, the editor allows removal. |
 | `items[].label` | string \| null | yes | yes | — | — |
 | `items[].colour` | string \| null | yes | yes | — | — |
 | `items[].picture` | object \| null | yes | yes | — | — |
@@ -341,6 +343,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].position` | integer | yes | no | — | — |
 | `items[].kind` | literal["group", "item"] | yes | no | — | — |
 | `items[].item` | string \| null | yes | yes | — | — |
+| `items[].inactive` | boolean | yes | no | — | Item or its category is inactive; the till skips this box, the editor allows removal. |
 | `items[].label` | string \| null | yes | yes | — | — |
 | `items[].colour` | string \| null | yes | yes | — | — |
 | `items[].picture` | object \| null | yes | yes | — | — |
@@ -478,6 +481,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].position` | integer | yes | no | — | — |
 | `items[].kind` | literal["group", "item"] | yes | no | — | — |
 | `items[].item` | string \| null | yes | yes | — | — |
+| `items[].inactive` | boolean | yes | no | — | Item or its category is inactive; the till skips this box, the editor allows removal. |
 | `items[].label` | string \| null | yes | yes | — | — |
 | `items[].colour` | string \| null | yes | yes | — | — |
 | `items[].picture` | object \| null | yes | yes | — | — |
@@ -615,6 +619,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].position` | integer | yes | no | — | — |
 | `items[].kind` | literal["group", "item"] | yes | no | — | — |
 | `items[].item` | string \| null | yes | yes | — | — |
+| `items[].inactive` | boolean | yes | no | — | Item or its category is inactive; the till skips this box, the editor allows removal. |
 | `items[].label` | string \| null | yes | yes | — | — |
 | `items[].colour` | string \| null | yes | yes | — | — |
 | `items[].picture` | object \| null | yes | yes | — | — |
@@ -755,6 +760,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].position` | integer | yes | no | — | — |
 | `items[].kind` | literal["group", "item"] | yes | no | — | — |
 | `items[].item` | string \| null | yes | yes | — | — |
+| `items[].inactive` | boolean | yes | no | — | Item or its category is inactive; the till skips this box, the editor allows removal. |
 | `items[].label` | string \| null | yes | yes | — | — |
 | `items[].colour` | string \| null | yes | yes | — | — |
 | `items[].picture` | object \| null | yes | yes | — | — |
@@ -893,6 +899,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].position` | integer | yes | no | — | — |
 | `items[].kind` | literal["group", "item"] | yes | no | — | — |
 | `items[].item` | string \| null | yes | yes | — | — |
+| `items[].inactive` | boolean | yes | no | — | Item or its category is inactive; the till skips this box, the editor allows removal. |
 | `items[].label` | string \| null | yes | yes | — | — |
 | `items[].colour` | string \| null | yes | yes | — | — |
 | `items[].picture` | object \| null | yes | yes | — | — |

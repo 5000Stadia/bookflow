@@ -38,7 +38,7 @@ def test_the_people_only_list_is_exactly_the_five_and_every_other_entry_is_a_cap
     # automation-v1 (on user-home-v1) adds none: automate.bank-rule and automate.invoice are capabilities, not acts.
     # pos-v1 (R114 inc 4, on opening-draft-v1) adds none: its five capabilities are grantable, and an agent needs an
     # explicit grant of each (hub.capabilities).
-    # pos-layout-v1 (R114 increment 6, on bank-reconcile-v1) adds no people-only acts.
+    # pos-layout-v1 (R114 increment 6, on bank-source-v1) adds no people-only acts.
     assert tip is runtime.known_catalog(c.POS_LAYOUT_POLICY_VERSION)
     assert people_only.people_only_commands() == FIVE == set(layer.STAYS_HUMAN)
     assert sorted(a.key for a in tip.CATALOG.admin_actions if a.human_only) == sorted(

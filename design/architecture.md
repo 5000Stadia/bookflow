@@ -5292,8 +5292,25 @@ included, goes to the expense account. An agent's write-off is the `write_off` f
 
 `company/pos_layout.py` owns the company-wide box tree and deterministic unsaved category seed.
 `pos_layout_models.py` defines its typed command contract, and `pos_layout_schema.py` defines storage added by
-co0122. `pos-box` commands run through `pos-layout-v1`, chained on `bank-reconcile-v1`. Reads use `pos.sell`;
+co0123. `pos-box` commands run through `pos-layout-v1`, chained on `bank-source-v1`. Reads use `pos.sell`;
 all layout writes use `pos.layout` and the layout's revision, independent of company settings and per-box revisions.
 The workbench reads the tree once and renders it from local item data; htmx forms apply edits and shared styles.
 The full behavior, permission decision, screenshot location and verification limits are in
 [Point of sale, as built increment 6](point-of-sale.md#as-built-increment-6-layout-and-view-styles).
+
+### Live bank feed seam (R108 increment 8)
+
+`company/bank_sources.py` defines the provider contract, exact posted-line page validation and an empty
+registry. `bank_connections.py` and `commands/bank_connection_cmds.py` expose per-account connections
+through `bank-source-v1`, on `bank-reconcile-v1`; connection authority is `bank-feed.connect`, including
+an explicit grant for an agent. Disabling requires only `bank-feed` at standard. Connection reads redact
+the cursor and staged page below admin; provider cursors must never contain credentials. Migration co0122 adds connection and account-cursor tables. Secrets are
+resolved from OS keyring references only, outside the writer.
+
+The host's bank-feed worker obtains bounded work from `bank_feed_tick.py`, calls providers off the
+writer, and returns pages to the writer for an authority/cursor/connection recheck. First pages are
+staged for fingerprint approval. `bank_feeds.prepare_page` feeds the same preparation and write path
+as statement files; its import batch and cursor commit together. Fetched live-rule provenance is
+committed with the page and `bank_rules.run_live(fetched=True)` runs after the import. Restore and
+attach disable every connection and discard staged approval. Provider conformance lives in
+`tests/bankfeed_source_contract.py`; all providers used by the tests are test-only.

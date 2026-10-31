@@ -1,11 +1,11 @@
-"""POS layout and styles on bank-reconcile-v1; accepted layers remain unchanged.
+"""POS layout and styles on bank-source-v1; accepted layers remain unchanged.
 
 Reads require pos.sell. Every layout write, including saved styles and group pictures, requires pos.layout.
 """
 from dataclasses import asdict, replace
 import hashlib
 import json
-from . import permission_bank_reconcile_catalog as previous, permission_catalog as c
+from . import permission_bank_source_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
 SOURCE_COMMIT = '183f244427c917f2745b87aa49857326f0200ed4'

@@ -253,14 +253,17 @@ def test_item_transitions_keep_editor_boxes_and_skip_inactive_at_till(browser_si
                                                          'expected_version': category['version']})
         else:
             # A fresh matching item has no inventory cost history to block its merge.
-            dup = _command(b, site, 'item.create', {'name': 'Layout duplicate sealant', 'type': item['type'],
-                'description': 'Duplicate', 'price': '4.00', 'income_account_id': item['income_account_id']})
+            dup = _command(b, site, 'item.create', {'name': 'Layout duplicate labor', 'type': item['type'],
+                'description': 'Duplicate', 'price': '4.00', 'income_account_id': item['income_account_id'],
+                'sales_tax_code_id': item['sales_tax_code_id']})
             layout = _command(b, site, 'pos-box.list', {})
             layout = _command(b, site, 'pos-box.create', {'kind': 'item', 'item': dup['id'],
                                                        'expected_version': layout['version']})
             box = next(x['id'] for x in layout['items'] if x['item'] == dup['id'])
-            _command(b, site, 'item.merge', {'merged': dup['id'], 'into': item['id']})
-        _open_pos(b, site)
+            _command(b, site, 'item.merge', {'merged': dup['id'], 'into': item['id']},
+                     **{'X-Bookflow-Reason': 'Merge duplicate layout item'})
+        b.navigate(f"{site.base_url}/c/{site.company_id}/pos")
+        b.wait_for('!!window.bookflowPos && !!window.bookflowScan')
         selector = f'[data-pos-box-id="{box}"]'
         if transition == 'merge':
             assert b.evaluate(f'document.querySelector({json.dumps(selector + " [data-pos-box-item]")}).dataset.posBoxItem') == item['id']

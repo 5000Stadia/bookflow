@@ -172,7 +172,9 @@ def test_the_clerk_preset_holds_company_item_and_pos_sell_and_lands_on_the_pos(h
     assert clerk["denies"] == CLERK_DENIES
     assert pos_presets.preset("pos-clerk-returns")["grants"] == ["pos.sell", "pos.void", "pos.refund",
                                                                  "preset.pos-clerk-returns"]
+    assert runtime.current_catalog().CATALOG.version == "pos-layout-v1"  # on bank-source-v1
     assert sorted(_admitted_commands(clerk)) == CLERK_COMMANDS
+    assert not any(name.startswith("bank-feed") for name in _admitted_commands(clerk))
 
     user = hosted.ok("user.add", {"username": "till", "password": _password("till"), "company": cid,
                                   "role": "readonly"}, headers=REASON)["user_id"]

@@ -1,8 +1,8 @@
-"""co0122: stored POS tap boxes and home style. Frozen DDL, on co0121."""
+"""co0123: stored POS tap boxes and home style. Frozen DDL, on co0122."""
 from alembic import op
 
-revision = 'co0122'
-down_revision = 'co0121'
+revision = 'co0123'
+down_revision = 'co0122'
 branch_labels = depends_on = None
 TABLES = ('pos_boxes',)
 TRIGGERS = ()
@@ -15,7 +15,7 @@ def upgrade():
     existing = {r[0] for r in conn.exec_driver_sql('SELECT name FROM sqlite_schema')}
     columns = {r[1] for r in conn.exec_driver_sql('PRAGMA table_info(company_info)')}
     if 'pos_boxes' in existing or set(COLUMNS) & columns:
-        raise RuntimeError('co0122 reserved object already exists')
+        raise RuntimeError('co0123 reserved object already exists')
     for statement in DDL:
         conn.exec_driver_sql(statement)
     conn.exec_driver_sql("ALTER TABLE company_info ADD COLUMN pos_home_view_style VARCHAR(12) NOT NULL DEFAULT 'block'")

@@ -142,7 +142,7 @@ class ImportOutput(Model):
     batch_id: ID | None = Field(description='Its batch, through which it is reversed as one unit.')
     account_id: ID
     currency: Currency
-    format: Literal['ofx', 'qfx', 'csv']
+    format: Literal['ofx', 'qfx', 'csv', 'feed']
     file_sha256: str
     date_from: str | None
     date_to: str | None

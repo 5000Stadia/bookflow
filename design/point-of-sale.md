@@ -890,7 +890,7 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
 
 ### As built: increment 6 (layout and view styles)
 
-- **Storage.** co0122 on co0121 adds `pos_boxes` (ordered parent/child boxes, group or item, label, colour,
+- **Storage.** co0123 on co0122 adds `pos_boxes` (ordered parent/child boxes, group or item, label, colour,
   group picture attachment, group view style and common version/audit fields) and `company_info.pos_home_view_style`
   and `pos_layout_version`. A positive layout revision means it has been saved, including an intentionally empty
   layout. The layout revision is independent of the company settings revision. Both demo companies keep POS off
@@ -899,7 +899,7 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   layout revision is zero; reading the till writes nothing. `pos-box seed --mode categories` stores that tree;
   `--mode empty` stores an empty home. The first other edit also materializes the tree. Once saved, category and
   inventory changes do not rearrange the boxes. Removing the final box does not reseed the layout.
-- **Commands and authority.** New layer `pos-layout-v1` on `bank-reconcile-v1`: `pos-box list` and `picture get`
+- **Commands and authority.** New layer `pos-layout-v1` on `bank-source-v1`: `pos-box list` and `picture get`
   read with `pos.sell`; `create`, `update`, `move`, `remove`, `seed`, `view` and `picture set` write with
   `pos.layout` at admin. **Permission decision for this increment:** the build instruction that all layout writes
   need `pos.layout` supersedes §3's older clerk-writable view choice. Clerks see saved styles, with no layout editor
