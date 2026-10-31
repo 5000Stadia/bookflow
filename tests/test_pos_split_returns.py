@@ -109,7 +109,9 @@ def test_returns_clerk_can_void_and_refund_split_without_ledger_permission(hoste
         assert till.post('/login', json={'username': 'split-returns-clerk',
             'password': _password('split-returns-clerk')}).status_code == 200
         def call(name, body):
-            response = till.post(f'/companies/{cid}/commands/{name}', headers={**H, **HEADERS}, json=body)
+            from bookflow.core import registry
+            headers = {**H, **HEADERS} if registry.get(name.replace('.', ' ')).is_write else H
+            response = till.post(f'/companies/{cid}/commands/{name}', headers=headers, json=body)
             assert response.status_code == 200, response.text
             return response.json()
         cart = {'lines': [{'item': 'Brass Shutoff Valve', 'quantity': '2'}]}
