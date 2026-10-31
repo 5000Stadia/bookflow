@@ -1029,7 +1029,7 @@ ENTERED_COLUMNS = {
         "item": ("item", "item name", "product", "name", "sku"),
         "quantity": ("quantity on hand", "quantity", "qty", "on hand", "qty on hand"),
         "value": ("total value", "value", "asset value", "total"),
-        "cost": ("unit cost", "cost", "avg cost", "average cost")},
+        "cost": ("unit cost", "cost", "avg cost", "average cost", "cost each", "each", "cost per unit", "per unit")},
 }
 ENTERED_REQUIRED = {"entered_balances": ("account",), "entered_open_invoices": ("party", "date", "open"),
                     "entered_unpaid_bills": ("party", "date", "open"), "entered_stock": ("item", "quantity")}

@@ -1,0 +1,5 @@
+Vendor	Contact	Phone	Email	Terms	Account no
+Prairie Pipe & Supply	Dana Ruiz	555-0301	orders@prairiepipe.example	Net 30	PP-1182
+Lakeshore Electric	Sam Ito	555-0302	sam@lakeshore.example	2% 10 Net 30	LE-77
+Midstate Rentals		555-0303		Net 30 days	
+Quick Fix Hardware	Al Brandt	555-0304	al@quickfix.example	Due on receipt	QF-0042

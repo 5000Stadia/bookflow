@@ -145,6 +145,30 @@ def _books(s, k) -> imports.Books:
     return imports.Books(s, k, SOURCE)
 
 
+_EQUALS = re.compile(r'^\s*([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*(.+?)\s*$')
+_ULID = re.compile(r'^[0-9A-HJKMNP-TV-Z]{26}$')
+
+
+def _named_filters(s, sel, books) -> list[str]:
+    """A reference filter given by name (`category_id=Fixtures`) is read as the record it names, as a column's value is
+    (R107 closing trial: the name matched nothing, silently); a name that names nothing is refused."""
+    out, cmap = [], None
+    for text in sel.filter:
+        match = _EQUALS.match(str(text))
+        if match and match.group(1).endswith('_id') and not _ULID.match(match.group(2)):
+            cmap = cmap if cmap is not None else _column_map(s, sel.kind)
+            col = cmap.get(match.group(1))
+            if col is not None and col['type'] == 'reference' and col['target']:
+                found = books.resolve(col['target'], match.group(2))
+                if found is None:
+                    raise BookflowError('E_RECORD_NOT_FOUND', message=(
+                        f"No {col['target']} {match.group(2)!r} for the filter {text!r}."),
+                        details={'field': 'filter', 'record_type': col['target'], 'selector': match.group(2)})
+                text = f'{match.group(1)}={found}'
+        out.append(text)
+    return out
+
+
 def select(s, ctx, k, sel, books, *, limit: int = MAX_RECORDS) -> tuple[list[str], int]:
     """The records chosen, in order: named ones, else the list's own `query` (its filters and search), paged."""
     if sel.records:
@@ -159,8 +183,9 @@ def select(s, ctx, k, sel, books, *, limit: int = MAX_RECORDS) -> tuple[list[str
         ids = _without_walk_ins(s, k, list(dict.fromkeys(ids)))
         return ids[:limit], len(ids)
     ids, cursor, total = [], None, None
+    filters = _named_filters(s, sel, books)
     while True:
-        payload = {'filter': list(sel.filter), 'include_inactive': sel.include_inactive, 'projection': 'reference',
+        payload = {'filter': filters, 'include_inactive': sel.include_inactive, 'projection': 'reference',
                    'limit': 200}
         if sel.query:
             payload['query'] = sel.query

@@ -293,7 +293,7 @@ Example JSON output:
 
 ## `import decide`
 
-Decide the unknown references a previewed run waits on: map text to an existing record, create it when the run reaches it, or skip its rows; `remember` keeps the maps in the source's saved mapping. Example: {"run": "01J...", "map": ["Net 30 days=Net 30"], "remember": true}.
+Decide the unknown references a previewed run waits on: map text to an existing record, create it when the run reaches it, or skip its rows; `remember` keeps the maps in the source's saved mapping. The answers are the owner's: a suggestion is not one, so map a value yourself only when the match is plain, and ask about the rest. Example: {"run": "01J...", "map": ["Net 30 days=Net 30"], "remember": true}.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -637,7 +637,7 @@ Example JSON output:
 
 ## `import preview`
 
-Read a file of records and say what importing it would do, writing nothing to the books. The file is `content` (a CSV, or cells pasted from a spreadsheet) or an `attachment`; its encoding, delimiter, money and date formats are detected. Columns map to the kind's create-command fields by header (`columns` overrides: `{"Cust Name": "name"}`); each row is keyed (name by default) so a re-run of the same `source` never duplicates, and runs through its command in dry-run. Returns counts, the mapping, unknown references with suggestions, the first refused rows with line, column, code and reason, and a sample of the exact inputs; then `import run`. Example: {"kind": "customer", "content": "Name,Email\nAcme,ap@acme.test\n"}.
+Read a file of records and say what importing it would do, writing nothing to the books. The file is `content` (a CSV, or cells pasted from a spreadsheet) or an `attachment`; its encoding, delimiter, money and date formats are detected. Columns map to the kind's create-command fields by header (`columns` overrides: `{"Cust Name": "name"}`); each row is keyed (name by default) so a re-run of the same `source` never duplicates, and runs through its command in dry-run. Returns counts, the mapping, unknown references with suggestions, the first refused rows with line, column, code and reason, and a sample of the exact inputs; then `import run`. Send it without dry_run: it writes nothing to the books either way, but only a real call saves the run that `import decide` and `import run` continue. Before running, an import that sets how the business works from then on (customers with their terms, a mapping next month's file will use) gets one check with the owner of its exact details from this preview: the counts and how each unknown value is mapped; a value with no plain match is asked about, never guessed. A plainly named small import just runs. Example: {"kind": "customer", "content": "Name,Email\nAcme,ap@acme.test\n"}.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -1455,7 +1455,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `header` | array[string] | yes | no | — | A header row that maps without asking. |
 | `example` | array[string] | yes | no | — | One example row. |
 | `content` | string | yes | no | — | Header and example as CSV text. |
-| `fields` | array[object[string, any]] | yes | no | — | Every mappable input path, its type and whether required. |
+| `fields` | array[object[string, any]] | yes | no | — | Every mappable input path (`field`, the name `columns` maps a header to), its type, whether required, and what a reference names. |
 
 Example JSON output:
 

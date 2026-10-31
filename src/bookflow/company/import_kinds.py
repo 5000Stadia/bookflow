@@ -61,7 +61,8 @@ _PARTY = {'customer': 'name', 'customer name': 'name', 'vendor': 'name', 'vendor
           'account no': 'account_number', 'tax id': 'resale_number', 'web': 'website', 'parent': 'parent_id',
           'job of': 'parent_id', 'customer type': 'customer_type_id', 'vendor type': 'vendor_type_id',
           'rep': 'sales_rep_id', 'sales rep': 'sales_rep_id', 'class': 'default_class_id',
-          'price level': 'price_level_id', 'tax code': 'sales_tax_code_id', 'contact name': 'contact'}
+          'price level': 'price_level_id', 'tax code': 'sales_tax_code_id', 'contact name': 'contact',
+          'contact person': 'contact'}
 # A customer's own words: what a client list or a job sheet calls its columns.
 _CUSTOMER = {'client': 'name', 'client name': 'name', 'customer/job': 'name', 'job started': 'job_start',
              'job start': 'job_start', 'job start date': 'job_start', 'start date': 'job_start',
@@ -70,7 +71,7 @@ _CUSTOMER = {'client': 'name', 'client name': 'name', 'customer/job': 'name', 'j
              'job description': 'job_description'}
 _ADDRESS = {'address': 'line1', 'address 1': 'line1', 'address1': 'line1', 'street': 'line1', 'address line 1': 'line1',
             'address 2': 'line2', 'address2': 'line2', 'address line 2': 'line2', 'city': 'city', 'town': 'city',
-            'state': 'state', 'province': 'state', 'region': 'state', 'zip': 'postal_code', 'zip code': 'postal_code',
+            'state': 'state', 'st': 'state', 'province': 'state', 'region': 'state', 'zip': 'postal_code', 'zip code': 'postal_code',
             'postcode': 'postal_code', 'postal code': 'postal_code', 'country': 'country'}
 
 KINDS: dict[str, Kind] = {k.name: k for k in (
@@ -337,13 +338,13 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
         'delivery-connection check', 'delivery-schedule live',
     )),
     'not-yet': frozenset((
-        'attachment add', 'batch-invoice post', 'billing-group add', 'billing-group create', 'bin create',
+        'batch-invoice post', 'billing-group add', 'billing-group create', 'bin create',
         'budget create', 'budget set', 'card-credit post', 'costing-method set', 'custom-field create',
         'customer-refund post', 'cycle-class create', 'deposit post', 'directive add', 'fixed-asset setup',
         'inventory-count create', 'inventory-count enter', 'inventory-count post', 'inventory-site create',
         'inventory-transfer post', 'item-receipt post', 'landed-cost post', 'landed-cost setup', 'loan create',
         'loan pay', 'memorized create', 'memorized enter', 'memorized-group create', 'memorized-group enter',
-        'memorized-report create', 'mileage-rate set', 'note add', 'payment selection create', 'pick-list create',
+        'memorized-report create', 'mileage-rate set', 'payment selection create', 'pick-list create',
         'pick-list enter', 'prepayment receive', 'price-rule create', 'proposal create', 'rate set', 'register post',
         'sales-tax pay', 'sales-tax-code create', 'schedule create', 'shipment post', 'statement-charge post',
         'time-activity create', 'todo create', 'transfer post', 'trip create', 'unit-of-measure create',
@@ -352,8 +353,9 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
         'bank-rule create',
     )),
     'not-a-record': frozenset((
-        # An item's picture is a file on an item that exists, never a cell of a row (R114).
-        'item picture set', 'item picture use',
+        # An item's picture, an attachment and a note are a file or text on a record that exists, never a cell of a
+        # row (R114; reviewed in R107 increment 8).
+        'item picture set', 'item picture use', 'attachment add', 'note add',
         'import preview', 'import run', 'import cancel', 'import reverse', 'import decide', 'import-mapping save',
         'import-mapping deactivate', 'bank-feed import', 'bank-feed reverse', 'bank-feed move',
         'bank-line match', 'bank-line unmatch', 'bank-line ignore', 'bank-line add', 'bank-line transfer',
