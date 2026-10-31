@@ -671,10 +671,11 @@ def _in_use(s, record_type: str, ids: list[str], made_here: set[str], by_batch: 
     if getattr(rec, 'document', False):
         return _document_uses(s, rec, ids, made_here)
     payload = json.dumps(ids)
+    retired_documents: dict[str, bool] = {}
     for table, column in _referrers(s, rec.table.name):
         meta = c.metadata.tables.get(table)
         key = 'id' if meta is not None and 'id' in meta.c else 'rowid'
-        document = ('transaction_id' if meta is not None and 'transaction_id' in meta.c else
+        document = ('id' if table == 'transactions' else 'transaction_id' if meta is not None and 'transaction_id' in meta.c else
                     # a placement names its document through the movement it places
                     '(SELECT m.transaction_id FROM inventory_movements m WHERE m.id = movement_id)'
                     if meta is not None and 'movement_id' in meta.c and table != 'inventory_movements' else 'NULL')
@@ -687,6 +688,13 @@ def _in_use(s, record_type: str, ids: list[str], made_here: set[str], by_batch: 
                 if by_batch is not None:
                     by_batch.add(target)
                 continue
+            if transaction:
+                if transaction not in retired_documents:
+                    status = s.company.raw.execute('SELECT status FROM transactions WHERE id = ?',
+                                                   (transaction,)).fetchone()
+                    retired_documents[transaction] = bool(status and status[0] in ('voided', 'deleted'))
+                if retired_documents[transaction]:
+                    continue  # history may still name a retired list record; it is not a live dependency
             uses = found.setdefault(target, {'tables': [], 'rows': [], 'documents': []})
             if transaction and len(uses['documents']) < 3:
                 kind, number = s.company.raw.execute('SELECT type, number FROM transactions WHERE id = ?',

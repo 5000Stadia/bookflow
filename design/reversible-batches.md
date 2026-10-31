@@ -88,7 +88,8 @@ after one check, and refuses plainly when a payment has since been applied.
   also block. Void checks the closed period even while applications are still standing, before any unapply runs.
 - Depreciation and finance-charge assessment insert their batch and effects inside their existing command transaction.
   Their output `batch` identifies it. Neither has a separate native run table; their `source_type` names the command.
-  Depreciation links and assessment bases remain history. An assessment-created Finance Charge item is recorded
+  Depreciation links and assessment bases remain history. A live disposal blocks reversal of its depreciation
+  journals; voided later assessments do not block retirement of the shared Finance Charge item. An assessment-created Finance Charge item is recorded
   before its charges and renamed/deactivated only after they have been voided. A pre-existing item is retained.
 - Reversible choices: depreciation and assessments use strict company-wide scopes per operation, so later runs unwind
   first. Independent invoice and bill-payment batches use record dependencies. Native adopter reversals retain document

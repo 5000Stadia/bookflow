@@ -4,7 +4,7 @@
 
 ## `fixed-asset depreciate`
 
-Post depreciation for every period ending on or before `through` that is not posted yet: debit the depreciation expense account, credit accumulated depreciation. per_period writes one journal entry per period end date; combined writes one dated `through`. Each asset period is linked to its entry, so running again posts nothing twice, and voiding an entry reopens its periods. Dry-run is the preview. A date in a closed period is refused: post it combined into an open period instead. The output names its batch: `batch reverse <batch> --dry-run` previews reversing its journals. Later depreciation batches must reverse first; depreciation links remain as history.
+Post depreciation for every period ending on or before `through` that is not posted yet: debit the depreciation expense account, credit accumulated depreciation. per_period writes one journal entry per period end date; combined writes one dated `through`. Each asset period is linked to its entry, so running again posts nothing twice, and voiding an entry reopens its periods. Dry-run is the preview. A date in a closed period is refused: post it combined into an open period instead. The output names its batch: `batch reverse <batch> --dry-run` previews reversing its journals. Later depreciation batches must reverse first; a live disposal of the asset blocks reversal. Depreciation links remain as history.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
