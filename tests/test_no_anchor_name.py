@@ -6,6 +6,8 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_PATHS = ('src', 'docs', 'design', 'README.md', 'tools', 'tests')
+# Compressed binaries (fonts, images, wasm) hold arbitrary bytes that can spell two letters by chance.
+OPAQUE_SUFFIXES = ('.ttf', '.otf', '.woff', '.woff2', '.wasm', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.pdf')
 PATTERN = re.compile(r'quickbooks|(?<![a-z])(?:intuit|qbo|qbd|qb)(?![a-z])', re.IGNORECASE)
 # No product-name/report-title exceptions are needed. This exact extension matcher
 # must keep recognizing bank-download files; it is a format identifier, not prose.
@@ -22,6 +24,8 @@ def test_no_anchor_name_in_tracked_public_files():
     violations = []
     seen = set()
     for name in filter(None, tracked):
+        if name.lower().endswith(OPAQUE_SUFFIXES):
+            continue
         # Latin-1 preserves every byte, including ASCII names in binary fixtures.
         content = (ROOT / name).read_bytes().decode('latin-1')
         for literal in MATCHER_LITERALS.get(name, ()):
