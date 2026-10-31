@@ -155,3 +155,32 @@ def test_group_picture_validated_read_scoped_and_retained_until_cleared(co):
         co.c.run('pos-box picture get', {'attachment': shown['attachment_id']}, company=co.cid, output_stream=io.BytesIO())
     assert missing.value.code == 'E_RECORD_NOT_FOUND'
     assert co.run('company compact')['collected_count'] >= 1
+
+
+def test_conflict_names_latest_writer_elapsed_time_and_changed_style_and_order(co, root):
+    from tests.test_row2_flow import _second_admin
+    other = _second_admin(root, co.c, login='layout-editor')
+    edit(co, 'seed', mode='empty')
+    one = group(co, 'One')
+    two = group(co, 'Two')
+    version = co.run('pos-box list')['version']
+    styled = other.run('pos-box view', dict(style='list', expected_version=version),
+                       company=co.cid, reason='Set shared home style')
+    stale = co.fails('pos-box view', dict(style='photo', expected_version=version))
+    assert stale.code == 'E_VERSION_CONFLICT'
+    details = stale.details
+    assert details['changed_fields'] == ['home_view_style']
+    assert details['updated_by_name'] == 'Layout-Editor' and details['updated_by']
+    assert details['updated_at'] and 0 <= details['seconds_since_update'] < 120
+    assert details['updated_via'] == 'python' and details['show_command'] == 'pos-box list'
+    assert 'home_view_style' in stale.message and 'Layout-Editor' in stale.message
+    reordered = other.run('pos-box move', dict(pos_box=two, parent=None, position=0,
+                                               expected_version=styled['version']),
+                          company=co.cid, reason='Move Two first')
+    stale = co.fails('pos-box update', dict(pos_box=one, label='Stale name', expected_version=version))
+    assert stale.details['changed_fields'] == ['home_view_style', 'position']
+    assert stale.details['current_version'] == reordered['version']
+    assert stale.details['expected_version'] == version
+    assert stale.details['updated_by'] == details['updated_by']
+    assert stale.details['updated_by_name'] == 'Layout-Editor'
+    assert co.run('pos-box list') == reordered

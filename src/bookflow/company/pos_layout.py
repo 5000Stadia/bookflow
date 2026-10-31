@@ -121,13 +121,56 @@ def _picture(s, key):
     return None
 
 
+def conflict(s, record_id, expected_version):
+    """Explain a stale layout using its own audit revision, including box edits in the same events.
+
+    Layout revision changes are serialization guards, not user-facing fields. A reorder is therefore reported
+    as position/parent, and a style change as home_view_style or view_style, with the latest writer's provenance.
+    """
+    from bookflow.core import audit, versioning
+    from bookflow.hub.users import user_names
+    current_version = s.company.conn.execute(sa.select(c.company_info.c.pos_layout_version).where(
+        c.company_info.c.id == record_id)).scalar_one()
+    writer = versioning.current_writer_from_entries(s.company, 'pos_layout', record_id, current_version)
+    names = user_names(s, {key for key in (writer.updated_by, writer.on_behalf_of) if key}) if writer else {}
+    entries = c.audit_entries
+    events = sa.select(entries.c.event_id).where(entries.c.record_type == 'pos_layout',
+        entries.c.record_id == record_id, entries.c.version_after > expected_version,
+        entries.c.version_after <= current_version)
+    changed = set()
+    public_fields = {'parent_id': 'parent', 'item_id': 'item', 'picture_attachment_id': 'picture_attachment',
+                     'pos_home_view_style': 'home_view_style'}
+    for entry in s.company.conn.execute(sa.select(entries).where(entries.c.event_id.in_(events),
+            entries.c.record_type.in_(('pos_box', 'pos_layout')))).mappings():
+        before, after = audit.decode_snapshot(entry['before']), audit.decode_snapshot(entry['after'])
+        if entry['record_type'] == 'pos_box' and (before is None or after is None):
+            changed.add('boxes')
+            continue
+        before, after = before or {}, after or {}
+        changed.update(public_fields.get(key, key) for key in set(before) | set(after)
+                       if key not in versioning.BOOKKEEPING | {'pos_layout_version'}
+                       and before.get(key) != after.get(key))
+        if entry['record_type'] == 'pos_layout' and before.get('pos_layout_version') == 0:
+            changed.add('initialized')
+    fields = sorted(changed)
+    details = dict(record_type='pos_layout', record_id=record_id, expected_version=expected_version,
+        current_version=current_version, changed_fields=fields, show_command='pos-box list',
+        updated_by=writer.updated_by if writer else None,
+        updated_by_name=names.get(writer.updated_by) if writer else None,
+        updated_on_behalf_of=writer.on_behalf_of if writer else None,
+        updated_on_behalf_of_name=names.get(writer.on_behalf_of) if writer else None,
+        updated_via=writer.updated_via if writer else None,
+        updated_at=writer.at if writer else None,
+        seconds_since_update=versioning._seconds_since(writer.at if writer else None))
+    return BookflowError('E_VERSION_CONFLICT', message=versioning._conflict_message(details, fields) +
+                        ' Reload with pos-box list before editing the layout.', details=details)
+
+
 def begin(s, ctx, expected_version):
     pos_layer.require_enabled(s)
     info, rows = state(s)
     if expected_version != info['pos_layout_version']:
-        raise BookflowError('E_VERSION_CONFLICT', message='The POS layout changed. Reload it before editing again.',
-            details={'record_type': 'pos_layout', 'record_id': info['id'], 'expected_version': expected_version,
-                     'current_version': info['pos_layout_version'], 'show_command': 'pos-box list'})
+        raise conflict(s, info['id'], expected_version)
     before = [dict(r) for r in rows] if expected_version else []
     for row in rows:
         if 'created_at' not in row:
@@ -263,8 +306,7 @@ def apply(plan, ctx, s):
     if s.company.conn.execute(c.company_info.update().where(c.company_info.c.id == info['id'],
             c.company_info.c.pos_layout_version == info['pos_layout_version']).values(
                 pos_layout_version=after['pos_layout_version'], pos_home_view_style=after['pos_home_view_style'])).rowcount != 1:
-        raise BookflowError('E_VERSION_CONFLICT', message='The POS layout changed; reload it before editing.',
-                            details={'record_type': 'pos_layout', 'record_id': info['id']})
+        raise conflict(s, info['id'], info['pos_layout_version'])
     old = {r['id']: r for r in data['before']}
     new = {r['id']: r for r in data['rows']}
     touched = []

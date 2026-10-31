@@ -161,6 +161,12 @@
       root.classList.toggle('pos-editing', layoutEditing);
     }
   }
+  function acceptLayout(answer) {
+    // A delayed read or picture response must never replace a newer saved revision.
+    if (answer.version < data.layout.version) return;
+    data.layout = answer;
+    drawBoxes();
+  }
   function layoutStatus(message) {
     if ($('[data-pos-layout-status]')) $('[data-pos-layout-status]').textContent = message;
     if ($('[data-pos-box-status]')) $('[data-pos-box-status]').textContent = message;
@@ -173,16 +179,16 @@
       layoutStatus('Saving…');
       form.elements.command.value = command;
       form.elements.body.value = JSON.stringify({...body, expected_version: data.layout.version});
-      function finished(event) {
+      async function finished(event) {
         if (event.target !== form) return;
         form.removeEventListener('htmx:afterRequest', finished);
         let answer;
         try { answer = JSON.parse(event.detail.xhr.responseText); } catch (_) {}
         if (event.detail.successful && answer && Array.isArray(answer.items)) {
-          data.layout = answer; drawBoxes(); layoutStatus('Saved.'); resolve(answer);
+          acceptLayout(answer); layoutStatus('Saved.'); resolve(answer);
         } else {
           const message = answer && (answer.message || answer.error && answer.error.message) || 'The layout was not saved. Check your connection and try again.';
-          api('pos-box list', {}).then(found => { data.layout = found; drawBoxes(); }).catch(() => {});
+          try { acceptLayout(await api('pos-box list', {})); } catch (_) { /* keep the last known layout */ }
           layoutStatus(message); reject(new Error(message));
         }
       }
@@ -193,8 +199,8 @@
     return work;
   }
   function addBoxItem(item) {
-    if (!item.box) { layoutStatus('This item can be rung up from lookup, but cannot be a tap box.'); return; }
-    layoutWrite('create', {kind: 'item', parent: currentGroup(), item: item.id}).catch(() => {});
+    if (!item.box) { layoutStatus('This item can be rung up from lookup, but cannot be a tap box.'); return Promise.resolve(false); }
+    return layoutWrite('create', {kind: 'item', parent: currentGroup(), item: item.id}).then(() => '1', () => false);
   }
   function openBox(box) {
     arranged = box || null;
@@ -522,7 +528,7 @@
       let answer;
       try { answer = JSON.parse(event.detail.xhr.responseText); } catch (_) {}
       if (event.detail.successful && answer && Array.isArray(answer.items)) {
-        data.layout = answer; drawBoxes(); layoutStatus('Picture saved.');
+        acceptLayout(answer); layoutStatus('Picture saved.');
         $('[data-pos-box-dialog]').close();
       } else layoutStatus(answer && (answer.message || answer.error && answer.error.message) || 'The picture was not saved. Try again.');
     });
@@ -567,6 +573,11 @@
     scanned(answer, want) {
       if (state.pending) return false;
       const known = items.get(answer.item_id) || {id: answer.item_id, name: answer.item_name, price: null, tracking: 'none'};
+      if (layoutEditing) {
+        scanInput.value = '';
+        lookup();
+        return addBoxItem(known);
+      }
       const serial = Array.isArray(answer.serial_numbers) ? answer.serial_numbers[0] : null;
       const line = add(known, want.quantity, serial);
       scanInput.value = '';

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from tests.test_item_pictures_browser import _fits, _give, _png
-from tests.test_pos_sale_browser import _signed_in, _pos_on, _open_pos, _lines
+from tests.test_pos_sale_browser import _signed_in, _pos_on, _open_pos, _lines, SEALANT, COUPLING
 from tests.test_row5_browser_acceptance import CHROME, browser_site  # noqa: F401
 from tests.test_row8_register_browser import _command
 
@@ -85,11 +85,23 @@ def test_four_styles_saved_on_home_and_group_and_read_on_another_device(browser_
         other.evaluate('document.querySelector(".pos-styles details").open = true')
         _click(other, '[data-pos-style="compact"]')
         _saved(other, version)
+        b.evaluate('''(() => { const real = window.fetch; window.fetch = async (url, init) => {
+          const answer = await real(url, init);
+          if (String(url).endsWith('/pos-box.list')) {
+            window.__recoveryWaiting = true;
+            await new Promise(resolve => { window.__releaseRecovery = resolve; });
+          }
+          return answer;
+        }; })()''')
         b.evaluate('document.querySelector(".pos-styles details").open = true')
         _click(b, '[data-pos-style="photo"]')
-        b.wait_for('document.querySelector("[data-pos-layout-status]").textContent !== "Saving…"')
-        b.wait_for('document.querySelector("[data-pos-boxes]").classList.contains("pos-view-compact")')
-        assert b.evaluate('document.querySelector("[data-pos-layout-status]").textContent') != 'Saved.'
+        b.wait_for('window.__recoveryWaiting === true')
+        # A second choice waits for the conflict read; its eventual save cannot be replaced by that older read.
+        _click(b, '[data-pos-style="list"]')
+        b.evaluate('window.__releaseRecovery()')
+        b.wait_for(f'window.bookflowPos.layout().version > {version + 1}')
+        assert b.evaluate('document.querySelector("[data-pos-boxes]").classList.contains("pos-view-list")')
+        assert b.evaluate('document.querySelector("[data-pos-layout-status]").textContent') == 'Saved.'
     finally:
         if other:
             other.close()
@@ -155,6 +167,25 @@ def test_editor_adds_nested_groups_duplicate_item_moves_and_removes_only_boxes(b
         _saved(b, version)
         assert b.evaluate(f'window.bookflowPos.layout().items.filter(x => x.item === {json.dumps(item)}).length') == 1
         assert _command(b, site, 'item.show', {'item': item})['id'] == item
+        b.wait_for('!document.querySelector("[data-pos-box-dialog]").open')
+        # USB/keyboard Enter and the camera hand-off both add boxes while editing, never sale lines.
+        version = b.evaluate('window.bookflowPos.layout().version')
+        b.evaluate(f'''(() => {{ const i = document.querySelector('[data-scan-input]'); i.value = '2*{SEALANT}';
+          i.dispatchEvent(new KeyboardEvent('keydown', {{key: 'Enter', bubbles: true}})); }})()''')
+        _saved(b, version)
+        assert _lines(b) == []
+        sealant = _command(b, site, 'item.show', {'item': 'Pipe Sealant'})['id']
+        assert b.evaluate(f'window.bookflowPos.layout().items.filter(x => x.item === {json.dumps(sealant)}).length') == 1
+        version = b.evaluate('window.bookflowPos.layout().version')
+        b.evaluate(f'window.bookflowScan.scan(document.querySelector("[data-scan][data-scan-mode=pos]"), "{COUPLING}")')
+        _saved(b, version)
+        assert _lines(b) == []
+        # A lookup-only discount cannot become a box through the scanner hand-off either.
+        before = b.evaluate('window.bookflowPos.layout().version')
+        assert b.evaluate('''(() => { const item = JSON.parse(document.querySelector('#pos-data').textContent).items.find(i => !i.box);
+          return window.bookflowPos.scanned({item_id: item.id, item_name: item.name}, {quantity: '1'}); })()''', await_promise=True) is False
+        assert b.evaluate('window.bookflowPos.layout().version') == before
+        assert _lines(b) == []
     finally:
         b.close()
 

@@ -244,6 +244,32 @@ def test_the_clerk_preset_holds_company_item_and_pos_sell_and_lands_on_the_pos(h
         refused = fresh.post(f"/companies/{cid}/commands/{name}", headers=H, json=body)
         assert refused.status_code == 403 and refused.json()["code"] == "E_PERMISSION", (name, refused.text)
     assert fresh.post(f"/companies/{cid}/commands/pos-register.list", headers=H, json={}).status_code == 200
+    layout = fresh.post(f"/companies/{cid}/commands/pos-box.list", headers=H, json={})
+    assert layout.status_code == 200, layout.text
+    layout = layout.json()
+    box = next(b['id'] for b in layout['items'] if b['kind'] == 'group')
+    layout_writes = {
+        'create': {'kind': 'group', 'label': 'Not allowed'},
+        'update': {'pos_box': box, 'label': 'Not allowed'},
+        'move': {'pos_box': box, 'position': 0},
+        'remove': {'pos_box': box},
+        'seed': {'mode': 'empty'},
+        'view': {'style': 'list'},
+    }
+    for verb, body in layout_writes.items():
+        refused = fresh.post(f"/companies/{cid}/commands/pos-box.{verb}", headers={**H, **REASON},
+                             json={**body, 'expected_version': layout['version']})
+        assert refused.status_code == 403 and refused.json()['code'] == 'E_PERMISSION', (verb, refused.text)
+    from bookflow.core.transfer_protocol import encode_input
+    from tests.test_item_pictures import png
+    refused = fresh.post(f"/companies/{cid}/transfers/pos-box.picture.set", headers={**H, **REASON,
+        'X-Bookflow-Input': encode_input({'pos_box': box, 'expected_version': layout['version'],
+                                        'original_filename': 'forbidden.png'})}, content=png())
+    assert refused.status_code == 403 and refused.json()['code'] == 'E_PERMISSION', refused.text
+    # The bespoke editor route has the same command-boundary refusal if typed directly.
+    refused = fresh.post(f"/c/{cid}/pos/layout", headers=H,
+                         data={'command': 'view', 'body': json.dumps({'style': 'list', 'expected_version': layout['version']})})
+    assert refused.status_code == 400 and refused.json()['code'] == 'E_PERMISSION', refused.text
     # POS off: the seller keeps the minimal header, now with Items alone.
     _pos(hosted, False)
     off = fresh.get(f"/c/{cid}/_group/items")
@@ -259,6 +285,11 @@ def test_the_clerk_preset_holds_company_item_and_pos_sell_and_lands_on_the_pos(h
             assert not ok and "E_PERMISSION" in json.dumps(reply), reply
             ok, reply = await call("pos-register list", {})
             assert ok and reply["items"][0]["name"] == "Main", reply
+            ok, reply = await call("pos-box list", {})
+            assert ok and reply['version'] == layout['version'], reply
+            for verb, body in layout_writes.items():
+                ok, reply = await call('pos-box ' + verb, {**body, 'expected_version': layout['version']})
+                assert not ok and 'E_PERMISSION' in json.dumps(reply), (verb, reply)
     anyio.run(over_mcp)
 
     # A readonly member with no grant holds no POS capability: no entry, and the command refuses.
