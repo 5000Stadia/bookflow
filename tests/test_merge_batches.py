@@ -407,3 +407,16 @@ def test_merge_retry_reuses_batch_and_manual_unmerge_is_not_a_second_reversal(bo
     assert after == before
     _run(books, f'{kind} unmerge', {'merged': merged})
     _refused_unchanged(books, made['batch_id'], made['merge_id'])
+
+
+@pytest.mark.parametrize('kind', KINDS)
+def test_missing_unmerge_reason_refuses_before_opening_reversal(books, kind):
+    merged, survivor = _setup(books, kind)
+    batch = _merge(books, kind, merged, survivor)['batch_id']
+    before = _snapshot()
+    for dry in (True, False):
+        with pytest.raises(BookflowError) as caught:
+            books.run('batch reverse', {'batch': batch}, company=COMPANY, dry_run=dry)
+        assert caught.value.code == 'E_BATCH_BLOCKED'
+        assert any(b['code'] == 'E_REASON_REQUIRED' for b in caught.value.details['blockers'])
+        assert _snapshot() == before

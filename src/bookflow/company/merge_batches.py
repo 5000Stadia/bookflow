@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 
 from bookflow import BookflowError
+from bookflow.core.errors import require_reason
 from bookflow.company import batches, list_merges, party_merges
 
 TABLES = {'customer': 'customers', 'vendor': 'vendors', 'account': 'accounts', 'item': 'items'}
@@ -151,6 +152,13 @@ def _plan(s, ctx, batch, effects, done, probe, blockers):
         command = f'{kind} unmerge'
         payload = {'merged': merge['merged_id']}
         if probe:
+            # Native unmerge requires a reason in its applier. Check that requirement
+            # before the shared engine opens a reversal batch, even for a human caller.
+            try:
+                require_reason(ctx.reason)
+            except BookflowError as error:
+                blockers.append(dict(seq=effect['seq'], record_type=effect['record_type'], record_id=effect['record_id'],
+                                     code=error.code, message=error.message, details=error.details))
             try:
                 batches.run_nested(s, ctx, command, payload, source_ref=f"reverse:{batch['id']}", dry_run=True)
             except BookflowError as error:
