@@ -11,7 +11,7 @@ Database: `company`.
 | `id` | VARCHAR(26) | no | — | primary key 1 | — | — | Stable ULID of this line. |
 | `import_id` | VARCHAR(26) | no | — | unique with import_id + ordinal | — | bank_feed_imports.id | The import that brought the line in. |
 | `ordinal` | INTEGER | no | — | unique with import_id + ordinal | — | — | Position among that import's new lines, from 0. |
-| `account_id` | VARCHAR(26) | no | — | — | ix_bank_lines_account_state, ix_bank_lines_fitid, uq_bank_lines_live_key | accounts.id | Account the line belongs to. |
+| `account_id` | VARCHAR(26) | no | — | — | ix_bank_lines_account_state, ix_bank_lines_fitid, ix_bank_lines_payee_key, uq_bank_lines_live_key | accounts.id | Account the line belongs to. |
 | `line_key` | VARCHAR(120) | no | — | — | uq_bank_lines_live_key | — | fitid:<FITID> (with !<amount hash> when the bank reused the id for another amount), or hash:<24 hex> of the line and its occurrence in the file. |
 | `fitid` | VARCHAR(255) | yes | — | — | ix_bank_lines_fitid | — | The bank's own transaction id; null when the file gave none. |
 | `date` | VARCHAR(10) | no | — | — | ix_bank_lines_account_state | — | Posted date, YYYY-MM-DD. |
@@ -36,3 +36,4 @@ Database: `company`.
 | `entry_date` | VARCHAR(10) | yes | — | — | — | — | The entry's date on this account when the line was linked to it (YYYY-MM-DD), so a later change shows as entry_gone; null while none. |
 | `rule_id` | VARCHAR(26) | yes | — | — | — | bank_rules.id | The rule that proposed for this line, or acted on it; null when none. |
 | `answer` | TEXT | yes | — | — | — | — | What the line was added as (payee, account, class) as a JSON object, read by history proposals and learning; null unless added with one account. |
+| `payee_key` | VARCHAR(200) | yes | — | — | ix_bank_lines_payee_key | — | The payee as Bookflow reads it, when the text names a party (letters, & and a name's own short number; store and reference numbers, dates and processor words dropped); null for "CHECK 1234", "MOBILE DEPOSIT" and the like. History proposals and learning read lines by it. |

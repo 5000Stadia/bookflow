@@ -669,7 +669,8 @@ def add(s, ctx, inp, *, dry_run: bool) -> dict:
             if came.get('rule_id'):
                 s2.company.conn.execute(c.bank_lines.update().where(c.bank_lines.c.id == line['id']).values(
                     rule_id=came['rule_id']))
-            note = bank_rules.learn(s2, ctx, current, answer, batch['id'], always=bool(getattr(inp, 'always', False)))
+            note = bank_rules.learn(s2, ctx, current, answer, batch['id'], always=bool(getattr(inp, 'always', False)),
+                                    sort_batch=sort_id)
             if note:
                 learned.append(note)
             entered.append(m.Entered(line_id=line['id'], entry_id=entry_id, command=cmd.name, input=plan['input']))
@@ -1355,7 +1356,8 @@ def _restorable(s, touched: dict[str, dict], batch_id: str) -> tuple[dict[str, d
 
 
 def _sort_plan(s, ctx, batch: dict, all_effects: list[dict], done: dict, probe, ordering: list[dict]) -> dict:
-    known = {('bank_line', 'updated'), ('transaction', 'created'), ('transaction', 'linked')}
+    known = {('bank_line', 'updated'), ('transaction', 'created'), ('transaction', 'linked'),
+             ('bank_rule', 'rule_learned')}
     unknown = sorted({(e['record_type'], e['action']) for e in all_effects} - known)
     if unknown:
         raise BookflowError('E_VALIDATION', message=f'No inverse is known for {unknown[0][0]} {unknown[0][1]} effects.',
@@ -1382,9 +1384,12 @@ def _sort_plan(s, ctx, batch: dict, all_effects: list[dict], done: dict, probe, 
         return found
     steps, work, more, entries, created = bank_reversal.entry_plan(s, ctx, batch, all_effects, done, probe, linked_for)
     blockers += more
+    learned = sum(1 for e in all_effects if (e['record_type'], e['action']) == ('bank_rule', 'rule_learned'))
     restore = {'seq': 0, 'record_type': 'batch', 'record_id': batch['id'], 'name': 'the lines it sorted',
                'action': 'updated', 'version': len(live),
-               'steps': [f'return {len(live)} line(s) to how they stood before the batch']}
+               'steps': [f'return {len(live)} line(s) to how they stood before the batch',
+                         *([f'retire bank_rule (rule_learned): {learned} learned from it, unless edited since']
+                           if learned else [])]}
     freed = sum(1 for i, row in live.items() if row['entry_id'] and not row['created']
                 and touched[i]['before'].get('entry_id') != row['entry_id'])
     return {'steps': [*steps, restore], 'work': work, 'blockers': blockers, 'records': len(created) + 1,
@@ -1421,6 +1426,13 @@ def _sort_release(s, batch: dict) -> None:
                               before={'of_seq': info['seq'], 'restored': before['state']}, event_id=event)
     # A line a match held is waiting again with its entry free: read its proposals afresh, and those of the waiting
     # lines of its account that entry could be (one imported meanwhile skipped it while it was taken).
+    from bookflow.company import bank_rules
+    for e in batches.effects(s, batch['id']):
+        if (e['record_type'], e['action']) == ('bank_rule', 'rule_learned'):
+            outcome = bank_rules.retire(s, e, batch, reversal_id)
+            batches.record_effect(s, reversal_id, record_type='bank_rule', record_id=e['record_id'],
+                                  action='reversed', version_after=None, before={'of_seq': e['seq'],
+                                                                                 'outcome': outcome}, event_id=event)
     freed = [row for line_id, row in live.items() if row['entry_id'] and not row['created']
              and touched[line_id]['before'].get('entry_id') != row['entry_id']]
     if freed:
@@ -1453,6 +1465,10 @@ def _propose_again(s, freed: list[dict]) -> None:
                 continue
             seen.add(line['id'])
             proposal = _proposal_now(s, dict(line))
+            kept = {k: v for k, v in (json.loads(line['proposal']) if line['proposal'] else {}).items()
+                    if k in ('rule', 'history')}
+            if kept:  # a rule's or history's proposal stays; only the matcher's is read again
+                proposal = json.dumps({**(json.loads(proposal) if proposal else {}), **kept}, sort_keys=True)
             if proposal != line['proposal']:
                 conn.execute(t.update().where(t.c.id == line['id']).values(proposal=proposal))
 

@@ -4,7 +4,7 @@
 
 ## `automation list`
 
-The automations: rules that write with nobody asking at the time (a send-mode delivery schedule; bank rules and invoice schedules once they exist), each with its state, who established it and, for a live one whose establisher no longer holds the authority, why its next firing pauses it.
+The automations: rules that write with nobody asking at the time (a send-mode delivery schedule; bank rules (auto-add and ignore) and invoice schedules once they exist), each with its state, who established it and, for a live one whose establisher no longer holds the authority, why its next firing pauses it.
 
 | Contract | Value |
 |---|---|

@@ -78,8 +78,10 @@ class Line(Model):
     rule_id: ID | None = Field(None, description='The bank rule that fits this waiting line (the first, in order).')
     rule_reason: str | None = Field(None, description="Why: the rule and the conditions it met, or 'from history: "
                                                       "4 of 5 times'.")
-    rule_acts: Literal['add', 'ignore'] | None = Field(None, description=(
-        'A live auto-add or ignore rule acts on the line at the import (its establisher checked first).'))
+    rule_acts: Literal['add', 'ignore', 'held'] | None = Field(None, description=(
+        'A live auto-add or ignore rule acts on the line at the import (add, ignore), or was held back from it (held: '
+        'rule_held says why; the line waits with its proposal).'))
+    rule_held: str | None = Field(None, description='Why a live rule did not act on this line.')
 
 
 class AccountCheck(Model):
@@ -123,12 +125,15 @@ class ImportCounts(Model):
 class RuleRun(Model):
     rule_id: ID
     name: str
-    outcome: Literal['acted', 'paused', 'skipped'] = Field(description=(
-        'acted: it added or ignored its lines as its establisher; paused: its establisher no longer holds '
-        'automate.bank-rule (or was refused), so its lines wait and one to-do was raised; skipped: not checked now.'))
+    outcome: Literal['acted', 'paused', 'held', 'skipped'] = Field(description=(
+        'acted: it added or ignored lines as its establisher; paused: its establisher no longer holds what the act '
+        'needs, so its lines wait and one to-do was raised; held: the importer lacks the authority, the company holds '
+        'rules back, or every line may already be in the books; skipped: not checked now (reason says why).'))
     added: Count
     ignored: Count
     refused: tuple[dict, ...] = Field((), description='Lines it could not enter (each waits), with the code and why.')
+    held: tuple[dict, ...] = Field((), description='Lines it left waiting because they may already be in the books.')
+    later: Count = Field(0, description="Lines past this import's share of acts: the host's next tick goes on.")
     reason: str | None = None
 
 

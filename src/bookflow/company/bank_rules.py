@@ -68,23 +68,65 @@ def _refuse(field: str, message: str, **details) -> BookflowError:
 
 _SPACE = re.compile(r'\s+')
 _DATE = re.compile(r'\b\d{1,4}[/-]\d{1,2}(?:[/-]\d{1,4})?\b')
-_KEY_NOISE = frozenset(w.upper() for w in bank_feeds._NOISE) | frozenset(
-    'ACH DES ID INDN CO PPD WEB ONLINE TRANSFER XFER REF CHECKCARD DEBITCARD STORE'.split())
+# Processor and channel words a bank puts before the name ("POS DEBIT", "SQ *"): dropped at the start only.
+_LEAD = frozenset('POS DEBIT PURCHASE CHECKCARD DEBITCARD CARD VISA MASTERCARD SQ TST PP RECURRING PENDING POSTED '
+                  'PREAUTHORIZED AUTH'.split())
+# Reference trailers after the name ("WEB ID: 123", "CONF# 45", "REF 9"): dropped at the end only, once the numbers
+# are gone.
+_TRAIL = frozenset('WEB ID CONF REF PPD INDN DES TRACE TRN CCD'.split())
+# Words that say what kind of movement a line is, a processor, or an own account, but no party: text made only of
+# these names nobody (design §5: no history proposal and no learned rule from "CHECK 1234" or "VENMO PAYMENT").
+_NO_PARTY = frozenset((
+    'CHECK CHK CHEQUE DEPOSIT DEP MOBILE REMOTE ATM WITHDRAWAL WITHDRAW CASH TRANSFER XFER TRANS ONLINE INTERNET '
+    'WIRE IN OUT TO FROM PAYMENT PMT PYMT PAY PAYROLL ACH DEBIT CREDIT INTEREST DIVIDEND SERVICE CHARGE FEE FEES '
+    'MONTHLY ANNUAL MAINTENANCE OVERDRAFT NSF RETURNED RETURN ITEM ADJUSTMENT REVERSAL REFUND BRANCH TELLER POS '
+    'PURCHASE CARD VENMO ZELLE PAYPAL CASHAPP CASH APP SQUARE SQ STRIPE QUICKPAY SAV SAVINGS CHECKING ACCOUNT ACCT '
+    'BALANCE BAL REF CONF ID WEB TEL PHONE BANKING BANK & THE OF FOR A AN').split())
 
 
 def norm(text: str | None) -> str:
     return _SPACE.sub(' ', (text or '').casefold()).strip()
 
 
+def _number(word: str) -> bool:
+    """A store, reference or check number: all digits, or a long run mostly of digits (1A2B3C)."""
+    digits = sum(ch.isdigit() for ch in word)
+    return digits == len(word) or (len(word) >= 4 and 2 * digits >= len(word))
+
+
 def payee_key(text: str | None) -> str:
-    """The payee as Bookflow reads it: upper case; dates, digits, store numbers, ``#`` runs and punctuation removed;
-    processor words dropped at either end and two-letter words (a state) at the end."""
-    words = re.sub(r'[^A-Z ]+', ' ', _DATE.sub(' ', (text or '').upper())).split()
-    while words and (words[0] in _KEY_NOISE or len(words[0]) < 2):
-        words.pop(0)
-    while words and (words[-1] in _KEY_NOISE or len(words[-1]) <= 2):
-        words.pop()
-    return ' '.join(words)[:200]
+    """The payee as Bookflow reads it: upper case; dates, ``#`` runs, store and reference numbers and punctuation
+    removed, keeping letters, ``&`` and a name's own short number (A1, 7 ELEVEN, 76); processor words dropped at the
+    start and reference trailers at the end. "SHELL OIL 4471" and "SHELL OIL #12" read alike; "A1 AUTO REPAIR" and
+    "B2 AUTO REPAIR" do not."""
+    text = re.sub(r'#\S*', ' ', _DATE.sub(' ', (text or '').upper()))
+    words = re.findall(r'[A-Z0-9&]+', re.sub(r"(?<=[A-Z])'(?=[A-Z])", '', text))
+    kept = []
+    for n, word in enumerate(words):
+        if word.isdigit():
+            if n == 0 and len(word) <= 3 and len(words) > 1:
+                kept.append(word)  # a leading brand number: 76, 7 (ELEVEN), 99
+            continue
+        if _number(word):
+            continue
+        kept.append(word)
+    while kept and kept[0] in _LEAD:
+        kept.pop(0)
+    while kept and (kept[-1] in _TRAIL or kept[-1] == '&'):
+        kept.pop()
+    while kept and kept[0] == '&':
+        kept.pop(0)
+    return ' '.join(kept)[:200]
+
+
+def party_key(text: str | None) -> str | None:
+    """The payee key when the text names a party; None when it is only movement, processor or account words (a check
+    known only by its number, "MOBILE DEPOSIT", "VENMO PAYMENT", "ONLINE TRANSFER TO SAV"): such a line gives no
+    history proposal and teaches no rule."""
+    key = payee_key(text)
+    if not key or all(w in _NO_PARTY for w in key.split()):
+        return None
+    return key
 
 
 # ------------------------------------------------------------------ rules: reading
@@ -175,19 +217,16 @@ def first_fit(rules: list[dict], line: dict, places: int) -> tuple[dict, str] | 
 
 # ------------------------------------------------------------------ history
 
-def _answers(s, account_id: str) -> dict[str, list[dict]]:
-    """The account's live lines added with one account, by payee key, in the order they were added."""
+def answers_for(s, account_id: str, key: str | None) -> list[dict]:
+    """The account's live lines with this party key that were added with one account, in the order they were added
+    (read by the indexed key, so history and learning cost what the payee's own lines cost)."""
+    if not key:
+        return []
     t = c.bank_lines
-    out: dict[str, list[dict]] = {}
-    for payee, answer in s.company.conn.execute(sa.select(t.c.payee, t.c.answer).where(
-            t.c.account_id == account_id, t.c.live == 1, t.c.state == 'added', t.c.answer.is_not(None))).all():
-        value = json.loads(answer)
-        key = payee_key(payee)
-        if key:
-            out.setdefault(key, []).append(value)
-    for values in out.values():
-        values.sort(key=lambda v: v.get('at') or '')
-    return out
+    values = [json.loads(a) for a in s.company.conn.execute(sa.select(t.c.answer).where(
+        t.c.account_id == account_id, t.c.payee_key == key, t.c.live == 1, t.c.state == 'added',
+        t.c.answer.is_not(None))).scalars()]
+    return sorted(values, key=lambda v: v.get('at') or '')
 
 
 def _same(a: dict, b: dict) -> bool:
@@ -211,19 +250,35 @@ def from_history(answers: list[dict]) -> tuple[dict, str] | None:
     return best[-1], f'from history: {len(best)} of {len(answers)} times'
 
 
+def automation_on(s) -> bool:
+    """The company setting (K2): live auto-add and ignore rules act at imports unless an admin turned it off."""
+    return bool(s.company.conn.execute(sa.select(c.company_info.c.bank_rule_automation)).scalar())
+
+
 # ------------------------------------------------------------------ proposals on lines
 
 def proposal_rule(row: dict, reason: str) -> dict:
     return dict(id=row['id'], name=row['name'], reason=reason[:500], action=row['action'], payee=row['payee'],
                 payee_type=row['payee_type'], payee_id=row['payee_id'], account_id=row['category_account_id'],
                 class_id=row['class_id'], memo=row['memo'], transfer_account_id=row['transfer_account_id'],
-                ignore_reason=row['ignore_reason'], acts=('add' if row['auto_add'] else 'ignore')
-                if acting(row) else None)
+                ignore_reason=row['ignore_reason'], acts=None, held=None)
 
 
-def annotate(s, prepared: dict) -> None:
+def _unsure(r: dict) -> str | None:
+    """Why a new line is not one a live rule may act on unattended (review H1): it may already be in the books."""
+    if r.get('duplicate_of'):
+        return f"it may repeat line {r['duplicate_of']} (possible_duplicate)"
+    result = r.get('result')
+    if r.get('suggest') or (result is not None and result.status == 'suggested' and result.suggestions):
+        return 'the matcher suggests an entry already in the books'
+    return None
+
+
+def annotate(s, prepared: dict, *, may_act: bool = True) -> None:
     """For each new waiting line of an import (or its preview): the first rule that fits, else a history proposal.
-    Read afresh inside the import's own write, so a rule changed since a preview is read as it is now."""
+    Read afresh inside the import's own write, so a rule changed since a preview is read as it is now. A live
+    auto-add or ignore rule is marked to act (``acts``) only on a line that cannot already be in the books, while
+    the company lets rules act, and not on a move's re-import (``may_act``); otherwise ``held`` says why."""
     new = [r for r in prepared['new'] if r.get('state') == 'waiting']
     for r in prepared['new']:
         r.pop('rule', None)
@@ -231,17 +286,27 @@ def annotate(s, prepared: dict) -> None:
     if new:
         account_id, places = prepared['account_id'], prepared['places']
         rules = active_rules(s, account_id)
-        history = None
+        allowed = automation_on(s) if may_act else False
+        history: dict[str, list[dict]] = {}
         for r in new:
             line = r['line']
             fit = first_fit(rules, dict(account_id=account_id, amount=line.amount, payee=line.payee, memo=line.memo,
                                         number=line.number), places)
             if fit is not None:
                 r['rule'] = proposal_rule(*fit)
+                if acting(fit[0]):
+                    why = _unsure(r) or (None if allowed else (
+                        "a move's re-import only proposes" if not may_act else
+                        'the company holds automated bank rules back (company update --bank-rule-automation)'))
+                    if why is None:
+                        r['rule']['acts'] = 'add' if fit[0]['auto_add'] else 'ignore'
+                    else:
+                        r['rule']['held'] = why
                 continue
-            if history is None:
-                history = _answers(s, account_id)
-            found = from_history(history.get(payee_key(line.payee), []))
+            key = party_key(line.payee)
+            if key and key not in history:
+                history[key] = answers_for(s, account_id, key)
+            found = from_history(history.get(key, [])) if key else None
             if found is not None:
                 answer, reason = found
                 r['history'] = dict(answer, reason=reason)
@@ -315,7 +380,8 @@ def _make_kind() -> automation.Kind:
     base = automation.table_kind(
         kind='bank-rule', capability=CAPABILITY, noun='bank rule', record_type='bank_rule', table=c.bank_rules,
         show_command='bank-rule show', edit_command='bank-rule update', live_command='bank-rule update --live',
-        what=_what, edit_needs_confirm=True)
+        what=_what, edit_needs_confirm=True, due=lambda s, now: _due(s, now),
+        act=lambda s, ctx, row, firing: _tick_act(s, ctx, row, firing))
 
     def rows(s, state=None):
         return [r for r in base.rows(s, state) if is_automation(r)]
@@ -597,9 +663,10 @@ def update(s, ctx, inp, *, dry_run: bool) -> tuple[dict, list[Touched]]:
                                     'decline` it.')
         after['status'] = inp.status
     operative = any(before.get(k) != after.get(k) for k in OPERATIVE)
-    if operative:
-        after['edited'] = 1
+    if any(before.get(k) != after.get(k) for k in OPERATIVE if k != 'status'):
+        after['edited'] = 1  # what it does changed (a status change alone is not an edit, here or in deactivate)
     notes: list[str] = []
+    holder_unconfirmed = False
     if inp.live is True:
         if not is_automation(after):
             raise _refuse('live', f"Bank rule {after['name']} only proposes: only an auto-add or ignore rule acts on "
@@ -611,15 +678,22 @@ def update(s, ctx, inp, *, dry_run: bool) -> tuple[dict, list[Touched]]:
         after.update(automation.establisher(s))
         change = 'live'
     elif inp.live is False:
-        if before['state'] == 'live':
+        if operative and is_automation(before):
+            # A non-holder's change goes to draft as any edit does; pausing is open to every editor (L4).
+            # A holder pausing needs no check of what it would do: it acts for nobody until made live again.
+            after, notes = automation.on_edit(s, CAPABILITY, before, after, operative=True, confirmed=True)
+        if after['state'] == 'live':
             at = clock.now_iso()
             after.update(state='paused', paused_reason=f'paused by {automation.name_of(s, s.actor.id)}'[:500],
                          paused_at=at)
         change = 'paused'
     else:
         if is_automation(before) or is_automation(after):
+            confirmed = inp.confirm == fingerprint(after)
+            holder_unconfirmed = (operative and before['state'] == 'live' and not confirmed
+                                  and automation.holds_now(s, CAPABILITY))
             after, notes = automation.on_edit(s, CAPABILITY, before, after, operative=operative,
-                                              confirmed=inp.confirm == fingerprint(after))
+                                              confirmed=confirmed)
             if not is_automation(after) and after['state'] != 'draft':
                 after.update(state='draft', draft_reason='no longer an auto-add or ignore rule')
         change = 'deactivated' if inp.status == 'disabled' else 'updated'
@@ -630,15 +704,15 @@ def update(s, ctx, inp, *, dry_run: bool) -> tuple[dict, list[Touched]]:
             "it will do, then pass the check's fingerprint as confirm."),
             details={'field': 'confirm', 'fields': [{'field': 'confirm', 'problem': 'the dry run\'s check fingerprint'}],
                      'reason': 'confirm_required'})
-    if inp.live is None and is_automation(after) and before['state'] == 'live' and after['state'] == 'live' \
-            and operative and inp.confirm is None:
-        notes.append('This change keeps it live only with its check confirmed.')
+    if holder_unconfirmed and the_check is not None:
+        notes = [f"Passing the check's fingerprint as confirm ({the_check.fingerprint}) keeps it live under you; "
+                 'without it this change returns it to draft.']
     touched = [] if dry_run or after == before else [_update(s, ctx, before, after, change)]
     word = {'live': 'made live', 'paused': 'paused', 'deactivated': 'deactivated'}.get(change, 'updated')
     return dict(row=after if dry_run else get(s, before['id']), check=the_check, notes=notes,
                 summary=f"bank rule {after['name']} {'would be ' if dry_run else ''}{word}",
-                next=(f"the same call with confirm {the_check.fingerprint}" if dry_run and the_check and inp.live
-                      else None)), touched
+                next=(f"the same call with confirm {the_check.fingerprint}"
+                      if dry_run and the_check and (inp.live or holder_unconfirmed) else None)), touched
 
 
 def set_status(s, ctx, inp, to: str, *, dry_run: bool) -> tuple[dict, list[Touched]]:
@@ -712,7 +786,7 @@ def apply(s, ctx, inp, *, dry_run: bool) -> tuple[dict, list[Touched]]:
         rules, places = active_rules(s, acct), bank_feeds._currency_places(s, acct)
         if only is not None and only['status'] == 'active' and only['id'] not in {r['id'] for r in rules}:
             rules = []
-        history = None
+        history: dict[str, list[dict]] = {}
         for line in rows:
             fit = first_fit(rules, line, places)
             value = json.loads(line['proposal']) if line['proposal'] else {}
@@ -721,9 +795,10 @@ def apply(s, ctx, inp, *, dry_run: bool) -> tuple[dict, list[Touched]]:
             if fit is not None:
                 value['rule'] = proposal_rule(*fit)
             else:
-                if history is None:
-                    history = _answers(s, acct)
-                found = from_history(history.get(payee_key(line['payee']), []))
+                key = line['payee_key']
+                if key and key not in history:
+                    history[key] = answers_for(s, acct, key)
+                found = from_history(history.get(key, [])) if key else None
                 if found is not None:
                     value['history'] = dict(found[0], reason=found[1])
             rule_id = fit[0]['id'] if fit else None
@@ -770,32 +845,42 @@ def answer_of(plan_input: dict, payee_id: str, payee_type: str, payee: str, acco
                 at=batches.now())
 
 
-def learn(s, ctx, line: dict, answer: dict | None, import_batch: str, *, always: bool = False) -> str | None:
-    """After a person or agent adds ``line`` with ``answer``: a rule learned when its payee key now has LEARN_AFTER
-    adds in a row answered the same (or at once with ``always``). Returns what to tell the caller."""
+def learn(s, ctx, line: dict, answer: dict | None, import_batch: str, *, always: bool = False,
+          sort_batch: str | None = None) -> str | None:
+    """After a person or agent adds ``line`` with ``answer``: a rule learned when its party key now has LEARN_AFTER
+    adds in a row answered the same (or at once with ``always``), recorded as a ``rule_learned`` effect of the line's
+    import batch (and of its --lines batch), so reversing either takes it back unless it was edited since. Returns
+    what to tell the caller; ``always`` that cannot apply says why."""
     from bookflow.core.audit import write_event_to
     if answer is None:
-        return None
-    key = payee_key(line['payee'])
+        return 'Always do this did not apply: a rule is learned from one account, not splits.' if always else None
+    key = line.get('payee_key') or party_key(line['payee'])
     if not key:
-        return None
+        return (f"Always do this did not apply: {line['payee']!r} names no party (a check number, a deposit, a "
+                'transfer or a processor alone), so no rule is learned for it.') if always else None
+    pref = learning(s)
+    if pref == 'never':
+        return ('Always do this did not apply: this company learns no bank rules (bank_rule_learning never).'
+                if always else None)
     account_id = line['account_id']
     t = c.bank_rules
     same = _rows(s, (t.c.account_id == account_id, t.c.learned_key == key, t.c.status != 'retired'))
     if same:
-        return None
+        return (f"Always do this did not apply: bank rule {same[0]['name']} already exists for {key} "
+                f"({same[0]['status']}); " + (f"`bank-rule accept {same[0]['id']}` makes it a rule."
+                                             if same[0]['status'] == 'suggested' else
+                                             f"`bank-rule update {same[0]['id']}` changes it.")) if always else None
     places = bank_feeds._currency_places(s, account_id)
-    if first_fit(active_rules(s, account_id), line, places) is not None:
-        return None
-    pref = learning(s)
+    fit = first_fit(active_rules(s, account_id), line, places)
+    if fit is not None:
+        return (f"Always do this did not apply: bank rule {fit[0]['name']} already fits this payee's lines "
+                f"(`bank-rule update {fit[0]['id']}` changes it).") if always else None
     if not always:
-        if pref == 'never':
-            return None
         if s.company.conn.execute(sa.select(c.bank_rule_declines.c.id).where(
                 c.bank_rule_declines.c.account_id == account_id, c.bank_rule_declines.c.payee_key == key)).first():
             return None
         run = 0
-        for a in reversed(_answers(s, account_id).get(key, [])):
+        for a in reversed(answers_for(s, account_id, key)):
             if not _same(a, answer):
                 break
             run += 1
@@ -808,13 +893,15 @@ def learn(s, ctx, line: dict, answer: dict | None, import_batch: str, *, always:
                    action='categorise', priority=LEARNED_PRIORITY, source='learned', status=status,
                    payee=answer['payee'], payee_type=answer['payee_type'], payee_id=answer['payee_id'],
                    category_account_id=answer['account_id'], class_id=answer['class_id'], learned_key=key,
-                   learned_from_batch=None if always else import_batch)
+                   learned_from_batch=import_batch)
     touched = _insert(s, ctx, row, 'created')
     write_event_to(s.company, ctx, 'bank-line add', f"learned bank rule {row['name']} ({status})", [touched],
                    actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=getattr(s, 'directive_code', None))
-    if not always:
-        batches.record_effect(s, import_batch, record_type='bank_rule', record_id=row['id'], action='rule_learned',
-                              version_after=1, event_id=batches.last_event_id(s))
+    event = batches.last_event_id(s)
+    for batch_id in (import_batch, sort_batch):
+        if batch_id:
+            batches.record_effect(s, batch_id, record_type='bank_rule', record_id=row['id'], action='rule_learned',
+                                  version_after=1, event_id=event)
     if status == 'suggested':
         return (f"Always do this for {key}? ({LEARN_AFTER} times so far) `bank-rule accept {row['id']}` makes it a "
                 f"rule; `bank-rule decline {row['id']}` stops the suggestion.")
@@ -822,7 +909,8 @@ def learn(s, ctx, line: dict, answer: dict | None, import_batch: str, *, always:
 
 
 def retire(s, effect: dict, batch: dict, reversal_id: str) -> str:
-    """Reversing the import that taught a rule retires it, unless it was edited since (or written by hand)."""
+    """Reversing the batch that taught a rule (its import, a move, or the undo of its --lines batch) retires it,
+    unless it was edited since (or written by hand)."""
     row = s.company.conn.execute(sa.select(c.bank_rules).where(c.bank_rules.c.id == effect['record_id'])) \
         .mappings().first()
     if row is None or row['source'] != 'learned' or row['edited'] or row['status'] == 'retired':
@@ -830,110 +918,336 @@ def retire(s, effect: dict, batch: dict, reversal_id: str) -> str:
     row = dict(row)
     after = dict(row, status='retired', state='draft' if row['state'] != 'draft' else row['state'])
     from bookflow.company.scheduler import context
-    ctx = context().model_copy(update={'reason': f'its import was reversed ({reversal_id})'})
-    _update(s, ctx, row, after, 'retired', f'its import was reversed (batch {reversal_id})')
+    ctx = context().model_copy(update={'reason': f'the batch that taught it was reversed ({reversal_id})'})
+    _update(s, ctx, row, after, 'retired', f"batch {batch['id']} that taught it was reversed ({reversal_id})")
     return 'retired'
 
 
 # ------------------------------------------------------------------ live rules at an import
+#
+# Who an act runs as (review M2, the confused deputy). A live rule's lines are entered under its establisher's
+# authority, but on a file import the file is the importer's: a clerk without authority to post could otherwise
+# import a crafted statement and have the owner's rule post whatever it fits. So on a file import a rule acts only
+# when the importer also holds every authority the act needs (bank-line add or ignore, and the posting command);
+# otherwise its lines wait with their proposals and the import says which rules were held back and why. The
+# establisher's authority alone suffices only for lines Bookflow fetched itself (``fetched``: the live feed of
+# increment 8), where nobody chose the lines.
 
-def acting_rows(prepared: dict) -> dict[str, list[dict]]:
-    """The new lines a live auto-add or ignore rule proposed for, by rule."""
-    out: dict[str, list[dict]] = {}
-    for r in prepared['new']:
-        rule = r.get('rule')
-        if rule and rule.get('acts') and r.get('line_id'):
-            out.setdefault(rule['id'], []).append(r)
-    return out
+SLICE = 25  # acts per writer job, as the scheduler's ENTRIES_PER_TICK; the rest continue on the host's next tick
+
+
+def _on_writer() -> bool:
+    from threading import current_thread
+    from bookflow.core.identity_admin_binding import SCHEDULER_THREADS
+    return current_thread() in SCHEDULER_THREADS
 
 
 def _as(s, user_id, principal):
     from bookflow.company import scheduler
-    saved = (s.actor, s.memberships, s.credential, s.directive_code)
+    saved = (s.actor, s.memberships, s.credential, s.directive_code, getattr(s, '_resource_checks', None))
+    s._resource_checks = None  # nothing the previous actor was found to hold carries over
     scheduler._act_as(s, user_id, principal, automation.epoch_of(s, user_id, principal))
     return saved
 
 
 def _restore(s, saved) -> None:
-    s.actor, s.memberships, s.credential, s.directive_code = saved
+    s.actor, s.memberships, s.credential, s.directive_code, s._resource_checks = saved
 
 
-def run_live(s, ctx, prepared: dict) -> list[dict]:
-    """After an import committed: each live rule that fit its lines acts on them under its establisher's authority,
-    checked first (else paused with one to-do, its lines waiting), each act citing the rule and recorded in the
-    import's batch."""
-    from bookflow.company import bank_sort, scheduler
+def _system_id(s) -> str | None:
+    from bookflow.hub import schema as h
+    return s.hub.conn.execute(sa.select(h.users.c.id).where(h.users.c.kind == 'system', h.users.c.active.is_(True))
+                              .order_by(h.users.c.created_at)).scalars().first()
+
+
+def pause_as_system(s, row: dict, why: str) -> None:
+    """Pause a live rule with its one to-do, written as the system on the rule's behalf (review L5), never as the act
+    of whoever happened to import."""
+    from bookflow.company import scheduler
+    from bookflow.core.dispatch import _load_actor_by_id
+    system = _system_id(s)
+    saved = (s.actor, s.memberships, s.credential, s.directive_code, getattr(s, '_resource_checks', None))
+    try:
+        if system is not None:
+            _load_actor_by_id(s, system)
+        ctx = scheduler.context().model_copy(update={'actor_id': s.actor.id, 'reason': f"On rule: {row['name']}"[:140]})
+
+        def write():
+            _, touched = KIND.pause(s, ctx, get(s, row['id']), why)
+            automation._audit(s, ctx, 'automation pause', f"automation {row['name']} paused: {why}"[:512], touched)
+        automation._in_tx(s, 'automation.pause', write)
+    finally:
+        _restore(s, saved)
+
+
+def _needs(row: dict, plans: dict[str, dict]) -> list[str]:
+    return ['bank-line ignore'] if row['action'] == 'ignore' else \
+        ['bank-line add', *sorted({p['command'] for p in plans.values()})]
+
+
+def _missing(s, needs: list[str]) -> list[str]:
+    """The commands of an act the session's actor may not run (each command's own capability and resources)."""
+    return [name for name in needs if not automation.may(s, name)]
+
+
+def _mark(s, line_ids, pending: dict | None) -> None:
+    """Note on each waiting line whether its live rule is still to act on it (``pending``: why, and the importer whose
+    authority it needs), or not any longer. Bookkeeping on the proposal: the line's version is untouched."""
+    if line_ids:
+        _txn(s, lambda: _marked(s, line_ids, pending))
+
+
+def _marked(s, line_ids, pending) -> None:
+    for line_id in line_ids:
+        current = s.company.conn.execute(sa.select(c.bank_lines.c.proposal).where(
+            c.bank_lines.c.id == line_id, c.bank_lines.c.state == 'waiting', c.bank_lines.c.live == 1)).scalar()
+        if not current:
+            continue
+        value = json.loads(current)
+        if not value.get('rule'):
+            continue
+        if pending is None:
+            value['rule'].pop('pending', None)
+        else:
+            value['rule']['pending'] = pending
+        s.company.conn.execute(c.bank_lines.update().where(c.bank_lines.c.id == line_id).values(
+            proposal=json.dumps(value, sort_keys=True)))
+
+
+def _pending_lines(s, account_id: str | None = None, rule_id: str | None = None) -> list[dict]:
+    t = c.bank_lines
+    q = sa.select(t).where(t.c.live == 1, t.c.state == 'waiting',
+                           sa.func.json_extract(t.c.proposal, '$.rule.pending').is_not(None))
+    if account_id:
+        q = q.where(t.c.account_id == account_id)
+    if rule_id:
+        q = q.where(sa.func.json_extract(t.c.proposal, '$.rule.id') == rule_id)
+    return [dict(r) for r in s.company.conn.execute(q.order_by(t.c.date, t.c.id)).mappings()]
+
+
+def _result(row: dict) -> dict:
+    return dict(rule_id=row['id'], name=row['name'], outcome='skipped', added=0, ignored=0, refused=[], held=[],
+                later=0, reason=None)
+
+
+def _plans(s, row: dict, lines: list[dict]) -> dict[str, dict]:
+    from bookflow.company import bank_sort
     from bookflow.company import bank_feed_models as bm
+    if row['action'] == 'ignore':
+        return {}
+    out = {}
+    for line in lines:
+        item = bm.AddItem(line=line['id'], payee=row['payee_id'], payee_type=row['payee_type'],
+                          account=row['category_account_id'], class_id=row['class_id'], memo=row['memo'])
+        try:
+            out[line['id']] = dict(bank_sort._add_plan(s, line, item), item=item)
+        except BookflowError as error:
+            out[line['id']] = dict(error=error)
+    return out
+
+
+def _txn(s, fn):
+    from bookflow.company import bank_sort
+    bank_sort._in_tx(s, fn)
+
+
+def _act(s, row: dict, lines: list[dict], *, importer: tuple[str, str | None] | None, fetched: bool, budget: int,
+         result: dict) -> int:
+    """One live rule over some of its waiting lines, as far as ``budget`` acts: every check first, then each line,
+    re-checked per act. Returns the budget left."""
+    from bookflow.company import bank_sort, scheduler
     from bookflow.core.context import ActorKind
-    results = []
-    for rule_id, rows in acting_rows(prepared).items():
-        row = get(s, rule_id)
-        result = dict(rule_id=rule_id, name=row['name'], outcome='skipped', added=0, ignored=0, refused=[],
-                      reason=None)
-        results.append(result)
-        if not acting(row):
-            result['reason'] = f"it is {row['status']}, {row['state']}"
-            continue
-        try:
-            why = automation.firing_check(s, KIND, row)
-        except automation.Unsettled as e:
-            result['reason'] = e.reason
-            continue
-        if why is not None:
-            def pause(row=row, why=why):
-                _, touched = KIND.pause(s, ctx, get(s, row['id']), why)
-                automation._audit(s, ctx, 'automation pause', f"automation {row['name']} paused: {why}"[:512], touched)
-            automation._in_tx(s, 'automation.pause', pause)
-            result.update(outcome='paused', reason=why)
-            continue
-        v = KIND.view(s, row)
-        # The establisher's authority is lent on the host's writer (as R111's memorized entries and R112's schedules
-        # are); elsewhere a rule acts only when its establisher is the one importing.
-        from threading import current_thread
-        from bookflow.core.identity_admin_binding import SCHEDULER_THREADS
-        on_writer = current_thread() in SCHEDULER_THREADS
-        if not on_writer and v['established_by'] != s.actor.id:
-            result['reason'] = (f"{automation.name_of(s, v['established_by'])}'s authority is lent only through the "
-                                'host (bookflow serve), or when they import; its lines wait')
-            continue
-        saved = _as(s, v['established_by'], v['established_for']) if on_writer else None
-        refused_for_authority = None
-        try:
-            base = scheduler.context().model_copy(update={
-                'actor_id': v['established_by'], 'actor_kind': ActorKind(s.actor.kind),
-                'on_behalf_of': v['established_for'], 'reason': f"On rule: {row['name']}"[:140]})
-            for r in rows:
-                line = bank_sort.lines(s, [r['line_id']])[0]
+    ids = [v['id'] for v in lines]
+    if not acting(row):
+        result['reason'] = f"it is {row['status']}, {row['state']}"
+        _mark(s, ids, None)
+        return budget
+    if not automation_on(s):
+        result.update(outcome='held', reason='the company holds automated bank rules back '
+                                             '(company update --bank-rule-automation)')
+        _mark(s, ids, None)
+        return budget
+    try:
+        why = automation.firing_check(s, KIND, row)
+    except automation.Unsettled as e:
+        result['reason'] = e.reason
+        return budget
+    if why is not None:
+        pause_as_system(s, row, why)
+        _mark(s, ids, None)
+        result.update(outcome='paused', reason=why)
+        return budget
+    v = KIND.view(s, row)
+    # H1: never unattended on a line that may already be in the books (a transfer's other end, among them).
+    todo = []
+    for line in lines:
+        fits_, _ = bank_sort._pairing(s, line)
+        if line['possible_duplicate_of']:
+            result['held'].append(dict(line_id=line['id'], reason=f"it may repeat line {line['possible_duplicate_of']}"))
+        elif fits_:
+            result['held'].append(dict(line_id=line['id'], reason='it may be one end of a transfer'))
+        else:
+            todo.append(line)
+    _mark(s, [h['line_id'] for h in result['held']], None)
+    if not todo:
+        result['outcome'] = 'held'
+        return budget
+    on_writer = _on_writer()
+    me = s.actor.id
+    if not on_writer and v['established_by'] != me:
+        # The establisher's authority is lent only on the host's writer (as R111 and R112 lend it).
+        result.update(outcome='skipped', reason=(
+            f"{automation.name_of(s, v['established_by'])}'s authority is lent only through the host (bookflow "
+            'serve), or when they import: the lines wait, marked for the host to act on'))
+        _mark(s, [x['id'] for x in todo], dict(why='local', importer=importer[0] if importer else me,
+                                               importer_for=importer[1] if importer else None))
+        return budget
+    plans = _plans(s, row, todo)
+    needs = _needs(row, {k: p for k, p in plans.items() if 'command' in p})
+    if not fetched and importer is not None:
+        if importer[0] == me:
+            missing = _missing(s, needs)
+        elif on_writer:
+            saved = _as(s, importer[0], importer[1])
+            try:
+                missing = _missing(s, needs)
+            finally:
+                _restore(s, saved)
+        else:
+            # Another person's file, read off the host: their authority cannot be checked here; it waits, marked.
+            result.update(outcome='skipped', reason=(
+                f"the lines {automation.name_of(s, importer[0])} imported wait for the host (bookflow serve), where "
+                'their authority can be checked'))
+            return budget
+        if missing:
+            result.update(outcome='held', reason=(
+                f"{automation.name_of(s, importer[0])} imported the file and may not run {', '.join(missing)}: on a "
+                "file import a live rule acts only with the importer's authority too; the lines wait"))
+            _mark(s, ids, None)
+            return budget
+    saved = _as(s, v['established_by'], v['established_for']) if on_writer else None
+    pause_why = None
+    try:
+        base = scheduler.context().model_copy(update={
+            'actor_id': v['established_by'], 'actor_kind': ActorKind(s.actor.kind),
+            'on_behalf_of': v['established_for'], 'reason': f"On rule: {row['name']}"[:140]})
+        for n, line in enumerate(todo):
+            if budget <= 0:
+                rest = [x['id'] for x in todo[n:]]
+                result['later'] = len(rest)
+                _mark(s, rest, dict(why='later', importer=importer[0] if importer else None,
+                                    importer_for=importer[1] if importer else None))
+                break
+            # L6: the rule and its establisher are read again before every act.
+            now = get(s, row['id'])
+            if now['version'] != row['version'] or not acting(now):
+                result['reason'] = 'the rule changed meanwhile; its other lines wait'
+                _mark(s, [x['id'] for x in todo[n:]], None)
+                break
+            try:
+                why = automation.firing_check(s, KIND, now)
+            except automation.Unsettled as e:
+                result['reason'] = e.reason
+                break
+            if why is not None:
+                pause_why = why
+                break
+            plan = plans.get(line['id'], {})
+            try:
+                if 'error' in plan:
+                    raise plan['error']
+                # M1: every requirement of the act, as the establisher: bank-line add or ignore, and the posting
+                # command's own capability.
+                for name in (['bank-line ignore'] if row['action'] == 'ignore' else ['bank-line add', plan['command']]):
+                    automation.require_command(s, name)
+                current = bank_sort.lines(s, [line['id']])[0]
                 ref = automation.source_ref(KIND.kind, row['id'], v['established_by'], row['name'],
                                             inner=f"bank-line:{line['id']}")
                 rctx = base.model_copy(update={'source_ref': ref})
-                try:
-                    if row['action'] == 'ignore':
-                        _ignore(s, rctx, line, row)
-                        result['ignored'] += 1
-                    else:
-                        item = bm.AddItem(line=line['id'], payee=row['payee_id'], payee_type=row['payee_type'],
-                                          account=row['category_account_id'], class_id=row['class_id'],
-                                          memo=row['memo'])
-                        bank_sort.add_one(s, rctx, line, item, how='rule', rule_id=row['id'], source_ref=ref)
-                        result['added'] += 1
-                except BookflowError as error:
-                    result['refused'].append(dict(line_id=line['id'], code=error.code, message=error.message))
-                    if error.code in ('E_PERMISSION', 'E_UNAUTHENTICATED'):
-                        refused_for_authority = f"{automation.name_of(s, v['established_by'])} was refused " \
-                                                f"({error.code}): {error.message}"
-                        break
-        finally:
-            if saved is not None:
-                _restore(s, saved)
-        result['outcome'] = 'acted'
-        if refused_for_authority:
-            def pause(row=row, why=refused_for_authority):
-                _, touched = KIND.pause(s, ctx, get(s, row['id']), why)
-                automation._audit(s, ctx, 'automation pause', f"automation {row['name']} paused: {why}"[:512], touched)
-            automation._in_tx(s, 'automation.pause', pause)
-            result.update(outcome='paused', reason=refused_for_authority)
-    return results
+                if row['action'] == 'ignore':
+                    _ignore(s, rctx, current, row)
+                    result['ignored'] += 1
+                else:
+                    bank_sort.add_one(s, rctx, current, plan['item'], how='rule', rule_id=row['id'], source_ref=ref)
+                    result['added'] += 1
+                budget -= 1
+            except BookflowError as error:
+                result['refused'].append(dict(line_id=line['id'], code=error.code, message=error.message))
+                _mark(s, [line['id']], None)
+                if error.code in ('E_PERMISSION', 'E_UNAUTHENTICATED'):
+                    pause_why = (f"{automation.name_of(s, v['established_by'])} was refused ({error.code}): "
+                                 f"{error.message}")
+                    break
+    finally:
+        if saved is not None:
+            _restore(s, saved)
+    result['outcome'] = 'acted' if result['added'] or result['ignored'] else result['outcome']
+    if pause_why:
+        pause_as_system(s, row, pause_why)
+        _mark(s, [x['id'] for x in todo], None)
+        result.update(outcome='paused', reason=pause_why)
+    return budget
+
+
+def run_live(s, ctx, prepared: dict, *, fetched: bool = False) -> list[dict]:
+    """After an import committed: each live rule that fit its new lines acts on them (and on lines of the account an
+    earlier import left for it), checked as `_act` says, at most SLICE acts in this job; the rest are marked and
+    continue on the host's next tick. ``fetched``: lines Bookflow fetched itself (increment 8's live feed), where the
+    establisher's authority alone suffices."""
+    from bookflow.company import bank_sort
+    from bookflow.hub.capabilities import principal_of
+    importer = None if fetched else (s.actor.id, principal_of(s) if s.actor.kind == 'agent' else None)
+    # Older lines an earlier import left for a rule go first, each with the importer whose file brought it in.
+    groups: dict[tuple, list[str]] = {}
+    for line in _pending_lines(s, prepared['account_id']):
+        rule = json.loads(line['proposal'])['rule']
+        pending = rule['pending']
+        who = (pending['importer'], pending.get('importer_for')) if pending.get('importer') else None
+        groups.setdefault((rule['id'], who), []).append(line['id'])
+    taken = {i for ids in groups.values() for i in ids}
+    for r in prepared['new']:
+        rule = r.get('rule')
+        if rule and rule.get('acts') and r.get('line_id') and r['line_id'] not in taken:
+            groups.setdefault((rule['id'], importer), []).append(r['line_id'])
+    results: dict[str, dict] = {}
+    budget = SLICE
+    for (rule_id, who), ids in groups.items():
+        row = get(s, rule_id)
+        result = results.setdefault(rule_id, _result(row))
+        lines = [v for v in bank_sort.lines(s, ids) if v['live'] and v['state'] == 'waiting']
+        budget = _act(s, row, lines, importer=who, fetched=who is None, budget=budget, result=result)
+    return list(results.values())
+
+
+def _due(s, now) -> list:
+    """The host's tick: each live rule with lines an import left for it (local, or past an import's slice)."""
+    t = c.bank_rules
+    live = _rows(s, (t.c.state == 'live', t.c.status == 'active', sa.or_(t.c.auto_add == 1, t.c.action == 'ignore')))
+    if not live:
+        return []
+    slot = now.strftime('%Y-%m-%dT%H:%M:%S')
+    return [(row, slot) for row in live if _pending_lines(s, rule_id=row['id'])]
+
+
+def _tick_act(s, ctx, row: dict, firing) -> None:
+    """Up to SLICE marked lines of this rule, each with the authority of the importer who brought it in (checked
+    again now, M2) and its establisher (fire has already loaded them)."""
+    budget = SLICE
+    lines = _pending_lines(s, rule_id=row['id'])
+    groups: dict[tuple, list[dict]] = {}
+    for line in lines:
+        pending = json.loads(line['proposal'])['rule']['pending']
+        groups.setdefault((pending.get('importer'), pending.get('importer_for')), []).append(line)
+    saved = (s.actor, s.memberships, s.credential, s.directive_code, getattr(s, '_resource_checks', None))
+    try:
+        for (importer, importer_for), group in groups.items():
+            result = _result(row)
+            budget = _act(s, get(s, row['id']), group, importer=(importer, importer_for) if importer else None,
+                          fetched=importer is None, budget=budget, result=result)
+            if budget <= 0 or result['outcome'] == 'paused':
+                break
+    finally:
+        _restore(s, saved)
 
 
 def _ignore(s, ctx, line: dict, row: dict) -> None:

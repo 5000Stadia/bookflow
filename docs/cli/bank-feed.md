@@ -162,16 +162,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].warnings` | array[string] | no | no | [] | — |
 | `lines[].rule_id` | string \| null | no | yes | null | The bank rule that fits this waiting line (the first, in order). |
 | `lines[].rule_reason` | string \| null | no | yes | null | Why: the rule and the conditions it met, or 'from history: 4 of 5 times'. |
-| `lines[].rule_acts` | literal["add", "ignore"] \| null | no | yes | null | A live auto-add or ignore rule acts on the line at the import (its establisher checked first). |
+| `lines[].rule_acts` | literal["add", "ignore", "held"] \| null | no | yes | null | A live auto-add or ignore rule acts on the line at the import (add, ignore), or was held back from it (held: rule_held says why; the line waits with its proposal). |
+| `lines[].rule_held` | string \| null | no | yes | null | Why a live rule did not act on this line. |
 | `has_more_lines` | boolean | yes | no | — | — |
 | `next` | string | yes | no | — | — |
 | `automations` | array[object] | no | no | [] | Live auto-add and ignore rules that fit lines of this import, and what each did. |
 | `automations[].rule_id` | string | yes | no | — | — |
 | `automations[].name` | string | yes | no | — | — |
-| `automations[].outcome` | literal["acted", "paused", "skipped"] | yes | no | — | acted: it added or ignored its lines as its establisher; paused: its establisher no longer holds automate.bank-rule (or was refused), so its lines wait and one to-do was raised; skipped: not checked now. |
+| `automations[].outcome` | literal["acted", "paused", "held", "skipped"] | yes | no | — | acted: it added or ignored lines as its establisher; paused: its establisher no longer holds what the act needs, so its lines wait and one to-do was raised; held: the importer lacks the authority, the company holds rules back, or every line may already be in the books; skipped: not checked now (reason says why). |
 | `automations[].added` | integer | yes | no | — | — |
 | `automations[].ignored` | integer | yes | no | — | — |
 | `automations[].refused` | array[dict] | no | no | [] | Lines it could not enter (each waits), with the code and why. |
+| `automations[].held` | array[dict] | no | no | [] | Lines it left waiting because they may already be in the books. |
+| `automations[].later` | integer | no | no | 0 | Lines past this import's share of acts: the host's next tick goes on. |
 | `automations[].reason` | string \| null | no | yes | null | — |
 
 Example JSON output:
@@ -419,16 +422,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `target.lines[].warnings` | array[string] | no | no | [] | — |
 | `target.lines[].rule_id` | string \| null | no | yes | null | The bank rule that fits this waiting line (the first, in order). |
 | `target.lines[].rule_reason` | string \| null | no | yes | null | Why: the rule and the conditions it met, or 'from history: 4 of 5 times'. |
-| `target.lines[].rule_acts` | literal["add", "ignore"] \| null | no | yes | null | A live auto-add or ignore rule acts on the line at the import (its establisher checked first). |
+| `target.lines[].rule_acts` | literal["add", "ignore", "held"] \| null | no | yes | null | A live auto-add or ignore rule acts on the line at the import (add, ignore), or was held back from it (held: rule_held says why; the line waits with its proposal). |
+| `target.lines[].rule_held` | string \| null | no | yes | null | Why a live rule did not act on this line. |
 | `target.has_more_lines` | boolean | yes | no | — | — |
 | `target.next` | string | yes | no | — | — |
 | `target.automations` | array[object] | no | no | [] | Live auto-add and ignore rules that fit lines of this import, and what each did. |
 | `target.automations[].rule_id` | string | yes | no | — | — |
 | `target.automations[].name` | string | yes | no | — | — |
-| `target.automations[].outcome` | literal["acted", "paused", "skipped"] | yes | no | — | acted: it added or ignored its lines as its establisher; paused: its establisher no longer holds automate.bank-rule (or was refused), so its lines wait and one to-do was raised; skipped: not checked now. |
+| `target.automations[].outcome` | literal["acted", "paused", "held", "skipped"] | yes | no | — | acted: it added or ignored lines as its establisher; paused: its establisher no longer holds what the act needs, so its lines wait and one to-do was raised; held: the importer lacks the authority, the company holds rules back, or every line may already be in the books; skipped: not checked now (reason says why). |
 | `target.automations[].added` | integer | yes | no | — | — |
 | `target.automations[].ignored` | integer | yes | no | — | — |
 | `target.automations[].refused` | array[dict] | no | no | [] | Lines it could not enter (each waits), with the code and why. |
+| `target.automations[].held` | array[dict] | no | no | [] | Lines it left waiting because they may already be in the books. |
+| `target.automations[].later` | integer | no | no | 0 | Lines past this import's share of acts: the host's next tick goes on. |
 | `target.automations[].reason` | string \| null | no | yes | null | — |
 | `next` | string \| null | no | yes | null | The command to run next, or null. |
 

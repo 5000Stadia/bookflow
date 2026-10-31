@@ -3,9 +3,10 @@
 Three new tables, moving no stored row: ``bank_rules`` (one rule: which lines it fits and what it proposes, its
 priority, source, status and, for an auto-add or ignore rule, the automation columns of design/principal-directives.md
 §3; never deleted), ``bank_rule_versions`` (each saved version, append-only) and ``bank_rule_declines`` (payee keys
-declined as learned rules, per account; append-only). Two columns on ``bank_lines``: ``rule_id`` (the rule that
-proposed for or acted on the line) and ``answer`` (what it was added as, JSON). One on ``company_info``:
-``bank_rule_learning`` (ask, the default; always; never). Numbered after main's head co0116 with co0117 and co0118
+declined as learned rules, per account; append-only). Three columns on ``bank_lines``: ``rule_id`` (the rule that
+proposed for or acted on the line), ``answer`` (what it was added as, JSON) and ``payee_key`` (the party the text names,
+indexed with the account). Two on ``company_info``: ``bank_rule_learning`` (ask, the default; always; never) and
+``bank_rule_automation`` (true: live auto-add and ignore rules act). Numbered after main's head co0116 with co0117 and co0118
 taken by branches in flight; renumbered at merge as needed. DDL below is frozen: this migration never imports current
 application metadata.
 """
@@ -22,15 +23,19 @@ COLUMNS = (
     ('bank_lines', 'ALTER TABLE bank_lines ADD COLUMN rule_id VARCHAR(26) REFERENCES bank_rules (id)'),
     ('bank_lines', "ALTER TABLE bank_lines ADD COLUMN answer TEXT CONSTRAINT ck_bank_line_answer CHECK (answer IS NULL "
                    "OR (json_valid(answer) AND json_type(answer) = 'object'))"),
+    ('bank_lines', 'ALTER TABLE bank_lines ADD COLUMN payee_key VARCHAR(200)'),
     ('company_info', "ALTER TABLE company_info ADD COLUMN bank_rule_learning VARCHAR(8) NOT NULL DEFAULT 'ask' "
                      "CONSTRAINT ck_company_info_bank_rule_learning CHECK (bank_rule_learning IN ('ask', 'always', "
                      "'never'))"),
+    ('company_info', "ALTER TABLE company_info ADD COLUMN bank_rule_automation BOOLEAN NOT NULL DEFAULT '1'"),
 )
+# Lines imported before this migration keep a null payee_key: they give no history proposal and teach nothing.
+LINE_INDEX = 'CREATE INDEX ix_bank_lines_payee_key ON bank_lines (account_id, payee_key)'
 TABLES = ('bank_rule_declines', 'bank_rule_versions', 'bank_rules')
 # What a test rewinding this head drops: the guards, the indexes, the columns (rule_id, a foreign key, which DROP
 # COLUMN refuses, goes with co0112's bank_lines), then the tables (children first).
 TRIGGERS = tuple(statement.split()[2] for statement in GUARDS)
-INDEX_NAMES = tuple(statement.split(' ON ')[0].split()[-1] for statement in INDEXES)
+INDEX_NAMES = tuple(statement.split(' ON ')[0].split()[-1] for statement in (*INDEXES, LINE_INDEX))
 NAMES = tuple((statement[0], statement[1].split()[5]) for statement in COLUMNS)
 
 
@@ -47,6 +52,7 @@ def upgrade():
         connection.exec_driver_sql(statement)
     for _, statement in COLUMNS:
         connection.exec_driver_sql(statement)
+    connection.exec_driver_sql(LINE_INDEX)
 
 
 def downgrade():

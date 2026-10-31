@@ -3,7 +3,7 @@
 Each surface gets an identical demo copy. It writes a rule for Shell, imports a statement whose Shell line the rule
 proposes for, lists and shows the rule, applies the rules again (dry run, then for real), adds two coffee and two tea
 lines so two rules are learned, accepts one suggestion and declines the other, makes an ignore rule live with its
-check's fingerprint, and deactivates the Shell rule; a duplicate name is refused. Every surface must end with the same
+check's fingerprint, changes the Shell rule's conditions, and deactivates the Shell rule; a duplicate name is refused. Every surface must end with the same
 states, proposals and refusals.
 """
 import anyio
@@ -52,10 +52,13 @@ def test_the_same_bank_rules_through_python_cli_http_and_mcp(root, tmp_path):
                                                                 'value': 'SERVICE FEE'}]})
                 check = (await call('bank-rule update', {'rule': 'Fee', 'live': True}, dry_run=True))['check']
                 live = await call('bank-rule update', {'rule': 'Fee', 'live': True, 'confirm': check['fingerprint']})
+                edited = await call('bank-rule update', {'rule': 'Shell fuel', 'conditions': [
+                    {'field': 'payee', 'op': 'starts_with', 'value': 'SHELL OIL'}]})
                 off = await call('bank-rule deactivate', {'rule': 'Shell fuel'})
                 results[surface] = dict(made=made, taken=taken, shell=lines['SHELL OIL 4471'], shown=shown,
                                         listed=listed, plan=plan, applied=applied, suggested=suggested,
-                                        accepted=accepted, declined=declined, check=check, live=live, off=off)
+                                        accepted=accepted, declined=declined, check=check, live=live, edited=edited,
+                                        off=off)
             return results
         finally:
             await matrix.close()
@@ -72,6 +75,8 @@ def test_the_same_bank_rules_through_python_cli_http_and_mcp(root, tmp_path):
         assert sorted(x['learned_key'] for x in r['suggested']['rules']) == ['COFFEE BEAN', 'TEA HOUSE'], surface
         assert r['accepted']['rule']['status'] == 'active' and r['declined']['rule']['status'] == 'retired'
         assert r['check']['waiting'] == 1 and r['live']['rule']['state'] == 'live', surface
+        assert r['edited']['rule']['conditions'] == [{'field': 'payee', 'op': 'starts_with', 'value': 'SHELL OIL',
+                                                      'value_to': None}], surface
         assert r['off']['rule']['status'] == 'disabled', surface
         shapes.add((r['shown']['rule']['does'], r['check']['does'], r['declined']['summary']))
     assert len(shapes) == 1

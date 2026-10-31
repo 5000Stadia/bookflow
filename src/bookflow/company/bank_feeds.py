@@ -580,7 +580,7 @@ def prepare(s, ctx, inp, *, stored: dict | None = None, exclude_import: str | No
         r.setdefault('entry', None)
         r.setdefault('reason', '')
     prepared_rules = dict(new=new, account_id=account_id, places=places, counts={})
-    _rules.annotate(s, prepared_rules)
+    _rules.annotate(s, prepared_rules, may_act=stored is None)
 
     reused = sum(1 for r in new if 'fitid_reused' in r['warnings'])
     if reused:
@@ -721,7 +721,8 @@ def output(prepared: dict, *, import_id=None, batch_id=None, line_ids=None, dry_
             possible_duplicate_of=r.get('duplicate_of'), warnings=tuple(r['warnings']),
             rule_id=(r.get('rule') or {}).get('id'),
             rule_reason=(r.get('rule') or r.get('history') or {}).get('reason'),
-            rule_acts=(r.get('rule') or {}).get('acts')))
+            rule_acts=(r.get('rule') or {}).get('acts') or ('held' if (r.get('rule') or {}).get('held') else None),
+            rule_held=(r.get('rule') or {}).get('held')))
     counts = prepared['counts']
     if dry_run:
         step = ('Dry run: nothing was written. Run the same call without --dry-run to import '
@@ -805,7 +806,8 @@ def write(s, ctx, prepared: dict, *, moved_from: str | None = None) -> tuple[m.I
                 entry_date=entry.date if entry is not None else None,
                 link_how='auto' if entry is not None else None, match_reason=(r['reason'] or None) and r['reason'][:500],
                 possible_duplicate_of=r.get('duplicate_of'), warnings=json.dumps(r['warnings']),
-                proposal=_proposal(r), rule_id=(r.get('rule') or {}).get('id') if r['state'] == 'waiting' else None))
+                proposal=_proposal(r), rule_id=(r.get('rule') or {}).get('id') if r['state'] == 'waiting' else None,
+                payee_key=_rules.party_key(line.payee)))
             event_rows.append(dict(
                 id=new_id(), line_id=line_id, kind='imported', import_id=import_id, batch_id=batch_id,
                 details=json.dumps({'state': r['state'], 'reason': r['reason'], 'warnings': r['warnings'],

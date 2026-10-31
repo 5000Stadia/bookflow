@@ -326,6 +326,7 @@ FIELDS = {
         'weight_unit': ('str', False, False, 'dependency_field'),
         'shipping_item_id': ('str', True, False, 'dependency_field'),
         'bank_rule_learning': ('str', False, False, 'outside_output'),  # R108 increment 4
+        'bank_rule_automation': ('bool', False, False, 'outside_output'),
     },
     'custom_field_defs': {
         'active': ('bool', False, False, 'dependency_field'),

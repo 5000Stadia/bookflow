@@ -8,11 +8,11 @@ grants nothing. Making a rule live is never done here: each kind's own command d
 """
 from bookflow.company import automation
 from bookflow.company import automation_models as m
-from bookflow.company import delivery_schedules  # noqa: F401 - registers the delivery kind
+from bookflow.company import bank_rules, delivery_schedules  # noqa: F401 - register the bank-rule and delivery kinds
 from bookflow.core.registry import Applied, Plan, command
 
 _LIST = ('The automations: rules that write with nobody asking at the time (a send-mode delivery schedule; bank rules '
-         'and invoice schedules once they exist), each with its state, who established it and, for a live one whose '
+         '(auto-add and ignore) and invoice schedules once they exist), each with its state, who established it and, for a live one whose '
          'establisher no longer holds the authority, why its next firing pauses it.')
 _SHOW = ('One automation: what it does unattended, its state, who made it live and when, why it is paused or back in '
          'draft, the capability making it live needs, and the command that does it. Example: {"kind": "delivery", '

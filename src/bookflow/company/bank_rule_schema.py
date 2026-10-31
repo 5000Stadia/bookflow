@@ -10,9 +10,10 @@
 - ``bank_rule_declines``: the payee keys a person or agent declined to have learned, per account; never suggested
   again. Append-only.
 
-Two columns on ``bank_lines``: ``rule_id`` (the rule that proposed for the line, or acted on it) and ``answer`` (what
-a line was added as: payee, account and class, the history proposals and learning read). One on ``company_info``:
-``bank_rule_learning`` (ask, always or never).
+Three columns on ``bank_lines``: ``rule_id`` (the rule that proposed for the line, or acted on it), ``answer`` (what a
+line was added as: payee, account and class) and ``payee_key`` (the party it names, indexed, which history proposals
+and learning read). Two on ``company_info``: ``bank_rule_learning`` (ask, always or never) and
+``bank_rule_automation`` (live auto-add and ignore rules act, or are held back company-wide).
 """
 import sqlalchemy as sa
 
@@ -132,14 +133,21 @@ def line_columns(C):
             C('answer', sa.Text, 'What the line was added as (payee, account, class) as a JSON object, read by '
                                  'history proposals and learning; null unless added with one account.',
               sa.CheckConstraint("answer IS NULL OR (json_valid(answer) AND json_type(answer) = 'object')",
-                                 name='ck_bank_line_answer'), nullable=True))
+                                 name='ck_bank_line_answer'), nullable=True),
+            C('payee_key', sa.String(200), 'The payee as Bookflow reads it, when the text names a party (letters, & and a '
+                                           "name's own short number; store and reference numbers, dates and processor "
+                                           'words dropped); null for "CHECK 1234", "MOBILE DEPOSIT" and the like. '
+                                           'History proposals and learning read lines by it.', nullable=True))
 
 
-def company_info_column(C):
-    return C('bank_rule_learning', sa.String(8), 'Bank rules: when two adds of a payee agree, ask (the default: a '
+def company_info_columns(C):
+    return (C('bank_rule_learning', sa.String(8), 'Bank rules: when two adds of a payee agree, ask (the default: a '
              'suggested rule to accept or decline), always (make it active) or never (learn nothing).',
              sa.CheckConstraint(f"bank_rule_learning IN ({', '.join(repr(v) for v in LEARNING)})",
-                                name='ck_company_info_bank_rule_learning'), nullable=False, server_default='ask')
+                                name='ck_company_info_bank_rule_learning'), nullable=False, server_default='ask'),
+            C('bank_rule_automation', sa.Boolean, 'Bank rules: live auto-add and ignore rules act at imports (true, the '
+              'default); false holds every one back company-wide, their lines waiting with their proposals.',
+              nullable=False, server_default='1'))
 
 
 _FIXED = ('id', 'created_at', 'created_by', 'created_via', 'source', 'learned_from_batch', 'learned_key')

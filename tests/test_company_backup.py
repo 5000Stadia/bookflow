@@ -214,7 +214,9 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
         for index in co0119.INDEX_NAMES:
             conn.execute(f"DROP INDEX {index}")
         conn.execute("ALTER TABLE company_info DROP COLUMN bank_rule_learning")
+        conn.execute("ALTER TABLE company_info DROP COLUMN bank_rule_automation")
         conn.execute("ALTER TABLE bank_lines DROP COLUMN answer")
+        conn.execute("ALTER TABLE bank_lines DROP COLUMN payee_key")
         # Then co0116 (on co0115): its guards, then its two tables (children first).
         for trigger in co0116.TRIGGERS:
             conn.execute(f"DROP TRIGGER {trigger}")

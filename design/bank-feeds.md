@@ -936,9 +936,8 @@ cheque blocker applies.
   `always` (*Always do this*). `company update` gains `bank_rule_learning`.
 - **Conditions** on `payee`, `memo`, `number` (`contains`, `starts_with`, `equals`, case-folded with spaces collapsed),
   `amount` (`equals`, `between`, on the line's size in either direction, read in the line's currency) and, decided,
-  `payee_key` (`equals`): the payee as Bookflow reads it (upper case; dates, digits, `#` runs and punctuation
-  removed; processor words dropped at either end and a two-letter word, a state, at the end), which is what a
-  learned rule tests, so "SHELL OIL 4471" and "SHELL OIL #12" are one payee. No regular expressions. Categorise
+  `payee_key` (`equals`): the payee as Bookflow reads it (see the review fixes, H2), which is what a learned rule
+  tests, so "SHELL OIL 4471" and "SHELL OIL #12" are one payee. No regular expressions. Categorise
   takes one account (decided: no splits; a fixed split of a varying amount means nothing), a payee that exists, a
   class and a memo.
 - **Order, decided where §5 left it open:** active rules by `priority` ascending, then a rule for the line's own
@@ -961,12 +960,12 @@ cheque blocker applies.
   `learned` at priority 1000 testing `payee_key equals`, `suggested` (or `active` under `always`), `learned_from_batch`
   the import batch of the line that tipped it (a `bank_rule` `rule_learned` effect there); the add's `next` says
   "Always do this for COFFEE BEAN? (2 times so far)" with `bank-rule accept` and `decline`. `always` on an add makes the
-  rule active at once with no learned batch (decided: the person asked for it, so reversing the import keeps it).
+  rule active at once (review M4: it goes back with its batches like any learned rule).
   `decline` retires the suggestion and remembers the key for that account. Learning never asks to auto-add.
 - **Retirement on reversal.** `bank_reversal.RETIRE` retires a learned rule whose `learned_from_batch` is the reversed
-  import, unless `edited` (any operative change by anyone sets it) or not learned; the reversal's effect records
-  `retired` or `kept`, and its plan lists "retire bank_rule (rule_learned)". Decided: a `bank-line undo` of the
-  `--lines` batch whose add tipped learning does not retire the rule (only its import's reversal does).
+  import, unless `edited` (any change to what it does, by anyone, sets it) or not learned; the reversal's effect
+  records `retired` or `kept`, and its plan lists "retire bank_rule (rule_learned)". The undo of the `--lines` batch
+  whose add tipped it retires it too (review M4).
 - **Auto-add and ignore through the seam.** Making live is `bank-rule update --live`: `automation.require_establish`
   (an agent's refusal names `automate.bank-rule` and its principal), then one check of the exact details (the dry run
   returns `check`: what it will do in words, the waiting lines it fits now and a 16-hex fingerprint of its operative
@@ -987,6 +986,49 @@ cheque blocker applies.
   An ignore rule's ignore uses the rule's reason among the four (decided: co0114's check allows no `rule` reason;
   `link_how` is `rule` and the event names the rule). A move's re-import applies rules as proposals only (decided).
 - **Load order.** The company schema now imports `automation` (for `columns()`) while `batches` may itself be loading, so `automation._register_batches` waits for a whole `batches` and `batches` completes the registration at its end.
+- **Review fixes (2026-10-30).**
+  - *H1, never on a line the books may hold.* A live rule acts only on a waiting line with no `possible_duplicate`
+    flag, no match suggestion and no transfer pair; any other line waits (`rule_acts` `held`, `rule_held` says why,
+    and the rule's run lists it in `held`). Tested with a pending card item re-posted under a new FITID and a check
+    typed in by hand that later clears.
+  - *H2, the payee key.* Upper case; dates, `#` runs, store and reference numbers (all digits, or a long run mostly of
+    digits) and punctuation removed; letters, `&` and a name's own short leading number kept (A1, 7 ELEVEN, 76);
+    processor words dropped only at the start (POS, DEBIT, SQ...) and reference trailers only at the end (WEB ID,
+    CONF, REF...); nothing else dropped, so "A1 AUTO REPAIR" and "B2 AUTO REPAIR", "SMITH & CO" and "SMITH JR" stay
+    apart. `party_key` is null when only movement, processor or account words remain ("CHECK 1234", "MOBILE
+    DEPOSIT", "VENMO PAYMENT", "ONLINE TRANSFER TO SAV", "INTEREST PAYMENT", "SERVICE CHARGE"): such a line gives no
+    history proposal and teaches no rule. The party key is stored per line (`bank_lines.payee_key`, indexed with the
+    account), so history and learning read only that payee's lines (L7); lines imported before co0119 keep null.
+  - *M1, every requirement of the act.* Before each act, as the establisher: `bank-line add` (or `ignore`) and the
+    posting command, each command's own capability and resources (`automation.require_command`); a refusal pauses
+    the rule. The ignore path passes the same gate.
+  - *M2, the confused deputy (the navigator's decision).* A live rule's lines are entered under its establisher's
+    authority, but on a file import the file is the importer's: a person or agent without authority to post could
+    otherwise import a crafted statement and have someone else's rule post whatever it fits. So on a file import a
+    rule acts only when the importer also holds every authority the act needs; otherwise its lines wait with their
+    proposals and `next` names the rule and why. The establisher's authority alone is enough only for lines Bookflow
+    fetched itself: `run_live(..., fetched=True)` is that seam, for increment 8's live feed.
+  - *M3.* The shared model's list-to-tuple step now covers optional tuple fields, so `bank-rule update --conditions`
+    works on every surface (the four-surface witness edits conditions).
+  - *M5.* `automation` loads the bank-rule kind with its own module, so `automation list`, `show` and `pause` know it
+    in any process.
+  - *L1, L6, L7, waiting and slices.* An import acts at most 25 times (`SLICE`, as the scheduler's
+    `ENTRIES_PER_TICK`). Lines past that, and lines a local process could not act on (someone else's establishment,
+    or another importer's file, whose authority is lent only on the host's writer), are marked on their proposal with
+    why and whose file they came from. The next import on the account takes them first, and the bank-rule kind is now
+    timed (`due`, `act`), so the host's tick goes on with them under the same checks. The rule, its state and its
+    establisher are read again before every act.
+  - *L2.* `always` that cannot apply says why in `next` (no party, a rule already exists or already fits, splits);
+    `bank_rule_learning never` wins over it.
+  - *L3, L4, L10.* A holder's dry run of a change to a live rule says the fingerprint keeps it live (and `next` is the
+    same call with it); `live: false` with a change by a non-holder goes to draft through `on_edit`, a holder's
+    pauses; a status change alone (through `update` or `deactivate`) is not an edit.
+  - *L5.* A pause at an import is written by the system on the rule's behalf (`interface` system, the system user),
+    with its one to-do, never as the importer's act.
+  - *L8, K2.* `company update --bank-rule-automation false` (admin) holds every live auto-add and ignore rule back
+    company-wide; their lines wait with their proposals and the rules stay live.
+  - *L9.* A move's re-import reports `rule_acts` as none: it proposes only.
+  - A line's rule and history proposals are kept when its matcher proposal is read again after a `bank-line undo`.
 - **Not built here:** the rules page and the Add dialog's checkbox (increment 7; `always` is the command half), bulk
   rule edits, the agent guide's rules chapter (increment 9).
 
@@ -999,4 +1041,12 @@ rule, undone by the reversal; through the host, an agent's auto-add draft adding
 naming the capability, a clerk making it live, the next import adding inside the import's batch as the clerk with "On
 rule: Fuel stop, established by clerk", one reversal taking it back, the agent's edit returning it to draft, a
 holder's confirmed edit keeping it live, and the clerk denied `automate.bank-rule` pausing it at the next import with
-one to-do and the line waiting. `tests/test_bank_rule_surfaces.py` runs the eight through Python, CLI, HTTP and MCP.
+one to-do and the line waiting. After the review: what each reversal deleted and retired; a holder's unconfirmed edit
+returning the rule to draft; the clerk denied `bank-feed` pausing it as the system; the payee-key samples; checks
+teaching nothing; a re-posted pending card item and a hand-entered cleared check left waiting; auto-added entries
+equal to the typed `bank-line add` on a bank and a card account; a closed period refused with the line waiting; the
+local skip, the next import on the host acting older lines first within the slice, and an importer without
+`ledger.post` holding the rule back; `always` said when it cannot apply, `never` winning, and a rule made at once going
+back with its `--lines` undo and its import's reversal; the company setting holding rules back; `automation list` from
+a fresh CLI process; an agent establisher paused when its principal is narrowed.
+`tests/test_bank_rule_surfaces.py` runs the eight through Python, CLI, HTTP and MCP, editing conditions too.

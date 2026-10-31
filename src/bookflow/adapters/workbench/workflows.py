@@ -56,12 +56,13 @@ def company_form_groups(leaves):
         pick_and_pack_enabled='Use pick lists and packing (pick and box before shipping; off ships straight from the order)',
         weight_unit='Weight unit (lb, kg, oz)', shipping_item_id='Freight to bill is billed as',
         delivery_reply_to='Reply-To on every email', delivery_copy_to='Copy every email to (Bcc)',
-        bank_rule_learning='When two bank lines of a payee are added the same way, learn a rule')
+        bank_rule_learning='When two bank lines of a payee are added the same way, learn a rule',
+        bank_rule_automation='Let live auto-add and ignore bank rules act at imports')
     payment_preferences = {'automatically_apply_payments', 'automatically_calculate_payments', 'use_undeposited_funds_for_payments'}
     display_preferences = {'negative_number_style'}
     shipping_preferences = {'invoice_when_shipping', 'pick_and_pack_enabled', 'weight_unit', 'shipping_item_id'}
     email_preferences = {'delivery_reply_to', 'delivery_copy_to'}
-    banking_preferences = {'bank_rule_learning'}
+    banking_preferences = {'bank_rule_learning', 'bank_rule_automation'}
     finance_preferences = {'finance_charge_annual_rate', 'finance_charge_minimum', 'finance_charge_grace_days',
         'finance_charge_account_id', 'finance_charge_on_overdue_charges', 'finance_charge_from', 'finance_charge_mark_to_print'}
     reminder_preferences = {'scheduler_catch_up_days', 'overdue_notice_days', 'overdue_notice_frequency',

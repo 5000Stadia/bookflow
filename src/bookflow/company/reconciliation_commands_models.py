@@ -17,6 +17,14 @@ Count = Annotated[int, Field(strict=True, ge=0, le=2**63-1)]
 Units = Annotated[int, Field(strict=True, ge=-(2**63), le=2**63-1)]
 Currency = Annotated[str, Field(pattern=r'^[A-Z]{3}$')]
 
+def _tupled(annotation) -> bool:
+    """A tuple field, or an optional one (``tuple[...] | None``)."""
+    from typing import get_args
+    if get_origin(annotation) is tuple:
+        return True
+    return any(get_origin(arg) is tuple for arg in get_args(annotation)) if get_origin(annotation) is not None else False
+
+
 class Model(StrictModel):
     model_config=ConfigDict(extra='forbid',strict=True,frozen=True)
 
@@ -26,7 +34,7 @@ class Model(StrictModel):
         # Shared dispatch validates parsed JSON/Python lists, while domain
         # collections remain immutable tuples. Element validation stays strict.
         if type(value) is dict:
-            return {k:tuple(v) if type(v) is list and k in cls.model_fields and get_origin(cls.model_fields[k].annotation) is tuple else v for k,v in value.items()}
+            return {k:tuple(v) if type(v) is list and k in cls.model_fields and _tupled(cls.model_fields[k].annotation) else v for k,v in value.items()}
         return value
 
 class Dated(Model):
