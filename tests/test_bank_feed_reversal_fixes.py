@@ -165,7 +165,7 @@ def test_a_move_that_stops_after_a_slice_keeps_its_flags_shows_its_state_and_say
 
 # ------------------------------------------------------------------ Medium 5
 
-def test_with_a_dry_runs_fingerprint_the_first_call_probes_only_its_slice(client, monkeypatch):
+def test_fingerprint_rechecks_all_inverse_grants_before_running_its_slice(client, monkeypatch):
     from bookflow.company import batches
     done, _ = _with_entries(client, 5)
     plan = reverse(client, done['import_id'], dry_run=True)
@@ -177,7 +177,7 @@ def test_with_a_dry_runs_fingerprint_the_first_call_probes_only_its_slice(client
         return real(s, ctx, name, payload, **kw)
     monkeypatch.setattr(batches, 'run_nested', counting)
     out = reverse(client, done['import_id'], fingerprint=plan['fingerprint'], limit=2)
-    assert (out['state'], out['reversed_now'], len(probes)) == ('reversing', 2, 2)
+    assert (out['state'], out['reversed_now'], len(probes)) == ('reversing', 2, 7)  # five planned inverses, then two slice checks
 
 
 # ------------------------------------------------------------------ Medium 6
