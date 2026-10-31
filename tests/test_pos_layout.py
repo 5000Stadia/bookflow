@@ -184,3 +184,47 @@ def test_conflict_names_latest_writer_elapsed_time_and_changed_style_and_order(c
     assert stale.details['updated_by'] == details['updated_by']
     assert stale.details['updated_by_name'] == 'Layout-Editor'
     assert co.run('pos-box list') == reordered
+
+
+@pytest.mark.parametrize('target', ['item', 'category'])
+def test_inactive_reference_is_flagged_and_removable(co, target):
+    edit(co, 'seed', mode='empty')
+    item = co.run('item show', {'item': 'Pipe Sealant'})
+    if target == 'category':
+        category = co.run('item-category show', {'item_category': 'Plumbing Parts'})
+        item = co.run('item update', dict(item=item['id'], expected_version=item['version'], category_id=category['id']))
+    saved = edit(co, 'create', kind='item', item=item['id'])
+    box = saved['items'][0]
+    assert not box['inactive']
+    if target == 'item':
+        co.run('item deactivate', {'item': item['id'], 'expected_version': item['version']})
+    else:
+        category = co.run('item-category show', {'item_category': item['category_id']})
+        co.run('item-category deactivate', {'item_category': category['id'], 'expected_version': category['version']})
+    flagged = co.run('pos-box list')['items']
+    assert len(flagged) == 1 and flagged[0]['id'] == box['id'] and flagged[0]['inactive']
+    assert edit(co, 'remove', pos_box=box['id'])['items'] == []
+
+
+def test_merge_repoints_every_box_and_unmerge_restores_with_layout_conflicts(co):
+    edit(co, 'seed', mode='empty')
+    template = co.run('item show', {'item': 'Payment Example Labor'})
+    ids = [co.run('item create', dict(name=name, type='service', description=name, price='10.00',
+            income_account_id=template['income_account_id'], sales_tax_code_id=template['sales_tax_code_id']))['id']
+           for name in ('Layout original', 'Layout survivor')]
+    parent = group(co, 'Nested')
+    edit(co, 'create', kind='item', item=ids[0])
+    saved = edit(co, 'create', kind='item', item=ids[0], parent=parent)
+    boxes = {b['id'] for b in saved['items'] if b['kind'] == 'item'}
+    preview = co.run('item merge', dict(merged=ids[0], into=ids[1]), dry_run=True)
+    assert {r['record_id'] for r in preview['references'] if r['table'] == 'pos_boxes'} == boxes
+    assert co.run('pos-box list') == saved
+    co.run('item merge', dict(merged=ids[0], into=ids[1]))
+    merged = co.run('pos-box list')
+    assert merged['version'] == saved['version'] + 1
+    assert all(b['item'] == ids[1] and not b['inactive'] for b in merged['items'] if b['id'] in boxes)
+    assert co.fails('pos-box remove', dict(pos_box=parent, expected_version=saved['version'])).code == 'E_VERSION_CONFLICT'
+    assert co.run('item unmerge', dict(merged=ids[0]))['restored'] == 2
+    restored = co.run('pos-box list')
+    assert restored['version'] == merged['version'] + 1
+    assert all(b['item'] == ids[0] and not b['inactive'] for b in restored['items'] if b['id'] in boxes)

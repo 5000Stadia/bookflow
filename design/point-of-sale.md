@@ -910,6 +910,11 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   changed boxes also advance their own versions. Moving a group into itself or a descendant is refused. Positions
   are zero-based within a parent. Removing a group removes its descendant boxes; the editor confirms a nonempty
   group removal. No box removal alters an inventory item, and one item can appear in several groups.
+- **Inactive items and merges.** Deactivating an item is permitted with saved boxes. `pos-box` reads flag boxes
+  whose item or category is inactive; the till skips them and the editor shows “inactive item — remove or replace”
+  with removal available. Item merges re-point every saved box in the merge transaction, audit box and layout
+  revisions, and record references for unmerge to restore unchanged boxes. Tests cover deactivation, category
+  deactivation, merge and reversal, and exact ordered box IDs after a browser drop.
 - **The screen.** Edit layout offers Add group, Add item through the existing lookup, names, colours, group pictures,
   Move to group, position, Remove and drag reorder. Position also supports arranging on a touch screen without
   dragging. Posting forms use htmx. The page reads `pos-box list` once alongside registers and items, declared in

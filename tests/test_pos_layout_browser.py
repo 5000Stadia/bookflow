@@ -141,6 +141,9 @@ def test_editor_adds_nested_groups_duplicate_item_moves_and_removes_only_boxes(b
         _click(b, '[data-pos-result]')
         _saved(b, version)
         assert b.evaluate(f'window.bookflowPos.layout().items.filter(x => x.item === {json.dumps(item)}).length') == 2
+        ordered_ids = 'Array.from(document.querySelectorAll("[data-pos-boxes] [data-pos-box-id]"), b => b.dataset.posBoxId)'
+        before_drop = b.evaluate(ordered_ids)
+        assert len(before_drop) == 2
         # Drag reorder in the same group uses one versioned move, without touching the item.
         version = b.evaluate('window.bookflowPos.layout().version')
         b.evaluate('''(() => { const boxes = document.querySelectorAll('[data-pos-boxes] [data-pos-box-id]');
@@ -149,7 +152,7 @@ def test_editor_adds_nested_groups_duplicate_item_moves_and_removes_only_boxes(b
           boxes[0].dispatchEvent(new DragEvent('drop', {bubbles: true, cancelable: true, dataTransfer: transfer}));
         })()''')
         _saved(b, version)
-        assert b.evaluate('!!document.querySelector("[data-pos-boxes] [data-pos-box-id] [data-pos-box-item]")')
+        assert b.evaluate(ordered_ids) == [before_drop[1], before_drop[0]]
         # Accessible move: position one in Home, followed by removing this box.
         box_id = b.evaluate('document.querySelector("[data-pos-box-item]").closest("[data-pos-box-id]").dataset.posBoxId')
         _click(b, f'[data-pos-arrange="{box_id}"]')
@@ -221,5 +224,55 @@ def test_group_picture_upload_colour_and_clear_through_htmx(browser_site, tmp_pa
         _click(b, '[data-pos-picture-clear]')
         _saved(b, version)
         assert b.evaluate(f'window.bookflowPos.layout().items.find(x => x.id === "{box_id}").picture') is None
+    finally:
+        b.close()
+
+
+@pytest.mark.parametrize('transition', ['item', 'category', 'merge'])
+def test_item_transitions_keep_editor_boxes_and_skip_inactive_at_till(browser_site, tmp_path, transition):
+    site = browser_site
+    b = _signed_in(tmp_path, site, 390, 900)
+    try:
+        _pos_on(b, site)
+        _open_pos(b, site)
+        layout = _command(b, site, 'pos-box.list', {})
+        layout = _command(b, site, 'pos-box.seed', {'mode': 'empty', 'expected_version': layout['version']})
+        item = _command(b, site, 'item.show', {'item': 'Payment Example Labor' if transition == 'merge' else 'Pipe Sealant'})
+        if transition == 'category':
+            category = _command(b, site, 'item-category.show', {'item_category': 'Plumbing Parts'})
+            item = _command(b, site, 'item.update', {'item': item['id'], 'expected_version': item['version'],
+                                                   'category_id': category['id']})
+        layout = _command(b, site, 'pos-box.create', {'kind': 'item', 'item': item['id'],
+                                                   'expected_version': layout['version']})
+        box = layout['items'][0]['id']
+        if transition == 'item':
+            _command(b, site, 'item.deactivate', {'item': item['id'], 'expected_version': item['version']})
+        elif transition == 'category':
+            category = _command(b, site, 'item-category.show', {'item_category': item['category_id']})
+            _command(b, site, 'item-category.deactivate', {'item_category': category['id'],
+                                                         'expected_version': category['version']})
+        else:
+            # A fresh matching item has no inventory cost history to block its merge.
+            dup = _command(b, site, 'item.create', {'name': 'Layout duplicate sealant', 'type': item['type'],
+                'description': 'Duplicate', 'price': '4.00', 'income_account_id': item['income_account_id']})
+            layout = _command(b, site, 'pos-box.list', {})
+            layout = _command(b, site, 'pos-box.create', {'kind': 'item', 'item': dup['id'],
+                                                       'expected_version': layout['version']})
+            box = next(x['id'] for x in layout['items'] if x['item'] == dup['id'])
+            _command(b, site, 'item.merge', {'merged': dup['id'], 'into': item['id']})
+        _open_pos(b, site)
+        selector = f'[data-pos-box-id="{box}"]'
+        if transition == 'merge':
+            assert b.evaluate(f'document.querySelector({json.dumps(selector + " [data-pos-box-item]")}).dataset.posBoxItem') == item['id']
+        else:
+            assert not b.evaluate(f'!!document.querySelector({json.dumps(selector)})')
+        _click(b, '[data-pos-edit]')
+        if transition != 'merge':
+            assert 'inactive item — remove or replace' in b.evaluate(f'document.querySelector({json.dumps(selector)}).textContent')
+        _click(b, f'[data-pos-arrange="{box}"]')
+        version = b.evaluate('window.bookflowPos.layout().version')
+        _click(b, '[data-pos-box-remove]')
+        _saved(b, version)
+        assert not b.evaluate(f'window.bookflowPos.layout().items.some(x => x.id === {json.dumps(box)})')
     finally:
         b.close()

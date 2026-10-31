@@ -135,7 +135,11 @@
   }
   function boxHtml(box) {
     const group = box.kind === 'group', item = group ? null : items.get(box.item);
-    if (!group && !item) return '';
+    if (!group && (box.inactive || !item)) {
+      if (!layoutEditing) return '';
+      const name = box.label || (item && item.name) || box.item;
+      return `<div class="pos-box-wrap" role="listitem" data-pos-box-id="${escape(box.id)}"><button type="button" class="pos-box" data-pos-arrange="${escape(box.id)}"><span class="pos-box-name">${escape(name)}</span><span>inactive item — remove or replace</span></button></div>`;
+    }
     const name = box.label || (group ? 'Group' : item.name);
     const picture = group ? (box.picture && box.picture.url) : item.picture;
     const attr = group ? `data-pos-box-group="${escape(name)}" data-pos-group-id="${escape(box.id)}"` : `data-pos-box-item="${escape(item.id)}"`;

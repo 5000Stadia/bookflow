@@ -77,13 +77,18 @@ def output(s, info, rows, extra_pictures=None):
     pictures = {r['id']: dict(r) for r in s.company.conn.execute(sa.select(c.attachments).where(
         c.attachments.c.id.in_(wanted))).mappings()} if wanted else {}
     pictures.update(extra_pictures or {})
+    item_ids = {r['item_id'] for r in rows if r['item_id']}
+    inactive = {r.id: not r.active or r.category_active is False for r in s.company.conn.execute(
+        sa.select(c.items.c.id, c.items.c.active, c.item_categories.c.active.label('category_active'))
+        .select_from(c.items.outerjoin(c.item_categories, c.items.c.category_id == c.item_categories.c.id))
+        .where(c.items.c.id.in_(item_ids)))}
     boxes = []
     for row in sorted(rows, key=lambda row: (row['parent_id'] or '', row['position'], row['id'])):
         pic = pictures.get(row['picture_attachment_id'])
         shown = m.Picture(attachment_id=pic['id'], sha256=pic['sha256'], media_type=pic['media_type'],
             size_bytes=pic['size_bytes'], url=f"/c/{s.company_row['id']}/pos/picture/{pic['id']}/{pic['sha256']}") if pic else None
         boxes.append(m.Box(id=row['id'], parent=row['parent_id'], position=row['position'], kind=row['kind'],
-            item=row['item_id'], label=row['label'], colour=row['colour'], picture=shown,
+            item=row['item_id'], inactive=inactive.get(row['item_id'], False), label=row['label'], colour=row['colour'], picture=shown,
             view_style=row['view_style'], version=row['version']))
     return m.Layout(items=boxes, home_view_style=info['pos_home_view_style'], version=info['pos_layout_version'],
                     initialized=bool(info['pos_layout_version']))

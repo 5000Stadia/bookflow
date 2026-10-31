@@ -74,6 +74,7 @@ class Box(Strict):
     position: int
     kind: Literal['group', 'item']
     item: str | None
+    inactive: bool = Field(description="Item or its category is inactive; the till skips this box, the editor allows removal.")
     label: str | None
     colour: str | None
     picture: Picture | None
