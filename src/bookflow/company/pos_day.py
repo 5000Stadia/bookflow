@@ -123,22 +123,26 @@ def _totals(s, reg, date, shift=None):
         if memo['status'] == 'posted' and (shift or memo['date'] == date):
             totals['refunds_total'] += memo['subtotal_minor_units'] + memo['tax_minor_units']
             totals['refund_tax'] += memo['tax_minor_units']
-        if not row['refund_id']:
-            continue
-        payout = s.company.conn.execute(sa.select(c.transactions.c.status,c.transaction_revisions.c.date,
-            c.customer_refund_profiles.c.amount_minor_units,c.customer_refund_profiles.c.payment_method_id,
-            c.customer_refund_profiles.c.profile_snapshot).select_from(
-            c.transactions.join(c.transaction_revisions,c.transaction_revisions.c.id == c.transactions.c.current_revision_id)
-            .join(c.customer_refund_profiles,c.customer_refund_profiles.c.revision_id == c.transaction_revisions.c.id))
-            .where(c.transactions.c.id == row['refund_id'])).mappings().one()
-        if payout['status'] == 'posted' and (shift or payout['date'] == date):
-            method = json.loads(payout['profile_snapshot'])['payment_method']
-            amount = payout['amount_minor_units']
-            bucket = tender(method['id'], method['kind'])
-            bucket['refund_count'] += 1
-            bucket['refund_amount'] += amount
-            if method['kind'] == 'cash':
-                totals['cash_refunds'] += amount
+        # A split-tender return pays out once per original tender (increment 11); the row's refund_id is
+        # only the first payout, so read every payout from the captured result, falling back to refund_id.
+        payout_ids = [x['refund']['id'] for x in json.loads(row['result_json'] or '{}').get('tenders') or [] if x.get('refund')]
+        if not payout_ids and row['refund_id']:
+            payout_ids = [row['refund_id']]
+        for payout_id in payout_ids:
+            payout = s.company.conn.execute(sa.select(c.transactions.c.status,c.transaction_revisions.c.date,
+                c.customer_refund_profiles.c.amount_minor_units,c.customer_refund_profiles.c.payment_method_id,
+                c.customer_refund_profiles.c.profile_snapshot).select_from(
+                c.transactions.join(c.transaction_revisions,c.transaction_revisions.c.id == c.transactions.c.current_revision_id)
+                .join(c.customer_refund_profiles,c.customer_refund_profiles.c.revision_id == c.transaction_revisions.c.id))
+                .where(c.transactions.c.id == payout_id)).mappings().one()
+            if payout['status'] == 'posted' and (shift or payout['date'] == date):
+                method = json.loads(payout['profile_snapshot'])['payment_method']
+                amount = payout['amount_minor_units']
+                bucket = tender(method['id'], method['kind'])
+                bucket['refund_count'] += 1
+                bucket['refund_amount'] += amount
+                if method['kind'] == 'cash':
+                    totals['cash_refunds'] += amount
     totals['cash_to_deposit'] = totals['cash_sales'] - totals['cash_refunds']
     for bucket in tenders.values():
         bucket['amount'] = Money(bucket['amount'], cur).to_dict()
@@ -269,6 +273,10 @@ def guard_closed_document(s, document_id, *, correcting=False):
     refund_shift = s.company.conn.execute(sa.select(shifts.c.id).join(c.pos_refunds,
         c.pos_refunds.c.shift_id == shifts.c.id).where(sa.or_(c.pos_refunds.c.refund_id == document_id,
         c.pos_refunds.c.credit_memo_id == document_id),sa.or_(sa.literal(correcting), shifts.c.closed_at.is_not(None)))).scalar()
+    if not refund_shift:  # a split return's later payouts are named only in its captured tenders
+        refund_shift = s.company.conn.execute(sa.select(shifts.c.id).join(c.pos_refunds,
+            c.pos_refunds.c.shift_id == shifts.c.id).where(c.pos_refunds.c.result_json.contains(f'"refund":{{"id":"{document_id}"'),
+            sa.or_(sa.literal(correcting), shifts.c.closed_at.is_not(None)))).scalar()
     if sale_shift or refund_shift:
         raise BookflowError('E_WORK_DEPENDENCY', message='A counted POS shift holds this document. Record a new return or adjustment instead of changing its recorded cash history.',
             details={'shift':sale_shift or refund_shift,'document_id':document_id})

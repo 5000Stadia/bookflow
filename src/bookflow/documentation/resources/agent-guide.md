@@ -1656,7 +1656,9 @@ post` as always, POS on or off. Each POS act is a capability your principal gran
 `pos-register list` answers which tills there are, where each one's takings are deposited and which payment methods
 it takes; `pos-register create` and `update` need `pos.layout`. A POS sale (`pos sale complete`, from the POS
 screen) posts the very sales receipt `sales-receipt post` would, with the register's deposit account, site and
-walk-in customer and today's date, and records the ticket and tender beside it; each such receipt's `pos_sales` row
+walk-in customer and today's date. Split sales take `tenders` (distinct methods with explicit positive amounts)
+and post one invoice Due on receipt plus one payment per method, atomically. Only cash gives change. A single
+method uses `tender` and posts a sales receipt. Each sale's `pos_sales` row
 says which register and clerk took it and what was tendered. Answer questions about takings from the receipts; do
 not ring sales up through `pos sale complete` yourself.
 
@@ -1685,11 +1687,12 @@ Turning POS off is refused while tickets are held or open, naming every label an
 `pos receipt show` reads printable POS receipt facts under `pos.sell`, using a sale ID, ticket key, receipt ID
 or number. Set `reprint` to mark a copy. Reprints preserve original posted lines and totals; voided sales say VOID.
 The browser receipt route offers 80/58 mm printing and a content-sized PDF. Its Code 128 contains the original
-receipt number, which the POS selector still accepts after a renumber. This does not grant general receipt or ledger access.
+receipt number, which the POS selector still accepts after a renumber. Split receipts print and encode
+`INV:<invoice number>`; bare numbers identify sales receipts, while stable sale, ticket or document IDs work for both. This does not grant general receipt or ledger access.
 
-`pos sale void` needs `pos.void`, a required reason, and the receipt's `expected_version` (1 on a new sale).
+`pos sale void` needs `pos.void`, a required reason, and the sale document's `expected_version` (use `version` from the sale or receipt output).
 Its selector accepts a POS sale ID, ticket key, receipt ID or receipt number; ordinary typed receipts are refused.
-It runs the receipt reversal core and preserves history. A banked sale names its blocking deposit; a reconciled
+It runs the receipt reversal core, or reverses every split payment then its invoice, and preserves history. A banked sale names its blocking deposit; a reconciled
 sale is refused. A sale with a refund cannot be voided; the refusal names the refund. The plain POS clerk
 cannot void or refund; Clerk with returns can.
 
@@ -1702,7 +1705,10 @@ The command posts a credit memo and its cash or original-method payout together,
 bank account, date and stock site. Store credit leaves the credit memo open on a named customer; the walk-in
 customer cannot retain store credit because the balance would be shared by unrelated shoppers. A voided sale
 cannot be refunded. `pos refund show` reads the saved result; `pos refund receipt` supplies the printable REFUND
-receipt through the receipt route, with a content-sized PDF.
+receipt through the receipt route, with a content-sized PDF. Original split refunds allocate in the original
+tender order, capped at each net payment less previous Original payouts; preview lists each payout. Cash and
+store-credit returns consume line quantities but do not consume a particular original method. All money
+refunds leave the register refund bank account. An inactive selected original method refuses the return.
 
 `pos-box list` reads the company's tap boxes and layout `version` with `pos.sell`. Every layout write needs
 `pos.layout` and that revision as `expected_version`: `create`, `update`, `move`, `remove`, `view`, `seed`, and

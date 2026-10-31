@@ -220,6 +220,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `sale.tenders[].amount.amount` | string | yes | no | — | — |
 | `sale.tenders[].amount.currency` | string | yes | no | — | — |
 | `sale.tenders[].amount.minor_units` | integer | yes | no | — | — |
+| `sale.tenders[].applied` | object \| null | no | yes | null | — |
+| `sale.tenders[].applied.amount` | string | yes | no | — | — |
+| `sale.tenders[].applied.currency` | string | yes | no | — | — |
+| `sale.tenders[].applied.minor_units` | integer | yes | no | — | — |
+| `sale.tenders[].change` | object \| null | no | yes | null | — |
+| `sale.tenders[].change.amount` | string | yes | no | — | — |
+| `sale.tenders[].change.currency` | string | yes | no | — | — |
+| `sale.tenders[].change.minor_units` | integer | yes | no | — | — |
 | `sale.tenders[].reference` | string \| null | yes | yes | — | — |
 | `sale.change` | object | yes | no | — | Zero on a refund receipt; no change is due. |
 | `sale.change.amount` | string | yes | no | — | — |
@@ -395,6 +403,20 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `refund` | object \| null | no | yes | null | — |
 | `refund.id` | string | yes | no | — | — |
 | `refund.name` | string | yes | no | — | — |
+| `tenders` | array[object] | no | no | [] | Payouts in original tender order; each is capped at that tender's unreturned paid amount. |
+| `tenders[].payment_method` | object | yes | no | — | — |
+| `tenders[].payment_method.id` | string | yes | no | — | — |
+| `tenders[].payment_method.name` | string | yes | no | — | — |
+| `tenders[].payment_method.kind` | string | yes | no | — | — |
+| `tenders[].amount` | object | yes | no | — | — |
+| `tenders[].amount.amount` | string | yes | no | — | — |
+| `tenders[].amount.currency` | string | yes | no | — | — |
+| `tenders[].amount.minor_units` | integer | yes | no | — | — |
+| `tenders[].reference` | string \| null | no | yes | null | — |
+| `tenders[].tender_index` | integer \| null | no | yes | null | — |
+| `tenders[].refund` | object \| null | no | yes | null | — |
+| `tenders[].refund.id` | string | yes | no | — | — |
+| `tenders[].refund.name` | string | yes | no | — | — |
 | `date` | string | yes | no | — | — |
 | `created_at` | string | yes | no | — | — |
 | `clerk_id` | string | yes | no | — | — |
@@ -473,6 +495,7 @@ Example JSON output:
     "currency": "USD",
     "minor_units": 1
   },
+  "tenders": [],
   "total": {
     "amount": "value",
     "currency": "USD",

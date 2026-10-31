@@ -80,7 +80,7 @@ def read(s, inp):
     info = dict(s.company.conn.execute(sa.select(c.company_info)).mappings().one())
     issuer = _issuer_party(json.loads(revision['issuer_snapshot']), info)
     reg = pos_layer.resolve(s, row['register_id'])
-    return ReceiptOutput(sale=pos_sales.sale_output(s, row), number=revision['number'], status=header['status'],
+    return ReceiptOutput(sale=pos_sales.sale_output(s, row), number=('INV:' if row['document_type'] == 'invoice' else '') + revision['number'], status=header['status'],
         reprint=inp.reprint, width=reg['receipt_width'], company_name=issuer.name or '', address=list(issuer.lines),
         phone=info.get('phone'), clerk=user_names(s, {row['created_by']}).get(row['created_by'], row['created_by']),
         customer=facts['customer']['label'] if row['customer_named'] else None, lines=lines,

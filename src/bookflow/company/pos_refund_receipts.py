@@ -66,7 +66,9 @@ def read(s, inp: RefundReceiptInput):
         rate = str(Decimal(tax['rate_percent_millionths']) / 1000000)
         taxes[(label, rate)] = taxes.get((label, rate), 0) + tax['tax_minor_units']
     store_credit = facts['settlement'] == 'store_credit'
-    tenders = [] if store_credit else [dict(payment_method=facts['payment_method'],amount=facts['total'],reference=facts.get('reference'))]
+    tenders = [] if store_credit else [
+        dict(payment_method=p['payment_method'], amount=p['amount'], reference=p.get('reference'))
+        for p in facts.get('tenders') or [dict(payment_method=facts['payment_method'], amount=facts['total'], reference=facts.get('reference'))]]
     sale = RefundReceiptSummary(id=row['id'], pos_register=facts['pos_register'],
         created_at=row['created_at'], total=facts['total'],
         change=Money(0,currency).to_dict(), tenders=tenders)

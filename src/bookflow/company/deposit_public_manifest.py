@@ -538,7 +538,7 @@ FIELDS: dict[str, dict[str, tuple]] = {
         'pricing_rule': (_P, (), 'Sales line profile; explicitly excluded by the owning plan.'),
         'standard_price_minor_units': (_P, (), 'Sales line profile; explicitly excluded by the owning plan.'),
         'cost_minor_units': (_P, (), 'Sales line profile; explicitly excluded by the owning plan.'),
-        'return_cost_minor_units': (_P, (), 'Returned stock valuation; not a deposit cash fact.'),
+        'return_cost_minor_units': (_P, (), 'Captured inventory return valuation; private sales line profile, not deposit cash.'),
         'price_basis_minor_units': (_P, (), 'Sales line profile; explicitly excluded by the owning plan.'),
         'standard_price_fraction': (_P, (), 'Sales line profile; explicitly excluded by the owning plan.'),
         'cost_fraction': (_P, (), 'Sales line profile; explicitly excluded by the owning plan.'),

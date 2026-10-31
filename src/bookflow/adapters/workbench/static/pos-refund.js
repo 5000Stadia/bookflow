@@ -38,6 +38,8 @@
   function invalidate() {
     generation++; preview = null;
     $('[data-pos-refund-total]').textContent = '—';
+    $('[data-pos-refund-tenders]').replaceChildren();
+    $('[data-pos-refund-original-help]').hidden = $('[data-pos-refund-settlement]').value !== 'original';
     $('[data-pos-refund-subtotal]').textContent = '—'; $('[data-pos-refund-tax]').textContent = '—';
     $('[data-pos-refund-complete]').disabled = true;
   }
@@ -55,7 +57,7 @@
     $('[data-pos-refund-customer]').textContent = customer?.name || 'No customer';
     const original = $('[data-pos-refund-settlement] option[value=original]');
     original.disabled = !source;
-    original.textContent = source ? `Original payment method (${source.payment_method.name})` : 'Original payment method';
+    original.textContent = 'Original payment methods';
     if (!source && $('[data-pos-refund-settlement]').value === 'original') $('[data-pos-refund-settlement]').value = 'cash';
   }
   function register() {
@@ -106,6 +108,7 @@
       if (generation !== mine) return;
       preview = out;
       $('[data-pos-refund-total]').textContent = money(out.total); $('[data-pos-refund-subtotal]').textContent = money(out.subtotal); $('[data-pos-refund-tax]').textContent = money(out.tax);
+      $('[data-pos-refund-tenders]').innerHTML = (out.tenders || []).map(t => `<li>${escape(t.payment_method.name)} · ${money(t.amount)}</li>`).join('');
       status(body.settlement === 'store_credit' ? 'This credit will remain on the customer’s account.' : 'Check the refund total before paying the customer.');
     } catch (e) { status(e.message); }
     finally { busy = false; lock(); }
@@ -125,7 +128,8 @@
       $('[data-pos-done]').hidden = true;
       $('[data-pos-refund-done-label]').textContent = out.settlement === 'store_credit' ? 'Store credit issued' : 'Refund paid';
       $('[data-pos-refund-done-amount]').textContent = money(out.total);
-      $('[data-pos-refund-done-summary]').textContent = `Credit memo ${out.credit_memo.name}${out.payment_method ? ' · ' + out.payment_method.name : ''}${out.customer ? ' · ' + out.customer.name : ''}`;
+      const paid = (out.tenders || []).map(t => `${t.payment_method.name} ${money(t.amount)}`).join(', ');
+      $('[data-pos-refund-done-summary]').textContent = `Credit memo ${out.credit_memo.name}${paid ? ' · ' + paid : (out.payment_method ? ' · ' + out.payment_method.name : '')}${out.customer ? ' · ' + out.customer.name : ''}`;
       $('[data-pos-refund-print]').href = `/c/${encodeURIComponent(data.company)}/pos/receipt/${encodeURIComponent(out.id)}?refund=true`;
       $('[data-pos-refund-done]').hidden = false;
     } catch (e) {

@@ -73,6 +73,14 @@ class PosRefundLinesOutput(_Strict):
     lines: list[RefundLineOutput]
 
 
+class RefundTenderOutput(_Strict):
+    payment_method: PaymentMethodRef
+    amount: MoneyOutput
+    reference: str | None = None
+    tender_index: int | None = None
+    refund: Named | None = None
+
+
 class PosRefundOutput(_Strict):
     id: str
     operation_key: str
@@ -81,6 +89,7 @@ class PosRefundOutput(_Strict):
     customer: Named | None
     credit_memo: Named
     refund: Named | None = None
+    tenders: list[RefundTenderOutput] = Field(default_factory=list, description="Payouts in original tender order; each is capped at that tender's unreturned paid amount.")
     date: str
     created_at: str
     clerk_id: str

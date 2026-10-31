@@ -125,16 +125,18 @@
 
 <dialog class="pos-dialog pos-tender" data-pos-tender aria-label="Take payment">
   <form method="dialog"><p class="pos-tender-total">Total <b data-pos-tender-total></b></p>
+    <ul class="pos-payments" data-pos-payments aria-label="Payments entered"></ul>
+    <p data-pos-balance-row hidden>Balance remaining <b data-pos-balance></b></p>
     <div class="pos-methods" data-pos-methods role="group" aria-label="Payment method"></div>
+    <label>Amount tendered <input data-pos-tendered inputmode="decimal" autocomplete="off"></label>
     <div data-pos-cash hidden>
       <div class="pos-quick" data-pos-quick role="group" aria-label="Quick amounts"></div>
-      <label>Amount tendered <input data-pos-tendered inputmode="decimal" autocomplete="off"></label>
       <div class="pos-keypad" data-pos-keypad>{% for key in ['7','8','9','4','5','6','1','2','3','0','00','⌫'] %}<button type="button" data-pos-key="{{ key }}">{{ key }}</button>{% endfor %}</div>
-      <p class="pos-change-due">Change due <b data-pos-change-due>—</b></p>
     </div>
+    <p class="pos-change-due">Change due <b data-pos-change-due>—</b></p>
     <label data-pos-reference-row hidden>Reference (optional) <input data-pos-reference autocomplete="off" placeholder="Last four digits or approval code" maxlength="128"></label>
     <p class="pos-dialog-status" data-pos-tender-status role="alert"></p>
-    <div class="pos-dialog-actions"><button value="cancel">Back</button><button type="button" class="primary" data-pos-complete disabled>Complete</button></div>
+    <div class="pos-dialog-actions"><button value="cancel">Back</button><button type="button" data-pos-add-payment disabled>Add another payment</button><button type="button" data-pos-retry data-pos-tender-retry hidden>Finish the sale</button><button type="button" class="primary" data-pos-complete disabled>Complete</button></div>
   </form>
 </dialog>
 
@@ -165,10 +167,12 @@
     </div>
     <ol class="pos-refund-lines" data-pos-refund-lines aria-label="Returned lines"></ol>
     <label>Refund as <select data-pos-refund-settlement><option value="cash">Cash</option><option value="original">Original payment method</option><option value="store_credit">Store credit</option></select></label>
+    <p data-pos-refund-original-help hidden>Refund to the original methods in payment order, up to the amount still available on each.</p>
     <p data-pos-refund-credit-help>Store credit needs a named customer so the credit can be used on their account.</p>
     <label>Reference (optional) <input data-pos-refund-reference maxlength="128" autocomplete="off"></label>
   </fieldset>
   <dl class="pos-totals"><div><dt>Subtotal</dt><dd data-pos-refund-subtotal>—</dd></div><div><dt>Tax</dt><dd data-pos-refund-tax>—</dd></div><div class="pos-total"><dt>Refund total</dt><dd data-pos-refund-total>—</dd></div></dl>
+  <ul data-pos-refund-tenders aria-label="Refund payments"></ul>
   <p data-pos-refund-status role="status"></p>
   <div class="pos-dialog-actions"><button type="button" data-pos-refund-back>Back</button><button type="button" data-pos-refund-preview>Review total</button><button type="button" class="primary" data-pos-refund-complete disabled>Complete refund</button></div>
 </dialog>

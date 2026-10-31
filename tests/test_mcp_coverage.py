@@ -189,7 +189,7 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 26 -> 27 (R150): unit prices and costs take SalesPriceInput, the shape of SalesMoneyInput with an
     # amount exact to three places past the minor unit. Measured per command on both trees: the same
     # 3430 paths, now split across one more variant kind.
-    assert len(mapped)==len(variant_policies())==27
+    assert len(mapped)==len(variant_policies())==28
     # The census of material schema nodes. It moves whenever a routed command gains input
     # shape. Measured from the merged tree on every merge -- no branch's number survives
     # another branch landing.
@@ -460,7 +460,8 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # Merged POS receipts/refunds/ticket recovery bring the prior census to 4482.
     # Increment 10 adds eight null branches: shift open register (1), report register/date/shift (3),
     # deposit prepare register/date/shift/method selection (4); close has no optional input.
-    assert sum(len(group["paths"]) for group in mapped)==4490
+    # Increment 11 adds four: complete's nullable tender and tenders plus the list tender amount/reference.
+    assert sum(len(group["paths"]) for group in mapped)==4494
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.
