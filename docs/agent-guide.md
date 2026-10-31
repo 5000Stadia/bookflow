@@ -1599,6 +1599,19 @@ walk-in customer and today's date, and records the ticket and tender beside it; 
 says which register and clerk took it and what was tendered. Answer questions about takings from the receipts; do
 not ring sales up through `pos sale complete` yourself.
 
+`pos ticket hold` saves a nonempty cart on the host without posting or reserving stock. `list` returns held
+carts across the company, newest first, with their versions and last held totals. `resume` claims one using
+`expected_version`; run `pos sale preview` on its returned lines for current prices, then supply the returned
+version as `ticket_version` to Complete. Holding it again needs `expected_version`. `discard` accepts held or
+resumed tickets and keeps their audit trail. All four commands need `pos.sell`; hold also checks typed-price
+authority. Use an idempotency key on mutations and keep the identical request and key until the host confirms.
+Turning POS off is refused while a ticket is held, naming the ticket.
+
+`pos sale void` needs `pos.void`, a required reason, and the receipt's `expected_version` (1 on a new sale).
+Its selector accepts a POS sale ID, ticket key, receipt ID or receipt number; ordinary typed receipts are refused.
+It runs the receipt reversal core and preserves history. A banked sale names its blocking deposit; a reconciled
+sale is refused. The plain POS clerk cannot void; Clerk with returns can.
+
 `pos-box list` reads the company's tap boxes and layout `version` with `pos.sell`. Every layout write needs
 `pos.layout` and that revision as `expected_version`: `create`, `update`, `move`, `remove`, `view`, `seed`, and
 `picture set`. A stale revision returns `E_VERSION_CONFLICT`; read the layout again before editing. The first

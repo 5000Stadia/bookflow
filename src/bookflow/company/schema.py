@@ -1330,3 +1330,6 @@ for _pos_layout_column in _pos_layout_schema.company_columns(_column):
 
 from bookflow.company import bank_connection_schema as _bank_connection_schema
 globals().update(_bank_connection_schema.define_tables(metadata, _column, _table, _common))
+
+from bookflow.company import pos_ticket_schema as _pos_ticket_schema
+globals().update(_pos_ticket_schema.define_tables(metadata, _column, _table, _common))

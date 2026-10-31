@@ -189,6 +189,7 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.BANK_RULE_POLICY_VERSION: '12b5f914d21302af037c6cc0b1aeab0ef6912d764015332d7734c12338ad8127',
     c.POS_SALE_POLICY_VERSION: '1462bee09d7343f15fdc015fa86a114e30671e8d73fc2bab7f5e75444d0450cf',
     c.BANK_RECONCILE_POLICY_VERSION: '8673bd998c7e077061301d0bfaea5af7b33cbd3eb773f89dd0e6fdcdbf026e42',
+    c.POS_TICKET_POLICY_VERSION: '6639dc50b25389df49db0c4bd6e45d637a6271a4c9f81c8abd579abfb0d7ff35',
     c.POS_LAYOUT_POLICY_VERSION: '9f95dba850d8f730aac8e4fdfdd82f23de09109fcf54e7e9499ff9b22dd29916',
     c.BANK_SOURCE_POLICY_VERSION: '9676dfedbb049b4743cdc1d56915a2d296f6eaf3cda9db30768d912a11d36949',
 }
@@ -355,6 +356,7 @@ def _full_known():
     from . import permission_bank_rule_catalog
     from . import permission_pos_sale_catalog
     from . import permission_bank_reconcile_catalog
+    from . import permission_pos_ticket_catalog
     from . import permission_pos_layout_catalog
     from . import permission_bank_source_catalog
     known = {
@@ -447,6 +449,7 @@ def _full_known():
         c.BANK_RULE_POLICY_VERSION: permission_bank_rule_catalog,
         c.POS_SALE_POLICY_VERSION: permission_pos_sale_catalog,
         c.BANK_RECONCILE_POLICY_VERSION: permission_bank_reconcile_catalog,
+        c.POS_TICKET_POLICY_VERSION: permission_pos_ticket_catalog,
         c.POS_LAYOUT_POLICY_VERSION: permission_pos_layout_catalog,
         c.BANK_SOURCE_POLICY_VERSION: permission_bank_source_catalog,
     }
@@ -609,7 +612,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.POS_LAYOUT_POLICY_VERSION)
+    return known_catalog(c.POS_TICKET_POLICY_VERSION)
 
 
 def catalog_for_root(tx):

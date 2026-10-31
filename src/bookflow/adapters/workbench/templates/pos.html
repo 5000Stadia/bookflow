@@ -6,6 +6,8 @@
 <div class="pos-main">
   <div class="pos-topbar">
     {% if registers | length > 1 %}<label class="pos-register-pick">Register <select data-pos-register-select>{% for register in registers %}<option value="{{ register.id }}">{{ register.name }}</option>{% endfor %}</select></label>{% elif registers %}<span class="pos-register-name" data-pos-register-name>{{ registers[0].name }}</span>{% endif %}
+    <button type="button" data-pos-held>Held ({{ pos_data.held | length }})</button>
+    {% if pos_data.can_void %}<button type="button" data-pos-void-open>Void sale</button>{% endif %}
   </div>
   <div class="pos-lookup">{{ scan_field(company_id, 'pos', label='Look up or scan an item') }}
     <ul class="pos-results pos-view-list" data-pos-results hidden aria-label="Lookup results"></ul>
@@ -41,10 +43,36 @@
   <p class="pos-empty" data-pos-empty>Tap an item, look one up or scan it.</p>
   <dl class="pos-totals"><div><dt>Subtotal</dt><dd data-pos-subtotal>—</dd></div><div><dt>Tax</dt><dd data-pos-tax>—</dd></div><div class="pos-total"><dt>Total</dt><dd data-pos-total>—</dd></div></dl>
   <p class="pos-connection" data-pos-connection role="status" hidden></p>
-  <div class="pos-cart-actions"><button type="button" data-pos-clear>Clear sale</button><button type="button" class="primary pos-charge" data-pos-charge disabled>Charge</button></div>
+  <div class="pos-cart-actions"><button type="button" data-pos-hold disabled>Hold</button><button type="button" data-pos-clear>Clear sale</button><button type="button" class="primary pos-charge" data-pos-charge disabled>Charge</button></div>
 </aside>
 <button type="button" class="pos-bar" data-pos-bar aria-label="Show the sale"><span data-pos-bar-count>0 items</span> · <span data-pos-bar-total>—</span> · <b>Charge</b></button>
 <p class="pos-pending" data-pos-pending role="alert" hidden></p>
+
+<dialog class="pos-dialog" data-pos-hold-dialog aria-label="Hold sale">
+  <form data-pos-hold-form><h2>Hold sale</h2>
+    <p>Save this sale for anyone at this company to resume. No payment or stock is posted.</p>
+    <label>Label (optional) <input data-pos-hold-label maxlength="200" placeholder="Time and first item"></label>
+    <p data-pos-hold-status role="status"></p>
+    <div class="pos-dialog-actions"><button type="button" data-pos-close="hold">Back</button><button type="submit" class="primary" data-pos-hold-save>Hold sale</button></div>
+  </form>
+</dialog>
+<dialog class="pos-dialog" data-pos-held-dialog aria-label="Held sales">
+  <h2>Held sales</h2><p>Resume at today’s prices. Hold or clear your current sale first.</p>
+  <ul class="pos-held-list" data-pos-held-list></ul>
+  <p data-pos-held-status role="status"></p>
+  <div class="pos-dialog-actions"><button type="button" data-pos-held-refresh>Refresh</button><button type="button" data-pos-close="held">Close</button></div>
+</dialog>
+{% if pos_data.can_void %}
+<dialog class="pos-dialog" data-pos-void-dialog aria-label="Void sale">
+  <form data-pos-void-form><h2>Void sale</h2>
+    <p>Reverse the completed sale and restore its stock. The original receipt and reason stay in the audit history.</p>
+    <label>Receipt number <input data-pos-void-sale required autocomplete="off"></label>
+    <label>Reason <input data-pos-void-reason required maxlength="140" autocomplete="off"></label>
+    <p data-pos-void-status role="status"></p>
+    <div class="pos-dialog-actions"><button type="button" data-pos-close="void">Back</button><button type="submit" class="primary" data-pos-void-submit>Void sale</button></div>
+  </form>
+</dialog>
+{% endif %}
 
 {% if pos_data.can_layout %}
 <dialog class="pos-dialog" data-pos-box-dialog aria-label="Arrange box">
@@ -68,7 +96,7 @@
   <form method="dialog"><h2 data-pos-line-name></h2>
     <label>Quantity <span class="pos-qty"><button type="button" data-pos-qty-step="-1" aria-label="One fewer">−</button><input data-pos-line-qty inputmode="decimal" autocomplete="off"><button type="button" data-pos-qty-step="1" aria-label="One more">+</button></span></label>
     <label data-pos-line-price-row hidden>Price <input data-pos-line-price inputmode="decimal" autocomplete="off" placeholder="Item price"></label>
-    <label data-pos-line-serial-row hidden>Serial number <input data-pos-line-serial autocomplete="off" placeholder="Scan or type; leave empty to skip"></label>
+    <label data-pos-line-serial-row hidden>Serial numbers <textarea data-pos-line-serial autocomplete="off" rows="3" placeholder="One per line; leave empty to skip"></textarea></label>
     <div class="pos-dialog-actions"><button type="button" data-pos-line-remove>Remove</button><button value="done" class="primary" data-pos-line-done>Done</button></div>
   </form>
 </dialog>
@@ -106,6 +134,7 @@
 <section class="pos-done" data-pos-done hidden aria-label="Sale complete">
   <p class="pos-done-label">Change due</p><p class="pos-done-change" data-pos-done-change></p>
   <p data-pos-done-summary></p>
+  {% if pos_data.can_void %}<button type="button" data-pos-void-last>Void this sale</button>{% endif %}
   <button type="button" class="primary" data-pos-new-sale>New sale</button>
 </section>
 <script type="application/json" id="pos-data">{{ pos_data | tojson }}</script>

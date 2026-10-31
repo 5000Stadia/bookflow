@@ -2990,3 +2990,43 @@ MATRIX['bank-feed-connection query'] = {}
 MATRIX['bank-feed fetch']['E_ACCOUNT_MISMATCH'] = 'the staged page differs from the selected account hint'
 
 MATRIX['bank-feed-connection disable']['E_PERMISSION'] = 'bank-feed at standard is not held'
+
+
+# R114 increment 7: tickets never post; void delegates to the receipt core.
+MATRIX['pos ticket list'] = {'E_FEATURE_DISABLED': 'POS is off for the company'}
+_POS_TICKET = {
+    'E_VALIDATION': 'an empty cart, invalid ticket state or invalid reference',
+    'E_RECORD_NOT_FOUND': 'unknown ticket, register, customer or item',
+    'E_VERSION_CONFLICT': 'another device changed the ticket since it was read',
+    'E_FEATURE_DISABLED': 'POS is off for the company',
+    'E_INACTIVE_REFERENCE': 'the customer or item is inactive',
+    'E_PERMISSION': 'typed price without pos.price-override',
+    'E_PERIOD_CLOSED': 'today is on or before the closing date',
+    'E_VALUE_RANGE': 'quantity or amount outside its range',
+    'E_AMOUNT_PRECISION': 'a price with more places than the currency',
+    'E_WORK_DEPENDENCY': 'ticket has already completed or cannot take this transition',
+    'E_IDEMPOTENCY_MISMATCH': 'operation key or ticket was used with other input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+MATRIX['pos ticket hold'] = dict(_POS_TICKET)
+for _verb in ('resume', 'discard'):
+    MATRIX['pos ticket ' + _verb] = {code: _POS_TICKET[code] for code in (
+        'E_FEATURE_DISABLED', 'E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_WORK_DEPENDENCY',
+        'E_IDEMPOTENCY_MISMATCH', 'E_DIRECTIVE_NOT_FOUND', 'E_DIRECTIVE_INACTIVE')}
+MATRIX['pos sale complete']['E_VERSION_CONFLICT'] = 'the resumed ticket changed or its version was omitted'
+MATRIX['pos sale complete']['E_WORK_DEPENDENCY'] = 'the ticket is held or discarded'
+MATRIX['pos sale void'] = {
+    'E_RECORD_NOT_FOUND': 'the sale selector does not name a completed POS sale',
+    'E_VERSION_CONFLICT': 'the receipt changed since the expected version',
+    'E_PERIOD_CLOSED': 'the receipt date is on or before the closing date',
+    'E_VALIDATION': 'the document is already void or is not a sales receipt',
+    'E_REASON_REQUIRED': 'void requires the reason for the reversal',
+    'E_FEATURE_DISABLED': 'POS is off for the company',
+    'E_DEPOSIT_DEPENDENCY': 'the receipt belongs to the named deposit',
+    'E_RECONCILIATION_DEPENDENCY': 'the receipt belongs to a reconciliation',
+    'E_WORK_DEPENDENCY': 'linked work prevents voiding the receipt',
+    'E_IDEMPOTENCY_MISMATCH': 'operation key was used with other input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}

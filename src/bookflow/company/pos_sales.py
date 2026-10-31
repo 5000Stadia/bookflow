@@ -285,7 +285,9 @@ def plan_complete(s, ctx, inp) -> Plan:
         return Plan(out, dict(replay=found['id']))
     if not inp.lines:
         raise _invalid('lines', 'the cart is empty')
+    from bookflow.company import pos_tickets
     reg = register(s, inp.pos_register)
+    pos_tickets.check_complete(s, inp.ticket, inp.ticket_version, reg['id'])
     chosen = customer(s, inp.customer)
     method = payment_method(s, reg, inp.tender.payment_method)
     payload = receipt_payload(s, inp, reg, method, chosen, (inp.tender.reference or '').strip() or None)
@@ -305,7 +307,7 @@ def plan_complete(s, ctx, inp) -> Plan:
         tendered=Money(facts['tendered'], facts['currency']).to_dict(),
         change=Money(facts['change'], facts['currency']).to_dict(), tenders=[_tender_out(facts)],
         warnings=list(header.warnings or []))
-    return Plan(preview, dict(payload=payload, register=reg, customer=chosen, facts=facts, sha=_input_sha(inp)))
+    return Plan(preview, dict(payload=payload, register=reg, customer=chosen, facts=facts, sha=_input_sha(inp), ticket_version=inp.ticket_version))
 
 
 def _named_customer(chosen) -> Named | None:
@@ -334,6 +336,9 @@ def apply_complete(plan: Plan, ctx, s) -> Applied:
     total = fresh.preview.total
     if total.minor_units != plan.data['facts']['total']:
         raise BookflowError('E_PREVIEW_STALE', details={'total': total.amount})
+    from bookflow.company import pos_tickets
+    ticket_touched = pos_tickets.complete(s, ctx, plan.preview.ticket, plan.data['ticket_version'],
+                                           plan.data['register']['id'])
     applied = sales.persist_prepared(fresh, ctx, s, command_name=COMMAND)
     header = fresh.data['header']
     facts, reg, chosen = plan.data['facts'], plan.data['register'], plan.data['customer']
@@ -347,7 +352,7 @@ def apply_complete(plan: Plan, ctx, s) -> Applied:
     s.company.conn.execute(c.pos_sales.insert().values(**row))
     summary = f"POS sale on register {reg['name']}: sales receipt {header['number']}"
     audit.write_event_to(s.company, ctx, COMMAND, summary,
-                         [Touched('pos_sale', row['id'], 'create', None, 1, row, db='company')],
+                         [Touched('pos_sale', row['id'], 'create', None, 1, row, db='company'), *ticket_touched],
                          actor_id=s.actor.id, actor_kind=s.actor.kind,
                          directive_code=getattr(s, 'directive_code', None))
     output = sale_output(s, row, warnings=list(getattr(applied.output, 'warnings', None) or []))

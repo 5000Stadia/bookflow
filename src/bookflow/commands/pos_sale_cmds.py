@@ -50,7 +50,7 @@ sale_complete = command(
         'typed unit_price also pos.price-override.' + _OFF),
     input_model=m.PosSaleCompleteInput, output_model=m.PosSaleOutput, writes={'company'}, required_role='member',
     capability='pos.sell', accepts_idempotency_key=True,
-    error_codes=_SALE_ERRORS + ['E_PERMISSION', 'E_PREVIEW_STALE', 'E_IDEMPOTENCY_MISMATCH'])(plan_complete)
+    error_codes=_SALE_ERRORS + ['E_PERMISSION', 'E_PREVIEW_STALE', 'E_IDEMPOTENCY_MISMATCH', 'E_VERSION_CONFLICT', 'E_WORK_DEPENDENCY'])(plan_complete)
 sale_complete.applier(pos_sales.apply_complete)
 sale_complete.authorize_input = pos_sales.authorize
 sale_complete.authorization = 'member pos.sell; pos.price-override when a line has unit_price'

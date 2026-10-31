@@ -57,7 +57,9 @@ def mount(app, *, render, run, credential, page_error, role_allows, holds=None, 
                         registers=[dict(id=r['id'], name=r['name'], methods=r['payment_methods'])
                                    for r in registers],
                         items=items, layout=run(request, 'pos-box list', {}, cid), can_override=can_override,
-                        can_layout=role_allows('pos-box create', company, credential(request)))
+                        can_layout=role_allows('pos-box create', company, credential(request)),
+                        can_void=role_allows('pos sale void', company, credential(request)),
+                        held=run(request, 'pos ticket list', {}, cid)['items'])
             return render('pos.html', request, company=company, company_id=cid, registers=registers, pos_data=data)
         except BookflowError as e:
             return page_error(request, e)
