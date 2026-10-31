@@ -1255,7 +1255,9 @@ class Reader:
         if name == "users":  # Users & permissions: membership.grant here, or user.manage
             return self.administers
         if name == "advanced":  # Advanced tools and All commands: some company write
-            return any(command.is_write for verbs in self.rows().values() for command in verbs)
+            # A till's own writes (`pos sale complete`, `pos customer add`; R114 increment 5) are made on the POS screen:
+            # they do not open All commands and Advanced tools, so a POS clerk keeps the minimal header.
+            return any(command.is_write and not is_pos(command) for verbs in self.rows().values() for command in verbs)
         if name.startswith("section:") and name[8:] in MENU_BY_SLUG:
             return section_offers(self.company_id, MENU_BY_SLUG[name[8:]], self, self.rows())
         return False
@@ -1308,6 +1310,8 @@ PAGE_RUNS: dict[str, tuple[str, ...]] = {
     '/other-name/create': ('custom-field list',),
     '/payment': ('payment-method list',),
     '/payment-method': ('payment-method query', 'payment-method query options'),
+    # The POS screen (R114 increment 5): the sales items it rings up, read once with the page.
+    '/pos': ('item list',),
     '/price-level': ('price-level query', 'price-level query options'),
     '/print-checks': ('account list',),
     '/proposal/create': ('custom-field list', 'item show'),

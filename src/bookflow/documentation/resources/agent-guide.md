@@ -1593,7 +1593,11 @@ Point of sale is a person's checkout on a phone, tablet or till, and an optional
 post` as always, POS on or off. Each POS act is a capability your principal grants on your membership (`pos.sell`,
 `pos.void`, `pos.refund`, `pos.price-override`, `pos.layout`); your role never gives you one. With `pos.sell`,
 `pos-register list` answers which tills there are, where each one's takings are deposited and which payment methods
-it takes; `pos-register create` and `update` need `pos.layout`.
+it takes; `pos-register create` and `update` need `pos.layout`. A POS sale (`pos sale complete`, from the POS
+screen) posts the very sales receipt `sales-receipt post` would, with the register's deposit account, site and
+walk-in customer and today's date, and records the ticket and tender beside it; each such receipt's `pos_sales` row
+says which register and clerk took it and what was tendered. Answer questions about takings from the receipts; do
+not ring sales up through `pos sale complete` yourself.
 
 <!-- bookflow-example: illustrative -->
 ```json

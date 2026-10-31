@@ -128,7 +128,14 @@
     });
   }
 
-  const MODES = {lines: intoLines, rows: intoRows, count: intoCount, pick: intoPick};
+  // ---- "pos": the POS screen (R114 increment 5). The cart is the page's (pos.js): a known code rings the item up,
+  // adding a line or one more to its last line; "6*" first rings up six.
+  function intoPos(field, answer, want) {
+    if (!window.bookflowPos) return false;
+    return window.bookflowPos.scanned(answer, want);
+  }
+
+  const MODES = {lines: intoLines, rows: intoRows, count: intoCount, pick: intoPick, pos: intoPos};
 
   // The current bin: the form's Bin field (the count screen), else every empty bin field the next lines use.
   function setBin(field, answer) {

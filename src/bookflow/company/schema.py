@@ -1319,3 +1319,6 @@ for _bank_rule_column in _bank_rule_schema.line_columns(_column):
 for _bank_rule_column in _bank_rule_schema.company_info_columns(_column):
     company_info.append_column(_bank_rule_column)
 sa.Index("ix_bank_lines_payee_key", bank_lines.c.account_id, bank_lines.c.payee_key)
+# POS sales (co0120, R114 increment 5): one row per completed sale, beside the receipt it posted.
+from bookflow.company import pos_sale_schema as _pos_sale_schema
+globals().update(_pos_sale_schema.define_tables(metadata, _column, _table))

@@ -1,0 +1,116 @@
+/* The POS screen (R114 increment 5, design/point-of-sale.md §12). Phone first: boxes, then a sticky bar at the foot
+   that slides the sale up as a sheet; from 768 px the sale stands beside the boxes. Touch targets at least 44 px,
+   the tender keypad's keys at least 64 px. */
+#pos { --pos-line: var(--line, #d0d5dd); --pos-surface: var(--surface, #fff); --pos-muted: var(--muted, #667085);
+  --pos-accent: var(--accent, #2563eb); display: block; padding-bottom: 4.5rem; overflow-wrap: anywhere; }
+#pos button { min-height: 44px; }
+#pos .pos-main { min-width: 0; }
+#pos .pos-topbar { display: flex; align-items: center; gap: .5rem; min-height: 0; }
+#pos .pos-topbar:empty { display: none; }
+#pos .pos-register-name { font-weight: 600; color: var(--pos-muted); }
+#pos .pos-lookup { position: sticky; top: 0; z-index: 6; background: var(--canvas, #f3f4f6); padding: .4rem 0; }
+#pos .pos-lookup .scan-field { display: flex; flex-wrap: wrap; align-items: end; gap: .4rem; }
+#pos .pos-lookup .scan-field label.scan { flex: 1 1 12rem; display: flex; flex-direction: column; font-size: .85rem; min-width: 0; }
+#pos .pos-lookup .scan-field input { width: 100%; box-sizing: border-box; font-size: 1.1rem; padding: .55rem; min-height: 44px; }
+#pos .pos-lookup .scan-hint { flex: 1 1 100%; color: var(--pos-muted); }
+#pos .pos-lookup .scan-status:empty { display: none; }
+#pos .pos-results { list-style: none; margin: .3rem 0 0; padding: 0; border: 1px solid var(--pos-line); border-radius: 8px;
+  max-height: 55vh; overflow: auto; background: var(--pos-surface); box-shadow: 0 6px 18px rgb(0 0 0 / .12); }
+#pos .pos-results button { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; grid-template-rows: auto auto;
+  column-gap: .6rem; align-items: center; width: 100%; min-height: 56px; text-align: left; background: none; border: 0;
+  border-bottom: 1px solid var(--pos-line); padding: .35rem .6rem; cursor: pointer; }
+#pos .pos-results img, #pos .pos-results .pos-tile { grid-row: 1 / 3; width: 40px; height: 40px; object-fit: cover; border-radius: 6px; }
+#pos .pos-results .pos-onhand { grid-column: 2; font-size: .8rem; color: var(--pos-muted); }
+#pos .pos-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; margin: .4rem 0; }
+#pos .pos-crumbs button { background: none; border: 0; color: var(--pos-accent); padding: .2rem .4rem; cursor: pointer; }
+#pos .pos-crumbs button[aria-current] { color: inherit; font-weight: 600; }
+#pos .pos-crumbs .pos-back { margin-left: auto; border: 1px solid var(--pos-line); border-radius: 6px; color: inherit; }
+#pos .pos-boxes.pos-view-block { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; }
+#pos .pos-box { display: flex; flex-direction: column; align-items: stretch; gap: .25rem; padding: .4rem; text-align: left;
+  border: 1px solid var(--pos-line); border-radius: 10px; background: var(--pos-surface); cursor: pointer; min-width: 0; }
+#pos .pos-box:active { transform: scale(.98); }
+#pos .pos-box .pos-tile { width: 100%; aspect-ratio: 4 / 3; height: auto; object-fit: cover; border-radius: 7px; }
+#pos .pos-tile { display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 1.3rem;
+  background: #98a2b3; text-transform: uppercase; }
+#pos .pos-box-group .pos-tile { box-shadow: 4px -4px 0 -1px rgb(0 0 0 / .18); }
+#pos .pos-box-name { font-weight: 600; line-height: 1.2; }
+#pos .pos-box-price { color: var(--pos-muted); font-variant-numeric: tabular-nums; }
+#pos .pos-empty { color: var(--pos-muted); }
+
+#pos .pos-cart { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; max-height: 85vh; overflow: auto;
+  background: var(--pos-surface); border-top: 1px solid var(--pos-line); box-shadow: 0 -8px 24px rgb(0 0 0 / .18);
+  padding: .6rem 1rem 1rem; transform: translateY(105%); transition: transform .18s ease-out; box-sizing: border-box; }
+#pos.pos-sheet-open .pos-cart { transform: none; }
+#pos .pos-cart-head { display: flex; gap: .5rem; align-items: center; }
+#pos .pos-customer { flex: 1; text-align: left; border: 1px dashed var(--pos-line); border-radius: 999px; padding: .3rem .9rem;
+  background: none; cursor: pointer; color: var(--pos-muted); }
+#pos .pos-customer.chosen { border-style: solid; color: inherit; font-weight: 600; }
+#pos .pos-sheet-close { width: 44px; border: 0; background: none; font-size: 1.5rem; cursor: pointer; }
+#pos .pos-lines { list-style: none; padding: 0; margin: .5rem 0; }
+#pos .pos-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; width: 100%; text-align: left; background: none;
+  border: 0; border-bottom: 1px solid var(--pos-line); padding: .45rem 0; cursor: pointer; gap: 0 .5rem; }
+#pos .pos-line-qty { grid-column: 1; color: var(--pos-muted); font-size: .9rem; font-variant-numeric: tabular-nums; }
+#pos .pos-line-amount { grid-column: 2; grid-row: 1 / 3; align-self: center; font-variant-numeric: tabular-nums; font-weight: 600; }
+#pos .pos-totals { margin: .5rem 0; }
+#pos .pos-totals div { display: flex; justify-content: space-between; padding: .1rem 0; }
+#pos .pos-totals dt { color: var(--pos-muted); }
+#pos .pos-totals dd { margin: 0; font-variant-numeric: tabular-nums; }
+#pos .pos-total { font-size: 1.35rem; font-weight: 700; }
+#pos .pos-total dt { color: inherit; }
+#pos [data-pos-total][data-state="updating"], #pos [data-pos-total][data-state="offline"] { color: var(--pos-muted); font-weight: 400; font-style: italic; }
+#pos .pos-connection { margin: .3rem 0; padding: .4rem .6rem; border-radius: 6px; background: #fff4e5; color: #7a4100; }
+#pos .pos-cart-actions { display: flex; gap: .5rem; }
+#pos .pos-cart-actions button { flex: 1; font-size: 1.05rem; }
+#pos .pos-charge { flex: 2 !important; font-size: 1.2rem !important; }
+#pos .pos-bar { position: fixed; left: .75rem; right: .75rem; bottom: .75rem; z-index: 15; min-height: 52px;
+  border-radius: 12px; border: 0; background: var(--pos-accent); color: #fff; font-size: 1.05rem; cursor: pointer;
+  box-shadow: 0 4px 14px rgb(0 0 0 / .2); }
+#pos.pos-sheet-open .pos-bar { visibility: hidden; }
+#pos .pos-pending { position: fixed; left: .75rem; right: .75rem; bottom: 4.6rem; z-index: 25; margin: 0; padding: .6rem .8rem;
+  background: #fff4e5; color: #7a4100; border: 1px solid #f5c48a; border-radius: 10px; }
+#pos.pos-locked .pos-boxes, #pos.pos-locked .pos-lookup { opacity: .5; pointer-events: none; }
+
+#pos .pos-dialog { width: min(32rem, calc(100vw - 2rem)); box-sizing: border-box; border: 1px solid var(--pos-line);
+  border-radius: 14px; padding: 1rem; }
+#pos .pos-dialog::backdrop { background: rgb(0 0 0 / .35); }
+#pos .pos-dialog h2 { margin: 0 0 .6rem; font-size: 1.2rem; }
+#pos .pos-dialog label { display: flex; flex-direction: column; gap: .2rem; margin: .5rem 0; }
+#pos .pos-dialog input { font-size: 1.15rem; padding: .5rem; min-height: 44px; box-sizing: border-box; width: 100%; }
+#pos .pos-qty { display: flex; gap: .4rem; }
+#pos .pos-qty button { width: 56px; font-size: 1.4rem; }
+#pos .pos-qty input { text-align: center; }
+#pos .pos-dialog-actions { display: flex; gap: .5rem; justify-content: flex-end; margin-top: .8rem; }
+#pos .pos-dialog-actions button { min-width: 6rem; }
+#pos .pos-dialog-status:empty { display: none; }
+#pos .pos-customer-results { list-style: none; padding: 0; margin: .3rem 0; max-height: 40vh; overflow: auto; }
+#pos .pos-customer-results button { width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--pos-line); padding: .4rem; cursor: pointer; }
+#pos .pos-tender-total { font-size: 1.1rem; margin: 0 0 .6rem; }
+#pos .pos-tender-total b { display: block; font-size: 2.4rem; font-variant-numeric: tabular-nums; }
+#pos .pos-methods, #pos .pos-quick { display: flex; flex-wrap: wrap; gap: .4rem; margin: .4rem 0; }
+#pos .pos-methods button { flex: 1 1 6rem; font-size: 1.05rem; }
+#pos .pos-methods button[aria-pressed="true"] { background: var(--pos-accent); color: #fff; border-color: var(--pos-accent); }
+#pos .pos-quick button { flex: 1 1 4.5rem; }
+#pos .pos-keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem; }
+#pos .pos-keypad button { min-height: 64px; font-size: 1.4rem; }
+#pos .pos-change-due { font-size: 1.2rem; margin: .6rem 0 0; }
+#pos .pos-change-due b { font-variant-numeric: tabular-nums; }
+#pos .pos-done { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: .6rem; padding: 1rem; text-align: center; background: var(--pos-surface); }
+#pos .pos-done[hidden] { display: none; }
+#pos .pos-done-label { margin: 0; font-size: 1.2rem; color: var(--pos-muted); }
+#pos .pos-done-change { margin: 0; font-size: 4rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
+#pos .pos-done button { font-size: 1.2rem; min-width: 12rem; min-height: 56px; }
+
+@media (min-width: 560px) { #pos .pos-boxes.pos-view-block { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 768px) {
+  #pos { display: grid; grid-template-columns: minmax(0, 3fr) minmax(18rem, 2fr); gap: 1rem; align-items: start; padding-bottom: 0; }
+  #pos .pos-cart { position: sticky; top: .5rem; transform: none; transition: none; max-height: calc(100vh - 6rem);
+    border: 1px solid var(--pos-line); border-radius: 12px; box-shadow: none; }
+  #pos .pos-sheet-close, #pos .pos-bar { display: none; }
+  #pos .pos-pending { position: static; grid-column: 1 / -1; }
+  #pos .pos-boxes.pos-view-block { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (min-width: 1200px) { #pos .pos-boxes.pos-view-block { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+@media (prefers-color-scheme: dark) {
+  #pos .pos-connection, #pos .pos-pending { background: #3a2a12; color: #ffd8a8; border-color: #6b4a1c; }
+}

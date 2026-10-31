@@ -107,7 +107,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # tie-out, reverse.
     # +4 the POS layer (R114 increment 4): pos-register create, update, show, list.
     # +8 bank rules (R108 increment 4): bank-rule create, update, deactivate, accept, decline, apply, show, query.
-    assert len(rows) == 880
+    # +4 ringing up (R114 increment 5): pos sale preview, complete, pos customer search, add.
+    assert len(rows) == 884
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
@@ -445,7 +446,10 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # same nine, name, expected_version) -- their null branches. No new variant kind.
     # 4392 -> 4431 (R108 inc 4): the eight bank-rule commands' optional fields and each condition's value_to (their
     # null branches), and company update's bank_rule_learning. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==4431
+    # 4431 -> 4444 (R114 inc 5, measured): pos sale preview and complete (pos_register, customer, each line's
+    # unit_price and serial_numbers, payment_method; the tender's amount and reference) and pos customer add's phone and
+    # email -- their null branches. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==4444
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.
