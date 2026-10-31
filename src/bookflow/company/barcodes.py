@@ -287,11 +287,19 @@ def plan_generate(s, ctx, inp) -> dict[str, Any]:
     return {"assigned": assigned, "skipped": skipped, "next_number": number, "updates": updates}
 
 
-def apply_generate(s, planned: dict[str, Any]) -> list:
+def apply_generate(s, ctx, planned: dict[str, Any]) -> tuple[list, str | None]:
+    from bookflow.company import batches
+    batch_id = None
+    if planned['updates']:
+        batch_id = batches._insert_batch(s, ctx, kind='barcode-generate', label='Generated barcodes',
+                                        scope='barcode-generate', ordering='record', source_type='barcode_generate')
     touched = []
     for update in planned["updates"]:
         item_service.persist_item_update(s.company, update)
         mutation = update.mutation
+        batches.record_effect(s, batch_id, record_type='item', record_id=str(mutation.after['id']),
+                              action='updated', version_after=int(mutation.after['version']),
+                              before={'barcode': mutation.before['barcode']})
         touched.append(Touched(item_service.ITEM_RECORD_TYPE, str(mutation.after["id"]), mutation.action,
                                int(mutation.before["version"]), int(mutation.after["version"]),
                                mutation.after_snapshot, mutation.before_snapshot, db="company"))
@@ -301,4 +309,8 @@ def apply_generate(s, planned: dict[str, Any]) -> list:
             s.company.conn.execute(t.insert().values(name=SERIES, next_number=planned["next_number"], prefix=""))
         else:
             s.company.conn.execute(t.update().where(t.c.name == SERIES).values(next_number=planned["next_number"]))
-    return touched
+    return touched, batch_id
+
+
+from bookflow.company import batches as _batches
+_batches.register(_batches.Adapter('barcode-generate', label='Generated barcodes'))
