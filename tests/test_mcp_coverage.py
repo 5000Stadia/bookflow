@@ -109,7 +109,7 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +8 bank rules (R108 increment 4): bank-rule create, update, deactivate, accept, decline, apply, show, query.
     # +4 ringing up (R114 increment 5): pos sale preview, complete, pos customer search, add.
     # +9 shared POS layout, styles and group pictures (R114 increment 6).
-    assert len(rows) == 899
+    assert len(rows) == 900  # + batch reverse (R186)
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
@@ -454,7 +454,7 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 4444 -> 4455 (R114 inc 6, measured): pos-box create 6 (parent, position, item, label, colour,
     # picture_attachment), update 3 (label, colour, picture_attachment), move 1 (parent), view 1 (pos_box).
     # No new variant kind; the other five commands add no material input node.
-    assert sum(len(group["paths"]) for group in mapped)==4462
+    assert sum(len(group["paths"]) for group in mapped)==4463  # batch reverse fingerprint adds one nullable input
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

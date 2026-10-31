@@ -356,7 +356,7 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
         # An item's picture, an attachment and a note are a file or text on a record that exists, never a cell of a
         # row (R114; reviewed in R107 increment 8).
         'item picture set', 'item picture use', 'attachment add', 'note add',
-        'import preview', 'import run', 'import cancel', 'import reverse', 'import decide', 'import-mapping save',
+        'batch reverse', 'import preview', 'import run', 'import cancel', 'import reverse', 'import decide', 'import-mapping save',
         'bank-feed-connection add', 'bank-feed-connection enable', 'bank-feed-connection disable',
         'bank-feed-connection check', 'bank-feed fetch',
         'import-mapping deactivate', 'bank-feed import', 'bank-feed reverse', 'bank-feed move',

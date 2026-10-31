@@ -4,7 +4,7 @@
 
 ## `fixed-asset depreciate`
 
-Post depreciation for every period ending on or before `through` that is not posted yet: debit the depreciation expense account, credit accumulated depreciation. per_period writes one journal entry per period end date; combined writes one dated `through`. Each asset period is linked to its entry, so running again posts nothing twice, and voiding an entry reopens its periods. Dry-run is the preview. A date in a closed period is refused: post it combined into an open period instead.
+Post depreciation for every period ending on or before `through` that is not posted yet: debit the depreciation expense account, credit accumulated depreciation. per_period writes one journal entry per period end date; combined writes one dated `through`. Each asset period is linked to its entry, so running again posts nothing twice, and voiding an entry reopens its periods. Dry-run is the preview. A date in a closed period is refused: post it combined into an open period instead. The output names its batch: `batch reverse <batch> --dry-run` previews reversing its journals. Later depreciation batches must reverse first; depreciation links remain as history.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -77,6 +77,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 |---|---|---|---|---|---|
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
+| `batch` | string \| null | no | yes | null | The reversible batch written by this call; absent on previews or no-op calls. |
+| `next` | string \| null | no | yes | null | How to preview reversing this batch. |
 | `through` | string | yes | no | — | — |
 | `entry` | literal["per_period", "combined"] | yes | no | — | — |
 | `entries` | array[object] | yes | no | — | — |
@@ -106,9 +108,11 @@ Example JSON output:
 
 ```json
 {
+  "batch": null,
   "dry_run": false,
   "entries": [],
   "entry": "per_period",
+  "next": null,
   "periods_posted": 1,
   "summary": "value",
   "through": "value",

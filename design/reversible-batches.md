@@ -64,3 +64,38 @@ amounts worked by hand), or is refused naming the blocker with nothing changed; 
 agent guide and `batch reverse` help say what cannot be undone. The R186 closing trial: a fresh agent over MCP, told
 "that batch of invoices went to the wrong customers" and "undo last month's finance charges", reverses each correctly
 after one check, and refuses plainly when a payment has since been applied.
+
+## As built: increment 1
+
+- `batch reverse <batch> [--dry-run]` is the company-wide door over the existing sliced reversal engine. It returns
+  the complete remaining effect list, a fingerprint and the next command. It preflights the whole unit before any
+  reversal commits, names blockers, and resumes from committed inverse effects. A live batch with nothing left to
+  reverse is refused explicitly. Reversal batches cannot themselves be reversed.
+- `company/reversal_registry.py` owns document inverse declarations and list restore/retire steps independently of
+  import kinds. Existing import declarations remain compatible. Statement charges use `statement-charge void`;
+  bill payments unapply before voiding. Batch adapters retain the native aggregate planner/runner extension point.
+  A fresh process lazily loads the adapter for the batch it reads or reverses. Native import, bank, opening and
+  bulk-edit doors retain their aggregate grants and run lifecycle through registry delegation.
+- Every remaining inverse is dry-run under the caller's authority on every call, including resumed slices and calls
+  carrying a fingerprint. The outer command requires only the `import` member capability used by batch show/query.
+  `reversible-batch-v1` is a new permission layer on `pos-layout-v1`; accepted layers are unchanged. Help and the agent
+  guide mark reversal confirm-first unless the principal plainly named the act, and explain irreversible outputs.
+- Invoice post and retry each create a separate shared batch linked by `source_type=invoice_batch` and `source_id`
+  to their invoice run. Each successful invoice's effect is inside `_write_one`'s savepoint. The existing output
+  `batch_id` still names the invoice run; `reversal_batch_id` names the shared batch. Show/query expose that link too.
+- Bill pay records each created payment inside its payment transaction and returns `batch_id`. Pending print runs,
+  already printed checks and finished reconciliations block reversal with their identities. Later settlement edits
+  also block. Void checks the closed period even while applications are still standing, before any unapply runs.
+- Depreciation and finance-charge assessment insert their batch and effects inside their existing command transaction.
+  Their output `batch` identifies it. Neither has a separate native run table; their `source_type` names the command.
+  Depreciation links and assessment bases remain history. An assessment-created Finance Charge item is recorded
+  before its charges and renamed/deactivated only after they have been voided. A pre-existing item is retained.
+- Reversible choices: depreciation and assessments use strict company-wide scopes per operation, so later runs unwind
+  first. Independent invoice and bill-payment batches use record dependencies. Native adopter reversals retain document
+  numbers; import reversals retain their existing number-release behavior for corrected files. No-op previews/runs
+  for depreciation and charges return no batch. No migration is needed: the existing ledger holds all new effects.
+- Tests cover hand-worked balances, open amounts and unchanged inventory; exact plans including more than fifty
+  invoices; payment, reconciliation, print, later-run and closed-period blockers; missing inverse grants; interrupted
+  and sliced reversal; and rollback when effect recording fails. The generic door also has a four-adapter witness.
+
+The demo previews and reverses a temporary customer-note batch edit, restoring the original note and leaving balances unchanged.

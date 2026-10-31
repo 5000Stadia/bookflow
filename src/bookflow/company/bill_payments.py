@@ -100,7 +100,7 @@ def reversal_blockers(s, ctx, batch):
     return found
 
 
-batches.register(batches.Adapter('bill-pay', label='Bill payments', preflight=reversal_blockers))
+batches.register(batches.Adapter('bill-pay', release_document_numbers=False, label='Bill payments', preflight=reversal_blockers))
 
 # Insert order matters: an attribution row follows the posting line it hangs off, a source
 # component follows both the source it belongs to and the attribution it names, and an

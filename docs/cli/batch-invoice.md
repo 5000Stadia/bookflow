@@ -4,7 +4,7 @@
 
 ## `batch-invoice post`
 
-Invoice a billing group, or an explicit list of customers, with the same lines: one ordinary invoice per customer. Every invoice resolves its own customer's terms, tax code, tax item, sales rep, price level, class, billing address and message exactly as a hand-entered invoice would, so the same line can be a different amount on each invoice; a batch has no place to put a shared term or price level and never stamps one. Dry-run previews one row per customer with its resolved amount and writes nothing, which is also where a customer that would be refused is visible before anything is posted. A customer that is refused does not roll back the invoices that succeeded: every outcome is recorded against the batch, and batch-invoice retry runs the failures again. Document numbers come from the existing allocator and are allocated only on successful creation, so a preview shows none.
+Invoice a billing group, or an explicit list of customers, with the same lines: one ordinary invoice per customer. Every invoice resolves its own customer's terms, tax code, tax item, sales rep, price level, class, billing address and message exactly as a hand-entered invoice would, so the same line can be a different amount on each invoice; a batch has no place to put a shared term or price level and never stamps one. Dry-run previews one row per customer with its resolved amount and writes nothing, which is also where a customer that would be refused is visible before anything is posted. A customer that is refused does not roll back the invoices that succeeded: every outcome is recorded against the batch, and batch-invoice retry runs the failures again. Document numbers come from the existing allocator and are allocated only on successful creation, so a preview shows none. The reversal_batch_id and next name the shared batch and how to preview reversing every invoice this run created.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -98,6 +98,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
 | `batch_id` | string \| null | no | yes | null | — |
+| `reversal_batch_id` | string \| null | no | yes | null | Shared batch id for batch show and batch reverse. |
+| `next` | string \| null | no | yes | null | Preview reversal of this run with batch reverse --dry-run. |
 | `date` | string | yes | no | — | — |
 | `billing_group_id` | string \| null | no | yes | null | — |
 | `billing_group_name` | string \| null | no | yes | null | — |
@@ -159,8 +161,10 @@ Example JSON output:
   "date": "2026-01-01",
   "dry_run": false,
   "failed_count": 1,
+  "next": null,
   "requested_count": 1,
   "retry_of_batch_id": null,
+  "reversal_batch_id": null,
   "warnings": []
 }
 ```
@@ -261,6 +265,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 |---|---|---|---|---|---|
 | `items` | array[object] | yes | no | — | — |
 | `items[].batch_id` | string | yes | no | — | — |
+| `items[].reversal_batch_id` | string \| null | no | yes | null | — |
+| `items[].next` | string \| null | no | yes | null | — |
 | `items[].date` | string | yes | no | — | — |
 | `items[].billing_group_id` | string \| null | yes | yes | — | — |
 | `items[].billing_group_name` | string \| null | yes | yes | — | — |
@@ -320,7 +326,7 @@ Example JSON output:
 
 ## `batch-invoice retry`
 
-Invoice again, from a recorded batch, only the customers whose invoice was refused. The request is the one that batch was given, so the lines and words are unchanged; supply a date to move the retry off the original batch date. This records its own batch naming the one it retried, and refuses when the named batch has no failed customers left.
+Invoice again, from a recorded batch, only the customers whose invoice was refused. The request is the one that batch was given, so the lines and words are unchanged; supply a date to move the retry off the original batch date. This records its own batch naming the one it retried, and refuses when the named batch has no failed customers left. Its reversal_batch_id names a separate shared batch; next previews reversing only the invoices this retry created.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -392,6 +398,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
 | `batch_id` | string \| null | no | yes | null | — |
+| `reversal_batch_id` | string \| null | no | yes | null | Shared batch id for batch show and batch reverse. |
+| `next` | string \| null | no | yes | null | Preview reversal of this run with batch reverse --dry-run. |
 | `date` | string | yes | no | — | — |
 | `billing_group_id` | string \| null | no | yes | null | — |
 | `billing_group_name` | string \| null | no | yes | null | — |
@@ -453,8 +461,10 @@ Example JSON output:
   "date": "2026-01-01",
   "dry_run": false,
   "failed_count": 1,
+  "next": null,
   "requested_count": 1,
   "retry_of_batch_id": null,
+  "reversal_batch_id": null,
   "warnings": []
 }
 ```
@@ -550,6 +560,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
 | `batch_id` | string | yes | no | — | — |
+| `reversal_batch_id` | string \| null | no | yes | null | — |
+| `next` | string \| null | no | yes | null | — |
 | `date` | string | yes | no | — | — |
 | `billing_group_id` | string \| null | yes | yes | — | — |
 | `billing_group_name` | string \| null | yes | yes | — | — |
@@ -610,8 +622,10 @@ Example JSON output:
   "currency": "USD",
   "date": "2026-01-01",
   "failed_count": 1,
+  "next": null,
   "requested_count": 1,
-  "retry_of_batch_id": null
+  "retry_of_batch_id": null,
+  "reversal_batch_id": null
 }
 ```
 

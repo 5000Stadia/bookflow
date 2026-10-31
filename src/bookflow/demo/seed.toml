@@ -2810,3 +2810,27 @@ input = { record_type = "company_info", record_id = "${annotation_company.compan
 command = "attachment add"
 body_fixture = "september-wrong-account.csv"
 input = { record_type = "company_info", record_id = "${annotation_company.company_id}", original_filename = "september-wrong-account.csv", media_type = "text/csv", caption = "Wrong-account exercise: Checking fees; import into Payment Example Bank to practice undo or move to Checking" }
+
+# R186: a mistaken bulk note edit, previewed and reversed without changing the books.
+[[commands]]
+command = "import preview"
+capture = "reversible_note_preview"
+input = { kind = "customer", mode = "update", source = "Reversal demonstration", content = "Name,Notes\nRiverside Apartments,Temporary batch note\n" }
+
+[[commands]]
+command = "import run"
+capture = "reversible_note_run"
+reason = "Demonstrate a mistaken batch note edit"
+input = { run = "${reversible_note_preview.run.id}" }
+
+[[commands]]
+command = "batch reverse"
+capture = "reversible_note_plan"
+dry_run = true
+reason = "Restore the original customer note"
+input = { batch = "${reversible_note_run.run.batch.id}" }
+
+[[commands]]
+command = "batch reverse"
+reason = "Restore the original customer note"
+input = { batch = "${reversible_note_run.run.batch.id}", fingerprint = "${reversible_note_plan.fingerprint}" }

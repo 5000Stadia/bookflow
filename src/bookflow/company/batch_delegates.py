@@ -9,18 +9,12 @@ from bookflow import BookflowError
 from bookflow.company import batches
 from bookflow.core import registry
 
-DELEGATES = {
-    'bank-import': ('bank-feed reverse', 'import_id'),
-    'bank-sort': ('bank-line undo', 'batch'),
-    'opening': ('opening-draft reverse', 'draft'),
-    'bulk-edit': ('bulk-edit reverse', 'run'),
-    'import': ('import reverse', 'run'),
-}
+from bookflow.company.reversal_registry import NATIVE_INVERSES
 
 
 def reverse(s, ctx, inp, *, dry_run: bool) -> dict | None:
     batch = batches._batch(s, inp.batch)
-    delegate = DELEGATES.get(batch['kind'])
+    delegate = NATIVE_INVERSES.get(batch['kind'])
     if delegate is None:
         return None
     command, selector = delegate

@@ -100,6 +100,7 @@ def catalog_bundle() -> s.CatalogBundle:
 # the chain is imported anyway -- at module scope it would force that import on every
 # command and cost roughly half a second, against nothing here.
 ACCEPTED_DESCRIPTOR_SHA256 = {
+    c.REVERSIBLE_BATCH_POLICY_VERSION: '8a3e694684db93beb8b6dd75961286d1a2106bf19e335efc7a99e86c1ad8a589',
     c.SCOPED_POLICY_VERSION: 'a0823e6d9ae98e96c98e2b6e4e73042ecc8ecb7cf0e7d4d9b50e8febc7ed6979',
     c.SETUP_POLICY_VERSION: '5d71ff2a0970f85e12b6fca0f84ff2736176565db44064b0668f84a3c132e2f2',
     c.DELETE_POLICY_VERSION: 'bdcd036b653a165a65279386fc91a6ac8ead2dc45fa49e7791e943067c989f9e',
@@ -355,6 +356,7 @@ def _full_known():
     from . import permission_bank_rule_catalog
     from . import permission_pos_sale_catalog
     from . import permission_bank_reconcile_catalog
+    from . import permission_reversible_batch_catalog
     from . import permission_pos_layout_catalog
     from . import permission_bank_source_catalog
     known = {
@@ -448,6 +450,7 @@ def _full_known():
         c.POS_SALE_POLICY_VERSION: permission_pos_sale_catalog,
         c.BANK_RECONCILE_POLICY_VERSION: permission_bank_reconcile_catalog,
         c.POS_LAYOUT_POLICY_VERSION: permission_pos_layout_catalog,
+        c.REVERSIBLE_BATCH_POLICY_VERSION: permission_reversible_batch_catalog,
         c.BANK_SOURCE_POLICY_VERSION: permission_bank_source_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is
@@ -609,7 +612,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.POS_LAYOUT_POLICY_VERSION)
+    return known_catalog(c.REVERSIBLE_BATCH_POLICY_VERSION)
 
 
 def catalog_for_root(tx):

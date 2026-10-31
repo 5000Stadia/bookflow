@@ -47,7 +47,7 @@ SNAPSHOT_VERSION = 1
 # rolled back before the next customer takes it, so one name is enough and nesting never grows.
 SAVEPOINT = 'bookflow_batch_customer'
 
-batches.register(batches.Adapter('batch-invoice', label='Batch invoicing'))
+batches.register(batches.Adapter('batch-invoice', release_document_numbers=False, label='Batch invoicing'))
 
 
 def _invalid(field: str, problem: str) -> BookflowError:

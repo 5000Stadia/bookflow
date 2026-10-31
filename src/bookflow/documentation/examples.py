@@ -1805,6 +1805,9 @@ EXAMPLES.update({
                                     + _C + ' --json', {'kind': 'customer', 'content': 'Name,Credit Limit\n'}),
     'import-mapping deactivate': Example('bookflow import-mapping deactivate "Acme export"' + _C + ' --json',
                                          {'source': 'Acme export'}),
+    'batch reverse': Example('bookflow batch reverse 01J9ZK4QF8T7E2V5N3B6C1D0BT' + _C
+                             + ' --reason "Wrong batch" --dry-run --json',
+                             {'batch': '01J9ZK4QF8T7E2V5N3B6C1D0BT'}),
     'batch show': Example('bookflow batch show 01J9ZK4QF8T7E2V5N3B6C1D0BT' + _C + ' --json',
                           {'batch': '01J9ZK4QF8T7E2V5N3B6C1D0BT'}),
     'batch query': Example('bookflow batch query --kind import' + _C + ' --json', {'kind': 'import'}),
