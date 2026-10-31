@@ -982,6 +982,10 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   Ticket and void surface tests exercise Python, CLI, HTTP and MCP. Real Chrome tests cover cross-device hold,
   resume, reload, current prices, complete and void at 390 and 1440 px, lost hold/resume responses, discard
   confirmation, local-cart protection and stale-copy recovery. Screenshots: `/tmp/m4-shots/pos7/`.
+- **Final checks.** After the last code and test edit, the required targeted regression suite plus the page-command
+  declaration check passed: **411 tests**, including all **20 POS browser cases**. Generated documentation was
+  regenerated and `bookflow docs generate --check` passed. Independent read-only source review passed. The six
+  screenshots at 390 and 1440 px were inspected; Unicode and literal-percent void reasons are preserved in audit.
 - **Not verified here.** Physical phone hardware, LAN timing targets and printers. Receipt printing, refunds,
   shifts and the day summary (including tickets older than seven days) remain their later increments.
 
