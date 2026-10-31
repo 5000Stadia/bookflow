@@ -416,8 +416,10 @@ def test_a_deny_or_a_pause_mid_run_stops_the_go_of_the_next_chunk(hosted, monkey
         shown = at(2, 10)
         assert shown['state'] == 'paused' and not shown['runs'][0]['go'] and len(backend.delivered) == 1
         assert len(paused_todos()) == 1
-        at(2, 20)
-        assert len(backend.delivered) == 1
+        for minute in (20, 30, 40):  # five unsent invoices (the books' two and these three): one chunk a tick, no go, until the run is done; until then
+            # the open run is continued before a new slot begins
+            shown = at(2, minute)
+        assert shown['runs'][0]['state'] == 'done' and len(backend.delivered) == 1
         # A deny mid-run: the next chunk asks again, pauses the rule with one to-do, and nothing more leaves.
         make_live()
         invoices(3)
