@@ -144,6 +144,7 @@ The company's external accountants and the end of each review period.
 | Kind | read |
 | Required role | member |
 | Capability | company |
+| Additional resources | ledger.read: member |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/accountant.list` |
 | External binary body | none |

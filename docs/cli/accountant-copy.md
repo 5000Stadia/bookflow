@@ -724,6 +724,7 @@ Whether an accountant's copy is out and its dividing date (these books refuse ch
 | Kind | read |
 | Required role | member |
 | Capability | company |
+| Additional resources | ledger.read: member |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/accountant-copy.status` |
 | External binary body | none |

@@ -718,7 +718,7 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   walk-in pools on that one customer across every unnamed buyer, so a refund to store credit needs a named customer.
   Turning POS on says what it made in `company update`'s warnings ("Made register Main and customer Walk-in ...",
   and the register's own warnings).
-- **Capabilities (layer `pos-v1` on `opening-draft-v1`, 866 commands, descriptor fbe539d7).** `pos.sell`, `pos.void`,
+- **Capabilities (layer `pos-v1` on `opening-draft-v1`, 866 commands, descriptor 3d55aae9).** `pos.sell`, `pos.void`,
   `pos.refund` and `pos.price-override` at threshold `member`, held by default by standard, admin, owner and
   installation administrators, so `readonly` holds one only by an explicit grant; `pos.layout` at `admin`.
   `pos-register show`/`list` need `pos.sell`, `create`/`update` `pos.layout`. Unlike the capabilities-v1 acts, each
@@ -736,9 +736,12 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   values (`cost`, `average_cost`, `inventory_value`, a fixed asset's figures, vendor profiles' costs) only to a holder
   of `ledger.read`, and vendors (preferred vendor, vendor profiles, a fixed asset's vendor, a tax agency) only to a
   holder of `vendor`; otherwise they are null (`company/item_concealment.py`; sorting or filtering the item list by
-  cost is not yet refused). So a clerk is admitted to exactly 31 company commands (items, stock, sites, bins, counts,
-  lots, serials, transfers, the register reads, `company show` and the `company` reads `accountant list`,
-  `accountant-copy status`, `delivery-connection show`/`query`), pinned in `tests/test_pos_layer.py`.
+  cost is not yet refused). Two `company` reads a clerk has no business with also gain the capability of the people
+  who use them, at `member` so nobody who used them loses them: `accountant list` and `accountant-copy status` need
+  `ledger.read` (the accountant's review is the books'; its other commands are `ledger.post`), and
+  `delivery-connection show` and `query` need `customer-work` (a sending connection is the outbox's, and every outbox
+  read needs it). So a clerk is admitted to exactly 27 company commands (items, stock, sites, bins, counts, lots,
+  serials, transfers, the register reads and `company show`), pinned in `tests/test_pos_layer.py`.
 - **An older root (review M3).** Where a requirement meets a root activated before pos-v1, the refusal is
   `E_PERMISSION` `catalog_upgrade_required` naming `permission show` then `permission activate`
   (`permission_access.upgrade_required`), on the pos commands, the `/pos` page and any command needing a capability

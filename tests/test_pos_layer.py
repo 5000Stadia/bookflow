@@ -31,9 +31,8 @@ CLERK_DENIES = ['account', 'activity', 'attachment', 'audit', 'automation', 'ban
 
 # Every company command the clerk is admitted to on the current catalog, pinned: a command a later change lets a clerk
 # reach fails here first. Shipments, their returns and pick lists name customers, so they need `customer` (pos-v1).
-CLERK_COMMANDS = ['accountant list', 'accountant-copy status', 'barcode lookup', 'bin list', 'bin show', 'company show',
-                  'cycle-class list', 'cycle-class show', 'cycle-count due', 'delivery-connection query',
-                  'delivery-connection show', 'inventory-count query', 'inventory-count sheet', 'inventory-count show',
+CLERK_COMMANDS = ['barcode lookup', 'bin list', 'bin show', 'company show',
+                  'cycle-class list', 'cycle-class show', 'cycle-count due', 'inventory-count query', 'inventory-count sheet', 'inventory-count show',
                   'inventory-site list', 'inventory-site show', 'inventory-transfer history', 'inventory-transfer query',
                   'inventory-transfer show', 'item list', 'item picture get', 'item query', 'item query children',
                   'item query options', 'item show', 'lot list', 'lot show', 'pos-register list', 'pos-register show',
@@ -305,8 +304,8 @@ def test_every_pos_command_names_its_pos_capability():
     assert all(capabilities.capability_for(name) == cap for name, (cap, _) in named.items())
     assert all(Home.is_pos(registry.get(name)) for name in named) and not Home.is_pos(registry.get("item show"))
     # The shipment, return and pick-list reads need `customer` too.
-    for name in layer.CUSTOMER_NAMING_READS:
-        assert ("customer", "member") in registry.get(name).resource_requirements, name
+    for name, needed in layer.EXTRA_READS.items():
+        assert (needed.capability, needed.threshold) in registry.get(name).resource_requirements, name
 
 
 def test_new_capabilities_a_later_catalog_gives_readonly_are_found():

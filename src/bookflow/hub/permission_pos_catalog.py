@@ -58,17 +58,29 @@ ADDED_ACTIONS = tuple(
 CUSTOMER_READ = c.Requirement('customer', 'member')
 CUSTOMER_NAMING_READS = ('pick-list query', 'pick-list show', 'shipment history', 'shipment query', 'shipment show',
                          'shipment-return query', 'shipment-return show')
+# Two `company` reads a clerk has no business with (review of increment 4), each given the capability of the people who
+# use it, at `member` so no reader who used it loses it: the accountant's review is the books' (its other commands are
+# `ledger.post`), so `accountant list` and `accountant-copy status` also need `ledger.read`; a sending connection is
+# the outbox's, so `delivery-connection show` and `query` also need `customer-work`, as every outbox read does.
+EXTRA_READS = {
+    **{name: CUSTOMER_READ for name in CUSTOMER_NAMING_READS},
+    'accountant list': c.Requirement('ledger.read', 'member'),
+    'accountant-copy status': c.Requirement('ledger.read', 'member'),
+    'delivery-connection query': c.Requirement('customer-work', 'member'),
+    'delivery-connection show': c.Requirement('customer-work', 'member'),
+}
 
 
 def _with_customer(x):
-    if x.name in CUSTOMER_NAMING_READS:
-        return replace(x, resources=tuple(sorted((*x.resources, CUSTOMER_READ), key=lambda r: (r.capability, r.threshold))))
+    if x.name in EXTRA_READS:
+        return replace(x, resources=tuple(sorted((*x.resources, EXTRA_READS[x.name]),
+                                                 key=lambda r: (r.capability, r.threshold))))
     return x
 
 
 def _action_with_customer(x):
-    if x.key in CUSTOMER_NAMING_READS:
-        return replace(x, requirements=tuple(sorted((*x.requirements, CUSTOMER_READ), key=lambda r: r.capability)))
+    if x.key in EXTRA_READS:
+        return replace(x, requirements=tuple(sorted((*x.requirements, EXTRA_READS[x.key]), key=lambda r: r.capability)))
     return x
 
 
