@@ -1322,3 +1322,6 @@ sa.Index("ix_bank_lines_payee_key", bank_lines.c.account_id, bank_lines.c.payee_
 # POS sales (co0120, R114 increment 5): one row per completed sale, beside the receipt it posted.
 from bookflow.company import pos_sale_schema as _pos_sale_schema
 globals().update(_pos_sale_schema.define_tables(metadata, _column, _table))
+
+from bookflow.company import bank_connection_schema as _bank_connection_schema
+globals().update(_bank_connection_schema.define_tables(metadata, _column, _table, _common))

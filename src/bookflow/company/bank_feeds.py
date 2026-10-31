@@ -997,3 +997,28 @@ def line_query(s, inp) -> dict:
 from bookflow.company import bank_reversal as _reversal  # noqa: E402,F401  (registers the bank-import adapter)
 from bookflow.company import bank_sort as _sort  # noqa: E402,F401  (registers the bank-sort adapter)
 from bookflow.company import bank_rules as _rules  # noqa: E402,F401  (registers the bank-rule automation kind)
+
+
+def prepare_page(s, ctx, account: str, page) -> dict | None:
+    """Prepare host-fetched posted lines through the file import's shared path.
+
+    Empty pages advance only their connection cursor. Replayed pages use normal line
+    identity and never create an empty import or batch. This is an internal host seam,
+    deliberately absent from public import inputs.
+    """
+    from bookflow.company import bank_sources, bank_rules
+    bank_sources.validate_page(page)
+    row = _account(s, account)
+    if row['currency'] != page.currency or (row['type'] == 'credit_card') != (page.account_kind == 'card'):
+        raise files.invalid('account', 'feed currency or kind differs from the selected account')
+    hint = None if page.account_last4 is None else dict(
+        bank_number=page.bank_number, account_last4=page.account_last4, kind=page.account_kind)
+    inp = m.ImportInput(account=account, content='host fetched page', again=True)
+    parsed = files.Statement(format='feed', lines=page.lines, currency=page.currency,
+                             statement_date=page.balance_date, ending_balance=page.balance)
+    if not page.lines:
+        _account_check(s, row, parsed, '', inp, hint=hint)
+        return None
+    prepared = prepare(s, ctx, inp, stored=dict(parsed=parsed, sha=bank_sources.fingerprint(page), hint=hint))
+    bank_rules.annotate(s, prepared, may_act=True)
+    return prepared

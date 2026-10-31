@@ -2,6 +2,159 @@
 
 # `bank-feed` commands
 
+## `bank-feed fetch`
+
+With dry_run, show the staged first page without contacting a provider. With confirm equal to its fingerprint, approve first backfill and enable bounded host fetching. No provider is wired in this build. Example: {"connection":"Checking feed"}.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | admin |
+| Capability | bank-feed.connect |
+| Additional resources | bank-feed: member, ledger.read: member |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/bank-feed.fetch` |
+| External binary body | none |
+
+### CLI
+
+`bookflow bank-feed fetch --connection "Checking feed" --company "Demo Plumbing Co" --dry-run --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "bank-feed fetch", "input": {"connection": "Checking feed"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `connection` | `--connection` | string | yes | no | — | minimum length 1; maximum length 100 |
+| `expected_version` | `--expected-version` | integer \| null | no | yes | null | — |
+| `confirm` | `--confirm` | string \| null | no | yes | null | Fingerprint from the staged first-page preview; required before the first import. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/bank-feed.fetch`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `id` | string | yes | no | — | — |
+| `version` | integer | yes | no | — | — |
+| `name` | string | yes | no | — | — |
+| `kind` | string | yes | no | — | — |
+| `account_id` | string | yes | no | — | — |
+| `remote_account` | string | yes | no | — | — |
+| `secret_ref` | string \| null | yes | yes | — | — |
+| `enabled` | boolean | yes | no | — | — |
+| `enabled_here` | boolean | yes | no | — | — |
+| `check_requested` | boolean | yes | no | — | — |
+| `backfill_approved` | boolean | yes | no | — | — |
+| `cursor` | string \| null | yes | yes | — | — |
+| `staged_fingerprint` | string \| null | yes | yes | — | — |
+| `approved_fingerprint` | string \| null | yes | yes | — | — |
+| `preview` | object[string, any] \| null | no | yes | null | — |
+| `import_preview` | object[string, any] \| null | no | yes | null | Current shared import preview, including counts and account check; empty page has no import. |
+| `last_check_ok` | boolean \| null | yes | yes | — | — |
+| `last_check_at` | string \| null | yes | yes | — | — |
+| `next` | string | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "approved_fingerprint": null,
+  "backfill_approved": false,
+  "check_requested": false,
+  "cursor": null,
+  "enabled": false,
+  "enabled_here": false,
+  "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "import_preview": null,
+  "kind": "human",
+  "last_check_at": null,
+  "last_check_ok": null,
+  "name": "value",
+  "next": "value",
+  "preview": null,
+  "remote_account": "value",
+  "secret_ref": null,
+  "staged_fingerprint": null,
+  "version": 1
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_ACCOUNT_MISMATCH` | The file looks like another account's; the details name both. Import it to the right account, or confirm. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
 ## `bank-feed import`
 
 Bring a bank or card statement file (OFX, QFX or CSV) into the account's bank inbox. Overlaps never duplicate: a line is known by its FITID (or, without one, a hash of the line and its occurrence in the file), so a download that overlaps an earlier one adds only the new lines; a FITID reused for another amount is kept apart and flagged; a new line that looks like one already in under another id or text is flagged possible_duplicate, never dropped. Each line the matcher pairs surely with an entry is matched; the rest wait. Nothing is posted. A file with any unreadable line is refused whole, listing every problem. An OFX file is checked against the account (E_ACCOUNT_MISMATCH), a CSV by its content (account_confirmed goes on); the same file twice is refused without again (E_ALREADY_IMPORTED). --dry-run is the preview. Example: {"account": "Checking", "attachment": "01J..."}.
@@ -100,7 +253,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `batch_id` | string \| null | yes | yes | — | Its batch, through which it is reversed as one unit. |
 | `account_id` | string | yes | no | — | — |
 | `currency` | string | yes | no | — | — |
-| `format` | literal["ofx", "qfx", "csv"] | yes | no | — | — |
+| `format` | literal["ofx", "qfx", "csv", "feed"] | yes | no | — | — |
 | `file_sha256` | string | yes | no | — | — |
 | `date_from` | string \| null | yes | yes | — | — |
 | `date_to` | string \| null | yes | yes | — | — |
@@ -360,7 +513,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `target.batch_id` | string \| null | yes | yes | — | Its batch, through which it is reversed as one unit. |
 | `target.account_id` | string | yes | no | — | — |
 | `target.currency` | string | yes | no | — | — |
-| `target.format` | literal["ofx", "qfx", "csv"] | yes | no | — | — |
+| `target.format` | literal["ofx", "qfx", "csv", "feed"] | yes | no | — | — |
 | `target.file_sha256` | string | yes | no | — | — |
 | `target.date_from` | string \| null | yes | yes | — | — |
 | `target.date_to` | string \| null | yes | yes | — | — |

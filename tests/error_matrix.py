@@ -2952,3 +2952,19 @@ MATRIX['pos customer add'] = {'E_VALIDATION': 'an empty name', 'E_NAME_TAKEN': '
                               'E_FEATURE_DISABLED': 'POS is off for the company',
                               'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
                               'E_DIRECTIVE_INACTIVE': 'deactivated --directive'}
+
+# R108 increment 8: connection writes only authorize bounded host work.
+for _name in ('bank-feed-connection add', 'bank-feed-connection enable', 'bank-feed-connection disable',
+              'bank-feed-connection check', 'bank-feed fetch'):
+    MATRIX[_name] = {
+        'E_VALIDATION': 'unknown provider, invalid keyring reference or settings, missing or stale backfill approval',
+        'E_RECORD_NOT_FOUND': 'unknown connection or account',
+        'E_VERSION_CONFLICT': 'connection changed since the supplied version',
+        'E_PERMISSION': 'bank-feed.connect is not held or explicitly granted',
+        'E_IDEMPOTENCY_MISMATCH': 'same key with different input',
+        'E_DIRECTIVE_NOT_FOUND': 'unknown directive',
+        'E_DIRECTIVE_INACTIVE': 'deactivated directive',
+    }
+MATRIX['bank-feed-connection query'] = {}
+
+MATRIX['bank-feed fetch']['E_ACCOUNT_MISMATCH'] = 'the staged page differs from the selected account hint'
