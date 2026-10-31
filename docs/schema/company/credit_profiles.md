@@ -17,8 +17,8 @@ Database: `company`.
 | `type` | VARCHAR(32) | no | — | — | — | transactions.type | Commercial type; credit_memo is the only one. |
 | `customer_id` | VARCHAR(26) | no | — | — | ix_credit_profiles_customer | customers.id | Customer or job the credit belongs to. |
 | `ar_account_id` | VARCHAR(26) | no | — | — | ix_credit_profiles_customer | accounts.id | Receivable account credited for the gross. |
-| `origin` | VARCHAR(16) | no | — | — | — | — | standalone when the credit names its own items; return when every line claims a source invoice line. |
+| `origin` | VARCHAR(16) | no | — | — | — | — | standalone when the credit names its own items; return when every line claims a source sale line. |
 | `subtotal_minor_units` | BIGINT | no | — | — | — | — | Home-currency net total before tax. |
 | `tax_minor_units` | BIGINT | no | — | — | — | — | Home-currency sum of captured component taxes. |
 | `profile_snapshot` | TEXT | no | — | — | — | — | Versioned typed JSON object of resolved customer, account, tax and origin facts. |
-| `tax_attribution_snapshot` | TEXT | yes | — | — | — | — | Typed JSON object of the tax calculation that produced these cells; null on a return, whose cells were captured by the source invoice and never calculated here. |
+| `tax_attribution_snapshot` | TEXT | yes | — | — | — | — | Typed JSON object of the tax calculation that produced these cells; null on a return, whose cells were captured by the source sale and never calculated here. |

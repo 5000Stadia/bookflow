@@ -14,7 +14,7 @@ Database: `company`.
 | `credit_transaction_id` | VARCHAR(26) | no | — | — | — | credit_line_profiles.transaction_id | Credit memo making this claim. |
 | `credit_revision_id` | VARCHAR(26) | no | — | — | — | credit_line_profiles.revision_id | Exact credit revision making this claim. |
 | `credit_document_line_id` | VARCHAR(26) | no | — | — | — | credit_line_profiles.document_line_id | Credited line this interval was priced into. |
-| `source_transaction_id` | VARCHAR(26) | no | — | — | ix_credit_source_claims_line | document_line_identities.transaction_id, sales_line_profiles.transaction_id | Source invoice claimed. |
+| `source_transaction_id` | VARCHAR(26) | no | — | — | ix_credit_source_claims_line | document_line_identities.transaction_id, sales_line_profiles.transaction_id | Source sale claimed. |
 | `source_revision_id` | VARCHAR(26) | no | — | — | — | sales_line_profiles.revision_id | Exact captured source revision the interval was priced from. |
 | `source_document_line_id` | VARCHAR(26) | no | — | — | — | sales_line_profiles.document_line_id | Exact captured source commercial line. |
 | `source_line_id` | VARCHAR(26) | no | — | — | ix_credit_source_claims_line | document_line_identities.id | Permanent source line occurrence, stable across source corrections. |

@@ -4,7 +4,7 @@
 <h2>Credit memo {{ r.number }}</h2>
 {% if credit.print_url %}<p class="actions document-print"><a class="primary-action" href="{{ credit.print_url }}" target="_blank" rel="noopener">Print / save PDF</a></p>{% endif %}
 <p><strong>{{ 'Preview — nothing written' if credit.preview else credit.record.status|capitalize }}</strong> · {{ r.date|longday }} · Revision {{ r.revision_number }} · {{ r.currency }}</p>
-{% if credit.record.void_reason %}<p class="warn">Voided: {{ credit.record.void_reason }}. Historical amounts remain visible; the reversal is in accounting history, and every source invoice quantity this credit claimed has been released.</p>{% endif %}
+{% if credit.record.void_reason %}<p class="warn">Voided: {{ credit.record.void_reason }}. Historical amounts remain visible; the reversal is in accounting history, and every source sale quantity this credit claimed has been released.</p>{% endif %}
 {% for warning in credit.record.warnings or [] %}<p class="warn">{{ warning }}</p>{% endfor %}
 <div class="sales-parties">
 <div><h3>From</h3><p>{{ credit.issuer.legal_name or credit.issuer.display_name }}</p>{% for part in credit.issuer_address %}<div>{{ part }}</div>{% endfor %}</div>
@@ -12,8 +12,8 @@
 </div>
 <dl class="sales-facts">
 <dt>A/R account</dt><dd>{{ p.control_account.full_name }}</dd>
-<dt>Origin</dt><dd data-credit-origin>{% if credit.record.origin == 'return' %}Units returned against a posted invoice{% else %}Credit for the items named below{% endif %}</dd>
-{% if credit.returned_from %}<dt>Returned from</dt><dd><a data-credit-source href="{{ credit.returned_from }}">The invoice these units came back from</a></dd>{% endif %}
+<dt>Origin</dt><dd data-credit-origin>{% if credit.record.origin == 'return' %}Units returned against a posted {{ credit.source_label }}{% else %}Credit for the items named below{% endif %}</dd>
+{% if credit.returned_from %}<dt>Returned from</dt><dd><a data-credit-source href="{{ credit.returned_from }}">The sale these units came back from</a></dd>{% endif %}
 {% if p.class_id %}<dt>Class</dt><dd>{{ p.class_id.label }}</dd>{% endif %}
 {% if p.customer_purchase_order %}<dt>P.O. Number</dt><dd>{{ p.customer_purchase_order }}</dd>{% endif %}
 {% if p.customer_tax_code %}<dt>Customer tax code</dt><dd>{{ p.customer_tax_code.label }}</dd>{% endif %}

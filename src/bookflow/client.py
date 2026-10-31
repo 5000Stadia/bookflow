@@ -17,26 +17,30 @@ class _Noun:
 
     def __getattr__(self, verb: str):
         name = f"{self._noun} {verb.replace('_', '-')}"
-        if registry.get(name) is None:
-            if any(c.name.startswith(name + " ") for c in registry.all_commands()):
-                return _Noun(self._client, name)
-            raise registry.unknown_command(name)
+        if registry.get(name) is not None or any(c.name.startswith(name + " ") for c in registry.all_commands()):
+            return _Noun(self._client, name)
+        raise registry.unknown_command(name)
 
-        def call(**kwargs: Any) -> dict[str, Any]:
-            dry_run = kwargs.pop("dry_run", False)
-            reason = kwargs.pop("reason", None)
-            source_ref = kwargs.pop("source_ref", None)
-            fields = registry.get(name).input_model.model_fields
-            directive = kwargs.pop("directive", None) if "directive" not in fields else None
-            idempotency_key = kwargs.pop("idempotency_key", None)
-            clear = kwargs.pop("clear", None)
-            input_stream = kwargs.pop("input_stream", None)
-            output_stream = kwargs.pop("output_stream", None)
-            company = None
-            if registry.get(name).scope == "company" and "company" not in fields:
-                company = kwargs.pop("company", None)
-            return self._client.run(name, kwargs, company=company, dry_run=dry_run, reason=reason, source_ref=source_ref, directive=directive, idempotency_key=idempotency_key, clear=clear, input_stream=input_stream, output_stream=output_stream)
-        return call
+    def __call__(self, **kwargs: Any) -> dict[str, Any]:
+        # A command can also own subcommands: pos.refund(...) and pos.refund.lines(...).
+        cmd = registry.get(self._noun)
+        if cmd is None:
+            raise registry.unknown_command(self._noun)
+        dry_run = kwargs.pop("dry_run", False)
+        reason = kwargs.pop("reason", None)
+        source_ref = kwargs.pop("source_ref", None)
+        fields = cmd.input_model.model_fields
+        directive = kwargs.pop("directive", None) if "directive" not in fields else None
+        idempotency_key = kwargs.pop("idempotency_key", None)
+        clear = kwargs.pop("clear", None)
+        input_stream = kwargs.pop("input_stream", None)
+        output_stream = kwargs.pop("output_stream", None)
+        company = None
+        if cmd.scope == "company" and "company" not in fields:
+            company = kwargs.pop("company", None)
+        return self._client.run(self._noun, kwargs, company=company, dry_run=dry_run, reason=reason,
+                                source_ref=source_ref, directive=directive, idempotency_key=idempotency_key,
+                                clear=clear, input_stream=input_stream, output_stream=output_stream)
 
 
 class Client:

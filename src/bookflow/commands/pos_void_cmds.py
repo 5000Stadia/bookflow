@@ -12,7 +12,7 @@ sale_void = command(
         'Void a completed POS sale through the same reversal as sales-receipt void, with a required context reason '
         'and receipt expected_version. The sale selector accepts the POS sale ID, ticket key, receipt ID or number; '
         'an ordinary typed receipt is refused. Keeps the original receipt and immutable reversal history. '
-        'A deposited sale is refused naming its deposit; a reconciled sale is refused. Needs pos.void, not pos.sell '
+        'A deposited sale is refused naming its deposit; a reconciled sale is refused. A sale with a POS refund is refused naming the refund. Needs pos.void, not pos.sell '
         'or ledger.post. Off unless company setting pos_enabled is on (E_FEATURE_DISABLED).'),
     input_model=pos_void.PosSaleVoidInput, output_model=pos_void.PosSaleVoidOutput,
     writes={'company'}, required_role='member', capability='pos.void', accepts_idempotency_key=True,

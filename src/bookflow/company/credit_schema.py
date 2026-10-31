@@ -19,7 +19,7 @@ points outward from here: ``posting_line_sources`` gains no column and knows not
 credits, exactly as ``ap_obligation_components`` established.
 
 **The claim.** A credit that returns something claims a half-open quantity interval on the
-source invoice line it returns, in base microunits, and ``credit_source_claims`` holds those
+source invoice or sales receipt line it returns, in base microunits, and ``credit_source_claims`` holds those
 intervals immutably. Ownership is by endpoint -- an interval ``[a,b)`` of a captured line of
 quantity ``Q`` and net ``N`` owns ``floor(N*b/Q) - floor(N*a/Q)`` -- so any disjoint set of
 claims telescopes to exactly ``N``, whatever order they were made in, and releasing one span
@@ -74,11 +74,11 @@ def define_tables(metadata, column, table):
         C('type', sa.String(32), 'Commercial type; credit_memo is the only one.', nullable=False),
         identifier('customer_id', 'Customer or job the credit belongs to.', 'customers.id'),
         identifier('ar_account_id', 'Receivable account credited for the gross.', 'accounts.id'),
-        C('origin', sa.String(16), 'standalone when the credit names its own items; return when every line claims a source invoice line.', nullable=False),
+        C('origin', sa.String(16), 'standalone when the credit names its own items; return when every line claims a source sale line.', nullable=False),
         integer('subtotal_minor_units', 'Home-currency net total before tax.'),
         integer('tax_minor_units', 'Home-currency sum of captured component taxes.'),
         C('profile_snapshot', sa.Text, 'Versioned typed JSON object of resolved customer, account, tax and origin facts.', nullable=False),
-        C('tax_attribution_snapshot', sa.Text, 'Typed JSON object of the tax calculation that produced these cells; null on a return, whose cells were captured by the source invoice and never calculated here.', nullable=True),
+        C('tax_attribution_snapshot', sa.Text, 'Typed JSON object of the tax calculation that produced these cells; null on a return, whose cells were captured by the source sale and never calculated here.', nullable=True),
         sa.UniqueConstraint('transaction_id', 'revision_id', name='uq_credit_profile_owner'),
         sa.ForeignKeyConstraint(['transaction_id', 'revision_id'],
             ['transaction_revisions.transaction_id', 'transaction_revisions.id'], name='fk_credit_profile_revision'),
@@ -111,8 +111,8 @@ def define_tables(metadata, column, table):
         integer('gross_minor_units', 'Home-currency line net plus tax.'),
         C('item_snapshot', sa.Text, 'Versioned typed JSON object of resolved item, account, unit, pricing and tax rules.', nullable=False),
         identifier('posting_source_id', 'Exact income attribution row this line net was posted through; null only when the line is worth nothing and posts no leg.', nullable=True),
-        identifier('source_transaction_id', 'Source invoice this line returns; null on a standalone credit.', nullable=True),
-        identifier('source_revision_id', 'Exact captured source invoice revision; null on a standalone credit.', nullable=True),
+        identifier('source_transaction_id', 'Source sale this line returns; null on a standalone credit.', nullable=True),
+        identifier('source_revision_id', 'Exact captured source sale revision; null on a standalone credit.', nullable=True),
         identifier('source_document_line_id', 'Exact captured source commercial line; null on a standalone credit.', nullable=True),
         identifier('source_line_id', 'Permanent source line occurrence; null on a standalone credit.', nullable=True),
         sa.UniqueConstraint('transaction_id', 'revision_id', 'document_line_id', name='uq_credit_line_profile_owner'),
@@ -158,7 +158,7 @@ def define_tables(metadata, column, table):
         integer('tax_minor_units', 'Captured home-currency component tax reversed by this credit; zero is retained.'),
         C('component_snapshot', sa.Text, 'Versioned typed JSON object of captured tax item, agency and liability labels.', nullable=False),
         identifier('posting_source_id', 'Exact tax liability attribution row this component was posted through; null only on a retained zero-tax cell, which posts no leg.', nullable=True),
-        identifier('source_tax_component_id', 'Exact captured source invoice tax cell; null on a standalone credit.', nullable=True),
+        identifier('source_tax_component_id', 'Exact captured source sale tax cell; null on a standalone credit.', nullable=True),
         sa.UniqueConstraint('transaction_id', 'revision_id', 'document_line_id', 'id', name='uq_credit_tax_component_owner'),
         sa.ForeignKeyConstraint(['transaction_id', 'revision_id', 'document_line_id'],
             ['credit_line_profiles.transaction_id', 'credit_line_profiles.revision_id', 'credit_line_profiles.document_line_id'],
@@ -212,7 +212,7 @@ def define_tables(metadata, column, table):
         identifier('credit_transaction_id', 'Credit memo making this claim.'),
         identifier('credit_revision_id', 'Exact credit revision making this claim.'),
         identifier('credit_document_line_id', 'Credited line this interval was priced into.'),
-        identifier('source_transaction_id', 'Source invoice claimed.'),
+        identifier('source_transaction_id', 'Source sale claimed.'),
         identifier('source_revision_id', 'Exact captured source revision the interval was priced from.'),
         identifier('source_document_line_id', 'Exact captured source commercial line.'),
         identifier('source_line_id', 'Permanent source line occurrence, stable across source corrections.'),
