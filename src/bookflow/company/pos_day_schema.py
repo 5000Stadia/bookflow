@@ -20,7 +20,7 @@ def define_tables(metadata, C, T):
         C('report_json', sa.Text, 'Frozen Z report captured at close.'),
         sa.CheckConstraint('float_minor_units >= 0', name='ck_pos_shift_float'),
         sa.CheckConstraint('counted_minor_units IS NULL OR counted_minor_units >= 0', name='ck_pos_shift_count'),
-        sa.CheckConstraint('(closed_at IS NULL AND closed_by IS NULL AND counted_minor_units IS NULL AND expected_minor_units IS NULL AND over_short_minor_units IS NULL AND close_key IS NULL AND report_json IS NULL) OR (closed_at IS NOT NULL AND closed_by IS NOT NULL AND counted_minor_units IS NOT NULL AND expected_minor_units IS NOT NULL AND over_short_minor_units = counted_minor_units - expected_minor_units AND close_key IS NOT NULL AND report_json IS NOT NULL)', name='ck_pos_shift_close'),
+        sa.CheckConstraint('(closed_at IS NULL AND closed_by IS NULL AND counted_minor_units IS NULL AND expected_minor_units IS NULL AND over_short_minor_units IS NULL AND close_key IS NULL AND report_json IS NULL) OR (closed_at IS NOT NULL AND closed_by IS NOT NULL AND counted_minor_units IS NOT NULL AND expected_minor_units IS NOT NULL AND over_short_minor_units IS NOT NULL AND over_short_minor_units = counted_minor_units - expected_minor_units AND close_key IS NOT NULL AND report_json IS NOT NULL)', name='ck_pos_shift_close'),
         sa.Index('ix_pos_shifts_register_open', 'register_id', unique=True, sqlite_where=sa.text('closed_at IS NULL')),
         description='Register opening floats and immutable counted closes; counting posts nothing.')
     return {'pos_shifts': shifts}

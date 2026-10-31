@@ -37,6 +37,24 @@ def _local_day(s, timestamp):
     return datetime.fromisoformat(timestamp.replace('Z', '+00:00')).astimezone(ZoneInfo(s.company_tz)).date().isoformat()
 
 
+def captured_method_kind(s, reference, fallback=None):
+    """Sales references capture a list version; recover its kind from immutable list audit facts."""
+    from bookflow.core.audit import decode_snapshot
+    method = s.company.conn.execute(sa.select(c.payment_methods).where(
+        c.payment_methods.c.id == reference['id'])).mappings().one()
+    if method['version'] == reference['version']:
+        return method['kind']
+    for version, snapshot in ((c.audit_entries.c.version_after, c.audit_entries.c.after),
+                              (c.audit_entries.c.version_before, c.audit_entries.c.before)):
+        blob = s.company.conn.execute(sa.select(snapshot).where(
+            c.audit_entries.c.record_type == 'payment_method', c.audit_entries.c.record_id == reference['id'],
+            version == reference['version']).order_by(c.audit_entries.c.id).limit(1)).scalar()
+        facts = decode_snapshot(blob)
+        if facts and 'kind' in facts:
+            return facts['kind']
+    return fallback or method['kind']
+
+
 def _totals(s, reg, date, shift=None):
     cur = pos_sales._currency(s)
     totals = dict(sales_count=0, gross_sales=0, discounts=0, tax=0, total_sales=0,
@@ -79,8 +97,9 @@ def _totals(s, reg, date, shift=None):
         change = row['change_minor_units']
         payments = json.loads(row['tenders'])
         if row['revision_number'] > 1 and row['document_type'] == 'sales_receipt':
-            method_id = json.loads(row['profile_snapshot'])['payment_method']['id']
-            captured_kind = next((p['kind'] for p in payments if p['payment_method_id'] == method_id), methods[method_id]['kind'])
+            reference = json.loads(row['profile_snapshot'])['payment_method']
+            method_id = reference['id']
+            captured_kind = captured_method_kind(s, reference, next((p['kind'] for p in payments if p['payment_method_id'] == method_id), None))
             payments = [dict(payment_method_id=method_id, kind=captured_kind, amount_minor_units=sale_total)]
             change = 0
         for payment in payments:

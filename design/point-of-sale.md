@@ -1125,7 +1125,7 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   from the deposit would count it twice. An overnight shift's deposit date is no earlier than its
   receipts or close. Already banked sources are excluded, and the ordinary deposit claim/version
   checks prevent stale hand-offs from banking them twice.
-- **Bundle safeguards.** A nonzero difference requires the whole cash bundle: selecting only some cash
+- **Bundle safeguards.** Counted shifts must close before hand-off. A nonzero difference requires the whole cash bundle: selecting only some cash
   methods, a partly banked cash bundle, or a date slice of an overnight shift refuses with guidance.
   Use the complete shift for overnight counts. A hand-off with no eligible receipts refuses; a
   difference without any cash receipts needs a hand-entered deposit after review. Card-only deposits

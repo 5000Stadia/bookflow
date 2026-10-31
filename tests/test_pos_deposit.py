@@ -119,3 +119,17 @@ def test_handoff_can_select_retired_historical_method(root):
     handoff = co.run('pos deposit prepare', {'payment_methods': [method['id']]})
     assert handoff['document']['sources'][0]['source'] == sold['sales_receipt']['id']
     co.run('deposit post', {'operation_key': 'retired-method-deposit', 'document': handoff['document']})
+
+
+def test_corrected_receipt_keeps_method_kind_at_revision(root):
+    from tests.test_pos_day import sell
+    co = Company(root)
+    _setup(co)
+    sold = sell(co, 'corrected-kind-history')
+    co.run('sales-receipt update', {'sales_receipt': sold['sales_receipt']['id'], 'expected_version': 1,
+        'lines': [{'item': 'Pipe Sealant', 'quantity': '2', 'unit_price': '10.00'}]})
+    method = co.run('payment-method show', {'payment_method': 'Cash'})
+    co.run('payment-method update', {'payment_method': method['id'], 'expected_version': method['version'], 'kind': 'credit_card'})
+    report = co.run('report pos-day')
+    assert report['cash_sales']['minor_units'] == 2000
+    assert co.run('pos deposit prepare')['document']['sources'][0]['source'] == sold['sales_receipt']['id']

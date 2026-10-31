@@ -48,6 +48,7 @@ def test_shift_day_ties_by_hand(root):
     assert methods['Cash']['refund_amount']['minor_units'] == 1000
     assert methods['Visa']['amount']['minor_units'] == 1000
     assert cash['change']['minor_units'] == 1000
+    assert co.fails('pos deposit prepare', {'shift': shift['id']}).code == 'E_WORK_DEPENDENCY'
     before = _reads(co)
     closed = co.run('pos shift close', {'shift': shift['id'], 'counted': '59.50', 'operation_key': 'evening'})
     assert closed['expected']['minor_units'] == 6000
@@ -107,9 +108,9 @@ def test_plain_clerk_can_count_but_cannot_prepare_or_post_deposit(hosted):
     from tests.test_item_pictures_review import _membership_version
     from tests.test_pos_layer import H, REASON, _password, _pos
     _pos(hosted, True)
-    reg = hosted.ok('pos-register.show', {'pos_register': 'Main'})
+    reg = hosted.ok('pos-register.show', {'pos_register': 'Main'}, company=hosted.company_id)
     hosted.ok('pos-register.update', {'pos_register': reg['id'], 'expected_version': reg['version'],
-                                      'count_shifts': True}, headers=REASON)
+                                      'count_shifts': True}, company=hosted.company_id, headers=REASON)
     settings = pos_presets.preset('pos-clerk')
     user = hosted.ok('user.add', {'username': 'drawer-clerk', 'password': _password('drawer-clerk'),
         'company': hosted.company_id, 'role': 'readonly'}, headers=REASON)['user_id']
@@ -214,3 +215,25 @@ def test_refund_cash_kind_is_captured_not_current_method(root):
     assert report['cash_refunds']['minor_units'] == 1000
     assert report['expected_drawer']['minor_units'] == 6000
     assert report['by_tender'][0]['payment_method']['kind'] == 'cash'
+
+
+def test_shift_storage_refuses_mutation_and_incomplete_close(root):
+    import sqlite3
+    from pathlib import Path
+    co = Company(root)
+    counted_register(co)
+    shift = co.run('pos shift open', {'float': '50', 'operation_key': 'storage-open'})
+    path = Path(co.run('company show')['path']) / 'company.db'
+    with sqlite3.connect(path) as db:
+        with pytest.raises(sqlite3.IntegrityError):
+            db.execute('UPDATE pos_shifts SET float_minor_units = 1 WHERE id = ?', (shift['id'],))
+        db.rollback()
+        with pytest.raises(sqlite3.IntegrityError):
+            db.execute("UPDATE pos_shifts SET closed_at = opened_at, closed_by = opened_by, counted_minor_units = 5000, expected_minor_units = 5000, close_key = 'invalid', report_json = '{}' WHERE id = ?", (shift['id'],))
+        db.rollback()
+    co.run('pos shift close', {'shift': shift['id'], 'counted': '50', 'operation_key': 'storage-close'})
+    with sqlite3.connect(path) as db:
+        for sql in ('UPDATE pos_shifts SET counted_minor_units = 0 WHERE id = ?', 'DELETE FROM pos_shifts WHERE id = ?'):
+            with pytest.raises(sqlite3.IntegrityError):
+                db.execute(sql, (shift['id'],))
+            db.rollback()

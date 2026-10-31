@@ -1,7 +1,7 @@
 """Build ordinary Make Deposits inputs from a POS day; never post another receipt."""
 import json
 import sqlalchemy as sa
-from pydantic import Field
+from pydantic import Field, field_serializer
 from bookflow.company import accounts, pos_layer, pos_sales, schema as c
 from bookflow.company.deposit_models import InlineDocument
 from bookflow.company.items import MoneyOutput
@@ -26,6 +26,11 @@ class PrepareOutput(_Strict):
     cash_refunds: MoneyOutput
     warning: str
 
+    @field_serializer('document')
+    def deposit_input(self, value):
+        # This output is fed straight to deposit post: preserve its public input aliases.
+        return value.model_dump(mode='json', by_alias=True)
+
 
 def prepare(s, ctx, inp):
     from bookflow.company import pos_day
@@ -34,6 +39,8 @@ def prepare(s, ctx, inp):
     pos_layer.require_enabled(s)
     report = pos_day.report(s, DayInput(pos_register=inp.pos_register, date=inp.date, shift=inp.shift))
     reg = pos_sales.register(s, report.pos_register.id)
+    if any(x.closed_at is None for x in report.shifts):
+        raise BookflowError('E_WORK_DEPENDENCY', message='Close the selected register shifts before handing their cash to Make Deposits.')
     if not reg['refund_account_id']:
         raise BookflowError('E_VALIDATION', message='Set the register refund bank account before making a deposit.')
     from bookflow.company import list_service
@@ -58,10 +65,9 @@ def prepare(s, ctx, inp):
         if row['document_type'] == 'sales_receipt' and rev['revision_number'] > 1:
             snapshot = s.company.conn.execute(sa.select(c.sales_profiles.c.profile_snapshot).where(
                 c.sales_profiles.c.revision_id == rev['id'])).scalar_one()
-            method_id = json.loads(snapshot)['payment_method']['id']
-            kind = s.company.conn.execute(sa.select(c.payment_methods.c.kind).where(
-                c.payment_methods.c.id == method_id)).scalar_one()
-            kind = next((t['kind'] for t in tenders if t['payment_method_id'] == method_id), kind)
+            reference = json.loads(snapshot)['payment_method']
+            method_id = reference['id']
+            kind = pos_day.captured_method_kind(s, reference, next((t['kind'] for t in tenders if t['payment_method_id'] == method_id), None))
             tenders = [dict(payment_method_id=method_id, kind=kind)]
         # Single receipts today. Split sales expose payment ids in their tender facts.
         ids = [(t.get('payment_id'), t) for t in tenders] if row['document_type'] == 'invoice' else [(row['document_id'], tenders[0])]
@@ -97,8 +103,6 @@ def prepare(s, ctx, inp):
         raise BookflowError('E_WORK_DEPENDENCY', message='This drawer difference spans dates. Choose Deposit this shift to include the entire shift.')
     if variance and set(cash_ids) != set(all_cash_ids):
         raise BookflowError('E_WORK_DEPENDENCY', message='Select every cash method to hand off this drawer difference once.')
-    if variance and any(x.closed_at is None for x in report.shifts):
-        raise BookflowError('E_WORK_DEPENDENCY', message='Close all shifts for the day before handing off a drawer difference.')
     if variance and set(cash_ids).intersection(excluded):
         raise BookflowError('E_WORK_DEPENDENCY', message='Part of this cash bundle is already deposited or paid directly to a bank. Review its Cash Over and Short line in Make Deposits before depositing the remainder.')
     mutation = None

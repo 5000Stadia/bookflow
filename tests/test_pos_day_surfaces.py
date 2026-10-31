@@ -58,11 +58,11 @@ def test_mcp_agent_drawer_answer_requires_explicit_sell_grant(hosted, live, tmp_
     from tests.test_item_pictures_review import _membership_version
 
     cid = hosted.company_id
-    info = hosted.ok('company.show', {})
-    hosted.ok('company.update', {'pos_enabled': True, 'expected_version': info['info_version']})
-    reg = hosted.ok('pos-register.show', {'pos_register': 'Main'})
-    hosted.ok('pos-register.update', {'pos_register': reg['id'], 'expected_version': reg['version'], 'count_shifts': True})
-    shift = hosted.ok('pos.shift.open', {'float': '37.25', 'operation_key': 'agent-drawer-open'})
+    info = hosted.ok('company.show', {}, company=cid)
+    hosted.ok('company.update', {'pos_enabled': True, 'expected_version': info['info_version']}, company=cid)
+    reg = hosted.ok('pos-register.show', {'pos_register': 'Main'}, company=cid)
+    hosted.ok('pos-register.update', {'pos_register': reg['id'], 'expected_version': reg['version'], 'count_shifts': True}, company=cid)
+    shift = hosted.ok('pos.shift.open', {'float': '37.25', 'operation_key': 'agent-drawer-open'}, company=cid)
     principal = Config.load(hosted.root / 'config.toml').user_table(hosted.login)['user_id']
     agent = make_agent(hosted_call(hosted), 'drawer-report-agent', principals=principal, company=cid, role='admin')
 

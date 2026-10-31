@@ -42,7 +42,7 @@
     if(report.shift)query.set('pos_shift',report.shift);
     for(const method of methods)query.append('pos_method',method);
     link.href=`/c/${encodeURIComponent(data.company)}/deposit/post?${query}`;
-    link.hidden=!methods.length;
+    link.hidden=!methods.length || report.shifts.some(s=>s.status==='open');
   }
   function draw(result) {
     report=result;
