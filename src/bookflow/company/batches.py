@@ -1246,3 +1246,10 @@ def _finish(s, ctx, batch_id: str, reversal_id: str, batch: dict, then: Callable
                 s.company.raw.rollback()
             raise
     return event_id, then_out
+
+
+# The automation module may first load while this one does (the company schema takes its columns): its adapter is
+# registered here, once this module is whole.
+import sys as _sys  # noqa: E402
+if 'bookflow.company.automation' in _sys.modules:
+    _sys.modules['bookflow.company.automation']._register_batches()

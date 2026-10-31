@@ -1310,6 +1310,8 @@ The same example as complete `bookflow_run` arguments:
 | `pos_enabled` | `--pos-enabled` | boolean | no | no | null | Point of sale as an optional layer on sales receipts: off by default. Turning it on the first time makes register Main and its walk-in customer; turning it off keeps the registers, and is refused while a ticket is held or a shift is open. |
 | `weight_unit` | `--weight-unit` | string \| null | no | yes | null | The one weight unit of item weights and boxes (lb, kg, oz): a label, never converted. |
 | `shipping_item_id` | `--shipping-item-id` | string \| null | no | yes | null | Other-charge or service item a shipment's freight to bill is billed as, by default. |
+| `bank_rule_learning` | `--bank-rule-learning` | literal["ask", "always", "never"] \| null | no | yes | null | Bank rules: when two adds of a payee in a bank or card account agree, ask (the default: a suggested rule to accept or decline), always (make the rule active at once) or never (learn nothing). A learned rule only proposes; it never adds on its own. |
+| `bank_rule_automation` | `--bank-rule-automation` | boolean | no | no | null | Bank rules: let live auto-add and ignore rules act at imports (true, the default). False holds every one back company-wide: their lines wait with their proposals, and the rules stay live for when it is turned back on. |
 
 ### Command and context options
 

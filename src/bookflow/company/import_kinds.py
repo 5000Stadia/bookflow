@@ -325,7 +325,7 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
         'schedule cancel', 'ship-method deactivate', 'term deactivate', 'unit-of-measure deactivate',
         'vendor deactivate', 'vendor-credit unapply', 'vendor-type deactivate',
         'delivery-template deactivate', 'delivery-connection disable', 'delivery-connection remove',
-        'delivery-schedule pause', 'automation pause', 'item picture clear',
+        'delivery-schedule pause', 'automation pause', 'item picture clear', 'bank-rule deactivate',
     )),
     'needs-a-person': frozenset((
         'accountant mark-entry', 'accountant reviewed-through', 'accountant-copy export', 'assembly finalize',
@@ -349,6 +349,7 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
         'time-activity create', 'todo create', 'transfer post', 'trip create', 'unit-of-measure create',
         'vehicle create', 'work-order create',
         'delivery draft', 'delivery-template create', 'shipment create', 'delivery-schedule create',
+        'bank-rule create',
     )),
     'not-a-record': frozenset((
         # An item's picture is a file on an item that exists, never a cell of a row (R114).
@@ -357,6 +358,7 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
         'import-mapping deactivate', 'bank-feed import', 'bank-feed reverse', 'bank-feed move',
         'bank-line match', 'bank-line unmatch', 'bank-line ignore', 'bank-line add', 'bank-line transfer',
         'bank-line undo', 'bank-line deposit', 'bank-line pay-bills',
+        'bank-rule update', 'bank-rule accept', 'bank-rule decline', 'bank-rule apply',
         'bulk-edit preview', 'bulk-edit apply', 'bulk-edit reverse',
         'opening-draft create', 'opening-draft update', 'opening-draft discard', 'opening-draft plan',
         'opening-draft apply', 'opening-draft reverse',

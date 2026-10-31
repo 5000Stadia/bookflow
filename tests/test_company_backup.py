@@ -206,9 +206,20 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0118 = importlib.import_module("bookflow.storage.company_migrations.versions.0118_pos_layer")
     co0117 = importlib.import_module("bookflow.storage.company_migrations.versions.0117_opening_drafts")
     co0115 = importlib.import_module("bookflow.storage.company_migrations.versions.0115_item_pictures")
+    co0119 = importlib.import_module("bookflow.storage.company_migrations.versions.0119_bank_rules")
 
     def older(conn):
-        # Newest first: co0118 (on co0117): its guard, its table, then the switch column and the walk-in flag.
+        # Newest first: co0119 (on co0118): its guards and indexes, the learning preference, the line's answer (its
+        # rule_id, a foreign key DROP COLUMN refuses, goes with co0112's bank_lines below), then its three tables.
+        for trigger in co0119.TRIGGERS:
+            conn.execute(f"DROP TRIGGER {trigger}")
+        for index in co0119.INDEX_NAMES:
+            conn.execute(f"DROP INDEX {index}")
+        conn.execute("ALTER TABLE company_info DROP COLUMN bank_rule_learning")
+        conn.execute("ALTER TABLE company_info DROP COLUMN bank_rule_automation")
+        conn.execute("ALTER TABLE bank_lines DROP COLUMN answer")
+        conn.execute("ALTER TABLE bank_lines DROP COLUMN payee_key")
+        # Then co0118 (on co0117): its guard, its table, then the switch column and the walk-in flag.
         for trigger in co0118.TRIGGERS:
             conn.execute(f"DROP TRIGGER {trigger}")
         for table in co0118.TABLES:
@@ -240,6 +251,9 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
         for trigger in co0112.TRIGGERS:
             conn.execute(f"DROP TRIGGER {trigger}")
         for table in co0112.TABLES:
+            conn.execute(f"DROP TABLE {table}")
+        # co0119's three tables go after bank_lines, whose rule_id refers to bank_rules.
+        for table in co0119.TABLES:
             conn.execute(f"DROP TABLE {table}")
         # Then co0111 (on co0110): its guards, two indexes and two tables (runs before the schedules).
         for trigger in co0111.TRIGGERS:
@@ -493,7 +507,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))
     restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older",
                                               "organization": "Older Books Organization"})
-    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0118"
+    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0119"
     folder = _folder(client, restored["company_id"])
     # The migration took its verified backup of the restored database first, as every migration does.
     assert list((folder / "backups").glob("*-from-co0062.db"))
