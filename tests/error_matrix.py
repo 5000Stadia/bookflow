@@ -3036,3 +3036,4 @@ MATRIX['pos receipt show'] = {
     'E_RECORD_NOT_FOUND': 'the selector names no POS sale',
     'E_VALIDATION': 'the selector names multiple POS sales',
 }
+MATRIX['batch reverse'] = dict(MATRIX['import reverse'])

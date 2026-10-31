@@ -4,7 +4,7 @@
 
 ## `finance-charge assess`
 
-Assess finance charges on overdue customer balances as of a date (default today), by the company finance charge preferences: annual rate, minimum charge, grace days, the finance charge account, whether overdue finance charges are charged again, and whether days count from the due date or the invoice date. Finance charges are off until those are set with `company update`. Dry-run is the preview: every customer and job with a balance overdue past the grace period, with its overdue balance, last finance charge date, the documents and days charged, and the proposed charge (open balance x rate x days / 365 per document, days from the due date, or invoice date, or the last finance charge date when later; summed exactly, rounded once to the cent half to even, then the minimum). `has_unapplied_credits` marks a customer with payments or credits not yet applied, which are not subtracted: apply them first. Omit `customers` to assess every proposed customer, or name the ones to assess, each optionally with a changed `amount`. Each charge is one statement charge on the Finance Charge item (set up on first use on the finance charge account), dated the assessment date: Accounts Receivable is debited and the finance charge account credited, so it ages, shows on `report statement` and is paid like any other charge; void it with `statement-charge void`. A customer already charged as of the date is not charged again. A date in a closed period is refused.
+Assess finance charges on overdue customer balances as of a date (default today), by the company finance charge preferences: annual rate, minimum charge, grace days, the finance charge account, whether overdue finance charges are charged again, and whether days count from the due date or the invoice date. Finance charges are off until those are set with `company update`. Dry-run is the preview: every customer and job with a balance overdue past the grace period, with its overdue balance, last finance charge date, the documents and days charged, and the proposed charge (open balance x rate x days / 365 per document, days from the due date, or invoice date, or the last finance charge date when later; summed exactly, rounded once to the cent half to even, then the minimum). `has_unapplied_credits` marks a customer with payments or credits not yet applied, which are not subtracted: apply them first. Omit `customers` to assess every proposed customer, or name the ones to assess, each optionally with a changed `amount`. Each charge is one statement charge on the Finance Charge item (set up on first use on the finance charge account), dated the assessment date: Accounts Receivable is debited and the finance charge account credited, so it ages, shows on `report statement` and is paid like any other charge; void it with `statement-charge void`. A customer already charged as of the date is not charged again. A date in a closed period is refused. The output names its batch: `batch reverse <batch> --dry-run` previews reversing every charge and retiring the Finance Charge item if this assessment created it. Later assessments must reverse first.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -77,6 +77,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `batch` | string \| null | no | yes | null | The reversible batch written by this call; absent on previews or no-op calls. |
+| `next` | string \| null | no | yes | null | How to preview reversing this batch. |
 | `date` | string | yes | no | — | — |
 | `annual_rate` | string | yes | no | — | — |
 | `minimum` | object | yes | no | — | — |
@@ -143,6 +145,7 @@ Example JSON output:
   "account": "value",
   "annual_rate": "value",
   "assessed_count": 1,
+  "batch": null,
   "calculated_from": "due_date",
   "currency": "USD",
   "date": "2026-01-01",
@@ -155,6 +158,7 @@ Example JSON output:
     "currency": "USD",
     "minor_units": 1
   },
+  "next": null,
   "on_overdue_charges": false,
   "rows": [],
   "summary": "value",

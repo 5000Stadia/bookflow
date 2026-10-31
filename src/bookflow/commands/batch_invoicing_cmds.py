@@ -158,7 +158,8 @@ batch_invoice_post = command(
                 'refused does not roll back the invoices that succeeded: every outcome is '
                 'recorded against the batch, and batch-invoice retry runs the failures again. '
                 'Document numbers come from the existing allocator and are allocated only on '
-                'successful creation, so a preview shows none.',
+                'successful creation, so a preview shows none. The reversal_batch_id and next name '
+                'the shared batch and how to preview reversing every invoice this run created.',
     input_model=BatchInvoicePostInput, output_model=BatchInvoiceOutput, writes={'company'},
     required_role='standard', capability='ledger.post', accepts_idempotency_key=True,
     error_codes=_BATCH_WRITE_ERRORS)(plan_batch_post)
@@ -171,7 +172,8 @@ batch_invoice_retry = command(
                 'refused. The request is the one that batch was given, so the lines and words are '
                 'unchanged; supply a date to move the retry off the original batch date. This '
                 'records its own batch naming the one it retried, and refuses when the named '
-                'batch has no failed customers left.',
+                'batch has no failed customers left. Its reversal_batch_id names a separate shared '
+                'batch; next previews reversing only the invoices this retry created.',
     input_model=BatchInvoiceRetryInput, output_model=BatchInvoiceOutput, writes={'company'},
     required_role='standard', capability='ledger.post', accepts_idempotency_key=True,
     positional=['batch'],

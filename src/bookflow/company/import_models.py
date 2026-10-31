@@ -237,6 +237,12 @@ class BatchShowInput(_Input):
     batch: str = Field(min_length=26, max_length=26, description='The batch.')
 
 
+class BatchReverseInput(BatchShowInput):
+    limit: int = Field(200, ge=1, le=20_000, description='Most records to reverse in this resumable slice.')
+    fingerprint: str | None = Field(None, min_length=64, max_length=64,
+                                    description='Fingerprint returned by the dry run.')
+
+
 class BatchQueryInput(_Input):
     kind: str | None = Field(None, max_length=32, description='Only batches of this kind (import, reversal...).')
     state: Literal['live', 'reversing', 'blocked', 'reversed', 'reversed_partly'] | None = Field(

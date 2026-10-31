@@ -339,7 +339,7 @@ Example JSON output:
 
 ## `bill pay`
 
-Pay open bills. Each selected bill is settled by what you name for it, or by everything still open on it when you name nothing, and the payment debits Accounts Payable and credits the account the money came from -- a bank account, which falls, or a credit card account, which rises. Bills are grouped by vendor, payable account, currency, funding account and method, and each group is one payment, so two vendors are never paid by one check; `group_count` says how many the selection made. Paying less than what is open leaves the remainder open. A payment whose method is a check drawn on a bank account is a cheque out of that account's chequebook: it takes the account's next check number, moves that number on, and is refused if the number is already on another cheque, exactly as `check post` is. `check_number` writes a number you name instead of the next one, and is accepted only on such a payment and only when one payee is being paid. A row may also name an early-payment `discount`: the bill is then settled by the amount paid plus the discount (a row may pay "0.00" and take only its discount, while the payment to that vendor pays some money on another bill), Accounts Payable falls by both and the discount is credited to `discount_account` (default: the company vendor discount account, else an active account named "Discounts Taken"; with neither the payment is refused and the error lists the chart's discount accounts). A discount is never taken unless named; `bill query` shows each bill's `discount_date` and the `early_discount` its terms still offer, a dry run shows `suggested_discount_minor_units` per line for the payment date, and a discount named after the discount date is taken with a warning. Vendor credits are separate documents and are not entered here.
+Pay open bills. Each selected bill is settled by what you name for it, or by everything still open on it when you name nothing, and the payment debits Accounts Payable and credits the account the money came from -- a bank account, which falls, or a credit card account, which rises. Bills are grouped by vendor, payable account, currency, funding account and method, and each group is one payment, so two vendors are never paid by one check; `group_count` says how many the selection made. Paying less than what is open leaves the remainder open. A payment whose method is a check drawn on a bank account is a cheque out of that account's chequebook: it takes the account's next check number, moves that number on, and is refused if the number is already on another cheque, exactly as `check post` is. `check_number` writes a number you name instead of the next one, and is accepted only on such a payment and only when one payee is being paid. A row may also name an early-payment `discount`: the bill is then settled by the amount paid plus the discount (a row may pay "0.00" and take only its discount, while the payment to that vendor pays some money on another bill), Accounts Payable falls by both and the discount is credited to `discount_account` (default: the company vendor discount account, else an active account named "Discounts Taken"; with neither the payment is refused and the error lists the chart's discount accounts). A discount is never taken unless named; `bill query` shows each bill's `discount_date` and the `early_discount` its terms still offer, a dry run shows `suggested_discount_minor_units` per line for the payment date, and a discount named after the discount date is taken with a warning. Vendor credits are separate documents and are not entered here. The output names its batch_id; next previews its whole reversal with `batch reverse <batch> --dry-run`. Reversal unapplies and voids its payments; pending check print runs, printed checks, reconciliation and closed periods block it.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -422,6 +422,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 |---|---|---|---|---|---|
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
+| `batch_id` | string \| null | no | yes | null | — |
+| `next` | string \| null | no | yes | null | — |
 | `payments` | array[object] | yes | no | — | — |
 | `payments[].id` | string | yes | no | — | — |
 | `payments[].version` | integer | yes | no | — | — |
@@ -701,12 +703,14 @@ Example JSON output:
 
 ```json
 {
+  "batch_id": null,
   "bill_count": 1,
   "currency": "USD",
   "discount": null,
   "discount_minor_units": 0,
   "dry_run": false,
   "group_count": 1,
+  "next": null,
   "paid": {
     "amount": "value",
     "currency": "USD",

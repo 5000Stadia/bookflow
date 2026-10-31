@@ -247,6 +247,14 @@ def entry_plan(s, ctx, batch: dict, all_effects: list[dict], done: dict, probe, 
                 f"unmark it on that draft (`reconcile mark {draft['id']}`, action unmark) or discard the draft "
                 f"(`reconcile discard {draft['id']}`)", seq=e['seq'], draft=draft['id'], account=draft['account']))
             continue
+        if family in ('check', 'bill_payment'):
+            from bookflow.company import check_printing
+            if check_printing.printed(s, transaction_id):
+                blockers.append(_blocker(
+                    'printed', 'transaction', transaction_id,
+                    f'{label}: this check was printed; paper cannot be recalled.',
+                    'Ask the principal how to handle the printed check.', seq=e['seq']))
+                continue
         if transaction_id in held and any(cmd.endswith(' void') for cmd, _ in inverse):
             # A void is allowed on a reconciled entry by design, and an unapply before it moves no money, so neither
             # dry run refuses: the reconciliation's hold is read here, as `deposit delete` reads it.
@@ -270,14 +278,21 @@ def entry_plan(s, ctx, batch: dict, all_effects: list[dict], done: dict, probe, 
         work.append(item)
         if budget is None or probed < budget:
             probed += 1
-            # The first step is dry-run; a later step depends on it and is checked when it runs.
-            try:
-                batches.run_nested(s, ctx, left[0][0], _step_payload(item, 0, row['version']),
-                                   source_ref=f"reverse:{batch['id']}", dry_run=True, recovery=False)
-            except BookflowError as error:
-                blockers.append(_blocker(CODES.get(error.code, error.code), 'transaction', transaction_id,
-                                         f'{label}: {error.message}', CLEARS.get(error.code), seq=e['seq'],
-                                         error=error.code, details=error.details))
+            # Every inverse checks the reverser's authority and its own blockers before
+            # any write. An unapply in this same plan clears only E_HAS_APPLICATIONS.
+            waits = False
+            for index, (command, _) in enumerate(left):
+                try:
+                    batches.run_nested(s, ctx, command, _step_payload(item, index, row['version']),
+                                       source_ref=f"reverse:{batch['id']}", dry_run=True, recovery=False)
+                except BookflowError as error:
+                    if not (waits and error.code == 'E_HAS_APPLICATIONS'):
+                        blocker = _blocker(CODES.get(error.code, error.code), 'transaction', transaction_id,
+                                           f'{label}: {error.message}', CLEARS.get(error.code), seq=e['seq'],
+                                           error=error.code, details=error.details)
+                        if blocker not in blockers:
+                            blockers.append(blocker)
+                waits = waits or command.endswith(' unapply')
     return steps, work, blockers, entries, created
 
 

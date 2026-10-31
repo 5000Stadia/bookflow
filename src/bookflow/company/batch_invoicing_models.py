@@ -186,6 +186,8 @@ class BatchInvoiceOutput(WriteOutput):
     """The batch itself. ``batch_id`` is null while this is only a preview."""
 
     batch_id: str | None = None
+    reversal_batch_id: str | None = Field(None, description="Shared batch id for batch show and batch reverse.")
+    next: str | None = Field(None, description="Preview reversal of this run with batch reverse --dry-run.")
     date: str
     billing_group_id: str | None = None
     billing_group_name: str | None = None
@@ -203,6 +205,8 @@ class BatchInvoiceOutput(WriteOutput):
 
 class BatchSummaryOutput(BaseModel):
     batch_id: str
+    reversal_batch_id: str | None = None
+    next: str | None = None
     date: str
     billing_group_id: str | None
     billing_group_name: str | None

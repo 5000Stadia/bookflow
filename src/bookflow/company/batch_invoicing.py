@@ -33,7 +33,7 @@ from typing import Any
 
 import sqlalchemy as sa
 
-from bookflow.company import document_effects as effects, sales, schema as c
+from bookflow.company import batches, document_effects as effects, sales, schema as c
 from bookflow.company.billing_groups import members as group_members, resolve_customer, resolve_group
 from bookflow.company.sales_models import InvoicePostInput
 from bookflow.core import clock
@@ -46,6 +46,8 @@ SNAPSHOT_VERSION = 1
 # One savepoint name, taken and released around every customer in turn. It is released or
 # rolled back before the next customer takes it, so one name is enough and nesting never grows.
 SAVEPOINT = 'bookflow_batch_customer'
+
+batches.register(batches.Adapter('batch-invoice', release_document_numbers=False, label='Batch invoicing'))
 
 
 def _invalid(field: str, problem: str) -> BookflowError:
@@ -143,12 +145,15 @@ def preview_rows(s, ctx, snapshot: dict[str, Any], targets: list[dict[str, Any]]
     return rows
 
 
-def _write_one(s, ctx, snapshot, customer, position, *, command_name):
+def _write_one(s, ctx, snapshot, customer, position, *, command_name, reversal_batch_id):
     """Write one customer's invoice inside its own savepoint; a refusal rolls back only it."""
     s.company.raw.execute(f'SAVEPOINT {SAVEPOINT}')
     try:
         plan = sales.prepare(s, ctx, _invoice_input(snapshot, customer['id']), 'invoice', 'post')
-        applied = effects.persist(plan, ctx, s, command_name=command_name, table_kinds=sales.TABLE_KINDS)
+        applied = sales.persist_prepared(plan, ctx, s, command_name=command_name)
+        batches.record_effect(s, reversal_batch_id, record_type='invoice', record_id=applied.output.id,
+                              action='created', version_after=applied.output.version,
+                              event_id=plan.data['event'])
     except BookflowError as exc:
         s.company.raw.execute(f'ROLLBACK TO {SAVEPOINT}')
         s.company.raw.execute(f'RELEASE {SAVEPOINT}')
@@ -162,7 +167,7 @@ def _write_one(s, ctx, snapshot, customer, position, *, command_name):
     return row, applied.touched
 
 
-def _batch_output(*, batch_id, snapshot, group, rows, currency, retry_of=None, created=None):
+def _batch_output(*, batch_id, snapshot, group, rows, currency, retry_of=None, created=None, reversal_batch_id=None):
     """The output a real run returns. A preview is the same document, counted the same way.
 
     A previewed row is ``will_create`` rather than ``created`` because no invoice exists yet and
@@ -173,7 +178,9 @@ def _batch_output(*, batch_id, snapshot, group, rows, currency, retry_of=None, c
     made = [row for row in rows if row['status'] in ('created', 'will_create')]
     total = sum(row['total']['minor_units'] for row in made)
     return BatchInvoiceOutput(
-        batch_id=batch_id, date=snapshot['date'],
+        batch_id=batch_id, reversal_batch_id=reversal_batch_id,
+        next=f'batch reverse {reversal_batch_id} --dry-run' if reversal_batch_id else None,
+        date=snapshot['date'],
         billing_group_id=group['id'] if group else None,
         billing_group_name=group['name'] if group else None,
         retry_of_batch_id=retry_of,
@@ -196,12 +203,12 @@ def _stored_rows(batch_id: str, rows: list[dict[str, Any]], *, at: str, actor: s
             for row in rows]
 
 
-def _persist(s, ctx, *, snapshot, group, rows, currency, retry_of, command_name) -> Applied:
+def _persist(s, ctx, *, snapshot, group, rows, currency, retry_of, command_name, run_id, reversal_batch_id) -> Applied:
     """Record the run itself, after its invoices are already written."""
     from bookflow.core import audit
     at, event = clock.now_iso(), new_id()
     made = [row for row in rows if row['status'] == 'created']
-    batch = dict(id=new_id(), created_at=at, created_by=s.actor.id, created_via=ctx.interface.value,
+    batch = dict(id=run_id, created_at=at, created_by=s.actor.id, created_via=ctx.interface.value,
                  audit_event_id=event, date=snapshot['date'],
                  billing_group_id=group['id'] if group else None,
                  billing_group_name=group['name'] if group else None, retry_of_batch_id=retry_of,
@@ -220,7 +227,7 @@ def _persist(s, ctx, *, snapshot, group, rows, currency, retry_of, command_name)
     if stored:
         s.company.conn.execute(c.invoice_batch_results.insert(), stored)
     output = _batch_output(batch_id=batch['id'], snapshot=snapshot, group=group, rows=rows,
-                           currency=currency, retry_of=retry_of,
+                           currency=currency, retry_of=retry_of, reversal_batch_id=reversal_batch_id,
                            created=dict(created_at=at, created_by=s.actor.id, created_via=ctx.interface.value))
     return Applied(output, touched, summary, audited=True)
 
@@ -250,12 +257,18 @@ def _run(plan: Plan, ctx, s, *, command_name) -> Applied:
     targets = [dict(id=identifier, full_name=resolve_customer(s, identifier)['full_name'])
                for identifier in snapshot['customers']]
     currency = _home_currency(s)
+    run_id = new_id()
+    reversal_batch_id = batches._insert_batch(
+        s, ctx, kind='batch-invoice', label=f'Batch invoices {snapshot["date"]}',
+        scope='batch-invoice', ordering='record', source_type='invoice_batch', source_id=run_id)
     rows = []
     for position, customer in enumerate(targets, 1):
-        row, _touched = _write_one(s, ctx, snapshot, customer, position, command_name=command_name)
+        row, _touched = _write_one(s, ctx, snapshot, customer, position, command_name=command_name,
+                                   reversal_batch_id=reversal_batch_id)
         rows.append(row)
     return _persist(s, ctx, snapshot=snapshot, group=group, rows=rows, currency=currency,
-                    retry_of=data['retry_of'], command_name=command_name)
+                    retry_of=data['retry_of'], command_name=command_name, run_id=run_id,
+                    reversal_batch_id=reversal_batch_id)
 
 
 # ---------------------------------------------------------------------------- retry
@@ -319,7 +332,12 @@ def _row_output(row: dict[str, Any]):
 def _summary_fields(s, batch: dict[str, Any]) -> dict[str, Any]:
     # The group's name is read off the batch, not off the group: the batch is history and has to
     # keep reading back after the group it was addressed to has been deleted or renamed.
-    return dict(batch_id=batch['id'], date=batch['date'], billing_group_id=batch['billing_group_id'],
+    reversal_batch_id = s.company.conn.execute(sa.select(c.batches.c.id).where(
+        c.batches.c.source_type == 'invoice_batch', c.batches.c.source_id == batch['id'],
+        c.batches.c.reversal_of.is_(None))).scalar()
+    return dict(batch_id=batch['id'], reversal_batch_id=reversal_batch_id,
+                next=f'batch reverse {reversal_batch_id} --dry-run' if reversal_batch_id else None,
+                date=batch['date'], billing_group_id=batch['billing_group_id'],
                 billing_group_name=batch['billing_group_name'],
                 retry_of_batch_id=batch['retry_of_batch_id'],
                 requested_count=batch['requested_count'], created_count=batch['created_count'],

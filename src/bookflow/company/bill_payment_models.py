@@ -339,6 +339,8 @@ class BillPayOutput(WriteOutput):
     than implied.
     """
 
+    batch_id: str | None = None
+    next: str | None = None
     payments: list[BillPaymentOutput]
     group_count: int
     paid_minor_units: int

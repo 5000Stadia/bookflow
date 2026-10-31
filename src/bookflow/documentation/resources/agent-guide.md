@@ -1696,3 +1696,22 @@ Open POS tickets remain visible after a device is lost. `pos ticket take-over` c
 `expected_version`, invalidating the old device copy; supply `device` to identify the replacement in audit.
 Confirm the displayed clerk and register before taking over or discarding an open ticket. Explicit stored prices
 survive resume, but preview, hold and completion still require `pos.price-override` to use an overridden price.
+
+## Reverse a batch
+
+`batch query` finds a run and `batch show <batch>` lists its recorded effects. Use
+`batch reverse <batch> --dry-run` to read the complete inverse list. This is confirm-first:
+check that list once with your principal unless they plainly named the reversal. The
+command needs the same `import` read capability as batch show; every inverse also needs
+your own grant. A fingerprint never supplies authority.
+
+Run `batch reverse <batch>` with a reason, following `next` until reversed. An interrupted
+reversal resumes without repeating completed steps. A blocker names the dependent record,
+later batch, closed period or missing grant and leaves the attempted slice unchanged.
+Invoice runs, bill payments, depreciation journals and finance charges retain their history;
+a Finance Charge item created by the assessment is retired after its charges.
+
+Sent mail, printed checks and exported files cannot be recalled. Pending check-print runs
+must be cancelled through their native command before reversal. Reconciled bill payments,
+later edits and later dependent records block the whole batch. A batch with nothing
+reversible says so; a reversal itself cannot be reversed.

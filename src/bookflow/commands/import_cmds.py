@@ -232,6 +232,27 @@ def plan_batch_show(inp, ctx, s) -> Plan:
     return Plan(m.BatchOutput(batch=batches.show(s, ctx, inp.batch)))
 
 
+def _batch_reverse(s, ctx, inp, *, dry_run):
+    from bookflow.company import batch_delegates
+    out = batch_delegates.reverse(s, ctx, inp, dry_run=dry_run)
+    if out is None:
+        out = batches.reverse(s, ctx, inp.batch, reason=ctx.reason, dry_run=dry_run,
+                              limit=inp.limit, fingerprint=inp.fingerprint, require_work=True)
+    out['next'] = f'batch reverse {inp.batch}' if out['remaining'] else None
+    return _reverse_out(out)
+
+
+def plan_batch_reverse(inp, ctx, s) -> Plan:
+    # Preflight before the dispatcher's write transaction: even a first-time caller's
+    # principal row must not be committed when the whole unit is blocked.
+    return Plan(m.BatchReverseOutput(**_batch_reverse(s, ctx, inp, dry_run=True)), {'input': inp})
+
+
+def apply_batch_reverse(plan, ctx, s) -> Applied:
+    return _finalized(s, ctx, 'batch.reverse',
+                      lambda: _batch_reverse(s, ctx, plan.data['input'], dry_run=False), m.BatchReverseOutput)
+
+
 def plan_batch_query(inp, ctx, s) -> Plan:
     return Plan(m.BatchQueryOutput(**batches.query(s, ctx, kind=inp.kind, state=inp.state, scope=inp.scope,
                                                    limit=inp.limit, cursor=inp.cursor)))
@@ -322,3 +343,17 @@ import_mapping_deactivate = _write('import-mapping deactivate', 'Stop a source\'
                                    'versions stay readable.', m.ImportMappingSelector, m.ImportMappingOutput,
                                    plan_mapping_deactivate, apply_mapping_deactivate, positional=('source',),
                                    errors=('E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT'))
+
+
+batch_reverse = command(
+    'batch reverse', scope='company', writes={'company'}, capability='import', required_role='member',
+    input_model=m.BatchReverseInput, output_model=m.BatchReverseOutput, positional=['batch'],
+    error_codes=['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_BATCH_BLOCKED', 'E_VERSION_CONFLICT'],
+    description=(
+        'Confirm-first: reverse the entire batch, newest effects first, using your own grants for every inverse. '
+        'Run --dry-run and check its exact list with your principal unless this reversal was plainly named. '
+        'Every blocker is named and a blocked plan changes nothing. Later edits, dependent records, closed periods, '
+        'reconciled payments and pending or printed checks can block. Sent mail, printed checks and exported files '
+        'cannot be recalled. History stays. Returns a resumable slice; repeat `next` until reversed. '
+        'A batch with nothing reversible says so. Example: {"batch": "01J..."}.'))(plan_batch_reverse)
+batch_reverse.applier(apply_batch_reverse)

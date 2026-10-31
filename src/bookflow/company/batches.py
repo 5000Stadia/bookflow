@@ -16,7 +16,7 @@ A batch is **reversed as one unit** through the ordinary inverse commands, under
 ordering (``strict``: a later live batch in its scope); a record **edited again** since (its version is not the one the
 batch left); a created record **in use** (any row the database's own foreign keys say refers to it, other than its own
 detail rows and records the same batch made); and the inverse command's own refusal, permission included, from a dry run.
-A blocked reversal changes nothing (``E_BATCH_BLOCKED`` names up to 50 blockers and the total). "Edited again" is
+A blocked reversal changes nothing (``E_BATCH_BLOCKED`` names every blocker and the total). "Edited again" is
 judged against the record's newest effect in any batch, reversals included, so batches unwind newest first; a record a
 later live batch touched names that batch.
 
@@ -29,7 +29,6 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
-from functools import lru_cache
 from datetime import datetime, timezone
 from typing import Any, Callable
 
@@ -37,6 +36,7 @@ import sqlalchemy as sa
 
 from bookflow import BookflowError
 from bookflow.company import schema as c
+from bookflow.company.reversal_registry import DocumentRecord, ListRecord, list_record
 from bookflow.core.ids import new_id
 
 OWNER = 'batch.apply'
@@ -67,10 +67,26 @@ class Adapter:
     planner: Callable | None = None
     runner: Callable | None = None
     reader: Callable[[Any, dict], None] | None = None
+    release_document_numbers: bool = True  # import corrections can reuse file numbers
     blocks: bool = False
+    preflight: Callable | None = None  # (s, ctx, batch) -> blockers for native run dependencies
 
 
 ADAPTERS: dict[str, Adapter] = {}
+# A fresh CLI process may load only `batch`, not the command that originally wrote it.
+ADAPTER_MODULES = {
+    'import': 'imports', 'bulk-edit': 'bulk_edit', 'opening': 'opening_drafts',
+    'bank-import': 'bank_feeds', 'bank-sort': 'bank_feeds', 'automation': 'automation',
+    'batch-invoice': 'batch_invoicing', 'bill-pay': 'bill_payments',
+    'fixed-asset-depreciation': 'fixed_assets', 'finance-charge-assessment': 'finance_charges',
+}
+
+
+def _load_adapter(kind: str) -> None:
+    if kind not in ADAPTERS and kind in ADAPTER_MODULES:
+        from importlib import import_module
+        import_module('bookflow.company.' + ADAPTER_MODULES[kind])
+
 
 
 def register(adapter: Adapter) -> Adapter:
@@ -79,6 +95,7 @@ def register(adapter: Adapter) -> Adapter:
 
 
 def adapter_for(kind: str) -> Adapter:
+    _load_adapter(kind)
     try:
         return ADAPTERS[kind]
     except KeyError:
@@ -86,29 +103,6 @@ def adapter_for(kind: str) -> Adapter:
                             details={'field': 'batch', 'kind': kind}) from None
 
 
-@dataclass(frozen=True)
-class ListRecord:
-    noun: str
-    table: sa.Table
-    name_field: str  # the input field holding the record's own (leaf) name
-    selector_field: str
-    number_field: str | None = None  # a second unique field a reversed record releases (an account's number)
-
-    @property
-    def selector(self) -> str:
-        """The input field its update and deactivate commands select the record by (`customer_type`)."""
-        return self.noun.replace('-', '_')
-
-
-@lru_cache(maxsize=None)
-def list_record(record_type: str) -> ListRecord | None:
-    from bookflow.company import lists
-    for definition in lists.all_list_definitions():
-        if definition.record_type == record_type:
-            table = c.metadata.tables[definition.table]
-            return ListRecord(definition.noun, table, 'name', definition.display_field,
-                              'number' if definition.noun == 'account' else None)
-    return None
 
 
 def _record(record_type: str) -> ListRecord:
@@ -250,6 +244,7 @@ def describe(s, batch: dict, *, with_plan: bool = False, ctx=None) -> dict:
                                  'created_at', 'reversed_by', 'reversed_at', 'reversal_reason', 'reversal_event_id')}
     out['counts'] = counts(s, batch['id'])
     if with_plan:
+        _load_adapter(batch['kind'])
         if batch['state'] in ('live', 'reversing', 'blocked') and batch['reversal_of'] is None \
                 and batch['kind'] in ADAPTERS:
             try:
@@ -270,6 +265,7 @@ def describe(s, batch: dict, *, with_plan: bool = False, ctx=None) -> dict:
 
 def show(s, ctx, batch_id: str) -> dict:
     batch = _batch(s, batch_id)
+    _load_adapter(batch['kind'])
     reader = ADAPTERS[batch['kind']].reader if batch['kind'] in ADAPTERS else None
     (reader or require_batch_read)(s, batch)
     out = describe(s, batch, with_plan=True, ctx=ctx)
@@ -410,28 +406,11 @@ def require_batch_read(s, batch: dict) -> None:
 
 # ------------------------------------------------------------------ documents a batch made (R107 increment 4)
 
-@dataclass(frozen=True)
-class DocumentRecord:
-    """A document an import made: retired by its family's delete, history preserved (else its void), one step."""
-    noun: str
-    table: sa.Table
-    name_field: str
-    selector: str
-    inverse: str
-    type_value: str
-    type_column: str | None
-    document = True
-    number_field = None
 
 
-@lru_cache(maxsize=None)
 def document_record(record_type: str) -> DocumentRecord | None:
-    from bookflow.company import import_kinds
-    for k in import_kinds.DOC_KINDS.values():
-        if k.family == record_type:
-            return DocumentRecord(k.noun, c.metadata.tables[k.table], 'number', k.selector, k.inverse, k.family,
-                                  k.type_column)
-    return None
+    from bookflow.company.reversal_registry import DOCUMENTS
+    return DOCUMENTS.get(record_type)
 
 
 def _document_steps(s, group: dict, rec: DocumentRecord) -> list[tuple[str, dict]]:
@@ -456,7 +435,8 @@ def _document_steps(s, group: dict, rec: DocumentRecord) -> list[tuple[str, dict
             (group['record_id'],)).fetchone()
         if standing:
             steps.append(('bill payment unapply', {'payment': group['record_id']}))
-    if renumbers(rec) and not _retired_here(s, rec, group):
+    if adapter_for(_batch(s, group['batch_id'])['kind']).release_document_numbers \
+            and renumbers(rec) and not _retired_here(s, rec, group):
         steps.append(('renumber', {}))
     steps.append((rec.inverse, {rec.selector: group['record_id']}))
     return steps
@@ -691,10 +671,11 @@ def _in_use(s, record_type: str, ids: list[str], made_here: set[str], by_batch: 
     if getattr(rec, 'document', False):
         return _document_uses(s, rec, ids, made_here)
     payload = json.dumps(ids)
+    retired_documents: dict[str, bool] = {}
     for table, column in _referrers(s, rec.table.name):
         meta = c.metadata.tables.get(table)
         key = 'id' if meta is not None and 'id' in meta.c else 'rowid'
-        document = ('transaction_id' if meta is not None and 'transaction_id' in meta.c else
+        document = ('id' if table == 'transactions' else 'transaction_id' if meta is not None and 'transaction_id' in meta.c else
                     # a placement names its document through the movement it places
                     '(SELECT m.transaction_id FROM inventory_movements m WHERE m.id = movement_id)'
                     if meta is not None and 'movement_id' in meta.c and table != 'inventory_movements' else 'NULL')
@@ -707,6 +688,13 @@ def _in_use(s, record_type: str, ids: list[str], made_here: set[str], by_batch: 
                 if by_batch is not None:
                     by_batch.add(target)
                 continue
+            if transaction:
+                if transaction not in retired_documents:
+                    status = s.company.raw.execute('SELECT status FROM transactions WHERE id = ?',
+                                                   (transaction,)).fetchone()
+                    retired_documents[transaction] = bool(status and status[0] in ('voided', 'deleted'))
+                if retired_documents[transaction]:
+                    continue  # history may still name a retired list record; it is not a live dependency
             uses = found.setdefault(target, {'tables': [], 'rows': [], 'documents': []})
             if transaction and len(uses['documents']) < 3:
                 kind, number = s.company.raw.execute('SELECT type, number FROM transactions WHERE id = ?',
@@ -721,18 +709,8 @@ def _in_use(s, record_type: str, ids: list[str], made_here: set[str], by_batch: 
 
 
 def _steps_for(group: dict, rec: ListRecord, version: int, s=None) -> list[tuple[str, dict]]:
-    """The inverse commands for one record, in order, given its version when the first one runs."""
-    if group['action'] == 'created' and getattr(rec, 'document', False):
-        return _document_steps(s, group, rec)
-    if group['action'] == 'updated':
-        return [(f'{rec.noun} update', {rec.selector: group['record_id'], 'expected_version': version,
-                                        **group['before']})]
-    if group['action'] == 'created' and getattr(rec, 'document', False):
-        return [(rec.inverse, {rec.selector: group['record_id']})]
-    if group['action'] == 'created':
-        return [('rename', {}), (f'{rec.noun} deactivate', {rec.selector: group['record_id']})]
-    raise BookflowError('E_VALIDATION', message=f"No inverse for a {group['action']} effect.",
-                        details={'action': group['action']})
+    from bookflow.company.reversal_registry import steps_for
+    return steps_for(group, rec, version, s)
 
 
 def released_name(name: str, batch_id: str) -> str:
@@ -774,6 +752,8 @@ def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
         raise BookflowError('E_VALIDATION', message=f'Batch {batch_id} is already {batch["state"]}.',
                             details={'field': 'batch', 'state': batch['state']})
     (adapter.reader or require_batch_read)(s, batch)
+    if adapter.preflight is not None:
+        blockers.extend(adapter.preflight(s, ctx, batch))
     if adapter.ordering == 'strict':
         later = s.company.conn.execute(sa.text(
             "SELECT id, label, created_at FROM batches WHERE scope = :scope AND reversal_of IS NULL "
@@ -786,6 +766,9 @@ def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
     if adapter.planner is not None:
         found = adapter.planner(s, ctx, batch, effects(s, batch_id), _done_steps(s, batch), probe, blockers)
         return {'batch': batch, 'fingerprint': _fingerprint(found['steps']), **found}
+    if batch['kind'] != 'bill-pay' and any(e['record_type'] == 'bill_payment' for e in effects(s, batch_id)):
+        from bookflow.company.bill_payments import reversal_blockers
+        blockers.extend(reversal_blockers(s, ctx, batch))
     groups = _groups(effects(s, batch_id))
     done = _done_steps(s, batch)
     made = {g['key'] for g in groups if g['action'] == 'created'}
@@ -851,7 +834,8 @@ def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
                                      clears=f"`{rec.noun} show {row[rec.name_field]}` shows the change; undo it or "
                                             'keep the batch', changed_by=edit['by'], changed_at=edit['at']))
             continue
-        if changed and not getattr(rec, 'document', False):
+        if changed and (not getattr(rec, 'document', False) or
+                        getattr(rec, 'type_value', None) in ('payment', 'bill_payment')):
             blockers.append(_blocker(g, rec, 'edited_again',
                                      f"{label} was changed since the batch (version {row['version']}, the batch left "
                                      f"{expected}), by {row['updated_by']} at {row['updated_at']}.",
@@ -873,11 +857,10 @@ def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
                                     for name, _ in steps]})
         work.append((g, rec, row, steps, len(steps_done)))
         if probe:
-            refusal = _probe(s, ctx, batch, g, rec, row, steps, made)
-            # A record the batch's own documents use is probed again by running, once those are gone: its dry run
-            # now counts only for the caller's grant (review L1).
-            if refusal is not None and (g['record_id'] not in by_batch or refusal['code'] == 'E_PERMISSION'):
-                blockers.append(refusal)
+            refusals = _probe(s, ctx, batch, g, rec, row, steps, made)
+            # Only a specifically recognized prerequisite may be ignored by _probe.
+            # A same-batch reference never excuses duplicate names or other validation errors.
+            blockers.extend(refusals)
     return {'batch': batch, 'steps': steps_out, 'blockers': blockers, 'fingerprint': _fingerprint(steps_out),
             'work': work, 'records': len(groups), 'pending': len(pending)}
 
@@ -939,23 +922,15 @@ def _free_initials(s, record_id: str) -> str:
     return record_id[-5:]
 
 
-def _probe(s, ctx, batch, g, rec, row, steps, made) -> dict | None:
+def _probe(s, ctx, batch, g, rec, row, steps, made) -> list[dict]:
     """Dry-run the inverse commands still to run: their own refusals, permission included, name the blocker. A
     deactivate refused only for children this same batch made (and reverses first) is not a blocker."""
     waits = False
+    refusals = []
     for i, (name, payload) in enumerate(steps):
-        if i and getattr(rec, 'document', False) and waits:
-            try:  # a later step waits on the first (a payment is deleted once unapplied): its own grant, here
-                from bookflow.core import registry
-                from bookflow.hub import access
-                access.require_explicit_grant(s, registry.get(
-                    f'{rec.noun} update' if name == 'renumber' else name).capability)
-            except BookflowError as error:
-                return _blocker(g, rec, error.code, f"{rec.noun} {row[rec.name_field]}: {error.message}",
-                                clears=_clears_for(error, rec), details=error.details)
-            continue
         command = f'{rec.noun} update' if name in ('rename', 'renumber') else name
         body = _payload(s, rec, batch, row, name, payload, row['version'])
+        after_unapply = waits
         waits = waits or name.endswith(' unapply')
         if name.endswith(' deactivate'):
             body.pop('expected_version', None)
@@ -963,11 +938,15 @@ def _probe(s, ctx, batch, g, rec, row, steps, made) -> dict | None:
             run_nested(s, ctx, command, body, source_ref=f"reverse:{batch['id']}", dry_run=True,
                        recovery=not getattr(rec, 'document', False))
         except BookflowError as error:
+            if after_unapply and error.code == 'E_HAS_APPLICATIONS':
+                continue  # this prerequisite is an earlier step of the same record
             if error.code == 'E_ACTIVE_DEPENDENTS' and _only_batch_children(s, rec, row, g, made):
                 continue
-            return _blocker(g, rec, error.code, f"{rec.noun} {row[rec.name_field]}: {error.message}",
-                            clears=_clears_for(error, rec), details=error.details)
-    return None
+            refusal = _blocker(g, rec, error.code, f"{rec.noun} {row[rec.name_field]}: {error.message}",
+                               clears=_clears_for(error, rec), details=error.details)
+            if refusal not in refusals:
+                refusals.append(refusal)
+    return refusals
 
 
 def _only_batch_children(s, rec, row, g, made) -> bool:
@@ -1002,7 +981,7 @@ def refuse(found: dict) -> BookflowError:
     return BookflowError('E_BATCH_BLOCKED', message=(
         _progress(found) + f"The batch cannot be reversed: {len(blockers)} blocker{'s' if len(blockers) != 1 else ''}, "
         f"first {first['message']} Nothing was changed."),
-        details={'batch': found['batch']['id'], 'blockers': blockers[:MAX_BLOCKERS], 'total': len(blockers),
+        details={'batch': found['batch']['id'], 'blockers': blockers, 'total': len(blockers),
                  'state': found['batch']['state'], 'records': found['records'],
                  'reversed': found['records'] - found['pending']})
 
@@ -1025,7 +1004,7 @@ def _skippable(blocker: dict, adapter: Adapter) -> bool:
 def reverse(s, ctx, batch_id: str, *, reason: str | None, dry_run: bool = False, limit: int = DEFAULT_SLICE,
             fingerprint: str | None = None, interrupt: Callable[[int], None] | None = None,
             then: Callable[[], Any] | None = None, on_begin: Callable[[Any, str], None] | None = None,
-            skip_changed: bool = False, own_writes: bool = False) -> dict:
+            skip_changed: bool = False, own_writes: bool = False, require_work: bool = False) -> dict:
     """Reverse a batch (or its next slice). ``own_writes``: the command that made the batch is undoing its own writes in
     the same call, nothing depending on them, as its all-or-nothing promise (an opening refused part way); the
     caller had the authority to write them, so their deletes need no separate delete grant here (review M1). A
@@ -1037,22 +1016,25 @@ def reverse(s, ctx, batch_id: str, *, reason: str | None, dry_run: bool = False,
     returned as ``then``; ``on_begin(s, reversal_id)`` inside the one that opens the reversal batch (a move keeps its
     flags there).
 
-    The whole plan is probed (every inverse command dry-run) once: by a dry run whose fingerprint the real call
-    carries, else by the first slice. A later slice re-checks only what can have changed since: each record's
-    version against its newest effect, what uses a created record, and later batches. An inverse command refused
-    while running stops the slice there with the record named; what ran stays reversed and the state `reversing`."""
+    The whole remaining plan is probed (every inverse command dry-run) on every call, including resumed
+    slices and calls carrying a fingerprint. A fingerprint detects changes, never supplies authority.
+    An inverse refused while running stops the slice there with the record named; committed steps remain
+    recorded so the same command can resume. ``require_work`` makes the generic door explicitly refuse
+    a live batch with no reversible steps; native adapters may have aggregate finish steps without records.
+    """
     if own_writes:
         saved = getattr(s, 'own_rollback', None)
         s.own_rollback = OWN_ROLLBACK_DELETES
         try:
             return reverse(s, ctx, batch_id, reason=reason, dry_run=dry_run, limit=limit, fingerprint=fingerprint,
-                           interrupt=interrupt, then=then, on_begin=on_begin, skip_changed=skip_changed)
+                           interrupt=interrupt, then=then, on_begin=on_begin, skip_changed=skip_changed,
+                           require_work=require_work)
         finally:
             s.own_rollback = saved
     batch = _batch(s, batch_id)
     adapter = adapter_for(batch['kind'])
     starting = batch['state'] not in ('reversing', 'blocked')
-    found = plan(s, ctx, batch_id, probe=dry_run or (starting and fingerprint is None))
+    found = plan(s, ctx, batch_id, probe=True)
     skipped = [b for b in found['blockers'] if _skippable(b, adapter)] if skip_changed else []
     if skipped:
         found['blockers'] = [b for b in found['blockers'] if not _skippable(b, adapter)]
@@ -1061,6 +1043,9 @@ def reverse(s, ctx, batch_id: str, *, reason: str | None, dry_run: bool = False,
             _set_state(s, batch_id, 'blocked')
             found['batch'] = _batch(s, batch_id)
         raise refuse(found)
+    if require_work and starting and not found['steps']:
+        raise BookflowError('E_VALIDATION', message='This batch has nothing reversible.',
+                            details={'field': 'batch', 'batch': batch_id, 'problem': 'nothing_reversible'})
     if starting and fingerprint is not None and fingerprint != found['fingerprint']:
         raise BookflowError('E_VERSION_CONFLICT', message='The batch changed since that dry run; run it again.',
                             details={'field': 'fingerprint', 'current': found['fingerprint']})
@@ -1092,7 +1077,7 @@ def reverse(s, ctx, batch_id: str, *, reason: str | None, dry_run: bool = False,
             index = offset + i
             command = f'{rec.noun} update' if name in ('rename', 'renumber') else name
             retire = _retire(rec, g, batch_id) if getattr(rec, 'document', False) and name == rec.inverse \
-                and not renumbers(rec) else None
+                and not renumbers(rec) and adapter.release_document_numbers else None
             numbers = retire.done if retire else None
             body = _payload(s, rec, batch, row, name, payload, version)
             if name == 'renumber':
@@ -1165,7 +1150,7 @@ def _result(s, found: dict, *, state: str, reversed_now: int, dry_run: bool = Fa
     batch = _batch(s, found['batch']['id'])
     return {'batch': describe(s, batch), 'state': state, 'reversed_now': reversed_now,
             'remaining': len(found['steps']), 'blockers': found['blockers'][:MAX_BLOCKERS],
-            'steps': found['steps'][:MAX_BLOCKERS], 'fingerprint': found['fingerprint'],
+            'steps': found['steps'], 'fingerprint': found['fingerprint'],
             'reversal_batch': batch['reversed_by'], 'event_id': None, 'dry_run': dry_run}
 
 

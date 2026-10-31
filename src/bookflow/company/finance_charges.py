@@ -325,7 +325,7 @@ def prepare(s, ctx, inp) -> Plan:
 
 
 def apply(plan: Plan, ctx, s) -> Applied:
-    from bookflow.company import document_effects as effects, sales
+    from bookflow.company import batches, document_effects as effects, sales
     from bookflow.company.sales_models import StatementChargePostInput
     from bookflow.core import audit
     inp = plan.data['input']
@@ -339,10 +339,18 @@ def apply(plan: Plan, ctx, s) -> Applied:
     touched: list[Touched] = []
     item_id, item_label = _item(s, policy['account'])
     selected = [row for row in out.rows if row.status == 'will_assess']
+    batch_id = batches._insert_batch(
+        s, ctx, kind='finance-charge-assessment', label=f'Finance charges as of {as_of}',
+        scope='finance-charge:assess', ordering='strict', source_type='finance-charge assess') if selected else None
     if item_id is None and selected:
         item_id, created = _create_item(s, ctx, policy['account'], at)
         item_label = ITEM_NAME
+        item_event = audit.write_event_to(
+            s.company, ctx, 'finance-charge assess', 'created Finance Charge item', [created],
+            actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=getattr(s, 'directive_code', None))
         touched.append(created)
+        batches.record_effect(s, batch_id, record_type=created.record_type, record_id=item_id,
+                              action='created', version_after=created.version_after, event_id=item_event)
     records, rows = [], []
     for row in out.rows:
         if row.status != 'will_assess':
@@ -353,6 +361,8 @@ def apply(plan: Plan, ctx, s) -> Applied:
             description=inp.memo or DEFAULT_MEMO))
         step = sales.prepare(s, ctx, charge, 'statement_charge', 'post')
         written = sales.apply(step, ctx, s).output
+        batches.record_effect(s, batch_id, record_type='statement_charge', record_id=written.id,
+                              action='created', version_after=written.version, event_id=batches.last_event_id(s))
         basis = [doc.model_dump(mode='json') for doc in row.documents]
         record = dict(id=new_id(), transaction_id=written.id, customer_id=row.customer_id, assessment_date=as_of,
                       overdue_balance_minor_units=row.overdue_balance.minor_units, computed_minor_units=row.computed.minor_units,
@@ -363,11 +373,20 @@ def apply(plan: Plan, ctx, s) -> Applied:
         records.append(record)
         touched.append(Touched('finance_charge', record['id'], 'create', None, 1, effects.decoded(record), db='company'))
         rows.append(row.model_copy(update=dict(status='assessed', transaction_id=written.id, number=written.number)))
-    output = out.model_copy(update=dict(rows=rows, item=item_label, summary=out.summary.replace('Would assess', 'Assessed', 1)))
+    output = out.model_copy(update=dict(rows=rows, item=item_label, batch=batch_id,
+                                       next=f'batch reverse {batch_id} --dry-run' if batch_id else None,
+                                       summary=out.summary.replace('Would assess', 'Assessed', 1)))
     if not records:
         return Applied(output, [], 'no finance charges to assess')
     summary = f"assessed {len(records)} finance charge{'s' if len(records) != 1 else ''} as of {as_of}"
-    audit.write_event_to(s.company, ctx, 'finance-charge assess', summary, touched, actor_id=s.actor.id,
+    audit.write_event_to(s.company, ctx, 'finance-charge assess', summary,
+                         [touch for touch in touched if touch.record_type == 'finance_charge'], actor_id=s.actor.id,
                          actor_kind=s.actor.kind, directive_code=getattr(s, 'directive_code', None), event_id=event)
     s.company.conn.execute(c.finance_charges.insert(), records)
     return Applied(output, touched, summary, audited=True)
+
+
+# The item is recorded before its charges, so newest-first reversal retires it last.
+from bookflow.company import batches as _batches
+_batches.register(_batches.Adapter('finance-charge-assessment', release_document_numbers=False,
+                                   ordering='strict', label='Finance-charge assessment'))
