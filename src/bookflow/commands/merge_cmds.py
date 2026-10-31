@@ -69,7 +69,7 @@ def _commands(kind: str):
                      f"{kind} is made inactive and hidden. People only, with a reason; `--dry-run` previews what "
                      f"moves and the balance after. The output names its batch; `batch reverse` previews and reverses the complete merge, or refuses every blocker. Native `{kind} unmerge` also remains available."),
         input_model=MergeInput, output_model=MergeOutput, writes={"company"}, positional=["merged", "into"],
-        accepts_idempotency_key=True, plan_in_write=True,
+        accepts_idempotency_key=True,
         error_codes=["E_RECORD_NOT_FOUND", "E_MERGE_REFUSED", "E_REASON_REQUIRED", "E_ACTIVE_DEPENDENTS",
                      "E_RECORD_IN_USE"])
 
@@ -98,7 +98,7 @@ def _commands(kind: str):
         description=(f"Undo a {kind} merge: the merged {kind} reads as itself again and is made active again if "
                      f"the merge made it inactive. Nothing posted changes. People only, with a reason."),
         input_model=UnmergeInput, output_model=UnmergeOutput, writes={"company"}, positional=["merged"],
-        accepts_idempotency_key=True, plan_in_write=True,
+        accepts_idempotency_key=True,
         error_codes=["E_RECORD_NOT_FOUND", "E_MERGE_REFUSED", "E_REASON_REQUIRED", "E_INACTIVE_REFERENCE"])
 
     @unmerge
@@ -119,6 +119,7 @@ def _commands(kind: str):
         touched = party_merges.apply_unmerge(s, ctx, planned, f"{kind} unmerge")
         return Applied(plan.preview, touched, f"unmerged {kind} {planned.merged['name']}", audited=True)
 
+    merge.plan_in_write = unmerge.plan_in_write = True
     return merge, unmerge
 
 
@@ -187,7 +188,7 @@ def _list_commands(kind: str):
                      f"`--dry-run` previews what moves, every reference re-pointed and any conflict. Undo with "
                      f"`batch reverse` using the output batch_id; it refuses if any reference would be kept. Native `{kind} unmerge` also remains available."),
         input_model=MergeInput, output_model=ListMergeOutput, writes={"company"}, positional=["merged", "into"],
-        accepts_idempotency_key=True, plan_in_write=True,
+        accepts_idempotency_key=True,
         error_codes=["E_RECORD_NOT_FOUND", "E_MERGE_REFUSED", "E_REASON_REQUIRED"])
 
     @merge
@@ -216,7 +217,7 @@ def _list_commands(kind: str):
                      f"merge made it inactive, and every reference the merge re-pointed is put back unless it has "
                      f"been changed since. Nothing posted changes. People only, with a reason."),
         input_model=UnmergeInput, output_model=ListUnmergeOutput, writes={"company"}, positional=["merged"],
-        accepts_idempotency_key=True, plan_in_write=True,
+        accepts_idempotency_key=True,
         error_codes=["E_RECORD_NOT_FOUND", "E_MERGE_REFUSED", "E_REASON_REQUIRED"])
 
     @unmerge
@@ -238,6 +239,7 @@ def _list_commands(kind: str):
         touched = list_merges.apply_unmerge(s, ctx, planned, f"{kind} unmerge")
         return Applied(plan.preview, touched, f"unmerged {kind} {planned.merged['full_name']}", audited=True)
 
+    merge.plan_in_write = unmerge.plan_in_write = True
     return merge, unmerge
 
 
