@@ -2784,3 +2784,29 @@ input = { record_type = "company_info", record_id = "${annotation_company.compan
 command = "attachment add"
 body_fixture = "new-suppliers-pasted.txt"
 input = { record_type = "company_info", record_id = "${annotation_company.company_id}", original_filename = "new-suppliers-pasted.txt", media_type = "text/plain", caption = "New suppliers, pasted from a spreadsheet, to import" }
+
+# R108: statement downloads to try through the bank inbox. The files retain their sample September 2026 dates.
+# No statement is imported by reset, so the initial inbox stays empty and the books stay unchanged.
+[[commands]]
+command = "vendor create"
+input = { name = "Shell" }
+
+[[commands]]
+command = "attachment add"
+body_fixture = "september-checking.ofx"
+input = { record_type = "company_info", record_id = "${annotation_company.company_id}", original_filename = "september-checking.ofx", media_type = "application/x-ofx", caption = "September 2026 Checking statement: six lines, including Shell fuel, a card payment and an unknown ACH" }
+
+[[commands]]
+command = "attachment add"
+body_fixture = "september-checking-overlap.ofx"
+input = { record_type = "company_info", record_id = "${annotation_company.company_id}", original_filename = "september-checking-overlap.ofx", media_type = "application/x-ofx", caption = "September 2026 Checking overlapping download: two lines repeat, one new Shell charge" }
+
+[[commands]]
+command = "attachment add"
+body_fixture = "september-card.ofx"
+input = { record_type = "company_info", record_id = "${annotation_company.company_id}", original_filename = "september-card.ofx", media_type = "application/x-ofx", caption = "September 2026 Business Credit Card statement: payment from Checking and Shell fuel" }
+
+[[commands]]
+command = "attachment add"
+body_fixture = "september-wrong-account.csv"
+input = { record_type = "company_info", record_id = "${annotation_company.company_id}", original_filename = "september-wrong-account.csv", media_type = "text/csv", caption = "Wrong-account exercise: Checking fees; import into Payment Example Bank to practice undo or move to Checking" }

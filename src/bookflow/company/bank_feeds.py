@@ -570,7 +570,10 @@ def prepare(s, ctx, inp, *, stored: dict | None = None, exclude_import: str | No
             r['state'], r['entry'] = 'waiting', None
             if result.status == 'matched':
                 r['suggest'] = [result.match]
-        r['reason'] = result.reason
+        # The shared matcher's next step belongs to reconciliation; inbox lines are sorted in place.
+        r['reason'] = result.reason.replace(
+            '; enter it, then import again',
+            '; review with bank-line query, then bank-line add with a known payee and category')
     for r in new:
         r.setdefault('state', 'waiting')
         r.setdefault('entry', None)

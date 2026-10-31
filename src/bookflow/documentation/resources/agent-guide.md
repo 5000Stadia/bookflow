@@ -64,6 +64,62 @@ first `reconcile start` on each account follows the old books' last reconciliati
 `report vendor-1099-summary` includes what was paid before the move-in. Never enter those items again
 by hand: they are already in, and entering them twice is the mistake the tie-out would show.
 
+## The bank inbox
+
+“Here's September's checking statement” starts with `bank-feed import`, for OFX, QFX or CSV.
+Find attached files with `attachment list company_info <company id>` (`company show` supplies the id).
+Pass the attachment id and the intended bank or card account. Preview with `--dry-run`; check the
+account, date span, warnings, new lines and overlap before the same call without `--dry-run`.
+Report those counts. Import history counts describe arrival outcomes; `bank-feed show` gives current
+`by_state` counts and line decisions. Overlapping downloads add only new lines; an exact file repeat refuses unless
+`again` is explicit. A possible duplicate stays waiting for a decision. An account mismatch is a
+reason to check with the owner, not to force confirmation. CSV mappings can be saved and reused.
+
+Sort with `bank-line query --state waiting`, paging with `limit` and `cursor`. Read each proposal
+and its reason: `bank-line match` links an existing entry without posting or clearing it;
+`bank-line add` posts with a known payee and category (or splits); `bank-line ignore` needs a real
+reason. Leave unclear lines waiting and report their ids and the missing information. Never guess
+a payee or category to empty the inbox. `bank-line unmatch` returns matches and ignored lines to
+waiting; an added entry must be taken back by its own delete/void or the import's reversal first.
+`bank-line deposit` banks selected Undeposited Funds receipts; `bank-line pay-bills` pays selected
+bills with the owner's payment method. Both require the selected total to equal the statement line,
+unless an explicit deposit adjustment explains the difference.
+
+“Is the card payment a transfer?”: inspect both accounts' lines and the proposed pair, then use
+`bank-line transfer` to link both ends to one transfer entry. A payment to the business's own card
+is not an expense. A unique pair may be accepted; competing candidates need a decision. A transfer
+entered before the other file arrives is matched when that other end comes in, without a second entry.
+
+“Always put Shell under Fuel”: create a `bank-rule` with payee contains SHELL, direction out and
+category Fuel, then `bank-rule apply --dry-run` to inspect affected waiting lines. Apply refreshes
+proposals; it never posts or ignores lines. Report the rule as proposal-only. Auto-add requires an
+explicit request and an actor with `automate.bank-rule` making it live through the exact-details
+fingerprint check. Import may run live rules and post entries in its batch; ordinary rules only
+propose. Lower priority numbers run first (written defaults to 100, learned to 1000); the first
+matching rule wins and decided lines
+are untouched. Learned suggestions can be accepted or declined.
+
+“Undo that import”: find it with `bank-feed query`/`show`, then `bank-feed reverse --dry-run`.
+Report blockers and what clears them. Pass the fingerprint to the real reversal; follow `next`
+until it is reversed. Undo hides its lines, removes matches and takes back entries it created,
+retaining history. A later live import blocks an older one; `through` also reverses those later
+imports, so do not use it without that scope being intended. A reconciliation copy can also block
+undo. For “wrong account”, preview the reversal but execute `bank-feed move --to <right account>`
+instead of reversing first. Preview the move too, use `reversal.fingerprint`, and follow `next`
+until its target import is returned. Created entries are taken back; target lines are sorted afresh
+and may need categorizing again. Move uses stored lines, so no file is needed. The correct
+account must come from the owner. Reversal may require the created entries' Delete grants.
+
+Reconciliation remains separate: `reconcile import --from-inbox` uses the inbox for the statement
+period, with the owner's statement date and ending balance, and runs the usual reconciliation
+matcher. Matching in the inbox does not certify a statement. As an agent, never post an adjustment
+to force a tie: leave the draft open and tell the owner the difference. A person may explicitly use
+`reconcile finish` with `adjustment={"reason": "..."}`; that input is refused for agents and MCP callers.
+
+“Connect my bank”: live bank connections are not available. `bank-feed-connection query` lists no
+production providers; use statement files. Do not ask for bank credentials. The connection commands
+are a prepared interface for a future provider, not a working live feed.
+
 ## Operator bootstrap
 
 Install the `bookflow-core` distribution first, or run from a source-checkout root containing `pyproject.toml` and the committed `uv.lock`. The block automatically uses an installed `bookflow` command when one is on `PATH`. Otherwise it creates and synchronizes a dedicated environment inside the disposable trial directory, then uses `uv run --frozen --no-sync`; the checkout's lockfile and shared environment remain unchanged. Every later command uses the selected array, so the rest of the instructions are identical in both environments.
@@ -1083,9 +1139,10 @@ whether to correct it; posting it anyway (`accept_differences`, the difference l
 owner's decision, and an agent needs the capability `opening.accept-differences` from its principal for it.
 "Undo the opening" is `opening-draft reverse --dry-run`, then `opening-draft reverse`; what blocks it is named.
 
-## Reading a bank statement from a file
+## Reconciling a bank statement from a file
 
-When the owner says the statement is in your input folder, attach the file once and import it by its
+For importing and sorting activity without starting a reconciliation, use the bank inbox chapter above.
+When reconciling, if the owner says the statement is in your input folder, attach the file once and import it by its
 attachment id; `reconcile import` itself takes no `transport.input_file`, and pasted text works too
 (`content`). The attachment is the same one you would give `cutover`:
 
@@ -1135,11 +1192,14 @@ canceled, kept with its history, and leaves the Overview and the owner's entries
 
 ## A reconciliation that will not tie
 
-Never force a statement to tie. `reconcile finish` with `adjustment` (a journal to
-Reconciliation Discrepancies for whatever is left) is for a person only and refuses an
-agent with `E_PERMISSION`. When the difference will not reach zero, leave the draft open
-and tell the owner the account, the statement date and the remaining difference from
-`reconcile preview`.
+Never force a statement to tie. `reconcile finish` accepts `adjustment={"reason": "..."}`
+only from a person; an agent, including a caller over MCP or acting on someone's behalf, is refused
+with `E_PERMISSION`. It posts the exact remaining difference as a journal dated the statement date
+to Reconciliation Discrepancies and certifies with that movement cleared. The caller chooses neither
+the amount nor the account; `--dry-run` previews it, and a statement that already ties posts nothing.
+When the difference will not reach zero, leave the draft open, record what you checked with
+`note add reconciliation_draft`, and tell the owner the account, statement date and remaining
+difference from `reconcile preview`.
 
 ## An item that should have been stocked
 
@@ -1575,8 +1635,9 @@ it and tell the owner what `company verify` reported: nothing you post fixes it.
 Never post, change or tick an entry just to make a reconciliation's difference zero. If a
 statement will not tie, stop: leave the draft open, add a note to it saying what you checked
 (`note add reconciliation_draft <draft id> --body "..."`), and tell the owner. The open draft,
-its difference and your note appear on the owner's Overview. `reconcile finish` has no
-adjustment input; a statement is certified only when its ticked movements tie.
+its difference and your note appear on the owner's Overview. A person may use `reconcile finish`
+with `adjustment={"reason": "..."}` to post the exact difference to Reconciliation Discrepancies
+and certify with that movement cleared; agents and MCP callers are refused with `E_PERMISSION`.
 
 The owner's `report entries-to-review` lists, from any command and any actor, entries dated
 into a reconciled statement period or a closed period but entered later, entries an agent

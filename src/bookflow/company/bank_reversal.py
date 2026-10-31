@@ -489,7 +489,7 @@ def _out(plans, chain, *, state, reversed_now=0, summary='', next_=None, fingerp
     return m.ReverseOutput(
         imports=tuple(i['id'] for i in chain), state=state,
         lines=sum(p['lines'] for p in plans), matches=sum(p['matches'] for p in plans),
-        entries=sum(p['entries'] for p in plans), reversed_now=reversed_now, remaining=len(steps),
+        entries=sum(p['entries'] for p in plans), reversed_now=reversed_now, remaining=0 if state == 'reversed' else len(steps),
         steps=tuple(steps[:batches.MAX_BLOCKERS]), blockers=tuple(_jsonable(b) for b in blockers[:batches.MAX_BLOCKERS]),
         total_blockers=len(blockers), fingerprint=fingerprint,
         reversal_batches=tuple(p['batch']['reversed_by'] for p in plans if p['batch'].get('reversed_by')),
@@ -716,12 +716,23 @@ def _move(s, ctx, imp: dict, inp, *, dry_run: bool) -> m.MoveOutput:
         raise files.invalid('import_id', 'the import holds no lines to move')
     target_inp = _target_input(inp, target['id'])
     command = f"bank-feed move {inp.import_id} --to {target['id']}"
+    # A preview's next call must retain account confirmation and matching choices too.
+    # Once begun these are also stored for resuming, but a dry run stores nothing.
+    if dry_run:
+        for field in (*_MOVE_FLAGS, 'limit'):
+            value = getattr(inp, field)
+            if value != m.MoveInput.model_fields[field].default:
+                option = field.replace('_', '-')
+                command += (f" --{'' if value else 'no-'}{option}" if isinstance(value, bool)
+                            else f' --{option} {value}')
     # Checked whole on every call, before anything (more) is reversed: the target refuses (account check, currency)
     # while the source still holds the lines.
     preview = bank_feeds.prepare(s, ctx, target_inp, stored=stored, exclude_import=imp['id'])
     if dry_run:
         reversal = reverse(s, ctx, inp, dry_run=True, command=command)['out']
-        return m.MoveOutput(reversal=reversal, target=bank_feeds.output(preview, dry_run=True), next=reversal.next)
+        target_preview = bank_feeds.output(preview, dry_run=True).model_copy(update={
+            'next': 'Target preview only; complete the move with ' + reversal.next})
+        return m.MoveOutput(reversal=reversal, target=target_preview, next=reversal.next)
 
     def reimport():
         prepared = bank_feeds.prepare(s, ctx, target_inp, stored=stored)

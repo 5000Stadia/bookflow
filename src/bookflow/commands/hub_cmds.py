@@ -47,7 +47,9 @@ migrate = lazy("bookflow.storage.migrate")
 
 VIA = lambda ctx: ctx.interface.value  # noqa: E731
 # Packaged files a demo seed command may send as its body (R107 increment 8 adds a messy customer file and a paste).
-DEMO_BODY_FIXTURES = frozenset(("example.pdf", "old-system-customers.csv", "new-suppliers-pasted.txt"))
+DEMO_BODY_FIXTURES = frozenset(("example.pdf", "old-system-customers.csv", "new-suppliers-pasted.txt",
+    "september-checking.ofx", "september-checking-overlap.ofx", "september-card.ofx",
+    "september-wrong-account.csv"))
 
 
 # ---------------------------------------------------------------- init

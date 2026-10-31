@@ -1224,3 +1224,108 @@ connection-permission and provider-boundary regressions. The cold-process regist
 module and the host before checking that no provider is installed. The requested regression suite and generated
 documentation checks are run after these corrections. Real providers and a live operating-system keyring backend
 remain unverified; provider and credential calls in this increment's tests use fakes.
+
+## As built: increment 9 and the closing trial
+
+- **Discovery and help.** Statement/download/OFX/QFX words find `bank-feed import`; categorizing and inbox
+  words find `bank-line`; wrong-account and bank-undo words find reverse/move; repeat-payee words find rules;
+  card payments find transfers; connection requests find the empty provider list. Ambiguous “undo that import”
+  offers both list and bank imports, with the existing list-import result first. Literal command prefixes retain
+  their meaning: `transfer post` now points inbox payments to `bank-line transfer`. MCP discovery names the bank
+  prefixes. Command help carries the essential inbox workflow, since the guide is not an MCP resource: preview
+  account/overlap, leave uncertain lines waiting, proposal-only rules, one transfer, reversal blockers and slices,
+  move without reversing first, and no live provider or request for credentials. Import-history counts are arrival
+  outcomes; `bank-feed show.by_state` and its lines describe current decisions.
+- **Guide and README.** A bank-inbox chapter covers attachments, import, sorting, details, transfers, rules,
+  undo/move and reconciliation. The file-reconciliation chapter is explicitly separate. `reconcile finish`
+  accepts `adjustment={"reason": "..."}` to post the exact difference and certify; this is a person-only act,
+  refused for agents and MCP callers, not an absent feature. The bank chapter and both stop-at-a-difference
+  sections state that distinction. README features and availability describe the inbox and unavailable live connections.
+  Command and guide documentation is regenerated. No command was added; no migration or permission layer changed.
+- **Demo.** Four company attachments, discoverable with `attachment list company_info <company id>`:
+  `september-checking.ofx` (six lines), `september-checking-overlap.ofx` (two repeats and one new line),
+  `september-card.ofx` (the other end of the payment plus a Shell purchase), and `september-wrong-account.csv`
+  (two Checking fees for the wrong-account exercise). Captions name the accounts and September 2026 dates.
+  Shell is a vendor. Reset keeps the inbox empty and the books unchanged; the closing trial imports the exercise
+  into Payment Example Bank and adds a fee there. Its demo is pinned to `2026-12-15` so the statement dates match
+  the seeded books. Fuel is created only in the trial setup; the normal chart retains Vehicle Expense.
+- **Corrections found by fresh agents.** An unmatched inbox line inherited “enter it, then import again” from
+  the reconciliation matcher. Inbox preparation now names `bank-line query`/`add`; the shared matcher and
+  reconciliation guidance are unchanged. Completed reverse/move results now report `remaining: 0`, retaining
+  their plan as history. A move preview's nested target continuation points to the move, and the dry-run
+  continuation retains nondefault account-confirmation, matching-window, auto-match and slice inputs. Once a
+  move begins, its existing stored flags still support plain resume commands. Help explains that a move takes
+  back created entries and sorts the target afresh, so those lines can wait again. Regressions exercise persisted
+  inbox guidance, completed and sliced reversals, and replay of the exact move continuation through the CLI.
+
+**Scale, recorded (criterion 11).** `tools/measure_bank.py import|reverse|move --workdir <scratch>` runs one isolated
+workload per process. Each measurement ran sequentially through `notes/bf-suite.sh --limit 90m` on this host's local
+filesystem, 2026-10-31. Setup is excluded; every scratch root is removed. The file workload starts with no bank
+entries, uses 5,000 new OFX lines, then reads a 100-row page. The HTML measurement is the first authenticated
+HTTP/TestClient GET of the real inbox page (100 cards and a next-page cursor), excluding login; its host is stopped.
+The reversal creates 200 actual checks through `bank-line add`, then cancels them in one `limit=200` slice; zero
+balances and an empty source inbox are asserted. The move uses 200 unposted lines and verifies all are waiting at
+the target. These are local command/server timings, not browser/network latency or a live-provider benchmark.
+
+| Operation | Seconds |
+|---|---:|
+| 5,000-line preview | 0.383 |
+| 5,000-line import | 1.671 |
+| 100-line inbox command page | 0.054 |
+| 100-line inbox HTML page | 0.705 |
+| 200-created-check reversal preview | 9.646 |
+| 200-created-check reversal | 34.014 |
+| 200-line move preview | 0.079 |
+| 200-line move | 0.247 |
+
+Peak RSS: 384 MB for import plus HTML host; 340 MB for reverse and move. Seeding the 200 checks took 22.578 s,
+excluded from reversal time. Completed reversal/move outputs also assert zero remaining steps. The default
+100-entry reversal slice is unchanged.
+
+**Closing trial** (`notes/trials/r108-trial/mcp-close/results.md`, private). Separate `codex exec` sessions
+started in new empty directories outside this worktree with user config/project documents and shell tools
+disabled. Each received only the six owner prompts and used Bookflow's three discoverable MCP tools; no repo,
+docs, CLI wrapper or previous transcript was supplied. The run-local stdio launcher connected to an isolated
+host using a token for a company member with role `standard`, `hub_admin: false`, and the explicit
+`transaction.check.delete` grant needed for the seeded wrong-account check. Audit rows verify `interface=mcp`
+and that member's identity. This supersedes the earlier CLI usability trial as closing evidence.
+
+The first launcher invocation was blocked by a Codex MCP approval default before any Bookflow command ran;
+the run-local server configuration was corrected and a new empty-directory session started. On the first
+actual MCP attempt, five of six business requests were correct. The Shell rule used exact payee equality and
+missed a future description with a suffix. Command help now explicitly says to use `contains SHELL` for this
+merchant-wide request and reserve `equals` for an exact-description request. A fresh complete rerun used
+another newly seeded scratch root, the corrected help and the same prompts; all six requests passed.
+The transcripts contain only agent messages and MCP calls (35 on the first actual run, 37 on the rerun).
+
+| Owner prompt | First MCP attempt | Help correction and fresh MCP rerun |
+|---|---|---|
+| September's checking statement | Correct: both files previewed/imported; six plus one new, two repeats; existing deposit matched | No help correction needed; correct on fresh rerun |
+| Wrong account | Correct: fingerprinted move takes back the check and moves both lines; move dry-run includes the reversal plan instead of a separate reverse dry-run | No help correction needed; correct on fresh rerun |
+| Sort the inbox and report the rest | Correct: Checking Shell purchases 110.00 to Fuel; unidentified fee payees/categories and ACH reported waiting | No help correction needed; correct on fresh rerun |
+| Always put Shell under Fuel | Incomplete: proposal-only rule was safe, but `equals SHELL` missed `SHELL FUTURE` | Explicit contains-versus-equals guidance added; fresh rerun creates `contains SHELL`, apply preview passes and a future-Shell probe proposes Fuel without posting |
+| Is the card payment a transfer? | Correct: one 500.00 transfer linked to both ends; card Shell purchase 25.00 to Fuel | No help correction needed; correct on fresh rerun |
+| Connect my bank | Correct: no provider or connection, no credentials requested | No help correction needed; correct on fresh rerun |
+
+**Owner-side inspection.** Both MCP runs' books balance with the same postings and inbox counts. Net changes in debit-minus-credit terms are
+Checking −610.00, Fuel +135.00 and Business Credit Card +475.00; the wrong account and Trial Fees return to
+baseline. Wrong-import lines remain in history but are hidden, the created check retains its deletion record,
+and two lines live in the target account. Both payment lines share one transfer entry. The inbox has 11 live
+lines: four added, one matched, two transfer ends and four waiting. The rule is active, draft, non-automation,
+`auto_add: false`; decided lines stay unchanged by apply preview. The future-Shell probe exposed the exact-match
+limitation on the first run. The rerun's future-Shell preview proposes the written rule without posting;
+apply preview leaves decided lines unchanged. Both scratch hosts were stopped, ports closed, tokens and data
+deleted. Private prompts, transcripts and owner-check receipts remain in the trial directory.
+
+**Verification.** The earlier closure regression run covered every `tests/test_bank_*.py`, including real Chrome at 1440 and 390;
+`test_phone_import_sort_and_undo` supplies the additional run starting at phone width, with screenshots retained
+in the private trial directory. It also covered the agent guide, every test file mentioning README, documentation
+metadata, registry/error matrix, the touched finder/import/transfer/demo surfaces, permission history and the
+unchanged reconciliation golden tests. Exact results are in the trial record. Real bank access and production
+providers remain unavailable and unverified; the closing trial uses the actual MCP surface. The MCP rerun
+reported a nonblocking discovery issue: a generic unmatched-line hint names `bank-line add` for a card payment;
+transfer help directed it correctly, and no incorrect posting resulted.
+
+The MCP closure correction ran the required locked suite (`test_agent_guide.py` and
+`test_docs_schema_metadata.py`): **8 passed, 2 warnings**, 73.01 s. `bookflow docs generate --check`
+passed for all 531 files. No test files changed. The pytest basetemp was deleted.

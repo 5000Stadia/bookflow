@@ -21,7 +21,8 @@ _ENDS = (
 
 DESCRIPTIONS = {
     'post': (
-        "Move money between two accounts the company already owns. `from_account` is credited"
+        "Move money between two accounts the company already owns. For a payment already in the bank inbox, use "
+        "`bank-line transfer` to link the statement lines to one transfer without duplicating it. `from_account` is credited"
         " and `to_account` is debited, which is the one rule that makes the signs come out right"
         " on both sides: a bank account the money leaves goes down, a bank account it arrives in"
         " goes up, and a credit card it is sent to has less owed on it." + _ENDS +

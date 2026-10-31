@@ -612,7 +612,7 @@ Example JSON output:
 
 ## `bank-feed-connection query`
 
-List account connections and available provider kinds (none in this build); never read a secret or contact a provider.
+List account connections and available provider kinds (none in this build); never read a secret or contact a provider. Live bank connections are not available yet; use bank-feed import with a statement file. Do not request bank credentials.
 
 | Contract | Value |
 |---|---|
