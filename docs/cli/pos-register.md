@@ -104,9 +104,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `receipt_message` | string \| null | yes | yes | — | — |
 | `count_shifts` | boolean | yes | no | — | — |
 | `decoder_order` | string \| null | yes | yes | — | — |
+| `warnings` | array[string] | no | no | [] | What needs attention: a record it points at that is no longer active, or no refund account yet. |
 | `changed` | boolean | no | no | true | — |
 | `created_walk_in_customer` | boolean | no | no | false | True when this call made the walk-in customer. |
-| `warnings` | array[string] | no | no | [] | — |
 
 Example JSON output:
 
@@ -255,6 +255,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].receipt_message` | string \| null | yes | yes | — | — |
 | `items[].count_shifts` | boolean | yes | no | — | — |
 | `items[].decoder_order` | string \| null | yes | yes | — | — |
+| `items[].warnings` | array[string] | no | no | [] | What needs attention: a record it points at that is no longer active, or no refund account yet. |
 
 Example JSON output:
 
@@ -373,6 +374,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `receipt_message` | string \| null | yes | yes | — | — |
 | `count_shifts` | boolean | yes | no | — | — |
 | `decoder_order` | string \| null | yes | yes | — | — |
+| `warnings` | array[string] | no | no | [] | What needs attention: a record it points at that is no longer active, or no refund account yet. |
 
 Example JSON output:
 
@@ -398,7 +400,8 @@ Example JSON output:
   "walk_in_customer": {
     "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "name": "value"
-  }
+  },
+  "warnings": []
 }
 ```
 
@@ -535,9 +538,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `receipt_message` | string \| null | yes | yes | — | — |
 | `count_shifts` | boolean | yes | no | — | — |
 | `decoder_order` | string \| null | yes | yes | — | — |
+| `warnings` | array[string] | no | no | [] | What needs attention: a record it points at that is no longer active, or no refund account yet. |
 | `changed` | boolean | no | no | true | — |
 | `created_walk_in_customer` | boolean | no | no | false | True when this call made the walk-in customer. |
-| `warnings` | array[string] | no | no | [] | — |
 
 Example JSON output:
 

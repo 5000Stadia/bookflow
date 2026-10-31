@@ -426,6 +426,7 @@ FIELDS = {
         'job_sales_rep_id': ('str', True, False, 'dependency_field'),
         'address_mode': ('str', False, False, 'dependency_field'),
         'contact_mode': ('str', False, False, 'dependency_field'),
+        'pos_walk_in': ('bool', False, False, 'outside_output'),
     },
     'deposit_cash_cells': {
         'id': ('str', False, True, 'immutable_image'),

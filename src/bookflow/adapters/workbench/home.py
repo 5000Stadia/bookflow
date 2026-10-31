@@ -1175,26 +1175,31 @@ def offered_menu(company_id: str, permits, rows=None) -> list[MenuGroup]:
     return [entry for entry in MENU if section_offers(company_id, entry, permits, rows)]
 
 
-# The POS layer's nouns: offered only while `pos_enabled` is on (design/point-of-sale.md §2).
-POS_NOUNS = frozenset(("pos", "pos-register", "pos-box", "pos-ticket"))
+def is_pos(command) -> bool:
+    """A command of the POS layer, offered only while `pos_enabled` is on (design/point-of-sale.md §2): one whose own
+    capability or a resource requirement is a pos.* capability, whatever its noun."""
+    from bookflow.hub.capabilities import pos_capability
+    return pos_capability(command) is not None
 
 
 POS_PAGE = "/pos"
 
 
-def pos_header_links(company_id: str, reader, menu: list[MenuGroup]) -> list[dict[str, str]] | None:
+def pos_header_links(company_id: str, reader, menu: list[MenuGroup], *, seller: bool = False
+                     ) -> list[dict[str, str]] | None:
     """A POS clerk's header (design/point-of-sale.md §9, as built in increment 4): when the Point of sale is open to
-    the reader and their only sections are Customers through that one entry and Items (looking items up), the
-    header is the minimal one with Point of sale and Items as its links, and the side menu goes. None otherwise:
-    every other reader's menu is exactly as before."""
+    the reader, or they are a seller of a company with POS off (``seller``), and their only sections are Customers
+    through that one entry and Items (looking items up), the header is the minimal one with Point of sale (when on)
+    and Items as its links, and the side menu goes. None otherwise: every other reader's menu is exactly as before."""
     command = registry.get("pos-register list")
-    if command is None or not reader(command) or not page_allowed(POS_PAGE, reader):
+    offered = command is not None and reader(command) and page_allowed(POS_PAGE, reader)
+    if not (offered or seller):
         return None
     pos_href = f"/c/{company_id}{POS_PAGE}"
     for entry in menu:
         if entry.slug == "items":
             continue
-        if entry.slug != "customers":
+        if entry.slug != "customers" or not offered:
             return None
         section = SECTION_BY_SLUG["customers"]
         records = registry.get(f"{section.records} query")
@@ -1203,10 +1208,10 @@ def pos_header_links(company_id: str, reader, menu: list[MenuGroup]) -> list[dic
         hrefs += [link["href"] for _, links in found["groups"] for link in links]
         if (records is not None and reader(records)) or hrefs != [pos_href]:
             return None
-    links = [dict(label="Point of sale", href=pos_href)]
+    links = [dict(label="Point of sale", href=pos_href)] if offered else []
     if any(entry.slug == "items" for entry in menu):
         links.append(dict(label="Items", href=f"/c/{company_id}/_group/items"))
-    return links
+    return links or None
 
 
 def features_offer(command, info: dict[str, Any]) -> bool:
@@ -1214,7 +1219,7 @@ def features_offer(command, info: dict[str, Any]) -> bool:
     on, and new estimates follow `estimates_enabled`. The workbench and `user home set` both ask this."""
     if command.name.startswith("pick-list ") and not info.get("pick_and_pack_enabled", False):
         return False
-    if command.name.split(" ")[0] in POS_NOUNS and not info.get("pos_enabled", False):
+    if not info.get("pos_enabled", False) and is_pos(command):
         return False  # the POS layer (R114 increment 4): no POS surface while it is off
     return bool(info.get("estimates_enabled", True)) or command.name not in ("estimate create", "estimate copy",
                                                                                "proposal estimate")

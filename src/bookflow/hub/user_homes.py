@@ -115,7 +115,8 @@ def permits_for(s, user_id: str, company: dict[str, Any], effective: Effective |
             return decided
         if best is None and not hub_admin:
             return False
-        return access.role_satisfies(best, "company", cmd.required_role, hub_admin)
+        from bookflow.company.pos_layer import legacy_required_role
+        return access.role_satisfies(best, "company", legacy_required_role(cmd), hub_admin)
     return permits
 
 

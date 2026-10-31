@@ -432,6 +432,9 @@ def plan_merge(db, kind: str, merged_selector: str, survivor_selector: str) -> M
     ids = dict(merged_id=merged["id"], survivor_id=target["id"])
     if merged["id"] == target["id"]:
         raise _refuse(f"an {kind} cannot be merged into itself", **ids)
+    if kind == "account":
+        from bookflow.company.pos_layer import refuse_if_used
+        refuse_if_used(db, "account", merged["id"], "merged away")
     existing = live_merge(db, kind, merged["id"])
     if existing is not None:
         if existing["survivor_id"] == target["id"]:

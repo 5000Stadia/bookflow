@@ -571,6 +571,7 @@ Every revision of one shipment: version, status, ship date, reason and who wrote
 | Kind | read |
 | Required role | member |
 | Capability | item |
+| Additional resources | customer: member |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/shipment.history` |
 | External binary body | none |
@@ -2595,6 +2596,7 @@ List shipments, newest first, by order, customer, status or date; `not_invoiced`
 | Kind | read |
 | Required role | member |
 | Capability | item |
+| Additional resources | customer: member |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/shipment.query` |
 | External binary body | none |
@@ -2913,6 +2915,7 @@ Show one shipment: the order and customer, ship date, site, each line with its p
 | Kind | read |
 | Required role | member |
 | Capability | item |
+| Additional resources | customer: member |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/shipment.show` |
 | External binary body | none |

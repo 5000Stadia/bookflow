@@ -207,13 +207,15 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0115 = importlib.import_module("bookflow.storage.company_migrations.versions.0115_item_pictures")
 
     def older(conn):
-        # Newest first: co0118 (on co0116): its guard, its table, then the switch column on company_info.
+        # Newest first: co0118 (on co0116): its guard, its table, then the switch column and the walk-in flag.
         for trigger in co0118.TRIGGERS:
             conn.execute(f"DROP TRIGGER {trigger}")
         for table in co0118.TABLES:
             conn.execute(f"DROP TABLE {table}")
         for column in co0118.COMPANY_COLUMNS:
             conn.execute(f"ALTER TABLE company_info DROP COLUMN {column}")
+        for column in co0118.CUSTOMER_COLUMNS:
+            conn.execute(f"ALTER TABLE customers DROP COLUMN {column}")
         # Then co0116 (on co0115): its guards, then its two tables (children first).
         for trigger in co0116.TRIGGERS:
             conn.execute(f"DROP TRIGGER {trigger}")

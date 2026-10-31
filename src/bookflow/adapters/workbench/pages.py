@@ -275,9 +275,7 @@ def _role_allows(cmd: registry.Command, record: dict[str, Any], *, hub_admin: bo
             return decided
     if hub_admin or record.get("access") == "hub_admin":
         return True
-    required = cmd.required_role
-    if cmd.capability in POS_SELLER_CAPABILITIES:
-        required = POS_LEGACY_SELLER_ROLE  # before activation the roles decide: a seller is standard (pos_layer)
+    required = legacy_required_role(cmd)  # before activation the roles decide: a POS seller is standard
     if required is None:
         return True
     if required == "hub_admin":
@@ -286,14 +284,13 @@ def _role_allows(cmd: registry.Command, record: dict[str, Any], *, hub_admin: bo
     return role in ROLE_RANK and ROLE_RANK[role] >= ROLE_FOR_REQUIRED[required]
 
 
-from bookflow.company.pos_layer import LEGACY_SELLER_ROLE as POS_LEGACY_SELLER_ROLE  # noqa: E402
-from bookflow.company.pos_layer import SELLER_CAPABILITIES as POS_SELLER_CAPABILITIES  # noqa: E402
+from bookflow.company.pos_layer import legacy_required_role  # noqa: E402
 
 
 def _feature_offers(cmd: registry.Command, info: dict[str, Any]) -> bool:
     """Whether the company's feature switches offer this command: picking (R181 K3) and the POS layer (R114) are off
     until turned on."""
-    if cmd.name.split(" ")[0] in Home.POS_NOUNS and not info.get("pos_enabled", False):
+    if not info.get("pos_enabled", False) and Home.is_pos(cmd):
         return False
     return bool(info.get("pick_and_pack_enabled", False)) or not cmd.name.startswith("pick-list ")
 
@@ -832,14 +829,17 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         reader = company_permits(request, company_view)
         menu = Home.offered_menu(company_view["company_id"], reader)
         # A POS clerk: the minimal header with Point of sale and Items as its links (R114 increment 4).
-        links = Home.pos_header_links(company_view["company_id"], reader, menu) if menu else None
+        cred = credential(request)
+        seller = not cred.hub_admin and _role_allows(registry.get("pos-register list"), company_view)
+        links = Home.pos_header_links(company_view["company_id"], reader, menu, seller=seller) if menu else None
         nav = dict(menu=[] if links else menu, minimal=not menu or bool(links), links=links or [],
                    users=reader.flag("users"), advanced=reader.flag("advanced"))
         request.state.navigation = (company_view["company_id"], nav)
         return nav
 
     Purchases.install_deletion(app, run=run, render=render, page_error=page_error)
-    FindPage.install(app, host=host, run=run, render=render, page_error=page_error)
+    FindPage.install(app, host=host, run=run, render=render, page_error=page_error,
+                     may=lambda request, show, name: company_permits(request, show)(registry.get(name)))
     from bookflow.adapters.workbench import setup_link_pages as SetupLinkPage
     SetupLinkPage.install(app, host=host, render=render, secure_cookies=secure_cookies)
     from bookflow.adapters.workbench import perf_page as PerfPage
@@ -1194,13 +1194,23 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             show = run(request, "company show", {}, company_id)
         except BookflowError as e:
             return page_error(request, e)
+        reader = company_permits(request, show)
+        if not reader.flag("advanced"):
+            # All commands is offered only with some company write (design/point-of-sale.md §9); typed directly it
+            # answers the refusal page, as a denied form does.
+            return page_error(request, BookflowError("E_PERMISSION", message=(
+                "All commands lists what you may do in this company, and you may not change anything here."),
+                details={"page": "_all"}), company_id=show["company_id"])
+        cid = show["company_id"]
+        rows = [(noun, [cmd for cmd in verbs if Home.page_open(cid, f"{noun}/{cmd.verb}", reader) is not False])
+                for noun, verbs in company_noun_rows(request, show)]
         return render(
             "index.html",
             request,
             company=show,
-            company_id=show["company_id"],
+            company_id=cid,
             page_title="All commands",
-            groups=_grouped_nouns(company_noun_rows(request, show), company=True),
+            groups=_grouped_nouns(rows, company=True),
         )
 
     @app.get("/c/{company_id}/_group/{slug}", response_class=HTMLResponse)
@@ -1811,7 +1821,12 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             audit = None
             if company_id and registry.get("audit list"):
                 rid = out.get("company_id", record_id) if noun == "company" else out.get("id", record_id)
-                audit = run(request, "audit list", {"record_type": meta["record_type"], "record_id": rid, "limit": 20}, company_id)["items"]
+                try:
+                    audit = run(request, "audit list", {"record_type": meta["record_type"], "record_id": rid, "limit": 20}, company_id)["items"]
+                except BookflowError as refused:
+                    if refused.code != "E_PERMISSION":
+                        raise
+                    audit = None  # a reader refused `audit` sees the record with no activity (R114 inc 4)
         except BookflowError as e:
             if noun in Work.DOCUMENTS and e.code == 'E_QUERY_STALE':
                 restart = request.url.path + '?' + urlencode([(k, v) for k, v in request.query_params.multi_items() if k != 'links_cursor'])

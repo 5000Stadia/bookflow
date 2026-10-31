@@ -81,3 +81,5 @@ pick_list_show = command('pick-list show', scope='company', description=_SHOW, i
 pick_list_query = command('pick-list query', scope='company', description=_QUERY, input_model=m.PickListQueryInput,
                           output_model=m.PickListPageOutput, required_role='member', capability='item',
                           error_codes=['E_RECORD_NOT_FOUND', 'E_VALIDATION', _OFF])(plan_pick_list_query)
+# A pick list names its orders' customers: reading one also needs `customer` (pos-v1).
+pick_list_show.resource_requirements = pick_list_query.resource_requirements = (('customer', 'member'),)

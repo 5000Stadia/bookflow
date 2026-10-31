@@ -67,7 +67,19 @@ def install(app, *, run, render, page_error):
             people = sorted({(row['username'], row['display_name']) for row in known.values()}, key=lambda x: x[1].lower())
         selected_name = next((row['display_name'] for row in rows if selected in (row['user_id'], row['username'])),
                              next((label for value, label in people if value == selected), selected))
+        ceiling = None
+        if values.get('applied_preset') and selected:
+            from bookflow.hub import pos_presets
+            for row in rows:
+                if row['scope_type'] == 'organization' and row['active'] and selected in (row['user_id'], row['username']):
+                    kept = pos_presets.kept_through(row['role'], row.get('grants') or (), values['applied_preset'])
+                    if kept:
+                        ceiling = (f"{row['display_name']} also has {Admin.ROLES.get(row['role'], row['role'])} access "
+                                   f"through the organization {row['scope_name']}, so after this preset they keep: "
+                                   f"{', '.join(kept)}. To make them a clerk here alone, change the organization "
+                                   "membership too.")
         return render('permissions.html',request,company_id=company_id,company_label=current['company_name'],
+            preset_ceiling=ceiling,
             admin=Admin, people=people, selected_name=selected_name,
             current=current,rows=rows,values=values,result=result,error=error,effective=effective,
             agents=agents,agent_admin=agent_admin,home=home,home_result=getattr(request.state,'home_result',None),
@@ -181,6 +193,8 @@ def install(app, *, run, render, page_error):
             if action not in ('preview','save','revoke'):
                 raise ValueError
             grants = [x for x in grants if not (x in ('ledger.post','ledger.read') and x in denies)]
+            if values.get('role') != 'readonly':
+                grants = [x for x in grants if not x.startswith('preset.')]  # off readonly: no longer a preset clerk
             denies = [x for x in denies if x not in [cap for cap,key in zip(CAPS,FIELDS) if values[key]]]
             if action != 'revoke':
                 raw.update(role=values['role'],grants=grants,denies=denies)

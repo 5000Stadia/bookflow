@@ -80,6 +80,13 @@ def require_seller(s) -> None:
                                                      'role': role})
 
 
+def legacy_required_role(cmd) -> str | None:
+    """The role a command needs before activation: a POS seller command needs standard (pos.sell's role defaults),
+    every other its own threshold. The pages, `user home set` and the commands all ask this."""
+    from bookflow.hub.capabilities import pos_capability
+    return LEGACY_SELLER_ROLE if pos_capability(cmd) in SELLER_CAPABILITIES else cmd.required_role
+
+
 def check_turning_off(s) -> None:
     """Turning POS off is refused (E_WORK_DEPENDENCY) while a ticket is held or a shift is open. Neither exists yet:
     held tickets arrive with increment 7 and shifts with increment 10, each adding its check here."""
@@ -96,6 +103,75 @@ def plan_setup_on(s, ctx) -> Plan | None:
 
 def write_setup(plan: Plan, ctx, s) -> list[Touched]:
     return _write(plan, ctx, s)
+
+
+# ---------------------------------------------------------------------------- what registers point at
+
+# (what is referenced, register column, JSON list?)
+_REFERENCES = {
+    'customer': (('walk_in_customer_id', False),),
+    'account': (('deposit_account_id', False), ('refund_account_id', False)),
+    'inventory_site': (('site_id', False),),
+    'payment-method': (('payment_method_ids', True),),
+}
+_LABELS = {'walk_in_customer_id': 'walk-in customer', 'deposit_account_id': 'deposit account',
+           'refund_account_id': 'refund account', 'site_id': 'inventory site', 'payment_method_ids': 'payment method'}
+
+
+def registers_using(db, kind: str, record_id: str) -> list[tuple[str, str]]:
+    """[(register name, what it uses the record as)] for every register pointing at the record."""
+    raw = db.conn
+    if raw.execute(sa.text("SELECT 1 FROM sqlite_schema WHERE name = 'pos_registers'")).first() is None:
+        return []
+    found = []
+    for row in raw.execute(sa.select(c.pos_registers)).mappings():
+        for column, many in _REFERENCES.get(kind, ()):
+            value = row[column]
+            if (record_id in json.loads(value)) if many and value else value == record_id:
+                found.append((row['name'], _LABELS[column]))
+    return found
+
+
+def refuse_if_used(db, kind: str, record_id: str, act: str) -> None:
+    """Deactivating or merging away a record a register points at is refused (E_RECORD_IN_USE), naming the register:
+    change the register first (`pos-register update`)."""
+    used = registers_using(db, kind, record_id)
+    if used:
+        names = '; '.join(f'register {name} uses it as its {what}' for name, what in used)
+        raise BookflowError('E_RECORD_IN_USE', message=(
+            f'This record cannot be {act}: {names}. Point the register at another one first '
+            f'(`pos-register update`).'), details={'record_type': kind.replace('-', '_'), 'record_id': record_id,
+                                                   'registers': [name for name, _ in used],
+                                                   'reason': 'pos_register_reference'})
+
+
+def refuse_walk_in_merge(db, merged, target) -> None:
+    if merged.get('pos_walk_in') or target.get('pos_walk_in'):
+        raise BookflowError('E_RECORD_IN_USE', message=(
+            "A point-of-sale walk-in customer is never merged: its sales are a register's sales with no customer."),
+            details={'record_type': 'customer', 'merged_id': merged['id'], 'survivor_id': target['id'],
+                     'reason': 'pos_walk_in'})
+
+
+def inactive_references(s, row) -> list[str]:
+    """What a register points at that is no longer active, in words, for `pos-register show`."""
+    out = []
+    checks = ((c.customers, row['walk_in_customer_id'], 'walk-in customer'), (c.accounts, row['deposit_account_id'],
+              'deposit account'), (c.accounts, row['refund_account_id'], 'refund account'),
+              (c.inventory_sites, row['site_id'], 'inventory site'))
+    for table, record_id, what in checks:
+        if record_id is None:
+            continue
+        found = s.company.conn.execute(sa.select(table.c.active).where(table.c.id == record_id)).first()
+        if found is not None and not found[0]:
+            out.append(f'its {what} is inactive')
+    ids = json.loads(row['payment_method_ids'])
+    if ids:
+        t = c.payment_methods
+        names = [r[0] for r in s.company.conn.execute(sa.select(t.c.name).where(t.c.id.in_(ids),
+                                                                             t.c.active.is_(False)))]
+        out += [f'payment method {name} is inactive' for name in names]
+    return out
 
 
 # ---------------------------------------------------------------------------- defaults and lookups
@@ -187,7 +263,15 @@ def output(s, row, *, cls=RegisterOutput, walk_in_name: str | None = None, **ext
                payment_methods=[PaymentMethodRef(id=i, name=found[i][1], kind=found[i][2]) for i in ids if i in found],
                walk_in_customer=walk_in, refund_account=_named(s, c.accounts, row['refund_account_id']),
                receipt_width=row['receipt_width'], receipt_message=row['receipt_message'],
-               count_shifts=bool(row['count_shifts']), decoder_order=row['decoder_order'], **extra)
+               count_shifts=bool(row['count_shifts']), decoder_order=row['decoder_order'],
+               warnings=_warnings(s, row), **extra)
+
+
+def _warnings(s, row) -> list[str]:
+    out = inactive_references(s, row)
+    if row['refund_account_id'] is None:
+        out.append('No bank account for cash refunds yet: set refund_account once the company has one.')
+    return out
 
 
 def resolve(s, selector) -> dict[str, Any]:
@@ -266,10 +350,8 @@ def _plan_create(s, ctx, inp) -> Plan:
                count_shifts=False, decoder_order=None)
     mutation = _apply_fields(s, ctx, inp, row)
     walk_in_name = mutation.after['name'] if mutation is not None else None
-    warnings = [] if row['refund_account_id'] else [
-        'No bank account for cash refunds yet: set refund_account once the company has one.']
     preview = output(s, row, cls=RegisterWriteOutput, walk_in_name=walk_in_name,
-                     created_walk_in_customer=mutation is not None, warnings=warnings)
+                     created_walk_in_customer=mutation is not None)
     return Plan(preview, dict(row=row, before=None, walk_in=mutation))
 
 
@@ -304,8 +386,12 @@ def _write(plan: Plan, ctx, s) -> list[Touched]:
     if mutation is not None:
         from bookflow.company import parties
         parties.persist_party_mutation(s.company, mutation)
+        # The walk-in customer a register makes carries the flag (never merged or edited in bulk; reports can group
+        # it), written in its own creating transaction, before anything else can read it.
+        s.company.conn.execute(c.customers.update().where(c.customers.c.id == str(mutation.after['id']))
+                               .values(pos_walk_in=True))
         touched.append(Touched('customer', str(mutation.after['id']), 'create', None, 1,
-                               dict(mutation.after_snapshot), db='company'))
+                               dict(mutation.after_snapshot, pos_walk_in=True), db='company'))
     t = c.pos_registers
     if before is None:
         s.company.conn.execute(t.insert().values(**row))

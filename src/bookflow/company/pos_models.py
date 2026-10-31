@@ -88,12 +88,13 @@ class RegisterOutput(_Strict):
     receipt_message: str | None
     count_shifts: bool
     decoder_order: str | None
+    warnings: list[str] = Field(default_factory=list, description=(
+        'What needs attention: a record it points at that is no longer active, or no refund account yet.'))
 
 
 class RegisterWriteOutput(RegisterOutput):
     changed: bool = True
     created_walk_in_customer: bool = Field(False, description='True when this call made the walk-in customer.')
-    warnings: list[str] = Field(default_factory=list)
 
 
 class RegisterPageOutput(_Strict):

@@ -287,13 +287,16 @@ def _item(inp, session):
         preferred_vendor=_label(schema.vendors, table.c.preferred_vendor_id))
     p.extra = {name: table.c[name] for name in ("price_minor_units", "price_currency", "price_fraction",
                                                 "cost_minor_units", "cost_currency", "cost_fraction")}
+    from bookflow.company.item_concealment import conceal, hidden
+    which = hidden(session)
+
     def transform(row):
         for field in ("price", "cost"):
             money = items._money_output(row, field)
             row[field] = None if money is None else money.model_dump()
         if "quantity_on_hand" in row:
             row["quantity_on_hand"] = format_quantity_micro_units(int(row["quantity_on_hand"]))
-        return row
+        return conceal(row, session, which=which)
     p.transform = transform
     return p
 

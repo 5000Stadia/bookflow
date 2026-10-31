@@ -467,6 +467,11 @@ def plan_company_update(inp: CompanyUpdateInput, ctx: Context, s: Session) -> Pl
         # Turning POS on the first time makes register Main and its walk-in customer (design/point-of-sale.md §2).
         from bookflow.company import pos_layer
         pos_setup = pos_layer.plan_setup_on(s, ctx)
+        if pos_setup is not None:
+            made = pos_setup.preview
+            warnings.append(f"Made register {made.name} and customer {made.walk_in_customer.name} (the walk-in "
+                            "customer a sale with no customer is recorded against).")
+            warnings.extend(made.warnings)
     preview = UpdateOutput(company_id=current["id"], warnings=warnings, **{k: v for k, v in meta.as_dict().items()})
     return Plan(preview=preview, data={"current": current, "new": new, "changed": sorted(changed), "meta": meta, "warnings": warnings,
                                        "pos_setup": pos_setup})

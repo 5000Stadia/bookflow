@@ -939,6 +939,7 @@ def plan_membership_grant(inp: MembershipGrantInput, ctx: Context, s: Session) -
     if activated(s):
         if inp.expected_version is None and (inp.grants is not None or inp.denies is not None):
             raise BookflowError('E_VALIDATION',message='Supply expected_version when changing grants or denies; use 0 for an absent membership.')
+        _require_known_capabilities(s, [*(inp.grants or ()), *(inp.denies or ())])
         intent = setup.membership_intent(user,scope,existing,inp.role,inp.grants,inp.denies,inp.expected_version)
         prepared = setup.edit(s,ctx,intent,preview=True)
         row = _prepared_membership_row(prepared, user, scope)
@@ -954,6 +955,22 @@ def plan_membership_grant(inp: MembershipGrantInput, ctx: Context, s: Session) -
                                "granted_at": now_iso(), "revoked_at": None}, user, scope, changed=changed)
     return Plan(preview=MembershipOutput(**preview.model_dump(), message=_grant_message(user, scope, inp.role, changed)),
                 data={"user": user, "scope": scope, "existing": existing, "role": inp.role})
+
+
+def _require_known_capabilities(s: Session, named) -> None:
+    """A capability this build knows but the root's activated rules do not (pos.sell before pos-v1 is activated) is
+    refused with the step that adds it, not as invalid input."""
+    from bookflow.hub import permission_runtime as runtime
+    from bookflow.hub.permission_access import UPGRADE_STEP
+    stored = {x.name for x in runtime.catalog_for_root(s.hub).descriptor.capabilities}
+    build = {x.name for x in runtime.current_catalog().CATALOG.capabilities}
+    newer = sorted(x for x in named if x not in stored and x in build)
+    if newer:
+        raise BookflowError("E_VALIDATION", message=(
+            f"{', '.join(newer)} {'is' if len(newer) == 1 else 'are'} not in this installation's permission rules yet: "
+            f"Bookflow was upgraded since they were last activated. {UPGRADE_STEP}"),
+            details={"fields": [{"field": "grants", "problem": "not in the activated permission rules"}],
+                     "capabilities": newer, "reason": "catalog_upgrade_required", "next_step": UPGRADE_STEP})
 
 
 def _grant_message(user: dict[str, Any], scope: Scope, role: str, changed: bool, denies=()) -> str:

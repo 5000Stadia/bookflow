@@ -805,6 +805,7 @@ List pick lists, newest first, by status, site or order.
 | Kind | read |
 | Required role | member |
 | Capability | item |
+| Additional resources | customer: member |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/pick-list.query` |
 | External binary body | none |
@@ -916,6 +917,7 @@ Show a pick list: each line with its bin, lot, serial numbers in the bin, to pic
 | Kind | read |
 | Required role | member |
 | Capability | item |
+| Additional resources | customer: member |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/pick-list.show` |
 | External binary body | none |

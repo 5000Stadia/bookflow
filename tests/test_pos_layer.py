@@ -29,6 +29,30 @@ CLERK_DENIES = ['account', 'activity', 'attachment', 'audit', 'automation', 'ban
                 'payment-method', 'price-level', 'profile', 'reports', 'sales-rep', 'sales-tax-code', 'ship-method',
                 'term', 'unit-of-measure', 'vendor', 'vendor-type']
 
+# Every company command the clerk is admitted to on the current catalog, pinned: a command a later change lets a clerk
+# reach fails here first. Shipments, their returns and pick lists name customers, so they need `customer` (pos-v1).
+CLERK_COMMANDS = ['accountant list', 'accountant-copy status', 'barcode lookup', 'bin list', 'bin show', 'company show',
+                  'cycle-class list', 'cycle-class show', 'cycle-count due', 'delivery-connection query',
+                  'delivery-connection show', 'inventory-count query', 'inventory-count sheet', 'inventory-count show',
+                  'inventory-site list', 'inventory-site show', 'inventory-transfer history', 'inventory-transfer query',
+                  'inventory-transfer show', 'item list', 'item picture get', 'item query', 'item query children',
+                  'item query options', 'item show', 'lot list', 'lot show', 'pos-register list', 'pos-register show',
+                  'serial-number list', 'serial-number show']
+
+
+def _admitted_commands(preset):
+    """The company commands a member with this preset is admitted to, from the live catalog alone."""
+    from bookflow.hub.permission_catalog import Requirement
+    catalog = runtime.current_catalog().CATALOG
+    defaults = {(d.role, d.requirement) for d in catalog.defaults}
+    grants, denies = set(preset["grants"]), set(preset["denies"])
+
+    def ok(r):
+        return (r.threshold in ("authenticated", "member") and r.capability not in denies
+                and ((preset["role"], r) in defaults or r.capability in grants))
+    return {c.name for c in catalog.commands if c.routed_scope == "company"
+            and all(ok(r) for r in (Requirement(c.capability, c.threshold), *c.resources))}
+
 
 def _password(name):
     return f"pw-{name}-12345678"
@@ -57,7 +81,7 @@ def test_off_by_default_then_main_and_its_walk_in_survive_off_and_on(hosted):
     for name, body in (("pos-register.list", {}), ("pos-register.show", {"pos_register": "Main"}),
                        ("pos-register.create", {"name": "Till 2"})):
         refused = hosted.call(name, body, company=cid, headers=REASON if name.endswith("create") else None)
-        assert refused.status_code in (400, 403, 409), refused.text
+        assert refused.status_code == 400, refused.text
         assert refused.json()["code"] == "E_FEATURE_DISABLED", refused.text
         assert refused.json()["details"] == {"feature": "pos", "setting": "pos_enabled",
                                              "enable_command": "company update"}
@@ -66,12 +90,17 @@ def test_off_by_default_then_main_and_its_walk_in_survive_off_and_on(hosted):
         assert f'href="/c/{cid}/pos"' not in owner.get(f"/c/{cid}{path}").text, path
     assert not [item["href"] for item in owner.get(f"/c/{cid}/_finder").json()["items"]
                 if re.search(r"/pos(-register)?(/|\?|$)", item["href"])]
-    assert owner.get(f"/c/{cid}/pos").status_code != 200
+    off = owner.get(f"/c/{cid}/pos")
+    assert off.status_code == 400 and "Point of sale is off for this company" in off.text
     refused = hosted.call("user.home.set", {"page": "pos", "company": cid}, headers=REASON)
     assert refused.json()["code"] == "E_VALIDATION", refused.text
 
-    # On: register Main with its defaults, and a walk-in customer made for it.
-    _pos(hosted, True)
+    # A customer already named Walk-in keeps its name: Main's walk-in becomes "Walk-in 2".
+    plain = hosted.ok("customer.create", {"name": "Walk-in"}, company=cid, headers=REASON)["id"]
+
+    # On: register Main with its defaults, and a walk-in customer made for it; the update says so.
+    turned = _pos(hosted, True)
+    assert any("Made register Main and customer Walk-in 2" in w for w in turned["warnings"]), turned
     (main,) = _registers(hosted)
     assert main["name"] == "Main" and main["receipt_width"] == 80 and main["count_shifts"] is False
     assert main["deposit_account"]["name"] == "Undeposited Funds"
@@ -79,7 +108,7 @@ def test_off_by_default_then_main_and_its_walk_in_survive_off_and_on(hosted):
     rank = {"cash": 0, "credit_card": 1, "debit_card": 1, "check": 2}
     assert kinds and kinds[0] == "cash" and kinds == sorted(kinds, key=rank.__getitem__)
     walk_in = hosted.ok("customer.show", {"customer": main["walk_in_customer"]["id"]}, company=cid)
-    assert walk_in["name"] == "Walk-in" == main["walk_in_customer"]["name"]
+    assert walk_in["name"] == "Walk-in 2" == main["walk_in_customer"]["name"]
     for path in ("/", "/_group/customers"):
         assert f'href="/c/{cid}/pos"' in owner.get(f"/c/{cid}{path}").text, path
     page = owner.get(f"/c/{cid}/pos")
@@ -111,7 +140,19 @@ def test_off_by_default_then_main_and_its_walk_in_survive_off_and_on(hosted):
     assert [r["id"] for r in _registers(hosted)] == sorted([main["id"], till["id"]],
                                                             key=lambda i: "front counter" if i == till["id"] else "main")
     names = [c["name"] for c in hosted.ok("customer.list", {"query": "Walk-in"}, company=cid)["items"]]
-    assert names.count("Walk-in") == 1 and names.count("Walk-in (Front counter)") == 1
+    assert sorted(names) == ["Walk-in", "Walk-in (Front counter)", "Walk-in 2"]
+
+    # What a register points at cannot be deactivated or merged away; the refusal names the register. The walk-in
+    # customer is never merged, and a bulk edit leaves it out.
+    for name, body in (("customer.deactivate", {"customer": main["walk_in_customer"]["id"]}),
+                       ("payment-method.deactivate", {"payment_method": main["payment_methods"][0]["id"]}),
+                       ("customer.merge", {"merged": plain, "into": main["walk_in_customer"]["id"]})):
+        blocked = hosted.call(name, body, company=cid, headers=REASON)
+        assert blocked.json()["code"] == "E_RECORD_IN_USE", (name, blocked.text)
+        assert "Main" in blocked.json()["message"] or blocked.json()["details"].get("reason") == "pos_walk_in", blocked.text
+    grid = hosted.ok("bulk-edit.grid", {"kind": "customer", "query": "Walk-in"}, company=cid)
+    assert plain in json.dumps(grid) and main["walk_in_customer"]["id"] not in json.dumps(grid)
+    assert till["walk_in_customer"]["id"] not in json.dumps(grid)
 
 
 def _clerk_effective(hosted, user):
@@ -126,9 +167,12 @@ def test_the_clerk_preset_holds_company_item_and_pos_sell_and_lands_on_the_pos(h
     _pos(hosted, True)
     # The preset on the live catalog: readonly, pos.sell, and the pinned denies.
     clerk = pos_presets.preset("pos-clerk")
-    assert clerk["role"] == "readonly" and clerk["grants"] == ["pos.sell"] and clerk["home"] == "pos"
+    assert clerk["role"] == "readonly" and clerk["grants"] == ["pos.sell", "preset.pos-clerk"]
+    assert clerk["home"] == "pos"
     assert clerk["denies"] == CLERK_DENIES
-    assert pos_presets.preset("pos-clerk-returns")["grants"] == ["pos.sell", "pos.void", "pos.refund"]
+    assert pos_presets.preset("pos-clerk-returns")["grants"] == ["pos.sell", "pos.void", "pos.refund",
+                                                                 "preset.pos-clerk-returns"]
+    assert sorted(_admitted_commands(clerk)) == CLERK_COMMANDS
 
     user = hosted.ok("user.add", {"username": "till", "password": _password("till"), "company": cid,
                                   "role": "readonly"}, headers=REASON)["user_id"]
@@ -143,7 +187,7 @@ def test_the_clerk_preset_holds_company_item_and_pos_sell_and_lands_on_the_pos(h
     assert filled.status_code == 200 and "data-applied-preset" in filled.text, filled.text[-2000:]
     grants = re.search(r'name="other_grants" value="([^"]*)"', filled.text).group(1).replace("&#34;", '"')
     denies = re.search(r'name="other_denies" value="([^"]*)"', filled.text).group(1).replace("&#34;", '"')
-    assert json.loads(grants) == ["pos.sell"] and "ledger.read" not in json.loads(denies)
+    assert json.loads(grants) == ["pos.sell", "preset.pos-clerk"] and "ledger.read" not in json.loads(denies)
     assert 'name="allow_read" checked' not in filled.text
     saved = owner.post(f"/c/{cid}/users", headers=H, data={
         "user": "till", "expected_version": str(_membership_version(hosted, user)), "role": "readonly",
@@ -168,15 +212,42 @@ def test_the_clerk_preset_holds_company_item_and_pos_sell_and_lands_on_the_pos(h
     assert fresh.get(f"/c/{cid}/_group/items").status_code == 200
     assert fresh.get("/").headers["location"] == f"/c/{cid}/pos"
     # The books are refused: a form, a report URL, and the commands over HTTP (the CLI's remote route) and MCP.
-    for path in ("/invoice/new", "/invoice/post", "/report/profit-and-loss", "/customer", "/"):
-        status = fresh.get(f"/c/{cid}{path}").status_code
-        assert status in (403, 404) if path != "/" else status == 200, (path, status)
+    # Each page exists (the owner opens it) and the clerk is refused it: refused, not missing.
+    # /invoice/new is not a page (the invoice form is /invoice/post): the owner is told so, while the clerk is refused
+    # the invoice noun before anything is looked up.
+    assert owner.get(f"/c/{cid}/invoice/new").status_code == 404
+    assert fresh.get(f"/c/{cid}/invoice/new").status_code == 403
+    for path in ("/invoice/post", "/report/profit-and-loss", "/customer", "/shipments",
+                 "/_all", "/find"):
+        assert owner.get(f"/c/{cid}{path}").status_code == 200, path
+        assert fresh.get(f"/c/{cid}{path}").status_code == 403, path
+    assert fresh.get(f"/c/{cid}/").status_code == 200
+    # Items: the item page opens with no activity panel, and its costs and vendors are not shown on any surface.
+    item = next(i for i in hosted.ok("item.list", {}, company=cid)["items"]
+                if i["type"] == "inventory_part" and i["cost"] and i["preferred_vendor_id"])
+    record = fresh.get(f"/c/{cid}/item/{item['id']}")
+    assert record.status_code == 200, record.text[-1500:]
+    seen = fresh.post(f"/companies/{cid}/commands/item.show", headers=H, json={"item": item["id"]}).json()
+    assert seen["name"] == item["name"] and seen["price"] == item["price"]
+    assert seen["cost"] is None and seen["average_cost"] is None and seen["inventory_value"] is None
+    assert seen["preferred_vendor_id"] is None and seen["vendor_profiles"] == []
+    queried = fresh.post(f"/companies/{cid}/commands/item.query", headers=H,
+                         json={"columns": ["full_name", "cost", "preferred_vendor"], "query": item["name"]}).json()
+    row = next(r for r in queried["items"] if r["id"] == item["id"])
+    assert row.get("cost") is None and row.get("preferred_vendor") is None, row
+    items_page = fresh.get(f"/c/{cid}/_group/items").text
+    assert f'href="/c/{cid}/shipments"' not in items_page and f'href="/c/{cid}/inventory/pick-lists"' not in items_page
     for name, body in (("invoice.post", {"customer": "Walk-in", "lines": [{"item": "Labor", "quantity": "1"}]}),
                        ("report.profit-and-loss", {"date_from": "2026-01-01", "date_to": "2026-12-31"}),
                        ("customer.list", {})):
         refused = fresh.post(f"/companies/{cid}/commands/{name}", headers=H, json=body)
         assert refused.status_code == 403 and refused.json()["code"] == "E_PERMISSION", (name, refused.text)
     assert fresh.post(f"/companies/{cid}/commands/pos-register.list", headers=H, json={}).status_code == 200
+    # POS off: the seller keeps the minimal header, now with Items alone.
+    _pos(hosted, False)
+    off = fresh.get(f"/c/{cid}/_group/items")
+    assert "app-header-minimal" in off.text and re.findall(r'data-header-link>([^<]+)<', off.text) == ["Items"]
+    _pos(hosted, True)
     secret = fresh.post("/commands/token.issue", headers={**H, **REASON}, json={"label": "till-mcp"}).json()["secret"]
 
     async def over_mcp():
@@ -222,11 +293,106 @@ def test_an_agent_holds_no_pos_capability_until_its_principal_grants_it(hosted):
     assert layout.status_code == 403 and layout.json()["details"]["capability"] == "pos.layout", layout.text
 
 
-@pytest.mark.parametrize("missing", ["pos-register list"])
-def test_every_pos_command_names_its_pos_capability(missing):
+def test_every_pos_command_names_its_pos_capability():
     from bookflow.core import registry
     from bookflow.hub import permission_pos_catalog as layer
     registry.load_all()
     named = {c.name: (c.capability, c.required_role) for c in registry.all_commands() if c.name.startswith("pos")}
     assert named == {name: (cap, threshold) for name, cap, threshold, _ in layer._ADDED}
-    assert missing in named
+    # The POS layer is decided by capability, not noun: the gate and the switch find each command by its capability.
+    from bookflow.adapters.workbench import home as Home
+    from bookflow.hub import capabilities
+    assert all(capabilities.capability_for(name) == cap for name, (cap, _) in named.items())
+    assert all(Home.is_pos(registry.get(name)) for name in named) and not Home.is_pos(registry.get("item show"))
+    # The shipment, return and pick-list reads need `customer` too.
+    for name in layer.CUSTOMER_NAMING_READS:
+        assert ("customer", "member") in registry.get(name).resource_requirements, name
+
+
+def test_new_capabilities_a_later_catalog_gives_readonly_are_found():
+    """A layer giving `readonly` a new company capability (here a made-up `widget`, read by a company action) is what
+    `permission activate` extends a preset clerk's denies with; nothing else is."""
+    from dataclasses import replace
+    from bookflow.hub import permission_catalog as c
+    old = runtime.current_catalog().CATALOG
+    widget = c.Requirement("widget", "member")
+    new = replace(old, capabilities=(*old.capabilities, c.CapabilitySpec("widget", ("member",), ("member",))),
+                  defaults=(*old.defaults, c.DefaultEntry("readonly", widget)),
+                  company_actions=(*old.company_actions, c.CompanyAction("widget show", (widget,), True, ())))
+    assert pos_presets.new_capabilities(old, new) == {"widget"}
+    assert pos_presets.new_capabilities(old, old) == set()
+
+
+def test_permission_activate_keeps_a_preset_clerk_narrow(hosted, monkeypatch):
+    cid = hosted.company_id
+    _pos(hosted, True)
+    clerk = pos_presets.preset("pos-clerk")
+    user = hosted.ok("user.add", {"username": "till", "password": _password("till"), "company": cid,
+                                  "role": "readonly"}, headers=REASON)["user_id"]
+    # As if `vendor` were new to `readonly` in the catalog being activated: the clerk saved before it lacks the deny.
+    hosted.ok("membership.grant", {"user": user, "company": cid, "role": "readonly", "grants": clerk["grants"],
+                                   "denies": [d for d in clerk["denies"] if d != "vendor"],
+                                   "expected_version": _membership_version(hosted, user)}, headers=REASON)
+    hosted.ok("user.add", {"username": "plain", "password": _password("plain"), "company": cid, "role": "readonly"},
+              headers=REASON)
+    monkeypatch.setattr(pos_presets, "new_capabilities", lambda old, new: {"vendor"})
+    state = hosted.ok("permission.show", {})
+    body = {"expected_generation": state["generation"], "expected_catalog_sha256": state["catalog_sha256"]}
+    activated = hosted.ok("permission.activate", body, headers=REASON)
+    assert activated["presets_extended"] == [{"user": "till", "scope_type": "company", "scope_id": cid,
+                                              "preset": "pos-clerk", "added": ["vendor"]}], activated
+    effective = hosted.ok("membership.effective", {"company": cid, "user": user})
+    assert not any(p["admitted"] for p in effective["permissions"] if p["requirement"]["capability"] == "vendor")
+    # The plain readonly member, made from no preset, is untouched.
+    plain = hosted.ok("membership.effective", {"company": cid, "user": "plain"})
+    assert any(p["admitted"] for p in plain["permissions"] if p["requirement"]["capability"] == "vendor")
+
+
+def test_a_root_activated_before_pos_v1_says_to_activate(root, monkeypatch):
+    """On a root whose permission rules predate pos-v1, POS answers a clear refusal naming `permission activate`, on
+    the commands, the POS page and `membership grant --grants pos.sell`; activating fixes it."""
+    import socket
+
+    import bookflow
+    from bookflow.commands.host_cmds import start_serving
+    from bookflow.core.config import os_login
+    from bookflow.core.context import client_version
+    from bookflow.hub import permission_catalog as c
+    from tests.conftest import make_legacy
+    from tests.test_row3_host import Hosted
+    make_legacy(root)
+    lib = bookflow.connect(data_root=str(root))
+    with monkeypatch.context() as previous_build:
+        previous_build.setattr(runtime, "current_catalog", lambda: runtime.known_catalog(c.AUTOMATION_POLICY_VERSION))
+        state = lib.permission.show()
+        lib.permission.activate(expected_generation=state["generation"], expected_catalog_sha256=state["catalog_sha256"])
+    company = lib.company.list()["items"][0]["company_id"]
+    login = os_login()
+    lib.run("user set-password", {"username": login, "password": PASSWORD})
+    issued = lib.token.issue(label="installer")
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    handle = start_serving(root, client_version(), bind=f"127.0.0.1:{port}", secure_cookies=False)
+    try:
+        old = Hosted(handle, root, login, company, issued, "", {})
+        old.ok("company.update", {"pos_enabled": True, "expected_version": old.info()["info_version"]},
+               company=company, headers=REASON)
+        refused = old.call("pos-register.list", {}, company=company)
+        assert refused.status_code == 403 and refused.json()["details"]["reason"] == "catalog_upgrade_required"
+        assert "permission activate" in refused.json()["message"], refused.text
+        page = _login(old, login, PASSWORD).get(f"/c/{company}/pos")
+        assert page.status_code == 403 and "permission activate" in page.text
+        added = old.ok("user.add", {"username": "cashier", "password": _password("cashier"), "company": company,
+                                    "role": "readonly"}, headers=REASON)["user_id"]
+        granted = old.call("membership.grant", {"user": added, "company": company, "role": "readonly",
+                                                "grants": ["pos.sell"],
+                                                "expected_version": _membership_version(old, added)}, headers=REASON)
+        assert granted.json()["details"].get("reason") == "catalog_upgrade_required", granted.text
+        assert "permission activate" in granted.json()["message"]
+        state = old.ok("permission.show", {})
+        old.ok("permission.activate", {"expected_generation": state["generation"],
+                                       "expected_catalog_sha256": state["catalog_sha256"]}, headers=REASON)
+        assert old.ok("pos-register.list", {}, company=company)["items"][0]["name"] == "Main"
+    finally:
+        handle.stop()

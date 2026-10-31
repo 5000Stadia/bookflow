@@ -19,6 +19,12 @@ def company_info_column(C):
              'receipts; off by default.', nullable=False, server_default='0')
 
 
+def customers_column(C):
+    return C('pos_walk_in', sa.Boolean, "Point of sale: this customer is (or was) a register's walk-in customer, the "
+             'one a sale with no customer is recorded against; never merged or edited in bulk.', nullable=False,
+             server_default='0')
+
+
 def define_tables(metadata, C, T, common):
     registers = T('pos_registers',
         *common(),

@@ -1,6 +1,6 @@
 """co0118. The POS layer (R114 increment 4, design/point-of-sale.md §2).
 
-``company_info.pos_enabled`` (off) and one new table, ``pos_registers`` (a till's fixed facts: site, deposit account,
+``company_info.pos_enabled`` (off), ``customers.pos_walk_in`` (false: a register's walk-in customer) and one new table, ``pos_registers`` (a till's fixed facts: site, deposit account,
 payment methods, walk-in customer, refund account, receipt width and message, shift counting, decoder order), moving
 no stored row. Guard: a register is never deleted. DDL below is frozen: this migration never imports current
 application metadata.
@@ -17,7 +17,8 @@ INDEXES = ()
 GUARDS = ("CREATE TRIGGER pos_registers_no_delete BEFORE DELETE ON pos_registers BEGIN SELECT RAISE(ABORT, 'a register is never deleted'); END",)
 TABLES = ('pos_registers',)
 COMPANY_COLUMNS = ('pos_enabled',)
-# What a test rewinding this head drops: the guards, then the table, then the column.
+CUSTOMER_COLUMNS = ('pos_walk_in',)
+# What a test rewinding this head drops: the guards, then the table, then the columns.
 TRIGGERS = tuple(statement.split()[2] for statement in GUARDS)
 
 
@@ -28,6 +29,7 @@ def upgrade():
     if {name.casefold() for name in reserved} & existing:
         raise RuntimeError('co0118 reserved object already exists')
     op.add_column('company_info', sa.Column('pos_enabled', sa.Boolean, nullable=False, server_default='0'))
+    op.add_column('customers', sa.Column('pos_walk_in', sa.Boolean, nullable=False, server_default='0'))
     for statement in DDL + INDEXES + GUARDS:
         connection.exec_driver_sql(statement)
 

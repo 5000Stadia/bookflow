@@ -33,12 +33,21 @@ from .permission_pos_catalog import CAPABILITIES as _POS  # noqa: E402
 POS = frozenset(_POS)
 
 
+def pos_capability(cmd) -> str | None:
+    """The POS capability a registered command needs (its own, else a resource requirement), or None: decided by the
+    capability, never the name, so a POS report under another noun (`report pos-day`) is gated and hidden too."""
+    if cmd is None:
+        return None
+    if cmd.capability in POS:
+        return cmd.capability
+    return next((capability for capability, _ in cmd.resource_requirements if capability in POS), None)
+
+
 def capability_for(command: str) -> str | None:
     found = COMMAND_CAPABILITY.get(command)
-    if found is None and command.startswith('pos'):
+    if found is None:
         from bookflow.core import registry
-        cmd = registry.get(command)
-        found = cmd.capability if cmd is not None and cmd.capability in POS else None
+        found = pos_capability(registry.get(command))
     return found
 
 

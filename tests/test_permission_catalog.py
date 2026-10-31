@@ -128,7 +128,12 @@ RESOURCE_PAIRS = {
         ('membership.grant', 'admin'), ('delivery.send', 'standard'), ('delivery.mark-sent', 'standard'),
         ('delivery.connect', 'admin'), ('automate.delivery', 'standard'),
         # automation-v1: the two kinds with no command of their own yet.
-        ('automate.bank-rule', 'standard'), ('automate.invoice', 'standard')},
+        ('automate.bank-rule', 'standard'), ('automate.invoice', 'standard'),
+        # pos-v1: an agent holds a POS capability only by its own grant.
+        ('pos.sell', 'member'), ('pos.void', 'member'), ('pos.refund', 'member'), ('pos.price-override', 'member'),
+        ('pos.layout', 'admin')},
+    # pos-v1: an item read shows costs only with the books, and vendors only with the vendor list.
+    'item_concealment.holds': {('ledger.read', 'member'), ('vendor', 'member')},
     # automation-v1: a rule is read or paused only by a caller its kind's own show and update admit.
     'automation.require_command': {('customer', 'member'), ('customer', 'standard'), ('customer-work', 'member'),
                                    ('ledger.read', 'member')},
