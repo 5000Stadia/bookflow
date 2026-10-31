@@ -81,7 +81,9 @@ after one check, and refuses plainly when a payment has since been applied.
   `reversible-batch-v1` is a new permission layer on `pos-layout-v1`; accepted layers are unchanged. Help and the agent
   guide mark reversal confirm-first unless the principal plainly named the act, and explain irreversible outputs.
 - Invoice post and retry each create a separate shared batch linked by `source_type=invoice_batch` and `source_id`
-  to their invoice run. Each successful invoice's effect is inside `_write_one`'s savepoint. The existing output
+  to their invoice run. Each successful invoice's effect is inside `_write_one`'s savepoint.
+  Tracked stock uses the ordinary sales writer, including validation and stock settlement inside that savepoint;
+  the effect references the invoice creation audit event. The existing output
   `batch_id` still names the invoice run; `reversal_batch_id` names the shared batch. Show/query expose that link too.
 - Bill pay records each created payment inside its payment transaction and returns `batch_id`. Pending print runs,
   already printed checks and finished reconciliations block reversal with their identities. Later settlement edits
