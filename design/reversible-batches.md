@@ -156,3 +156,7 @@ demo-reset or checkpoint behavior in this increment. A separate reference-year p
   retain native unmerge semantics. An edit followed by an undo can still block when versions differ or native
   unmerge would keep a reference. This avoids overwriting later decisions. Existing vendor open-payable and
   inventory stock-history merge restrictions remain; batch reversal does not broaden which entries can merge.
+- Regression witnesses cover hand-worked A/R, A/P and account balances, item stock and valuation, exact editable
+  reference restoration and preview, simultaneous blockers, transaction rollback, missing inverse and read grants,
+  original posted and unposted document changes, and interruption after the durable inverse. The schema's global
+  name uniqueness already refuses a survivor rename into the merged name; that refusal is checked separately.
