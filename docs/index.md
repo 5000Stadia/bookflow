@@ -25,6 +25,7 @@ An AI agent installing Bookflow for someone starts with the agent install page: 
 - [`assembly`](cli/assembly.md)
 - [`attachment`](cli/attachment.md)
 - [`audit`](cli/audit.md)
+- [`automation`](cli/automation.md)
 - [`backup`](cli/backup.md)
 - [`bank-feed`](cli/bank-feed.md)
 - [`bank-line`](cli/bank-line.md)

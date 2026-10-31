@@ -263,3 +263,110 @@ asks for those specifics and never fills them in by guessing. The agent guide sa
   (increment 3) counts a holder's go. A person's deny of a new capability does not yet bind that person's own commands
   (it binds their agents); memorized entries still exclude every former people-only act; `agent show`/`list` stay
   installation-administrator reads.
+
+## As built: increment 2 (automation) (2026-10-28)
+
+- **Layer `automation-v1`** on `user-home-v1` (`hub/permission_automation_catalog.py`, 853 commands, descriptor
+  `4df1e05f`; re-chained from `bulk-edit-v1` as main brought `bank-line-details-v1` and then `user-home-v1`). It registers `automate.bank-rule` and `automate.invoice` (held by a person at standard, as
+  `automate.delivery` from increment 1 is; by an agent only by grant), and `automation list`, `show` (member) and
+  `pause` (standard) under a new capability `automation` (member and standard, as list reads and writes). Each rule is
+  then checked against its own kind's commands (`company/automation.require_command`: the kind's `show` to read it, its
+  `update` to pause it), so `automation` grants nothing; `automation list` leaves out the kinds the caller cannot read.
+  The capability gate's declared requirements grow by the two capabilities. No existing capability, default or
+  threshold changes; no migration (company or hub).
+- **One module, no shared table** (`company/automation.py`). A kind registers a `Kind` (where its rules live, how one is
+  viewed and paused, and for a timed kind `due`, `act`, a once-per-slot `claim` and its failure count). The model is
+  `require_establish` (making live), `on_edit`, `firing_check`, `source_ref`/`render` (the citation), and `fire`,
+  `effect` and `tick` (timed kinds on the host's tick, after delivery schedules; a no-op while no kind is timed).
+  `columns()` gives the standard columns (`state`, `established_by`, `established_for`, `established_epoch`,
+  `established_at`, `paused_reason`, `paused_at`, `draft_reason`, `fired_slot`, `failed_firings`) and `table_kind` a
+  `Kind` over a table carrying them.
+- **Who holds `automate.<kind>`** (`automation.lost`, the establisher test asked at making live and at every firing):
+  a person who is active, has a live membership covering the company at the threshold, is not denied the capability
+  there, and is admitted by the activated policy; an agent that is active, unsuspended, still bound to the principal it
+  established for (`established_for`) at the authority epoch it had then (`established_epoch`, recorded at
+  establishment and compared at each firing, as R111 records `authority_epoch` for memorized entries: any suspension
+  since, which moves the epoch, pauses the rule until it is made live again), explicitly granted the capability with
+  no deny, admitted with that principal by the policy, and whose principal holds it as a person.
+- **Authority that cannot be settled now never pauses a rule** (`automation.Unsettled`). A transient failure reading
+  the policy skips the firing (a timed rule: `skipped`; a delivery run: nothing drafted this tick, the run goes on
+  next time) and refuses a command with `E_DB_BUSY`. On a root whose stored catalog predates the capability (activated
+  before capabilities-v1 or this layer), a person is decided by the membership test alone, as their role decided
+  before, so no person gains or loses anything; an agent cannot make a rule live there (`reason:
+  catalog_upgrade_required`, "upgrade it (permission activate)") and an existing agent-established rule is skipped,
+  not paused.
+- **Decided: a person's deny of `automate.<kind>` binds that person too.** Increment 1 made a person's deny of a
+  capabilities-v1 act bind only their agents. Establishing is the exception: a principal who wants a standard person to
+  stop running unattended email denies `automate.delivery`, and that person can no longer make one live, and their
+  live schedules pause at the next firing. `membership grant` says so; it also says that a deny of `delivery.send`
+  binds the person (`go_lost` withdraws their go), which increment 1's note had wrong.
+- **Edits.** An operative edit of a live rule by a holder keeps it live under the editor; by anyone else it returns it
+  to draft; a paused rule edited by a holder stays paused. A kind may need a holder to confirm the changed rule's
+  check (`Kind.edit_needs_confirm`, `on_edit(confirmed=)`): delivery does (the fingerprint), and R108's auto-add can,
+  for a broad lasting change. Resuming a stopped live delivery schedule is making it live: a holder with a go resumes
+  it under them; anyone else's resume brings it back as a draft (its open run's go dropped). Pausing stays open to
+  any editor.
+- **Citing the rule.** An automation's writes carry `source_ref = automation:<kind>:<rule id>:<establisher>:<name>`
+  (the rule's name when it wrote, percent-encoded; a rule acting on a line appends `;<inner ref>`, for R108's
+  `bank-line:<id>`). Decided: the name at write time is in the citation, so a later rename does not rewrite past
+  events. `audit list`, `tail` and `show` render it as `on_rule` (kind, rule id, name, establisher and their name,
+  `text`: "On rule: Daily invoices, established by clerk") only for a system-interface event whose actor is the cited
+  establisher; any other interface passing a source reference with the `automation:` prefix is refused
+  (`dispatch.validate_context`, `E_VALIDATION` on `source_ref`). No audit schema change.
+- **`would_pause`** (on `automation list` and `show`) names another user's missing authority only to that user, an
+  installation administrator, or a holder of `membership.grant`; any other reader sees "its establisher no longer
+  holds the authority".
+- **Batches.** The `automation` batch adapter is registered when the module loads. A timed rule's first effect opens
+  the firing's batch inside its own transaction (a firing that writes nothing leaves no batch), and `automation.effect`
+  records each write in it in the same transaction: a created record as such; an updated one only with its prior
+  values (`prior=`, the update command's input shape), else the write is refused. `batches.reverse` undoes a firing as
+  one unit under the caller's own grants (§8 Q5's default). Each slot fires once (`claim`, a conditional update of
+  `fired_slot`). An effect that fails 3 firings in a row (`FAILURES_BEFORE_PAUSE`) pauses the rule with a to-do; a
+  success resets the count; a refusal for authority pauses at once. A delivery run drafts in its own delivery batch,
+  which `delivery batch-cancel` undoes before anything leaves (a sent email cannot be recalled). R108's auto-add
+  records into its import's batch (bank-feeds.md §5). No user-facing `reverse` for an `automation` batch yet: the first
+  timed consumer (invoice schedules) adds its own, as `import reverse` and `bulk-edit reverse` are.
+- **Delivery schedules are the first kind** (`delivery_schedules.KIND`: `delivery`, `automate.delivery`). Only
+  send-mode schedules are automations; a draft-mode schedule drafts under its `run_as`, as R111's memorized entries do
+  (§8 Q4: not retrofitted). A draft or paused send schedule still drafts and releases messages that wait for a go: it
+  sends nothing. `established_for`/`established_epoch` are the schedule's `run_as_for`/`run_as_epoch` when it was made
+  live by its `run_as`.
+  - Making live: `delivery-schedule live`, and now `delivery-schedule update --mode send --confirm <fingerprint>` on a
+    draft or paused send schedule (its dry run shows the check to a holder). Both ask `require_establish` (an agent's
+    refusal names `automate.delivery` and its principal; a person denied it gets `reason: capability_not_held`), then
+    the go check (`go_lost`, still a person's until increment 3: an agent granted `automate.delivery` is refused with
+    `no_send_authority`), and keep the one check of the exact details.
+  - At each firing `_go` asks `firing_check` and the go check before a run's first chunk, and `_keep_go` asks both
+    again before every later chunk of a run that carries a go: a deny, a demotion or a deactivation mid-run pauses the
+    schedule with one to-do and drops the batch's go, so the next chunk's releases wait. A live schedule's tick run
+    carries the rule's `source_ref`.
+  - `automation pause` sets `state = paused` ("paused by <who>: <reason>"), raises one to-do for the establisher and
+    drops the go of an open run's releases. `delivery-schedule pause` (stop: nothing runs) is unchanged; a paused
+    schedule comes back through `live`, `update --mode send --confirm`, or `resume` (as a draft).
+- **Seam for R108 increment 4 (not built here):** the bank rule table takes `automation.columns()`, registers a
+  `table_kind(kind='bank-rule', capability='automate.bank-rule', edit_needs_confirm=..., ...)` and adds its read and
+  update requirements in its own layer (the `automation.require_command` source); `bank-rule update --live` calls
+  `require_establish` and stores `establisher(s)`; `bank-rule update` calls `on_edit`; each import asks
+  `firing_check` per live rule (skipping on `Unsettled`), pauses with `Kind.pause` otherwise, and cites
+  `source_ref(..., inner=f'bank-line:{line}')` on each entry, in the import's batch.
+- **§8 as it bears here:** Q2 per kind (three capabilities); Q4 memorized entries not retrofitted; Q5 a batch is
+  reversed under the reverser's own grants; Q6 unchanged.
+- **Proved** (`tests/test_automation.py`): a test-only timed kind (its own table, `automate.invoice`, due every day in
+  any state) drafted by an agent is refused by `fire` itself and opens no batch; the agent cannot make it live
+  (refused naming `automate.invoice` and its principal); granted, it makes it live (its epoch recorded) and the next
+  tick creates a customer as the agent for its principal, the same slot never fires twice, the audit event cites the
+  rule and the agent, the customer is in the rule's batch, and one reversal takes it back; a forged citation over HTTP
+  is refused and one written anyway does not render; the grant withdrawn, `automation show` names why, the tick pauses
+  it with one to-do and later ticks raise no second; an agent's operative edit without the grant, or a holder's
+  unconfirmed edit where the kind needs a check, returns it to draft, a holder's keeps it live under them;
+  `automation pause` by an editor pauses it with a to-do; the agent deactivated, the tick pauses it with a to-do; an
+  effect failing three firings in a row pauses it with a to-do and leaves no batch. A real delivery schedule: an agent
+  drafts it and is refused making it live; its draft run gives no go; a person denied `automate.delivery` is refused
+  naming it; an agent granted it is refused by the go check; the clerk makes it live by `update`; its run carries the
+  clerk's go and its audit renders "On rule: Daily invoices, established by clerk"; the agent's edit returns it to
+  draft; a person who may edit it but not make it live pauses it with one to-do; paused to live through `update`; a
+  read-only member sees only that it would pause; the clerk denied, the next firing pauses it with a second to-do; a
+  non-holder's resume of a stopped live schedule makes it a draft. Mid-run (one message a chunk): `automation pause`
+  and then a deny each stop the go of the next chunk, pause the schedule with one to-do and nothing more leaves. A root
+  activated at `bank-feed-reverse-v1`: an owner makes a schedule live and the tick leaves it live.
+  `tests/test_automation_surfaces.py` runs list, show and pause through Python, the CLI, HTTP and MCP.

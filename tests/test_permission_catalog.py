@@ -128,7 +128,12 @@ RESOURCE_PAIRS = {
         ('item.convert', 'standard'), ('check.print-confirm', 'standard'), ('clock.link', 'standard'),
         ('accountant.manage', 'admin'), ('costing.method', 'admin'), ('company.closing-date', 'admin'),
         ('membership.grant', 'admin'), ('delivery.send', 'standard'), ('delivery.mark-sent', 'standard'),
-        ('delivery.connect', 'admin'), ('automate.delivery', 'standard')},
+        ('delivery.connect', 'admin'), ('automate.delivery', 'standard'),
+        # automation-v1: the two kinds with no command of their own yet.
+        ('automate.bank-rule', 'standard'), ('automate.invoice', 'standard')},
+    # automation-v1: a rule is read or paused only by a caller its kind's own show and update admit.
+    'automation.require_command': {('customer', 'member'), ('customer', 'standard'), ('customer-work', 'member'),
+                                   ('ledger.read', 'member')},
     # transaction-find-v1: a family is searched only for a caller its own `show` admits.
     'transaction_find._withheld': {('customer-work', 'member'), ('ledger.read', 'member')},
     'transaction_deletion_facts.admit': {('ledger.read', 'member'), ('transaction.invoice.delete', 'standard'), ('transaction.journal_entry.delete', 'standard'), ('transaction.payment.delete', 'standard'), ('transaction.sales_receipt.delete', 'standard')},

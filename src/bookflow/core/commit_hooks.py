@@ -62,6 +62,7 @@ OWNERS = {
     "scheduler.write": Impact.CONSERVATIVE,
     "delivery.run": Impact.CONSERVATIVE,
     "delivery.tick": Impact.CONSERVATIVE,
+    "automation.pause": Impact.CONSERVATIVE,
     "cutover.apply": Impact.CONSERVATIVE,
     "batch.apply": Impact.CONSERVATIVE,
     "config.flush": Impact.PROJECTION,
