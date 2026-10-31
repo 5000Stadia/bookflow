@@ -58,6 +58,11 @@ def validate_context(ctx: Context) -> None:
         if v is not None and len(v) > limit:
             fields.append({"field": name, "problem": f"must be at most {limit} characters"})
             said.append(f"The {name} is {len(v)} characters; it may be at most {limit}.")
+    if (ctx.source_ref or "").startswith("automation:") and getattr(ctx.interface, "value", ctx.interface) != "system":
+        # R187 §3: the rule citation is an automation's own; no caller may claim a rule wrote what it writes.
+        fields.append({"field": "source_ref", "problem": "the automation: prefix is reserved for an automation's own "
+                                                         "writes"})
+        said.append("A source reference starting automation: is written only by an automation itself.")
     if fields:
         if fields[0]["field"] == "reason":
             said.append("Shorten the reason to a short phrase naming what triggered the write.")
