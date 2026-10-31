@@ -180,7 +180,10 @@ def test_install_setup_connect_and_post_an_invoice_as_the_agent_for_the_owner(in
         company_id = first["company"]["company_id"]
 
         async def work():
-            params = StdioServerParameters(command=server["command"], args=server["args"], env={**env, **server["env"]})
+            # The freshly installed launcher owns provenance; never inject the checkout's import path.
+            mcp_env = {**env, **server["env"]}
+            assert "PYTHONPATH" not in mcp_env
+            params = StdioServerParameters(command=server["command"], args=server["args"], env=mcp_env)
             async with stdio_client(params) as (read, write):
                 async with ClientSession(read, write) as session:
                     await session.discover()
