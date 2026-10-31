@@ -171,3 +171,27 @@ demo-reset or checkpoint behavior in this increment. A separate reference-year p
   newest-first ordering, payment/sent/deposit/reconciliation blockers, denied inverse grants, interrupted and
   crash-before-outcome recovery, effect-write rollback, scheduler holds, nested batch invoicing, public receipt
   redaction and native money-out inverse selection.
+
+## As built: increment 4
+
+- Customer, vendor, account and item merges record one native aggregate effect and its shared batch inside the
+  merge transaction. The output names `batch_id`; `next` previews `batch reverse`. Repeated standing merges return
+  the same batch; new dry runs and legacy merges have no batch. No migration or new permission is needed.
+- The merge adapter invokes the existing unmerge under the reverser's own grant. Its complete preview names the
+  alias removed, the active flag restored and every editable reference restored with its prior value. Posted facts
+  stay unchanged. The merge and inverse plan under their write locks; the adapter repeats its strict preflight
+  inside the inverse transaction and records completion there. Interrupted finalization resumes without replaying
+  an unmerge. A merge undone separately through its native door is explicitly refused as no longer standing.
+- Refusals list every reference native unmerge would keep, changed or deleted original documents, barcode and
+  reactivation-name collisions, inactive ancestors, and later live merges into the same survivor. Independent survivors can unwind
+  independently. Changed original work documents and purchase orders are checked beside posted transactions.
+  Barcode validation does not hide other reference blockers. Native partial unmerge remains available separately;
+  it is never offered as a complete batch reversal.
+- Reversible choices: original document versions are checked conservatively, and child reference owner checks
+  retain native unmerge semantics. An edit followed by an undo can still block when versions differ or native
+  unmerge would keep a reference. This avoids overwriting later decisions. Existing vendor open-payable and
+  inventory stock-history merge restrictions remain; batch reversal does not broaden which entries can merge.
+- Regression witnesses cover hand-worked A/R, A/P and account balances, item stock and valuation, exact editable
+  reference restoration and preview, simultaneous blockers, transaction rollback, missing inverse and read grants,
+  original posted and unposted document changes, and interruption after the durable inverse. The schema's global
+  name uniqueness already refuses a survivor rename into the merged name; that refusal is checked separately.

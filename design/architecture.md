@@ -5325,3 +5325,11 @@ audited `notice reverse` command to dismiss ready notices and release their dedu
 `co0124` preserves original periods with a released flag and partial unique index. The new permission
 layer is `notice-reversal-v1`, on `reversible-batch-v1`. The complete behavior and boundaries are in
 [reversible-batches.md](reversible-batches.md#as-built-increment-2).
+
+### Merge batch reversal
+
+`company/merge_batches.py` supplies lazy-loaded native adapters for customer, vendor, account and item merges.
+`commands/merge_cmds.py` records the merge effect inside the merge transaction and returns its shared batch ID.
+The adapter enumerates native unmerge's retained references, name collisions, original document version changes
+and later live aliases into the survivor before invoking unmerge under the caller's grant. A write-lock recheck
+and completion effect share the inverse transaction. `design/reversible-batches.md` describes strict eligibility.

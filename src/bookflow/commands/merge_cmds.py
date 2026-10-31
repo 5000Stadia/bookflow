@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from bookflow.company import list_merges, party_merges
+from bookflow.company import list_merges, party_merges, merge_batches
 from bookflow.core.registry import Applied, Plan, command
 
 
@@ -37,6 +37,8 @@ class DocumentCount(_Strict):
 
 
 class MergeOutput(_Strict):
+    batch_id: str | None = Field(default=None, description="Shared reversal batch; null for a new merge preview or a legacy merge.")
+    next: str | None = None
     merge_id: str | None = Field(description="The merge; null only in a dry run of a new merge.")
     changed: bool = Field(description="False when this exact merge already stands; nothing was written.")
     merged_id: str
@@ -65,7 +67,7 @@ def _commands(kind: str):
         description=(f"Merge a duplicate {kind} into another. Nothing posted changes: every report, balance, aging "
                      f"and {balance} read shows the merged {kind}'s documents under the survivor, and the merged "
                      f"{kind} is made inactive and hidden. People only, with a reason; `--dry-run` previews what "
-                     f"moves and the balance after. Undo with `{kind} unmerge`."),
+                     f"moves and the balance after. The output names its batch; `batch reverse` previews and reverses the complete merge, or refuses every blocker. Native `{kind} unmerge` also remains available."),
         input_model=MergeInput, output_model=MergeOutput, writes={"company"}, positional=["merged", "into"],
         accepts_idempotency_key=True,
         error_codes=["E_RECORD_NOT_FOUND", "E_MERGE_REFUSED", "E_REASON_REQUIRED", "E_ACTIVE_DEPENDENTS",
@@ -75,7 +77,8 @@ def _commands(kind: str):
     def plan_merge(inp: MergeInput, ctx, s) -> Plan:
         party_merges.require_person(s, kind, "merge")
         planned = party_merges.plan_merge(s.company, kind, inp.merged, inp.into)
-        return Plan(preview=MergeOutput(**party_merges.preview(s.company, planned)), data={"plan": planned})
+        return Plan(preview=MergeOutput(**party_merges.preview(s.company, planned),
+            **merge_batches.output_link(s.company, kind, planned.existing)), data={"plan": planned})
 
     @merge.applier
     def apply_merge(plan: Plan, ctx, s) -> Applied:
@@ -83,7 +86,9 @@ def _commands(kind: str):
         if not planned.changed:
             return Applied(plan.preview, [], "already merged")
         merge_id, touched = party_merges.apply_merge(s, ctx, planned, f"{kind} merge")
-        out = plan.preview.model_copy(update={"merge_id": merge_id})
+        batch_id = merge_batches.record(s, ctx, kind, merge_id, planned)
+        out = plan.preview.model_copy(update={"merge_id": merge_id, "batch_id": batch_id,
+                                              "next": f"batch reverse {batch_id} --dry-run"})
         return Applied(out, touched, f"merged {kind} {planned.merged['name']} into {planned.survivor['name']}",
                        audited=True)
 
@@ -112,6 +117,7 @@ def _commands(kind: str):
         touched = party_merges.apply_unmerge(s, ctx, planned, f"{kind} unmerge")
         return Applied(plan.preview, touched, f"unmerged {kind} {planned.merged['name']}", audited=True)
 
+    merge.plan_in_write = unmerge.plan_in_write = True
     return merge, unmerge
 
 
@@ -137,6 +143,8 @@ class ReferenceOut(_Strict):
 
 
 class ListMergeOutput(_Strict):
+    batch_id: str | None = Field(default=None, description="Shared reversal batch; null for a new merge preview or a legacy merge.")
+    next: str | None = None
     merge_id: str | None = Field(description="The merge; null only in a dry run of a new merge.")
     changed: bool = Field(description="False when this exact merge already stands; nothing was written.")
     merged_id: str
@@ -176,7 +184,7 @@ def _list_commands(kind: str):
                      f"{_LIST_EFFECTS[kind]}, and the merged {kind} is made inactive and hidden. A saved document "
                      f"that names it saves with the survivor when next edited. People only, with a reason; "
                      f"`--dry-run` previews what moves, every reference re-pointed and any conflict. Undo with "
-                     f"`{kind} unmerge`."),
+                     f"`batch reverse` using the output batch_id; it refuses if any reference would be kept. Native `{kind} unmerge` also remains available."),
         input_model=MergeInput, output_model=ListMergeOutput, writes={"company"}, positional=["merged", "into"],
         accepts_idempotency_key=True,
         error_codes=["E_RECORD_NOT_FOUND", "E_MERGE_REFUSED", "E_REASON_REQUIRED"])
@@ -185,7 +193,8 @@ def _list_commands(kind: str):
     def plan_merge(inp: MergeInput, ctx, s) -> Plan:
         party_merges.require_person(s, kind, "merge")
         planned = list_merges.plan_merge(s.company, kind, inp.merged, inp.into)
-        return Plan(preview=ListMergeOutput(**list_merges.preview(s.company, planned)), data={"plan": planned})
+        return Plan(preview=ListMergeOutput(**list_merges.preview(s.company, planned),
+            **merge_batches.output_link(s.company, kind, planned.existing)), data={"plan": planned})
 
     @merge.applier
     def apply_merge(plan: Plan, ctx, s) -> Applied:
@@ -193,7 +202,9 @@ def _list_commands(kind: str):
         if not planned.changed:
             return Applied(plan.preview, [], "already merged")
         merge_id, touched = list_merges.apply_merge(s, ctx, planned, f"{kind} merge")
-        out = plan.preview.model_copy(update={"merge_id": merge_id})
+        batch_id = merge_batches.record(s, ctx, kind, merge_id, planned)
+        out = plan.preview.model_copy(update={"merge_id": merge_id, "batch_id": batch_id,
+                                              "next": f"batch reverse {batch_id} --dry-run"})
         return Applied(out, touched, f"merged {kind} {planned.merged['full_name']} into {planned.survivor['full_name']}",
                        audited=True)
 
@@ -224,6 +235,7 @@ def _list_commands(kind: str):
         touched = list_merges.apply_unmerge(s, ctx, planned, f"{kind} unmerge")
         return Applied(plan.preview, touched, f"unmerged {kind} {planned.merged['full_name']}", audited=True)
 
+    merge.plan_in_write = unmerge.plan_in_write = True
     return merge, unmerge
 
 

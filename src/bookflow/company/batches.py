@@ -75,6 +75,7 @@ class Adapter:
 ADAPTERS: dict[str, Adapter] = {}
 # A fresh CLI process may load only `batch`, not the command that originally wrote it.
 ADAPTER_MODULES = {
+    **{f'{kind}-merge': 'merge_batches' for kind in ('customer', 'vendor', 'account', 'item')},
     'import': 'imports', 'bulk-edit': 'bulk_edit', 'opening': 'opening_drafts',
     'bank-import': 'bank_feeds', 'bank-sort': 'bank_feeds', 'automation': 'automation',
     'batch-invoice': 'batch_invoicing', 'bill-pay': 'bill_payments',
@@ -409,6 +410,14 @@ def require_batch_read(s, batch: dict) -> None:
         rec = list_record(record_type) or document_record(record_type)
         if rec is not None:
             require_read(s, f'{rec.noun} show')
+        elif record_type in ('party_merge', 'list_merge'):
+            table, column = ('party_merges', 'party_kind') if record_type == 'party_merge' else ('list_merges', 'list_kind')
+            kinds = s.company.conn.execute(sa.text(
+                f'SELECT DISTINCT m.{column} FROM {table} m JOIN batch_effects e ON e.record_id=m.id '
+                'WHERE e.batch_id=:batch AND e.record_type=:record_type'),
+                {'batch': batch['id'], 'record_type': record_type}).scalars()
+            for kind in kinds:
+                require_read(s, f'{kind} show')
 
 
 # ------------------------------------------------------------------ documents a batch made (R107 increment 4)

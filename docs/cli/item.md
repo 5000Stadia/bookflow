@@ -1631,7 +1631,7 @@ Example JSON output:
 
 ## `item merge`
 
-Merge a duplicate item into another of the same type. Nothing posted changes: sales and purchases by item and every item filter show the merged item's lines under the survivor; group and assembly members, price levels and vendor profiles naming it are re-pointed to the survivor, and the merged item is made inactive and hidden. A saved document that names it saves with the survivor when next edited. People only, with a reason; `--dry-run` previews what moves, every reference re-pointed and any conflict. Undo with `item unmerge`.
+Merge a duplicate item into another of the same type. Nothing posted changes: sales and purchases by item and every item filter show the merged item's lines under the survivor; group and assembly members, price levels and vendor profiles naming it are re-pointed to the survivor, and the merged item is made inactive and hidden. A saved document that names it saves with the survivor when next edited. People only, with a reason; `--dry-run` previews what moves, every reference re-pointed and any conflict. Undo with `batch reverse` using the output batch_id; it refuses if any reference would be kept. Native `item unmerge` also remains available.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -1700,6 +1700,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `batch_id` | string \| null | no | yes | null | Shared reversal batch; null for a new merge preview or a legacy merge. |
+| `next` | string \| null | no | yes | null | — |
 | `merge_id` | string \| null | yes | yes | — | The merge; null only in a dry run of a new merge. |
 | `changed` | boolean | yes | no | — | False when this exact merge already stands; nothing was written. |
 | `merged_id` | string | yes | no | — | — |
@@ -1738,6 +1740,7 @@ Example JSON output:
 
 ```json
 {
+  "batch_id": null,
   "changed": false,
   "document_count": 1,
   "documents": [],
@@ -1745,6 +1748,7 @@ Example JSON output:
   "merged_balance": null,
   "merged_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "merged_name": "value",
+  "next": null,
   "notes": [],
   "references": [],
   "survivor_balance": null,
