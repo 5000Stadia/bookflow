@@ -5,7 +5,7 @@ import json
 from . import permission_pos_refund_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = 'baf80032257e8bd60b9b8e4bcb2db10b2205396d'
+SOURCE_COMMIT = '2304bbea56d3a13e3d0cec04d65f63bc59fda366'
 _ADDED = (
     ('pos shift open', 'pos.sell', 'member', 'pos_day_cmds.shift_open'),
     ('pos shift close', 'pos.sell', 'member', 'pos_day_cmds.shift_close'),

@@ -15,9 +15,14 @@ ADDED_COMMANDS = tuple(c.CommandDescriptor(name, 'company', 'pos.refund', 'membe
 ADDED_ACTIONS = tuple(c.CompanyAction(name, (c.Requirement('pos.refund', 'member'),), True,
     tuple(sorted((('bookflow.commands.pos_refund_receipt_cmds.plan_show|src/bookflow/commands/pos_refund_receipt_cmds.py'
                   if planner == 'receipt' else _OWNER.format(planner)), _AUTHORIZE)))) for name, planner in _ADDED)
+# The credit just created by this POS request is admitted only for this capability.
+CREDIT_SOURCE = c.ResourceSource('bookflow.company.credits.facts',
+    (('src/bookflow/company/credits.py', 1186),), (c.Requirement('pos.refund', 'member'),))
 CATALOG = replace(previous.CATALOG, version=c.POS_REFUND_POLICY_VERSION,
     commands=tuple(sorted((*previous.CATALOG.commands, *ADDED_COMMANDS), key=lambda x: x.name)),
-    company_actions=tuple(sorted((*previous.CATALOG.company_actions, *ADDED_ACTIONS), key=lambda x: x.key)))
+    company_actions=tuple(sorted((*previous.CATALOG.company_actions, *ADDED_ACTIONS), key=lambda x: x.key)),
+    conditional_sources=tuple(sorted((*previous.CATALOG.conditional_sources, CREDIT_SOURCE),
+                                     key=lambda x: x.owner)))
 MANIFEST = c.catalog_manifest(CATALOG, previous.MANIFEST.standalone_names)
 
 

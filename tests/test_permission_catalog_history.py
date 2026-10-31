@@ -120,8 +120,8 @@ ACCEPTED = {
     'pos-ticket-v1': (898, '6639dc50b25389df49db0c4bd6e45d637a6271a4c9f81c8abd579abfb0d7ff35'),
     'pos-ticket-takeover-v1': (899, 'bdcea7f8d98d6854d5ecc001b00e4b59f81288ef06af360288f8a2ce28e17bf3'),
     'pos-receipt-v1': (900, '00cfad8461346685e3de9485e8c900e23808206a65626cb72960aec0444a5a06'),
-    'pos-day-v1': (908, 'b1983466da4e8fc1e4bb26be9b0849cacfcc0ac101031848dcd466072fe104fb'),
-    'pos-refund-v1': (904, '64d5f0eb604a90e20fa872971200cb19419f430531f790d605f4c4d1314e0dde'),
+    'pos-refund-v1': (904, '469328cc54c3746bbb7e25fae4c5773e0123f935f5eba136a7a5349491097184'),
+    'pos-day-v1': (908, '4dfeb905ccc2dcf9451f2c7021c9b042016f48382d40b394fa6e73dfa962729b'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
