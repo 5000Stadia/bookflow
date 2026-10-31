@@ -1668,6 +1668,11 @@ resumed tickets and keeps their audit trail. All four commands need `pos.sell`; 
 authority. Use an idempotency key on mutations and keep the identical request and key until the host confirms.
 Turning POS off is refused while tickets are held or open, naming every label and ID.
 
+`pos receipt show` reads printable POS receipt facts under `pos.sell`, using a sale ID, ticket key, receipt ID
+or number. Set `reprint` to mark a copy. Reprints preserve original posted lines and totals; voided sales say VOID.
+The browser receipt route offers 80/58 mm printing and a content-sized PDF. Its Code 128 contains the original
+receipt number, which the POS selector still accepts after a renumber. This does not grant general receipt or ledger access.
+
 `pos sale void` needs `pos.void`, a required reason, and the receipt's `expected_version` (1 on a new sale).
 Its selector accepts a POS sale ID, ticket key, receipt ID or receipt number; ordinary typed receipts are refused.
 It runs the receipt reversal core and preserves history. A banked sale names its blocking deposit; a reconciled

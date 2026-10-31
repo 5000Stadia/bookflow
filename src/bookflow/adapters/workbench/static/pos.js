@@ -415,6 +415,7 @@
     render();
     root.classList.remove('pos-sheet-open');
     const screen = $('[data-pos-done]');
+    $('[data-pos-print]').href = `/c/${encodeURIComponent(data.company)}/pos/receipt/${encodeURIComponent(sale.id)}`;
     screen.querySelector('[data-pos-done-change]').textContent = money(sale.change.amount);
     const paid = sale.tenders.map(t => `${escape(t.payment_method.name)} ${money(t.amount.amount)}${t.reference ? ` (${escape(t.reference)})` : ''}`).join(', ');
     screen.querySelector('[data-pos-done-summary]').innerHTML = `Sales receipt <b data-pos-done-number>${escape(sale.sales_receipt.name)}</b> · Total ${money(sale.total.amount)} · Paid ${paid}${sale.customer ? ` · ${escape(sale.customer.name)}` : ''}${sale.replayed ? ' · already completed' : ''}`;
@@ -517,6 +518,13 @@
       ...(state.ticket_version ? {expected_version: state.ticket_version} : {})});
   });
 
+  $('[data-pos-reprint-form]').addEventListener('submit', async event => {
+    event.preventDefault();
+    try {
+      const receipt = await api('pos receipt show', {sale: $('[data-pos-reprint-sale]').value.trim(), reprint: true});
+      window.location.href = `/c/${encodeURIComponent(data.company)}/pos/receipt/${encodeURIComponent(receipt.sale.id)}?reprint=true`;
+    } catch (error) { $('[data-pos-reprint-status]').textContent = error.message; }
+  });
   // ---- voids use the same receipt reversal, with an explicit reason and an explicit retry after any conflict
   let voidVersion = 1, voidSelector = '', voidBusy = false, voidKey = null;
   function openVoid(sale) {
@@ -635,6 +643,7 @@
       if (state.stale_ticket && confirm('Forget only this device’s copy? The ticket on the host will stay unchanged.')) { state = fresh(); schedule(); }
     }
     else if (d.posClose) $('[data-pos-' + d.posClose + '-dialog]').close();
+    else if (target.matches('[data-pos-reprint-open]')) $('[data-pos-reprint-dialog]').showModal();
     else if (target.matches('[data-pos-void-open]')) openVoid(null);
     else if (target.matches('[data-pos-void-last]')) openVoid(lastSale);
     else if (target.matches('[data-pos-charge]')) openTender();

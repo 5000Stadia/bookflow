@@ -96,7 +96,7 @@ def test_hold_reload_resume_on_another_device_reprice_complete_and_void(browser_
         click(second, '[data-pos-void-last]')
         reason = '客户取消 — customer’s literal %20 reference'
         second.evaluate(f'document.querySelector("[data-pos-void-reason]").value = {json.dumps(reason)}')
-        second.evaluate('document.querySelector("[data-pos-void-form]").requestSubmit()')
+        click(second, '[data-pos-void-submit]')
         second.wait_for('document.querySelector("[data-pos-void-status]").textContent.includes("voided")', timeout=20)
         _fits(second)
         shot(second, 'voided', width)

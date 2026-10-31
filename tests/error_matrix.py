@@ -3030,3 +3030,9 @@ MATRIX['pos sale void'] = {
     'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
     'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
 }
+
+MATRIX['pos receipt show'] = {
+    'E_FEATURE_DISABLED': 'POS is off for the company',
+    'E_RECORD_NOT_FOUND': 'the selector names no POS sale',
+    'E_VALIDATION': 'the selector names multiple POS sales',
+}

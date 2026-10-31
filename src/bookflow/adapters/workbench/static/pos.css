@@ -167,3 +167,5 @@
 #pos .pos-held-list button { flex: 1; }
 #pos .pos-dialog-actions { flex-wrap: wrap; }
 #pos .pos-cart-actions { flex-wrap: wrap; }
+/* The change screen's receipt opens a printable page in its own tab. */
+#pos .pos-done [data-pos-print] { display: inline-flex; align-items: center; justify-content: center; min-height: 56px; min-width: 12rem; padding: .6rem 1rem; border: 1px solid var(--pos-line); border-radius: .5rem; font-size: 1.2rem; text-decoration: none; background: white; color: var(--pos-accent); }

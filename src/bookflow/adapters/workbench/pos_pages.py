@@ -44,6 +44,25 @@ def _items(listed: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def mount(app, *, render, run, credential, page_error, role_allows, holds=None, host=None, make_context=None):
+    @app.get('/c/{company_id}/pos/receipt/{sale}.pdf')
+    def receipt_pdf(request: Request, company_id: str, sale: str, reprint: bool = False):
+        from bookflow.documents.pos_receipt import pdf
+        try:
+            receipt = run(request, 'pos receipt show', {'sale': sale, 'reprint': reprint}, company_id)
+            return Response(pdf(receipt), media_type='application/pdf', headers={'Cache-Control': 'private, no-store'})
+        except BookflowError as error:
+            return page_error(request, error)
+
+    @app.get('/c/{company_id}/pos/receipt/{sale}')
+    def receipt_page(request: Request, company_id: str, sale: str, reprint: bool = False):
+        from bookflow.documents.pos_receipt import barcode_svg
+        try:
+            receipt = run(request, 'pos receipt show', {'sale': sale, 'reprint': reprint}, company_id)
+            return render('pos_receipt.html', request, company_id=company_id, receipt=receipt,
+                          barcode=barcode_svg(receipt['number']))
+        except BookflowError as error:
+            return page_error(request, error)
+
     @app.get('/c/{company_id}/pos')
     def pos_page(request: Request, company_id: str):
         try:

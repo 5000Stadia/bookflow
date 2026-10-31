@@ -122,6 +122,7 @@ An AI agent installing Bookflow for someone starts with the agent install page: 
 - [`permission`](cli/permission.md)
 - [`pick-list`](cli/pick-list.md)
 - [`pos customer`](cli/pos-customer.md)
+- [`pos receipt`](cli/pos-receipt.md)
 - [`pos sale`](cli/pos-sale.md)
 - [`pos ticket`](cli/pos-ticket.md)
 - [`pos-box`](cli/pos-box.md)

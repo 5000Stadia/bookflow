@@ -1322,6 +1322,8 @@ PAGE_RUNS: dict[str, tuple[str, ...]] = {
     '/payment-method': ('payment-method query', 'payment-method query options'),
     # The POS screen (R114 increment 5): the sales items it rings up, read once with the page.
     '/pos': ('item list', 'pos-box list', 'pos ticket list'),
+    '/pos/receipt/{sale}': ('pos receipt show',),
+    '/pos/receipt/{sale}.pdf': ('pos receipt show',),
     '/price-level': ('price-level query', 'price-level query options'),
     '/print-checks': ('account list',),
     '/proposal/create': ('custom-field list', 'item show'),

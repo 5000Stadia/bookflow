@@ -862,7 +862,7 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   status keeps the sale on the
   device, locked, with *Finish the sale*, which sends the same request again (also after a reload). The change screen
   shows the change due large, the receipt number and tenders, and New sale. Phone: the sale is a sheet raised from the
-  bar at the foot; from 768 px it stands beside the boxes. Print receipt waits for increment 8. A register picker shows
+  bar at the foot; from 768 px it stands beside the boxes. Print receipt is provided by increment 8 below. A register picker shows
   when there is more than one; the device remembers its choice. The `afterAdd` hook (R189) is in place; the preview's
   pre-tax hook (R188) is not, because the preview is the sales receipt's own dry run.
 - **The clerk's header stays minimal (settled).** A clerk now holds two company writes (`pos sale complete`, `pos
@@ -986,7 +986,7 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   declaration check passed: **411 tests**, including all **20 POS browser cases**. Generated documentation was
   regenerated and `bookflow docs generate --check` passed. Independent read-only source review passed. The six
   screenshots at 390 and 1440 px were inspected; Unicode and literal-percent void reasons are preserved in audit.
-- **Not verified here.** Physical phone hardware, LAN timing targets and printers. Receipt printing, refunds,
+- **Not verified here.** Physical phone hardware, LAN timing targets and printers. Refunds,
   shifts and the day summary (including tickets older than seven days) remain their later increments.
 
 ### As built: increment 7 follow-up (open tickets)
@@ -1011,6 +1011,42 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   POS-off, explicit price persistence and cross-clerk refusal. Surface tests include take-over through Python,
   CLI, HTTP and MCP; browser tests cover confirmation cancel/accept at 390 and 1440 px. The MCP seller without
   `pos.void` is refused. Screenshots are under `/tmp/m4-shots/pos8/`. Physical device loss remains simulated.
+
+### As built: increment 8 (receipt)
+
+- **Receipt facts and authority.** `pos receipt show` reads a POS sale by sale ID, ticket key, receipt ID or
+  receipt number under `pos.sell`; the plain clerk can print and reprint without access to general sales receipts,
+  customer accounts or ledger details. New immutable layer `pos-receipt-v1` follows `pos-ticket-takeover-v1`.
+  No company migration is needed. Each interface returns the same typed receipt facts.
+- **Printed content.** `/c/<id>/pos/receipt/<sale>` uses the register's current 80 or 58 mm width and message.
+  The company heading and address, item names, quantities, exact fractional unit prices, discounts and taxes by
+  rate come from the original posted receipt. Company phone and register/clerk display names use current records.
+  Named customers appear; the walk-in does not. Original tenders and change remain unchanged on reprint.
+  Reprints say **Reprint**; a voided sale also says **VOID**, retaining its original lines and totals.
+- **The till.** Print receipt on the change screen opens the printable receipt. Reprint receipt opens a receipt-number
+  selector. Both that selector and Void sale accept the existing keyboard/camera Scan path in receipt mode, which
+  keeps the decoded number for the clerk's action instead of looking for an inventory item.
+- **Barcode identity.** The Code 128 encodes the original receipt number. The POS selector also recognizes the
+  original revision's number after an ordinary receipt renumber, restricted to POS sales and retaining the existing
+  ambiguity refusal. Standard generated ASCII numbers are encoded unchanged. An original number customized with
+  non-ASCII characters cannot be represented by Code 128: the HTML explains that the number must be typed, and the
+  PDF preserves the number as text without substituting a different barcode. Very long numbers scale to the roll;
+  their physical scanner readability remains unverified.
+- **Printing and saving.** Long names wrap and amounts remain visible. The receipt measures its full content height
+  for browsers that do not accept `@page` auto height, setting a roll-sized page before printing. The `.pdf` route
+  uses ReportLab with height measured from every flowable, placing totals after all lines on one page. Embedded
+  DejaVu Sans preserves Latin, Greek and Cyrillic text; ReportLab's standard Chinese CID font preserves the tested Han text. Other scripts
+  and actual printer/font substitutions have not been verified.
+- **Checks.** Receipt tests cover unchanged reprints and voided copies, fine prices and discounts, captured names and
+  taxes, renumbered receipt lookup, Unicode text, plain-clerk authority, and Python/CLI/HTTP/MCP parity. Browser tests
+  cover the change screen and receipt at 390 and 1440 px, real Code 128 decoding followed by receipt Scan and void,
+  58 mm wrapping, and browser printing of 1-line and 60-line receipts at 80 mm with totals after every line.
+  Screenshots are written to `/tmp/m4-shots/pos8/`. Physical printers, phones and LAN speed targets remain unverified.
+
+- **Final verification (both parts).** After the last code and test edit, the full requested targeted suite plus
+  the page-command declaration check passed: **429 tests**, including the receipt browser workflows at 390 and
+  1440 px. Generated documentation passes `bookflow docs generate --check`. Independent source review passed;
+  the seven screenshots under `/tmp/m4-shots/pos8/` were inspected. Test hosts and browsers were closed.
 
 ## 16. Open questions
 

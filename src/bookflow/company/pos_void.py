@@ -44,12 +44,14 @@ def authorize(inp, ctx, s):
 
 
 def resolve(s, selector):
-    t, p = c.transactions, c.pos_sales
+    t, p, r = c.transactions, c.pos_sales, c.transaction_revisions
     rows = s.company.conn.execute(sa.select(p.c.document_id, p.c.id.label('sale_id'), p.c.ticket).select_from(
         p.join(t, t.c.id == p.c.document_id)).where(
         p.c.document_type == 'sales_receipt',
         sa.or_(p.c.id == selector, p.c.ticket == selector, t.c.id == selector,
-               t.c.number == selector)).distinct().limit(2)).mappings().all()
+               t.c.number == selector,
+               sa.exists(sa.select(1).where(r.c.transaction_id == t.c.id, r.c.revision_number == 1,
+                                           r.c.number == selector)))).distinct().limit(2)).mappings().all()
     if not rows:
         raise BookflowError('E_RECORD_NOT_FOUND', details={'record_type': 'pos_sale', 'selector': selector, 'suggestions': []})
     if len(rows) != 1:
