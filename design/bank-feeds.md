@@ -1052,7 +1052,7 @@ a fresh CLI process; an agent establisher paused when its principal is narrowed.
 
 ## As built: increment 6
 
-- **Migration co0120**, on co0119: nullable `statement_lines.bank_line_id`, a foreign key to the inbox line,
+- **Migration co0121**, on co0120: nullable `statement_lines.bank_line_id`, a foreign key to the inbox line,
   indexed for reversal lookup. Existing file lines keep null. `statement_imports.format` also accepts `inbox`;
   its table is rebuilt with its existing rows, indexes and triggers (including local ones) retained. Statement lines and mappings
   keep their append-only guards. No ledger posting changes.
@@ -1060,24 +1060,29 @@ a fresh CLI process; an agent establisher paused when its principal is narrowed.
   closing date (or opening date) through the requested closing date, inclusive. With `draft`, its header and base
   define that period; with `start`, give `statement_date` and `ending_balance`. A review without either uses the
   current chain and requires `statement_date`. The first period requires the account's adopted opening or its one
-  open opening draft. Invalid periods and stale draft chains refuse. The inbox never supplies a closing balance.
-- **Decided: all live states are evidence**, including ignored lines. Ignoring an inbox task does not remove a bank
-  statement line. The shared matcher reads the current books afresh; no saved inbox link is treated as a clearing
+  open opening draft. Invalid periods name `statement_date`; stale draft chains refuse. With `draft`, passing `ending_balance`
+  refuses naming that field. The inbox never supplies a closing balance.
+- **Inbox decisions.** Lines ignored as `duplicate` are excluded; lines ignored as `not_ours`,
+  `already_entered`, or `other` stay included. Undecided `possible_duplicate` flags in the period appear in result
+  `notes`, in both previews and applied results. The shared matcher reads the current books afresh; no saved inbox link is treated as a clearing
   instruction, and no inbox state is changed. Bank signs remain on returned lines; card signs flip only for matching
   and the stored statement, as they do for a file. Reused-FITID suffixes and CSV occurrence keys remain intact.
+- **Posted dates.** Selection and copied dates use the newest `seen_again` event’s `date_in_file` (ordered by
+  event creation time and id), falling back to the original line date. A line pending September 30 and posted
+  October 2 belongs to October, not September; the original inbox evidence remains unchanged.
 - **One existing reconciliation path.** The source becomes `statement_files.Line` values, then the existing matching,
   draft start, marking, gap detection and `statement_store.store` path runs unchanged. Copy provenance is written
   with the statement in the same transaction. Repeating the import stores and marks nothing twice; a line already
   stored from a file is not relabeled. Empty periods can start an empty draft and create no statement import.
   File and CSV options with `from_inbox` refuse. Paging fingerprints include the period and immutable source identities,
-  so new evidence invalidates an old cursor. Reads are repeated inside the write; a partial import reversal refuses
+  so new evidence invalidates an old cursor. Reads are repeated inside the write; a reversing or blocked import refuses
   copying until it finishes.
 - **`statement_copy`** now names the source bank line and reconciliation draft. It blocks reversal and move while
   the draft is open or consumed by an active certificate, using the same standing-draft predicate as inbox dedupe.
   `reconcile discard` releases an open draft's hold while retaining its copies as history. A certified statement
   keeps the hold while active; no public undo command is added by this increment. Strict newest-first ordering and
   the other reversal blockers are unchanged.
-- **Permissions.** New layer `bank-reconcile-v1` on `bank-rule-v1`, 874 commands, descriptor `4a5a917f`.
+- **Permissions.** New layer `bank-reconcile-v1` on `pos-sale-v1`, 878 commands, descriptor `8673bd99`.
   Only the inbox input additionally asks for `bank-feed` at member; file imports retain their existing authority.
   Every merged descriptor stays unchanged. There is no new write command: `reconcile import` remains `not-a-record`
   in `import_kinds`. No deposit read-manifest table gained a column, so its pins remain unchanged.
@@ -1088,13 +1093,5 @@ a fresh CLI process; an agent establisher paused when its principal is narrowed.
   conditional permission denial, and migration of populated statement tables with rows and append-only guards intact.
   The existing reconciliation golden tests remain unchanged. Public undo is unavailable and is not exercised.
 
-**Final verification (2026-10-31).** After the last code edit, the required 56-file targeted run through `bf-suite.sh`:
-541 passed, 11 failed, 74 errors, 1 skipped, in 2312.55 seconds. All 85 failures/errors were the sandbox refusing
-socket operations with `PermissionError: [Errno 1] Operation not permitted`, so hosted HTTP/MCP and browser runtime
-checks remain unverified here. Of the 19 new tests, 18 passed; the four-surface harness could not start its host.
-The standalone CLI witness passed, as did file-import golden outputs, full reconciliation, conditional permission
-checks, populated migration preservation, backup rewind/restore, audit guards, and catalog/cache/history checks.
-The skipped indexed-reconciliation oracle test requires `BOOKFLOW_R180_ORACLE_ROOT`, which was not supplied.
-The bank browser file was excluded as requested; the whole suite was not run. Generated docs were regenerated and
-`bookflow docs generate --check` passed after the last code edit. Independent static review passed. No public undo
-path was exercised because no public undo command exists.
+**Verification.** Regression coverage includes duplicate exclusions and warnings, all other ignore reasons,
+newest posted dates across month boundaries, field-specific validation, and reversing/blocked copy refusals.

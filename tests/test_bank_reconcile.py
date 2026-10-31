@@ -61,7 +61,7 @@ def test_period_ignored_reversed_other_account_and_keys(client):
                    ('2026-10-01', '-4', 'after', 'After')])
     imported = run(client, 'bank-feed import', dict(account='Checking', content=content))
     line = next(v for v in imported['lines'] if v['amount'] == -200)
-    run(client, 'bank-line ignore', dict(line=line['id'], ignore_reason='duplicate'))
+    run(client, 'bank-line ignore', dict(line=line['id'], ignore_reason='not_ours'))
     other = run(client, 'bank-feed import', dict(account='Payment Example Bank',
                 content=csv_file([('2026-05-01', 'Other', '73.12')])))
     discarded = run(client, 'bank-feed import', dict(account='Checking',
@@ -109,14 +109,16 @@ def test_empty_inbox_and_invalid_period(client):
     with pytest.raises(BookflowError) as raised:
         run(client, 'reconcile import', dict(account='Checking', from_inbox=True, statement_date='2025-12-31'))
     assert raised.value.code == 'E_VALIDATION'
+    assert raised.value.details['fields'][0]['field'] == 'statement_date'
 
 
-def test_partial_reversal_refuses_copy(client):
+@pytest.mark.parametrize('state', ['reversing', 'blocked'])
+def test_partial_reversal_refuses_copy(client, state):
     opening(client)
     imported = run(client, 'bank-feed import', dict(account='Checking', content=sample('checking-2026-09.csv')))
     # Model a stopped slice: lines remain live until the final reversal transaction.
     with sqlite3.connect(database_path(client)) as conn:
-        conn.execute("UPDATE batches SET state='reversing' WHERE id=?", (imported['batch_id'],))
+        conn.execute("UPDATE batches SET state=? WHERE id=?", (state, imported['batch_id']))
     with pytest.raises(BookflowError) as raised:
         inbox(client)
     assert raised.value.code == 'E_VALIDATION' and imported['import_id'] in raised.value.message
@@ -191,3 +193,54 @@ def test_cli_inbox_flag_starts_the_same_reconciliation(client, cli):
     assert result['format'] == 'inbox' and result['counts']['newly_marked'] == 8
     assert len(result['draft']['selections']) == 9
     assert table(client, 'SELECT count(bank_line_id) FROM statement_lines') == [(10,)]
+
+
+@pytest.mark.parametrize('reason', ['duplicate', 'not_ours', 'already_entered', 'other'])
+def test_duplicate_decision_and_warning(client, reason):
+    opening(client)
+    run(client, 'bank-feed import', dict(account='Checking', content=csv_file([
+        ('2026-09-10', 'ACME HARDWARE STORE 123', '-55.00')])))
+    second = run(client, 'bank-feed import', dict(account='Checking', content=csv_file([
+        ('2026-09-11', 'Acme Hardware Store', '-55.00')])))
+    line = second['lines'][0]
+    assert line['possible_duplicate_of']
+    request = dict(account='Checking', from_inbox=True, statement_date='2026-09-30')
+    for dry in (True, False):
+        review = run(client, 'reconcile import', request, dry_run=dry)
+        assert review['counts']['lines'] == 2
+        assert any('possible_duplicate' in note and line['id'] in note for note in review['notes'])
+    run(client, 'bank-line ignore', dict(line=line['id'], ignore_reason=reason))
+    done = inbox(client)
+    assert done['counts']['lines'] == (1 if reason == 'duplicate' else 2)
+    assert not done['notes']
+    assert table(client, 'SELECT count(*) FROM statement_lines WHERE bank_line_id=?', line['id']) == [
+        (0 if reason == 'duplicate' else 1,)]
+
+
+def test_pending_line_uses_newest_posted_date(client):
+    opening(client)
+    for date in ('2026-09-30', '2026-10-03', '2026-10-02'):
+        # Date-drift events belong to imports bringing new evidence. Keep the new line
+        # outside both statement periods, so only the re-dated line can be copied.
+        run(client, 'bank-feed import', dict(account='Checking', content=ofx([
+            (date, '-40.00', 'pending', 'Gas station'),
+            ('2026-11-01', '-1.00', 'new-' + date, 'Later evidence')])))
+    assert table(client, "SELECT date FROM bank_lines WHERE fitid='pending'") == [('2026-09-30',)]
+    september = inbox(client)
+    assert september['counts']['lines'] == 0
+    cancel(client, september['draft'])
+    october = run(client, 'reconcile import', dict(account='Checking', from_inbox=True,
+        start=True, statement_date='2026-10-31', ending_balance='0.00'))
+    assert [(v['date'], v['amount']) for v in october['lines']] == [('2026-10-02', -4000)]
+    assert table(client, 'SELECT date FROM statement_lines') == [('2026-10-02',)]
+
+
+@pytest.mark.parametrize('dry', [True, False])
+def test_existing_inbox_draft_refuses_ending_balance(client, dry):
+    opening(client)
+    draft = inbox(client)['draft']
+    with pytest.raises(BookflowError) as raised:
+        run(client, 'reconcile import', dict(account='Checking', from_inbox=True,
+            draft=draft['id'], ending_balance='1.00'), dry_run=dry)
+    assert raised.value.code == 'E_VALIDATION'
+    assert raised.value.details['fields'][0]['field'] == 'ending_balance'

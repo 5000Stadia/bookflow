@@ -856,6 +856,9 @@ def _shaped(annotation, value):
 
 # ------------------------------------------------------------------ classifying one row (preview and run alike)
 
+# A row an earlier run of its source made, whose file values now differ from the record (R107 closing trial).
+CHANGED_SINCE = 'changed_since'
+
 def classify(s, ctx, run: dict, kind: kinds.Kind, books: Books, plan: RowPlan, pending: set[str],
              columns: dict[str, str], *, dry_run: bool, decided: dict | None = None,
              creator=None) -> tuple[str, dict | None, dict | None]:
@@ -867,18 +870,29 @@ def classify(s, ctx, run: dict, kind: kinds.Kind, books: Books, plan: RowPlan, p
     if plan.status == 'refused' and (plan.payload is None or plan.code in READER_CODES):
         return 'none', None, None
     payload = plan.payload or {}
-    if plan.key_hash in books.ledger:
+
+    def already_in():
         plan.status = 'already_in'
-        plan.record_type, plan.record_id = books.ledger[plan.key_hash]
+        plan.record_type, plan.record_id = made_here
         plan.message = 'An earlier run of this source made it.'
         return 'none', None, None
-    existing = books.existing(payload)
+
+    # A row an earlier run of this source made is compared like any other (R107 closing trial: a changed phone in
+    # next month's file read as already in, and update mode never reached it); one that cannot be resolved now is
+    # simply already in.
+    made_here = books.ledger.get(plan.key_hash)
+    existing = made_here[1] if made_here is not None else books.existing(payload)
     mode = run['mode']
     if existing is None and mode == 'update':
         plan.status, plan.code, plan.message = 'skipped', 'missing', 'No record matches; update mode makes none.'
         _not_all(run, plan, 'skipped')
         return 'none', None, None
     resolved, unknowns, waits, skip = resolve_payload(books, kind, payload, pending, columns, decided, creator)
+    if made_here is not None and (skip is not None or unknowns or waits):
+        return already_in()
+    if made_here is not None and mode == 'upsert':
+        # Upsert over its own source makes only what is missing; `update` changes what an earlier run made.
+        mode = 'create'
     if skip is not None:
         plan.status, plan.code = 'skipped', 'skipped_by_decision'
         plan.message = f"Skipped: {skip['value']!r} ({skip['field']}) was decided skip."
@@ -896,13 +910,24 @@ def classify(s, ctx, run: dict, kind: kinds.Kind, books: Books, plan: RowPlan, p
         current = batches.run_nested(s, ctx, f'{kind.noun} show', {kind.selector: existing},
                                      source_ref=f"import:{run['id']}")
         if _same(kind, resolved, current):
+            if made_here is not None:
+                return already_in()
             plan.status = 'unchanged'
             return 'none', None, None
         if mode == 'create':
-            plan.status, plan.code = 'differs', 'differs'
             changed = [p for p in _leaves(resolved) if norm_key(_get_path(resolved, p))
                        != norm_key(_get_path(current, p))]
-            plan.message = 'A record with this name exists and differs in ' + ', '.join(changed[:8]) + '; nothing applied.'
+            if made_here is not None:
+                # Still already in (a re-run never refuses its own rows), but the change is named, and the preview
+                # counts it in its notes.
+                already_in()
+                plan.code = CHANGED_SINCE
+                plan.message = ('An earlier run of this source made it; the file now differs in ' + ', '.join(changed[:8])
+                                + '; nothing applied (mode update changes it).')
+                return 'none', None, None
+            plan.status, plan.code = 'differs', 'differs'
+            plan.message = ('A record with this name exists and differs in ' + ', '.join(changed[:8])
+                            + '; nothing applied.')
             _not_all(run, plan, 'differs')
             return 'none', None, None
         body = {kind.selector: existing, 'expected_version': current['version'], **resolved}
@@ -1163,6 +1188,15 @@ def _prepare(s, ctx, inp) -> dict:
                          'would import a second copy')
     if report['dropped_total']:
         notes.append(f"{report['dropped_total']} character(s) no text field holds were dropped (`dropped` lists each)")
+    # A column holding values that no field takes is said out loud (R107 closing trial: a Balance column left out
+    # silently), unless the caller left it out on purpose with `columns: {"Balance": null}`.
+    ignored = {h for h, p in (getattr(inp, 'columns', None) or {}).items() if p is None}
+    where = {h: i for i, h in enumerate(table.headers)}
+    left = [h for h in mapping.unmapped if h not in ignored and h in where
+            and any(where[h] < len(cells) and str(cells[where[h]]).strip() for _, cells in table.rows)]
+    if left:
+        notes.append(f'not imported: {", ".join(left)} (no field takes {"it" if len(left) == 1 else "them"}; '
+                     '`columns` maps a header to a field, or to null to leave it out on purpose)')
     for d in mapping.decisions:
         notes.append(d['message'])
     return {'kind': kind, 'table': table, 'mapping': mapping, 'rows': rows, 'source': source, 'books': books,
@@ -1241,6 +1275,11 @@ def prepare_preview(s, ctx, inp) -> dict:
         action, body, _ = classify(s, ctx, run, kind, books, plan, _Others(names, own), columns, dry_run=True)
         if action in ('create', 'update'):
             _dry_run(s, ctx, run, kind, plan, action, body, columns)
+    changed = [plan for plan in rows if plan.code == CHANGED_SINCE]
+    if changed:
+        p['notes'].append(f'{len(changed)} row(s) an earlier run of this source made now differ from the file (rows '
+                          + ', '.join(str(r.row_no) for r in changed[:10]) + '); they stay as they are: preview '
+                          'again with mode update to change them')
     references = []
     for u in p['check']['unknown_references']:
         rows_ = [plan.spans[0][0] if plan.spans else plan.row_no for plan in rows if plan.status == 'waiting' and any(
@@ -2067,5 +2106,6 @@ def template(kind_name: str) -> dict:
             example.append(_EXAMPLES.get(spec.type, ''))
     return {'kind': k.name, 'command': k.create, 'header': paths, 'example': example,
             'content': tabular.write_csv(paths, [example]),
-            'fields': [{'path': p, 'type': s.type, 'required': s.required, 'enum': list(s.enum) or None,
+            # `field` repeats `path`: a reply to anyone but a hub admin nulls every key named path (blueprint 5.4).
+            'fields': [{'field': p, 'path': p, 'type': s.type, 'required': s.required, 'enum': list(s.enum) or None,
                         'reference_to': s.target} for p, s in specs.items()]}

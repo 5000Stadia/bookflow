@@ -21,6 +21,8 @@ from bookflow.core.session import Session
 PlanCallback = Callable[[BaseModel, Context, Session], Plan]
 ApplyCallback = Callable[[Plan, Context, Session], Applied]
 LIFECYCLE_VERBS = ("create", "update", "show", "list", "activate", "deactivate")
+# The lists `bulk-edit` changes many of at once (design/bulk-import.md §7); their `update` help points there.
+BULK_EDIT_NOUNS = frozenset(("customer", "vendor", "item", "account"))
 
 
 @dataclass(frozen=True)
@@ -151,6 +153,11 @@ def register_lifecycle(
     }
     if descriptions:
         default_descriptions.update(descriptions)
+    if noun in BULK_EDIT_NOUNS:
+        # R107 closing trial: asked to reprice a category, an agent found `item update` and made twelve of them.
+        default_descriptions["update"] += (
+            f" To change many {plural} at once (a category repriced, new terms for a group), use `bulk-edit preview` "
+            f"(kind {noun}) then `bulk-edit apply`: one batch with a before-and-after diff, undone whole by `bulk-edit reverse`.")
     for verb, description in default_descriptions.items():
         if not description.endswith("."):
             raise ValueError(f"{verb}: description must end with a period")

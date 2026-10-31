@@ -59,7 +59,9 @@ def _output(plan: undo.UndoPlan, results) -> UndoOutput:
 undo_command = command(
     "undo",
     scope="company",
-    description="Compensate an eligible Row 5 list audit event without deleting history.",
+    description=("Undo one change to a list record (an eligible audit event) without deleting history. A whole import, "
+                 "grid edit or opening is undone as one unit instead: `import reverse`, `bulk-edit reverse` or "
+                 "`opening-draft reverse` (`batch query` lists them)."),
     input_model=UndoInput,
     output_model=UndoOutput,
     writes={"company"},

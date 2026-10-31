@@ -681,7 +681,7 @@ The same example as complete `bookflow_run` arguments:
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `account` | `--account` | string | yes | no | — | Bank or credit card account ID or canonical full name.; minimum length 1; maximum length 1000 |
-| `from_inbox` | `--from-inbox` | boolean | no | no | false | Use live bank inbox lines, including ignored lines, after the previous statement or opening date through statement_date (or the draft closing date). Give no file or CSV options. With start, supply statement_date and ending_balance; with draft, use its period. Matches are read afresh; no inbox decision is changed. |
+| `from_inbox` | `--from-inbox` | boolean | no | no | false | Use live bank inbox lines except those ignored as duplicate, by their latest posted date, after the previous statement or opening date through statement_date (or the draft closing date). Give no file or CSV options. With start, supply statement_date and ending_balance; with draft, use its period and omit ending_balance. Undecided possible duplicates appear in result notes. Matches are read afresh; no inbox decision is changed. |
 | `content` | `--content` | string \| null | no | yes | null | The statement file's text, exactly as downloaded from the bank. Give this, `attachment`, or `from_inbox`. |
 | `attachment` | `--attachment` | string \| null | no | yes | null | An attachment in this company holding the statement file, as `attachment add company_info <company id> FILE` returns its id (over MCP the file goes in that command's transport.input_file). Give this, `content`, or `from_inbox`. |
 | `format` | `--format` | literal["auto", "ofx", "qfx", "csv"] | no | no | "auto" | File format; auto tells OFX/QFX (an <OFX> element) from CSV. |
@@ -851,6 +851,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `has_more` | boolean | no | no | false | More lines follow this page: pass next_cursor as cursor, with the same file, for them. |
 | `next_cursor` | string \| null | no | yes | null | The cursor for the lines after this page; null on the last page. |
 | `next_step` | string | yes | no | — | — |
+| `notes` | array[string] | no | no | [] | Warnings about undecided possible duplicates in the inbox period. |
 
 Example JSON output:
 
@@ -878,6 +879,7 @@ Example JSON output:
   "lines": [],
   "next_cursor": null,
   "next_step": "value",
+  "notes": [],
   "statement_date": null
 }
 ```

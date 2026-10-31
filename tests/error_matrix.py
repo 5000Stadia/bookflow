@@ -1706,9 +1706,11 @@ _RECONCILE_ERRORS = {
 for _verb in ("opening start", "start", "mark", "finish", "discard"):
     MATRIX["reconcile " + _verb] = dict(_RECONCILE_ERRORS)
 # `reconcile import` starts and marks through the same aggregate, reading a file or the bank inbox.
+# Inbox validation names statement_date for an invalid period, ending_balance when supplied with a draft,
+# and from_inbox while the source import is reversing or blocked.
 MATRIX["reconcile import"] = {
     **_RECONCILE_ERRORS,
-    "E_VALIDATION": "invalid statement input, mixed file/inbox sources, or missing inbox statement date/balance",
+    "E_VALIDATION": "invalid statement input, mixed file/inbox sources, invalid inbox period, missing date/balance, ending_balance with an inbox draft, or reversing/blocked inbox source",
     "E_AMOUNT_PRECISION": "a statement amount with more decimal places than the account's currency has",
 }
 
@@ -2927,3 +2929,26 @@ MATRIX['pos-register create'] = dict(_POS_WRITE)
 MATRIX['pos-register update'] = dict(_POS_WRITE, E_VERSION_CONFLICT='changed since the version read')
 MATRIX['pos-register show'] = {'E_RECORD_NOT_FOUND': 'unknown register', 'E_FEATURE_DISABLED': 'POS is off'}
 MATRIX['pos-register list'] = {'E_FEATURE_DISABLED': 'POS is off for the company'}
+# Ringing up (R114 increment 5).
+_POS_SALE = {
+    'E_VALIDATION': 'an empty cart, a register to name when there are several, a payment method the register does not '
+                    'offer, cash short of the total, a card for part of it, a field the register fixes',
+    'E_RECORD_NOT_FOUND': 'unknown register, customer, item or payment method',
+    'E_INACTIVE_REFERENCE': 'an inactive customer, item or payment method',
+    'E_FEATURE_DISABLED': 'POS is off for the company',
+    'E_PERIOD_CLOSED': 'today is on or before the closing date',
+    'E_VALUE_RANGE': 'a quantity or amount out of range',
+    'E_AMOUNT_PRECISION': 'a price with more places than the currency',
+    'E_PERMISSION': 'a price typed over an item\'s own price without pos.price-override',
+}
+MATRIX['pos sale preview'] = dict(_POS_SALE)
+MATRIX['pos sale complete'] = dict(_POS_SALE, E_PREVIEW_STALE='the sale now totals other than the total shown',
+                                   E_IDEMPOTENCY_MISMATCH='the ticket already completed with another cart',
+                                   E_DIRECTIVE_NOT_FOUND='unknown --directive',
+                                   E_DIRECTIVE_INACTIVE='deactivated --directive')
+MATRIX['pos customer search'] = {'E_FEATURE_DISABLED': 'POS is off for the company'}
+MATRIX['pos customer add'] = {'E_VALIDATION': 'an empty name', 'E_NAME_TAKEN': 'a customer has the name',
+                              'E_IDEMPOTENCY_MISMATCH': 'the idempotency key was used with another input',
+                              'E_FEATURE_DISABLED': 'POS is off for the company',
+                              'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+                              'E_DIRECTIVE_INACTIVE': 'deactivated --directive'}

@@ -801,6 +801,93 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   A live installation needs `permission activate` after this merges. The deny pin did its job at the merge of main: automation-v1 added `automation` to `readonly`,
   the pin failed, and the clerk denies it.
 
+### As built: increment 5 (ring up)
+
+- **Receipt link and register scope.** §4’s `source_ref` of `pos:<register>:<ticket>` is not implemented: sales receipts
+  have no such field. The link lives in `pos_sales`, whose ticket and register point to the receipt through `document_id`.
+  A clerk is not yet bound to one register; increment 10 adds shifts.
+- **Storage.** co0120 on co0119 (bank rules): one insert-only table, `pos_sales` (ticket, unique; input hash; register; document type and id, a foreign
+  key to `transactions`; whether a customer was named; currency; total, tendered and change in minor units; tenders
+  JSON), with no-update and no-delete guards. Written in the same transaction as the receipt. **Settled:**
+  `pos_tickets` is not made yet: nothing stores a cart until Hold (increment 7), so the ticket is a key the device
+  makes (a UUID) and `pos_sales.ticket` holds it; a held ticket's id will be the same key. `pos_sales` has no `shift`
+  column yet; increment 10 adds it with the shifts table it points at. Nothing reads the new table in a report, so
+  the deposit read manifest is unchanged.
+- **Commands (layer `pos-sale-v1` on `bank-rule-v1`, 878 commands).** All four at `pos.sell` (member): `pos sale preview`
+  (a read), `pos sale complete`, `pos customer search` (a read) and `pos customer add`. `company/pos_sales.py` turns
+  the ticket into the very `sales-receipt post` input a person would type — customer (the chosen one, else the
+  register's walk-in), `deposit_to` the register's account, `site` the register's site, `date` today in the company's
+  timezone, `payment_method` one the register offers, `payment_reference` the tender's — and runs the same core:
+  `sales.prepare(..., 'sales_receipt', 'post')`, then `sales.persist_prepared` with the command name `pos sale
+  complete`, so the receipt's audit event, its stock movements and the `pos_sales` row's own event all name the POS
+  command. None of those facts is an input (the model forbids extra fields), so `pos.sell` reaches no other account,
+  date, site or document. `expected_total` (the total shown) is required; any other total posts nothing
+  (`E_PREVIEW_STALE`, carrying the new total). Single tender: cash takes at least the total and the change is the
+  difference; any other method takes exactly the total (part of it is split tender, increment 11). A negative total
+  is refused (refunds are increment 9).
+- **Price override (settled).** `pos.price-override` is asked for only when a line types a price over an item's own
+  price; an item whose exact base price and effective price (including price levels and rules) are zero
+  takes a typed price at the till without it (§3's "an item with no price opens
+  the keypad for one": an item record always has a price, so "no price" is 0.00). The check is a declared conditional
+  source (`pos_sales.require_price_override`), run before planning through the command's `authorize_input`
+  (`hub.capabilities.require_company` for an agent, `access.require_resource` for a person).
+- **Nothing doubled.** The ticket key is the operation key, checked before planning and again inside the write
+  transaction: the same key and sale (register, customer and lines) return the sale already posted with `replayed: true`
+  and its recorded tender, even if the retry changes tender or expected total; the same key with
+  another cart is `E_IDEMPOTENCY_MISMATCH`, naming the posted receipt and warning not to ring it again.
+  Unlike the generic 30-day, per-actor `Idempotency-Key` (which the
+  command also accepts), the ticket never expires and holds across clerks and devices.
+- **Customers at the till.** `pos customer search` requires at least 3 characters (including phone fragments).
+  It matches part of a name, phone or email with SQL LIKE and a result limit (digits alone for a phone,
+  so "(555) 010-9988" is found by "5550109988") over active customers' contacts and contact points, never a
+  register's walk-in, returning id, name, phone and email only (a clerk holds no `customer` read).
+  `pos customer add` makes a customer from a name and optional phone and email through `parties.plan_party_create`.
+- **The screen** (`pos_pages.py`, `pos.html`, `static/pos.js`, `static/pos.css`, the Scan field's new `pos` mode in
+  `scan.js`). The page reads `pos-register list` and `item list` once (declared in `home.PAGE_RUNS`) and carries each
+  active sales item's name, price, barcode, SKU, description, on-hand and picture (no cost or vendor), so a tap or a
+  scan adds its line at once with no host. **Settled: the starting layout** is computed, not stored, until the
+  layout editor (increment 6): one group per top-level item category (subcategories nested by the category's full
+  name), then the uncategorized items; discounts, subtotals and percentage charges are rung up by lookup, not boxes;
+  *Start empty* arrives with the editor. Block style only (2 a row at 390 px, 4–5 from 768 px). Lookup filters the
+  page's items by name, SKU, barcode and description as typed, in List style; Enter is the Scan field's own look-up
+  (`2*` first rings up two), and the camera hands its codes to the same path. The cart is mirrored to `localStorage`
+  per company and register on every change, with its ticket; a reload keeps it. 250 ms after a change the page asks
+  `pos sale preview`; the total reads "updating" until it answers and "not confirmed" with no host, when Charge is
+  off. Line amounts are the server's when the posted lines match the cart line for line (a group item expands, and
+  then only the totals are the server's). Tapping a line opens quantity (−/+), price (with `pos.price-override`, or
+  for a 0.00 item) and a serial number for a serial-tracked item. The customer chip searches and adds; clear returns
+  to *No customer*. Charge opens the tender: the register's methods, Cash first with quick amounts (exact, the next
+  whole unit, the next 5, 10, 20, 50 and 100 above), a 64 px keypad and Change due; a card or check takes an optional
+  reference. Complete stores the request in `localStorage` before sending it; a lost answer, any HTTP 5xx, or an unknown/network
+  status keeps the sale on the
+  device, locked, with *Finish the sale*, which sends the same request again (also after a reload). The change screen
+  shows the change due large, the receipt number and tenders, and New sale. Phone: the sale is a sheet raised from the
+  bar at the foot; from 768 px it stands beside the boxes. Print receipt waits for increment 8. A register picker shows
+  when there is more than one; the device remembers its choice. The `afterAdd` hook (R189) is in place; the preview's
+  pre-tax hook (R188) is not, because the preview is the sales receipt's own dry run.
+- **The clerk's header stays minimal (settled).** A clerk now holds two company writes (`pos sale complete`, `pos
+  customer add`), which would have opened All commands and Advanced tools (they need "some company write", increment
+  3) and with them the Company and Settings sections. A POS command's write no longer counts there
+  (`home.Reader`'s `advanced` flag), so the clerk keeps the minimal header with Point of sale and Items.
+- **Agent guide.** The *Point of sale* chapter says a POS sale is the receipt `sales-receipt post` would make and that
+  agents answer from receipts rather than ring up. `import_kinds.NOT_IMPORTABLE` lists `pos sale complete` and `pos
+  customer add`.
+- **Timings (§12), measured by `test_pos_sale_browser.py` in headless desktop Chrome on loopback, not a phone:**
+  a tap shows its line in 0.9 ms (target 100 ms), the host's total in 222 ms (median of 5; target 400 ms), and
+  Complete reaches the change screen in 464 ms (target 1.5 s). The phone figures are Kabe's trial.
+- **Tests.** `tests/test_pos_sale.py`: the twin property (two byte-identical demo roots; 14 generated carts of
+  stocked, service, non-inventory, group, discount, subtotal and 0.00-priced lines, a price level, a price rule, taxed,
+  exempt and walk-in customers, cash, card and check; each receipt, the trial balance, the general ledger, stock and
+  its value, the sales tax liability and Undeposited Funds read the same), a retry with the same ticket (one sale,
+  `replayed`; another cart refused; a generic key on top changes nothing), the register's fixed facts and the
+  refusals, customers at the till, and a POS clerk ringing up over HTTP (refused an override, allowed a 0.00 item,
+  refused `sales-receipt post` and the customer list). `tests/test_pos_sale_surfaces.py` (Python, CLI, HTTP and MCP
+  alike). `tests/test_pos_sale_browser.py` (real Chrome: at 390 px by tap, lookup, a keyboard scanner's `2*` and the
+  camera's hand-off, a reload keeping the cart, the sheet, a customer added, cash from a quick amount and the change
+  screen; at 1440 px the side-by-side layout and a lost Complete finished after a reload, posting once). The clerk's
+  pinned commands (`test_pos_layer.py`) now include the four.
+- **Not verified here.** Real phones (camera to cart, touch, §12's phone targets); a group item's line-by-line amounts.
+
 ## 16. Open questions
 
 Each default stands if nobody decides. K1 and K2 are Kabe's.

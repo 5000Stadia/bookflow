@@ -37,16 +37,26 @@ def read(s, snapshot, account_id, closing_date, draft, opening_draft):
         after = opening_draft.header.opening_date
     if closing_date is None or closing_date <= after:
         raise files.invalid('statement_date', f'The closing date must be after {after}, the previous statement or opening date.')
-    rows = s.company.conn.execute(sa.select(c.bank_lines).where(
+    events = c.bank_line_events
+    latest_date = (sa.select(sa.func.json_extract(events.c.details, '$.date_in_file'))
+                   .where(events.c.line_id == c.bank_lines.c.id, events.c.kind == 'seen_again')
+                   .order_by(events.c.created_at.desc(), events.c.id.desc()).limit(1).scalar_subquery())
+    posted_date = sa.func.coalesce(latest_date, c.bank_lines.c.date)
+    rows = s.company.conn.execute(sa.select(c.bank_lines, posted_date.label('posted_date')).where(
         c.bank_lines.c.account_id == account_id, c.bank_lines.c.live == 1,
-        c.bank_lines.c.date > after, c.bank_lines.c.date <= closing_date).order_by(
-            c.bank_lines.c.date, c.bank_lines.c.import_id, c.bank_lines.c.ordinal)).mappings().all()
-    # Keep the stored key, including occurrence numbers and reused-FITID suffixes. Inbox decisions
-    # are deliberately not evidence: ignored and linked lines are rematched against the current books.
-    lines = tuple(files.Line(line_id=r['line_key'], date=r['date'], amount=r['amount'], payee=r['payee'],
+        sa.or_(c.bank_lines.c.state != 'ignored', c.bank_lines.c.ignore_reason.is_(None),
+               c.bank_lines.c.ignore_reason != 'duplicate'),
+        posted_date > after, posted_date <= closing_date).order_by(
+            posted_date, c.bank_lines.c.import_id, c.bank_lines.c.ordinal)).mappings().all()
+    # Keep source keys, but use the bank's newest posted date. Only an explicit duplicate
+    # decision removes evidence; other ignored and linked lines are rematched against the books.
+    lines = tuple(files.Line(line_id=r['line_key'], date=r['posted_date'], amount=r['amount'], payee=r['payee'],
                              memo=r['memo'], number=r['number'], fitid=r['fitid']) for r in rows)
+    notes = tuple(f"Inbox line {r['id']} has an undecided possible_duplicate flag (may repeat "
+                  f"{r['possible_duplicate_of']}); decide it before finishing the statement."
+                  for r in rows if r['state'] == 'waiting' and r['possible_duplicate_of'])
     ids = {r['line_key']: r['id'] for r in rows}
     text = json.dumps(dict(after=after, through=closing_date,
                            lines=[dict(bank_line_id=ids[v.line_id], **v.__dict__) for v in lines]),
                       sort_keys=True, separators=(',', ':'))
-    return files.Statement(format='inbox', lines=lines, statement_date=closing_date), text, ids
+    return files.Statement(format='inbox', lines=lines, statement_date=closing_date), text, ids, notes

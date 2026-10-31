@@ -991,17 +991,63 @@ stable record IDs). Combine it with `projection: "reference"` and
 collections. It intersects every other criterion and remains subject to ordinary
 company authority and cursor checks. Omitted `ids` preserves ordinary browsing.
 
+## Importing a list from a file
+
+"Here's my customer list from my old system" is an import. The file is an attachment (`attachment list
+company_info <company id>` shows what the owner attached; `attachment add` attaches one) or pasted cells, given as
+`content`. Find the kind with `import kinds` (customer, vendor, item, account, term, item-category... and the
+document kinds below); `import template <kind>` shows its header and fields.
+
+1. `import preview --kind customer --attachment <id> --source "<where it came from>"`. Bookflow reads the encoding,
+   delimiter, dates (day first or month first), money (decimal commas, parentheses, a trailing minus) and maps the
+   headers it recognises. Give the same `source` every time a file comes from the same place: rows are keyed within
+   it, so running it again never makes a second record. Read `counts`, `mapping`, `decisions`, `unknown_references`
+   (each with up to three suggestions), `refused` (line, column, code and reason) and `next`. A column it did not
+   map is set with `columns` (`{"Pay terms": "terms_id", "Fax": null}`) on a fresh preview; `notes` names any
+   column holding values that nothing takes. A balance column is not part of a customer or vendor: what they owe
+   comes in as open invoices or bills in the opening (below), so leave it out and say so. Send the preview without
+   `dry_run`: it writes nothing to the books either way, and only a real call keeps the run that `decide` and `run`
+   continue.
+2. Unknown references (terms "Net 30 days" when the list has Net 30) are answered with `import decide <run>`:
+   `map` to an existing record (`"Net 30 days=Net 30"`), `create`, or `skip`; `remember` keeps the maps for the next
+   file. A suggestion is only a suggestion: when the right record is not plain from the file and the list, ask the
+   owner which it is. Never guess a mapping that sets money, terms or accounts.
+3. One check before `import run`. An import that sets how the business works from then on (new customers with their
+   terms, a list replaced, a mapping next month's file will use) gets one check of its exact details with the owner,
+   from the preview: how many records it makes, how each unknown value is mapped, and the source name you will save
+   the mapping under. Run it on their yes and do not ask again. A plainly named, small import ("add these three
+   vendors") just runs.
+4. `import run <run>` until `state` is `done`; report the counts (created, already in, refused). By default a file is
+   all or nothing: any refused row stops the run before it starts, so fix the file or the mapping, or rerun the
+   preview with `partial` when the owner wants the good rows in now; `import errors <run>` gives the refused rows as a
+   CSV to correct and import again as the same source (only those rows import).
+5. `import-mapping save --from-run <run> --source "<the same source>"` keeps the columns, formats and value maps.
+
+"Same export as last month" needs no setup: `import preview` with the same `source` (or `mapping`) on the new file
+finds the saved mapping (`matched` says exact or probable, with the new and missing columns), then `import run`.
+Rows created by an earlier run of the same source come back `already_in`; changed rows carry code
+`changed_since` naming the changed fields. Only `mode` `update` changes these rows; `upsert` leaves them unchanged.
+
+"That import was wrong" (terms mapped to the wrong name, the wrong file) is undone as one unit: `import show <run>`
+to name it, `import reverse <run> --dry-run` to see the plan, then `import reverse <run>`. Records it made leave the
+lists (their history is kept) and their names are released, so the corrected file then imports as new rows; records
+it updated get their old values back. It is refused, naming each record and what clears it, while one is in use (a
+customer with an invoice) or was changed since; then nothing changes, so report the blockers rather than working
+around them. `batch query` lists every import, edit and opening that can still be undone.
+
 ## Importing invoices, bills or payments from a file
 
 "Load these 40 open invoices from the spreadsheet" is `import check --kind invoice` on the file (every
 problem at once, by column and row), then `import preview`, then `import run` until done. Rows sharing an
 invoice number are one invoice, its lines in file order; a payment file is applied to invoices by their
 numbers. An unknown customer is named, never made, unless the owner asked for new customers to be created
-(`create_missing`, and never one that looks like an existing name). A plainly named import just runs. An
-import that sets how the business works from then on (a saved mapping next month's file will use, customers
-or lists it creates, an opening) gets one check of its exact details, from the preview, with the owner
-before `import run`. `import reverse --dry-run`, then `import reverse`, undoes a whole run; it is refused,
-naming the payment, while a payment is applied to one of its invoices.
+(`create_missing`, and never one that looks like an existing name): report the names and the rows they hold
+up, and ask whether to add those customers first. A plainly named import just runs. An import that sets how the
+business works from then on (a saved mapping next month's file will use, customers or lists it creates, an
+opening) gets one check of its exact details, from the preview, with the owner before `import run`. `import
+reverse --dry-run`, then `import reverse`, undoes a whole run; it is refused, naming the payment, while a payment
+is applied to one of its invoices. Open invoices from before the books start belong in the opening (below), not
+in an invoice import.
 
 ## Changing many records at once
 
@@ -1023,7 +1069,8 @@ changes, and `--skip-changed` restores the rest only when the owner agrees to le
 (Account, Balance: every bank, card, loan and other balance they know; a card or loan is what they owe),
 `open_invoices`, `unpaid_bills` and `stock`, pasted text in `content`. Put a total they state (receivables, payables,
 stock value) in `given`, so the rows are checked against it; a total left out is taken from the rows and labelled
-`derived`. Equity is worked out unless they name equity accounts. Then `opening-draft plan`: read `blocking` first,
+`derived`. Equity is worked out unless they name equity accounts. Give each invoice and bill a `Due date` or
+`Terms` column (the customer's or vendor's own terms are not read): without one it is due on its own date. Then `opening-draft plan`: read `blocking` first,
 fix each with `opening-draft update` (carrying `expected_version`), and plan again until `ready`. A stock item that
 is not an item yet is made only when the owner confirms it (`make_items`).
 
@@ -1546,7 +1593,11 @@ Point of sale is a person's checkout on a phone, tablet or till, and an optional
 post` as always, POS on or off. Each POS act is a capability your principal grants on your membership (`pos.sell`,
 `pos.void`, `pos.refund`, `pos.price-override`, `pos.layout`); your role never gives you one. With `pos.sell`,
 `pos-register list` answers which tills there are, where each one's takings are deposited and which payment methods
-it takes; `pos-register create` and `update` need `pos.layout`.
+it takes; `pos-register create` and `update` need `pos.layout`. A POS sale (`pos sale complete`, from the POS
+screen) posts the very sales receipt `sales-receipt post` would, with the register's deposit account, site and
+walk-in customer and today's date, and records the ticket and tender beside it; each such receipt's `pos_sales` row
+says which register and clerk took it and what was tendered. Answer questions about takings from the receipts; do
+not ring sales up through `pos sale complete` yourself.
 
 <!-- bookflow-example: illustrative -->
 ```json

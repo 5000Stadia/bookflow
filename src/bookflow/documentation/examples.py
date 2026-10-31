@@ -2102,3 +2102,20 @@ EXAMPLES.update({
     'bank-rule query': Example('bookflow bank-rule query --account Checking --company "Demo Plumbing Co" --json',
                                {'account': 'Checking'}),
 })
+# R114 increment 5: ringing up at the POS.
+EXAMPLES.update({
+    'pos sale preview': Example('bookflow pos sale preview --lines \'[{"item":"Pipe Sealant","quantity":"2"}]\' '
+                                '--company "Demo Plumbing Co" --json',
+                                {'lines': [{'item': 'Pipe Sealant', 'quantity': '2'}]}),
+    'pos sale complete': Example('bookflow pos sale complete --ticket 01JPOSEXAMPLETICKET0000001 '
+                                 '--lines \'[{"item":"Pipe Sealant","quantity":"2"}]\' '
+                                 '--tender \'{"payment_method":"Cash","amount":"20"}\' --expected-total 16.08 '
+                                 '--company "Demo Plumbing Co" --json',
+                                 {'ticket': '01JPOSEXAMPLETICKET0000001',
+                                  'lines': [{'item': 'Pipe Sealant', 'quantity': '2'}],
+                                  'tender': {'payment_method': 'Cash', 'amount': '20'}, 'expected_total': '16.08'}),
+    'pos customer search': Example('bookflow pos customer search 555-0110 --company "Demo Plumbing Co" --json',
+                                   {'q': '555-0110'}),
+    'pos customer add': Example('bookflow pos customer add --name "Casey Counter" --phone 555-0142 '
+                                '--company "Demo Plumbing Co" --json', {'name': 'Casey Counter', 'phone': '555-0142'}),
+})

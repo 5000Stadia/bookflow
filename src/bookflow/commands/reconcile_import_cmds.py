@@ -56,9 +56,11 @@ class CsvMapping(m.Model):
 class ImportInput(m.Dated):
     account: m.AccountSelector
     from_inbox: bool = Field(False, description=(
-        "Use live bank inbox lines, including ignored lines, after the previous statement or opening date "
+        "Use live bank inbox lines except those ignored as duplicate, by their latest posted date, "
+        "after the previous statement or opening date "
         "through statement_date (or the draft closing date). Give no file or CSV options. "
-        "With start, supply statement_date and ending_balance; with draft, use its period. "
+        "With start, supply statement_date and ending_balance; with draft, use its period and omit ending_balance. "
+        "Undecided possible duplicates appear in result notes. "
         "Matches are read afresh; no inbox decision is changed."))
     content: str | None = Field(None, min_length=1, max_length=5_000_000,
                                 description=("The statement file's text, exactly as downloaded from the bank. "
@@ -166,6 +168,7 @@ class ImportOutput(m.Model):
     has_more: bool = Field(False, description='More lines follow this page: pass next_cursor as cursor, with the same file, for them.')
     next_cursor: str | None = Field(None, description='The cursor for the lines after this page; null on the last page.')
     next_step: str
+    notes: tuple[str, ...] = Field((), description="Warnings about undecided possible duplicates in the inbox period.")
 
 
 def _page_key(text, account_id):
@@ -380,6 +383,8 @@ def _prepare(inp, ctx, s, ids):
                 'draft must be an open statement reconciliation on this account'))
         statement_date = draft.header.statement_date
         if inp.from_inbox:
+            if inp.ending_balance is not None:
+                raise files.invalid('ending_balance', 'An existing draft already has its ending balance; omit ending_balance.')
             ending = draft.header.entered_balance
     elif inp.start:
         if inp.from_inbox and ending is None:
@@ -401,10 +406,11 @@ def _prepare(inp, ctx, s, ids):
             draft = drafts.start(snapshot, start_input, identity=ids['draft'],
                                  revision_id=ids['start_revision'], opening_draft=opening_draft)
             started = start_input
+    notes = ()
     bank_line_ids = {}
     if inp.from_inbox:
         from bookflow.company import statement_inbox
-        parsed, text, bank_line_ids = statement_inbox.read(
+        parsed, text, bank_line_ids, notes = statement_inbox.read(
             s, snapshot, account_id, statement_date, draft, opening_draft)
     cutoff = statement_date or max((v.date for v in parsed.lines), default=None)
     if cutoff is None:
@@ -494,7 +500,7 @@ def _prepare(inp, ctx, s, ids):
                               Suggestion(movement=c.ref[0], group_fingerprint=c.ref[1], date=c.date,
                                          amount=c.amount, number=c.number, payees=c.payees,
                                          memo=c.memo or None) for c in unsupported),
-                          next_step=step)
+                          next_step=step, notes=notes)
     return dict(output=output, text=text, account_id=account_id, started=started, start_value=draft if started else None,
                 opening_draft=opening_draft, marks=marks, parsed=parsed, lines=lines, mapping=mapping,
                 draft_id=value.id if value is not None else None, ending=ending,

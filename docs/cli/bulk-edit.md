@@ -254,7 +254,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `filter` | `--filter` | array[string] | no | no | [] | The list's own `query` filters (`customer query --help`), e.g. ["category_id=Fixtures"]. |
+| `filter` | `--filter` | array[string] | no | no | [] | The list's own `query` filters (`item query options` lists them), e.g. ["category_id=Fixtures"]: a reference filter takes the record's name or id. |
 | `query` | `--query` | string \| null | no | yes | null | Search text, as the list's `query` takes it. |
 | `include_inactive` | `--include-inactive` | boolean | no | no | false | Include inactive records. |
 | `records` | `--records` | array[string] \| null | no | yes | null | Exactly these records (id or full name; an account's number), in this order, instead of a filter. |
@@ -342,7 +342,7 @@ Example JSON output:
 
 ## `bulk-edit preview`
 
-Preview a grid edit of many records of one list (customer, vendor, item, account), changing nothing in the books: pick records by the list's own query `filter`, `query` text or named `records`; give cell `changes`, a `paste`d block and column `operations` (set, clear, copy_down, replace, add, multiply, percent, set_from; a computed amount rounds half-up to the currency's places or to `round`). Returns the diff (each record's fields before and after), money totals before and after, and each record its update would refuse, with the command's code. Then `bulk-edit apply`. Before applying an edit that sets how the business works from now on (new terms or prices), show its exact diff and totals to your principal once. Example: {"kind": "item", "filter": ["category=Fixtures"], "operations": [{"op": "percent", "field": "price", "by": "5", "round": "0.05"}]}.
+Preview a grid edit of many records of one list (customer, vendor, item, account), changing nothing in the books: pick records by the list's own query `filter`, `query` text or named `records`; give cell `changes`, a `paste`d block and column `operations` (set, clear, copy_down, replace, add, multiply, percent, set_from; a computed amount rounds half-up to the currency's places or to `round`). Returns the diff (each record's fields before and after), money totals before and after, and each record its update would refuse, with the command's code. Then `bulk-edit apply`. Before applying an edit that sets how the business works from now on (new terms or prices), show its exact diff and totals to your principal once. Example: {"kind": "item", "filter": ["category_id=Fixtures"], "operations": [{"op": "percent", "field": "price", "by": "5", "round": "0.05"}]}.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -372,7 +372,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `filter` | `--filter` | array[string] | no | no | [] | The list's own `query` filters (`customer query --help`), e.g. ["category_id=Fixtures"]. |
+| `filter` | `--filter` | array[string] | no | no | [] | The list's own `query` filters (`item query options` lists them), e.g. ["category_id=Fixtures"]: a reference filter takes the record's name or id. |
 | `query` | `--query` | string \| null | no | yes | null | Search text, as the list's `query` takes it. |
 | `include_inactive` | `--include-inactive` | boolean | no | no | false | Include inactive records. |
 | `records` | `--records` | array[string] \| null | no | yes | null | Exactly these records (id or full name; an account's number), in this order, instead of a filter. |
@@ -583,7 +583,7 @@ Example JSON output:
 
 ## `bulk-edit reverse`
 
-Undo a grid edit as one unit: every record it changed gets its exact prior values back through its update. Refused (E_BATCH_BLOCKED), naming each record and who changed it when, if any was edited again since; `skip_changed` restores the rest and leaves those (reversed_partly). Refused while the apply is unfinished (finish or cancel it first). --dry-run shows the plan and a fingerprint. Example: {"run": "01J..."}.
+Undo a grid edit as one unit: every record it changed gets its exact prior values back through its update. Refused (E_BATCH_BLOCKED), naming each record and who changed it when, if any was edited again since; `skip_changed` restores the rest and leaves those (reversed_partly). A later edit is someone's decision: before passing skip_changed, name those records to the owner and ask whether to leave them and restore the rest; do nothing until they answer. Refused while the apply is unfinished (finish or cancel it first). --dry-run shows the plan and a fingerprint. Example: {"run": "01J..."}.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -614,7 +614,7 @@ The same example as complete `bookflow_run` arguments:
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `run` | `RUN` | string | yes | no | — | The grid edit (from `bulk-edit preview`).; minimum length 26; maximum length 26 |
-| `skip_changed` | `--skip-changed` | boolean | no | no | false | Reverse every record except those edited again since (they are left as they are and listed; the batch is then reversed_partly). Without it, one such record refuses the whole reversal, naming it. |
+| `skip_changed` | `--skip-changed` | boolean | no | no | false | Reverse every record except those edited again since (they are left as they are and listed; the batch is then reversed_partly). Without it, one such record refuses the whole reversal, naming it. Those later edits are someone's decision: report them, and pass this only when the owner agrees to leave them. |
 | `fingerprint` | `--fingerprint` | string \| null | no | yes | null | The `fingerprint` a dry run returned; the reversal is refused if the batch changed since. |
 
 ### Command and context options

@@ -18,7 +18,7 @@ _PREVIEW = (
     'fields before and after), money totals before and after, and each record its update would refuse, with the '
     'command\'s code. Then `bulk-edit apply`. Before applying an edit that sets how the business works from now on '
     '(new terms or prices), show its exact diff and totals to your principal once. Example: {"kind": "item", '
-    '"filter": ["category=Fixtures"], "operations": [{"op": "percent", "field": "price", "by": "5", '
+    '"filter": ["category_id=Fixtures"], "operations": [{"op": "percent", "field": "price", "by": "5", '
     '"round": "0.05"}]}.')
 _APPLY = (
     'Apply a previewed grid edit: one ordinary update per record carrying the version the preview read, each its own '
@@ -29,7 +29,9 @@ _APPLY = (
 _REVERSE = (
     'Undo a grid edit as one unit: every record it changed gets its exact prior values back through its update. '
     'Refused (E_BATCH_BLOCKED), naming each record and who changed it when, if any was edited again since; '
-    '`skip_changed` restores the rest and leaves those (reversed_partly). Refused while the apply is unfinished '
+    '`skip_changed` restores the rest and leaves those (reversed_partly). A later edit is someone\'s decision: '
+    'before passing skip_changed, name those records to the owner and ask whether to leave them and restore the '
+    'rest; do nothing until they answer. Refused while the apply is unfinished '
     '(finish or cancel it first). --dry-run shows the plan and a fingerprint. '
     'Example: {"run": "01J..."}.')
 

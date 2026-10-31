@@ -97,7 +97,7 @@ def test_populated_statement_upgrade_retains_rows_and_append_only_guards(client,
     run(client, 'reconcile import', dict(account='Checking', content=sample('checking-2026-09.csv'),
         start=True, statement_date='2026-09-30', save_mapping='kept mapping'))
     prior = importlib.import_module('bookflow.storage.company_migrations.versions.0066_statement_imports')
-    path = tmp_path / 'populated-co0119.db'
+    path = tmp_path / 'populated-co0120.db'
     with sqlite3.connect(database_path(client)) as source, sqlite3.connect(path) as raw:
         source.backup(raw)
         raw.execute('PRAGMA foreign_keys=OFF')
@@ -118,9 +118,9 @@ def test_populated_statement_upgrade_retains_rows_and_append_only_guards(client,
         raw.execute('CREATE TRIGGER local_statement_insert AFTER INSERT ON statement_imports BEGIN SELECT 1; END')
         objects = raw.execute("SELECT name, sql FROM sqlite_schema WHERE tbl_name='statement_imports' "
                               "AND type IN ('index', 'trigger') ORDER BY name").fetchall()
-        raw.execute("UPDATE alembic_version SET version_num='co0119'")
+        raw.execute("UPDATE alembic_version SET version_num='co0120'")
         assert raw.execute('PRAGMA foreign_key_check').fetchall() == []
-    _at(path, 'co0120')
+    _at(path, 'co0121')
     with sqlite3.connect(path) as raw:
         assert raw.execute("SELECT name, sql FROM sqlite_schema WHERE tbl_name='statement_imports' "
                            "AND type IN ('index', 'trigger') ORDER BY name").fetchall() == objects
