@@ -96,6 +96,21 @@ def _check(s, effect):
         current = db.raw.execute(f"SELECT version FROM {doc['table']} WHERE id=?", (doc['id'],)).fetchone()
         if current is None or current[0] != doc['version']:
             block('reference_changed', f"{doc['table']} {doc['id']} changed or was deleted since the merge.", **doc)
+    if kind in party_merges.KINDS and merge['deactivated_merged']:
+        try:
+            party_merges.parties.plan_party_active_change(db, kind, merge['merged_id'], True,
+                actor_id=s.actor.id, via='', unmerging=True)
+        except BookflowError as error:
+            block(error.code, error.message, **error.details)
+    if kind == 'item' and merge['deactivated_merged']:
+        from bookflow.company import items
+        item = items.resolve_item(db, merge['merged_id'])
+        if item.get('barcode'):
+            try:
+                items.assert_barcode_available(db, item['barcode'], exclude_id=item['id'],
+                                               reactivating=item['full_name'])
+            except BookflowError as error:
+                block(error.code, error.message, **error.details)
     module = party_merges if kind in party_merges.KINDS else list_merges
     try:
         plan = module.plan_unmerge(db, kind, merge['merged_id'], **(
