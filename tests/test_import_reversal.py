@@ -285,8 +285,8 @@ def test_a_reversal_is_frozen_across_slices_and_never_runs_twice(books, monkeypa
         assert db.execute('SELECT count(*) FROM batches WHERE reversal_of = ?', (batch,)).fetchone()[0] == 1
 
 
-def test_a_dry_runs_fingerprint_spares_the_probe_and_later_slices_reprobe_nothing(books, monkeypatch):
-    """High 3: the whole plan is probed once."""
+def test_a_fingerprint_never_spares_current_authority_checks_on_remaining_inverses(books, monkeypatch):
+    """Every call checks all remaining inverses, including fingerprinted and resumed slices."""
     probed = []
     real = batches._probe
     monkeypatch.setattr(batches, '_probe', lambda *a: probed.append(a[3]['record_id']) or real(*a))
@@ -296,12 +296,12 @@ def test_a_dry_runs_fingerprint_spares_the_probe_and_later_slices_reprobe_nothin
     out = books.run('import reverse', {'run': run_id, 'limit': 2, 'fingerprint': plan['fingerprint']})
     while out['state'] == 'reversing':
         out = books.run('import reverse', {'run': run_id, 'limit': 2, 'fingerprint': plan['fingerprint']})
-    assert out['state'] == 'reversed' and len(probed) == 6
+    assert out['state'] == 'reversed' and len(probed) == 18  # preview 6, then 6 + 4 + 2
     other, _ = imported(books, 'customer', rows_file(4, start=20), source='other')
     out = books.run('import reverse', {'run': other, 'limit': 2})
-    assert len(probed) == 10  # the first slice probes the whole plan
+    assert len(probed) == 22  # the first slice probes all four remaining records
     books.run('import reverse', {'run': other, 'limit': 2})
-    assert len(probed) == 10
+    assert len(probed) == 24  # the next slice rechecks its two remaining records
 
 
 def test_utf16_without_a_byte_order_mark_is_read_and_a_nul_is_kept_for_the_import():
