@@ -89,10 +89,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `enabled_here` | boolean | yes | no | — | — |
 | `check_requested` | boolean | yes | no | — | — |
 | `backfill_approved` | boolean | yes | no | — | — |
-| `cursor` | string \| null | yes | yes | — | — |
+| `cursor` | string \| null | yes | yes | — | Provider cursor, redacted below admin; never contains credentials. |
 | `staged_fingerprint` | string \| null | yes | yes | — | — |
 | `approved_fingerprint` | string \| null | yes | yes | — | — |
-| `preview` | object[string, any] \| null | no | yes | null | — |
+| `preview` | object[string, any] \| null | no | yes | null | Staged first page, redacted below admin. |
 | `import_preview` | object[string, any] \| null | no | yes | null | Current shared import preview, including counts and account check; empty page has no import. |
 | `last_check_ok` | boolean \| null | yes | yes | — | — |
 | `last_check_at` | string \| null | yes | yes | — | — |
@@ -240,10 +240,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `enabled_here` | boolean | yes | no | — | — |
 | `check_requested` | boolean | yes | no | — | — |
 | `backfill_approved` | boolean | yes | no | — | — |
-| `cursor` | string \| null | yes | yes | — | — |
+| `cursor` | string \| null | yes | yes | — | Provider cursor, redacted below admin; never contains credentials. |
 | `staged_fingerprint` | string \| null | yes | yes | — | — |
 | `approved_fingerprint` | string \| null | yes | yes | — | — |
-| `preview` | object[string, any] \| null | no | yes | null | — |
+| `preview` | object[string, any] \| null | no | yes | null | Staged first page, redacted below admin. |
 | `import_preview` | object[string, any] \| null | no | yes | null | Current shared import preview, including counts and account check; empty page has no import. |
 | `last_check_ok` | boolean \| null | yes | yes | — | — |
 | `last_check_at` | string \| null | yes | yes | — | — |
@@ -310,7 +310,7 @@ Example JSON output:
 
 ## `bank-feed-connection disable`
 
-Disable fetching and cancel a pending check. Example: {"connection":"Checking feed"}.
+Disable fetching and cancel a pending check. Requires bank-feed at standard; anyone who may import may stop fetching. Example: {"connection":"Checking feed"}.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -318,9 +318,8 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 |---|---|
 | Scope | company |
 | Kind | write |
-| Required role | admin |
-| Capability | bank-feed.connect |
-| Additional resources | bank-feed: member, ledger.read: member |
+| Required role | standard |
+| Capability | bank-feed |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/bank-feed-connection.disable` |
 | External binary body | none |
@@ -391,10 +390,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `enabled_here` | boolean | yes | no | — | — |
 | `check_requested` | boolean | yes | no | — | — |
 | `backfill_approved` | boolean | yes | no | — | — |
-| `cursor` | string \| null | yes | yes | — | — |
+| `cursor` | string \| null | yes | yes | — | Provider cursor, redacted below admin; never contains credentials. |
 | `staged_fingerprint` | string \| null | yes | yes | — | — |
 | `approved_fingerprint` | string \| null | yes | yes | — | — |
-| `preview` | object[string, any] \| null | no | yes | null | — |
+| `preview` | object[string, any] \| null | no | yes | null | Staged first page, redacted below admin. |
 | `import_preview` | object[string, any] \| null | no | yes | null | Current shared import preview, including counts and account check; empty page has no import. |
 | `last_check_ok` | boolean \| null | yes | yes | — | — |
 | `last_check_at` | string \| null | yes | yes | — | — |
@@ -543,10 +542,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `enabled_here` | boolean | yes | no | — | — |
 | `check_requested` | boolean | yes | no | — | — |
 | `backfill_approved` | boolean | yes | no | — | — |
-| `cursor` | string \| null | yes | yes | — | — |
+| `cursor` | string \| null | yes | yes | — | Provider cursor, redacted below admin; never contains credentials. |
 | `staged_fingerprint` | string \| null | yes | yes | — | — |
 | `approved_fingerprint` | string \| null | yes | yes | — | — |
-| `preview` | object[string, any] \| null | no | yes | null | — |
+| `preview` | object[string, any] \| null | no | yes | null | Staged first page, redacted below admin. |
 | `import_preview` | object[string, any] \| null | no | yes | null | Current shared import preview, including counts and account check; empty page has no import. |
 | `last_check_ok` | boolean \| null | yes | yes | — | — |
 | `last_check_at` | string \| null | yes | yes | — | — |
@@ -682,10 +681,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].enabled_here` | boolean | yes | no | — | — |
 | `rows[].check_requested` | boolean | yes | no | — | — |
 | `rows[].backfill_approved` | boolean | yes | no | — | — |
-| `rows[].cursor` | string \| null | yes | yes | — | — |
+| `rows[].cursor` | string \| null | yes | yes | — | Provider cursor, redacted below admin; never contains credentials. |
 | `rows[].staged_fingerprint` | string \| null | yes | yes | — | — |
 | `rows[].approved_fingerprint` | string \| null | yes | yes | — | — |
-| `rows[].preview` | object[string, any] \| null | no | yes | null | — |
+| `rows[].preview` | object[string, any] \| null | no | yes | null | Staged first page, redacted below admin. |
 | `rows[].import_preview` | object[string, any] \| null | no | yes | null | Current shared import preview, including counts and account check; empty page has no import. |
 | `rows[].last_check_ok` | boolean \| null | yes | yes | — | — |
 | `rows[].last_check_at` | string \| null | yes | yes | — | — |

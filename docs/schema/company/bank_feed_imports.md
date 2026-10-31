@@ -11,6 +11,7 @@ Database: `company`.
 | `id` | VARCHAR(26) | no | — | primary key 1 | — | — | Stable ULID of this import. |
 | `batch_id` | VARCHAR(26) | no | — | — | — | batches.id | The batch (kind bank-import) this import is reversed through. |
 | `account_id` | VARCHAR(26) | no | — | — | ix_bank_feed_imports_account, ix_bank_feed_imports_file | accounts.id | Bank or credit card account the lines came into. |
+| `connection_id` | VARCHAR(26) | yes | — | — | — | bank_feed_connections.id | Live feed connection that supplied this import; null for file imports. |
 | `format` | VARCHAR(8) | no | — | — | — | — | File format: ofx, qfx, csv, feed. |
 | `file_sha256` | VARCHAR(64) | no | — | — | ix_bank_feed_imports_file | — | SHA-256 of the file text as given; a pasted file is not kept. |
 | `attachment_id` | VARCHAR(26) | yes | — | — | — | attachments.id | The attachment the file was read from; null for pasted text. |

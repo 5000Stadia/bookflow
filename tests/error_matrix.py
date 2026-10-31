@@ -2968,3 +2968,5 @@ for _name in ('bank-feed-connection add', 'bank-feed-connection enable', 'bank-f
 MATRIX['bank-feed-connection query'] = {}
 
 MATRIX['bank-feed fetch']['E_ACCOUNT_MISMATCH'] = 'the staged page differs from the selected account hint'
+
+MATRIX['bank-feed-connection disable']['E_PERMISSION'] = 'bank-feed at standard is not held'

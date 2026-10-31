@@ -5292,7 +5292,8 @@ included, goes to the expense account. An agent's write-off is the `write_off` f
 `company/bank_sources.py` defines the provider contract, exact posted-line page validation and an empty
 registry. `bank_connections.py` and `commands/bank_connection_cmds.py` expose per-account connections
 through `bank-source-v1`, on `bank-reconcile-v1`; connection authority is `bank-feed.connect`, including
-an explicit grant for an agent. Migration co0122 adds connection and account-cursor tables. Secrets are
+an explicit grant for an agent. Disabling requires only `bank-feed` at standard. Connection reads redact
+the cursor and staged page below admin; provider cursors must never contain credentials. Migration co0122 adds connection and account-cursor tables. Secrets are
 resolved from OS keyring references only, outside the writer.
 
 The host's bank-feed worker obtains bounded work from `bank_feed_tick.py`, calls providers off the

@@ -145,3 +145,66 @@ def test_new_check_invalidates_old_first_page_consent(client, provider):
     assert exc.value.code == 'E_VALIDATION'
     current = run(client, 'bank-feed fetch', {'connection': added['id']}, dry_run=True)
     assert current['preview'] is None and not current['enabled']
+
+
+def test_standard_agent_can_stop_feed_without_connect_or_ledger_access(hosted, provider):
+    from tests.test_people_only import _agent, _grant, _bearer, REASON
+    from tests.test_bank_feed_tick import call, sql
+    added = call(hosted, 'bank-feed-connection add', dict(name='Stop safely', kind=provider.kind,
+        account='Checking', remote_account='remote-checking'))
+    sql(hosted, 'UPDATE bank_feed_connection_accounts SET backfill_approved=1')
+    enabled = call(hosted, 'bank-feed-connection enable', {'connection': added['id']})
+    assert enabled['enabled']
+    agent, headers = _agent(hosted, role='standard')
+    _grant(hosted, agent, 'standard', denies=['bank-feed.connect', 'ledger.read'])
+    hosted.ok('agent.authorize', {'agent': agent, 'confirm_permitted_use': True, 'acknowledge_fresh_context': True}, headers=REASON)
+    headers = {**_bearer(hosted, agent, 'principal-p'), **REASON}
+    stopped = hosted.ok('bank-feed-connection.disable', {'connection': added['id']},
+                        company=hosted.company_id, headers=headers)
+    assert not stopped['enabled'] and not stopped['check_requested']
+    for command in ('add', 'enable'):
+        body = dict(name='Forbidden', kind=provider.kind, account='Checking', remote_account='remote') if command == 'add' else {'connection': added['id']}
+        refused = hosted.call('bank-feed-connection.' + command, body, company=hosted.company_id, headers=headers)
+        assert refused.status_code == 403
+    refused = hosted.call('bank-feed.fetch', {'connection': added['id'], 'confirm': '0' * 64},
+                          company=hosted.company_id, headers=headers)
+    assert refused.status_code == 403
+    _grant(hosted, agent, 'readonly')
+    hosted.ok('agent.authorize', {'agent': agent, 'confirm_permitted_use': True, 'acknowledge_fresh_context': True}, headers=REASON)
+    headers = {**_bearer(hosted, agent, 'principal-p'), **REASON}
+    refused = hosted.call('bank-feed-connection.disable', {'connection': added['id']},
+                          company=hosted.company_id, headers=headers)
+    assert refused.status_code == 403
+
+
+def test_connection_query_redacts_cursor_and_staged_page_below_admin(hosted, provider):
+    from tests.test_people_only import _agent, _grant, _bearer, REASON
+    from tests.test_bank_feed_tick import call, sql
+    added = call(hosted, 'bank-feed-connection add', dict(name='Private preview', kind=provider.kind,
+        account='Checking', remote_account='remote-checking'))
+    sql(hosted, 'UPDATE bank_feed_connection_accounts SET cursor=?, staged_page=?, staged_fingerprint=?',
+        'opaque-cursor', sources.serialize_page(first_page()), sources.fingerprint(first_page()))
+    owner = call(hosted, 'bank-feed-connection query', {})['rows'][0]
+    assert owner['cursor'] == 'opaque-cursor' and owner['preview']['lines']
+    agent, headers = _agent(hosted, role='standard')
+    for role in ('standard', 'readonly'):
+        _grant(hosted, agent, role)
+        hosted.ok('agent.authorize', {'agent': agent, 'confirm_permitted_use': True, 'acknowledge_fresh_context': True}, headers=REASON)
+        headers = _bearer(hosted, agent, 'principal-p')
+        value = hosted.ok('bank-feed-connection.query', {}, company=hosted.company_id, headers=headers)['rows'][0]
+        assert value['cursor'] is None and value['preview'] is None
+    _grant(hosted, agent, 'standard')
+    hosted.ok('agent.authorize', {'agent': agent, 'confirm_permitted_use': True, 'acknowledge_fresh_context': True}, headers=REASON)
+    headers = {**_bearer(hosted, agent, 'principal-p'), **REASON}
+    stopped = hosted.ok('bank-feed-connection.disable', {'connection': added['id']},
+                        company=hosted.company_id, headers=headers)
+    assert stopped['cursor'] is None and stopped['preview'] is None
+
+    # The represented person's role also limits an admin agent's preview.
+    from tests.test_automation import _users
+    _grant(hosted, agent, 'admin')
+    _grant(hosted, _users(hosted)['principal-p'], 'standard')
+    hosted.ok('agent.authorize', {'agent': agent, 'confirm_permitted_use': True, 'acknowledge_fresh_context': True}, headers=REASON)
+    headers = _bearer(hosted, agent, 'principal-p')
+    value = hosted.ok('bank-feed-connection.query', {}, company=hosted.company_id, headers=headers)['rows'][0]
+    assert value['cursor'] is None and value['preview'] is None

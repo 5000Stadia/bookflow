@@ -12,7 +12,7 @@ _WRITE = (c.Requirement('bank-feed', 'member'), *_READ)
 _ADDED = (
     ('bank-feed-connection add', 'bank-feed.connect', 'admin', 'plan_add', _WRITE),
     ('bank-feed-connection enable', 'bank-feed.connect', 'admin', 'plan_enable', _WRITE),
-    ('bank-feed-connection disable', 'bank-feed.connect', 'admin', 'plan_disable', _WRITE),
+    ('bank-feed-connection disable', 'bank-feed', 'standard', 'plan_disable', ()),
     ('bank-feed-connection check', 'bank-feed.connect', 'admin', 'plan_check', _WRITE),
     ('bank-feed fetch', 'bank-feed.connect', 'admin', 'plan_fetch', _WRITE),
     ('bank-feed-connection query', 'bank-feed', 'member', 'plan_query', _READ),

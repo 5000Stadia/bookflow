@@ -62,6 +62,8 @@ class TestFakeSource(BankSourceContract):
 
 def test_production_registry_is_empty_in_fresh_process():
     result = subprocess.run([sys.executable, '-c',
+                             'from bookflow.core import registry; registry.load_all(); '
+                             'import bookflow.core.host; '
                              'from bookflow.company.bank_sources import SOURCES; assert SOURCES == {}'],
                             capture_output=True, text=True)
     assert result.returncode == 0, result.stderr

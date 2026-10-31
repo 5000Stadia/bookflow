@@ -3,6 +3,7 @@
 Providers receive credentials in memory only, enforce the supplied timeout, and return
 posted transactions in the statement parser's exact minor-unit shape. Provider failures
 are deliberately reduced to fixed codes before they reach audit, logs or command output.
+Cursors are persisted in company files and backups and must never carry credentials.
 """
 from __future__ import annotations
 

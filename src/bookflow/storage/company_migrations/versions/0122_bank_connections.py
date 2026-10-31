@@ -10,6 +10,9 @@ DDL = ("\nCREATE TABLE bank_feed_connections (\n\tid VARCHAR(26) NOT NULL, \n\tv
 def upgrade():
     for sql in DDL:
         op.get_bind().exec_driver_sql(sql)
+    op.get_bind().exec_driver_sql(
+        "ALTER TABLE bank_feed_imports ADD COLUMN connection_id VARCHAR(26) "
+        "REFERENCES bank_feed_connections(id)")
 
 def downgrade():
     raise RuntimeError("Company migrations are forward-only")

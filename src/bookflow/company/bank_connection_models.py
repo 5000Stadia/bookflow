@@ -38,10 +38,10 @@ class ConnectionOutput(Model):
     enabled_here: bool
     check_requested: bool
     backfill_approved: bool
-    cursor: str | None
+    cursor: str | None = Field(description='Provider cursor, redacted below admin; never contains credentials.')
     staged_fingerprint: str | None
     approved_fingerprint: str | None
-    preview: dict[str, Any] | None = None
+    preview: dict[str, Any] | None = Field(None, description='Staged first page, redacted below admin.')
     import_preview: dict[str, Any] | None = Field(None, description="Current shared import preview, including counts and account check; empty page has no import.")
     last_check_ok: bool | None
     last_check_at: str | None

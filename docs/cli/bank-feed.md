@@ -86,10 +86,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `enabled_here` | boolean | yes | no | — | — |
 | `check_requested` | boolean | yes | no | — | — |
 | `backfill_approved` | boolean | yes | no | — | — |
-| `cursor` | string \| null | yes | yes | — | — |
+| `cursor` | string \| null | yes | yes | — | Provider cursor, redacted below admin; never contains credentials. |
 | `staged_fingerprint` | string \| null | yes | yes | — | — |
 | `approved_fingerprint` | string \| null | yes | yes | — | — |
-| `preview` | object[string, any] \| null | no | yes | null | — |
+| `preview` | object[string, any] \| null | no | yes | null | Staged first page, redacted below admin. |
 | `import_preview` | object[string, any] \| null | no | yes | null | Current shared import preview, including counts and account check; empty page has no import. |
 | `last_check_ok` | boolean \| null | yes | yes | — | — |
 | `last_check_at` | string \| null | yes | yes | — | — |

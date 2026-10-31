@@ -101,6 +101,11 @@ def current(s, snapshot):
 def fetch(snapshot):
     """Run only outside the host writer. Return safe values, never exception/provider text."""
     try:
+        from bookflow.delivery.transport import SECRET_REF
+        secret_ref = snapshot['secret_ref']
+        if secret_ref is not None and (not isinstance(secret_ref, str)
+                or not secret_ref.startswith('keyring:') or not SECRET_REF.fullmatch(secret_ref)):
+            raise sources.FeedFailure(permanent=True)
         if snapshot['enabled'] and snapshot['staged_page']:
             page = sources.page_from_json(snapshot['staged_page'])
             if sources.fingerprint(page) != snapshot['approved_fingerprint']:
@@ -182,6 +187,7 @@ def record(s, snapshot, result):
                 out = None
                 if prepared is not None:
                     bank_rules.annotate(s, prepared)
+                    prepared['connection_id'] = snapshot['id']
                     out, _ = bank_feeds.write(s, ctx, prepared)
                     # Commit fetched provenance with the lines. A crash before run_live must still resume
                     # as fetched work, while older user-imported lines retain their own importer.
@@ -201,9 +207,15 @@ def record(s, snapshot, result):
             outcome = bank_sort._in_tx(s, write)
         except Exception as error:
             from bookflow.core.errors import BookflowError
-            if not result.get('failed') and (isinstance(error, sources.FeedFailure) or
-                    isinstance(error, BookflowError) and error.code in ('E_VALIDATION', 'E_ACCOUNT_MISMATCH')):
-                return record(s, snapshot, {'failed': True, 'permanent': True})
+            if not result.get('failed'):
+                if isinstance(error, BookflowError) and error.code == 'E_VALIDATION':
+                    # Local account state can temporarily prevent an otherwise valid page import.
+                    # The transaction rolled back; keep the approval, cursor and enabled state for retry.
+                    return {'state': 'skipped'}
+                if isinstance(error, sources.FeedFailure):
+                    return record(s, snapshot, {'failed': True, 'permanent': error.permanent})
+                if isinstance(error, BookflowError) and error.code == 'E_ACCOUNT_MISMATCH':
+                    return record(s, snapshot, {'failed': True, 'permanent': True})
             raise
         if prepared is not None:
             outcome['rules'] = bank_rules.run_live(s, ctx, prepared, fetched=True)

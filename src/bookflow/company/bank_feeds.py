@@ -781,6 +781,7 @@ def write(s, ctx, prepared: dict, *, moved_from: str | None = None) -> tuple[m.I
             ordering='strict', source_type='bank_feed_import', source_id=import_id)
         conn.execute(c.bank_feed_imports.insert().values(
             id=import_id, batch_id=batch_id, account_id=account_id, format=prepared['parsed'].format,
+            connection_id=prepared.get('connection_id'),
             file_sha256=prepared['sha'], attachment_id=inp.attachment, mapping_name=inp.mapping_name or None,
             date_from=prepared['date_from'], date_to=prepared['date_to'], lines_in_file=len(prepared['rows']),
             lines_new=len(new), counts=json.dumps(prepared['counts'], sort_keys=True),

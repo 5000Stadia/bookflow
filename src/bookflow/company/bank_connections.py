@@ -27,6 +27,22 @@ def row(s, selector):
 
 
 def project(s, value):
+    from bookflow.hub import access
+    scope, role = access.company_role(s, s.company_row['id'], s.company_row['organization_id'])
+    admin = access.role_satisfies(role, scope, 'admin', access.legacy_admin(s))
+    if admin and s.actor.kind == 'agent':
+        from bookflow.hub import schema as h
+        from bookflow.hub.capabilities import principal_of
+        memberships = h.memberships
+        admin = bool(s.hub.conn.execute(sa.select(memberships.c.id).where(
+            memberships.c.user_id == principal_of(s), memberships.c.revoked_at.is_(None),
+            memberships.c.role.in_(('admin', 'owner')), sa.or_(
+                sa.and_(memberships.c.scope_type == 'company', memberships.c.scope_id == s.company_row['id']),
+                sa.and_(memberships.c.scope_type == 'organization',
+                        memberships.c.scope_id == s.company_row['organization_id'])))).first())
+    value = dict(value)
+    if not admin:
+        value.update(cursor=None, staged_page=None)
     preview = json.loads(value['staged_page']) if value.get('staged_page') else None
     return m.ConnectionOutput(**{k: value[k] for k in ('id', 'version', 'name', 'kind', 'account_id', 'remote_account', 'secret_ref', 'enabled', 'check_requested', 'backfill_approved', 'cursor', 'staged_fingerprint', 'approved_fingerprint', 'last_check_ok', 'last_check_at')},
         enabled_here=bool(value['enabled_host']) and value['enabled_host'] == binding(s), preview=preview,
