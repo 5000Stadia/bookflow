@@ -352,7 +352,8 @@ def test_every_pos_command_names_its_pos_capability():
     # The POS layer is decided by capability, not noun: the gate and the switch find each command by its capability.
     from bookflow.adapters.workbench import home as Home
     from bookflow.hub import capabilities
-    assert all(capabilities.capability_for(name) == cap for name, (cap, _) in named.items())
+    # Ordinary ledger capabilities (pos deposit prepare's ledger.post) are not in the capability map; POS ones are.
+    assert all(capabilities.capability_for(name) == cap for name, (cap, _) in named.items() if cap.startswith('pos.'))
     assert all(Home.is_pos(registry.get(name)) for name in named if name != 'pos deposit prepare') and not Home.is_pos(registry.get("item show"))
     # The shipment, return and pick-list reads need `customer` too.
     for name, needed in layer.EXTRA_READS.items():

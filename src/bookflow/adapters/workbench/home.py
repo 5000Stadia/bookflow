@@ -1203,6 +1203,9 @@ def pos_header_links(company_id: str, reader, menu: list[MenuGroup], *, seller: 
     for entry in menu:
         if entry.slug == "items":
             continue
+        if entry.slug == "reports" and offered and not any(
+                cmd.name.startswith("report ") and not is_pos(cmd) and reader(cmd) for cmd in registry.all_commands()):
+            continue  # only POS reports (`report pos-day`, increment 10): the till's Day summary already offers them
         if entry.slug != "customers" or not offered:
             return None
         section = SECTION_BY_SLUG["customers"]
