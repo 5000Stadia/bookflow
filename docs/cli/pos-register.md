@@ -39,7 +39,7 @@ The same example as complete `bookflow_run` arguments:
 | `payment_methods` | `--payment-methods` | array[string] \| null | no | yes | null | Payment methods it offers, in the order shown (IDs or names); default Cash, then the card and check methods. |
 | `walk_in_customer` | `--walk-in-customer` | string \| null | no | yes | null | Customer a sale with no customer is recorded against (ID or name); never shown on the POS screen or receipt. On create, omitted: a new customer named Walk-in (Main) or "Walk-in (<register>)". |
 | `refund_account` | `--refund-account` | string \| null | no | yes | null | Bank account cash refunds leave from (ID, number or name); default the company's first bank account; null for none yet. |
-| `receipt_width` | `--receipt-width` | literal[80, 58] \| null | no | yes | null | Receipt paper width in millimetres; default 80. |
+| `receipt_width` | `--receipt-width` | integer \| null | no | yes | null | Receipt paper width in millimetres, 80 or 58; default 80. |
 | `receipt_message` | `--receipt-message` | string \| null | no | yes | null | Line printed at the foot of every receipt; null for none. |
 | `count_shifts` | `--count-shifts` | boolean \| null | no | yes | null | Count the drawer in shifts (float, count, over/short); default off. |
 | `decoder_order` | `--decoder-order` | string \| null | no | yes | null | Camera decoder order for this register's devices, such as "zxing-wasm,native"; null uses the host's scan_decoders. |
@@ -468,7 +468,7 @@ The same example as complete `bookflow_run` arguments:
 | `payment_methods` | `--payment-methods` | array[string] \| null | no | yes | null | Payment methods it offers, in the order shown (IDs or names); default Cash, then the card and check methods. |
 | `walk_in_customer` | `--walk-in-customer` | string \| null | no | yes | null | Customer a sale with no customer is recorded against (ID or name); never shown on the POS screen or receipt. On create, omitted: a new customer named Walk-in (Main) or "Walk-in (<register>)". |
 | `refund_account` | `--refund-account` | string \| null | no | yes | null | Bank account cash refunds leave from (ID, number or name); default the company's first bank account; null for none yet. |
-| `receipt_width` | `--receipt-width` | literal[80, 58] \| null | no | yes | null | Receipt paper width in millimetres; default 80. |
+| `receipt_width` | `--receipt-width` | integer \| null | no | yes | null | Receipt paper width in millimetres, 80 or 58; default 80. |
 | `receipt_message` | `--receipt-message` | string \| null | no | yes | null | Line printed at the foot of every receipt; null for none. |
 | `count_shifts` | `--count-shifts` | boolean \| null | no | yes | null | Count the drawer in shifts (float, count, over/short); default off. |
 | `decoder_order` | `--decoder-order` | string \| null | no | yes | null | Camera decoder order for this register's devices, such as "zxing-wasm,native"; null uses the host's scan_decoders. |

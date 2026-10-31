@@ -1,8 +1,6 @@
 """Inputs and outputs of the POS layer's registers (R114 increment 4, design/point-of-sale.md §2)."""
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
 from bookflow.company.journal_models import _Version
@@ -30,7 +28,7 @@ class _RegisterFields(_Strict):
         "receipt. On create, omitted: a new customer named Walk-in (Main) or \"Walk-in (<register>)\"."))
     refund_account: Selector | None = Field(None, description='Bank account cash refunds leave from (ID, number or '
                                             "name); default the company's first bank account; null for none yet.")
-    receipt_width: Literal[80, 58] | None = Field(None, description='Receipt paper width in millimetres; default 80.')
+    receipt_width: int | None = Field(None, description='Receipt paper width in millimetres, 80 or 58; default 80.')
     receipt_message: str | None = Field(None, max_length=500, description='Line printed at the foot of every '
                                         'receipt; null for none.')
     count_shifts: bool | None = Field(None, description='Count the drawer in shifts (float, count, over/short); '

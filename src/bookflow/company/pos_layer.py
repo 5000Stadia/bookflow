@@ -237,6 +237,8 @@ def _apply_fields(s, ctx, inp, row: dict[str, Any]) -> Any:
                                     if inp.refund_account is not None else None)
     if 'receipt_width' in fields:
         row['receipt_width'] = inp.receipt_width or 80
+        if row['receipt_width'] not in (80, 58):
+            raise _invalid('receipt_width', 'must be 80 or 58 (millimetres)')
     if 'receipt_message' in fields:
         row['receipt_message'] = (inp.receipt_message or '').strip() or None
     if 'count_shifts' in fields:

@@ -682,6 +682,73 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   address with URL characters; hub0017's frozen DDL), `tests/test_user_home_surfaces.py` (Python, CLI, HTTP and
   MCP alike) and `tests/test_home_browser.py` (Chrome at 390 px: Make this page my Home, then the Home button).
 
+### As built: increment 4 (the POS layer)
+
+- **The switch.** `company_info.pos_enabled` (migration co0118 on co0116, re-chained at merge after opening's co0117),
+  off by default, set with `company update --pos-enabled` (admin) and shown in Company settings under a new *Sales*
+  group ("Use point of sale"). While it is off every `pos-register` command refuses with E_FEATURE_DISABLED (`feature
+  pos`, `setting pos_enabled`, `enable_command company update`), `home.features_offer` and the pages' feature check
+  hide every `pos`, `pos-register`, `pos-box` and `pos-ticket` command, `/c/<id>/pos` answers the switch's message,
+  `user home set --page pos` is refused, and nothing else changes (criterion 8). Turning it off runs
+  `pos_layer.check_turning_off`, which refuses nothing yet: held tickets (increment 7) and open shifts (increment 10)
+  each add their check there, so the "off with a held ticket" half of this increment's test moves to increment 7.
+- **Registers.** co0118 adds `pos_registers` (common columns; name and name key, unique; site; deposit account;
+  payment-method ids as a JSON list in order; walk-in customer; refund account, nullable; receipt width 80 or 58;
+  receipt message; count_shifts; decoder_order; never deleted). `pos-register create`, `update` (versioned), `show`
+  and `list`. Turning POS on the first time makes **Main** in the same transaction as the switch: the default site,
+  Undeposited Funds, the active cash, then card (credit and debit), then check methods, each kind by name, the first
+  active bank account by name for refunds (null, with a warning, when there is none), 80 mm, no shifts. Turning it
+  off and on again finds the registers where they were. A deposit account must be Undeposited Funds or a bank; a
+  refund account a bank; `decoder_order` is checked by `core.scan_decoders.normalize`. The selector field is
+  `pos_register` (a field named `register` shadows a pydantic attribute). No register deactivate yet.
+- **The walk-in customer (K2 settled: a sale works with or without a customer).** Each register has its own, made
+  with it through `parties.plan_party_create`: "Walk-in" for Main, "Walk-in (<register>)" for another, a number added
+  when the name is taken; or an existing customer named by `walk_in_customer`. It is an ordinary customer record
+  (lists and reports show it, so sales by customer shows one Walk-in line); "hidden" means the POS screen and the
+  receipt never show it, which increments 5 and 8 honour. It takes no tax code of its own, so a sale uses the
+  company's defaults.
+- **Capabilities (layer `pos-v1` on `automation-v1`, 857 commands, descriptor 616e0f92).** `pos.sell`, `pos.void`,
+  `pos.refund` and `pos.price-override` at threshold `member`, held by default by standard, admin, owner and
+  installation administrators, so `readonly` holds one only by an explicit grant; `pos.layout` at `admin`.
+  `pos-register show`/`list` need `pos.sell`, `create`/`update` `pos.layout`. Unlike the capabilities-v1 acts, each
+  POS command names its capability itself, so a person is admitted, or refused by a deny, through the policy.
+  Agents: `hub.capabilities.capability_for` maps any `pos*` command to its pos capability, so the dispatcher's gate asks
+  an agent for its own explicit grant and its principal's holding (`reason: capability_not_granted` until granted);
+  `user_homes.effective_in` admits a pos requirement for an agent only with an explicit grant, so its pages agree.
+  Before permissions are activated there are no grants, so the roles decide and a seller needs the standard role
+  (`pos_layer.require_seller`, and the pages' role fallback for the seller capabilities).
+- **The clerk presets** (`hub/pos_presets.py`). *POS clerk*: role `readonly`, grant `pos.sell`; *Clerk with returns*
+  adds `pos.void` and `pos.refund`. Denies: every capability `readonly` holds that a company command or company action
+  requires, except `company` and `item`, computed from the live catalog. **Correction to §9 (found by the increment 3
+  review):** the clerk keeps `company` (read), because every page runs `company show`; a member denied it gets a 403 on
+  every page. The installation-level capabilities `readonly` holds (`hub`, `init`, `membership`, `organization`,
+  `serve`, `token`, `upgrade`, `user`) are not company permissions and are not denied: signing in, one's tokens and
+  one's own Home keep working. In Users & permissions, while POS is on, *Presets* offers both; *Fill from preset* fills
+  the role and the grant and deny lists and previews; *Save permissions* runs `membership grant` and then
+  `user home set --page pos` for the person (needs `user.manage`; without it the membership is saved and the line says
+  "Home not set: ..."). The preset is a filled form, not a stored object: the person's permissions stay editable like
+  any member's, and an agent or the CLI applies the same lists with `membership grant` and `user home set`.
+- **The clerk's pages.** With increment 3's menus, a clerk holding only `company` and `item` (read) and `pos.sell` has
+  two sections, Customers (whose only live link is Point of sale) and Items. Settled here (the §9 "missed" note):
+  `home.pos_header_links` gives such a reader the **minimal header with Point of sale and Items as its links** and no
+  side menu, finder, Find transactions or account menu; Items stays open for looking items up. Any reader with any
+  other section keeps the menu exactly as before.
+- **Point of sale entry, tile and Home.** *Point of sale* is the first task under Customers and an aside tile on the
+  Customers panel, both backed by `pos-register list` at `/pos` and shown only while POS is on. `/c/<id>/pos` is a
+  placeholder (`pos_pages.py`, `pos.html`) naming the registers and saying the register screen is coming, with a sales
+  receipt link for those who may post one; increment 5 replaces its body at the same address, so a Home of `pos` set
+  now stays right. A clerk signing in lands there (criterion 2).
+- **Agent guide:** a *Point of sale* chapter (record sales with `sales-receipt post`; every POS act is a granted
+  capability). `import_kinds.NOT_IMPORTABLE` lists the two register writes. No report reads the new column beyond
+  `company show` (deposit read manifest: `company_info.pos_enabled`).
+- **Tests.** `tests/test_pos_layer.py` (off by default with every refusal and no surface, Main and its walk-in, a
+  second register, name, account and version refusals, off and on again; the preset's pinned deny list and the
+  clerk's effective set on the live catalog, applied through Users & permissions, landing on the POS with the minimal
+  header, refused a form, a report URL, and the commands over HTTP and MCP; a readonly member with no grant refused;
+  an agent refused until granted, then still refused `pos.layout`), `tests/test_pos_layer_surfaces.py` (Python, CLI,
+  HTTP and MCP alike). The deny pin did its job at the merge of main: automation-v1 added `automation` to `readonly`,
+  the pin failed, and the clerk denies it.
+
 ## 16. Open questions
 
 Each default stands if nobody decides. K1 and K2 are Kabe's.

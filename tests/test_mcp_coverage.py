@@ -434,7 +434,10 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 4323 -> 4329 (R191, measured): user home set 3 (user, company, expected_version), clear 2 (user,
     # expected_version), show 1 (user) -- their null branches. No new variant kind.
     # 4329 -> 4331 (R187 inc 2, measured): automation list's kind and state -- their null branches. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==4331
+    # 4331 -> 4351 (R114 inc 4, measured): pos-register create 9 (site, deposit_account, payment_methods,
+    # walk_in_customer, refund_account, receipt_width, receipt_message, count_shifts, decoder_order), update 11 (the
+    # same nine, name, expected_version) -- their null branches. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==4351
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.
