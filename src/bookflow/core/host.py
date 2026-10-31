@@ -942,6 +942,17 @@ class Host:
                     scheduled = scheduler._failure(e)
                 if scheduled is not None:
                     done[row["id"]]["delivery_schedules"] = scheduled
+                # Timed automations (R187 increment 2): nothing at all while no kind is timed.
+                try:
+                    from bookflow.company import automation
+                    fired = automation.tick(s, system["id"], now)
+                except Exception as e:  # noqa: BLE001 - recorded, never fatal to the host
+                    log.warning("automations for %s failed: %s", row["id"], e, exc_info=True)
+                    if s.company.write_transaction:
+                        s.company.raw.rollback()
+                    fired = scheduler._failure(e)
+                if fired is not None:
+                    done[row["id"]]["automations"] = fired
                 # Document delivery (R112): one EXISTS for a company with no connection and nothing in flight.
                 # While the delivery thread is still busy with an earlier tick, nothing more is claimed.
                 busy = self._delivery_busy

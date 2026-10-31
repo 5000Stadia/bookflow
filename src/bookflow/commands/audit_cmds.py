@@ -88,6 +88,11 @@ class AuditEventOut(BaseModel):
     directive_code: str | None
     directive_text: str | None
     source_ref: str | None
+    on_rule: dict[str, Any] | None = Field(
+        None,
+        description="An automation's write: the rule (kind, rule_id, name) and who established it, with text "
+                    "'On rule: <name>, established by <who>'; null for any other write",
+    )
     undo_of_event_id: str | None = Field(
         None,
         description="Original company audit event compensated by this event; null otherwise",
@@ -214,7 +219,18 @@ def _event_out(s: Session, hub: bool, e: dict[str, Any], names: dict[str, str], 
     return AuditEventOut(**fields, at=localize(s, e["at"]), actor_name=names.get(e["actor_id"]), on_behalf_of_name=names.get(e["on_behalf_of"]) if e.get("on_behalf_of") else None,
                          directive_code=e.get("directive_code") if directive else None,
                          directive_text=texts(e["directive_id"]) if directive and e.get("directive_id") else None,
+                         on_rule=None if hub else _on_rule(s, e),
                          entry_count=len(rows), entries=out_entries)
+
+
+def _on_rule(s: Session, e: dict[str, Any]) -> dict[str, Any] | None:
+    """R187 §3: an automation's writes carry the rule and its establisher in source_ref; rendered here, and only for a
+    system write by that establisher."""
+    ref = e.get("source_ref")
+    if not ref or not ref.startswith("automation:"):
+        return None
+    from bookflow.company import automation
+    return automation.render(s, ref, interface=e.get("interface"), actor_id=e.get("actor_id"))
 
 
 def _visible(q, events, held):

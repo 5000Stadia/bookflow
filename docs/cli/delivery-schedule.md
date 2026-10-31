@@ -1628,7 +1628,7 @@ The same example as complete `bookflow_run` arguments:
 | `name` | `--name` | string \| null | no | yes | null | — |
 | `kind` | `--kind` | literal["invoice", "sales-receipt", "estimate", "statement", "notice"] \| null | no | yes | null | — |
 | `no_end` | `--no-end` | boolean | no | no | false | Clear stop_date and remaining_runs. |
-| `confirm` | `--confirm` | string \| null | no | yes | null | A live schedule stays live through a change only when a person passes the fingerprint of the check the dry run shows for the changed schedule; otherwise the change returns it to draft. |
+| `confirm` | `--confirm` | string \| null | no | yes | null | A live schedule stays live through a change only when a holder of automate.delivery passes the fingerprint of the check the dry run shows for the changed schedule; otherwise the change returns it to draft. On a draft or paused send schedule, a holder's confirm makes it live, as delivery-schedule live does. |
 | `expected_version` | `--expected-version` | integer \| null | no | yes | null | — |
 
 ### Command and context options

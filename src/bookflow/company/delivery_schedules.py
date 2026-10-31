@@ -597,10 +597,22 @@ def _refuse_without_authority(s, row):
 
 
 def _require_automate(s):
-    """automate.delivery (capabilities-v1): an agent needs its principal's grant. The go its runs release is still
-    checked by _refuse_without_authority, which until R187's consumer step counts only a person's go."""
-    from bookflow.hub import capabilities
-    capabilities.require_company(s, 'delivery-schedule live')
+    """automate.delivery (R187 §3, company.automation): an agent needs its principal's grant, and everyone the
+    establisher test each firing repeats. The go its runs release is still checked by _refuse_without_authority,
+    which until R187's consumer step counts only a person's go."""
+    from bookflow.company import automation
+    automation.require_establish(s, CAPABILITY, 'delivery-schedule live')
+
+
+def _establish(s, ctx, row, check) -> dict:
+    """The fields a send schedule made live by this actor takes: under them, with exactly the check they confirmed."""
+    if is_finished(row):
+        raise BookflowError('E_WORK_DEPENDENCY', message=f"Schedule {row['name']} has run out: give it a later "
+                            'stop date or more runs first.', details={
+                                'record_type': RECORD, 'record_id': row['id'], 'status': 'finished',
+                                'problem': 'it has no slot left'})
+    return dict(state='live', established_by=s.actor.id, established_at=clock.now_iso(), paused_reason=None,
+                paused_at=None, confirmed=check.fingerprint, draft_reason=None, **_authority(s, ctx))
 
 
 def _today(s):
@@ -621,11 +633,23 @@ def prepare_update(s, ctx, inp) -> Plan:
     warnings, check = [], None
     if inp.confirm is not None:
         _require_automate(s)
-    if inp.confirm is not None:
         _refuse_without_authority(s, before)
-    if operative and before['state'] in ('live', 'paused'):
+    from bookflow.company import automation
+    # Asked only where it decides something: a dry run's check, or an operative edit of a live schedule.
+    holder = (s.dry_run or (operative and before['state'] == 'live')) and automation.holds_now(s, CAPABILITY)
+    if before['state'] != 'live' and after['mode'] == 'send' and (inp.confirm is not None or (s.dry_run and holder)):
+        # R187 §3: `update --mode send --confirm` by a holder of automate.delivery makes it live, as `live` does: one
+        # check of the exact details (dry_run shows it), then its fingerprint as confirm.
+        check = live_check(s, ctx, after, _today(s))
+        if inp.confirm is not None and not s.dry_run:
+            if inp.confirm != check.fingerprint:
+                raise _changed(before)
+            after.update(_establish(s, ctx, after, check))
+            if not after['active']:
+                warnings.append('It is stopped: resume it for it to run.')
+    elif operative and before['state'] in ('live', 'paused'):
         stays = False
-        if after['mode'] == 'send' and before['state'] == 'live' and s.actor.kind == 'human':
+        if after['mode'] == 'send' and before['state'] == 'live' and holder:
             # R187: a holder of automate.delivery who confirms the changed schedule's check keeps it live, under them.
             check = live_check(s, ctx, after, _today(s))
             stays = inp.confirm == check.fingerprint
@@ -641,7 +665,7 @@ def prepare_update(s, ctx, inp) -> Plan:
                 after['draft_reason'] = f"changed by {_name(s, s.actor.id) or s.actor.id}"[:500]
                 warnings.append('This change returns it to draft: its runs leave messages waiting for a go until a '
                                 'person makes it live again with the check of the changed schedule.')
-    if not operative and after == before:
+    if not operative and after == before and check is None:
         return Plan(output(s, before, warnings=['Nothing changed.']), dict(idle=True))
     after = d._touch(s, ctx, after) if not s.dry_run else dict(after, version=before['version'] + 1)
     drop = before['state'] == 'live' and after['state'] != 'live'
@@ -701,10 +725,8 @@ def prepare_live(s, ctx, inp) -> Plan:
                                   "run, who it would reach today), then pass the check's fingerprint as confirm")
     if inp.confirm != check.fingerprint:
         raise _changed(before)
-    at = clock.now_iso()
-    after = d._touch(s, ctx, dict(candidate, state='live', established_by=s.actor.id, established_at=at,
-                                  paused_reason=None, paused_at=None, confirmed=check.fingerprint, draft_reason=None,
-                                  **_authority(s, ctx)), at)
+    established = _establish(s, ctx, candidate, check)
+    after = d._touch(s, ctx, dict(candidate, **established), established['established_at'])
     warnings = [] if after['active'] else ['It is stopped: resume it for it to run.']
     return Plan(output(s, after, check=check, warnings=warnings), dict(before=before, after=after,
                                                                        warnings=warnings))
@@ -729,6 +751,18 @@ def prepare_resume(s, ctx, inp) -> Plan:
         return Plan(output(s, before, warnings=['It is already running.']), dict(idle=True))
     after = dict(before, active=True)
     warnings = []
+    if before['state'] == 'live' and not before['active']:
+        # R187 §3: resuming a stopped live schedule lets it send again, which is making it live: it needs
+        # automate.delivery and a go (and the resumer becomes its establisher); otherwise it comes back as a draft.
+        from bookflow.company import automation
+        if automation.holds_now(s, CAPABILITY) and authority_lost(s, s.actor.id) is None:
+            after.update(established_by=s.actor.id, established_at=clock.now_iso(), **_authority(s, ctx))
+        else:
+            after.update(state='draft', established_by=None, established_at=None, confirmed=None,
+                         draft_reason=f'resumed by {_name(s, s.actor.id) or s.actor.id}, who may not make it '
+                                      'live'[:500])
+            warnings.append('It is a draft again: resuming a live schedule is making it live, which needs '
+                            'automate.delivery and a go; a holder makes it live again (delivery-schedule live).')
     if before['state'] == 'paused':
         after.update(state='draft', paused_reason=None, paused_at=None, established_by=None, established_at=None,
                      confirmed=None)
@@ -741,8 +775,9 @@ def prepare_resume(s, ctx, inp) -> Plan:
     if stopped:
         after['next_date'] = _after(before, stopped[-1])
         warnings.append(f"{len(stopped)} slot(s) passed while it was stopped; they are skipped.")
+    drop = after['draft_reason'] if before['state'] == 'live' and after['state'] != 'live' else None
     return Plan(output(s, after, warnings=warnings), dict(before=before, after=after, warnings=warnings,
-                                                          skip=[(x, 'stopped') for x in stopped]))
+                                                          skip=[(x, 'stopped') for x in stopped], drop_go=drop))
 
 
 def _left(row, used):
@@ -1011,11 +1046,34 @@ def _go(s, ctx, schedule) -> tuple[str | None, dict, list[Touched]]:
     if rule_fingerprint(s, schedule) != schedule['confirmed']:
         after, touched = return_to_draft(s, ctx, schedule, 'its rule or template changed since it was confirmed')
         return None, after, touched
-    why = authority_lost(s, schedule['established_by'])
+    why = _authority_why(s, schedule, schedule['established_by'])
     if why is None:
         return schedule['established_by'], schedule, []
     after, touched = pause(s, ctx, schedule, why)
     return None, after, touched
+
+
+def _authority_why(s, schedule, go_by) -> str | None:
+    """Why the establisher's go no longer counts (None: it does): R187's firing check (live, active, still holding
+    automate.delivery) and the go's own (delivery.send). Raises automation.Unsettled when it cannot be decided now."""
+    from bookflow.company import automation
+    return automation.firing_check(s, KIND, schedule) or authority_lost(s, go_by)
+
+
+def _keep_go(s, ctx, schedule, run) -> tuple[dict, dict, list[Touched]]:
+    """A later chunk of a run that carries a go: asked again, so a deny or a deactivation mid-run stops the go at the
+    next chunk. Lost: the schedule pauses with one to-do and the run's batch loses its go (pause_rule)."""
+    if schedule['state'] == 'live' and rule_fingerprint(s, schedule) != schedule['confirmed']:
+        schedule, touched = return_to_draft(s, ctx, schedule, 'its rule or template changed since it was confirmed')
+        return schedule, open_run(s, schedule['id']), touched
+    why = _authority_why(s, schedule, run['go_by']) if schedule['state'] == 'live' else f"it is {schedule['state']}"
+    if why is None:
+        return schedule, run, []
+    if schedule['state'] == 'live':
+        schedule, touched = pause_rule(s, ctx, schedule, why)
+    else:
+        touched = end_open_run(s, ctx, schedule, why, cancel=False)
+    return schedule, open_run(s, schedule['id']), touched
 
 
 def _counts(s, run, batch_out: bm.BatchOutput) -> dict:
@@ -1035,10 +1093,20 @@ def _update_run(s, ctx, run, **values) -> Touched:
 
 def draft_step(s, ctx, schedule, run) -> tuple[dict, dict, list[Touched], list[str]]:
     """One chunk of a run: begin its batch (deciding its go) or continue it."""
+    from bookflow.company import automation
     touched, warnings = [], []
+    try:
+        if run['batch_id'] is None:
+            go_by, schedule, paused = _go(s, ctx, schedule)
+        elif run['go_by']:
+            schedule, run, paused = _keep_go(s, ctx, schedule, run)
+        else:
+            paused = []
+    except automation.Unsettled as e:
+        # Authority that cannot be read now is not authority lost: nothing is drafted this time; the run goes on.
+        return schedule, run, [], [f'Authority could not be checked now ({e.reason}); the run goes on next time.']
+    touched += paused
     if run['batch_id'] is None:
-        go_by, schedule, paused = _go(s, ctx, schedule)
-        touched += paused
         inp = batch_input(s, schedule, run['slot_date'])
         plan = db.prepare_batch(s, ctx, inp)
         if plan.data.get('batch'):
@@ -1221,10 +1289,16 @@ def tick(s, system_id, now) -> dict | None:
             run = open_run(s, schedule['id'])
             slot = run['slot_date'] if run else _pending_slot(schedule, upto)
             scheduler._act_as(s, schedule['run_as'], schedule['run_as_for'], epoch)
+            cited = {}
+            if schedule['state'] == 'live' and schedule['established_by'] == schedule['run_as']:
+                # A live send schedule's writes cite the rule and its establisher (R187 §3: audit "On rule").
+                from bookflow.company import automation
+                cited = {'source_ref': automation.source_ref(KIND.kind, schedule['id'], schedule['established_by'],
+                                                             schedule['name'])}
             ctx = scheduler.context().model_copy(update={
                 'actor_id': schedule['run_as'], 'actor_kind': ActorKind(s.actor.kind),
                 'on_behalf_of': schedule['run_as_for'],
-                'reason': (f'On schedule: {name} for {slot}' if slot else f'On schedule: {name}')[:140]})
+                'reason': (f'On schedule: {name} for {slot}' if slot else f'On schedule: {name}')[:140], **cited})
             token = _TICK_TIME.set(hhmm)
             try:
                 with clock.as_of_day(today):  # the tick's own day and time, which the command reads as now
@@ -1247,3 +1321,46 @@ def tick(s, system_id, now) -> dict | None:
             except Exception as again:  # noqa: BLE001 - recorded, never fatal to the host
                 out[name] = scheduler._failure(again)
     return out
+
+
+# ---------------------------------------------------------------- as an automation (R187 increment 2)
+
+CAPABILITY = 'automate.delivery'
+
+
+def _automations(s, state=None) -> list[dict]:
+    t = c.delivery_schedules
+    q = sa.select(t).where(t.c.mode == 'send').order_by(t.c.name_key)
+    if state:
+        q = q.where(t.c.state == state)
+    return [dict(r) for r in s.company.conn.execute(q).mappings()]
+
+
+def _view(s, row) -> dict:
+    return dict(rule_id=row['id'], name=row['name'], state=row['state'], established_by=row['established_by'],
+                established_for=row['run_as_for'] if row['established_by'] and row['run_as'] == row['established_by']
+                else None, established_epoch=row['run_as_epoch'] if row['established_by'] and
+                row['run_as'] == row['established_by'] else None,
+                established_at=row['established_at'], paused_reason=row['paused_reason'],
+                draft_reason=row['draft_reason'],
+                what=f"Emails {selection_text(s, row)}, {cadence(row)[:1].lower()}{cadence(row)[1:]}")
+
+
+def pause_rule(s, ctx, schedule, why) -> tuple[dict, list[Touched]]:
+    """`automation pause`, or a firing that found the establisher without the authority: paused with the reason and
+    one to-do; an open run's releases lose the go."""
+    if schedule['state'] != 'live':
+        return schedule, []
+    after, touched = pause(s, ctx, schedule, why)
+    return after, touched + end_open_run(s, ctx, after, why, cancel=False)
+
+
+def _register():
+    from bookflow.company import automation
+    return automation.register(automation.Kind(
+        'delivery', CAPABILITY, 'delivery schedule', RECORD, 'delivery-schedule show', 'delivery-schedule update',
+        'delivery-schedule live, or delivery-schedule update with confirm', _automations,
+        lambda s, selector: resolve(s, selector), _view, pause_rule, edit_needs_confirm=True))
+
+
+KIND = _register()

@@ -103,6 +103,14 @@ MATRIX = {
     "user deactivate": {"E_PERMISSION": "not a human hub administrator, a never-activated installation, or the last active installation administrator",
                         "E_USER_NOT_FOUND": "no such person", "E_VALIDATION": "an agent (use agent deactivate), or yourself",
                         "E_VERSION_CONFLICT": "stale --expected-version"},
+    "user home set": {"E_PERMISSION": "another person's Home without user.manage, or a Home for an agent",
+                      "E_USER_NOT_FOUND": "no such person", "E_VALIDATION": "not a workbench page, or one the person may not open",
+                      "E_VERSION_CONFLICT": "stale --expected-version", "E_COMPANY_NOT_FOUND": "no such company",
+                      "E_COMPANY_AMBIGUOUS": "the company name matches more than one"},
+    "user home show": {"E_PERMISSION": "another person's Home without user.manage", "E_USER_NOT_FOUND": "no such person",
+                       "E_VALIDATION": "an unreadable --user"},
+    "user home clear": {"E_PERMISSION": "another person's Home without user.manage", "E_USER_NOT_FOUND": "no such person",
+                        "E_VALIDATION": "an agent's Home", "E_VERSION_CONFLICT": "stale --expected-version"},
     "user activate": {"E_PERMISSION": "not a human hub administrator, or a never-activated installation",
                       "E_USER_NOT_FOUND": "no such person", "E_VALIDATION": "an agent (use agent activate)",
                       "E_VERSION_CONFLICT": "stale --expected-version"},
@@ -2866,3 +2874,13 @@ _BANK_DETAILS = {**_BANK_POST,
                  'E_APPLICATION_INACTIVE': 'a bill voided or deleted'}
 MATRIX['bank-line deposit'] = dict(_BANK_DETAILS)
 MATRIX['bank-line pay-bills'] = dict(_BANK_DETAILS)
+# Automations (R187 increment 2).
+MATRIX['automation list'] = {'E_VALIDATION': 'unknown kind, state or limit'}
+MATRIX['automation show'] = {'E_VALIDATION': 'unknown kind', 'E_RECORD_NOT_FOUND': 'unknown rule',
+                             'E_PERMISSION': "a caller the kind's own show does not admit"}
+MATRIX['automation pause'] = {'E_VALIDATION': 'unknown kind', 'E_RECORD_NOT_FOUND': 'unknown rule',
+                              'E_PERMISSION': "a caller the kind's own update does not admit",
+                              'E_VERSION_CONFLICT': 'the rule changed meanwhile',
+                              'E_IDEMPOTENCY_MISMATCH': 'a reused key with other input',
+                              'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+                              'E_DIRECTIVE_INACTIVE': 'deactivated --directive'}

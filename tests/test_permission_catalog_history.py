@@ -108,6 +108,8 @@ ACCEPTED = {
     'item-picture-v1': (838, 'fb1968ec34b88620255e739d05573fb009d3ac47036745294fd0a6f9c77ac8af'),
     'bulk-edit-v1': (845, 'c4664e87ef03c124012304d580259f65920644ed03c3b0c2cb535f8060e7fe6b'),
     'bank-line-details-v1': (847, 'c84a45585ddc7d4b5e7e1ce602517bfd25f3c76de7bba387ccc0064f8045f6e5'),
+    'user-home-v1': (850, 'e3ca5ecf2483bcf9780cdd3e9300c5a9cb9ac74f02d2a9f29175bfe8f0c98b36'),
+    'automation-v1': (853, '4df1e05f0db60c9ac166ce314398120e3065dfb07f205327c81f3d5e5348e7ed'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -257,6 +259,8 @@ CHAIN_ADDITIONS = {
     'bulk-edit-v1': {'bulk-edit apply', 'bulk-edit columns', 'bulk-edit grid', 'bulk-edit preview', 'bulk-edit query',
                      'bulk-edit reverse', 'bulk-edit show'},
     'bank-line-details-v1': {'bank-line deposit', 'bank-line pay-bills'},
+    'user-home-v1': {'user home clear', 'user home set', 'user home show'},
+    'automation-v1': {'automation list', 'automation pause', 'automation show'},
 }
 
 _ANCESTOR_EDIT = """

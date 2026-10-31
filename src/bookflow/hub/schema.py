@@ -280,3 +280,15 @@ company_accountant_sync = _table(
     sa.CheckConstraint("state IN ('verified','unverified')", name="ck_company_accountant_sync_state"),
     description="Whether company_accountants is known to match each company's own designations.",
 )
+
+user_homes = _table(
+    "user_homes",
+    _column("user_id", sa.String(26), "The person whose Home this is.", sa.ForeignKey("users.id"), primary_key=True),
+    _column("company_id", sa.String(26), "Company the Home page is in; a company since retired leaves the Home unavailable.", nullable=False),
+    _column("path", sa.String(400), "Workbench page inside that company, such as `report/profit-and-loss`; empty for the Overview.", nullable=False),
+    _column("version", sa.Integer, "Optimistic-concurrency version of this record.", nullable=False, default=1),
+    _column("set_at", sa.String(32), "UTC timestamp when the Home was last set.", nullable=False),
+    _column("set_by", sa.String(26), "User id who last set it (the person, or someone holding user.manage).", nullable=False),
+    _column("set_via", sa.String(16), "Interface it was last set through.", nullable=False),
+    description="Each person's chosen start page (R191): where signing in and the Home button land. Starting location is not permission.",
+)
