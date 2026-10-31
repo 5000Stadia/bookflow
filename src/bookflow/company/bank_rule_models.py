@@ -193,6 +193,7 @@ class Applied(Model):
 
 
 class ApplyOutput(Model):
+    batch_id: ID | None = Field(default=None, description='Shared reversible batch; null for a dry run or no changes.')
     lines: tuple[Applied, ...] = Field(description='The waiting lines whose rule proposal changes (changed, unless a '
                                                    'dry run).')
     read: Count

@@ -802,13 +802,19 @@ def apply(s, ctx, inp, *, dry_run: bool) -> tuple[dict, list[Touched]]:
                 if found is not None:
                     value['history'] = dict(found[0], reason=found[1])
             rule_id = fit[0]['id'] if fit else None
-            if rule_id == line['rule_id']:
+            proposal = json.dumps(value, sort_keys=True) if value else None
+            if rule_id == line['rule_id'] and proposal == line['proposal']:
                 continue
             if only is not None and only['id'] not in (rule_id, line['rule_id']):
                 continue
-            changes.append((line, rule_id, fit, json.dumps(value, sort_keys=True) if value else None, places))
+            changes.append((line, rule_id, fit, proposal, places))
     touched = []
-    if not dry_run:
+    batch_id = None
+    if not dry_run and changes:
+        from bookflow.company import bank_rule_reversal
+        batch_id = batches._insert_batch(s, ctx, kind=bank_rule_reversal.KIND,
+                                         label='Bank rule proposals', scope='bank-rule-apply', ordering='record',
+                                         source_type='bank_rule_apply')
         for line, rule_id, _, proposal, _ in changes:
             done = s.company.conn.execute(c.bank_lines.update().where(
                 c.bank_lines.c.id == line['id'], c.bank_lines.c.version == line['version'],
@@ -818,17 +824,22 @@ def apply(s, ctx, inp, *, dry_run: bool) -> tuple[dict, list[Touched]]:
                 raise BookflowError('E_VERSION_CONFLICT', message=f"Line {line['id']} changed meanwhile; apply again.",
                                     details={'line': line['id']})
             touched.append(Touched('bank_line', line['id'], 'update', line['version'], line['version'] + 1,
-                                   {'rule_id': rule_id}, {'rule_id': line['rule_id']}, db='company'))
+                                   {'rule_id': rule_id, 'proposal': proposal},
+                                   {'rule_id': line['rule_id'], 'proposal': line['proposal']}, db='company'))
+            batches.record_effect(s, batch_id, record_type='bank_line', record_id=line['id'], action='updated',
+                                  version_after=line['version'] + 1, before={
+                                      'rule_id': line['rule_id'], 'proposal': line['proposal'],
+                                      'after': {'rule_id': rule_id, 'proposal': proposal}})
     shown = tuple(m.Applied(line_id=line['id'], date=line['date'], amount_decimal=bank_feeds.decimal(line['amount'], p),
                             payee=line['payee'], rule_id=rule_id, rule=fit[0]['name'] if fit else None,
                             reason=fit[1] if fit else None, was_rule_id=line['rule_id'])
                   for line, rule_id, fit, _, p in changes[:1000])
     n = len(changes)
-    return dict(lines=shown, read=len(lines), summary=(
+    return dict(lines=shown, read=len(lines), batch_id=batch_id, summary=(
         f"{n} waiting line(s) {'would ' if dry_run else ''}change their rule proposal"
-        + ('. Nothing was changed.' if dry_run else '.')),
+        + ('. Nothing was changed.' if dry_run else (f'; batch {batch_id}.' if batch_id else '.'))),
         next=('the same call without --dry-run' if dry_run and n else
-              ('`bank-line add --lines ...` enters lines with their proposals' if n else None))), touched
+              (f'batch reverse {batch_id} --dry-run' if batch_id else None))), touched
 
 
 # ------------------------------------------------------------------ learning (inside bank-line add's own write)
