@@ -173,7 +173,7 @@ def test_the_clerk_preset_holds_company_item_and_pos_sell_and_lands_on_the_pos(h
     assert clerk["denies"] == CLERK_DENIES
     assert pos_presets.preset("pos-clerk-returns")["grants"] == ["pos.sell", "pos.void", "pos.refund",
                                                                  "preset.pos-clerk-returns"]
-    assert runtime.current_catalog().CATALOG.version == "pos-refund-v1"  # on pos-layout-v1
+    assert runtime.current_catalog().CATALOG.version == "pos-split-v1"  # on pos-layout-v1
     assert sorted(_admitted_commands(clerk)) == CLERK_COMMANDS
     assert "pos sale void" not in _admitted_commands(clerk)
     assert _admitted_commands(pos_presets.preset("pos-clerk-returns")) == set(CLERK_COMMANDS) | {

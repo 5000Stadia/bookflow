@@ -1159,6 +1159,10 @@ def variant_policies():
     money = 'tests/test_numeric_entry_browser.py::test_generated_sales_math_preview_and_save'
     payment = 'tests/test_mcp_payment_form_browser.py::test_saved_selection_control_previews_real_receipt'
     return {
+        ('anyOf', ('Tender', 'null')): ([parent,
+            'tests/test_pos_split_browser.py::test_split_change_reload_retry_and_receipt',
+            'tests/test_pos_sale_browser.py::test_ring_up_by_tap_lookup_and_scan_then_cash_and_the_change_screen_at_390'],
+            ['the generated fallback form has no Tender-specific explicit-null browser case; the POS screen uses omitted tender for split payments']),
         ('anyOf', ('Address', 'null')): ([parent, 'tests/test_mcp_address_payee_browser.py::test_sales_address_default_explicit_null_and_return_to_current_default'], []),
         ('anyOf', ('AddressInput', 'null')): ([parent, 'tests/test_mcp_address_payee_browser.py::test_party_address_create_patch_clear_and_omission'], []),
         ('anyOf', ('RegisterParty', 'null')): ([nested, parent, 'tests/test_mcp_address_payee_browser.py::test_top_level_register_payee_prefill_null_replacement_and_journal_destination'], []),

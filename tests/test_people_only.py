@@ -40,7 +40,7 @@ def test_the_people_only_list_is_exactly_the_five_and_every_other_entry_is_a_cap
     # explicit grant of each (hub.capabilities).
     # pos-layout-v1 (R114 increment 6, on bank-source-v1) adds no people-only acts.
     # pos-ticket-v1 adds hold, resume, discard and void under grantable POS capabilities.
-    assert tip is runtime.known_catalog(c.POS_REFUND_POLICY_VERSION)
+    assert tip is runtime.known_catalog(c.POS_SPLIT_POLICY_VERSION)
     assert people_only.people_only_commands() == FIVE == set(layer.STAYS_HUMAN)
     assert sorted(a.key for a in tip.CATALOG.admin_actions if a.human_only) == sorted(
         people_only.PEOPLE_ONLY_PREFIX + x for x in FIVE)
