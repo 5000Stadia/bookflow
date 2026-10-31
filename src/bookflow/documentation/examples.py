@@ -2076,6 +2076,32 @@ EXAMPLES.update({
                                  {'pos_register': 'Main'}),
     'pos-register list': Example('bookflow pos-register list --company "Demo Plumbing Co" --json', {}),
 })
+# R108 increment 4: bank rules, written or learned; an auto-add rule made live with one check of its details.
+_SHELL = [{'field': 'payee', 'op': 'contains', 'value': 'SHELL'}]
+EXAMPLES.update({
+    'bank-rule create': Example('bookflow bank-rule create --name "Shell fuel" --account Checking --direction out'
+                                ' --conditions \'[{"field": "payee", "op": "contains", "value": "SHELL"}]\''
+                                ' --payee "Central Supply" --category "Vehicle Expense" --company "Demo Plumbing Co"'
+                                ' --reason "Always put Shell under fuel" --json',
+                                {'name': 'Shell fuel', 'account': 'Checking', 'direction': 'out', 'conditions': _SHELL,
+                                 'payee': 'Central Supply', 'category': 'Vehicle Expense'}),
+    'bank-rule update': Example('bookflow bank-rule update "Shell fuel" --live --company "Demo Plumbing Co"'
+                                ' --reason "Add Shell lines unattended" --dry-run --json',
+                                {'rule': 'Shell fuel', 'live': True}),
+    'bank-rule deactivate': Example('bookflow bank-rule deactivate "Shell fuel" --company "Demo Plumbing Co"'
+                                    ' --reason "Shell is now a customer too" --json', {'rule': 'Shell fuel'}),
+    'bank-rule accept': Example('bookflow bank-rule accept "Coffee Bean (learned)" --company "Demo Plumbing Co"'
+                                ' --reason "Yes, always" --json', {'rule': 'Coffee Bean (learned)'}),
+    'bank-rule decline': Example('bookflow bank-rule decline "Coffee Bean (learned)" --company "Demo Plumbing Co"'
+                                 ' --reason "Not always office supplies" --json', {'rule': 'Coffee Bean (learned)'}),
+    'bank-rule apply': Example('bookflow bank-rule apply --rule "Shell fuel" --company "Demo Plumbing Co"'
+                               ' --reason "Propose the new rule for waiting lines" --dry-run --json',
+                               {'rule': 'Shell fuel'}),
+    'bank-rule show': Example('bookflow bank-rule show "Shell fuel" --company "Demo Plumbing Co" --json',
+                              {'rule': 'Shell fuel'}),
+    'bank-rule query': Example('bookflow bank-rule query --account Checking --company "Demo Plumbing Co" --json',
+                               {'account': 'Checking'}),
+})
 # R114 increment 5: ringing up at the POS.
 EXAMPLES.update({
     'pos sale preview': Example('bookflow pos sale preview --lines \'[{"item":"Pipe Sealant","quantity":"2"}]\' '

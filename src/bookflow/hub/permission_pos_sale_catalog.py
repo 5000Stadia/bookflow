@@ -1,4 +1,4 @@
-"""Add ringing up at the POS (R114 increment 5, design/point-of-sale.md §3, §4, §9) on pos-v1, without rewriting any
+"""Add ringing up at the POS (R114 increment 5, design/point-of-sale.md §3, §4, §9) on bank-rule-v1, without rewriting any
 accepted descriptor.
 
 Four commands, each under `pos.sell` at threshold `member` (held by standard, admin and owner, and by a `readonly`
@@ -11,10 +11,10 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_pos_catalog as previous, permission_catalog as c
+from . import permission_bank_rule_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = 'bd8623a3a6c1ab539bb0dd767282e39823fd419f'
+SOURCE_COMMIT = '89622d32040590d2f54760a800312d656a390b99'
 _OWNER = 'bookflow.commands.pos_sale_cmds.{}|src/bookflow/commands/pos_sale_cmds.py'
 _CONDITIONAL = 'bookflow.company.pos_sales.authorize|src/bookflow/company/pos_sales.py'
 _SELL = c.Requirement('pos.sell', 'member')

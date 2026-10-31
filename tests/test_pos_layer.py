@@ -112,7 +112,7 @@ def test_off_by_default_then_main_and_its_walk_in_survive_off_and_on(hosted):
     for path in ("/", "/_group/customers"):
         assert f'href="/c/{cid}/pos"' in owner.get(f"/c/{cid}{path}").text, path
     page = owner.get(f"/c/{cid}/pos")
-    assert page.status_code == 200 and "data-pos-coming" in page.text and 'data-pos-register="Main"' in page.text
+    assert page.status_code == 200 and "data-pos-boxes" in page.text and 'id="pos-data"' in page.text
 
     # A second register gets its own walk-in; a name is unique; a deposit account must be a bank or Undeposited Funds.
     till = hosted.ok("pos-register.create", {"name": "Front counter", "receipt_width": 58}, company=cid,
@@ -298,7 +298,10 @@ def test_every_pos_command_names_its_pos_capability():
     from bookflow.hub import permission_pos_catalog as layer
     registry.load_all()
     named = {c.name: (c.capability, c.required_role) for c in registry.all_commands() if c.name.startswith("pos")}
-    assert named == {name: (cap, threshold) for name, cap, threshold, _ in layer._ADDED}
+    from bookflow.hub import permission_pos_sale_catalog as sale_layer
+    expected = {name: (cap, threshold) for name, cap, threshold, _ in layer._ADDED}
+    expected.update({name: ('pos.sell', 'member') for name, _, _ in sale_layer._ADDED})   # increment 5
+    assert named == expected
     # The POS layer is decided by capability, not noun: the gate and the switch find each command by its capability.
     from bookflow.adapters.workbench import home as Home
     from bookflow.hub import capabilities

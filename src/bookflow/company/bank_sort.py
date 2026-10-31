@@ -37,9 +37,9 @@ TRANSFER_DAYS = 5
 # completed, never posted twice.
 LATE_TRANSFER_DAYS = 30
 _LINK = ('state', 'entry_id', 'movement', 'link_how', 'match_reason', 'created', 'payee_display', 'ignore_reason',
-         'entry_date')
+         'entry_date', 'answer')
 _CLEAR = dict(state='waiting', entry_id=None, movement=None, link_how=None, match_reason=None, created=0,
-              payee_display=None, ignore_reason=None, entry_date=None)
+              payee_display=None, ignore_reason=None, entry_date=None, answer=None)
 # What a line's sort is, compared by an undo: the state and link, not the wording around it.
 _IDENT = ('state', 'entry_id', 'created', 'ignore_reason')
 _LINKED = ('matched', 'settled', 'transfer', 'added')
@@ -561,6 +561,42 @@ def _version(s, entry_id: str) -> int:
     return s.company.conn.execute(sa.select(c.transactions.c.version).where(c.transactions.c.id == entry_id)).scalar()
 
 
+def _proposed(line: dict, item: m.AddItem) -> tuple[m.AddItem, dict | None]:
+    """An add that names no payee or no account takes them from the line's rule or history proposal (design §5: one
+    click is Add on a row with a proposal); what the caller named always wins."""
+    from bookflow.company import bank_rules
+    if item.payee is not None and (item.account is not None or item.splits):
+        return item, None
+    found = bank_rules.proposal_fields(line)
+    if found is None:
+        return item, None
+    values = item.model_dump()
+    if item.payee is None and found['payee']:
+        values.update(payee=found['payee'], payee_type=item.payee_type or found['payee_type'])
+    if item.account is None and not item.splits and found['account']:
+        values['account'] = found['account']
+        if item.class_id is None and found['class_id']:
+            values['class_id'] = found['class_id']
+    if item.memo is None and found['memo']:
+        values['memo'] = found['memo']
+    return m.AddItem(**values), found
+
+
+def _answer(s, plan: dict, item: m.AddItem) -> dict | None:
+    """What the line was added as, for history and learning: one account only (splits teach nothing)."""
+    from bookflow.company import bank_rules
+    if item.splits or not item.account:
+        return None
+    from bookflow.company.accounts import resolve_account
+    class_id = None
+    if item.class_id:
+        from bookflow.company.budgets import resolve_class
+        class_id = resolve_class(s, item.class_id)
+    payee = _payee(s, item.payee, item.payee_type or 'vendor')
+    return bank_rules.answer_of(plan['input'], payee['id'], item.payee_type or 'vendor', payee['name'],
+                                resolve_account(s.company, item.account)['id'], class_id)
+
+
 def add(s, ctx, inp, *, dry_run: bool) -> dict:
     items = [m.AddItem(line=inp.line, **{k: getattr(inp, k) for k in m.AddItem.model_fields if k != 'line'})] \
         if inp.line else [_merge(inp, i) for i in inp.lines]
@@ -569,10 +605,14 @@ def add(s, ctx, inp, *, dry_run: bool) -> dict:
         raise _refuse('lines', 'A line is named twice.')
     found = lines(s, ids)
     plans, problems = [], []
-    for line, item in zip(found, items):
+    for n, (line, item) in enumerate(zip(found, items)):
         try:
             _sortable(s, line)
-            plans.append((line, _add_plan(s, line, item)))
+            item, came = _proposed(line, item)
+            items[n] = item
+            plan = _add_plan(s, line, item)
+            plan['from'] = came
+            plans.append((line, plan))
         except BookflowError as error:
             problems.append((line, error))
     if problems:
@@ -598,9 +638,11 @@ def add(s, ctx, inp, *, dry_run: bool) -> dict:
     # A --lines add's batch opens in the first posting's own transaction, so a failure there leaves no empty batch.
     opened: list[str] = []
     how = _how(s)
-    entered, written = [], []
+    entered, written, learned = [], [], []
+    by_line = {i.line: i for i in items}
     for n, (line, plan) in enumerate(plans):
         def record(s2, cmd, applied, output, line=line, plan=plan):
+            from bookflow.company import bank_rules
             entry_id = _created_id(output)
             current = lines(s2, [line['id']])[0]
             if current['version'] != line['version'] or current['state'] != 'waiting' or not current['live']:
@@ -612,14 +654,25 @@ def add(s, ctx, inp, *, dry_run: bool) -> dict:
             if inp.lines and not opened:
                 opened.append(_open_sort(s2, ctx, f'Bank inbox: add {len(plans)} line(s)'))
             sort_id = opened[0] if opened else None
+            came = plan.get('from') or {}
+            answer = _answer(s2, plan, by_line[line['id']])
             written.append(_write_line(
                 s2, ctx, current, dict(state='added', entry_id=entry_id, movement=None, link_how=how,
                                        match_reason=f'entered with {cmd.name}', created=1,
-                                       payee_display=plan['payee'], ignore_reason=None, entry_date=line['date']),
+                                       payee_display=plan['payee'], ignore_reason=None, entry_date=line['date'],
+                                       answer=json.dumps(answer, sort_keys=True) if answer else None),
                 kind='added', details={'entry': entry_id, 'command': cmd.name, 'payee': plan['payee'], 'how': how,
-                                       'sort_batch': sort_id},
+                                       'sort_batch': sort_id, 'proposal': came.get('source'),
+                                       'rule_id': came.get('rule_id')},
                 event_id=batches.last_event_id(s2), batch_ids=[batch['id']] + ([sort_id] if sort_id else []),
                 extra=[('transaction', entry_id, 'created', _version(s2, entry_id))]))
+            if came.get('rule_id'):
+                s2.company.conn.execute(c.bank_lines.update().where(c.bank_lines.c.id == line['id']).values(
+                    rule_id=came['rule_id']))
+            note = bank_rules.learn(s2, ctx, current, answer, batch['id'], always=bool(getattr(inp, 'always', False)),
+                                    sort_batch=sort_id)
+            if note:
+                learned.append(note)
             entered.append(m.Entered(line_id=line['id'], entry_id=entry_id, command=cmd.name, input=plan['input']))
         try:
             batches.run_nested(s, ctx, plan['command'], plan['input'], source_ref=f"bank-line:{line['id']}",
@@ -636,7 +689,39 @@ def add(s, ctx, inp, *, dry_run: bool) -> dict:
     return dict(lines=tuple(_out(s, v) for v in written), entries=tuple(entered), batch_id=sort_id,
                 summary=f'{len(entered)} line(s) entered: ' + ', '.join(
                     f'{e.command.split()[0]} {e.entry_id}' for e in entered[:5]) + ('...' if len(entered) > 5 else '')
-                + '.', next=(f'`bank-line undo {sort_id}` undoes this batch' if sort_id else None))
+                + '.', next=' '.join([*learned, *([f'`bank-line undo {sort_id}` undoes this batch'] if sort_id else [])])
+                or None)
+
+
+def add_one(s, ctx, line: dict, item: m.AddItem, *, how: str, rule_id: str, source_ref: str) -> str:
+    """One waiting line entered by a live auto-add rule (bank_rules.run_live), as ``ctx``'s actor (its establisher):
+    the same typed command as `bank-line add`, citing the rule, recorded in the line's import batch only. Learns
+    nothing (the rule's own answer). Returns the entry."""
+    _sortable(s, line)
+    plan = _add_plan(s, line, item)
+    made = []
+
+    def record(s2, cmd, applied, output):
+        entry_id = _created_id(output)
+        current = lines(s2, [line['id']])[0]
+        if current['version'] != line['version'] or current['state'] != 'waiting' or not current['live']:
+            raise BookflowError('E_VERSION_CONFLICT', message=f"Line {line['id']} changed meanwhile; nothing was "
+                                                              'entered for it.', details={'line': line['id']})
+        batch = _import_batch(s2, current)
+        if batch['state'] != 'live':
+            raise _refuse('line', f"Import {line['import_id']} is being reversed; nothing was entered.")
+        _write_line(s2, ctx, current, dict(state='added', entry_id=entry_id, movement=None, link_how=how,
+                                           match_reason=f'entered with {cmd.name} on a rule', created=1,
+                                           payee_display=plan['payee'], ignore_reason=None, entry_date=line['date'],
+                                           answer=None),
+                    kind='added', details={'entry': entry_id, 'command': cmd.name, 'payee': plan['payee'],
+                                           'how': how, 'rule_id': rule_id, 'source_ref': source_ref},
+                    event_id=batches.last_event_id(s2), batch_ids=[batch['id']],
+                    extra=[('transaction', entry_id, 'created', _version(s2, entry_id))])
+        s2.company.conn.execute(c.bank_lines.update().where(c.bank_lines.c.id == line['id']).values(rule_id=rule_id))
+        made.append(entry_id)
+    batches.run_nested(s, ctx, plan['command'], plan['input'], source_ref=source_ref, recorder=record, recovery=False)
+    return made[0]
 
 
 # ------------------------------------------------------------------ add more details (increment 5)
@@ -1151,6 +1236,8 @@ def decorate(s, rows: list[dict]) -> dict[str, dict]:
                 proposals.append(m.Proposal(kind='transfer', reason=reason, line_ids=tuple(v['id'] for v in fits[:10]),
                                             unique=sure, next=f"bank-line transfer --line {r['id']}" + (
                                                 '' if sure else ' --pair <one of them>')))
+            from bookflow.company import bank_rules
+            proposals.extend(bank_rules.proposals_of(s, r))
             if proposals:
                 extra['proposals'] = tuple(proposals)
         out[r['id']] = extra
@@ -1269,7 +1356,8 @@ def _restorable(s, touched: dict[str, dict], batch_id: str) -> tuple[dict[str, d
 
 
 def _sort_plan(s, ctx, batch: dict, all_effects: list[dict], done: dict, probe, ordering: list[dict]) -> dict:
-    known = {('bank_line', 'updated'), ('transaction', 'created'), ('transaction', 'linked')}
+    known = {('bank_line', 'updated'), ('transaction', 'created'), ('transaction', 'linked'),
+             ('bank_rule', 'rule_learned')}
     unknown = sorted({(e['record_type'], e['action']) for e in all_effects} - known)
     if unknown:
         raise BookflowError('E_VALIDATION', message=f'No inverse is known for {unknown[0][0]} {unknown[0][1]} effects.',
@@ -1296,9 +1384,12 @@ def _sort_plan(s, ctx, batch: dict, all_effects: list[dict], done: dict, probe, 
         return found
     steps, work, more, entries, created = bank_reversal.entry_plan(s, ctx, batch, all_effects, done, probe, linked_for)
     blockers += more
+    learned = sum(1 for e in all_effects if (e['record_type'], e['action']) == ('bank_rule', 'rule_learned'))
     restore = {'seq': 0, 'record_type': 'batch', 'record_id': batch['id'], 'name': 'the lines it sorted',
                'action': 'updated', 'version': len(live),
-               'steps': [f'return {len(live)} line(s) to how they stood before the batch']}
+               'steps': [f'return {len(live)} line(s) to how they stood before the batch',
+                         *([f'retire bank_rule (rule_learned): {learned} learned from it, unless edited since']
+                           if learned else [])]}
     freed = sum(1 for i, row in live.items() if row['entry_id'] and not row['created']
                 and touched[i]['before'].get('entry_id') != row['entry_id'])
     return {'steps': [*steps, restore], 'work': work, 'blockers': blockers, 'records': len(created) + 1,
@@ -1335,6 +1426,13 @@ def _sort_release(s, batch: dict) -> None:
                               before={'of_seq': info['seq'], 'restored': before['state']}, event_id=event)
     # A line a match held is waiting again with its entry free: read its proposals afresh, and those of the waiting
     # lines of its account that entry could be (one imported meanwhile skipped it while it was taken).
+    from bookflow.company import bank_rules
+    for e in batches.effects(s, batch['id']):
+        if (e['record_type'], e['action']) == ('bank_rule', 'rule_learned'):
+            outcome = bank_rules.retire(s, e, batch, reversal_id)
+            batches.record_effect(s, reversal_id, record_type='bank_rule', record_id=e['record_id'],
+                                  action='reversed', version_after=None, before={'of_seq': e['seq'],
+                                                                                 'outcome': outcome}, event_id=event)
     freed = [row for line_id, row in live.items() if row['entry_id'] and not row['created']
              and touched[line_id]['before'].get('entry_id') != row['entry_id']]
     if freed:
@@ -1367,6 +1465,10 @@ def _propose_again(s, freed: list[dict]) -> None:
                 continue
             seen.add(line['id'])
             proposal = _proposal_now(s, dict(line))
+            kept = {k: v for k, v in (json.loads(line['proposal']) if line['proposal'] else {}).items()
+                    if k in ('rule', 'history')}
+            if kept:  # a rule's or history's proposal stays; only the matcher's is read again
+                proposal = json.dumps({**(json.loads(proposal) if proposal else {}), **kept}, sort_keys=True)
             if proposal != line['proposal']:
                 conn.execute(t.update().where(t.c.id == line['id']).values(proposal=proposal))
 

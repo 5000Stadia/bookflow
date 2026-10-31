@@ -186,7 +186,8 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.AUTOMATION_POLICY_VERSION: '4df1e05f0db60c9ac166ce314398120e3065dfb07f205327c81f3d5e5348e7ed',
     c.OPENING_DRAFT_POLICY_VERSION: '56a757a3260e92ca76ffafbf79f7cbcac99198a1c292278998588eef117d9aa2',
     c.POS_POLICY_VERSION: '3d55aae9746f7326fb83eab6d2a48e4d6d100ce35e48f6d845cbff2180dacaf2',
-    c.POS_SALE_POLICY_VERSION: '16496b81e6cdb1f75771955c4eb10066f10c8a04bdc7d4fe7af6e9559d35c4df',
+    c.BANK_RULE_POLICY_VERSION: '12b5f914d21302af037c6cc0b1aeab0ef6912d764015332d7734c12338ad8127',
+    c.POS_SALE_POLICY_VERSION: '1462bee09d7343f15fdc015fa86a114e30671e8d73fc2bab7f5e75444d0450cf',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -348,6 +349,7 @@ def _full_known():
     from . import permission_automation_catalog
     from . import permission_opening_draft_catalog
     from . import permission_pos_catalog
+    from . import permission_bank_rule_catalog
     from . import permission_pos_sale_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
@@ -436,6 +438,7 @@ def _full_known():
         c.AUTOMATION_POLICY_VERSION: permission_automation_catalog,
         c.OPENING_DRAFT_POLICY_VERSION: permission_opening_draft_catalog,
         c.POS_POLICY_VERSION: permission_pos_catalog,
+        c.BANK_RULE_POLICY_VERSION: permission_bank_rule_catalog,
         c.POS_SALE_POLICY_VERSION: permission_pos_sale_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is

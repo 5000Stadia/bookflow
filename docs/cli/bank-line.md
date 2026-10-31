@@ -45,6 +45,7 @@ The same example as complete `bookflow_run` arguments:
 | `class_id` | `--class-id` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | Default: the bank's text. |
 | `number` | `--number` | string \| null | no | yes | null | A check's number; default the line's when it is a plain number. |
+| `always` | `--always` | boolean | no | no | false | Always do this: make a rule now, so this payee's later lines in this account are proposed the same payee, account and class (a learned rule, active at once; it never adds on its own). |
 | `line` | `--line` | string \| null | no | yes | null | The waiting line to enter in the books. |
 | `lines[].payee` | inside `--lines` JSON array | string \| null | no | yes | null | Who the money went to or came from: an existing name (or its id) on the payee_type list. Unsure? Ask the person; never guess. |
 | `lines[].payee_type` | inside `--lines` JSON array | literal["customer", "vendor", "employee", "other_name"] \| null | no | yes | null | The list the payee is on; default vendor. |
@@ -121,12 +122,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].pair_line_id` | string \| null | no | yes | null | A transfer's other end: a live line of another account linked to the same entry. |
 | `lines[].entry_gone` | string \| null | no | yes | null | Set when the line's entry was voided, deleted or changed in amount or date since it was linked, with why: the line is not done (bank-line unmatch returns it to waiting). |
 | `lines[].proposals` | array[object] | no | no | [] | For a waiting line: what it could be, with why. |
-| `lines[].proposals[].kind` | literal["match", "transfer"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts. |
+| `lines[].proposals[].kind` | literal["match", "transfer", "rule", "history"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts; rule: what a bank rule says the line is; history: what the account's earlier lines of this payee were added as. |
 | `lines[].proposals[].reason` | string | yes | no | — | Why it is proposed; when several fit equally, says so (never chosen for you). |
 | `lines[].proposals[].entry_ids` | array[string] | no | no | [] | — |
 | `lines[].proposals[].line_ids` | array[string] | no | no | [] | Lines of other accounts (transfer). |
 | `lines[].proposals[].unique` | boolean | yes | no | — | True when exactly one fits: the act with no choice named accepts it. |
 | `lines[].proposals[].next` | string | yes | no | — | The command that accepts it, or names one of several. |
+| `lines[].proposals[].rule_id` | string \| null | no | yes | null | rule: the bank rule. |
+| `lines[].proposals[].payee` | string \| null | no | yes | null | rule or history: the payee it enters the line under. |
+| `lines[].proposals[].account_id` | string \| null | no | yes | null | rule or history: the account (or a transfer rule's other account). |
+| `lines[].rule_id` | string \| null | no | yes | null | The bank rule that proposed for the line, or acted on it. |
 | `entries` | array[object] | no | no | [] | — |
 | `entries[].line_id` | string | yes | no | — | — |
 | `entries[].entry_id` | string \| null | yes | yes | — | The entry made (null on a dry run). |
@@ -290,12 +295,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].pair_line_id` | string \| null | no | yes | null | A transfer's other end: a live line of another account linked to the same entry. |
 | `lines[].entry_gone` | string \| null | no | yes | null | Set when the line's entry was voided, deleted or changed in amount or date since it was linked, with why: the line is not done (bank-line unmatch returns it to waiting). |
 | `lines[].proposals` | array[object] | no | no | [] | For a waiting line: what it could be, with why. |
-| `lines[].proposals[].kind` | literal["match", "transfer"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts. |
+| `lines[].proposals[].kind` | literal["match", "transfer", "rule", "history"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts; rule: what a bank rule says the line is; history: what the account's earlier lines of this payee were added as. |
 | `lines[].proposals[].reason` | string | yes | no | — | Why it is proposed; when several fit equally, says so (never chosen for you). |
 | `lines[].proposals[].entry_ids` | array[string] | no | no | [] | — |
 | `lines[].proposals[].line_ids` | array[string] | no | no | [] | Lines of other accounts (transfer). |
 | `lines[].proposals[].unique` | boolean | yes | no | — | True when exactly one fits: the act with no choice named accepts it. |
 | `lines[].proposals[].next` | string | yes | no | — | The command that accepts it, or names one of several. |
+| `lines[].proposals[].rule_id` | string \| null | no | yes | null | rule: the bank rule. |
+| `lines[].proposals[].payee` | string \| null | no | yes | null | rule or history: the payee it enters the line under. |
+| `lines[].proposals[].account_id` | string \| null | no | yes | null | rule or history: the account (or a transfer rule's other account). |
+| `lines[].rule_id` | string \| null | no | yes | null | The bank rule that proposed for the line, or acted on it. |
 | `entries` | array[object] | no | no | [] | — |
 | `entries[].line_id` | string | yes | no | — | — |
 | `entries[].entry_id` | string \| null | yes | yes | — | The entry made (null on a dry run). |
@@ -469,12 +478,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].pair_line_id` | string \| null | no | yes | null | A transfer's other end: a live line of another account linked to the same entry. |
 | `lines[].entry_gone` | string \| null | no | yes | null | Set when the line's entry was voided, deleted or changed in amount or date since it was linked, with why: the line is not done (bank-line unmatch returns it to waiting). |
 | `lines[].proposals` | array[object] | no | no | [] | For a waiting line: what it could be, with why. |
-| `lines[].proposals[].kind` | literal["match", "transfer"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts. |
+| `lines[].proposals[].kind` | literal["match", "transfer", "rule", "history"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts; rule: what a bank rule says the line is; history: what the account's earlier lines of this payee were added as. |
 | `lines[].proposals[].reason` | string | yes | no | — | Why it is proposed; when several fit equally, says so (never chosen for you). |
 | `lines[].proposals[].entry_ids` | array[string] | no | no | [] | — |
 | `lines[].proposals[].line_ids` | array[string] | no | no | [] | Lines of other accounts (transfer). |
 | `lines[].proposals[].unique` | boolean | yes | no | — | True when exactly one fits: the act with no choice named accepts it. |
 | `lines[].proposals[].next` | string | yes | no | — | The command that accepts it, or names one of several. |
+| `lines[].proposals[].rule_id` | string \| null | no | yes | null | rule: the bank rule. |
+| `lines[].proposals[].payee` | string \| null | no | yes | null | rule or history: the payee it enters the line under. |
+| `lines[].proposals[].account_id` | string \| null | no | yes | null | rule or history: the account (or a transfer rule's other account). |
+| `lines[].rule_id` | string \| null | no | yes | null | The bank rule that proposed for the line, or acted on it. |
 | `entries` | array[object] | no | no | [] | — |
 | `entries[].line_id` | string | yes | no | — | — |
 | `entries[].entry_id` | string \| null | yes | yes | — | The entry made (null on a dry run). |
@@ -630,12 +643,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].pair_line_id` | string \| null | no | yes | null | A transfer's other end: a live line of another account linked to the same entry. |
 | `lines[].entry_gone` | string \| null | no | yes | null | Set when the line's entry was voided, deleted or changed in amount or date since it was linked, with why: the line is not done (bank-line unmatch returns it to waiting). |
 | `lines[].proposals` | array[object] | no | no | [] | For a waiting line: what it could be, with why. |
-| `lines[].proposals[].kind` | literal["match", "transfer"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts. |
+| `lines[].proposals[].kind` | literal["match", "transfer", "rule", "history"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts; rule: what a bank rule says the line is; history: what the account's earlier lines of this payee were added as. |
 | `lines[].proposals[].reason` | string | yes | no | — | Why it is proposed; when several fit equally, says so (never chosen for you). |
 | `lines[].proposals[].entry_ids` | array[string] | no | no | [] | — |
 | `lines[].proposals[].line_ids` | array[string] | no | no | [] | Lines of other accounts (transfer). |
 | `lines[].proposals[].unique` | boolean | yes | no | — | True when exactly one fits: the act with no choice named accepts it. |
 | `lines[].proposals[].next` | string | yes | no | — | The command that accepts it, or names one of several. |
+| `lines[].proposals[].rule_id` | string \| null | no | yes | null | rule: the bank rule. |
+| `lines[].proposals[].payee` | string \| null | no | yes | null | rule or history: the payee it enters the line under. |
+| `lines[].proposals[].account_id` | string \| null | no | yes | null | rule or history: the account (or a transfer rule's other account). |
+| `lines[].rule_id` | string \| null | no | yes | null | The bank rule that proposed for the line, or acted on it. |
 | `entries` | array[object] | no | no | [] | — |
 | `entries[].line_id` | string | yes | no | — | — |
 | `entries[].entry_id` | string \| null | yes | yes | — | The entry made (null on a dry run). |
@@ -795,12 +812,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].pair_line_id` | string \| null | no | yes | null | A transfer's other end: a live line of another account linked to the same entry. |
 | `lines[].entry_gone` | string \| null | no | yes | null | Set when the line's entry was voided, deleted or changed in amount or date since it was linked, with why: the line is not done (bank-line unmatch returns it to waiting). |
 | `lines[].proposals` | array[object] | no | no | [] | For a waiting line: what it could be, with why. |
-| `lines[].proposals[].kind` | literal["match", "transfer"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts. |
+| `lines[].proposals[].kind` | literal["match", "transfer", "rule", "history"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts; rule: what a bank rule says the line is; history: what the account's earlier lines of this payee were added as. |
 | `lines[].proposals[].reason` | string | yes | no | — | Why it is proposed; when several fit equally, says so (never chosen for you). |
 | `lines[].proposals[].entry_ids` | array[string] | no | no | [] | — |
 | `lines[].proposals[].line_ids` | array[string] | no | no | [] | Lines of other accounts (transfer). |
 | `lines[].proposals[].unique` | boolean | yes | no | — | True when exactly one fits: the act with no choice named accepts it. |
 | `lines[].proposals[].next` | string | yes | no | — | The command that accepts it, or names one of several. |
+| `lines[].proposals[].rule_id` | string \| null | no | yes | null | rule: the bank rule. |
+| `lines[].proposals[].payee` | string \| null | no | yes | null | rule or history: the payee it enters the line under. |
+| `lines[].proposals[].account_id` | string \| null | no | yes | null | rule or history: the account (or a transfer rule's other account). |
+| `lines[].rule_id` | string \| null | no | yes | null | The bank rule that proposed for the line, or acted on it. |
 | `entries` | array[object] | no | no | [] | — |
 | `entries[].line_id` | string | yes | no | — | — |
 | `entries[].entry_id` | string \| null | yes | yes | — | The entry made (null on a dry run). |
@@ -969,12 +990,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].pair_line_id` | string \| null | no | yes | null | A transfer's other end: a live line of another account linked to the same entry. |
 | `lines[].entry_gone` | string \| null | no | yes | null | Set when the line's entry was voided, deleted or changed in amount or date since it was linked, with why: the line is not done (bank-line unmatch returns it to waiting). |
 | `lines[].proposals` | array[object] | no | no | [] | For a waiting line: what it could be, with why. |
-| `lines[].proposals[].kind` | literal["match", "transfer"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts. |
+| `lines[].proposals[].kind` | literal["match", "transfer", "rule", "history"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts; rule: what a bank rule says the line is; history: what the account's earlier lines of this payee were added as. |
 | `lines[].proposals[].reason` | string | yes | no | — | Why it is proposed; when several fit equally, says so (never chosen for you). |
 | `lines[].proposals[].entry_ids` | array[string] | no | no | [] | — |
 | `lines[].proposals[].line_ids` | array[string] | no | no | [] | Lines of other accounts (transfer). |
 | `lines[].proposals[].unique` | boolean | yes | no | — | True when exactly one fits: the act with no choice named accepts it. |
 | `lines[].proposals[].next` | string | yes | no | — | The command that accepts it, or names one of several. |
+| `lines[].proposals[].rule_id` | string \| null | no | yes | null | rule: the bank rule. |
+| `lines[].proposals[].payee` | string \| null | no | yes | null | rule or history: the payee it enters the line under. |
+| `lines[].proposals[].account_id` | string \| null | no | yes | null | rule or history: the account (or a transfer rule's other account). |
+| `lines[].rule_id` | string \| null | no | yes | null | The bank rule that proposed for the line, or acted on it. |
 | `counts` | object[string, integer] | yes | no | — | Live lines matching the filters other than state, by state. |
 | `next_cursor` | string \| null | yes | yes | — | — |
 
@@ -1119,12 +1144,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].pair_line_id` | string \| null | no | yes | null | A transfer's other end: a live line of another account linked to the same entry. |
 | `lines[].entry_gone` | string \| null | no | yes | null | Set when the line's entry was voided, deleted or changed in amount or date since it was linked, with why: the line is not done (bank-line unmatch returns it to waiting). |
 | `lines[].proposals` | array[object] | no | no | [] | For a waiting line: what it could be, with why. |
-| `lines[].proposals[].kind` | literal["match", "transfer"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts. |
+| `lines[].proposals[].kind` | literal["match", "transfer", "rule", "history"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts; rule: what a bank rule says the line is; history: what the account's earlier lines of this payee were added as. |
 | `lines[].proposals[].reason` | string | yes | no | — | Why it is proposed; when several fit equally, says so (never chosen for you). |
 | `lines[].proposals[].entry_ids` | array[string] | no | no | [] | — |
 | `lines[].proposals[].line_ids` | array[string] | no | no | [] | Lines of other accounts (transfer). |
 | `lines[].proposals[].unique` | boolean | yes | no | — | True when exactly one fits: the act with no choice named accepts it. |
 | `lines[].proposals[].next` | string | yes | no | — | The command that accepts it, or names one of several. |
+| `lines[].proposals[].rule_id` | string \| null | no | yes | null | rule: the bank rule. |
+| `lines[].proposals[].payee` | string \| null | no | yes | null | rule or history: the payee it enters the line under. |
+| `lines[].proposals[].account_id` | string \| null | no | yes | null | rule or history: the account (or a transfer rule's other account). |
+| `lines[].rule_id` | string \| null | no | yes | null | The bank rule that proposed for the line, or acted on it. |
 | `entries` | array[object] | no | no | [] | — |
 | `entries[].line_id` | string | yes | no | — | — |
 | `entries[].entry_id` | string \| null | yes | yes | — | The entry made (null on a dry run). |
@@ -1423,12 +1452,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].pair_line_id` | string \| null | no | yes | null | A transfer's other end: a live line of another account linked to the same entry. |
 | `lines[].entry_gone` | string \| null | no | yes | null | Set when the line's entry was voided, deleted or changed in amount or date since it was linked, with why: the line is not done (bank-line unmatch returns it to waiting). |
 | `lines[].proposals` | array[object] | no | no | [] | For a waiting line: what it could be, with why. |
-| `lines[].proposals[].kind` | literal["match", "transfer"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts. |
+| `lines[].proposals[].kind` | literal["match", "transfer", "rule", "history"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts; rule: what a bank rule says the line is; history: what the account's earlier lines of this payee were added as. |
 | `lines[].proposals[].reason` | string | yes | no | — | Why it is proposed; when several fit equally, says so (never chosen for you). |
 | `lines[].proposals[].entry_ids` | array[string] | no | no | [] | — |
 | `lines[].proposals[].line_ids` | array[string] | no | no | [] | Lines of other accounts (transfer). |
 | `lines[].proposals[].unique` | boolean | yes | no | — | True when exactly one fits: the act with no choice named accepts it. |
 | `lines[].proposals[].next` | string | yes | no | — | The command that accepts it, or names one of several. |
+| `lines[].proposals[].rule_id` | string \| null | no | yes | null | rule: the bank rule. |
+| `lines[].proposals[].payee` | string \| null | no | yes | null | rule or history: the payee it enters the line under. |
+| `lines[].proposals[].account_id` | string \| null | no | yes | null | rule or history: the account (or a transfer rule's other account). |
+| `lines[].rule_id` | string \| null | no | yes | null | The bank rule that proposed for the line, or acted on it. |
 | `entries` | array[object] | no | no | [] | — |
 | `entries[].line_id` | string | yes | no | — | — |
 | `entries[].entry_id` | string \| null | yes | yes | — | The entry made (null on a dry run). |

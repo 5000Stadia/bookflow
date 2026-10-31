@@ -803,15 +803,14 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
 
 ### As built: increment 5 (ring up)
 
-- **Storage.** co0120 on co0118 (co0119 is the bank rules work's; re-chained, and renumbered if need be, at the
-  merge): one insert-only table, `pos_sales` (ticket, unique; input hash; register; document type and id, a foreign
+- **Storage.** co0120 on co0119 (bank rules): one insert-only table, `pos_sales` (ticket, unique; input hash; register; document type and id, a foreign
   key to `transactions`; whether a customer was named; currency; total, tendered and change in minor units; tenders
   JSON), with no-update and no-delete guards. Written in the same transaction as the receipt. **Settled:**
   `pos_tickets` is not made yet: nothing stores a cart until Hold (increment 7), so the ticket is a key the device
   makes (a UUID) and `pos_sales.ticket` holds it; a held ticket's id will be the same key. `pos_sales` has no `shift`
   column yet; increment 10 adds it with the shifts table it points at. Nothing reads the new table in a report, so
   the deposit read manifest is unchanged.
-- **Commands (layer `pos-sale-v1` on `pos-v1`, 870 commands).** All four at `pos.sell` (member): `pos sale preview`
+- **Commands (layer `pos-sale-v1` on `bank-rule-v1`, 878 commands).** All four at `pos.sell` (member): `pos sale preview`
   (a read), `pos sale complete`, `pos customer search` (a read) and `pos customer add`. `company/pos_sales.py` turns
   the ticket into the very `sales-receipt post` input a person would type — customer (the chosen one, else the
   register's walk-in), `deposit_to` the register's account, `site` the register's site, `date` today in the company's
@@ -858,6 +857,10 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   bar at the foot; from 768 px it stands beside the boxes. Print receipt waits for increment 8. A register picker shows
   when there is more than one; the device remembers its choice. The `afterAdd` hook (R189) is in place; the preview's
   pre-tax hook (R188) is not, because the preview is the sales receipt's own dry run.
+- **The clerk's header stays minimal (settled).** A clerk now holds two company writes (`pos sale complete`, `pos
+  customer add`), which would have opened All commands and Advanced tools (they need "some company write", increment
+  3) and with them the Company and Settings sections. A POS command's write no longer counts there
+  (`home.Reader`'s `advanced` flag), so the clerk keeps the minimal header with Point of sale and Items.
 - **Agent guide.** The *Point of sale* chapter says a POS sale is the receipt `sales-receipt post` would make and that
   agents answer from receipts rather than ring up. `import_kinds.NOT_IMPORTABLE` lists `pos sale complete` and `pos
   customer add`.

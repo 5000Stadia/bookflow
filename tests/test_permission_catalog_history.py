@@ -112,7 +112,8 @@ ACCEPTED = {
     'automation-v1': (853, '4df1e05f0db60c9ac166ce314398120e3065dfb07f205327c81f3d5e5348e7ed'),
     'opening-draft-v1': (862, '56a757a3260e92ca76ffafbf79f7cbcac99198a1c292278998588eef117d9aa2'),
     'pos-v1': (866, '3d55aae9746f7326fb83eab6d2a48e4d6d100ce35e48f6d845cbff2180dacaf2'),
-    'pos-sale-v1': (870, '16496b81e6cdb1f75771955c4eb10066f10c8a04bdc7d4fe7af6e9559d35c4df'),
+    'bank-rule-v1': (874, '12b5f914d21302af037c6cc0b1aeab0ef6912d764015332d7734c12338ad8127'),
+    'pos-sale-v1': (878, '1462bee09d7343f15fdc015fa86a114e30671e8d73fc2bab7f5e75444d0450cf'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -268,6 +269,8 @@ CHAIN_ADDITIONS = {
                          'opening-draft query', 'opening-draft reverse', 'opening-draft show', 'opening-draft tie-out',
                          'opening-draft update'},
     'pos-v1': {'pos-register create', 'pos-register list', 'pos-register show', 'pos-register update'},
+    'bank-rule-v1': {'bank-rule accept', 'bank-rule apply', 'bank-rule create', 'bank-rule deactivate',
+                     'bank-rule decline', 'bank-rule query', 'bank-rule show', 'bank-rule update'},
     'pos-sale-v1': {'pos customer add', 'pos customer search', 'pos sale complete', 'pos sale preview'},
 }
 

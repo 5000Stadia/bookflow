@@ -4,13 +4,12 @@ One new table, ``pos_sales``: a completed POS sale's ticket (its operation key, 
 document and tender, written beside the sales receipt it posted, moving no stored row. Guards: a POS sale is never
 updated or deleted. DDL below is frozen: this migration never imports current application metadata.
 
-Numbered co0120 because the bank rules work holds co0119; it sits on co0118 until that lands, and is re-chained (and
-renumbered if need be) at the merge.
+On co0119 (bank rules).
 """
 from alembic import op
 
 revision = 'co0120'
-down_revision = 'co0118'
+down_revision = 'co0119'
 branch_labels = depends_on = None
 
 DDL = ("\nCREATE TABLE pos_sales (\n\tid VARCHAR(26) NOT NULL, \n\tcreated_at VARCHAR(32) NOT NULL, \n\tcreated_by VARCHAR(26) NOT NULL, \n\tcreated_via VARCHAR(16) NOT NULL, \n\tticket VARCHAR(64) NOT NULL, \n\tinput_sha256 VARCHAR(64) NOT NULL, \n\tregister_id VARCHAR(26) NOT NULL, \n\tdocument_type VARCHAR(24) NOT NULL, \n\tdocument_id VARCHAR(26) NOT NULL, \n\tcustomer_named BOOLEAN NOT NULL, \n\tcurrency VARCHAR(3) NOT NULL, \n\ttotal_minor_units BIGINT NOT NULL, \n\ttendered_minor_units BIGINT NOT NULL, \n\tchange_minor_units BIGINT NOT NULL, \n\ttenders TEXT NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT ck_pos_sales_document_type CHECK (document_type IN ('sales_receipt', 'invoice')), \n\tCONSTRAINT ck_pos_sales_tender CHECK (change_minor_units >= 0 AND tendered_minor_units >= total_minor_units), \n\tCONSTRAINT uq_pos_sales_ticket UNIQUE (ticket), \n\tFOREIGN KEY(register_id) REFERENCES pos_registers (id), \n\tFOREIGN KEY(document_id) REFERENCES transactions (id)\n)\n\n",)

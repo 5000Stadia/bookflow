@@ -117,6 +117,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `counts.matched` | integer | yes | no | — | — |
 | `counts.settled` | integer | yes | no | — | — |
 | `counts.waiting` | integer | yes | no | — | — |
+| `counts.proposed` | integer | no | no | 0 | Waiting lines a bank rule or their history proposes for. |
 | `summary` | string | yes | no | — | — |
 | `account_check` | object | yes | no | — | — |
 | `account_check.account_id` | string | yes | no | — | — |
@@ -159,8 +160,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].suggestions[].payees` | array[string] | yes | no | — | — |
 | `lines[].possible_duplicate_of` | string \| null | no | yes | null | A live inbox line this one probably repeats. |
 | `lines[].warnings` | array[string] | no | no | [] | — |
+| `lines[].rule_id` | string \| null | no | yes | null | The bank rule that fits this waiting line (the first, in order). |
+| `lines[].rule_reason` | string \| null | no | yes | null | Why: the rule and the conditions it met, or 'from history: 4 of 5 times'. |
+| `lines[].rule_acts` | literal["add", "ignore", "held"] \| null | no | yes | null | A live auto-add or ignore rule acts on the line at the import (add, ignore), or was held back from it (held: rule_held says why; the line waits with its proposal). |
+| `lines[].rule_held` | string \| null | no | yes | null | Why a live rule did not act on this line. |
 | `has_more_lines` | boolean | yes | no | — | — |
 | `next` | string | yes | no | — | — |
+| `automations` | array[object] | no | no | [] | Live auto-add and ignore rules that fit lines of this import, and what each did. |
+| `automations[].rule_id` | string | yes | no | — | — |
+| `automations[].name` | string | yes | no | — | — |
+| `automations[].outcome` | literal["acted", "paused", "held", "skipped"] | yes | no | — | acted: it added or ignored lines as its establisher; paused: its establisher no longer holds what the act needs, so its lines wait and one to-do was raised; held: the importer lacks the authority, the company holds rules back, or every line may already be in the books; skipped: not checked now (reason says why). |
+| `automations[].added` | integer | yes | no | — | — |
+| `automations[].ignored` | integer | yes | no | — | — |
+| `automations[].refused` | array[dict] | no | no | [] | Lines it could not enter (each waits), with the code and why. |
+| `automations[].held` | array[dict] | no | no | [] | Lines it left waiting because they may already be in the books. |
+| `automations[].later` | integer | no | no | 0 | Lines past this import's share of acts: the host's next tick goes on. |
+| `automations[].reason` | string \| null | no | yes | null | — |
 
 Example JSON output:
 
@@ -181,6 +196,7 @@ Example JSON output:
     "type": "value"
   },
   "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "automations": [],
   "batch_id": null,
   "counts": {
     "already_in": 1,
@@ -189,6 +205,7 @@ Example JSON output:
     "lines_in_file": 1,
     "matched": 1,
     "new": 1,
+    "proposed": 0,
     "repeated_in_file": 1,
     "settled": 1,
     "soft_duplicates": 1,
@@ -360,6 +377,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `target.counts.matched` | integer | yes | no | — | — |
 | `target.counts.settled` | integer | yes | no | — | — |
 | `target.counts.waiting` | integer | yes | no | — | — |
+| `target.counts.proposed` | integer | no | no | 0 | Waiting lines a bank rule or their history proposes for. |
 | `target.summary` | string | yes | no | — | — |
 | `target.account_check` | object | yes | no | — | — |
 | `target.account_check.account_id` | string | yes | no | — | — |
@@ -402,8 +420,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `target.lines[].suggestions[].payees` | array[string] | yes | no | — | — |
 | `target.lines[].possible_duplicate_of` | string \| null | no | yes | null | A live inbox line this one probably repeats. |
 | `target.lines[].warnings` | array[string] | no | no | [] | — |
+| `target.lines[].rule_id` | string \| null | no | yes | null | The bank rule that fits this waiting line (the first, in order). |
+| `target.lines[].rule_reason` | string \| null | no | yes | null | Why: the rule and the conditions it met, or 'from history: 4 of 5 times'. |
+| `target.lines[].rule_acts` | literal["add", "ignore", "held"] \| null | no | yes | null | A live auto-add or ignore rule acts on the line at the import (add, ignore), or was held back from it (held: rule_held says why; the line waits with its proposal). |
+| `target.lines[].rule_held` | string \| null | no | yes | null | Why a live rule did not act on this line. |
 | `target.has_more_lines` | boolean | yes | no | — | — |
 | `target.next` | string | yes | no | — | — |
+| `target.automations` | array[object] | no | no | [] | Live auto-add and ignore rules that fit lines of this import, and what each did. |
+| `target.automations[].rule_id` | string | yes | no | — | — |
+| `target.automations[].name` | string | yes | no | — | — |
+| `target.automations[].outcome` | literal["acted", "paused", "held", "skipped"] | yes | no | — | acted: it added or ignored lines as its establisher; paused: its establisher no longer holds what the act needs, so its lines wait and one to-do was raised; held: the importer lacks the authority, the company holds rules back, or every line may already be in the books; skipped: not checked now (reason says why). |
+| `target.automations[].added` | integer | yes | no | — | — |
+| `target.automations[].ignored` | integer | yes | no | — | — |
+| `target.automations[].refused` | array[dict] | no | no | [] | Lines it could not enter (each waits), with the code and why. |
+| `target.automations[].held` | array[dict] | no | no | [] | Lines it left waiting because they may already be in the books. |
+| `target.automations[].later` | integer | no | no | 0 | Lines past this import's share of acts: the host's next tick goes on. |
+| `target.automations[].reason` | string \| null | no | yes | null | — |
 | `next` | string \| null | no | yes | null | The command to run next, or null. |
 
 Example JSON output:
@@ -843,12 +875,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].pair_line_id` | string \| null | no | yes | null | A transfer's other end: a live line of another account linked to the same entry. |
 | `lines[].entry_gone` | string \| null | no | yes | null | Set when the line's entry was voided, deleted or changed in amount or date since it was linked, with why: the line is not done (bank-line unmatch returns it to waiting). |
 | `lines[].proposals` | array[object] | no | no | [] | For a waiting line: what it could be, with why. |
-| `lines[].proposals[].kind` | literal["match", "transfer"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts. |
+| `lines[].proposals[].kind` | literal["match", "transfer", "rule", "history"] | yes | no | — | match: an entry already in the books; transfer: the other end of a movement between two of your accounts; rule: what a bank rule says the line is; history: what the account's earlier lines of this payee were added as. |
 | `lines[].proposals[].reason` | string | yes | no | — | Why it is proposed; when several fit equally, says so (never chosen for you). |
 | `lines[].proposals[].entry_ids` | array[string] | no | no | [] | — |
 | `lines[].proposals[].line_ids` | array[string] | no | no | [] | Lines of other accounts (transfer). |
 | `lines[].proposals[].unique` | boolean | yes | no | — | True when exactly one fits: the act with no choice named accepts it. |
 | `lines[].proposals[].next` | string | yes | no | — | The command that accepts it, or names one of several. |
+| `lines[].proposals[].rule_id` | string \| null | no | yes | null | rule: the bank rule. |
+| `lines[].proposals[].payee` | string \| null | no | yes | null | rule or history: the payee it enters the line under. |
+| `lines[].proposals[].account_id` | string \| null | no | yes | null | rule or history: the account (or a transfer rule's other account). |
+| `lines[].rule_id` | string \| null | no | yes | null | The bank rule that proposed for the line, or acted on it. |
 | `next_cursor` | string \| null | yes | yes | — | — |
 
 Example JSON output:

@@ -4,6 +4,8 @@ The work lives in ``company/bank_feeds.py``. Capability `bank-feed` (reads at me
 `ledger.read` beside it: the inbox shows the books' entries a line matched. An import posts nothing to the books;
 it is recorded as one batch (kind `bank-import`) so it can be reversed as one unit.
 """
+import json
+
 from bookflow.company import bank_feeds, bank_feed_models as m
 from bookflow.core.registry import Applied, Plan, command
 
@@ -27,9 +29,74 @@ def plan_bank_feed_import(inp, ctx, s) -> Plan:
 
 def apply_bank_feed_import(plan, ctx, s) -> Applied:
     from bookflow.commands.reconcile_cmds import _kept
+    from bookflow.company import bank_rules
     prepared = _kept(s, plan.data['prepared']) or bank_feeds.prepare(s, ctx, plan.data['input'])
-    out, wrote = bank_feeds.write(s, ctx, prepared)
-    return Applied(out, [], f'bank-feed import: {out.summary}', audited=wrote)
+    # Rules are read again inside this write: one changed since a preview is read as it is now.
+    bank_rules.annotate(s, prepared)
+    if not any(r.get('rule', {}).get('acts') for r in prepared['new']) and \
+            not bank_rules._pending_lines(s, prepared['account_id']):
+        out, wrote = bank_feeds.write(s, ctx, prepared)
+        return Applied(out, [], f'bank-feed import: {out.summary}', audited=wrote)
+    # A live auto-add or ignore rule fits a line (or one an earlier import left for it): the import commits first,
+    # then each such rule acts on its lines as its establisher, each entry by its own typed command in its own
+    # transaction, recorded in the import's batch.
+    from bookflow.company import batches
+    from bookflow.core.dispatch import _upsert_principals
+    with s.commits.operation(batches.OWNER, s.hub, s.company):
+        try:
+            _upsert_principals(s, ctx)
+            out, _ = bank_feeds.write(s, ctx, prepared)
+            s.commits.commit(s.company, batches.OWNER)
+        except BaseException:
+            if s.company.write_transaction:
+                s.company.raw.rollback()
+            raise
+        runs = bank_rules.run_live(s, ctx, prepared)
+    out = _with_runs(s, out, prepared, runs)
+    if ctx.idempotency_key:
+        from bookflow.core import idempotency
+        ihash = idempotency.input_hash(plan.data['input'].model_dump(mode='json'),
+                                       s.company_row['id'] if s.company_row else None)
+        body = out.model_dump(mode='json')
+        _sort_module()._in_tx(s, lambda: idempotency.store(s.company, s.actor.id, ctx.idempotency_key,
+                                                           'bank-feed import', ihash, ctx.request_id, body))
+    return Applied(out, [], f'bank-feed import: {out.summary}', finalized=True, audited=True)
+
+
+def _with_runs(s, out, prepared, runs):
+    """The import's result with what its live rules did: their lines as they now stand (acted on, or held back and
+    why), each rule's run, and in `next` what was done and what was held back."""
+    from bookflow.company import bank_sort
+    ids = [v.id for v in out.lines if v.id and v.rule_id]
+    now = {v['id']: v for v in bank_sort.lines(s, ids)} if ids else {}
+    by_rule = {r['rule_id']: r for r in runs}
+    lines = []
+    for v in out.lines:
+        current, run = now.get(v.id), by_rule.get(v.rule_id)
+        if current is None or run is None:
+            lines.append(v)
+            continue
+        if current['state'] != 'waiting':
+            lines.append(v.model_copy(update={'state': current['state'], 'entry_id': current['entry_id'],
+                                              'rule_acts': 'ignore' if current['state'] == 'ignored' else 'add',
+                                              'rule_held': None}))
+            continue
+        held = next((h['reason'] for h in run['held'] if h['line_id'] == v.id), None)
+        refused = next((f"{x['code']}: {x['message']}" for x in run['refused'] if x['line_id'] == v.id), None)
+        pending = (json.loads(current['proposal'] or '{}').get('rule') or {}).get('pending')
+        why = held or refused or run['reason'] or ('waits for the host to go on' if pending else run['outcome'])
+        lines.append(v.model_copy(update={'rule_acts': 'held', 'rule_held': why}))
+    added, ignored = sum(r['added'] for r in runs), sum(r['ignored'] for r in runs)
+    step = out.next + (f' Live rules added {added} and ignored {ignored} line(s).' if added or ignored else '')
+    for r in runs:
+        if r['outcome'] in ('paused', 'held', 'skipped') and r['reason']:
+            step += f" Bank rule {r['name']} {r['outcome']}: {r['reason']}."
+        if r['held']:
+            step += f" Bank rule {r['name']} left {len(r['held'])} line(s) waiting that may already be in the books."
+        if r['later']:
+            step += f" Bank rule {r['name']} goes on with {r['later']} more line(s) at the host's next tick."
+    return out.model_copy(update={'lines': tuple(lines), 'next': step, 'automations': tuple(
+        m.RuleRun(**{**r, 'refused': tuple(r['refused']), 'held': tuple(r['held'])}) for r in runs)})
 
 
 def plan_bank_feed_show(inp, ctx, s) -> Plan:
