@@ -121,4 +121,4 @@ def test_generic_opening_reversal_updates_the_draft_state(books):
     batch_id = applied['draft']['batch']
     out = books.run('batch reverse', {'batch': batch_id}, reason='Wrong opening')
     assert out['state'] == 'reversed'
-    assert books.run('opening-draft show', {'draft': draft['id']})['draft']['state'] == 'reversed'
+    assert books.run('opening-draft show', {'draft': draft['id']})['state'] == 'reversed'
