@@ -8,7 +8,11 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validat
 from bookflow.company.ledger_reports import MoneyOutput, iso_date
 
 FileKind = Literal["iif", "trial_balance", "open_invoices", "unpaid_bills", "ar_aging", "ap_aging", "inventory_valuation",
-                   "reconciliation_summary", "uncleared", "vendor_1099"]
+                   "reconciliation_summary", "uncleared", "vendor_1099",
+                   "entered_balances", "entered_open_invoices", "entered_unpaid_bills", "entered_stock"]
+Basis = Literal["given", "derived"]
+_BASIS = ("`given`: a figure from the old books or one the owner gave, checked against the rows or the books; "
+          "`derived`: worked out from the rows themselves (a total left out, equity), so nothing independent checks it")
 IsoDate = Annotated[str, AfterValidator(iso_date)]
 
 
@@ -32,7 +36,16 @@ class CutoverFile(_Input):
         "Valuation Summary, required when the trial balance carries inventory), `reconciliation_summary` (a bank or card "
         "account's Reconciliation Summary of its last reconciled statement), `uncleared` (a transaction report filtered to "
         "Cleared: No: the checks, deposits and charges no statement had shown, and the receipts waiting in Undeposited "
-        "Funds), `vendor_1099` (1099 Summary, January 1 to the cutover date)."))
+        "Funds), `vendor_1099` (1099 Summary, January 1 to the cutover date). Rows an owner types or pastes, with a "
+        "header row (never read from headings, so always name the kind): `entered_balances` (Account, Balance: one row per "
+        "account the owner knows, on the account's own side unless a Side column says debit or credit; receivables, "
+        "payables and stock left out are totalled from the rows, and equity is worked out unless equity accounts are "
+        "typed), `entered_open_invoices` (Customer, Number, Date, Due date or Terms, Open amount, PO number, Memo), "
+        "`entered_unpaid_bills` (Vendor, Reference, Date, Due date or Terms, Open amount, Memo), `entered_stock` (Item, "
+        "Quantity, Total value or Unit cost)."))
+    date_order: Literal["MDY", "DMY", "YMD"] | None = Field(None, description=(
+        "Entered kinds only: the order of day and month in the dates when no date tells (03/04/2026). MDY month first, "
+        "DMY day first, YMD year first."))
 
     @model_validator(mode="after")
     def one_source(self):
@@ -158,6 +171,7 @@ class CutoverJournal(BaseModel):
 
 class CutoverCheck(BaseModel):
     name: str = Field(description="receivables, payables, inventory, trial_balance_total, receivables_total, payables_total, aging")
+    basis: Basis = Field("given", description=_BASIS)
     source: MoneyOutput = Field(description="The old books' figure")
     compared: MoneyOutput = Field(description="What it was compared with: the documents, the rows or the other report")
     difference: MoneyOutput = Field(description="source less compared; 0.00 ties")
@@ -226,6 +240,7 @@ class CutoverApplyOutput(CutoverPlanOutput):
 
 class CutoverTieRow(BaseModel):
     name: str = Field(description="The account, customer, job or vendor")
+    basis: Basis = Field("given", description=_BASIS)
     record_id: str | None = Field(description="The Bookflow record compared; null when nothing in the books stands for it")
     column: str = Field(description="`balance` for the trial balance; total, current, days_1_30, days_31_60, days_61_90 or over_90 for an aging")
     source: MoneyOutput = Field(description="The old books' figure, debit positive on the trial balance")
@@ -235,6 +250,7 @@ class CutoverTieRow(BaseModel):
 
 class CutoverTieSection(BaseModel):
     source: str = Field(description="What the old books' side was read from")
+    basis: Basis = Field("given", description=_BASIS + "; a trial balance holding both says so per row")
     source_total: MoneyOutput
     books_total: MoneyOutput
     differences: int = Field(description="Rows that do not tie")
@@ -253,6 +269,7 @@ class CutoverStockRow(BaseModel):
 
 class CutoverStockSection(BaseModel):
     source: str = Field(description="What the old books' side was read from, or `none` when no valuation was given")
+    basis: Basis = Field("given", description=_BASIS)
     source_total: MoneyOutput
     books_total: MoneyOutput
     differences: int = Field(description="Items whose quantity or value does not tie")
@@ -306,6 +323,17 @@ class CutoverListSection(BaseModel):
     notes: list[CutoverListRow] = Field(description="Fields that differ by design, such as an account matched to one here that keeps its own number")
 
 
+class CutoverTieCheck(BaseModel):
+    name: str = Field(description="What is checked: an account's balance, receivables, payables, stock")
+    basis: Basis = Field(description=_BASIS)
+    source: MoneyOutput = Field(description="The figure given or derived")
+    books: MoneyOutput = Field(description="Bookflow's figure as of the cutover date")
+    difference: MoneyOutput = Field(description="source less books; 0.00 ties")
+    tied: bool
+    says: str = Field(description=("In a sentence, what the check proved: `tied to the 12,430.55 you gave` for a given figure, "
+                                   "`taken from your invoice list; not independently checked` for a derived one"))
+
+
 class CutoverTieOutOutput(BaseModel):
     as_of: str
     tied: bool = Field(description=(
@@ -327,4 +355,8 @@ class CutoverTieOutOutput(BaseModel):
         "Each vendor on the old books' 1099 Summary: what it shows paid from January 1 to the cutover date against this "
         "company's 1099 summary for the same dates"))
     clearing: MoneyOutput = Field(description="The clearing account's balance as of the cutover date; 0.00 ties")
+    checks: list[CutoverTieCheck] = Field(default_factory=list, description=(
+        "Each total checked, given first then derived: every trial balance figure (each account's balance, receivables, "
+        "payables, stock), so what was proved against a figure someone gave reads apart from what was only taken from "
+        "the rows. `tied` needs every one to tie and the clearing account at 0.00"))
     exceptions: list[CutoverException] = Field(description="Problems that kept a figure from being compared")

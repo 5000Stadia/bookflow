@@ -1016,6 +1016,26 @@ what `apply` returns, including any record refused because someone changed it me
 change" is `bulk-edit reverse --dry-run`, then `bulk-edit reverse`; a record changed since is named and nothing
 changes, and `--skip-changed` restores the rest only when the owner agrees to leave those.
 
+## Opening balances for a business with no old books
+
+"Starting from nothing: the bank has 12,430.55, I owe 3,100 on bills, here are the invoices and the stock" is
+`opening-draft create` with the cutover date and each step the owner gives as rows with a header row: `balances`
+(Account, Balance: every bank, card, loan and other balance they know; a card or loan is what they owe),
+`open_invoices`, `unpaid_bills` and `stock`, pasted text in `content`. Put a total they state (receivables, payables,
+stock value) in `given`, so the rows are checked against it; a total left out is taken from the rows and labelled
+`derived`. Equity is worked out unless they name equity accounts. Then `opening-draft plan`: read `blocking` first,
+fix each with `opening-draft update` (carrying `expected_version`), and plan again until `ready`. A stock item that
+is not an item yet is made only when the owner confirms it (`make_items`).
+
+An opening sets how the books start, so before `opening-draft apply` check its exact details with the owner once:
+the date, the counts and totals from the plan, and which checks are `given` (proved against a figure they gave) and
+which `derived` (taken from their rows). Apply on their yes; do not ask again. Then `opening-draft tie-out` and
+report `tied`, the given checks ("tied to the 12,430.55 you gave") and the derived ones apart. A refusal part way
+undoes the whole opening; a stop continues on the next `apply`. When a given total does not tie, say so and ask
+whether to correct it; posting it anyway (`accept_differences`, the difference left in the clearing account) is the
+owner's decision, and an agent needs the capability `opening.accept-differences` from its principal for it.
+"Undo the opening" is `opening-draft reverse --dry-run`, then `opening-draft reverse`; what blocks it is named.
+
 ## Reading a bank statement from a file
 
 When the owner says the statement is in your input folder, attach the file once and import it by its

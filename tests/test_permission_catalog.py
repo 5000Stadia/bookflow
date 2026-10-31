@@ -120,6 +120,8 @@ RESOURCE_PAIRS = {
     'reconciliation_proposals.preview': {('ledger.post', 'standard')},
     # bank-feed-v1: going on past an account-number mismatch is a connection-level decision.
     'bank_feeds._require_connect': {('bank-feed.connect', 'admin')},
+    # opening-draft-v1: posting an opening that does not tie is a person's act an agent holds only by grant.
+    'opening_drafts.require_accept': {('opening.accept-differences', 'standard')},
     # capabilities-v1: an agent's former people-only act, admitted for it and its principal (hub.capabilities).
     'capability_gate.require_held': {
         ('party.merge', 'standard'), ('list.merge', 'standard'), ('restore.document', 'standard'),

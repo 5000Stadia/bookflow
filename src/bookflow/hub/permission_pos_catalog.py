@@ -1,4 +1,4 @@
-"""Add the POS layer (R114 increment 4, design/point-of-sale.md §9) on automation-v1, without rewriting any accepted
+"""Add the POS layer (R114 increment 4, design/point-of-sale.md §9) on opening-draft-v1, without rewriting any accepted
 descriptor.
 
 Five new capabilities. `pos.sell` (ringing up, holding, looking up customers, a drawer's shift, the day summary for
@@ -17,10 +17,10 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_automation_catalog as previous, permission_catalog as c
+from . import permission_opening_draft_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = '06c29f99e0f2ea31a76b3e83877467cab5022c8b'
+SOURCE_COMMIT = '57d7cd569c71ef2cdc86dfa22bd2e9aed4389cfc'
 _OWNER = 'bookflow.commands.pos_register_cmds.{}|src/bookflow/commands/pos_register_cmds.py'
 # capability -> (threshold its commands name, the roles holding it by default)
 _SELLER = ('standard', 'admin', 'owner', 'hub_admin')
@@ -74,8 +74,10 @@ def _action_with_customer(x):
 
 # The agent's half of each POS capability is admitted at the capabilities-v1 gate (hub.capabilities ->
 # company.capability_gate), as automation-v1's are.
-GATE_SOURCE = replace(previous.GATE_SOURCE, requirements=tuple(sorted(
-    {*previous.GATE_SOURCE.requirements, *(c.Requirement(name, threshold) for name, (threshold, _) in CAPABILITIES.items())},
+_GATE = next(x for x in previous.CATALOG.conditional_sources
+             if x.owner == 'bookflow.company.capability_gate.require_held')
+GATE_SOURCE = replace(_GATE, requirements=tuple(sorted(
+    {*_GATE.requirements, *(c.Requirement(name, threshold) for name, (threshold, _) in CAPABILITIES.items())},
     key=lambda r: (r.capability, r.threshold))))
 # An item read shows costs only with ledger.read and vendors only with vendor (company/item_concealment.py).
 CONCEALMENT_SOURCE = c.ResourceSource('bookflow.company.item_concealment.holds',

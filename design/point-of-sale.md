@@ -690,7 +690,7 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
 
 ### As built: increment 4 (the POS layer)
 
-- **The switch.** `company_info.pos_enabled` (migration co0118 on co0116, re-chained at merge after opening's co0117),
+- **The switch.** `company_info.pos_enabled` (migration co0118 on opening's co0117),
   off by default, set with `company update --pos-enabled` (admin) and shown in Company settings under a new *Sales*
   group ("Use point of sale"). While it is off every `pos-register` command refuses with E_FEATURE_DISABLED (`feature
   pos`, `setting pos_enabled`, `enable_command company update`), `home.features_offer` and the pages' feature check
@@ -718,7 +718,7 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   walk-in pools on that one customer across every unnamed buyer, so a refund to store credit needs a named customer.
   Turning POS on says what it made in `company update`'s warnings ("Made register Main and customer Walk-in ...",
   and the register's own warnings).
-- **Capabilities (layer `pos-v1` on `automation-v1`, 857 commands, descriptor 61fc194e).** `pos.sell`, `pos.void`,
+- **Capabilities (layer `pos-v1` on `opening-draft-v1`, 866 commands, descriptor fbe539d7).** `pos.sell`, `pos.void`,
   `pos.refund` and `pos.price-override` at threshold `member`, held by default by standard, admin, owner and
   installation administrators, so `readonly` holds one only by an explicit grant; `pos.layout` at `admin`.
   `pos-register show`/`list` need `pos.sell`, `create`/`update` `pos.layout`. Unlike the capabilities-v1 acts, each
@@ -794,8 +794,8 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   the preset extension on `permission activate`; an older root's refusals and their fix),
   `tests/test_pos_layer_surfaces.py` (Python, CLI, HTTP and MCP alike). `test_every_page_runs_only_what_it_declares`
   turns POS on, so `/pos` is declared.
-- **At merge:** this branch merges after opening balances: co0118 re-chains onto co0117 and `pos-v1` onto
-  `opening-draft-v1`. The deny pin did its job at the merge of main: automation-v1 added `automation` to `readonly`,
+- **Merged with main after opening balances (57d7cd56):** co0118 sits on co0117 and `pos-v1` on `opening-draft-v1`.
+  A live installation needs `permission activate` after this merges. The deny pin did its job at the merge of main: automation-v1 added `automation` to `readonly`,
   the pin failed, and the clerk denies it.
 
 ## 16. Open questions

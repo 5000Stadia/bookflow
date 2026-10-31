@@ -40,7 +40,7 @@ from bookflow.company.cutover_models import (
     CutoverApplyOutput, CutoverBankRow, CutoverBankSection, CutoverCheck, CutoverClearing, CutoverClearingPart, CutoverCount,
     CutoverException, CutoverFileOutput, CutoverJournal, CutoverJournalLine, CutoverListRow, CutoverListSection,
     CutoverMappingsOutput, CutoverPlanOutput, CutoverStep, CutoverStockRow, CutoverStockSection, CutoverTieOutOutput,
-    CutoverTieRow, CutoverTieSection,
+    CutoverTieCheck, CutoverTieRow, CutoverTieSection,
 )
 from bookflow.company.ledger_reports import money
 from bookflow.core.errors import BookflowError
@@ -104,9 +104,17 @@ class Books:
         self.places = minor_units_of(self.currency)
         self.roles = {a["system_role"]: a for a in self.accounts if a["system_role"]}
         self.links: dict[str, list[tuple[str, str]]] = defaultdict(list)
+        # A record an opening made that an undo of it touched (R107 increment 7), and any document since deleted or
+        # voided, is no longer in: a later opening makes it again rather than finding it (review H2).
+        retired = {row[0] for row in s.company.raw.execute(
+            "SELECT f.record_id FROM batch_effects f JOIN batches r ON r.id = f.batch_id "
+            "JOIN batches b ON b.id = r.reversal_of WHERE b.kind = 'opening' "
+            "UNION SELECT id FROM transactions WHERE status IN ('voided', 'deleted')")}
         for ref, record_type, record_id in s.company.raw.execute(
                 "SELECT e.source_ref, n.record_type, n.record_id FROM audit_events e "
                 "JOIN audit_entries n ON n.event_id = e.id WHERE e.source_ref LIKE 'cutover:%' ORDER BY e.seq, n.rowid"):
+            if record_id in retired:
+                continue
             self.links[ref[len(SOURCE_MARK):]].append((record_type, record_id))
         # Entries dated on or before the cutover that the move-in did not make and that still move an
         # account: a voided or deleted document nets to nothing and does not count.
@@ -194,6 +202,9 @@ class Built:
     payer_skips: list[str] = field(default_factory=list)  # undeposited receipts' payers that are no customer
     unknown_accounts: set[tuple[str, str]] = field(default_factory=set)  # (file, account) said once as unmapped
     undeposited: set[str] = field(default_factory=set)  # Undeposited Funds accounts whose balance comes in as receipts
+    entered: bool = False  # the trial balance was built from rows the owner typed (R107 increment 7)
+    make_items: frozenset = frozenset()  # entered stock items a person confirmed may be made as inventory parts (keys)
+    accept: frozenset = frozenset()  # tie exceptions a person accepted (`accept_differences`): reported, not blocking
 
 
 def _problem(built: Built, severity: str, code: str, problem: str, fix: str | None = None, *, file=None, line=None, subject=None):
@@ -210,7 +221,8 @@ def _files(s, inp) -> list[src.SourceFile]:
             name = given.name or row["original_filename"]
         else:
             text, name = given.content, given.name or f"file {position}"
-        files.append(src.SourceFile(name, given.kind, src.digest(text), text, attachment=given.attachment))
+        files.append(src.SourceFile(name, given.kind, src.digest(text), text, attachment=given.attachment,
+                                    date_order=getattr(given, "date_order", None)))
     return files
 
 
@@ -226,15 +238,17 @@ def _attachment_text(s, selector: str) -> tuple[dict, str]:
 
 # ------------------------------------------------------------------ planning
 
-def build(s, inp, *, journal_number: str | None = None, piece: bool = False) -> Built:
+def build(s, inp, *, journal_number: str | None = None, piece: bool = False, make_items=(), accept=()) -> Built:
     files = _files(s, inp)
     books = Books(s, inp.as_of)
     for file in files:
         if file.attachment is None:
             file.attachment = books.link(_file_id(file), "attachment")
     sources = src.read(files, books.places)
-    built = Built(sources, books, piece=piece)
+    built = Built(sources, books, piece=piece, make_items=frozenset(src.key(name) for name in make_items),
+                  accept=frozenset(accept))
     built.exceptions.extend(sources.problems)
+    _entered_trial_balance(built, inp)
     _file_checks(built, inp)
     if not {"accounts_receivable", "accounts_payable", "opening_balance_equity", "undeposited_funds",
             "sales_tax_payable", "inventory_asset"} <= set(books.roles):
@@ -259,7 +273,117 @@ def build(s, inp, *, journal_number: str | None = None, piece: bool = False) -> 
     _deactivations(built)
     _closing(built, inp)
     _default_tax_note(built)
+    _accepted(built)
     return built
+
+
+# ------------------------------------------------------------------ rows the owner typed (R107 increment 7)
+
+DEBIT_TYPES = frozenset({"bank", "accounts_receivable", "other_current_asset", "fixed_asset", "other_asset", "expense",
+                         "cost_of_goods_sold", "other_expense"})
+# The tie exceptions a person may accept (`accept_differences`): the opening posts, the difference stays in the
+# clearing account in plain sight, and tie-out says not tied until it is cleared.
+ACCEPTABLE = frozenset({"receivables_do_not_tie", "payables_do_not_tie", "inventory_does_not_tie", "trial_balance_unbalanced"})
+ENTERED_LABEL = "Balances you gave"
+
+
+def _entered_trial_balance(built: Built, inp) -> None:
+    """The trial balance a business with no old books can give: built from what the owner knows.
+
+    Each entered balance becomes a row on its account, on the account's own side unless the row said which. A total
+    left out is derived and labelled so: receivables from the open invoices, payables from the unpaid bills, stock
+    from the stock rows. Equity is worked out (assets less liabilities, to Opening Balance Equity) unless the owner
+    typed an equity account; then the rows must balance themselves (`trial_balance_unbalanced`).
+    """
+    sources = built.sources
+    entered_files = [f for f in sources.files if f.kind in src.ENTERED_KINDS]
+    if not entered_files:
+        return
+    if sources.trial_balances:
+        _problem(built, "blocking", "several_trial_balances",
+                 "both a trial balance export and entered balances were given", "Give one of them.")
+        return
+    books = built.books
+    built.entered = True
+    file_name = sources.entered_balance_files[0] if sources.entered_balance_files else ENTERED_LABEL
+    tb = src.TrialBalance(file_name, basis="accrual", as_of=inp.as_of)
+    seen: dict[str, src.EnteredBalance] = {}
+    given_roles: set[str] = set()
+    equity_typed = False
+
+    def row_for(record: dict | None, text: str, net: int, line: int, file: str, basis: str) -> src.TrialBalanceRow:
+        if record is None:
+            number, path = src.split_account_label(text)
+            return src.TrialBalanceRow(text, number, path, max(net, 0), max(-net, 0), file, line, basis)
+        return src.TrialBalanceRow(record["full_name"], record["number"], record["full_name"], max(net, 0), max(-net, 0),
+                                   file, line, basis)
+
+    for entry in sources.entered_balances:
+        number, path = src.split_account_label(entry.account)
+        record = books.account(entry.account) or (books.account(number) if number else None) or books.account(path)
+        key_ = record["id"] if record else src.key(entry.account)
+        if key_ in seen:
+            _problem(built, "blocking", "duplicate_account",
+                     f"{entry.account} is given twice (line {seen[key_].line} and line {entry.line})",
+                     "Give each account's balance once.", file=entry.file, line=entry.line, subject=entry.account)
+            continue
+        seen[key_] = entry
+        debit_side = record is None or record["type"] in DEBIT_TYPES
+        if entry.side is None:
+            net = entry.amount if debit_side else -entry.amount
+        else:
+            net = entry.amount if entry.side == "debit" else -entry.amount
+        if record is not None:
+            if record["system_role"]:
+                given_roles.add(record["system_role"])
+            if record["type"] == "accounts_receivable":
+                given_roles.add("accounts_receivable")
+            if record["type"] == "accounts_payable":
+                given_roles.add("accounts_payable")
+            if record["type"] == "equity":
+                equity_typed = True
+        if net:
+            tb.rows.append(row_for(record, entry.account, net, entry.line, entry.file, "given"))
+    posted = [d for d in sources.documents if d.date is not None and d.date <= inp.as_of]  # what the documents carry
+    derived = (("accounts_receivable", sum(d.open_balance for d in posted if d.side == "receivable"),
+                "the open invoices and credits"),
+               ("accounts_payable", -sum(d.open_balance for d in posted if d.side == "payable"),
+                "the unpaid bills and credits"),
+               ("inventory_asset", sum(row.value for row in sources.stock), "the stock rows"))
+    for role, net, what in derived:
+        record = books.roles.get(role)
+        if role in given_roles or not net or record is None:
+            continue
+        tb.rows.append(row_for(record, record["full_name"], net, 0, f"derived from {what}", "derived"))
+    if not equity_typed:
+        net = -sum(row.net for row in tb.rows)
+        record = books.roles.get("opening_balance_equity")
+        if net and record is not None:
+            tb.rows.append(row_for(record, record["full_name"], net, 0, "derived: assets less liabilities", "derived"))
+    sources.trial_balances.append(tb)
+
+
+def _accepted(built: Built) -> None:
+    """A tie exception a person accepted posts anyway: it stays in the result as a warning saying so."""
+    if not built.accept:
+        return
+    for problem in built.exceptions:
+        if problem.severity == "blocking" and problem.code in built.accept and problem.code in ACCEPTABLE:
+            problem.severity = "warning"
+            problem.problem = "accepted: " + problem.problem + "; the difference stays in the clearing account"
+
+
+def _basis_of(built: Built, *, role: str | None = None, account_type: str | None = None) -> str:
+    """`derived` when a trial balance row this check reads was worked out rather than given."""
+    for tb in built.sources.trial_balances[:1]:
+        for row in tb.rows:
+            target = built.targets.get("account:" + src.key(row.path))
+            if target is None:
+                continue
+            if (role and target.get("role") == role) or (account_type and target["type"] == account_type):
+                if row.basis == "derived":
+                    return "derived"
+    return "given"
 
 
 def _sales_tax(built: Built) -> None:
@@ -333,7 +457,8 @@ def _file_checks(built: Built, inp) -> None:
         if tb.total_debit is not None and (tb.total_debit, tb.total_credit) != (debit, credit):
             _problem(built, "blocking", "total_mismatch", "the trial balance rows do not add up to its TOTAL row",
                      "Export the whole report again; the file may have been cut short.", file=tb.file)
-        built.checks.append(("trial_balance_total", debit, credit))
+        built.checks.append(("trial_balance_total", debit, credit,
+                             "derived" if any(r.basis == "derived" for r in tb.rows) else "given"))
     for doc in sources.documents:
         if doc.date is None:
             _problem(built, "blocking", "document_without_date", f"{doc.type} {doc.number or ''} for {doc.party} has no date",
@@ -1435,7 +1560,7 @@ def _documents(built: Built, inp) -> None:
                 payload["ar_account"] = ar
             if kind == "invoice":
                 payload["number"] = doc.number
-                payload["due_date"] = doc.due_date or doc.date
+                payload["due_date"] = doc.due_date or _due_by_terms(built, doc) or doc.date
                 terms = _term_for(built, doc.terms)
                 if terms:
                     payload["terms"] = terms
@@ -1456,7 +1581,7 @@ def _documents(built: Built, inp) -> None:
             if doc.number:
                 payload["supplier_reference"] = doc.number[:100]
             if kind == "bill":
-                payload["due_date"] = doc.due_date or doc.date
+                payload["due_date"] = doc.due_date or _due_by_terms(built, doc) or doc.date
                 terms = _term_for(built, doc.terms)
                 if terms:
                     payload["terms"] = terms
@@ -1473,6 +1598,18 @@ def _documents(built: Built, inp) -> None:
     _tie_check(built, "payables", "accounts_payable", payable, bool(built.sources.payable_files), "unpaid_bills")
 
 
+def _due_by_terms(built: Built, doc: src.OpenDocument) -> str | None:
+    """A document typed with terms and no due date (R107 increment 7): due as its standard terms say."""
+    if doc.due_date or not doc.terms or not doc.date:
+        return None
+    from datetime import date, timedelta
+    record = built.books.by_key(built.books.terms, "name", doc.terms)
+    days = record["due_days"] if record else (_term_settings(doc.terms, None) or {}).get("due_days")
+    if days is None:
+        return None
+    return (date.fromisoformat(doc.date) + timedelta(days=days)).isoformat()
+
+
 def _control(built: Built, role: str):
     """The receivable or payable account the old books' control account stands for, unless it is the default one."""
     for target in built.targets.values():
@@ -1486,14 +1623,26 @@ def _tie_check(built: Built, name: str, account_type: str, documents: int, given
     trial = sign * sum(t.get("balance", 0) for t in built.targets.values() if t["type"] == account_type)
     if not built.sources.trial_balances:
         return  # nothing to tie to; the trial balance's own exception says so
-    built.checks.append((name, trial, documents))
+    built.checks.append((name, trial, documents, _basis_of(built, account_type=account_type)))
     if trial and not given:
         what = "Open Invoices" if export == "open_invoices" else "Unpaid Bills Detail (Dates: All)"
+        if built.entered:
+            listed = "open invoices" if export == "open_invoices" else "unpaid bills"
+            _problem(built, "blocking", f"missing_{export}",
+                     f"you gave {account_type.replace('_', ' ')} of {_show(built, trial)} and no {listed}",
+                     f"List the {listed} that make it up, one row each.")
+            return
         _problem(built, "blocking", f"missing_{export}",
                  f"the trial balance carries {account_type.replace('_', ' ')} of {_show(built, trial)} and no {what} file was given",
                  f"Export the {what} report as of the cutover date to CSV.")
     elif trial != documents:
         what = "open invoices and credits" if export == "open_invoices" else "unpaid bills and credits"
+        if built.entered:
+            _problem(built, "blocking", f"{name}_do_not_tie",
+                     f"the {what} add up to {_show(built, documents)} but you gave {account_type.replace('_', ' ')} of "
+                     f"{_show(built, trial)}; difference {_show(built, trial - documents)}",
+                     "Correct the total you gave or the rows; or leave the total out to take it from the rows.")
+            return
         _problem(built, "blocking", f"{name}_do_not_tie",
                  f"the {what} add up to {_show(built, documents)} but the trial balance carries {account_type.replace('_', ' ')} of {_show(built, trial)}; difference {_show(built, trial - documents)}",
                  "Export both reports as of the cutover date" + (" (Unpaid Bills Detail with Dates: All, so bills not yet due are included)" if export == "unpaid_bills" else "")
@@ -1506,13 +1655,22 @@ def _stock(built: Built, inp) -> None:
     trial = sum(t.get("balance", 0) for t in built.targets.values() if t.get("role") == "inventory_asset")
     total = sum(row.value for row in built.sources.stock)
     if built.sources.trial_balances:
-        built.checks.append(("inventory", trial, total))
-    if trial and not built.sources.stock_files:
+        built.checks.append(("inventory", trial, total, _basis_of(built, role="inventory_asset")))
+    if trial and not built.sources.stock_files and built.entered:
+        _problem(built, "blocking", "missing_inventory_valuation",
+                 f"you gave Inventory Asset of {_show(built, trial)} and no stock rows",
+                 "List each item's quantity on hand and value.")
+        return
+    if trial != total and built.sources.trial_balances and built.entered:
+        _problem(built, "blocking", "inventory_does_not_tie",
+                 f"the items' values add up to {_show(built, total)} but you gave Inventory Asset of {_show(built, trial)}",
+                 "Correct the total you gave or the stock rows; or leave the total out to take it from the rows.")
+    elif trial and not built.sources.stock_files:
         _problem(built, "blocking", "missing_inventory_valuation",
                  f"the trial balance carries Inventory Asset of {_show(built, trial)} and no Inventory Valuation Summary was given",
                  "Export the Inventory Valuation Summary as of the cutover date to CSV; each item's stock comes in by item.")
         return
-    if trial != total and built.sources.trial_balances:
+    elif trial != total and built.sources.trial_balances:
         _problem(built, "blocking", "inventory_does_not_tie",
                  f"the items' asset values add up to {_show(built, total)} but the trial balance carries Inventory Asset of {_show(built, trial)}",
                  "Export both reports as of the cutover date.")
@@ -1521,6 +1679,10 @@ def _stock(built: Built, inp) -> None:
             continue
         target = built.targets.get("item:" + src.key(row.item))
         outside_id = "inventory:" + src.key(row.item)
+        if target is None and row.entered:
+            target = _entered_item(built, row)
+        if target is None and row.entered:
+            continue  # said once by _entered_item
         if target is None or target.get("item_type") != "inventory_part":
             _problem(built, "blocking", "unmapped_item", f"{row.item} has stock in the old books but is no inventory item that comes in",
                      "Give the item list IIF export, or map it with mappings.items.", file=row.file, line=row.line, subject=row.item)
@@ -1536,6 +1698,69 @@ def _stock(built: Built, inp) -> None:
         built.steps.append(Step("inventory_adjustment", outside_id, row.item, "inventory adjust", payload,
                                 "already_in" if linked else "create", linked, amount=row.value, date=inp.as_of,
                                 detail=f"{row.quantity} on hand"))
+
+
+def _default_income(books: Books) -> dict | None:
+    """The income account a new stock item sells to: an active income account named for sales (not returns), by
+    number then name, else the first active income account."""
+    income = sorted((a for a in books.accounts if a["type"] == "income" and a["active"]),
+                    key=lambda a: (a["number"] or "~", a["full_name"].lower()))
+    sales = [a for a in income if "sales" in a["full_name"].lower() and "return" not in a["full_name"].lower()]
+    return (sales or income or [None])[0]
+
+
+def _entered_item(built: Built, row: src.StockRow):
+    """An entered stock row's item: one this company has (by ID or full name), or, when a person confirmed it
+    (`make_items`), a new inventory part with the company's default accounts."""
+    books = built.books
+    key_ = src.key(row.item)
+    record = next((i for i in books.items if i["id"] == row.item), None) or books.by_key(books.items, "full_name", row.item)
+    outside_id = "item:" + key_
+    if record is not None:
+        if record["type"] != "inventory_part":
+            _problem(built, "blocking", "type_conflict",
+                     f"{row.item} is a {record['type'].replace('_', ' ')} item here; only an inventory part holds stock",
+                     "Name an inventory part, or make one.", file=row.file, line=row.line, subject=row.item)
+            return None
+        return _target(built, outside_id, record_id=record["id"], ref=None, record_type="item", name=record["full_name"],
+                       extra={"item_type": "inventory_part", "hidden": False, "active": record["active"], "made": False}) \
+            or built.targets[outside_id]
+    linked = books.link(outside_id, "item")
+    if linked:
+        _already(built, "item", outside_id, row.item, linked, "item")
+        return _target(built, outside_id, record_id=linked, ref=None, record_type="item", name=row.item,
+                       extra={"item_type": "inventory_part", "hidden": False, "active": True, "made": True}) \
+            or built.targets[outside_id]
+    if key_ not in built.make_items:
+        alike = [i["full_name"] for i in books.items if alike_names(i["full_name"], row.item)][:3]
+        _problem(built, "blocking", "unknown_item",
+                 f"{row.item} is no item here" + (f"; it looks like {', '.join(alike)}" if alike else ""),
+                 "Name an existing item, or confirm it may be made as a new inventory part (make_items) with the "
+                 "company's default accounts.", file=row.file, line=row.line, subject=row.item)
+        return None
+    income, cogs, asset = _default_income(books), books.roles.get("cost_of_goods_sold"), books.roles.get("inventory_asset")
+    if income is None or cogs is None or asset is None:
+        _problem(built, "blocking", "unknown_item", f"{row.item} cannot be made: the chart has no income, cost of goods "
+                 "sold or inventory asset account", "Add the account, or make the item first.", file=row.file,
+                 line=row.line, subject=row.item)
+        return None
+    from decimal import Decimal
+    quantity = Decimal(row.quantity)
+    from decimal import ROUND_HALF_UP
+    cost = (_amount_text(built, int((Decimal(row.value) / quantity).quantize(Decimal(1), ROUND_HALF_UP)))
+            if quantity > 0 else _amount_text(built, 0))
+    payload = {"name": row.item.rsplit(":", 1)[-1], "type": "inventory_part", "description": row.item,
+               "price": _amount_text(built, 0), "income_account_id": income["id"], "cogs_account_id": cogs["id"],
+               "asset_account_id": asset["id"], "cost": cost, "purchase_description": row.item}
+    code = _code_id(built, True)
+    if code:
+        payload["sales_tax_code_id"] = code
+    built.steps.append(Step("item", outside_id, row.item, "item create", payload, "create", record_type="item",
+                            ref=outside_id, detail=f"inventory part, sold to {income['full_name']}"))
+    built.mappings["items"][row.item] = "create"
+    return _target(built, outside_id, record_id=None, ref=outside_id, record_type="item", name=row.item,
+                   extra={"item_type": "inventory_part", "hidden": False, "active": True, "made": True}) \
+        or built.targets[outside_id]
 
 
 # ---------------------------------------------------------------- bank and card accounts: the last reconciliation
@@ -2349,8 +2574,8 @@ def _clearing_out(built: Built) -> CutoverClearing | None:
 
 def plan_output(built: Built, inp, model=CutoverPlanOutput, **extra) -> Any:
     books = built.books
-    checks = [CutoverCheck(name=name, source=money(a, books.currency), compared=money(b, books.currency),
-                           difference=money(a - b, books.currency)) for name, a, b in built.checks]
+    checks = [CutoverCheck(name=name, basis=basis, source=money(a, books.currency), compared=money(b, books.currency),
+                           difference=money(a - b, books.currency)) for name, a, b, basis in built.checks]
     journal = None
     if built.journal:
         journal = CutoverJournal(date=built.journal["date"], number=built.journal["number"], parts=built.journal["parts"],
@@ -2407,9 +2632,9 @@ def plan(s, ctx, inp) -> Plan:
 
 # ------------------------------------------------------------------ apply
 
-def prepare_apply(s, ctx, inp) -> Plan:
+def prepare_apply(s, ctx, inp, *, make_items=(), accept=()) -> Plan:
     from bookflow.core import idempotency
-    built = build(s, inp, journal_number=inp.journal_number)
+    built = build(s, inp, journal_number=inp.journal_number, make_items=make_items, accept=accept)
     preview = plan_output(built, inp, CutoverApplyOutput, created=0,
                           already_in=sum(1 for step in built.steps if step.action == "already_in"),
                           clearing_account_id=built.clearing_id, dry_run=s.dry_run)
@@ -2478,17 +2703,18 @@ def _keep_file(s, ctx, file: src.SourceFile) -> str:
             s.company.raw.rollback()
 
 
-def _run_step(s, ctx, step: Step, payload: dict) -> dict:
+def _run_step(s, ctx, step: Step, payload: dict, recorder=None) -> dict:
     from bookflow.core import registry
     from bookflow.core.dispatch import run_in_session
     command = registry.get(step.command)
     nested = ctx.model_copy(update={"idempotency_key": None, "source_ref": (SOURCE_MARK + step.outside_id)[:512],
                                     "reason": (ctx.reason or REASON)[:140]})
-    saved = (s.company_touched, s.hub_touched, list(s.warnings), s.dry_run)
+    saved = (s.company_touched, s.hub_touched, list(s.warnings), s.dry_run, getattr(s, "batch_recorder", None))
+    s.batch_recorder = recorder
     try:
         return run_in_session(command, command.input_model.model_validate(payload), nested, s)
     finally:
-        s.company_touched, s.hub_touched, s.warnings, s.dry_run = saved
+        s.company_touched, s.hub_touched, s.warnings, s.dry_run, s.batch_recorder = saved
         if s.company is not None and s.company.write_transaction:
             s.company.raw.rollback()
 
@@ -2635,10 +2861,44 @@ def _carry_number_series(s, made: dict[str, str]) -> dict[str, str]:
     return moved
 
 
+# What a move-in step makes, as the batch ledger names it (design/bulk-import.md §8a): list records by their list,
+# documents by their family, so an opening reverses through the families' own delete or void.
+STEP_RECORD_TYPES = {"account": "account", "term": "term", "customer": "customer", "vendor": "vendor", "item": "item",
+                     "invoice": "invoice", "credit_memo": "credit_memo", "bill": "bill", "vendor_credit": "vendor_credit",
+                     "journal": "journal_entry", "inventory_adjustment": "inventory_adjustment",
+                     "undeposited_receipt": "sales_receipt"}
+
+
+def step_recorder(batch_id: str, step: Step):
+    """Record what one step made as an effect of the opening's batch, in the step's own transaction."""
+    from bookflow.company import batches
+
+    def record(s, cmd, applied, output):
+        record_type = STEP_RECORD_TYPES.get(step.kind, step.kind)
+        if record_type == "account":
+            # An account that has carried postings is never deactivated (accounts keep their history), so the batch
+            # does not retire one: reversed, the clearing account stands at 0.00 and the next opening uses it again.
+            return
+        event_id = batches.last_event_id(s)
+        found = [(rid, version) for rt, rid, action, version in batches.touched_effects(applied, {record_type})
+                 if action == "created"]
+        if not found and isinstance(output, dict):
+            record_id = _record_id(output, step.record_type)
+            if record_id:
+                version = output.get("version")
+                nested = output.get(step.record_type) if isinstance(output.get(step.record_type), dict) else {}
+                found = [(record_id, version if version is not None else nested.get("version"))]
+        for record_id, version in found[:1]:
+            batches.record_effect(s, batch_id, record_type=record_type, record_id=record_id, action="created",
+                                  version_after=version, before=None, event_id=event_id)
+    return record
+
+
 def apply(plan_: Plan, ctx, s) -> Applied:
     from bookflow.core.dispatch import _upsert_principals
     built: Built = plan_.data["built"]
     inp = plan_.data["input"]
+    batch_id = plan_.data.get("batch_id")
     with s.commits.operation("cutover.apply", s.hub, s.company):
         try:
             _upsert_principals(s, ctx)
@@ -2673,7 +2933,8 @@ def apply(plan_: Plan, ctx, s) -> Applied:
                     created += _place_opening(s, ctx, built, step, step.record_id, made, created)
                 continue
             try:
-                output = _run_step(s, ctx, step, _resolve(step.payload, ids))
+                output = _run_step(s, ctx, step, _resolve(step.payload, ids),
+                                   step_recorder(batch_id, step) if batch_id else None)
             except BookflowError as error:
                 raise _stopped(step, error, created) from None
             record_id = _record_id(output, step.record_type)
@@ -2737,7 +2998,7 @@ def _source_aging(built: Built, side: str, as_of: str) -> tuple[str, dict[str, d
     for doc in built.sources.documents:
         if doc.side != side or not doc.date:
             continue
-        aging_date = (doc.due_date or doc.date) if doc.open_balance > 0 else doc.date
+        aging_date = (doc.due_date or _due_by_terms(built, doc) or doc.date) if doc.open_balance > 0 else doc.date
         cells = found.setdefault(doc.party, {**{b: 0 for b in BUCKETS}, "total": 0})
         cells[bucket_of(as_of, aging_date)] += doc.open_balance
         cells["total"] += doc.open_balance
@@ -2813,6 +3074,45 @@ def _stock_section(s, ctx, built: Built, inp) -> CutoverStockSection:
                                source_total=money(sum(row.value for row in built.sources.stock), currency),
                                books_total=money(sum(row["asset_value"]["minor_units"] for row in books.values()), currency),
                                differences=differences, rows=rows)
+
+
+def _derive(section) -> None:
+    """A section whose old-books side is the owner's own list: nothing independent checks it."""
+    section.basis = "derived"
+    for row in section.rows:
+        row.basis = "derived"
+
+
+_SAYS = {"the open invoices and credits": "taken from your invoice list; not independently checked",
+         "the unpaid bills and credits": "taken from your bill list; not independently checked",
+         "the stock rows": "taken from your stock list; not independently checked",
+         "assets less liabilities": "worked out as assets less liabilities; not independently checked"}
+
+
+def _tie_checks(built: Built, _rows, source_tb: dict[str, int], books_tb: dict[str, dict], names: dict[str, str],
+                bases: dict[str, str], says: dict[str, str]) -> list[CutoverTieCheck]:
+    """Every trial balance figure as one check, given first: what it was checked against, in a sentence."""
+    currency = built.books.currency
+    out = []
+    for account_id, source_value in source_tb.items():
+        books_value = books_tb[account_id]["signed_net"]["minor_units"] if account_id in books_tb else 0
+        basis = bases.get(account_id, "given")
+        tied = source_value == books_value
+        shown = _show(built, abs(source_value))
+        if basis == "derived":
+            sentence = _SAYS.get(says.get(account_id, ""), "worked out from the rows; not independently checked")
+            if not tied:
+                sentence += f"; the books show {_show(built, abs(books_value))}"
+        elif built.entered:
+            sentence = (f"tied to the {shown} you gave" if tied else
+                        f"the books show {_show(built, abs(books_value))} against the {shown} you gave")
+        else:
+            sentence = (f"tied to the old books' {shown}" if tied else
+                        f"the books show {_show(built, abs(books_value))} against the old books' {shown}")
+        out.append(CutoverTieCheck(name=names.get(account_id) or account_id, basis=basis,
+                                   source=money(source_value, currency), books=money(books_value, currency),
+                                   difference=money(source_value - books_value, currency), tied=tied, says=sentence))
+    return sorted(out, key=lambda check: (check.basis != "given", check.name.lower()))
 
 
 def _opening_proves(s, account_id: str, draft_id: str) -> bool:
@@ -3025,6 +3325,8 @@ def tie_out(s, ctx, inp) -> CutoverTieOutOutput:
     books_tb = {row["account_id"]: row for row in trial}
     source_tb: dict[str, int] = defaultdict(int)
     names: dict[str, str] = {}
+    bases: dict[str, str] = {}
+    says: dict[str, str] = {}
     unmatched: list[tuple[str, int]] = []
     for tb in built.sources.trial_balances[:1]:
         for row in tb.rows:
@@ -3034,6 +3336,11 @@ def tie_out(s, ctx, inp) -> CutoverTieOutOutput:
                 continue
             source_tb[target["id"]] += row.net
             names.setdefault(target["id"], target["name"])
+            if row.basis == "derived":
+                bases[target["id"]] = "derived"
+                says[target["id"]] = row.file.removeprefix("derived from ").removeprefix("derived: ")
+            else:
+                bases.setdefault(target["id"], "given")
     clearing_id = built.clearing_id
     tb_rows, tb_differences = [], 0
     for account_id in sorted(set(source_tb) | set(books_tb), key=lambda a: (names.get(a) or books_tb.get(a, {}).get("current_account_label") or "")):
@@ -3045,7 +3352,8 @@ def tie_out(s, ctx, inp) -> CutoverTieOutOutput:
         if difference or inp.detail == "all":
             name = names.get(account_id) or books_tb.get(account_id, {}).get("current_account_label") or account_id
             tb_rows.append(CutoverTieRow(name=name, record_id=account_id, column="balance", source=money(source_value, currency),
-                                         books=money(books_value, currency), difference=money(difference, currency)))
+                                         books=money(books_value, currency), difference=money(difference, currency),
+                                         basis=bases.get(account_id, "given")))
     for label, net in unmatched:
         if net:
             tb_differences += 1
@@ -3063,11 +3371,19 @@ def tie_out(s, ctx, inp) -> CutoverTieOutOutput:
     payables = _tie_section(built, label, source_ap, _whole(s, ctx, "report ap-aging", {"as_of": inp.as_of}),
                             "vendor_id", "current_vendor_name", "vendor", inp.detail)
     inventory = _stock_section(s, ctx, built, inp)
+    entered_docs = set(built.sources.entered_document_files)
+    for section, side, aging in ((receivables, "receivable", built.sources.ar_aging), (payables, "payable", built.sources.ap_aging)):
+        docs = [d for d in built.sources.documents if d.side == side]
+        if docs and not aging and all(d.file in entered_docs for d in docs):
+            _derive(section)
+    if any(row.entered for row in built.sources.stock):
+        _derive(inventory)
     lists = _lists_section(built)
     bank = _bank_section(s, built, books_tb)
     undeposited = _undeposited_section(s, ctx, built, inp)
     vendor_1099 = _vendor_1099_section(s, ctx, built, inp)
     clearing = books_tb[clearing_id]["signed_net"]["minor_units"] if clearing_id in books_tb else 0
+    checks = _tie_checks(built, tb_rows if inp.detail == "all" else None, source_tb, books_tb, names, bases, says)
     tied = not problems and not (tb_differences or receivables.differences or payables.differences or inventory.differences
                                  or lists.differences or clearing or bank.differences or undeposited.differences
                                  or vendor_1099.differences)
@@ -3075,8 +3391,14 @@ def tie_out(s, ctx, inp) -> CutoverTieOutOutput:
         extra = [what for what, rows in (("the bank and card accounts with their uncleared items and last reconciliations", bank.rows),
                                          ("the receipts waiting for deposit", undeposited.rows),
                                          ("the 1099 payments so far this year", vendor_1099.rows)) if rows]
-        summary = (f"tied: the trial balance, receivables, payables and stock{''.join(', ' + e for e in extra)} match the old "
-                   f"books to the cent as of {inp.as_of}, and the {lists.compared} list records compared match")
+        if built.entered:
+            given = sum(1 for check in checks if check.basis == "given")
+            summary = (f"tied: the books as of {inp.as_of} show every balance, invoice, bill and stock row you gave, to the "
+                       f"cent; {given} figure{'s' if given != 1 else ''} checked against a total you gave, "
+                       f"{len(checks) - given} taken from your rows")
+        else:
+            summary = (f"tied: the trial balance, receivables, payables and stock{''.join(', ' + e for e in extra)} match "
+                       f"the old books to the cent as of {inp.as_of}, and the {lists.compared} list records compared match")
     else:
         parts = [f"{n} {what}{'s' if n != 1 else ''}" for n, what in (
             (tb_differences, "trial balance difference"), (receivables.differences, "receivables difference"),
@@ -3091,6 +3413,6 @@ def tie_out(s, ctx, inp) -> CutoverTieOutOutput:
     return CutoverTieOutOutput(as_of=inp.as_of, tied=tied, summary=summary, trial_balance=trial_section,
                                receivables=receivables, payables=payables, inventory=inventory, lists=lists,
                                bank=bank, undeposited=undeposited, vendor_1099=vendor_1099,
-                               clearing=money(clearing, currency),
+                               clearing=money(clearing, currency), checks=checks,
                                exceptions=[CutoverException(severity=p.severity, code=p.code, problem=p.problem, fix=p.fix,
                                                             file=p.file, line=p.line, subject=p.subject) for p in problems])
