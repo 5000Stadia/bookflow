@@ -575,7 +575,30 @@ def apply_dispose(plan: Plan, ctx, s) -> Applied:
     return Applied(output, touched, output.summary, audited=True)
 
 
+def depreciation_reversal_blockers(s, ctx, batch):
+    """A live disposal uses the accumulated depreciation that this batch would remove."""
+    effect, depreciation, disposal, item = (
+        c.batch_effects, c.fixed_asset_depreciations, c.fixed_asset_disposals, c.items)
+    rows = s.company.conn.execute(sa.select(
+        effect.c.seq, effect.c.record_id, item.c.id.label('item_id'), item.c.full_name,
+        disposal.c.transaction_id.label('disposal_id')).select_from(
+            effect.join(depreciation, depreciation.c.transaction_id == effect.c.record_id)
+            .join(disposal, disposal.c.item_id == depreciation.c.item_id)
+            .join(item, item.c.id == depreciation.c.item_id))
+        .where(effect.c.batch_id == batch['id'], effect.c.record_type == 'journal_entry',
+               effect.c.action == 'created').distinct()).mappings().all()
+    live = standing(s, {row[key] for row in rows for key in ('record_id', 'disposal_id')})
+    return [dict(seq=row['seq'], record_type='journal_entry', record_id=row['record_id'],
+                 code='asset_disposed',
+                 message=(f"Depreciation journal {live[row['record_id']]} for {row['full_name']} is used by "
+                          f"disposal journal {live[row['disposal_id']]} ({row['disposal_id']})."),
+                 clears=f"Void disposal journal {row['disposal_id']} first; its history remains.",
+                 details={'item_id': row['item_id'], 'disposal_transaction_id': row['disposal_id']})
+            for row in rows if row['record_id'] in live and row['disposal_id'] in live]
+
+
 # Journal inverses preserve the depreciation links as history. Newer runs unwind first.
 from bookflow.company import batches as _batches
 _batches.register(_batches.Adapter('fixed-asset-depreciation', release_document_numbers=False,
-                                   ordering='strict', label='Fixed-asset depreciation'))
+                                   ordering='strict', label='Fixed-asset depreciation',
+                                   preflight=depreciation_reversal_blockers))

@@ -263,3 +263,45 @@ def test_finance_charge_item_retirement_collision_blocks_before_any_void(charge_
         assert _snapshot(b) == before
     assert all(b['run']('statement-charge show', {'statement_charge': row['transaction_id']})['status'] == 'posted'
                for row in out['rows'] if row['status'] == 'assessed')
+
+
+def test_depreciation_disposal_blocks_before_any_journal_is_reversed(asset_books):
+    b = asset_books
+    item = _asset(b)
+    out = b['run']('fixed-asset depreciate', {'through': '2026-05-31'})
+    disposal = b['run']('fixed-asset dispose', {'item': item, 'date': '2026-06-15',
+                                              'proceeds': '9000.00', 'costs': '100.00',
+                                              'deposit_to': b['acc']['bank']})
+    # Disposal relies on 5 * 250 depreciation: book value 8750; net proceeds 8900 => gain 150.
+    assert disposal['accumulated']['minor_units'] == 125000 and disposal['gain']['minor_units'] == 15000
+    before = _snapshot(b)
+    for dry_run in (True, False):
+        with pytest.raises(BookflowError) as refused:
+            b['run']('batch reverse', {'batch': out['batch']}, dry_run=dry_run)
+        assert refused.value.code == 'E_BATCH_BLOCKED'
+        blockers = refused.value.details['blockers']
+        assert {x['record_id'] for x in blockers if x['code'] == 'asset_disposed'} == {
+            entry['transaction_id'] for entry in out['entries']}
+        assert all(disposal['transaction_id'] in x['message'] for x in blockers if x['code'] == 'asset_disposed')
+        assert _snapshot(b) == before
+    # Voiding the native dependent clears the blocker without erasing its historical links.
+    b['run']('journal void', {'journal': disposal['transaction_id']})
+    assert b['run']('batch reverse', {'batch': out['batch']})['state'] == 'reversed'
+
+
+def test_finance_assessments_unwind_newest_first_across_preserved_history(charge_books):
+    b = charge_books
+    _charges(b)
+    before = _balance(b)
+    first = b['run']('finance-charge assess', {'date': '2026-03-02'})
+    first_plan = b['run']('batch reverse', {'batch': first['batch']}, dry_run=True)
+    item = next(x['record_id'] for x in first_plan['steps'] if x['record_type'] == 'item')
+    second = b['run']('finance-charge assess', {'date': '2026-04-01'})
+    assert second['assessed_count'] == 2
+    assert any(x['code'] == 'later_batch' for x in _refused_unchanged(b, first['batch']))
+    history = _rows(b, 'SELECT * FROM finance_charges')
+    assert b['run']('batch reverse', {'batch': second['batch']})['state'] == 'reversed'
+    assert b['run']('item show', {'item': item})['active']
+    assert b['run']('batch reverse', {'batch': first['batch']})['state'] == 'reversed'
+    assert not b['run']('item show', {'item': item})['active']
+    assert _balance(b) == before and _rows(b, 'SELECT * FROM finance_charges') == history

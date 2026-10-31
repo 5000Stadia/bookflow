@@ -97,7 +97,8 @@ fixed_asset_depreciate = command(
                  ' so running again posts nothing twice, and voiding an entry reopens its periods. Dry-run is the'
                  ' preview. A date in a closed period is refused: post it combined into an open period instead.'
                  ' The output names its batch: `batch reverse <batch> --dry-run` previews reversing its journals.'
-                 ' Later depreciation batches must reverse first; depreciation links remain as history.'),
+                 ' Later depreciation batches must reverse first; a live disposal of the asset blocks reversal.'
+                 ' Depreciation links remain as history.'),
     input_model=FixedAssetDepreciateInput, output_model=FixedAssetDepreciateOutput, writes={'company'},
     required_role='standard', capability='ledger.post', accepts_idempotency_key=True,
     error_codes=_LEDGER_ERRORS)(plan_fixed_asset_depreciate)
