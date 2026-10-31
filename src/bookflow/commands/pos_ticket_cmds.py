@@ -18,6 +18,10 @@ def plan_resume(inp, ctx, s):
     return t.plan_transition(s, ctx, inp, 'open')
 
 
+def plan_take_over(inp, ctx, s):
+    return t.plan_transition(s, ctx, inp, 'open', takeover=True)
+
+
 def plan_discard(inp, ctx, s):
     return t.plan_transition(s, ctx, inp, 'discarded')
 
@@ -33,7 +37,7 @@ hold.authorize_input = pos_sales.authorize
 hold.authorization = 'member pos.sell; pos.price-override when a line has unit_price'
 
 listing = command('pos ticket list', scope='company', description=(
-    'List company held tickets newest first with register, clerk and last held total. Posts nothing. Needs pos.sell; '
+    'List held tickets then open tickets, newest first within each group, with register, clerk, device and last held total. Posts nothing. Needs pos.sell; '
     'off unless pos_enabled is on.'), input_model=m.ListInput, output_model=m.TicketList, writes=set(),
     required_role='member', capability='pos.sell', error_codes=['E_FEATURE_DISABLED'])(plan_list)
 listing.authorize_input = t.authorize
@@ -54,3 +58,13 @@ discard = command('pos ticket discard', scope='company', description=(
     accepts_idempotency_key=True, error_codes=['E_FEATURE_DISABLED', 'E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_WORK_DEPENDENCY'])(plan_discard)
 discard.applier(t.apply)
 discard.authorize_input = t.authorize
+
+
+take_over = command('pos ticket take-over', scope='company', description=(
+    'Take over an open ticket at expected_version, recording this device and clerk. Confirm the displayed current '
+    'register and clerk before calling. The prior device version becomes stale. Posts nothing. Needs pos.sell; '
+    'off unless pos_enabled is on.'), input_model=m.TicketInput, output_model=m.TicketOutput,
+    writes={'company'}, required_role='member', capability='pos.sell', positional=['ticket'],
+    accepts_idempotency_key=True, error_codes=['E_FEATURE_DISABLED', 'E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_WORK_DEPENDENCY'])(plan_take_over)
+take_over.applier(t.apply)
+take_over.authorize_input = t.authorize

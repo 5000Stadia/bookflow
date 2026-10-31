@@ -9,12 +9,14 @@ from bookflow.company.journal_models import _Version
 
 class HoldInput(_Cart):
     ticket: Ticket
+    device: str = Field("unknown", min_length=1, max_length=128, description="Device identity for ticket hand-off audit.")
     label: str | None = Field(None, max_length=400, description='Optional label; default hold time and first item.')
     expected_version: _Version | None = Field(None, ge=1, description='Required when holding a previously resumed ticket.')
 
 
 class TicketInput(_Strict):
     ticket: Ticket
+    device: str = Field("unknown", min_length=1, max_length=128, description="Device identity for ticket hand-off audit.")
     expected_version: _Version = Field(ge=1, description='Ticket version returned by hold, list or resume.')
 
 
@@ -31,6 +33,7 @@ class TicketOutput(_Strict):
     customer: Named | None
     lines: list[PosLineInput]
     total: MoneyOutput = Field(description="Total when last held; preview resumed lines for current prices before charging.")
+    device: str
     clerk_id: str
     clerk_name: str
     created_at: str

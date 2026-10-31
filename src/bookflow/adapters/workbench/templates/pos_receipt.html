@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Receipt {{ receipt.number }}</title>
+<style>
+@page { size: {{ receipt.width }}mm auto; margin: 0; }
+* { box-sizing: border-box; } body { margin: 0; background: #eef1f4; color: #111; font: 12px/1.4 system-ui, sans-serif; }
+nav { display: flex; flex-wrap: wrap; gap: 10px; padding: 16px; } nav a, nav button { padding: 12px; min-height: 44px; color: #172e42; background: white; border: 1px solid #bcc8cf; border-radius: 6px; font: inherit; }
+.receipt { width: {{ receipt.width }}mm; padding: 3mm; margin: 10px auto; background: white; overflow-wrap: anywhere; }
+h1 { font-size: 16px; margin: 0; } p { margin: 4px 0; } header, footer { text-align: center; } .lines { border-top: 1px dashed; border-bottom: 1px dashed; margin: 12px 0; padding: 8px 0; }
+.item { margin: 0 0 8px; break-inside: avoid; } .amounts { display: flex; justify-content: space-between; gap: 8px; } .amount { white-space: nowrap; flex-shrink: 0; } .total { font-size: 16px; font-weight: bold; margin-top: 8px; } .barcode svg { width: 100%; height: auto; max-height: 18mm; } .barcode { margin-top: 12px; } .status { font-size: 20px; font-weight: bold; }
+@media print { body { background: white; } nav { display: none; } .receipt { margin: 0; } }
+</style></head><body>
+<nav><a href="/c/{{ company_id }}/pos">Back to POS</a><button type="button" onclick="window.print()">Print receipt</button><a href="/c/{{ company_id }}/pos/receipt/{{ receipt.sale.id }}.pdf?reprint={{ 'true' if receipt.reprint else 'false' }}">Save PDF</a></nav>
+<main class="receipt"><header><h1>{{ receipt.company_name }}</h1>{% for line in receipt.address %}<p>{{ line }}</p>{% endfor %}{% if receipt.phone %}<p>{{ receipt.phone }}</p>{% endif %}
+{% if receipt.reprint %}<p class="status">Reprint</p>{% endif %}{% if receipt.status == 'voided' %}<p class="status">VOID</p>{% endif %}
+<p>{{ receipt.sale.created_at }}</p><p>{{ receipt.sale.pos_register.name }} · {{ receipt.clerk }}</p><p>Receipt {{ receipt.number }}</p>{% if receipt.customer %}<p>{{ receipt.customer }}</p>{% endif %}</header>
+<section class="lines">{% for line in receipt.lines %}<div class="item"><div class="name">{{ line.name }}</div><div class="amounts"><span>{{ line.quantity or '' }}{% if line.price %} × {{ line.price }}{% endif %}</span><span class="amount">{{ line.amount }}</span></div></div>{% endfor %}</section>
+<section class="totals"><p class="amounts"><span>Subtotal</span><span class="amount">{{ receipt.subtotal }}</span></p>{% if receipt.discounts != '0.00' %}<p class="amounts"><span>Discounts</span><span class="amount">{{ receipt.discounts }}</span></p>{% endif %}{% for tax in receipt.taxes %}<p class="amounts"><span>{{ tax.name }} {{ tax.rate }}%</span><span class="amount">{{ tax.amount }}</span></p>{% endfor %}<p class="amounts total"><span>Total</span><span class="amount">{{ receipt.total }} {{ receipt.sale.total.currency }}</span></p>
+{% for tender in receipt.sale.tenders %}<p class="amounts"><span>{{ tender.payment_method.name }}</span><span class="amount">{{ tender.amount.amount }}</span></p>{% endfor %}<p class="amounts"><span>Change due</span><span class="amount">{{ receipt.sale.change.amount }}</span></p></section>
+<footer>{% if receipt.message %}<p>{{ receipt.message }}</p>{% endif %}{% if barcode %}<div class="barcode" aria-label="Receipt barcode {{ receipt.number }}">{{ barcode | safe }}</div>{% else %}<p>Barcode unavailable for this receipt number. Type the number to look up the sale.</p>{% endif %}<p>{{ receipt.number }}</p></footer></main><script>
+// Browsers that do not accept a roll's auto height receive its measured content height.
+function receiptPageSize() {
+  const receipt = document.querySelector('.receipt');
+  let style = document.querySelector('#receipt-page-size');
+  if (!style) { style = document.createElement('style'); style.id = 'receipt-page-size'; document.head.appendChild(style); }
+  const height = Math.ceil(receipt.getBoundingClientRect().height * 25.4 / 96) + 1;
+  style.textContent = '@page { size: {{ receipt.width }}mm ' + height + 'mm; margin: 0; }';
+}
+receiptPageSize();
+window.addEventListener('beforeprint', receiptPageSize);
+if (document.fonts) document.fonts.ready.then(receiptPageSize);
+</script></body></html>

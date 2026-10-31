@@ -110,7 +110,7 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +4 ringing up (R114 increment 5): pos sale preview, complete, pos customer search, add.
     # +9 shared POS layout, styles and group pictures (R114 increment 6).
     # +5 hold/list/resume/discard and completed-sale void (R114 increment 7).
-    assert len(rows) == 904
+    assert len(rows) == 906
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).

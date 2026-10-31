@@ -7,6 +7,7 @@
   <div class="pos-topbar">
     {% if registers | length > 1 %}<label class="pos-register-pick">Register <select data-pos-register-select>{% for register in registers %}<option value="{{ register.id }}">{{ register.name }}</option>{% endfor %}</select></label>{% elif registers %}<span class="pos-register-name" data-pos-register-name>{{ registers[0].name }}</span>{% endif %}
     <button type="button" data-pos-held>Held ({{ pos_data.held | length }})</button>
+    <button type="button" data-pos-reprint-open>Reprint receipt</button>
     {% if pos_data.can_void %}<button type="button" data-pos-void-open>Void sale</button>{% endif %}
   </div>
   <div class="pos-lookup">{{ scan_field(company_id, 'pos', label='Look up or scan an item') }}
@@ -68,7 +69,7 @@
 <dialog class="pos-dialog" data-pos-void-dialog aria-label="Void sale">
   <form data-pos-void-form><h2>Void sale</h2>
     <p>Reverse the completed sale and restore its stock. The original receipt and reason stay in the audit history.</p>
-    <label>Receipt number <input data-pos-void-sale required autocomplete="off"></label>
+    <div data-scan data-scan-mode="receipt"><label>Receipt number <input data-scan-input data-pos-void-sale required autocomplete="off"></label><button type="button" data-scan-camera hidden>Camera</button><p data-scan-status role="status"></p></div>
     <label>Reason <input data-pos-void-reason required maxlength="140" autocomplete="off"></label>
     <p data-pos-void-status role="status"></p>
     <div class="pos-dialog-actions"><button type="button" data-pos-close="void">Back</button><button type="submit" class="primary" data-pos-void-submit>Void sale</button></div>
@@ -133,9 +134,11 @@
   </form>
 </dialog>
 
+<dialog class="pos-dialog" data-pos-reprint-dialog aria-label="Reprint receipt"><form data-pos-reprint-form><h2>Reprint receipt</h2><div data-scan data-scan-mode="receipt"><label>Receipt number <input data-scan-input data-pos-reprint-sale required autocomplete="off"></label><button type="button" data-scan-camera hidden>Camera</button><p data-scan-status role="status"></p></div><p data-pos-reprint-status role="status"></p><div class="pos-dialog-actions"><button type="button" data-pos-close="reprint">Back</button><button type="submit">Reprint receipt</button></div></form></dialog>
 <section class="pos-done" data-pos-done hidden aria-label="Sale complete">
   <p class="pos-done-label">Change due</p><p class="pos-done-change" data-pos-done-change></p>
   <p data-pos-done-summary></p>
+  <a data-pos-print target="_blank" rel="noopener">Print receipt</a>
   {% if pos_data.can_void %}<button type="button" data-pos-void-last>Void this sale</button>{% endif %}
   <button type="button" class="primary" data-pos-new-sale>New sale</button>
 </section>

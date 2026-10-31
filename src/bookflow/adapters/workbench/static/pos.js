@@ -28,6 +28,9 @@
   const cartKey = () => `bookflow.pos.${data.company}.${register.id}.cart`;
   const newTicket = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
     : Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
+  const deviceKey = `bookflow.pos.${data.company}.device`;
+  const device = store.get(deviceKey) || newTicket();
+  store.set(deviceKey, device);
   const fresh = () => ({ticket: newTicket(), customer: null, lines: [], pending: null, ticket_version: null, mutation: null});
   let state = store.get(cartKey()) || fresh();
   let server = null;      // the last preview answer for the cart as it stands
@@ -412,6 +415,7 @@
     render();
     root.classList.remove('pos-sheet-open');
     const screen = $('[data-pos-done]');
+    $('[data-pos-print]').href = `/c/${encodeURIComponent(data.company)}/pos/receipt/${encodeURIComponent(sale.id)}`;
     screen.querySelector('[data-pos-done-change]').textContent = money(sale.change.amount);
     const paid = sale.tenders.map(t => `${escape(t.payment_method.name)} ${money(t.amount.amount)}${t.reference ? ` (${escape(t.reference)})` : ''}`).join(', ');
     screen.querySelector('[data-pos-done-summary]').innerHTML = `Sales receipt <b data-pos-done-number>${escape(sale.sales_receipt.name)}</b> · Total ${money(sale.total.amount)} · Paid ${paid}${sale.customer ? ` · ${escape(sale.customer.name)}` : ''}${sale.replayed ? ' · already completed' : ''}`;
@@ -428,7 +432,12 @@
   // ---- company-held tickets; uncertain writes keep their exact request and retry key on this device
   function drawHeld() {
     $('[data-pos-held]').textContent = `Held (${heldTickets.length})`;
-    $('[data-pos-held-list]').innerHTML = heldTickets.map(t => `<li><b>${escape(t.label)}</b><span>${escape(t.pos_register.name)} · ${escape(t.clerk_name || t.clerk_id)} · ${money(t.total.amount)}</span><small>${escape(new Date(t.updated_at || t.created_at).toLocaleString())}</small><div><button type="button" data-pos-resume="${escape(t.id)}">Resume</button><button type="button" data-pos-discard="${escape(t.id)}">Discard</button></div></li>`).join('') || '<li>No held sales.</li>';
+    const inUse = t => `In use on ${t.pos_register.name} by ${t.clerk_name || t.clerk_id} since ${new Date(t.updated_at).toLocaleString()} · device ${t.device || 'unknown'}`;
+    $('[data-pos-held-list]').innerHTML = ['held', 'open'].map(status => {
+      const tickets = heldTickets.filter(t => t.status === status);
+      if (!tickets.length) return '';
+      return `<li><strong>${status === 'held' ? 'Held' : 'In use'}</strong></li>` + tickets.map(t => `<li><b>${escape(t.label)}</b><span>${escape(status === 'open' ? inUse(t) : t.pos_register.name + ' · ' + (t.clerk_name || t.clerk_id))} · ${money(t.total.amount)}</span><small>${escape(new Date(t.updated_at || t.created_at).toLocaleString())}</small><div><button type="button" data-pos-resume="${escape(t.id)}">${status === 'open' ? 'Take over' : 'Resume'}</button><button type="button" data-pos-discard="${escape(t.id)}">Discard</button></div></li>`).join('');
+    }).join('') || '<li>No held sales.</li>';
   }
   async function refreshHeld() {
     $('[data-pos-held-status]').textContent = 'Refreshing…';
@@ -448,11 +457,12 @@
       $('[data-pos-held-status]').textContent = 'Hold or clear the sale on this device and the ticket’s register before resuming.';
       return;
     }
-    ticketMutation('resume', {ticket: id, expected_version: ticket.version});
+    if (ticket.status === 'open' && !confirm(`In use on ${ticket.pos_register.name} by ${ticket.clerk_name || ticket.clerk_id}; take it over?`)) return;
+    ticketMutation(ticket.status === 'open' ? 'take-over' : 'resume', {ticket: id, expected_version: ticket.version, device});
   }
   function ticketMutation(action, body, extra = {}) {
     if (locked()) return;
-    state.mutation = {action, body, key: newTicket(), ...extra};
+    state.mutation = {action, body: {...body, device}, key: newTicket(), ...extra};
     save();
     render();
     finishMutation();
@@ -467,7 +477,7 @@
         const error = new Error('Bookflow did not confirm the ticket change.'); error.offline = true; throw error;
       }
       state.mutation = null;
-      if (request.action === 'resume') {
+      if (['resume', 'take-over'].includes(request.action)) {
         save();
         register = data.registers.find(r => r.id === answer.pos_register.id) || register;
         store.set(registerKey, register.id);
@@ -508,6 +518,13 @@
       ...(state.ticket_version ? {expected_version: state.ticket_version} : {})});
   });
 
+  $('[data-pos-reprint-form]').addEventListener('submit', async event => {
+    event.preventDefault();
+    try {
+      const receipt = await api('pos receipt show', {sale: $('[data-pos-reprint-sale]').value.trim(), reprint: true});
+      window.location.href = `/c/${encodeURIComponent(data.company)}/pos/receipt/${encodeURIComponent(receipt.sale.id)}?reprint=true`;
+    } catch (error) { $('[data-pos-reprint-status]').textContent = error.message; }
+  });
   // ---- voids use the same receipt reversal, with an explicit reason and an explicit retry after any conflict
   let voidVersion = 1, voidSelector = '', voidBusy = false, voidKey = null;
   function openVoid(sale) {
@@ -618,7 +635,7 @@
     else if (d.posResume) resumeTicket(d.posResume);
     else if (d.posDiscard) {
       const ticket = heldTickets.find(t => t.id === d.posDiscard);
-      if (ticket && !locked() && confirm(`Discard “${ticket.label}”? Nothing has been posted.`))
+      if (ticket && !locked() && confirm(ticket.status === 'open' ? `In use on ${ticket.pos_register.name} by ${ticket.clerk_name || ticket.clerk_id}; discard it?` : `Discard “${ticket.label}”? Nothing has been posted.`))
         ticketMutation('discard', {ticket: ticket.id, expected_version: ticket.version});
     }
     else if (target.matches('[data-pos-ticket-retry]')) finishMutation();
@@ -626,6 +643,7 @@
       if (state.stale_ticket && confirm('Forget only this device’s copy? The ticket on the host will stay unchanged.')) { state = fresh(); schedule(); }
     }
     else if (d.posClose) $('[data-pos-' + d.posClose + '-dialog]').close();
+    else if (target.matches('[data-pos-reprint-open]')) $('[data-pos-reprint-dialog]').showModal();
     else if (target.matches('[data-pos-void-open]')) openVoid(null);
     else if (target.matches('[data-pos-void-last]')) openVoid(lastSale);
     else if (target.matches('[data-pos-charge]')) openTender();

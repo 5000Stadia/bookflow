@@ -55,7 +55,7 @@ def output(s, row):
         'created_via', 'updated_at', 'updated_by', 'updated_via')},
         pos_register=dict(id=reg['id'], name=reg['name']), customer=chosen, lines=json.loads(row['lines']),
         total=Money(row['total_minor_units'], row['currency']).to_dict(),
-        clerk_id=row['updated_by'], clerk_name=names.get(row['updated_by'], row['updated_by']))
+        device=row['device'], clerk_id=row['updated_by'], clerk_name=names.get(row['updated_by'], row['updated_by']))
 
 
 def authorize(inp, ctx, s):
@@ -64,8 +64,8 @@ def authorize(inp, ctx, s):
 
 
 def listing(s):
-    rows = s.company.conn.execute(sa.select(c.pos_tickets).where(c.pos_tickets.c.status == 'held').order_by(
-        c.pos_tickets.c.updated_at.desc(), c.pos_tickets.c.id.desc())).mappings().all()
+    rows = s.company.conn.execute(sa.select(c.pos_tickets).where(c.pos_tickets.c.status.in_(('held', 'open'))).order_by(
+        c.pos_tickets.c.status, c.pos_tickets.c.updated_at.desc(), c.pos_tickets.c.id.desc())).mappings().all()
     return m.TicketList(items=[output(s, row) for row in rows], count=len(rows))
 
 
@@ -94,7 +94,7 @@ def plan_hold(s, ctx, inp):
                                                          lines=lines))
     now = clock.now_iso()
     after = dict(before or {}, id=inp.ticket, version=before['version'] + 1 if before else 1,
-        register_id=reg['id'], customer_id=chosen['id'] if chosen else None,
+        device=inp.device, register_id=reg['id'], customer_id=chosen['id'] if chosen else None,
         label=(inp.label or '').strip() or (before['label'] if before else f'{now} · {first_name}'), status='held',
         lines=json.dumps(lines), currency=preview.total.currency, total_minor_units=preview.total.minor_units,
         updated_at=now, updated_by=s.actor.id, updated_via=ctx.interface.value)
@@ -103,10 +103,11 @@ def plan_hold(s, ctx, inp):
     return Plan(output(s, after), dict(before=before, after=after))
 
 
-def plan_transition(s, ctx, inp, status):
+def plan_transition(s, ctx, inp, status, *, takeover=False):
     before = resolve(s, inp.ticket)
-    check(s, before, inp.expected_version, ('held',) if status == 'open' else ('held', 'open'))
-    after = dict(before, status=status, version=before['version'] + 1, updated_at=clock.now_iso(),
+    states = ('open',) if takeover else (('held',) if status == 'open' else ('held', 'open'))
+    check(s, before, inp.expected_version, states)
+    after = dict(before, device=inp.device, status=status, version=before['version'] + 1, updated_at=clock.now_iso(),
                  updated_by=s.actor.id, updated_via=ctx.interface.value)
     return Plan(output(s, after), dict(before=before, after=after))
 
@@ -154,3 +155,10 @@ def complete(s, ctx, ticket, version, register_id):
     after = dict(before, status='completed', version=before['version'] + 1, updated_at=clock.now_iso(),
                  updated_by=s.actor.id, updated_via=ctx.interface.value)
     return [persist(s, before, after)]
+
+
+def check_replay(s, ticket, version):
+    """Only the device revision that completed a persisted ticket may replay its sale."""
+    row = find(s, ticket)
+    if row and (row['status'] != 'completed' or version != row['version'] - 1):
+        raise conflict(s, row, version)

@@ -281,6 +281,8 @@ def tender_facts(s, reg, inp, total: dict) -> dict[str, Any]:
 def plan_complete(s, ctx, inp) -> Plan:
     found = _existing(s, inp.ticket)
     if found is not None:
+        from bookflow.company import pos_tickets
+        pos_tickets.check_replay(s, inp.ticket, inp.ticket_version)
         out = _replay(s, found, inp)
         return Plan(out, dict(replay=found['id']))
     if not inp.lines:
@@ -329,6 +331,8 @@ def apply_complete(plan: Plan, ctx, s) -> Applied:
     # Inside the write transaction: a retry that raced this one and won is found here, and answered with its sale.
     found = _existing(s, plan.preview.ticket)
     if found is not None:
+        from bookflow.company import pos_tickets
+        pos_tickets.check_replay(s, plan.preview.ticket, plan.data['ticket_version'])
         if found['input_sha256'] != inp_sha:
             raise _mismatch(s, found)
         return Applied(sale_output(s, found, replayed=True), [], 'no change')

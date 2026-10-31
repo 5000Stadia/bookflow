@@ -2177,3 +2177,12 @@ EXAMPLES.update({
         '--reason "Customer canceled" --company "Demo Plumbing Co" --json',
         {'sale': 'counter-cart-1', 'expected_version': 1}),
 })
+
+EXAMPLES['pos ticket take-over'] = Example(
+    'bookflow pos ticket take-over counter-cart-1 --expected-version 2 --device replacement-till '
+    '--company "Demo Plumbing Co" --json',
+    {'ticket': 'counter-cart-1', 'expected_version': 2, 'device': 'replacement-till'})
+
+EXAMPLES['pos receipt show'] = Example(
+    'bookflow pos receipt show counter-cart-1 --reprint --company "Demo Plumbing Co" --json',
+    {'sale': 'counter-cart-1', 'reprint': True})

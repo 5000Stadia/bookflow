@@ -164,6 +164,12 @@
       if (current) { field = current; input = current.querySelector('[data-scan-input]'); }
     }
     if (!text.trim()) return;
+    if (field.dataset.scanMode === 'receipt') {
+      input.value = text.trim();
+      input.dispatchEvent(new Event('change', {bubbles: true}));
+      say(field, 'Receipt number ready.', 'ok');
+      return;
+    }
     const want = parse(text);
     want.camera = !!camera;
     const keepTyped = () => {
