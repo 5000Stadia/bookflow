@@ -210,3 +210,45 @@ def test_a_run_stopped_part_way_and_reversed_is_never_continued(books):
     error = refusal(lambda: books.run('import run', {'run': preview['run']['id']}))
     assert error.code == 'E_VALIDATION' and error.details['batch_state'] == 'reversed'
     assert active_customers(books) == set()
+
+
+def test_the_stock_held_check_stays_linear_and_small():
+    """R107 increment 7 verification N2: a batch of 2,000 and of 4,000 documents each moving one unit of one item, and
+    one later sale outside it. The check reads the item's later movements once (the batch's own left out in SQL) and
+    keeps three names per document: every document is held by the sale, at about twice the time and no more rows."""
+    import json as _json
+    import sqlite3 as _sqlite3
+    import time as _time
+    from types import SimpleNamespace
+    from bookflow.company import batches as _batches
+
+    def measure(n):
+        db = _sqlite3.connect(':memory:')
+        db.executescript('''CREATE TABLE items (id TEXT PRIMARY KEY, full_name TEXT);
+            CREATE TABLE transactions (id TEXT PRIMARY KEY, type TEXT, number TEXT, status TEXT);
+            CREATE TABLE applications (id TEXT, paid_transaction_id TEXT, paying_transaction_id TEXT,
+                reverses_application_id TEXT);
+            CREATE TABLE ap_applications (id TEXT, obligation_transaction_id TEXT, source_transaction_id TEXT,
+                reverses_application_id TEXT);
+            CREATE TABLE inventory_movements (id TEXT PRIMARY KEY, item_id TEXT, transaction_id TEXT,
+                effective_date TEXT, sequence INTEGER UNIQUE, reverses_movement_id TEXT UNIQUE);
+            CREATE INDEX ix_item ON inventory_movements (item_id, effective_date, sequence, id);
+            CREATE INDEX ix_doc ON inventory_movements (transaction_id, sequence);''')
+        db.execute("INSERT INTO items VALUES ('I', 'Widget')")
+        ids = [f'D{k:06d}' for k in range(n)]
+        db.executemany('INSERT INTO transactions VALUES (?, ?, ?, ?)', [(d, 'adjustment', d, 'posted') for d in ids])
+        db.executemany('INSERT INTO inventory_movements VALUES (?, ?, ?, ?, ?, NULL)',
+                       [(f'M{k}', 'I', d, '2026-04-01', k + 1) for k, d in enumerate(ids)])
+        db.execute("INSERT INTO transactions VALUES ('SALE', 'invoice', '2001', 'posted')")
+        db.execute("INSERT INTO inventory_movements VALUES ('MS', 'I', 'SALE', '2026-04-02', ?, NULL)", (n + 1,))
+        s = SimpleNamespace(company=SimpleNamespace(raw=db))
+        started = _time.perf_counter()
+        found = _batches._document_uses(s, None, ids, set(ids))
+        return _time.perf_counter() - started, found
+
+    small, found_small = measure(2000)
+    large, found_large = measure(4000)
+    assert len(found_small) == 2000 and len(found_large) == 4000
+    assert all(u['documents'] == ['invoice 2001 (it moves Widget later)'] for u in found_large.values())
+    assert large < max(4 * small, 0.5), (small, large)
+    print(f'\nN2 stock check: 2,000 documents {small:.3f} s, 4,000 documents {large:.3f} s')

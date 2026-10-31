@@ -108,7 +108,7 @@ Named here so the three designs cite one list. Humans hold each at the role show
 | `delivery.mark-sent` | record that a document was sent outside Bookflow | standard |
 | `delivery.connect` | write or check a delivery connection | admin |
 | `bank-feed.connect` | write or check a bank-feed connection, enable a fetch, pass `confirm_account`, the first live backfill | admin |
-| `import.approve` | approve an import or grid edit that waits for approval, `accept_differences`, `create_missing` past a look-alike (R107) | standard |
+| `opening.accept-differences` | post an opening whose given totals do not tie (`opening-draft apply --accept-differences`, R107 increment 7). It replaced `import.approve`, whose other acts (approving large imports and grid edits, a look-alike past `create_missing`) were dropped on 2026-10-28: no size thresholds, and a look-alike is refused for every actor | standard |
 
 ## 5. Directives and reasons: the record, not a gate
 
@@ -128,8 +128,8 @@ Light and in words, so the principal frames an agent's mandate before it works. 
 agent is created; the agent guide gains the matching chapter ("Your level and how to ask for more"). Neither blocks anything.
 
 - **Which level:** three presets, each saying what it cannot do. *Bookkeeper* (default): standard role, no automations, no
-  sending, no merges or restores, no approving large imports. *Read-only*: reports and drafts. *Trusted*: Bookkeeper plus
-  `delivery.send`, `import.approve` and the `automate.*` you pick. A preset is a list of grants the principal can edit.
+  sending, no merges or restores, no posting an opening that does not tie. *Read-only*: reports and drafts. *Trusted*:
+  Bookkeeper plus `delivery.send`, `opening.accept-differences` and the `automate.*` you pick. A preset is a list of grants the principal can edit.
 - **What the agent may automate:** one line per `automate.*` capability, naming what runs unattended (adds bank lines, sends
   email, raises invoices) and that it runs as the establisher.
 - **Every batch is reversible,** by one command; the guidance names it.

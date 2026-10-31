@@ -878,3 +878,27 @@ def test_a_number_a_voided_document_of_another_kind_carries_names_the_standing_o
                                      'payment_method': 'Cash'})
     held = books.run('prepayment query', {'document': 'H-1'})
     assert held['items'] and all(r.get('document_id', order['id']) == order['id'] for r in held['items'])
+
+
+def test_a_customer_an_import_made_for_its_own_invoice_is_no_use_until_a_payment_holds_it(books):
+    """R107 increment 7 review: the shared plan passes over a document's lines the same batch made (an invoice naming
+    the customer `create_missing` made), and still names a later payment applied to that invoice."""
+    content = text(INVOICE_HEADER, [['L-2', 'Dune Roofing', '2026-02-21', 'Labor', '', '1', '']])
+    run_id = books.run('import preview', {'kind': 'invoice', 'content': content, 'create_missing': True})['run']['id']
+    run_all(books, run_id)
+
+    def plan():
+        try:
+            return books.run('import reverse', {'run': run_id}, dry_run=True, reason='check'), []
+        except BookflowError as error:
+            return None, error.details['blockers']
+    _, blockers = plan()
+    assert not [b for b in blockers if b['code'] == 'in_use'], blockers
+    inv = books.run('invoice show', {'invoice': 'L-2'})
+    books.run('payment receive', dict(customer='Dune Roofing', date='2026-03-02', amount='85.00',
+                                      deposit_to='Undeposited Funds', payment_method='Check', operation_key='p-1',
+                                      applications={'mode': 'inline', 'items': [
+                                          {'invoice': 'L-2', 'expected_version': inv['version'], 'amount': '85.00'}]}),
+              reason='paid')
+    _, blockers = plan()
+    assert any(b['code'] == 'in_use' and 'payment' in b['message'] for b in blockers), blockers

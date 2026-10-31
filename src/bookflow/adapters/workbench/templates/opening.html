@@ -1,0 +1,96 @@
+{% extends "base.html" %}{% block title %}Opening balances{% endblock %}{% block body %}
+<link rel="stylesheet" href="{{ static_urls['opening.css'] }}">
+{% set post = '/c/' ~ company_id ~ '/opening' %}
+{% macro htmx() %}method="post" action="{{ post }}" hx-post="{{ post }}" hx-target="#opening-workspace" hx-select="#opening-workspace" hx-swap="outerHTML"{% endmacro %}
+{% macro hidden() %}<input type="hidden" name="draft" value="{{ draft.id }}"><input type="hidden" name="version" value="{{ draft.version }}"><input type="hidden" name="step" value="{{ step }}">{% endmacro %}
+{% macro amount(m) %}{{ display_money(m) if m else '—' }}{% endmacro %}
+<section id="opening-workspace" class="opening" data-opening-step="{{ step or 'start' }}" data-company="{{ company_id }}">
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/company">Company</a> / <a href="{{ post }}">Opening balances</a></nav>
+<h1>Opening balances</h1>
+{% if error %}<div role="alert" class="error" data-opening-error><strong>{{ error.message or error.code }}</strong>{% for f in (error.details or {}).get('fields', []) if f.problem %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}{% for e in (error.details or {}).get('exceptions', [])[:12] %}<br>{{ e.code }}: {{ e.problem }}{% endfor %}</div>{% endif %}
+
+{% if not draft %}
+<p class="opening-lead">Starting with no old books? Give the balances you know as of one date, the invoices customers still owe, the bills you still owe and your stock. Bookflow posts them through the same move-in a converting business uses, checks them against the totals you give, and keeps the books in balance. Paste from a spreadsheet in every step.</p>
+<p class="muted">Opening balances come first; enter later work dated after the opening date.</p>
+{% if can_write %}<form {{ htmx() }} class="opening-start" data-opening-start>
+<input type="hidden" name="action" value="start">
+<label class="opening-label">Opening date <input type="date" name="as_of" required data-opening-as-of></label>
+<fieldset class="opening-given"><legend>Totals you know (optional)</legend>
+<label class="opening-label">Customers owe you <input name="given_receivables" inputmode="decimal" placeholder="taken from your invoices"></label>
+<label class="opening-label">You owe vendors <input name="given_payables" inputmode="decimal" placeholder="taken from your bills"></label>
+<label class="opening-label">Stock is worth <input name="given_stock" inputmode="decimal" placeholder="taken from your stock list"></label></fieldset>
+<button type="submit" data-opening-begin>Start</button></form>{% endif %}
+{% if drafts %}<h2>Drafts</h2><ul class="opening-drafts">{% for d in drafts %}<li><a href="{{ post }}?draft={{ d.id }}" data-opening-draft="{{ d.id }}">{{ d.label }}</a> <span class="opening-tag state-{{ d.state }}">{{ d.state|replace('_', ' ') }}</span></li>{% endfor %}</ul>{% endif %}
+{% else %}
+<p class="opening-lead"><strong>{{ draft.label }}</strong> <span class="opening-tag state-{{ draft.state }}" data-opening-state="{{ draft.state }}">{{ draft.state|replace('_', ' ') }}</span></p>
+<ol class="opening-steps" aria-label="Steps">{% for key, label in steps %}<li class="{{ 'is-current' if key == step }}"{% if key == step %} aria-current="step"{% endif %}><a href="{{ post }}?draft={{ draft.id }}&amp;step={{ key }}" data-opening-goto="{{ key }}"><span class="step-num">{{ loop.index }}</span>{{ label }}</a></li>{% endfor %}</ol>
+{% if saved %}<p class="opening-saved" role="status" data-opening-saved>Saved.</p>{% endif %}
+{% set editable = can_write and draft.state in ('draft', 'planned', 'rolled_back') %}
+
+{% if step == 'date' %}
+<form {{ htmx() }} class="opening-form" data-opening-form="date">{{ hidden() }}
+<label class="opening-label">Opening date <input type="date" name="as_of" value="{{ draft.as_of }}" required{% if not editable %} disabled{% endif %}></label>
+<fieldset class="opening-given"><legend>Totals you know, to check the rows against</legend>
+<p class="muted">Leave one empty and it is taken from your rows; the tie-out then says it was not independently checked.</p>
+<label class="opening-label">Customers owe you <input name="given_receivables" inputmode="decimal" value="{{ draft.given.receivables.amount if draft.given.receivables else '' }}" placeholder="taken from your invoices"></label>
+<label class="opening-label">You owe vendors <input name="given_payables" inputmode="decimal" value="{{ draft.given.payables.amount if draft.given.payables else '' }}" placeholder="taken from your bills"></label>
+<label class="opening-label">Stock is worth <input name="given_stock" inputmode="decimal" value="{{ draft.given.stock.amount if draft.given.stock else '' }}" placeholder="taken from your stock list"></label></fieldset>
+{% if editable %}<div class="opening-bar"><button name="action" value="save">Save</button><button name="action" value="next" data-opening-next>Save and go on</button></div>{% endif %}
+</form>
+
+{% elif step in grids %}
+<form {{ htmx() }} class="opening-form" data-opening-form="{{ step }}">{{ hidden() }}
+<p>{{ help[step] }}</p>
+<p class="opening-header-hint">Columns: <code data-opening-header>{{ header|join(', ') }}</code>. Paste with the header row, or type one row per line with commas.</p>
+<label class="opening-label opening-grid-label">Rows
+<textarea name="content" rows="12" spellcheck="false" wrap="off" data-opening-grid placeholder="{{ header|join('&#9;') }}"{% if not editable %} readonly{% endif %}>{{ typed if typed is not none and typed is defined else (grid_step.content if grid_step and grid_step.content else '') }}</textarea></label>
+<label class="opening-label">Dates read <select name="date_order"><option value="">from the dates</option><option value="MDY"{% if grid_step and grid_step.date_order == 'MDY' %} selected{% endif %}>month first (09/30/2026)</option><option value="DMY"{% if grid_step and grid_step.date_order == 'DMY' %} selected{% endif %}>day first (30/09/2026)</option><option value="YMD"{% if grid_step and grid_step.date_order == 'YMD' %} selected{% endif %}>year first (2026-09-30)</option></select></label>
+{% if step == 'stock' %}<label class="opening-label">Make these new items (one per line; only items not in your item list yet) <textarea name="make_items" rows="3" data-opening-make>{{ draft.make_items|join('\n') }}</textarea></label>{% endif %}
+{% if grid_step %}<p class="opening-count" data-opening-rows="{{ grid_step.rows }}">{{ grid_step.rows }} row{{ '' if grid_step.rows == 1 else 's' }} read.</p>
+{% if grid_step.problems %}<ul class="opening-problems" data-opening-problems>{% for p in grid_step.problems %}<li>{% if p.line %}Line {{ p.line }}: {% endif %}{{ p.problem }}{% if p.fix %} <span class="muted">{{ p.fix }}</span>{% endif %}</li>{% endfor %}</ul>{% endif %}{% endif %}
+{% if editable %}<div class="opening-bar"><button name="action" value="save" data-opening-save>Save</button><button name="action" value="next" data-opening-next>Save and go on</button></div>{% endif %}
+</form>
+
+{% elif step == 'post' %}
+{% if draft.state in ('draft', 'planned', 'rolled_back') %}
+<form {{ htmx() }} class="opening-form" data-opening-form="plan">{{ hidden() }}
+{% if draft.state == 'rolled_back' %}<p class="warn">The last post stopped and was undone as a whole; nothing of it stays. Fix the cause and post again.</p>{% endif %}
+{% if editable %}<div class="opening-bar"><button name="action" value="plan" data-opening-plan>Check the plan</button></div>{% endif %}
+</form>
+{% endif %}
+{% if plan %}
+<section class="opening-plan" data-opening-plan-result data-ready="{{ 'yes' if plan.ready else 'no' }}">
+<h2>{{ 'Ready to post' if plan.ready else 'Not ready yet' }}</h2>
+<p>{{ plan.summary }}</p>
+{% if plan.blocking %}<ul class="opening-problems" data-opening-blocking>{% for line in plan.blocking %}<li>{{ line }}</li>{% endfor %}</ul>{% endif %}
+<dl class="opening-counts">{% for c in plan.counts %}<div><dt>{{ c.kind|replace('_', ' ') }}</dt><dd>{{ c.create }} new{% if c.amount %}, {{ display_money(c.amount) }}{% endif %}</dd></div>{% endfor %}</dl>
+<h3>Checked against a figure you gave</h3><ul class="opening-checks" data-opening-given>{% for c in plan.checks if c.basis == 'given' %}<li>{{ c.name|replace('_', ' ') }}: {{ display_money(c.source) }} against {{ display_money(c.compared) }}{% if c.difference.minor_units %} <strong class="bad">difference {{ display_money(c.difference) }}</strong>{% else %} — ties{% endif %}</li>{% else %}<li class="muted">None: every total is taken from your rows.</li>{% endfor %}</ul>
+<h3>Taken from your rows (not independently checked)</h3><ul class="opening-checks" data-opening-derived>{% for c in plan.checks if c.basis == 'derived' %}<li>{{ c.name|replace('_', ' ') }}: {{ display_money(c.source) }}</li>{% else %}<li class="muted">None.</li>{% endfor %}</ul>
+{% if editable and (plan.ready or only_acceptable) %}
+<form {{ htmx() }} class="opening-form" data-opening-form="apply">{{ hidden() }}
+{% if not plan.ready %}<label class="choice"><input type="checkbox" name="accept_differences" value="on" data-opening-accept> Post it anyway: the difference stays in the clearing account until it is found</label>{% endif %}
+<div class="opening-bar"><button name="action" value="apply" data-opening-apply>Post the opening as of {{ draft.as_of }}</button></div>
+</form>{% endif %}
+</section>
+{% endif %}
+{% if posted %}<p class="opening-saved" role="status" data-opening-posted>{{ posted.summary }}</p>{% endif %}
+{% if undone %}<p class="opening-saved" role="status" data-opening-undone>The opening was undone as one unit.</p>{% endif %}
+{% if tie %}
+<section class="opening-tie" data-opening-tie data-tied="{{ 'yes' if tie.tied else 'no' }}">
+<h2>{{ 'Tied' if tie.tied else 'Not tied' }}</h2>
+<p>{{ tie.summary }}. Clearing account: {{ display_money(tie.clearing) }}.</p>
+<h3>Proved against what you gave</h3><ul class="opening-checks" data-opening-tie-given>{% for c in tie.checks if c.basis == 'given' %}<li class="{{ '' if c.tied else 'bad' }}">{{ c.name }}: {{ c.says }}</li>{% else %}<li class="muted">None.</li>{% endfor %}</ul>
+<h3>Taken from your lists</h3><ul class="opening-checks" data-opening-tie-derived>{% for c in tie.checks if c.basis == 'derived' %}<li class="{{ '' if c.tied else 'bad' }}">{{ c.name }}: {{ c.says }}</li>{% else %}<li class="muted">None.</li>{% endfor %}</ul>
+</section>
+{% endif %}
+{% if can_write and draft.state in ('applied', 'failed') %}
+<form {{ htmx() }} class="opening-form" data-opening-form="undo">{{ hidden() }}
+{% if undo and undo.state == 'planned' %}<p>Undo puts back every record this opening made: {{ undo.plan.remaining }} record(s).</p><input type="hidden" name="fingerprint" value="{{ undo.plan.fingerprint or '' }}"><div class="opening-bar"><button name="action" value="undo" data-opening-undo>Undo the opening</button></div>
+{% elif undo and undo.state == 'blocked' %}<div role="alert" class="error" data-opening-blocked><strong>{{ undo.error.message }}</strong><ul>{% for b in undo.blockers[:12] %}<li>{{ b.label or b.record_id }}: {{ b.message }}{% if b.clears %} <span class="muted">{{ b.clears }}</span>{% endif %}</li>{% endfor %}</ul></div>
+{% else %}<div class="opening-bar"><button name="action" value="undo-plan" class="secondary" data-opening-undo-plan>Undo the opening…</button></div>{% endif %}
+</form>{% endif %}
+{% endif %}
+{% if can_write and draft.state in ('draft', 'planned', 'rolled_back') %}<form {{ htmx() }} class="opening-discard">{{ hidden() }}<button name="action" value="discard" class="link-button" data-opening-discard>Discard this draft</button></form>{% endif %}
+{% endif %}
+</section>
+{% endblock %}

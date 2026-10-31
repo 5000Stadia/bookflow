@@ -1,0 +1,46 @@
+/* R107 increment 7: guided opening balances. Steps in a row at desktop, stacked at 390 px; every grid takes the
+   screen's width and nothing scrolls sideways (a long pasted line scrolls inside its box). Controls are at least
+   44 px tall on a phone. */
+.opening{max-width:960px}
+.opening h2{font-size:1.1rem;margin:.8rem 0 .4rem}
+.opening h3{font-size:1rem;margin:.7rem 0 .3rem}
+.opening-lead{margin:.3rem 0 .6rem}
+.opening-steps{display:flex;gap:.25rem;list-style:none;padding:0;margin:.5rem 0 1rem}
+.opening-steps li{flex:1 1 0;min-width:0}
+.opening-steps a{display:flex;align-items:center;gap:.45rem;padding:.45rem .5rem;border-bottom:3px solid #d0d9e4;color:#555;text-decoration:none}
+.opening-steps li.is-current a{border-color:#1f3a5f;color:#1f3a5f;font-weight:700}
+.opening .step-num{display:inline-flex;align-items:center;justify-content:center;width:1.6rem;height:1.6rem;border-radius:50%;background:#e7f0fc;color:#1f3a5f;font-weight:700;flex:none}
+.opening .is-current .step-num{background:#1f3a5f;color:#fff}
+.opening-form,.opening-start{display:flex;flex-direction:column;gap:.6rem;margin:.6rem 0}
+.opening-label{display:flex;flex-direction:column;gap:.2rem;font-weight:600;font-size:.9rem;max-width:100%}
+.opening-label input,.opening-label select,.opening-label textarea{font:inherit;font-weight:400;padding:.4rem .5rem;border:1px solid #9aa9bb;border-radius:.3rem;background:#fff;box-sizing:border-box;max-width:100%}
+.opening-label input{max-width:20rem}
+.opening-grid-label textarea,.opening-label textarea{width:100%;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85rem;overflow:auto;tab-size:16}
+.opening-given{border:1px solid #d0d9e4;border-radius:.4rem;padding:.5rem .8rem;display:flex;flex-direction:column;gap:.5rem;min-width:0}
+.opening-header-hint code{white-space:normal;word-break:break-word}
+.opening-bar{display:flex;flex-wrap:wrap;gap:.5rem 1rem}
+.opening-bar button{min-height:2.75rem}
+.opening-problems{color:#8a1c1c;padding-left:1.2rem}
+.opening-problems li{margin:.15rem 0;overflow-wrap:anywhere}
+.opening-checks{padding-left:1.2rem}
+.opening-checks li{overflow-wrap:anywhere}
+.opening-checks .bad,.opening .bad{color:#8a1c1c}
+.opening-counts{display:grid;grid-template-columns:repeat(auto-fill,minmax(11rem,1fr));gap:.3rem .8rem;margin:.5rem 0}
+.opening-counts div{border:1px solid #e4e9f0;border-radius:.3rem;padding:.3rem .5rem}
+.opening-counts dt{font-size:.8rem;color:#555;text-transform:capitalize}
+.opening-counts dd{margin:0;font-weight:600}
+.opening-tag{display:inline-block;font-size:.8rem;padding:.05rem .45rem;border-radius:1rem;background:#e7f0fc;color:#1f3a5f}
+.opening-tag.state-applied{background:#e3f4e8;color:#1d5a2e}
+.opening-tag.state-failed,.opening-tag.state-rolled_back{background:#fbe9e9;color:#8a1c1c}
+.opening-saved{color:#1d5a2e;font-weight:600}
+.opening-drafts{padding-left:1.2rem}
+.opening-discard{margin-top:1.2rem}
+.opening-discard .link-button{background:none;border:none;color:#8a1c1c;text-decoration:underline;padding:0;cursor:pointer}
+@media (max-width:640px){
+  .opening-steps{flex-direction:column;gap:0}
+  .opening-steps a{border-bottom:none;border-left:3px solid #d0d9e4;padding:.55rem .6rem;min-height:2.75rem;box-sizing:border-box}
+  .opening-steps li.is-current a{border-left-color:#1f3a5f}
+  .opening-label input{max-width:100%;min-height:2.75rem}
+  .opening-label select{min-height:2.75rem}
+  .opening-bar button{flex:1 1 auto}
+}
