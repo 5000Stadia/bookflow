@@ -242,7 +242,9 @@ def count_output(s, count, *, cls=CountOutput, status=None, lines=None, reveal=F
     rendered = line_outputs(s, count, lines, counted, show_expected=show)
     from bookflow.company.count_batch_reversal import linked
     batch_id = linked(s, count.get('id'))
-    return cls(batch_id=batch_id, next=f'bookflow batch reverse {batch_id} --dry-run --reason "Reverse inventory count"' if batch_id else None,
+    next_command = (f'bookflow batch reverse {batch_id} --dry-run --reason "Reverse inventory count"'
+                    if batch_id and (status or count['status']) in ('open', 'recorded') else None)
+    return cls(batch_id=batch_id, next=next_command,
                id=count.get('id'), number=count['number'], version=count['version'],
                status=status or count['status'], site_id=count['site_id'], site_name=names.get(count['site_id'], ''),
                date=count['count_date'], blind=bool(count['blind']), selection=json.loads(count['selection']),

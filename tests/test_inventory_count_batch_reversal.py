@@ -36,7 +36,8 @@ def test_posted_count_reversal_restores_stock_and_valuation(van):
     assert _held(books, '2017-03-03')[('Widget', 'Van 1')] == '5'
     assert run('report inventory-valuation', {'as_of': '2017-12-31'})['totals']['asset_value']['minor_units'] == 8000
     assert _net(books) == before
-    assert run('inventory-count show', {'count': count['id']})['status'] == 'voided'
+    ended = run('inventory-count show', {'count': count['id']})
+    assert ended['status'] == 'voided' and ended['next'] is None
 
 
 def test_open_count_cancels_as_one_unit(van):
@@ -46,7 +47,8 @@ def test_open_count_cancels_as_one_unit(van):
     plan = run('batch reverse', {'batch': count['batch_id']}, dry_run=True, reason='Wrong count')
     assert plan['steps'][0]['operation'] == 'inventory-count cancel'
     run('batch reverse', {'batch': count['batch_id']}, reason='Wrong count')
-    assert run('inventory-count show', {'count': count['id']})['status'] == 'cancelled'
+    ended = run('inventory-count show', {'count': count['id']})
+    assert ended['status'] == 'cancelled' and ended['next'] is None
 
 
 @pytest.mark.parametrize('quantity', [2, 5])
