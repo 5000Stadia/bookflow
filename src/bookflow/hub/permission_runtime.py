@@ -182,7 +182,8 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.ITEM_PICTURE_POLICY_VERSION: 'fb1968ec34b88620255e739d05573fb009d3ac47036745294fd0a6f9c77ac8af',
     c.BULK_EDIT_POLICY_VERSION: 'c4664e87ef03c124012304d580259f65920644ed03c3b0c2cb535f8060e7fe6b',
     c.BANK_LINE_DETAILS_POLICY_VERSION: 'c84a45585ddc7d4b5e7e1ce602517bfd25f3c76de7bba387ccc0064f8045f6e5',
-    c.AUTOMATION_POLICY_VERSION: 'cffced1d61081ef8bbe7bdd417e75ee6a5b8f75b21aab461ab9dab40ba97d6bc',
+    c.USER_HOME_POLICY_VERSION: 'e3ca5ecf2483bcf9780cdd3e9300c5a9cb9ac74f02d2a9f29175bfe8f0c98b36',
+    c.AUTOMATION_POLICY_VERSION: '4df1e05f0db60c9ac166ce314398120e3065dfb07f205327c81f3d5e5348e7ed',
 }
 _VERIFIED_ACCEPTED = False
 
@@ -340,6 +341,7 @@ def _full_known():
     from . import permission_item_picture_catalog
     from . import permission_bulk_edit_catalog
     from . import permission_bank_line_details_catalog
+    from . import permission_user_home_catalog
     from . import permission_automation_catalog
     known = {
         c.SCOPED_POLICY_VERSION: permission_activation_catalog,
@@ -424,6 +426,7 @@ def _full_known():
         c.ITEM_PICTURE_POLICY_VERSION: permission_item_picture_catalog,
         c.BULK_EDIT_POLICY_VERSION: permission_bulk_edit_catalog,
         c.BANK_LINE_DETAILS_POLICY_VERSION: permission_bank_line_details_catalog,
+        c.USER_HOME_POLICY_VERSION: permission_user_home_catalog,
         c.AUTOMATION_POLICY_VERSION: permission_automation_catalog,
     }
     # Each module hashed its own descriptor when it was imported just above, so this is

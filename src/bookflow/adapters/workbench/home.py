@@ -740,14 +740,15 @@ def section_of(noun: str, group: str) -> str:
 
 
 def _live(action: Action, lookup, routed: set[str], permits) -> bool:
-    """A section link is live when every backing command is registered, routed and offered here."""
+    """A section link is live when every backing command is registered, routed and offered here, and the reader may
+    open its page: every other command it runs (PAGE_RUNS) and what a page running none needs (PAGE_FLAGS)."""
     if action.destination is None:
         return False
     for name in action.commands:
         command = lookup(name)
         if command is None or name not in routed or not permits(command):
             return False
-    return True
+    return page_allowed(action.destination, permits, lookup)
 
 
 def resolve_section(company_id: str, section: Section, *, get=None, routed=None, permits=None) -> dict[str, Any]:
@@ -843,6 +844,8 @@ def _availability(step: Step, commands: dict[str, registry.Command | None], rout
     if withheld:
         return ("this company's preferences or your role, which do not offer "
                 + ", ".join(withheld)), False
+    if not page_allowed(action.destination, permits):
+        return "your capabilities, which do not open everything this page runs", False
     return "", True
 
 
@@ -1034,7 +1037,7 @@ FINDER_LABELS = {
 }
 
 
-def finder_index(company_id: str, grouped, *, permits, heading, plural, selector) -> list[dict[str, Any]]:
+def finder_index(company_id: str, grouped, *, permits, heading, plural, selector, menu=None) -> list[dict[str, Any]]:
     """Every task and command page this reader may open, by name, for the header's finder.
 
     ``grouped`` is the company's (group, [(noun, verbs)]) rows already filtered to what this company
@@ -1049,14 +1052,18 @@ def finder_index(company_id: str, grouped, *, permits, heading, plural, selector
     entries: dict[str, dict[str, Any]] = {}
 
     def add(label: str, href: str, section: str, kind: str, *keywords: str) -> None:
+        if not page_allowed(href[len(base):] or "/", permits):
+            return  # a noun's own page may also be a declared page that runs more (the accountant's)
         entry = entries.get(href)
         if entry is None:
             entries[href] = dict(label=label, href=href, section=section, kind=kind, keywords=list(keywords))
         else:
             entry["keywords"] += [word for word in (label, *keywords) if word not in entry["keywords"]]
 
-    add("Overview", base + "/", "Menu", "section")
-    for entry in MENU:
+    menu = MENU if menu is None else menu  # the sections this reader may open (R191); none left, no fixed entries
+    if menu:
+        add("Overview", base + "/", "Menu", "section")
+    for entry in menu:
         add(entry.label, f"{base}/_group/{entry.slug}", "Menu", "section")
     for panel in resolve(company_id, permits=permits):
         for item in panel.steps:
@@ -1082,12 +1089,297 @@ def finder_index(company_id: str, grouped, *, permits, heading, plural, selector
                 elif verb.verb == "list":
                     continue
                 elif verb.verb == "show" and not selector(verb, noun):
-                    add(heading(noun, "show"), noun_base + "/self", where, "page", verb.name)
+                    if not verb.input_model.model_fields:  # a show that needs input is a form, not a page to open
+                        add(heading(noun, "show"), noun_base + "/self", where, "page", verb.name)
                 elif verb.verb == "show":
                     # The show form picks one record and opens it.
                     title = heading(noun, "show").lower()
                     add(("Open an " if title[:1] in "aeiou" and not title.startswith("uni") else "Open a ") + title, f"{noun_base}/show", where, "page", verb.name)
                 elif not verb.version_source:
                     add(FINDER_LABELS.get(verb.name) or heading(noun, verb.verb), f"{noun_base}/{verb.verb}", where, "page", verb.name)
-    add("All commands", base + "/_all", labels.get("settings", ""), "task", "advanced tools")
+    if menu and page_allowed("/_all", permits):
+        add("All commands", base + "/_all", labels.get("settings", ""), "task", "advanced tools")
     return list(entries.values())
+
+
+# ---------------------------------------------------------------- menus follow capabilities (R191)
+
+def noun_group(noun: str) -> str:
+    """The navigation group a company noun is listed under, as All commands groups it."""
+    from bookflow.adapters.workbench import work as Work
+    meta = Work.meta(noun, registry.noun_meta(noun))
+    if meta.get("ui_group"):
+        return str(meta["ui_group"])
+    if noun == "company":
+        return "Company"
+    if noun in ("audit", "hub audit", "undo"):
+        return "Audit"
+    if noun in ("profile",):
+        return "Settings"
+    if noun in ("chart",):
+        return "Accounting"
+    return "Hub"
+
+
+def _menu_nouns(entry: MenuGroup, noun: str, group: str) -> bool:
+    return group in entry.groups or noun in entry.nouns
+
+
+def section_offers(company_id: str, entry: MenuGroup, permits, rows) -> bool:
+    """Whether a menu section has anything left for this reader (design/point-of-sale.md §9).
+
+    A section page shows its records, its "+ New" menu, its lists and tasks (and Banking its registers); Reports
+    and Audit show the commands of their nouns. ``rows`` is {noun: [commands this reader may run]} for the company's
+    nouns. A section with nothing the reader may open is not offered at all.
+    """
+    section = SECTION_BY_SLUG.get(entry.slug)
+    if section is None:
+        return any(verbs and _menu_nouns(entry, noun, noun_group(noun)) for noun, verbs in rows.items())
+    if section.records:
+        query = registry.get(f"{section.records} query")
+        if query is not None and permits(query):
+            return True
+    if entry.slug == "banking":
+        listing = registry.get("account list")
+        if listing is not None and permits(listing):
+            return True
+    found = resolve_section(company_id, section, permits=permits)
+    return any(found[key] for key in ("new", "lists", "tasks", "groups"))
+
+
+def company_rows(permits) -> dict[str, list[registry.Command]]:
+    """{noun: [routed company commands this reader may run]}, every company noun present."""
+    rows: dict[str, list[registry.Command]] = {}
+    for command in registry.routed_commands():
+        if command.scope != "company" or command.noun.endswith(" query") or (command.verb == "query" and command.noun != "rate"):
+            continue
+        verbs = rows.setdefault(command.noun, [])
+        if permits(command):
+            verbs.append(command)
+    return rows
+
+
+def offered_menu(company_id: str, permits, rows=None) -> list[MenuGroup]:
+    """The menu sections this reader may open, in menu order."""
+    if isinstance(permits, Reader):
+        return [entry for entry in MENU if permits.flag(f"section:{entry.slug}")]
+    rows = company_rows(permits) if rows is None else rows
+    return [entry for entry in MENU if section_offers(company_id, entry, permits, rows)]
+
+
+def features_offer(command, info: dict[str, Any]) -> bool:
+    """Whether the company's switches offer the command: pick lists (R181 K3) are off until turned on, and new
+    estimates follow `estimates_enabled`. The workbench and `user home set` both ask this."""
+    if command.name.startswith("pick-list ") and not info.get("pick_and_pack_enabled", False):
+        return False
+    return bool(info.get("estimates_enabled", True)) or command.name not in ("estimate create", "estimate copy",
+                                                                               "proposal estimate")
+
+
+class Reader:
+    """Who is looking at a company's pages: ``reader(command)`` answers whether they may run it (their effective
+    capabilities), and ``flag`` what that decides for a page that runs no command of its own. The menus, the
+    finder, the Overview's tiles and `user home set` all ask through one Reader, so a page is offered exactly when
+    the reader may open it."""
+
+    def __init__(self, company_id: str, permits, *, administers: bool = False):
+        self.company_id, self._permits, self.administers = company_id, permits, administers
+        self._flags: dict[str, bool] = {}
+        self._rows = None
+
+    def __call__(self, command) -> bool:
+        return self._permits(command)
+
+    def rows(self) -> dict[str, list[registry.Command]]:
+        if self._rows is None:
+            self._rows = company_rows(self._permits)
+        return self._rows
+
+    def flag(self, name: str) -> bool:
+        if name not in self._flags:
+            self._flags[name] = False  # a section reached again while deciding itself adds nothing
+            self._flags[name] = self._decide(name)
+        return self._flags[name]
+
+    def _decide(self, name: str) -> bool:
+        if name == "users":  # Users & permissions: membership.grant here, or user.manage
+            return self.administers
+        if name == "advanced":  # Advanced tools and All commands: some company write
+            return any(command.is_write for verbs in self.rows().values() for command in verbs)
+        if name.startswith("section:") and name[8:] in MENU_BY_SLUG:
+            return section_offers(self.company_id, MENU_BY_SLUG[name[8:]], self, self.rows())
+        return False
+
+
+# Every command a page runs on GET beyond the ones its tile or link names, recorded by opening each page (the
+# owner, on the demo): the page is offered only if the reader may run all of them, so it never answers a refusal.
+# tests/test_menus_and_home.py records them again and fails on any command a page runs that is not declared here,
+# so this cannot drift from the pages. Guarded reads are listed too: hiding a page is the lesser error.
+PAGE_RUNS: dict[str, tuple[str, ...]] = {
+    '/account': ('account query options',),
+    '/accountant': ('accountant list', 'report accountant-review'),
+    '/assembly/build': ('item query',),
+    '/bill/post': ('custom-field list', 'inventory-site list', 'item list', 'item-receipt query'),
+    '/calendar': ('customer list', 'employee list', 'item list'),
+    '/card-charge/post': ('custom-field list', 'inventory-site list', 'item list'),
+    '/card-credit/post': ('custom-field list', 'inventory-site list', 'item list'),
+    '/check/post': ('custom-field list', 'inventory-site list', 'item list'),
+    '/class': ('class query', 'class query options'),
+    '/clock': ('customer list', 'employee list', 'item list'),
+    '/company/backup': ('backup list',),
+    '/company/restore': ('organization list',),
+    '/company/self': ('audit list',),
+    '/credit-memo/post': ('custom-field list', 'inventory-site list', 'item list', 'item show'),
+    '/custom-field': ('custom-field query', 'custom-field query options'),
+    '/customer': ('customer query options',),
+    '/customer-message': ('customer-message query', 'customer-message query options'),
+    '/customer-refund/post': ('inventory-site list', 'item list'),
+    '/customer-type': ('customer-type query', 'customer-type query options'),
+    '/customer/create': ('custom-field list',),
+    '/delivery': ('delivery batch-query',),
+    '/employee': ('employee query options',),
+    '/employee/create': ('custom-field list',),
+    '/estimate/create': ('custom-field list', 'inventory-site list', 'item list', 'item show'),
+    '/import': ('import kinds',),
+    '/inventory/counts': ('cycle-count due', 'inventory-site list'),
+    '/inventory/fulfillment': ('inventory-site list', 'item query'),
+    '/inventory/landed-cost': ('landed-cost query',),
+    '/inventory/sites': ('bin list', 'inventory-transfer query', 'item list', 'report quantity-by-site'),
+    '/invoice/post': ('custom-field list', 'inventory-site list', 'item list', 'item show'),
+    '/item': ('item query options',),
+    '/item-category': ('item-category query', 'item-category query options'),
+    '/item-receipt/post': ('purchase-order query',),
+    '/item/create': ('custom-field list',),
+    '/job-type': ('job-type query', 'job-type query options'),
+    '/journal/post': ('custom-field list',),
+    '/mileage': ('customer list', 'item list', 'mileage-rate list', 'vehicle list'),
+    '/other-name': ('other-name query', 'other-name query options'),
+    '/other-name/create': ('custom-field list',),
+    '/payment': ('payment-method list',),
+    '/payment-method': ('payment-method query', 'payment-method query options'),
+    '/price-level': ('price-level query', 'price-level query options'),
+    '/print-checks': ('account list',),
+    '/proposal/create': ('custom-field list', 'item show'),
+    '/sales-order/create': ('custom-field list', 'item show'),
+    '/sales-receipt/post': ('custom-field list', 'inventory-site list', 'item list', 'item show'),
+    '/sales-rep': ('sales-rep query', 'sales-rep query options'),
+    '/sales-tax-code': ('sales-tax-code query', 'sales-tax-code query options'),
+    '/ship-method': ('ship-method query', 'ship-method query options'),
+    '/statement-charge/post': ('item show',),
+    '/term': ('term query', 'term query options'),
+    '/time-activity/create': ('custom-field list',),
+    '/timesheet': ('customer list', 'employee list', 'item list'),
+    '/transfer/post': ('inventory-site list', 'item list'),
+    '/unit-of-measure': ('unit-of-measure query', 'unit-of-measure query options'),
+    '/vendor': ('vendor query options',),
+    '/vendor-credit/post': ('inventory-site list', 'item list'),
+    '/vendor-type': ('vendor-type query', 'vendor-type query options'),
+    '/vendor/create': ('custom-field list',),
+    '/work-order/create': ('custom-field list', 'item show'),
+}
+
+# A page that runs no command of its own: what the reader must hold to be offered it.
+PAGE_FLAGS: dict[str, str] = {"/users": "users", "/_all": "advanced"}
+
+
+def _page_key(destination: str) -> str:
+    return "/" + destination.split("?")[0].strip("/")
+
+
+def page_allowed(destination: str, permits, lookup=None) -> bool:
+    """Whether the reader may open the page beyond its named commands (PAGE_RUNS, PAGE_FLAGS, `_group/<slug>`)."""
+    lookup = registry.get if lookup is None else lookup
+    key = _page_key(destination)
+    for name in PAGE_RUNS.get(key, ()):
+        command = lookup(name)
+        if command is None or not permits(command):
+            return False
+    flag = PAGE_FLAGS.get(key) or (f"section:{key[8:]}" if key.startswith("/_group/") else None)
+    if flag is None:
+        return True
+    return permits.flag(flag) if isinstance(permits, Reader) else True
+
+
+# Pages that are not a noun's own page, and the command each one reads. A Home may be any of these, any destination
+# a tile or section link declares, any visible section, or a noun's own list, record, report or form page.
+FIXED_PAGES: dict[str, tuple[str, ...]] = {
+    "": ("company show",),  # the Overview
+    "_all": ("company show",),
+    "find": ("transaction find",),
+    "_registers": ("account list",),
+    "audit": ("audit list",),
+}
+_SAFE = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.")
+
+
+def normalize_page(path: str) -> str | None:
+    """A Home path as stored: the part under /c/<company>/, no slashes at either end; None if it cannot be one."""
+    path = (path or "").strip()
+    if len(path) > 400 or any(ch in path for ch in "?#\\") or "//" in path.strip("/"):
+        return None
+    path = path.strip("/")
+    parts = path.split("/") if path else []
+    if any(not part or part in (".", "..") or not set(part) <= _SAFE for part in parts):
+        return None
+    return path
+
+
+def _declared_destinations() -> dict[str, tuple[str, ...]]:
+    found: dict[str, tuple[str, ...]] = {}
+    actions = [step.action for panel in PANELS for step in panel.steps]
+    for section in SECTIONS:
+        actions += [*section.new, *section.lists, *section.tasks, *(a for _, links in section.groups for a in links)]
+    for action in actions:
+        if action.destination:
+            found.setdefault(_page_key(action.destination), action.commands)
+    return found
+
+
+def page_commands(path: str) -> tuple[str, ...] | None:
+    """The commands opening a workbench page runs that it names (PAGE_RUNS and PAGE_FLAGS add the rest), or None
+    when the path is not a workbench page at all. Reads the registry only."""
+    from bookflow.adapters.workbench import routing as Routing
+    from bookflow.core.ids import is_ulid
+    path = normalize_page(path)
+    if path is None:
+        return None
+    if path in FIXED_PAGES:
+        return FIXED_PAGES[path]
+    parts = path.split("/")
+    if parts[0] == "_group":
+        return ("company show",) if len(parts) == 2 and parts[1] in MENU_BY_SLUG else None
+    declared = _declared_destinations().get("/" + path)
+    if declared is not None:
+        return declared
+    noun = Routing.noun(parts[0])
+    routed_names = {command.name for command in registry.routed_commands()}
+
+    def routed(name: str) -> bool:
+        command = registry.get(name)
+        return command is not None and command.scope == "company" and name in routed_names
+
+    record = len(parts) >= 2 and (parts[1] == "self" or is_ulid(parts[1]) or parts[1].isdigit())
+    if len(parts) == 1:
+        for name in (f"{noun} list", f"{noun} query", noun):
+            if routed(name):
+                return (name,)
+        return None
+    if len(parts) == 2:
+        if routed(f"{noun} {parts[1]}"):
+            return (f"{noun} {parts[1]}",)
+        return (f"{noun} show",) if record and routed(f"{noun} show") else None
+    if len(parts) == 3 and record and routed(f"{noun} {parts[2]}"):
+        return (f"{noun} {parts[2]}",)
+    return None
+
+
+def page_open(company_id: str, path: str, reader) -> bool | None:
+    """Whether this reader may open the page: None when it is not a workbench page, else True or False. The same
+    question the menus, the finder and the tiles ask (`page_allowed`)."""
+    needs = page_commands(path)
+    if needs is None:
+        return None
+    commands = [registry.get(name) for name in needs]
+    if not all(command is not None and reader(command) for command in commands):
+        return False
+    return page_allowed("/" + normalize_page(path), reader)

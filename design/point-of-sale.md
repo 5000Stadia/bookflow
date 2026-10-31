@@ -615,6 +615,73 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   the de-dup constants; and §12's "camera scan to cart line within 500 ms", which is a phone measurement and is not
   recorded yet. The headless run only shows the path works: the fake camera is a clean synthetic picture.
 
+### As built: increment 3 (menus and Home)
+
+- **Menus follow capabilities.** The workbench reads the reader's effective capabilities once per request, when
+  `company show` first runs (`membership effective`; for an agent's token, `permission_policy.execution` per
+  requirement, the actor-and-principal intersection the boundary enforces), and reuses the answer across requests
+  per (reader, principal, company) only while the hub's authority generation token is unchanged. `_role_allows`
+  decides a company command from it: the command's own (capability, threshold) and each resource requirement must be
+  admitted, exactly the pairs `core.dispatch.authorize` checks; a legacy root, a hub command or a pair the catalog
+  does not list falls back to the role. One predicate then decides every offer: `company_permits` returns a
+  `home.Reader`, and the side menu, section links, Overview tiles, the noun grid and All commands, the finder,
+  record controls (notes, attachments, activity) and `user home set` all ask it.
+- **What a page needs.** A tile or link names its commands; a page often runs more on GET (a form's item and
+  custom-field lists, a site page's quantity report). Those are declared per page in `home.PAGE_RUNS`, recorded by
+  opening every declared page; `tests/test_menus_and_home.py::test_every_page_runs_only_what_it_declares` opens them
+  again and fails on any command a page runs that is not declared, so the declaration cannot drift from the pages
+  (chosen over guards in each page, which nothing would check). Guarded reads are declared too: hiding a page is the
+  lesser error. A page running no command of its own needs what `home.PAGE_FLAGS` says: Users & permissions needs
+  `membership.grant` there or `user.manage` (on section pages and in the finder as in the side menu); All commands
+  and Advanced tools need some company write; a `_group/<slug>` link needs that section offered.
+- **Sections and the header.** A section shows only while it has something the reader may open (its records, a
+  "+ New", list or task link, Banking's registers; Reports and Audit a command of their nouns). With none left the
+  side menu, the finder, Find transactions, Switch company and the account menu go, and the header shows Home, the
+  company and Sign out (Held comes with the POS): a member holding only `company` (which every page needs for
+  `company show`) gets it. Overview panels with no tile, and *Start a transaction* with no quick action, are not
+  shown. *Administration*, *System activity*, the finder's Installation entries and the company picker's link show
+  only to installation administrators; every signed-in person keeps *Your tokens* in the account menu. A hub page
+  filters the last company's links the same way. The command boundary is unchanged.
+- **Home.** Storage is hub0017 on hub0016: a new table `user_homes` (user_id primary key, company_id, path, version,
+  set_at, set_by, set_via) rather than the `users.home_*` columns sketched in §8, so setting a Home never moves a
+  user's version, which the permission audit reads as part of a person's authority, and no existing table changes.
+  No company migration. Commands `user home set --page PAGE [--company C] [--user U]`, `user home show [--user U]`,
+  `user home clear [--user U]`: hub, capability `user`, threshold `authenticated`; one's own is self-service for any
+  signed-in actor; for anyone else `hub.capabilities.require_hub(s, "user.manage")` (the check `user deactivate`
+  uses) runs before the name is looked up, so who exists is answered only to those who may manage them. `user.manage`
+  may read an agent's Home but not set or clear one. The output's field is `page` (a field named `path` is redacted
+  from non-administrators as a filesystem path). Layer `user-home-v1` on `bank-line-details-v1` (850 commands, descriptor
+  e3ca5ecf). `--page` is the part after `/c/<company>/` or the whole path (the company then comes from it, and a
+  `--company` naming the same company by name agrees). A page is accepted only if `home.page_commands` resolves it
+  (the Overview, `_all`, `find`, `_registers`, `audit`, a `_group/<slug>`, any destination a tile or section link
+  declares, or a noun's list, `<noun>/<verb>`, record or record-verb page) and the target's `Reader` opens it; the
+  same check runs whenever the Home is used.
+- **Landing.** `/` (signing in without `next=`, the brand link, the Home button) goes to the Home when it is
+  available; otherwise to the Home's company Overview with "Your Home page is not available to you; showing the
+  Overview.", or, when that company is gone and the picker shows, "Your Home page is not available to you; choose a
+  company."; with no Home set it lands as it always has. `next=` still wins. The Home button is a house at the left
+  of the header on every signed-in page; the Overview menu entry keeps its name and has its own icon. *Make this page
+  my Home* in the account menu posts the current path through htmx; a person's row in Users & permissions has Set
+  Home and Clear Home for `user.manage`.
+- **Settled choices.** (1) Every company command page, read or write, answers the refusal page up front when the
+  reader's capabilities refuse it. (2) Note controls follow `note`, attachment controls `attachment` (§9 said both
+  `attachment`; each follows the capability its command checks). (3) All commands, in the finder and Settings, needs
+  a write like Advanced tools (reversing the first build's choice, which kept it while any section stood and so kept
+  every member out of the minimal header). (4) Setting another's Home is `user.manage` only. (5) A Home names a page,
+  not a record's existence; a page switched off by a company preference is judged by capability alone. (6) Agents may
+  set their own Home; nobody may set an agent's.
+- **§9 missed.** A POS clerk keeps the Items section while the preset keeps `item` read, so the clerk's header is
+  minimal only if increment 4 decides `item` alone does not open Items; the minimal header itself is reached today by
+  a member holding only `company`. Pages run more than their tiles name (now declared). Users & permissions appeared
+  in section pages and the finder to everyone. The finder's Installation entries were offered to everyone.
+- **Tests.** `tests/test_menus_and_home.py` (the page and finder sets for standard, readonly and readonly denied
+  `reports`; every offered finder entry, section link and accepted Home answering 200 for those three; the page
+  declarations against what pages run; the minimal header; a denied write form refused up front; a report Home
+  landed on and returned to, `next=` winning; revoked Homes falling back, including a page that runs an undeclared
+  report; a permission change seen on the next request; agents through real tokens; no enumeration; the hub
+  address with URL characters; hub0017's frozen DDL), `tests/test_user_home_surfaces.py` (Python, CLI, HTTP and
+  MCP alike) and `tests/test_home_browser.py` (Chrome at 390 px: Make this page my Home, then the Home button).
+
 ## 16. Open questions
 
 Each default stands if nobody decides. K1 and K2 are Kabe's.

@@ -101,8 +101,9 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +4 the item picture (R114 increment 1): item picture set, use, get, clear.
     # +7 grid edits (R107 increment 6): bulk-edit columns, grid, preview, apply, reverse, show, query.
     # +2 add more details (R108 increment 5): bank-line deposit, bank-line pay-bills.
+    # +3 each person's Home (R191): user home set, show, clear.
     # +3 automations (R187 increment 2): automation list, show, pause.
-    assert len(rows) == 856
+    assert len(rows) == 859
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
@@ -429,8 +430,10 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 4311 -> 4323 (R108 inc 5, measured per command): bank-line deposit 6 (memo, adjustment_account, _payee,
     # _payee_type, _memo, _class_id), pay-bills 6 (method, check_number, memo, discount_account, each bill's amount
     # and discount) -- their null branches. No new variant kind (the adjustment is flat fields).
-    # 4323 -> 4325 (R187 inc 2, measured): automation list's kind and state -- their null branches. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==4325
+    # 4323 -> 4329 (R191, measured): user home set 3 (user, company, expected_version), clear 2 (user,
+    # expected_version), show 1 (user) -- their null branches. No new variant kind.
+    # 4329 -> 4331 (R187 inc 2, measured): automation list's kind and state -- their null branches. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==4331
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

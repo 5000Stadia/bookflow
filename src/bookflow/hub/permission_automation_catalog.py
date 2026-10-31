@@ -1,4 +1,4 @@
-"""Establishing an automation is a capability (R187 increment 2) on bank-line-details-v1, without rewriting any accepted
+"""Establishing an automation is a capability (R187 increment 2) on user-home-v1, without rewriting any accepted
 descriptor.
 
 design/principal-directives.md §3: an automation is a rule that writes with nobody asking at the time. Anyone with the
@@ -18,11 +18,11 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_bank_line_details_catalog as previous, permission_catalog as c
+from . import permission_user_home_catalog as previous, permission_catalog as c
 from . import permission_capabilities_catalog as capabilities_v1
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = '0b3769e84c061467ebb6e11adfdc75cf8ba5d443'
+SOURCE_COMMIT = '5c2616b3277b67fba83914f63cbef741b786673f'
 _OWNER = 'bookflow.commands.automation_cmds.{}|src/bookflow/commands/automation_cmds.py'
 # capability -> (threshold a person holds it at, the commands it opens): none opens a command of its own; each
 # domain's own command makes its rules live, checked against the capability.

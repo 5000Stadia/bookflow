@@ -43,6 +43,9 @@ HUB = {
     "agent deactivate": "current_hub_admin_on_activated_root_and_resolved_agent",
     "agent activate": "current_hub_admin_on_activated_root_and_resolved_agent",
     "user deactivate": "current_hub_admin_on_activated_root_and_resolved_person",
+    "user home set": "resolved_target_person_and_current_self_or_user_manage",
+    "user home show": "resolved_target_person_and_current_self_or_user_manage",
+    "user home clear": "resolved_target_person_and_current_self_or_user_manage",
     "user activate": "current_hub_admin_on_activated_root_and_resolved_person",
 }
 
