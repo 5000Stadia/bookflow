@@ -155,7 +155,7 @@ def apply(lines: list[dict], policy: str) -> None:
         taxed = lambda j: lines[j].get('adjustment_taxable', bool(lines[j].get('taxes')))
         cuts = None
         if taxable and value and any(share and not taxed(j) for j, share in shares.items()):
-            # The QuickBooks rule, as the person chose it: a taxable discount over taxable and
+            # The desktop product’s rule, as the person chose it: a taxable discount over taxable and
             # non-taxable lines reduces taxable sales by the whole discount. The reduction is
             # taken from the taxable lines it applies to, shared by their taxable bases the way
             # the discount itself is shared by nets.

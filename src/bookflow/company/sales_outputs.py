@@ -204,7 +204,7 @@ class SalesTaxRateApplied(StrictModel):
 class SalesTaxApplied(StrictModel):
     """Which sales tax this sale charged, read off its own saved revision.
 
-    QuickBooks shows the Tax item and its rate beside the tax amount on the form; this is that
+    The desktop product shows the Tax item and its rate beside the tax amount on the form; this is that
     field, so an agent need not dig through ``revision.profile`` or the tax attribution.
     """
     item: str | None = Field(description='The sales tax item or tax group on the sale; null when none applies')

@@ -22,7 +22,7 @@ Human-directed scope, 2026-09-17. These are future product features, not current
 
 ## Acknowledged opportunities requiring selection
 
-Mileage/trips; automatic depreciation/loan schedules; finance-charge assessment; accountant exchange; procurement approvals; linked intercompany transactions; liability-backed sales-order deposits; barcode/cycle-count workflows; receipt OCR and payment-provider functions. Inventorying QuickBooks functionality does not commit Bookflow to every feature. Multi-currency ledgers and non-US tax regimes remain outside scope without a new design pass.
+Mileage/trips; automatic depreciation/loan schedules; finance-charge assessment; accountant exchange; procurement approvals; linked intercompany transactions; liability-backed sales-order deposits; barcode/cycle-count workflows; receipt OCR and payment-provider functions. Inventorying the desktop product’s functionality does not commit Bookflow to every feature. Multi-currency ledgers and non-US tax regimes remain outside scope without a new design pass.
 
 ## Current exception
 

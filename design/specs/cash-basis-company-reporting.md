@@ -24,7 +24,7 @@ Implement one shared, exact, attributable read projection from immutable posting
 - Sales-tax liability timing is a separate existing preference. Cash financial reporting must not activate unsupported payment-receipt tax posting or alter historical liability.
 - Balance sheet remains balanced; prior/current fiscal earnings tie exactly to same-basis P&L. General journal effects remain posted in both views. No claim of statutory cash-tax compliance.
 
-Reference framing: Intuit's “Differentiate Cash and Accrual basis” describes company summary-report preferences, per-report toggles and journal treatment (https://quickbooks.intuit.com/learn-support/en-us/help-article/report-management/differentiate-cash-accrual-basis/L3RvRm1vW_US_en_US). Its Desktop cash-balance-sheet article documents inventory/assets, unapplied money and tax-related AR/AP residuals (https://quickbooks.intuit.com/learn-support/en-ca/help-article/set-inventory-lists/resolve-ar-ap-balances-cash-basis-balance-sheet/L8XR76bVQ_CA_en_CA). We do not reproduce destructive workaround advice or arbitrary journal-line-order behavior.
+Reference framing: The anchor desktop product’s cash/accrual reporting documentation describes company summary-report preferences, per-report toggles and journal treatment. Its cash-balance-sheet documentation covers inventory/assets, unapplied money and tax-related AR/AP residuals. We do not reproduce destructive workaround advice or arbitrary journal-line-order behavior.
 
 ## Acceptance
 

@@ -5,7 +5,7 @@ Status: implemented 2026-09-18; independent code and bounded visual review passe
 Inventory: `design/UI-INVENTORY.md`. Optional visual preference unanswered; proceeding with modern layout and Desktop-style efficiency.
 
 ## Outcome
-User: "random explanations in the interface" and elements "organized in a way that is a bit nonsensical". Inventory every existing workbench page family, redesign the interface around daily bookkeeping, using QuickBooks Desktop and Online as references. Phone portrait and landscape must both work. Functional scope is existing Bookflow; no new accounting features. Human judgment remains the final aesthetic acceptance, not an unsupported claim of objective superiority to QuickBooks.
+User: "random explanations in the interface" and elements "organized in a way that is a bit nonsensical". Inventory every existing workbench page family, redesign the interface around daily bookkeeping, using the desktop product and its online counterpart as references. Phone portrait and landscape must both work. Functional scope is existing Bookflow; no new accounting features. Human judgment remains the final aesthetic acceptance, not an unsupported claim of objective superiority to the desktop product.
 
 ## Design
 A calm, compact accounting workspace: persistent left navigation on desktop, company identity and account utilities in a slim header, clear page titles, one obvious main action and quieter secondary actions. Modern neutral surfaces with a restrained green accent, strong readable typography, aligned numerical columns. Desktop efficiency without squeezing controls on touch devices. No external fonts or assets.
@@ -23,8 +23,8 @@ At390x844 and 844x390, viewport does not scroll sideways; wide financial tables 
 Inventory plus bounded references before design; independent plan and artifact review. Run a disposable authenticated preview from a copy of demo data, no live passwords/data changes. Capture before/after screenshots across representative populated and empty families on desktop/phone portrait/landscape; exercise navigation, create/edit/validation, picker/date interactions, primary actions, report filters/CSV/print. Record family coverage, real defects and dispositions. Preserve business-command and permission contracts. Relevant existing UI behavior tests, meaningful new responsive/keyboard tests, no snapshots that merely duplicate CSS. Iterate visual defects. Push reviewed milestone to existing integration destination; deploy only completed verified UI under existing human direction, preserving data. Keep remaining work explicit; do not claim whole UI complete after a shell-only reskin.
 
 ## References
-- Supplied QuickBooks Enterprise24.0 In-Depth Guide, User Interface Basics/Home/Customer/VendorCenter (pages12–18).
-- Supplied QuickBooks2016 Missing Manual for transaction and list conventions.
-- Intuit Online welcome guide with navigation, create menu, invoice/payment/contact screenshots: https://media.intuit.com/en_US/QBO_welcome_guide_en_US/Content/Topics/guides/qbo_welcome_guide.htm
-- Current Online navigation reference: https://quickbooks.intuit.com/learn-support/en-au/help-article/bookkeeping-processes/understand-navigation-menu-quickbooks-intuit/L310NeoHY_AU_en_AU
+- Supplied Desktop accounting enterprise edition 24.0 In-Depth Guide, User Interface Basics/Home/Customer/VendorCenter (pages12–18).
+- Supplied Desktop accounting 2016 Missing Manual for transaction and list conventions.
+- Supplied online accounting welcome guide with navigation, create menu, invoice/payment/contact screenshots.
+- Online accounting navigation reference supplied for the comparison.
 References inform hierarchy and workflows, not a requirement to copy branding, promotions, AI panels or subscribed features.

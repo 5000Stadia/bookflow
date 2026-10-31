@@ -1,6 +1,6 @@
 # Workbench UI inventory and redesign
 
-Scope: existing V1 functions, September 18, 2026. This inventory covers 72 templates and their shared controls; it is not a claim that every business state has been visually tested. Verification evidence lists the actual screens and journeys exercised. QuickBooks Desktop's compact task centers and transaction layouts, and Online's section navigation and create actions, informed the design. Bookflow retains its own behavior and branding.
+Scope: existing V1 functions, September 18, 2026. This inventory covers 72 templates and their shared controls; it is not a claim that every business state has been visually tested. Verification evidence lists the actual screens and journeys exercised. The desktop product's compact task centers and transaction layouts, and the online product's section navigation and create actions, informed the design. Bookflow retains its own behavior and branding.
 
 | Area / templates | Existing problem | Element disposition and intended result |
 | --- | --- | --- |
@@ -30,4 +30,4 @@ Independent plan, code and bounded visual review passed. Verification includes a
 
 Representative visual inspection includes desktop, portrait desktop, 320/390px phones and 844px landscape. Screens include overview, lists, invoice entry/detail, report output, register, deposits and settings, with additional representative workflow captures. This is scoped UI evidence, not a claim that every accounting state or the entire repository test suite was exercised. No accounting, storage, schema or permission policy was changed.
 
-The next acceptance step is a human walkthrough on desktop and phone. Record visual preferences and specific workflow friction as follow-up items; the QuickBooks references do not substitute for that judgment.
+The next acceptance step is a human walkthrough on desktop and phone. Record visual preferences and specific workflow friction as follow-up items; the desktop product references do not substitute for that judgment.

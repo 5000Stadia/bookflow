@@ -1,4 +1,4 @@
-"""A statement that genuinely will not tie, finished with a labelled adjustment (QuickBooks' "Enter
+"""A statement that genuinely will not tie, finished with a labelled adjustment (the desktop product's "Enter
 Adjustment" on Reconcile Now).
 
 The bank, worked by hand. Adopted at zero on 2026-09-01; the September statement says 278.45:

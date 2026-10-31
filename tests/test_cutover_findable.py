@@ -38,8 +38,8 @@ def test_import_leads_to_the_import_commands():
 
 
 @pytest.mark.parametrize("words", ["migrate", "migrat", "migration", "move in", "switch from", "convert",
-                                   "conversion", "IIF", "QuickBooks", "opening balance", "opening balances",
-                                   "old books", "set up from", "import from QuickBooks"])
+                                   "conversion", "IIF", "the desktop product", "opening balance", "opening balances",
+                                   "old books", "set up from", "import from the desktop product"])
 def test_migration_words_lead_to_cutover_first(words):
     from bookflow.adapters.mcp.catalog import list_commands
     page = list_commands(prefix=words)
@@ -60,7 +60,7 @@ def test_cutover_plan_says_what_it_is_for_and_the_guide_points_there():
     from bookflow.adapters.mcp.catalog import list_commands
     from bookflow.adapters.mcp.envelopes import TOOLS
     row = list_commands(prefix="cutover plan")["commands"][0]
-    assert row["description"].startswith("Move a company in from its old books (QuickBooks Desktop")
+    assert row["description"].startswith("Move a company in from its old books (desktop-product")
     assert "prefix cutover" in TOOLS["bookflow_list_commands"][1]
     guide = files("bookflow.documentation.resources").joinpath("agent-guide.md").read_text()
     section = guide.split("## Moving a company in", 1)[1].split("\n## ", 1)[0]

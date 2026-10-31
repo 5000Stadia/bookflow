@@ -1,6 +1,6 @@
 """Finishing a statement that will not tie: a labelled adjustment to Reconciliation Discrepancies.
 
-QuickBooks Desktop's Reconcile Now offers "Enter Adjustment" when the difference is not zero: it
+The desktop product's Reconcile Now offers "Enter Adjustment" when the difference is not zero: it
 posts a journal for the difference to a "Reconciliation Discrepancies" expense account, labelled
 as a reconciliation adjustment, and the reconciliation completes. This is that, and only that:
 

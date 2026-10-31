@@ -768,7 +768,7 @@ def _order_note(s, customer_id, context, output=None):
 def discount_cuts(total, shares, taxed, amounts, taxable):
     """A billed discount's cut from taxable sales per target position, or None, by the ordinary rule.
 
-    The QuickBooks rule ordinary invoices follow (`sales_adjustments.apply`): a taxable discount over
+    The desktop product’s rule ordinary invoices follow (`sales_adjustments.apply`): a taxable discount over
     taxable and non-taxable lines reduces taxable sales by the whole discount, taken from the taxable
     lines by their bases; otherwise each share is its own cut. `shares`, `taxed` and `amounts` are
     keyed by target position.

@@ -193,7 +193,7 @@ class MarkEntry(GroupRef):
 class Mark(DraftChange):
     # Either name the movements (entries, from `reconcile candidates`) or tick the whole list at
     # once with `all`: every movement dated on or before the statement date that no earlier
-    # statement has cleared -- QuickBooks' "Mark All". `all_action` 'unmark' clears every tick.
+    # statement has cleared -- the desktop product's "Mark All". `all_action` 'unmark' clears every tick.
     entries: tuple[MarkEntry,...]=Field(default=(),max_length=200)
     all: bool=False
     all_action: Literal['mark','unmark']='mark'
@@ -252,7 +252,7 @@ class Preview(DraftRef):
     expected_version: Version
 
 class DiscrepancyAdjustment(Model):
-    """Finish a statement that will not tie: QuickBooks' "Enter Adjustment" on Reconcile Now.
+    """Finish a statement that will not tie: the desktop product's "Enter Adjustment" on Reconcile Now.
 
     Only a person may ask for it. It posts one journal for the exact remaining difference, dated
     the statement date, to the Reconciliation Discrepancies account; nobody chooses the account.

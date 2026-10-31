@@ -777,7 +777,7 @@ def test_a_caller_who_cannot_read_the_list_is_refused_never_given_a_silent_creat
 
 
 def test_rate_and_amount_columns_debit_and_credit_columns_and_rows_that_must_stay_together(books):
-    """Lows: a QuickBooks Qty/Rate/Amount file, a Debit/Credit journal, a blank-key row after a refused row, and a
+    """Lows: an anchor-style Qty/Rate/Amount file, a Debit/Credit journal, a blank-key row after a refused row, and a
     key repeated after another document."""
     header = SALE[:6] + ['Amount']
     good = text(header, [['M-1', 'Acme Plumbing', '2026-03-01', 'Parts', '3', '12.335', '37.00']])

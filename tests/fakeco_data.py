@@ -457,7 +457,7 @@ JULY = [
     dict(id="J01", kind="deposit", date="2026-07-01", cleared="2026-07-01",
          undeposited=["Schultz, Gary", "Nguyen, Linh"],
          note="Deposited the two checks that came in Tuesday after the bank closed (Gary Schultz #2207 and Linh "
-              "Nguyen #1043). Both were already entered in QuickBooks before the switch."),
+              "Nguyen #1043). Both were already entered in the desktop product before the switch."),
     dict(id="J02", kind="check", date="2026-07-01", number="4474", payee="Joliet Industrial Partners LLC",
          lines=[("Rent", "2450.00", "July rent, 1840 Plainfield Rd")], cleared="2026-07-06",
          note="July rent check to Joliet Industrial Partners."),

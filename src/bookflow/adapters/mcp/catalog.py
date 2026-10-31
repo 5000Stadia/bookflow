@@ -141,7 +141,7 @@ KEYWORDS = {
     "tax": ("sales-tax", "sales-tax-code", "report income-tax-summary"),
     "vat": ("sales-tax", "sales-tax-code"), "gst": ("sales-tax", "sales-tax-code"),
     **dict.fromkeys(("import", "migrate", "migration", "move in", "move-in", "moving in", "switch from",
-                     "convert", "conversion", "iif", "quickbooks", "quickbooks desktop", "qb", "qbd",
+                     "convert", "conversion", "iif", "desktop product", "desktop accounting",
                      "old books", "set up from", "setup from", "bring over"), _MOVE_IN + _FILE_IN),
     # R107: a business with no old books opens from what the owner knows; a file of records from any program is an
     # import; many records changed at once is a grid edit.
@@ -181,7 +181,7 @@ def _keyword_rank(query, name):
     position in its list), so the longest phrase leads.
 
     A keyword counts when it is the whole query, appears in it as whole words ("import from
-    quickbooks"), or the query is the start of a keyword of four or more letters ("migrat").
+    desktop product"), or the query is the start of a keyword of four or more letters ("migrat").
     """
     wanted = _words(query)
     if not wanted:
@@ -256,7 +256,7 @@ def list_commands(*, prefix=None, limit=20, cursor=None):
     searched = False
     if prefix and not matched:
         # A prefix that names no command is read as words: "tax" finds the sales-tax nouns,
-        # "credit card" or "cc" finds card charges, "import" or "quickbooks" the move-in. Commands a
+        # "credit card" or "cc" finds card charges, "import" or "desktop product" the move-in. Commands a
         # keyword means come first, in its order. Deterministic, so cursors still hold.
         found = [row for row in rows if keyword_match(prefix, row["name"])]
         ranks = {row["name"]: _keyword_rank(prefix, row["name"]) for row in found}

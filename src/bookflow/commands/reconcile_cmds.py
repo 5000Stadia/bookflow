@@ -259,7 +259,7 @@ reconcile_mark = command(
                 'marked in full or not at all, so its components can never be half cleared. Name '
                 'the movements in `entries` (movement and group_fingerprint, from `reconcile '
                 'candidates`), or pass `all` to tick every movement dated on or before the '
-                'statement date that no earlier statement has cleared, in one step (QuickBooks\' '
+                'statement date that no earlier statement has cleared, in one step (the desktop product\'s '
                 '"Mark All"); `all_action: unmark` clears every tick, and `filters` narrows what '
                 '`all` touches. Preview it with --dry-run, then `reconcile preview` and `reconcile '
                 'finish`.',
@@ -343,7 +343,7 @@ reconcile_finish = command(
                 'statement draft from `reconcile start`, never an opening draft: on an account\'s '
                 'first reconciliation the opening that statement follows is certified with it. '
                 + preparation.STOP_RULE + ' '
-                'That adjustment (QuickBooks\' "Enter Adjustment") posts one journal for the exact '
+                'That adjustment (the desktop product\'s "Enter Adjustment") posts one journal for the exact '
                 'remaining difference, dated the statement date, to the Reconciliation Discrepancies '
                 'expense account (made on first use), and certifies the statement with it. Preview it '
                 'with --dry-run. An agent passing `adjustment` is refused.',

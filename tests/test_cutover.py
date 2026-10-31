@@ -114,7 +114,7 @@ def test_the_sample_books_move_in_and_tie_out_to_the_cent(mover):
     assert clearing_parts(plan) == parts and plan["clearing"]["net"]["minor_units"] == 0
     assert plan["clearing"]["account"] == "Cutover Clearing" and plan["blocking"] == []
 
-    applied = run("cutover apply", dict(as_of=AS_OF, files=files), reason="Move in from QuickBooks")
+    applied = run("cutover apply", dict(as_of=AS_OF, files=files), reason="Move in from the desktop product")
     assert (applied["created"], applied["already_in"]) == (76, 0)
     assert clearing_parts(applied) == parts and applied["clearing"]["account_id"] == applied["clearing_account_id"]
     tie = run("cutover tie-out", dict(as_of=AS_OF, files=files))
@@ -161,7 +161,7 @@ def test_the_sample_books_move_in_and_tie_out_to_the_cent(mover):
 def test_the_opening_sales_tax_is_the_agencys_and_sales_tax_pay_settles_it(mover):
     """R175: one agency in the old books, so what they owe it is that agency's balance here."""
     run, files = mover["run"], mover["files"]
-    run("cutover apply", dict(as_of=AS_OF, files=files), reason="Move in from QuickBooks")
+    run("cutover apply", dict(as_of=AS_OF, files=files), reason="Move in from the desktop product")
     owed = run("sales-tax liability", dict(as_of=AS_OF))
     row, = owed["rows"]
     assert row["display_agency_label"] == "Illinois Department of Revenue" and row["is_tax_agency"]

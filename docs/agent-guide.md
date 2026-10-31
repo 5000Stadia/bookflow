@@ -21,7 +21,7 @@ identify the authenticated writer and bound principal, independently of that nam
 
 ## Moving a company in
 
-To bring a company in from its old books (QuickBooks Desktop IIF list exports and report CSVs: trial
+To bring a company in from its old books (desktop-product IIF list exports and report CSVs: trial
 balance, open invoices, unpaid bills), use the `cutover` commands, not hand-made accounts, invoices and
 journals. Old documents posted by hand keep their old dates and put old income into earlier periods.
 
