@@ -24,6 +24,15 @@ def _method(b, name):
     b.evaluate(f'[...document.querySelectorAll("[data-pos-method]")].find(x => x.textContent === {json.dumps(name)}).click()')
 
 
+def _press(b, selector):
+    """Press the visible control, including its native submitter and focus behavior."""
+    position = b.evaluate(f'''(() => {{const button = document.querySelector({json.dumps(selector)});
+      button.scrollIntoView({{block:'center'}}); const r = button.getBoundingClientRect();
+      return {{x:r.x + r.width / 2, y:r.y + r.height / 2}};}})()''')
+    b.call('Input.dispatchMouseEvent', dict(type='mousePressed', button='left', clickCount=1, **position))
+    b.call('Input.dispatchMouseEvent', dict(type='mouseReleased', button='left', clickCount=1, **position))
+
+
 def _shot(b, name, width):
     folder = Path('/tmp/m4-shots/pos11')
     folder.mkdir(parents=True, exist_ok=True)
@@ -54,7 +63,7 @@ def test_split_change_reload_retry_and_receipt(browser_site, tmp_path, width, pa
         _amount(b, '10.00')
         b.evaluate('document.querySelector("[data-pos-reference]").value = "4242"')
         assert b.evaluate('document.querySelector("[data-pos-complete]").disabled')
-        click(b, '[data-pos-add-payment]')
+        _press(b, '[data-pos-add-payment]')
         assert b.evaluate('document.querySelectorAll("[data-pos-payments] li").length') == 1
         assert '4242' in b.evaluate('document.querySelector("[data-pos-payments]").textContent')
         assert b.evaluate('[...document.querySelectorAll("[data-pos-method]")].find(x => x.textContent === "Visa").disabled')
@@ -72,7 +81,7 @@ def test_split_change_reload_retry_and_receipt(browser_site, tmp_path, width, pa
               .find(m => m.kind !== 'cash' && m.name !== 'Visa').name''')
             _method(b, name)
             _amount(b, '5.00')
-            click(b, '[data-pos-add-payment]')
+            _press(b, '[data-pos-add-payment]')
         _method(b, 'Cash')
         remaining = total - Decimal(10 + (5 if parts == 3 else 0))
         assert b.evaluate('document.querySelector("[data-pos-quick-amount]").dataset.posQuickAmount') == f'{remaining:.2f}'
@@ -90,7 +99,7 @@ def test_split_change_reload_retry_and_receipt(browser_site, tmp_path, width, pa
           } return response;
         };})()''')
         b.evaluate(f'window.__loseSplitAnswer = {json.dumps(parts == 3)}')
-        click(b, '[data-pos-complete]')
+        _press(b, '[data-pos-complete]')
         b.wait_for('!!window.__splitPosted', timeout=30)
         assert 'id' in b.evaluate('window.__splitPosted'), b.evaluate('window.__splitPosted')
         if parts == 3:
@@ -113,7 +122,8 @@ def test_split_change_reload_retry_and_receipt(browser_site, tmp_path, width, pa
         assert invoice['total']['amount'] == str(total)
         if parts == 3:
             click(b, '[data-pos-void-last]')
-            b.evaluate('document.querySelector("[data-pos-void-reason]").value = "Split payment void"; document.querySelector("[data-pos-void-form]").requestSubmit()')
+            b.evaluate('document.querySelector("[data-pos-void-reason]").value = "Split payment void"')
+            _press(b, '[data-pos-void-submit]')
             b.wait_for('document.querySelector("[data-pos-void-status]").textContent.includes("voided")', timeout=30)
         b.navigate(href)
         b.wait_for('!!document.querySelector(".receipt .totals")')
@@ -126,19 +136,20 @@ def test_split_change_reload_retry_and_receipt(browser_site, tmp_path, width, pa
         if parts == 2:
             _open_pos(b, site)
             click(b, '[data-pos-refund-open]')
-            b.evaluate(f'document.querySelector("[data-pos-refund-sale]").value = {json.dumps(posted["id"])}; document.querySelector("[data-pos-refund-find]").requestSubmit()')
+            b.evaluate(f'document.querySelector("[data-pos-refund-sale]").value = {json.dumps(posted["id"])}')
+            _press(b, '[data-pos-refund-find] button[type=submit]')
             b.wait_for('!!document.querySelector("[data-refund-quantity]")', timeout=30)
             b.evaluate('''(() => {const q = document.querySelector('[data-refund-quantity]'); q.value = '1';
               q.dispatchEvent(new Event('input', {bubbles:true}));
               const method = document.querySelector('[data-pos-refund-settlement]'); method.value = 'original';
               method.dispatchEvent(new Event('input', {bubbles:true}));})()''')
-            click(b, '[data-pos-refund-preview]')
+            _press(b, '[data-pos-refund-preview]')
             b.wait_for('!document.querySelector("[data-pos-refund-complete]").disabled', timeout=30)
             assert b.evaluate('document.querySelectorAll("[data-pos-refund-tenders] li").length') == 2
             review = b.evaluate('document.querySelector("[data-pos-refund-tenders]").textContent')
             assert 'Visa' in review and 'Cash' in review
             _shot(b, 'split-refund-review', width)
-            click(b, '[data-pos-refund-complete]')
+            _press(b, '[data-pos-refund-complete]')
             b.wait_for('!document.querySelector("[data-pos-refund-done]").hidden', timeout=30)
             summary = b.evaluate('document.querySelector("[data-pos-refund-done-summary]").textContent')
             assert 'Visa' in summary and 'Cash' in summary
