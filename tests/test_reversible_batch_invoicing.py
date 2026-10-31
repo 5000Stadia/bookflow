@@ -169,10 +169,8 @@ def test_invoice_dry_run_lists_more_than_fifty_effects(books):
 
 
 def test_agent_without_invoice_delete_grant_is_refused_atomically(books):
-    from tests.conftest import make_actor, as_user
-    from bookflow.storage.engine import open_database
-    from bookflow.hub import schema as h
-    from bookflow.core import clock
+    from tests.conftest import make_actor, make_agent, as_user
+    from bookflow.core.config import Config
 
     out = post(books)
     owner = make_actor(books.root, 'invoice-reverse-owner', company_role=(books.company, 'owner'))
@@ -181,16 +179,16 @@ def test_agent_without_invoice_delete_grant_is_refused_atomically(books):
     books.client.run('membership grant', {'user': owner, 'company': books.company,
                                         'expected_version': owner_member['version'],
                                         'grants': ['transaction.invoice.delete']})
-    agent_id = make_actor(books.root, 'invoice-reverse-agent', kind='agent', owner_user_id=owner)
-    with open_database(books.root / 'hub.db', writable=True) as connection:
-        connection.raw.execute('BEGIN IMMEDIATE')
-        connection.conn.execute(h.agent_authority.insert().values(agent_user_id=agent_id, epoch=1))
-        connection.conn.execute(h.agent_principals.insert().values(
-            agent_user_id=agent_id, principal_user_id=owner, assigned_by=owner, assigned_at=clock.now_iso()))
-        connection.raw.execute('COMMIT')
+    agent_id = make_agent(books.client.run, 'invoice-reverse-agent', principals=owner,
+                          company=books.company, owner=owner)
+    member = next(row for row in books.client.run('membership list', {'company': books.company})['items']
+                  if row['user_id'] == agent_id and row['scope_type'] == 'company')
     books.client.run('membership grant', {
-        'user': agent_id, 'company': books.company, 'role': 'standard', 'expected_version': 0,
+        'user': agent_id, 'company': books.company, 'role': 'standard', 'expected_version': member['version'],
         'denies': ['transaction.invoice.delete']}, reason='Allow posting but not deletion')
+    config = Config.load(books.root / 'config.toml')
+    config.set_user('invoice-reverse-agent', agent_id)
+    config.save()
     agent = as_user(books.root, 'invoice-reverse-agent')
     before = unchanged(books)
     for dry_run in (True, False):
@@ -200,3 +198,40 @@ def test_agent_without_invoice_delete_grant_is_refused_atomically(books):
         assert refused.value.code == 'E_BATCH_BLOCKED'
         assert any(b['code'] == 'E_PERMISSION' for b in refused.value.details['blockers'])
         assert unchanged(books) == before
+
+
+
+def test_invoice_batch_restores_tracked_stock_quantity_value_and_balances(books):
+    from tests.test_import_documents import _inventory
+
+    _inventory(books)  # Widget sells for 20.00 and costs 8.00.
+    books.run('inventory adjust', {'item': 'Widget', 'date': '2026-02-01',
+                                   'adjustment_account': 'Opening Balance Equity',
+                                   'quantity_change': '10', 'value_change': '80.00'})
+    item = books.run('item show', {'item': 'Widget'})['id']
+
+    def stock():
+        report = books.run('report inventory-valuation', {'as_of': '2026-03-31', 'limit': 200})
+        row = next(row for row in report['rows'] if row['item_id'] == item)
+        return row['quantity_on_hand'], row['asset_value']['minor_units']
+
+    before = _nets(books)
+    assert stock() == ('10', 8000)
+    out = post(books, lines=[{'item': 'Widget', 'quantity': '2'}])
+    assert out['created_count'] == 2
+    # Two customers each receive two widgets: four units leave at 8.00 cost,
+    # leaving six units worth 48.00. Each owes 40.00; total income is 80.00.
+    assert stock() == ('6', 4800)
+    assert [_due(books, row['transaction_id']) for row in out['batch_rows']] == [4000, 4000]
+    accounts = {name: books.run('account show', {'account': name})['id'] for name in (
+        'Inventory Asset', 'Cost of Goods Sold', 'Sales Income', 'Accounts Receivable')}
+    net = _nets(books)
+    assert net[accounts['Inventory Asset']] == 4800
+    assert net[accounts['Cost of Goods Sold']] == 3200
+    assert net[accounts['Sales Income']] == -8000
+    assert net[accounts['Accounts Receivable']] == 8000
+    reverse(books, out['reversal_batch_id'])
+    assert stock() == ('10', 8000)
+    assert _nets(books) == before
+    assert [books.run('invoice show', {'invoice': row['transaction_id'], 'include_deleted': True})
+            ['settlement_current']['due_minor_units'] for row in out['batch_rows']] == [0, 0]
