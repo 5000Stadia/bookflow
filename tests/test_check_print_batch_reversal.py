@@ -65,9 +65,12 @@ def test_inverse_grant_is_required(books):
     root = Path(books['client'].data_root)
     make_actor(root, 'clerk')
     books['client'].run('membership grant', {'user': 'clerk', 'company': books['company'],
-                          'expected_version': 0, 'role': 'standard', 'denies': ['check.print-confirm']})
+                          'expected_version': 0, 'role': 'standard', 'denies': ['ledger.post']})
     reader = as_user(root, 'clerk')
     reader.run('batch show', {'batch': run['batch_id']}, company=books['company'])
+    with pytest.raises(BookflowError) as native:
+        reader.run('check print-cancel', {'run': run['id']}, company=books['company'], dry_run=True)
+    assert native.value.code == 'E_PERMISSION'
     before = _snapshot(books)
     for dry in (True, False):
         with pytest.raises(BookflowError) as refused:
