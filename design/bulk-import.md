@@ -1176,9 +1176,13 @@ per call), the preview about 0.055 s per invoice, and the reversal about 0.15 s 
   row not yet run, with its payload, to find a record a later row makes; it now reads them only when a row first
   refers to such a record that the books lack (`_WaitingOn`). A file without jobs or sub-records never reads them.
 - **Row cap.** A file over the cap is refused at preview by the reader, text or `.xlsx`, before any check: the reader
-  counts the rows past the cap without keeping them, and the refusal (`too_many_rows`) gives the file's row count, the
-  cap, and the number of files to split it into, each with the header row, imported one after another as the same
-  source (`details`: `rows`, `max_rows`, `files`). Nothing is stored.
+  counts the rows past the cap without keeping them, up to twice the cap (`COUNTED_ROWS`; past it the count stops and
+  the refusal says "more than"), and the refusal (`too_many_rows`) gives the count, the cap and the number of files
+  (`details`: `rows`, `more_than`, `max_rows`, `files`), with `field` `attachment` for any attached file (CSV or
+  workbook) and `content` for pasted text. The caller words the split for the kind: a list file is split between rows;
+  a document file **between documents, each document's rows kept in one file**, since a document cut across two files
+  would import short with no error (its rows in the later file hash to the document's key, already in). A text file
+  over 256 MB (`MAX_TEXT_BYTES`, the size an `.xlsx` may unpack to) is refused first (`too_large`). Nothing is stored.
 - **Backup advice.** It was a note; §5 puts it in `next`. A preview of more than 100 rows (documents, for a document
   kind) still `previewed` returns `next` = `company backup first (N rows; the import takes none), then import run
   <run>`; once a slice has run, `next` is `import run <run>` again. Opening balances are increment 7's.
@@ -1187,11 +1191,17 @@ per call), the preview about 0.055 s per invoice, and the reversal about 0.15 s 
   after the preview and after each slice and the process's peak (`ru_maxrss`, read before the loop), then with
   `--loop` the same single command looped in-process over the same rows in a second company (`client.run`, as a
   script would; a customer's terms looked up once, as the import resolves them). `tools/diag_import_slices.py` is
-  the tracing diagnostic above. `tests/test_import_scale.py` runs the tool small for throughput (300 customers, 30
-  invoices), both sizes for memory (marked with its own 1,500 s timeout), kills a run's process outright
-  (`os._exit`) at three points (inside a row's write transaction, after a committed write, while the outcomes of rows
-  that wrote nothing are stored) and resumes it with each customer, key and batch effect once, and checks the cap and
-  the backup advice.
+  the tracing diagnostic above. The tool resets the process's resident high-water mark (`VmHWM`, by writing 5 to
+  `/proc/self/clear_refs`) once the companies are made, and reads it after the preview, then (reset again) after the
+  run: the import's own peaks. The process's `ru_maxrss` cannot tell them, since setting up the two companies peaks
+  higher (323-329 MB) than either. `tests/test_import_scale.py` runs the tool small for throughput (300 customers, 30
+  invoices; its own 600 s timeout), both sizes for memory (its own 1,500 s timeout; preview and run high-water marks
+  each within 10 percent), kills a run's process outright (`os._exit`) at three points (inside a row's write
+  transaction, after a committed write, while the outcomes of rows that wrote nothing are stored) and resumes it with
+  each customer, key and batch effect once; runs jobs listed before their customers in slices of one and two rows,
+  killed after a customer's write and before its job's, each made once under the right parent; and checks the cap's
+  wording for a list and a document kind, the bounded count, one field for CSV and workbook attachments, the byte
+  cap and the backup advice.
 
 **Measurements** (`tools/measure_import.py`, one process each, one at a time, root NVMe, other builders' suites
 running; 2026-10-30, after the fix; seconds unless named):
@@ -1221,8 +1231,26 @@ command: the importer's own cost per row is small.
   one call, linear at 7.3 ms per customer row and 17.6 ms per invoice row, so 10,000 rows is a 73 s or 176 s call; at
   20,000 it would be twice that, and that size was not measured. A larger file is refused with its count and the
   split; the rerun-safe key ledger makes importing the pieces one after another safe.
-- **Not changed:** the preview is still one call holding the file's rows (306.8-311.1 MB after it at 10,000 rows,
-  13-17 MB above the start); a preview in slices would be the next step past 10,000 rows.
+- **Not changed:** the preview is still one call holding the file's rows; a preview in slices would be the next step
+  past 10,000 rows.
+
+**After the review** (2026-10-30; same tool, one at a time, after the high-water mark reset). The
+peak figures above are each process's `ru_maxrss`, reached while its companies were made, so they could not show the
+import's own peak. Measured as the import's own, the preview at 10,000 customers first peaked 10.4 percent above
+1,000's (324.9 against 294.2 MB; the run 7.2 percent, 315.4 against 294.3); `apply_preview` built every row's stored
+values at once. It builds them 500 at a time now, and the tool no longer holds the loop's 10,000 inputs during the
+import (they are made after the run, with `--loop`):
+
+| Run | Preview | Run | Slices (slowest) | Loop | Run over loop | High-water mark: preview / run | RSS after every slice |
+|---|---|---|---|---|---|---|---|
+| 1,000 customers | 13.30 (13.3 ms/row) | 50.81 (50.8 ms/row) | 3 (20.2) | | | 292.8 / 293.1 MB | 293.1 MB |
+| 10,000 customers | 117.53 (11.8 ms/row) | 327.09 (32.7 ms/row) | 22 (21.1) | | | 312.6 / 308.3 MB | 305.6 MB, flat |
+| 3,333 invoices of 3 lines (9,999 rows; after merging main 57d7cd56) | 170.23 (17.0 ms/row) | 980.26 (294.1 ms/invoice) | 49 (20.9) | 1,314.17 (394.3 ms/invoice) | 0.75 | 310.1 / 309.0 MB | 309.0 MB, flat |
+
+At 10,000 customers the preview's high-water mark is 6.8 percent above 1,000's and the run's 5.2 percent (bound 10).
+The customer rows were taken with heavier load from other suites than the first table (2.3 times its run time per
+row at 1,000), before merging main 57d7cd56; the final test run's memory test checks the same bound after the merge.
+The invoice file is 3,333 invoices since 3,334 (10,002 rows) is now over the cap.
 
 ## As built: increment 6
 
