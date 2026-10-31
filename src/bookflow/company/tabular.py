@@ -31,10 +31,44 @@ from bookflow import BookflowError
 DELIMITERS = (',', ';', '\t', '|')
 DELIMITER_NAMES = {',': 'comma', ';': 'semicolon', '\t': 'tab', '|': 'pipe', 'xlsx': 'worksheet'}
 SNIFF_LINES = 50
-MAX_ROWS = 20_000  # data rows one file may hold, text or .xlsx (design §5's starting per-run cap)
+MAX_ROWS = 10_000  # data rows one file may hold, text or .xlsx: the per-run cap, as measured (bulk-import.md, inc 5)
 _CP1252_UNDEFINED = frozenset((0x81, 0x8D, 0x8F, 0x90, 0x9D))
 TRUE_WORDS = frozenset(('yes', 'true', '1', 'y', 't', 'on'))
 FALSE_WORDS = frozenset(('no', 'false', '0', 'n', 'f', 'off'))
+
+
+
+COUNTED_ROWS = 2 * MAX_ROWS  # rows a file over the cap is counted to, for its refusal; past that, "more than"
+MAX_TEXT_BYTES = 256 * 1024 * 1024  # a text file's size, pasted or attached: as an .xlsx may unpack to (xlsx.py)
+
+
+def too_many_rows(rows: int, *, more: bool = False, field: str = 'content', documents: bool = False,
+                  **details) -> BookflowError:
+    """A file over the per-run cap, refused before anything is checked: its count (``more``: at least that many, the
+    count stopped there) and how to split it. Cut between records; for a document kind, never inside a document: its
+    rows in a second file would count as already in (the document's key), and it would import short."""
+    files = -(-rows // MAX_ROWS) + (1 if more and rows % MAX_ROWS == 0 else 0)
+    count = f'more than {rows:,}' if more else f'{rows:,}'
+    if documents:
+        split = (f'Split it between documents into at least {files} files of at most {MAX_ROWS:,} rows, keeping every '
+                 "document's rows together in one file (a document cut across two files would import short: its rows "
+                 'in the later file count as already in), each file starting with the header row, and import them one '
+                 'after another as the same source: the documents already in are never made twice.')
+    else:
+        split = (f'Split it between rows into {"at least " if more else ""}{files} files of at most {MAX_ROWS:,} rows '
+                 'each, each starting with the header row, and import them one after another as the same source: the '
+                 'rows already in are never made twice.')
+    return BookflowError('E_VALIDATION', message=f'The file has {count} rows; one import reads at most {MAX_ROWS:,}. '
+                         + split,
+                         details={'field': field, 'problem': 'too_many_rows', 'rows': rows, 'more_than': more,
+                                  'max_rows': MAX_ROWS, 'files': files, **details})
+
+
+def too_large(size: int, field: str = 'content') -> BookflowError:
+    return BookflowError('E_VALIDATION', message=(
+        f'The file is {size / 2 ** 20:,.0f} MB; one import reads at most {MAX_TEXT_BYTES // 2 ** 20} MB of text. Split '
+        'it into smaller files, each starting with the header row.'),
+        details={'field': field, 'problem': 'too_large', 'bytes': size, 'max_bytes': MAX_TEXT_BYTES})
 
 
 class CellError(Exception):
@@ -133,6 +167,9 @@ def read(raw: bytes | str, *, delimiter: str | None = None, header_row: bool = T
         if raw.startswith(ZIP_SIGNATURE):  # a zip by its signature; xlsx.py refuses one without a zip's structure
             from bookflow.company import xlsx
             return xlsx.read(raw, sheet=sheet, header_row=header_row, skip_rows=skip_rows)
+    if len(raw) > MAX_TEXT_BYTES:  # bytes, or characters of pasted text (at least as many bytes)
+        raise too_large(len(raw))
+    if isinstance(raw, bytes):
         _refuse_binary(raw)
         text, encoding, guessed = decode(raw)
         sha = digest(raw)
@@ -150,19 +187,22 @@ def read(raw: bytes | str, *, delimiter: str | None = None, header_row: bool = T
                             details={'field': 'delimiter'})
     reader = csv.reader(io.StringIO(text, newline=''), delimiter=delimiter)
     records: list[tuple[int, list[str]]] = []
-    line = 1
+    line, over, limit = 1, 0, MAX_ROWS + skip_rows + (1 if header_row else 0)
     try:
         for cells in reader:
             start, line = line, reader.line_num + 1
             if any(cell.strip() for cell in cells):
-                if len(records) >= MAX_ROWS + skip_rows + (1 if header_row else 0):
-                    raise BookflowError('E_VALIDATION', message=(
-                        f'The file has more than {MAX_ROWS:,} rows, beyond what one import reads; split it into '
-                        'smaller files.'), details={'field': 'content', 'problem': 'too_many_rows'})
+                if len(records) >= limit:
+                    over += 1  # counted, not kept: the refusal says how many rows the file has
+                    if MAX_ROWS + over > COUNTED_ROWS:
+                        break
+                    continue
                 records.append((start, [unguard(cell) for cell in cells]))
     except csv.Error as exc:
         raise BookflowError('E_VALIDATION', message=f'The file cannot be read as delimited text near line {line}: {exc}',
                             details={'field': 'content', 'line': line}) from None
+    if over:
+        raise too_many_rows(min(MAX_ROWS + over, COUNTED_ROWS), more=MAX_ROWS + over > COUNTED_ROWS)
     records = records[skip_rows:]
     if not records:
         raise BookflowError('E_VALIDATION', message='The file has no rows.', details={'field': 'content'})
