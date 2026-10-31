@@ -1,7 +1,7 @@
 """Scoped split-sale payment composition on the immutable POS refund tip.
 
 No commands, capabilities or defaults change. This layer declares the internal
-payment scope and the POS refund credit access inherited from increment 9.
+payment scope; the parent refund layer declares its own credit access.
 """
 from dataclasses import asdict, replace
 import hashlib
@@ -14,10 +14,8 @@ SOURCE_COMMIT = 'baf80032257e8bd60b9b8e4bcb2db10b2205396d'
 PAYMENT_SOURCE = c.ResourceSource('bookflow.company.payment_authority.pos_scope',
     (('src/bookflow/company/payment_authority.py', 29),),
     (c.Requirement('pos.sell', 'member'), c.Requirement('pos.void', 'member')))
-REFUND_CREDIT_SOURCE = c.ResourceSource('bookflow.company.credits.facts',
-    (('src/bookflow/company/credits.py', 1186),), (c.Requirement('pos.refund', 'member'),))
 CATALOG = replace(previous.CATALOG, version=c.POS_SPLIT_POLICY_VERSION,
-    conditional_sources=tuple(sorted((*previous.CATALOG.conditional_sources, PAYMENT_SOURCE, REFUND_CREDIT_SOURCE), key=lambda x: x.owner)))
+    conditional_sources=tuple(sorted((*previous.CATALOG.conditional_sources, PAYMENT_SOURCE), key=lambda x: x.owner)))
 MANIFEST = c.catalog_manifest(CATALOG, previous.MANIFEST.standalone_names)
 
 
