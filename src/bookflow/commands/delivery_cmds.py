@@ -326,7 +326,9 @@ _BATCH = (
     'date_to, customer_type, customer), kind statement with period and balance_over (one per customer with a '
     'balance), or kind notice with ready. Always run it with dry_run first and show the person who gets what and '
     'who is skipped and why; then run it with the dry run\'s fingerprint (a changed set is refused). It drafts 10 per '
-    'call and returns next: call again with it until done. '
+    'call and returns next: call again with it until done. reversal_batch_id identifies the shared reversal batch; '
+    'next_commands includes its batch reverse preview. Only unchanged, unreleased drafts with no exported files '
+    'can be reversed as a whole. '
     'send releases them too; combine puts a customer\'s documents in one message. To repeat it every month or day, '
     'use delivery-schedule create. Example: {"kind": "statement", '
     '"period": "2026-09", "balance_over": "0", "method": "email"}.')

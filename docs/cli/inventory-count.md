@@ -73,6 +73,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `batch_id` | string \| null | no | yes | null | Shared reversible batch for this count and its recorded differences. |
+| `next` | string \| null | no | yes | null | Preview the complete count reversal through batch reverse. |
 | `id` | string \| null | no | yes | null | — |
 | `number` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
@@ -114,6 +116,7 @@ Example JSON output:
 ```json
 {
   "adjustment_account_id": null,
+  "batch_id": null,
   "blind": false,
   "counted_lines": 0,
   "date": "2026-01-01",
@@ -121,6 +124,7 @@ Example JSON output:
   "id": null,
   "lines": [],
   "memo": null,
+  "next": null,
   "number": "value",
   "recorded_at": null,
   "recorded_by": null,
@@ -169,7 +173,7 @@ Example JSON output:
 
 ## `inventory-count create`
 
-Start a physical count (a stocktake) of one site: the anchor's Physical Inventory Worksheet, kept as a document. It lists one line per item and place the books hold at the site on the count date, and a line for each item you name. Select every stocked item with quantity or history at the site (the default), named items, or an item category. blind hides expected quantities from the sheet, so counters count rather than confirm; they show again in the post preview. Nothing posts until the count is recorded. Example: `bookflow inventory-count create --site "Van 1" --reason "Monday van count" --json`.
+Start a physical count (a stocktake) of one site: the anchor's Physical Inventory Worksheet, kept as a document. It lists one line per item and place the books hold at the site on the count date, and a line for each item you name. Select every stocked item with quantity or history at the site (the default), named items, or an item category. blind hides expected quantities from the sheet, so counters count rather than confirm; they show again in the post preview. Nothing posts until the count is recorded. batch_id and next identify its shared reversal preview: cancel while open, or void after recording, provided no later count or stock document depends on it. Example: `bookflow inventory-count create --site "Van 1" --reason "Monday van count" --json`.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -246,6 +250,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `batch_id` | string \| null | no | yes | null | Shared reversible batch for this count and its recorded differences. |
+| `next` | string \| null | no | yes | null | Preview the complete count reversal through batch reverse. |
 | `id` | string \| null | no | yes | null | — |
 | `number` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
@@ -287,6 +293,7 @@ Example JSON output:
 ```json
 {
   "adjustment_account_id": null,
+  "batch_id": null,
   "blind": false,
   "counted_lines": 0,
   "date": "2026-01-01",
@@ -294,6 +301,7 @@ Example JSON output:
   "id": null,
   "lines": [],
   "memo": null,
+  "next": null,
   "number": "value",
   "recorded_at": null,
   "recorded_by": null,
@@ -419,6 +427,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `batch_id` | string \| null | no | yes | null | Shared reversible batch for this count and its recorded differences. |
+| `next` | string \| null | no | yes | null | Preview the complete count reversal through batch reverse. |
 | `id` | string \| null | no | yes | null | — |
 | `number` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
@@ -488,6 +498,7 @@ Example JSON output:
 ```json
 {
   "adjustment_account_id": null,
+  "batch_id": null,
   "blind": false,
   "counted_lines": 0,
   "date": "2026-01-01",
@@ -496,6 +507,7 @@ Example JSON output:
   "id": null,
   "lines": [],
   "memo": null,
+  "next": null,
   "number": "value",
   "recorded_at": null,
   "recorded_by": null,
@@ -616,6 +628,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `batch_id` | string \| null | no | yes | null | Shared reversible batch for this count and its recorded differences. |
+| `next` | string \| null | no | yes | null | Preview the complete count reversal through batch reverse. |
 | `id` | string \| null | no | yes | null | — |
 | `number` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
@@ -680,6 +694,7 @@ Example JSON output:
 {
   "adjustment_account_id": null,
   "after_counting_began": [],
+  "batch_id": null,
   "blind": false,
   "counted_lines": 0,
   "date": "2026-01-01",
@@ -688,6 +703,7 @@ Example JSON output:
   "id": null,
   "lines": [],
   "memo": null,
+  "next": null,
   "number": "value",
   "preview_fingerprint": "value",
   "recorded_at": null,
@@ -807,6 +823,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
 | `counts` | array[object] | yes | no | — | — |
+| `counts[].batch_id` | string \| null | no | yes | null | Shared reversible batch for this count and its recorded differences. |
+| `counts[].next` | string \| null | no | yes | null | Preview the complete count reversal through batch reverse. |
 | `counts[].id` | string \| null | no | yes | null | — |
 | `counts[].number` | string | yes | no | — | — |
 | `counts[].version` | integer | yes | no | — | — |
@@ -940,6 +958,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `batch_id` | string \| null | no | yes | null | Shared reversible batch for this count and its recorded differences. |
+| `next` | string \| null | no | yes | null | Preview the complete count reversal through batch reverse. |
 | `id` | string \| null | no | yes | null | — |
 | `number` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
@@ -981,6 +1001,7 @@ Example JSON output:
 ```json
 {
   "adjustment_account_id": null,
+  "batch_id": null,
   "blind": false,
   "counted_lines": 0,
   "date": "2026-01-01",
@@ -988,6 +1009,7 @@ Example JSON output:
   "id": null,
   "lines": [],
   "memo": null,
+  "next": null,
   "number": "value",
   "recorded_at": null,
   "recorded_by": null,
@@ -1088,6 +1110,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `batch_id` | string \| null | no | yes | null | Shared reversible batch for this count and its recorded differences. |
+| `next` | string \| null | no | yes | null | Preview the complete count reversal through batch reverse. |
 | `id` | string \| null | no | yes | null | — |
 | `number` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
@@ -1129,6 +1153,7 @@ Example JSON output:
 ```json
 {
   "adjustment_account_id": null,
+  "batch_id": null,
   "blind": false,
   "counted_lines": 0,
   "date": "2026-01-01",
@@ -1136,6 +1161,7 @@ Example JSON output:
   "id": null,
   "lines": [],
   "memo": null,
+  "next": null,
   "number": "value",
   "recorded_at": null,
   "recorded_by": null,
@@ -1249,6 +1275,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `batch_id` | string \| null | no | yes | null | Shared reversible batch for this count and its recorded differences. |
+| `next` | string \| null | no | yes | null | Preview the complete count reversal through batch reverse. |
 | `id` | string \| null | no | yes | null | — |
 | `number` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
@@ -1290,6 +1318,7 @@ Example JSON output:
 ```json
 {
   "adjustment_account_id": null,
+  "batch_id": null,
   "blind": false,
   "counted_lines": 0,
   "date": "2026-01-01",
@@ -1297,6 +1326,7 @@ Example JSON output:
   "id": null,
   "lines": [],
   "memo": null,
+  "next": null,
   "number": "value",
   "recorded_at": null,
   "recorded_by": null,

@@ -508,7 +508,10 @@ def run_output(s, run, items=None, pending_facts=None, *, cls=CheckPrintRunOutpu
     z = c.check_spoiled_numbers
     spoiled = [row[0] for row in _conn(s).execute(sa.select(z.c.check_number).where(z.c.run_id == run['id'])
                                                   .order_by(z.c.check_sequence))]
-    return cls(id=run['id'], kind=run['kind'], account_id=run['account_id'],
+    batch_id = _conn(s).execute(sa.select(c.batches.c.id).where(
+        c.batches.c.kind == 'check-print', c.batches.c.source_id == run['id'])).scalar()
+    return cls(batch_id=batch_id, next=f'batch reverse {batch_id} --dry-run' if batch_id and status == 'awaiting_confirmation' else None,
+               id=run['id'], kind=run['kind'], account_id=run['account_id'],
                account_name=account['full_name'] or account['name'], style=run['style'],
                first_number=run['first_number'], checks_on_first_page=run['checks_on_first_page'],
                offset_x_hundredths=run['offset_x_hundredths'], offset_y_hundredths=run['offset_y_hundredths'],
@@ -736,6 +739,14 @@ def apply_print(plan, ctx, s):
     if writes['pointer']:
         account, value = writes['pointer']
         _conn(s).execute(c.accounts.update().where(c.accounts.c.id == account['id']).values(next_check_number=value))
+    from bookflow.company import batches, check_print_batch_reversal
+    batch_id = batches._insert_batch(s, ctx, kind=check_print_batch_reversal.KIND,
+                                     label=f'Check print run {run["id"]}',
+                                     scope=f'check-print:{run["id"]}', ordering='record',
+                                     source_type='check_print_run', source_id=run['id'])
+    batches.record_effect(s, batch_id, record_type='check_print_run', record_id=run['id'],
+                          action='created', version_after=None, event_id=event)
+    output = output.model_copy(update={'batch_id': batch_id, 'next': f'batch reverse {batch_id} --dry-run'})
     return Applied(output, touched, summary, audited=True)
 
 

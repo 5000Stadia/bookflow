@@ -63,6 +63,8 @@ count_create = _write(
     'for each item you name. Select every stocked item with quantity or history at the site (the default), '
     'named items, or an item category. blind hides expected quantities from the sheet, so counters count '
     'rather than confirm; they show again in the post preview. Nothing posts until the count is recorded. '
+    'batch_id and next identify its shared reversal preview: cancel while open, or void after recording, '
+    'provided no later count or stock document depends on it. '
     'Example: `bookflow inventory-count create --site "Van 1" --reason "Monday van count" --json`.',
     m.CountCreateInput, m.CountOutput, plan_count_create, counts.apply_create, capability='item',
     errors=[*_ERRORS, 'E_DUPLICATE_NUMBER'], positional=())

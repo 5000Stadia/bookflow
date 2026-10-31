@@ -187,7 +187,7 @@ Example JSON output:
 
 ## `delivery batch`
 
-Draft many messages in one act: queued (to-be-emailed documents), unsent with a kind (filters date_from, date_to, customer_type, customer), kind statement with period and balance_over (one per customer with a balance), or kind notice with ready. Always run it with dry_run first and show the person who gets what and who is skipped and why; then run it with the dry run's fingerprint (a changed set is refused). It drafts 10 per call and returns next: call again with it until done. send releases them too; combine puts a customer's documents in one message. To repeat it every month or day, use delivery-schedule create. Example: {"kind": "statement", "period": "2026-09", "balance_over": "0", "method": "email"}.
+Draft many messages in one act: queued (to-be-emailed documents), unsent with a kind (filters date_from, date_to, customer_type, customer), kind statement with period and balance_over (one per customer with a balance), or kind notice with ready. Always run it with dry_run first and show the person who gets what and who is skipped and why; then run it with the dry run's fingerprint (a changed set is refused). It drafts 10 per call and returns next: call again with it until done. reversal_batch_id identifies the shared reversal batch; next_commands includes its batch reverse preview. Only unchanged, unreleased drafts with no exported files can be reversed as a whole. send releases them too; combine puts a customer's documents in one message. To repeat it every month or day, use delivery-schedule create. Example: {"kind": "statement", "period": "2026-09", "balance_over": "0", "method": "email"}.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -273,6 +273,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `reversal_batch_id` | string \| null | no | yes | null | Shared batch id; next_commands includes batch reverse --dry-run. |
 | `batch_id` | string \| null | no | yes | null | — |
 | `number` | string \| null | no | yes | null | — |
 | `state` | literal["preview", "drafting", "done", "cancelled", "nothing"] | yes | no | — | preview (dry run), drafting (run next), done, cancelled, or nothing (nothing to draft; no batch kept). |
@@ -347,6 +348,7 @@ Example JSON output:
   "planned": 1,
   "released": 0,
   "remaining": 0,
+  "reversal_batch_id": null,
   "selection": {},
   "skipped": [],
   "state": "preview",
@@ -462,6 +464,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `reversal_batch_id` | string \| null | no | yes | null | Shared batch id; next_commands includes batch reverse --dry-run. |
 | `batch_id` | string \| null | no | yes | null | — |
 | `number` | string \| null | no | yes | null | — |
 | `state` | literal["preview", "drafting", "done", "cancelled", "nothing"] | yes | no | — | preview (dry run), drafting (run next), done, cancelled, or nothing (nothing to draft; no batch kept). |
@@ -536,6 +539,7 @@ Example JSON output:
   "planned": 1,
   "released": 0,
   "remaining": 0,
+  "reversal_batch_id": null,
   "selection": {},
   "skipped": [],
   "state": "preview",
@@ -749,6 +753,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `reversal_batch_id` | string \| null | no | yes | null | Shared batch id; next_commands includes batch reverse --dry-run. |
 | `batch_id` | string \| null | no | yes | null | — |
 | `number` | string \| null | no | yes | null | — |
 | `state` | literal["preview", "drafting", "done", "cancelled", "nothing"] | yes | no | — | preview (dry run), drafting (run next), done, cancelled, or nothing (nothing to draft; no batch kept). |
@@ -823,6 +828,7 @@ Example JSON output:
   "planned": 1,
   "released": 0,
   "remaining": 0,
+  "reversal_batch_id": null,
   "selection": {},
   "skipped": [],
   "state": "preview",

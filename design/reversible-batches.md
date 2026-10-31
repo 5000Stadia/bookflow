@@ -130,3 +130,28 @@ The demo previews and reverses a temporary customer-note batch edit, restoring t
 - Tests exercise exact before-images and effect lists, atomic named refusals, interrupted reversal and resumption,
   denied inverse grants, effect-write rollback, corrected regeneration and the notice inverse across all four
   command surfaces. Reversal history and audit events remain; restored business fields match their prior values.
+
+## As built: increment 5
+
+- Inventory counts, pending check-print runs and delivery batches register native aggregate adapters with the
+  shared reversal engine. Each aggregate reverses in one native command transaction, after the whole plan and
+  the caller's inverse grant have been checked. The runner checks dependencies again inside that transaction;
+  its reversal effect commits with the inverse, so an interruption before finalisation can resume safely.
+- A count has one shared batch throughout creation, entry and posting. Each write appends its effect in its own
+  transaction. Reversal cancels an open count or voids a recorded count through the native command. Later live
+  counts or stock documents involving counted items block, including a count whose original difference was zero.
+  The plan names the count, counted items and adjustment documents. Stock, valuation and audit history use the
+  ordinary count inverse; no transaction history is erased.
+- `check print` records its pending run and returns `batch_id` and `next`. The inverse is `check print-cancel`
+  under its existing permission and person-only rule. Every cheque must still be pending. A printed outcome
+  names the cheque and says “a printed cheque cannot be recalled”. Failed or cancelled outcomes also refuse
+  because the run no longer represents an untouched pending print operation. Independent runs can cancel
+  separately; the native inverse preserves a later run's number pointer.
+- Delivery records each committed draft chunk in the same shared batch, including scheduled chunks. Output
+  retains the native `batch_id` and continuation `next`, adds `reversal_batch_id`, and names the reversal preview
+  in `next_commands`. Reversal cancels the native run and all its drafts together, stopping unfinished drafting.
+  Every message must still be an unchanged, unreleased, unexported draft. Sent messages say “sent mail cannot be
+  recalled”; exported messages say “exported files cannot be recalled”. Native partial cancellation remains
+  available separately and is never described as a whole-batch reversal.
+- These adopters use existing commands and tables: no migration or permission layer is added. The agent guide
+  and shared reversal help state the irreversible mail, paper and exported-file boundaries explicitly.

@@ -81,6 +81,8 @@ ADAPTER_MODULES = {
     'fixed-asset-depreciation': 'fixed_assets', 'finance-charge-assessment': 'finance_charges',
     'barcode-generate': 'barcodes', 'cycle-count-classify': 'cycle_counts',
     'bank-rule-apply': 'bank_rule_reversal', 'notice-generate': 'notices',
+    'inventory-count': 'count_batch_reversal', 'check-print': 'check_print_batch_reversal',
+    'delivery-batch': 'delivery_batch_reversal',
 }
 
 
