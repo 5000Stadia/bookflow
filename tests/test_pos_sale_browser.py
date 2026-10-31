@@ -186,7 +186,8 @@ def test_ring_up_by_tap_lookup_and_scan_then_cash_and_the_change_screen_at_390(b
         b.close()
 
 
-def test_a_lost_answer_is_finished_after_a_reload_and_posts_once_at_1440(browser_site, tmp_path):
+@pytest.mark.parametrize('lost_status', [None, 500, 501, 599, 0, 200])
+def test_a_lost_answer_is_finished_after_a_reload_and_posts_once_at_1440(browser_site, tmp_path, lost_status):
     site = browser_site
     b = _signed_in(tmp_path, site, 1440, 900)
     try:
@@ -206,9 +207,13 @@ def test_a_lost_answer_is_finished_after_a_reload_and_posts_once_at_1440(browser
         _shot(b, 1440, 'pos-cart')
         before = _receipts(b, site)
         # The host completes the sale, but its answer never arrives.
+        b.evaluate("window.__lostStatus = " + json.dumps(lost_status))
         b.evaluate("""(() => { const real = window.fetch; window.fetch = async (url, init) => {
           const response = await real(url, init);
-          if (String(url).endsWith('/pos.sale.complete')) { window.__posted = true; throw new TypeError('Failed to fetch'); }
+          if (String(url).endsWith('/pos.sale.complete')) { window.__posted = true;
+            if (window.__lostStatus === null) throw new TypeError('Failed to fetch');
+            if (window.__lostStatus === 0) return {ok: false, status: 0, json: async () => ({})};
+            return new Response(JSON.stringify({message: 'Lost answer'}), {status: window.__lostStatus}); }
           return response; }; })()""")
         b.evaluate('document.querySelector("[data-pos-charge]").click()')
         b.wait_for('document.querySelector("[data-pos-tender]").open')

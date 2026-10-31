@@ -50,11 +50,11 @@
     let out = null;
     try { out = await response.json(); } catch (error) { /* not JSON */ }
     const code = out && (out.code || (out.error && out.error.code));
-    if (!response.ok || (code && String(code).startsWith('E_'))) {
+    if (!out || !response.ok || (code && String(code).startsWith('E_'))) {
       const failure = new Error((out && (out.message || (out.error && out.error.message))) || `The host answered ${response.status}.`);
       failure.code = code;
       failure.details = out && (out.details || (out.error && out.error.details));
-      failure.offline = response.status >= 502 && response.status <= 504;
+      failure.offline = !response.status || response.status >= 500 || !out;
       throw failure;
     }
     return out;
@@ -212,7 +212,7 @@
   async function searchCustomers() {
     const q = $('[data-pos-customer-q]').value.trim();
     const list = $('[data-pos-customer-results]');
-    if (!q) { list.innerHTML = ''; return; }
+    if (q.length < 3) { list.innerHTML = '<li class="pos-empty">Type at least 3 characters.</li>'; return; }
     try {
       const found = await api('pos customer search', {q});
       list.innerHTML = found.items.map(c => `<li><button type="button" data-pos-choose="${escape(c.id)}" data-name="${escape(c.name)}"><b>${escape(c.name)}</b>${c.phone ? ` · ${escape(c.phone)}` : ''}${c.email ? ` · ${escape(c.email)}` : ''}</button></li>`).join('')
@@ -275,6 +275,11 @@
     let sale;
     try {
       sale = await api('pos sale complete', body);
+      if (!sale || !sale.sales_receipt || !sale.tenders || !sale.total) {
+        const failure = new Error('The host did not confirm this sale.');
+        failure.offline = true;
+        throw failure;
+      }
     } catch (error) {
       if (error.offline) {
         offline = true;

@@ -803,6 +803,9 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
 
 ### As built: increment 5 (ring up)
 
+- **Receipt link and register scope.** §4’s `source_ref` of `pos:<register>:<ticket>` is not implemented: sales receipts
+  have no such field. The link lives in `pos_sales`, whose ticket and register point to the receipt through `document_id`.
+  A clerk is not yet bound to one register; increment 10 adds shifts.
 - **Storage.** co0120 on co0119 (bank rules): one insert-only table, `pos_sales` (ticket, unique; input hash; register; document type and id, a foreign
   key to `transactions`; whether a customer was named; currency; total, tendered and change in minor units; tenders
   JSON), with no-update and no-delete guards. Written in the same transaction as the receipt. **Settled:**
@@ -823,15 +826,19 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   difference; any other method takes exactly the total (part of it is split tender, increment 11). A negative total
   is refused (refunds are increment 9).
 - **Price override (settled).** `pos.price-override` is asked for only when a line types a price over an item's own
-  price; an item whose price is 0.00 takes a typed price at the till without it (§3's "an item with no price opens
+  price; an item whose exact base price and effective price (including price levels and rules) are zero
+  takes a typed price at the till without it (§3's "an item with no price opens
   the keypad for one": an item record always has a price, so "no price" is 0.00). The check is a declared conditional
   source (`pos_sales.require_price_override`), run before planning through the command's `authorize_input`
   (`hub.capabilities.require_company` for an agent, `access.require_resource` for a person).
 - **Nothing doubled.** The ticket key is the operation key, checked before planning and again inside the write
-  transaction: the same key and ticket return the sale already posted with `replayed: true`; the same key with
-  another ticket is `E_IDEMPOTENCY_MISMATCH`. Unlike the generic 30-day, per-actor `Idempotency-Key` (which the
+  transaction: the same key and sale (register, customer and lines) return the sale already posted with `replayed: true`
+  and its recorded tender, even if the retry changes tender or expected total; the same key with
+  another cart is `E_IDEMPOTENCY_MISMATCH`, naming the posted receipt and warning not to ring it again.
+  Unlike the generic 30-day, per-actor `Idempotency-Key` (which the
   command also accepts), the ticket never expires and holds across clerks and devices.
-- **Customers at the till.** `pos customer search` matches part of a name, phone or email (digits alone for a phone,
+- **Customers at the till.** `pos customer search` requires at least 3 characters (including phone fragments).
+  It matches part of a name, phone or email with SQL LIKE and a result limit (digits alone for a phone,
   so "(555) 010-9988" is found by "5550109988") over active customers' contacts and contact points, never a
   register's walk-in, returning id, name, phone and email only (a clerk holds no `customer` read).
   `pos customer add` makes a customer from a name and optional phone and email through `parties.plan_party_create`.
@@ -851,7 +858,8 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   for a 0.00 item) and a serial number for a serial-tracked item. The customer chip searches and adds; clear returns
   to *No customer*. Charge opens the tender: the register's methods, Cash first with quick amounts (exact, the next
   whole unit, the next 5, 10, 20, 50 and 100 above), a 64 px keypad and Change due; a card or check takes an optional
-  reference. Complete stores the request in `localStorage` before sending it; a lost answer keeps the sale on the
+  reference. Complete stores the request in `localStorage` before sending it; a lost answer, any HTTP 5xx, or an unknown/network
+  status keeps the sale on the
   device, locked, with *Finish the sale*, which sends the same request again (also after a reload). The change screen
   shows the change due large, the receipt number and tenders, and New sale. Phone: the sale is a sheet raised from the
   bar at the foot; from 768 px it stands beside the boxes. Print receipt waits for increment 8. A register picker shows
@@ -868,7 +876,7 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   a tap shows its line in 0.9 ms (target 100 ms), the host's total in 222 ms (median of 5; target 400 ms), and
   Complete reaches the change screen in 464 ms (target 1.5 s). The phone figures are Kabe's trial.
 - **Tests.** `tests/test_pos_sale.py`: the twin property (two byte-identical demo roots; 14 generated carts of
-  stocked, service, non-inventory, discount, subtotal and 0.00-priced lines, a price level, a price rule, taxed,
+  stocked, service, non-inventory, group, discount, subtotal and 0.00-priced lines, a price level, a price rule, taxed,
   exempt and walk-in customers, cash, card and check; each receipt, the trial balance, the general ledger, stock and
   its value, the sales tax liability and Undeposited Funds read the same), a retry with the same ticket (one sale,
   `replayed`; another cart refused; a generic key on top changes nothing), the register's fixed facts and the

@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from bookflow.company.items import MoneyOutput
 from bookflow.company.pos_models import Named, PaymentMethodRef
 from bookflow.company.pos_sale_schema import TICKET_PATTERN
-from bookflow.company.sales_models import Quantity, Selector
+from bookflow.company.sales_models import MAX_SALES_LINES, Quantity, Selector
 from bookflow.company import serial_lot_models as _SL
 
 
@@ -40,7 +40,7 @@ class _Cart(_Strict):
     customer: Selector | None = Field(None, description=(
         "Customer ID or name, from `pos customer search` or `add`. Omitted, the sale is the register's walk-in "
         "customer's, which the POS screen and the receipt never show."))
-    lines: list[PosLineInput] = Field(max_length=500, description='The cart, in the order rung up.')
+    lines: list[PosLineInput] = Field(max_length=MAX_SALES_LINES, description='The cart, in the order rung up.')
 
 
 class PosSalePreviewInput(_Cart):
@@ -115,7 +115,7 @@ class PosSaleOutput(_Strict):
 
 
 class CustomerSearchInput(_Strict):
-    q: str = Field(min_length=1, max_length=200, description='Part of a name, phone number or email address.')
+    q: str = Field(min_length=3, max_length=200, description='At least 3 characters of a name, phone number or email address.')
     limit: int = Field(20, ge=1, le=50)
 
 

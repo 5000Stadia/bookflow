@@ -152,7 +152,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `q` | `Q` | string | yes | no | — | Part of a name, phone number or email address.; minimum length 1; maximum length 200 |
+| `q` | `Q` | string | yes | no | — | At least 3 characters of a name, phone number or email address.; minimum length 3; maximum length 200 |
 | `limit` | `--limit` | integer | no | no | 20 | minimum 1; maximum 50 |
 
 ### Command and context options

@@ -11,6 +11,8 @@ Criterion 7, nothing doubled: completing again with the same ticket returns the 
 and the same ticket with another cart is refused; nothing posts twice.
 """
 import json
+from concurrent.futures import ThreadPoolExecutor
+import threading
 import random
 import re
 
@@ -28,11 +30,17 @@ _SKIP = re.compile(r'snapshot|cursor|fingerprint|generated_at|as_posted|freshnes
                    r'request_id|^id$|_id$|_ids$|created_|updated_|idempotent|dry_run|ticket')
 
 
-def _norm(value):
+_FACT_IDS = {'site_id', 'deposit_to_id', 'deposit_account_id', 'control_account_id', 'payment_method_id'}
+_FACT_REFS = {'control_account', 'deposit_to', 'deposit_account', 'payment_method', 'site'}
+
+
+def _norm(value, parent=None):
     if isinstance(value, dict):
-        return {k: _norm(v) for k, v in value.items() if not _SKIP.search(k)}
+        return {k: (v if k in _FACT_IDS or k == 'id' and parent in _FACT_REFS else _norm(v, k))
+                for k, v in value.items()
+                if k in _FACT_IDS or k == 'id' and parent in _FACT_REFS or not _SKIP.search(k)}
     if isinstance(value, list):
-        return [_norm(v) for v in value]
+        return [_norm(v, parent) for v in value]
     if isinstance(value, str):
         return _STAMP.sub('<ts>', _ULID.sub('<id>', value))
     return value
@@ -67,6 +75,9 @@ def _setup(co):
                                'price_level_id': levels['Preferred Customer']})
     co.run('price-rule create', {'name': 'Pipe by the length', 'items': ['Copper Pipe'], 'min_quantity': '3',
                                  'kind': 'percent', 'direction': 'down', 'value': '10', 'rounding': 'cent'})
+    members = [co.run('item show', {'item': name})['id'] for name in ('Mainline Clearing', 'Copper Pipe')]
+    co.run('item create', {'name': 'POS Twin Group', 'type': 'group', 'description': 'Twin cart group', 'print_members': True,
+                           'members': [{'component_item_id': item, 'quantity': '1'} for item in members]})
     return co.run('pos-register show', {'pos_register': 'Main'})
 
 
@@ -89,6 +100,8 @@ def _carts(seed, count):
             lines.append({'item': 'Loyalty Discount'})
         if rnd.random() < .25:
             lines.append({'item': 'Service Call Kit', 'unit_price': '35.00'})   # an item priced 0.00, priced at the till
+        if n == 0:
+            lines.append({'item': 'POS Twin Group', 'quantity': '2'})
         carts.append(dict(customer=rnd.choice(CUSTOMERS), method=METHODS[n % len(METHODS)], lines=lines))
     return carts
 
@@ -157,7 +170,8 @@ def test_a_pos_sale_posts_exactly_what_sales_receipt_post_would(twins):
         mine = pos.run('sales-receipt show', {'sales_receipt': sale['sales_receipt']['id']})
         theirs = typed.run('sales-receipt show', {'sales_receipt': receipt['id']})
         assert _norm(mine) == _norm(theirs), n
-        assert mine['customer_id'] == (walk_in['pos'] if customer is None else mine['customer_id'])
+        assert mine['customer_id'] == (walk_in['pos'] if customer is None else
+                                       pos.run('customer show', {'customer': customer})['id'])
         seen.add((customer is None, cart['method']))
     assert {(True, 'Cash'), (False, 'Cash')} <= seen
     assert _reads(pos) == _reads(typed)
@@ -176,9 +190,21 @@ def test_a_retry_with_the_same_ticket_posts_once(twins):
     assert not first['replayed'] and again['replayed']
     assert again['sales_receipt'] == first['sales_receipt'] and again['id'] == first['id']
     assert again['change'] == first['change'] and again['customer'] is None
+    changed_tender = co.run('pos sale complete', dict(body, expected_total='1.00',
+                            tender={'payment_method': 'Visa', 'amount': '999', 'reference': 'changed'}))
+    assert changed_tender['replayed']
+    for field in ('sales_receipt', 'tenders', 'tendered', 'change', 'total'):
+        assert changed_tender[field] == first[field]
+    cash_retry = co.run('pos sale complete', dict(body, tender={'payment_method': 'Cash', 'amount': '600'}))
+    assert cash_retry['replayed'] and cash_retry['tenders'] == first['tenders']
     # The same ticket with another cart is refused; nothing more posts.
     other = dict(body, lines=[{'item': 'Mainline Clearing'}])
-    assert co.fails('pos sale complete', other).code == 'E_IDEMPOTENCY_MISMATCH'
+    mismatch = co.fails('pos sale complete', other)
+    assert mismatch.code == 'E_IDEMPOTENCY_MISMATCH'
+    assert mismatch.details['sales_receipt_id'] == first['sales_receipt']['id']
+    assert mismatch.details['sales_receipt_number'] == first['sales_receipt']['name']
+    assert first['sales_receipt']['name'] in str(mismatch)
+    assert 'not' in str(mismatch).lower() and 'again' in str(mismatch).lower()
     assert len(co.run('sales-receipt query', {'limit': 200})['items']) == before + 1
     # A generic idempotency key on top changes nothing.
     keyed = co.run('pos sale complete', body, idempotency_key='retry-key-1')
@@ -219,10 +245,9 @@ def test_the_register_fixes_the_facts_and_the_refusals(twins):
     sale = co.run('pos sale complete', dict(cart, ticket='t-card', tender={'payment_method': 'Visa', 'reference': '4242'},
                                             expected_total=total))
     shown = co.run('sales-receipt show', {'sales_receipt': sale['sales_receipt']['id']})
-    assert shown['revision']['profile']['payment_reference'] == '4242' if 'payment_reference' in shown['revision']['profile'] \
-        else json.dumps(shown).count('4242') >= 1
+    assert shown['revision']['profile']['payment_reference'] == '4242'
     assert sale['tendered']['amount'] == total and sale['change']['amount'] == '0.00'
-    assert json.dumps(shown).count(reg['deposit_account']['id']) >= 1
+    assert shown['revision']['profile']['control_account']['id'] == reg['deposit_account']['id']
     # The audit names the POS command.
     events = co.run('audit list', {'limit': 20})['items']
     assert any(e['command'] == 'pos sale complete' for e in events)
@@ -231,6 +256,14 @@ def test_the_register_fixes_the_facts_and_the_refusals(twins):
 def test_customers_at_the_till(twins):
     co, _ = twins
     _setup(co)
+    for query in ('sa', '  sa  ', '55', '   '):
+        assert co.fails('pos customer search', {'q': query}).code == 'E_VALIDATION'
+    assert co.run('pos customer search', {'q': '%%%'})['items'] == []
+    assert co.run('pos customer search', {'q': '___'})['items'] == []
+    for name in ('Limited Shopper A', 'Limited Shopper B', 'Limited Shopper C'):
+        co.run('pos customer add', {'name': name})
+    limited = co.run('pos customer search', {'q': 'Limited Shopper', 'limit': 2})['items']
+    assert [row['name'] for row in limited] == ['Limited Shopper A', 'Limited Shopper B']
     found = co.run('pos customer search', {'q': '555-0110'})['items']
     assert found and found[0]['name'] == 'Riverside Apartments' and found[0]['phone'] == '555-0110'
     assert co.run('pos customer search', {'q': 'walk'})['items'] == []   # the walk-in is never offered
@@ -269,6 +302,11 @@ def test_a_pos_clerk_rings_up_and_reaches_nothing_else(hosted):
     def call(name, body):
         return till.post(f'/companies/{cid}/commands/{name}', headers=H, json=body)
 
+    for command, extra in [('pos.sale.preview', {}), ('pos.sale.complete', {
+            'ticket': 'too-many-lines', 'expected_total': '1', 'tender': {'payment_method': 'Cash'}})]:
+        oversized = call(command, dict(lines=[{'item': 'Pipe Sealant'}] * 201, **extra))
+        assert oversized.status_code == 422, oversized.text
+        assert oversized.json()['code'] == 'E_VALIDATION', oversized.text
     cart = {'lines': [{'item': 'Pipe Sealant', 'quantity': '2'}]}
     shown = call('pos.sale.preview', cart)
     assert shown.status_code == 200, shown.text
@@ -295,3 +333,47 @@ def test_a_pos_clerk_rings_up_and_reaches_nothing_else(hosted):
     # The POS screen opens for the clerk, carrying the items it rings up and no cost.
     page = till.get(f'/c/{cid}/pos')
     assert page.status_code == 200 and 'id="pos-data"' in page.text and 'average_cost' not in page.text
+
+
+def test_two_threads_complete_the_same_ticket_once(twins):
+    co, _ = twins
+    _setup(co)
+    before = len(co.run('sales-receipt query', {'limit': 200})['items'])
+    cart = {'lines': [{'item': 'Mainline Clearing'}]}
+    total = co.run('pos sale preview', cart)['total']['amount']
+    body = dict(cart, ticket='racing-ticket', expected_total=total, tender={'payment_method': 'Cash'})
+    start = threading.Barrier(2)
+
+    def complete():
+        start.wait(timeout=30)
+        try:
+            return co.run('pos sale complete', body)
+        except bookflow.BookflowError as exc:
+            assert exc.code == 'E_DB_BUSY'
+            return None
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: complete(), range(2)))
+    posted = [result for result in results if result is not None and not result['replayed']]
+    assert len(posted) == 1, results
+    assert all(result is None or result['sales_receipt'] == posted[0]['sales_receipt'] for result in results)
+    assert len(co.run('sales-receipt query', {'limit': 200})['items']) == before + 1
+    replay = co.run('pos sale complete', body)
+    assert replay['replayed'] and replay['sales_receipt'] == posted[0]['sales_receipt']
+
+
+def test_twin_normalization_keeps_register_facts():
+    for field in _FACT_IDS:
+        assert _norm({field: '01AAAAAAAAAAAAAAAAAAAAAAAA'}) != _norm({field: '01BBBBBBBBBBBBBBBBBBBBBBBB'})
+    for field in _FACT_REFS:
+        assert _norm({field: {'id': '01AAAAAAAAAAAAAAAAAAAAAAAA'}}) != _norm({field: {'id': '01BBBBBBBBBBBBBBBBBBBBBBBB'}})
+
+
+def test_receipt_input_validation_is_a_bookflow_error():
+    from bookflow.company.pos_sales import _receipt_input
+
+    with pytest.raises(bookflow.BookflowError) as caught:
+        _receipt_input({'customer': 'Walk-in', 'deposit_to': 'Undeposited Funds',
+                        'lines': [{'item': 'Mainline Clearing'}] * 201})
+    assert caught.value.code == 'E_VALIDATION'
+    assert any(field['field'] == 'lines' for field in caught.value.details['fields'])

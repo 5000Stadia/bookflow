@@ -23,6 +23,7 @@ import json
 from typing import Any
 
 import sqlalchemy as sa
+from pydantic import ValidationError
 
 from bookflow.company import pos_layer, schema as c
 from bookflow.company.pos_models import Named, PaymentMethodRef
@@ -113,24 +114,55 @@ def receipt_payload(s, inp, reg, method, chosen, reference=None) -> dict[str, An
 
 def _receipt_input(payload):
     from bookflow.company.sales_models import SalesReceiptPostInput
-    return SalesReceiptPostInput.model_validate(payload)
+    try:
+        return SalesReceiptPostInput.model_validate(payload)
+    except ValidationError as exc:
+        raise BookflowError('E_VALIDATION', details={'fields': [
+            {'field': '.'.join(map(str, error['loc'])) or 'input', 'problem': error['msg']}
+            for error in exc.errors(include_url=False)]}) from None
 
 
 def authorize(inp, ctx, s) -> None:
     """Before planning: the switch, a seller, and a typed price's own capability."""
     pos_layer.require_enabled(s)
     pos_layer.require_seller(s)
+    # A posted ticket is read-only: planning returns it or names the mismatched receipt.
+    if getattr(inp, 'ticket', None) and _existing(s, inp.ticket) is not None:
+        return
     typed = [line for line in getattr(inp, 'lines', ()) or () if line.unit_price is not None]
-    if typed and any(_has_price(s, line.item) for line in typed):
+    if not typed:
+        return
+    if any(_has_price(s, line.item) for line in typed):
         require_price_override(s, ctx)
+        return
+    # A zero item price may still inherit a nonzero customer level or price rule.
+    # Resolve the same defaulted receipt lines, without the clerk's typed prices,
+    # so quantity breaks and the customer's defaults use the sales engine itself.
+    from bookflow.company import sales_defaults
+    from bookflow.core import unit_price
+    reg = register(s, inp.pos_register)
+    chosen = customer(s, inp.customer)
+    payload = receipt_payload(s, inp, reg, payment_method(s, reg, None), chosen)
+    for line in payload['lines']:
+        line.pop('unit_price', None)
+    entered = _receipt_input(payload)
+    header, _ = sales_defaults.resolve_header(s, entered, 'sales_receipt')
+    for original, line in zip(inp.lines, entered.lines):
+        if original.unit_price is None:
+            continue
+        resolved, _ = sales_defaults.resolve_line(
+            s, line, header, date=payload['date'], defer_tax=True, line_kinds=True)
+        if unit_price.row_units(resolved, 'unit_price'):
+            require_price_override(s, ctx)
+            return
 
 
 def _has_price(s, selector) -> bool:
-    """An item with no price (none set, or 0.00) takes one typed at the till (design §3: it opens the keypad for
-    one); typing over an item's own price is an override."""
+    """Use the exact stored unit price, including fractions smaller than a cent."""
     from bookflow.company.items import resolve_item
+    from bookflow.core import unit_price
     try:
-        return bool(resolve_item(s.company, selector).get('price_minor_units'))
+        return bool(unit_price.row_units(resolve_item(s.company, selector), 'price'))
     except BookflowError as exc:
         if exc.code in ('E_RECORD_NOT_FOUND', 'E_VALIDATION'):
             return False   # the sale's own validation names it
@@ -198,7 +230,7 @@ def preview(s, ctx, inp) -> PosSalePreviewOutput:
 # ---------------------------------------------------------------------------- complete
 
 def _input_sha(inp) -> str:
-    canonical = json.dumps(inp.model_dump(mode='json'), sort_keys=True, separators=(',', ':'))
+    canonical = json.dumps(inp.model_dump(mode='json', include={'pos_register', 'customer', 'lines'}), sort_keys=True, separators=(',', ':'))
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
@@ -210,10 +242,17 @@ def _existing(s, ticket) -> dict[str, Any] | None:
 
 def _replay(s, row, inp) -> PosSaleOutput:
     if row['input_sha256'] != _input_sha(inp):
-        raise BookflowError('E_IDEMPOTENCY_MISMATCH', message=(
-            f"Ticket {row['ticket']} already completed as a different sale. Start a new sale (a new ticket) for "
-            'another cart.'), details={'key': row['ticket'], 'stored_command': COMMAND})
+        raise _mismatch(s, row)
     return sale_output(s, row, replayed=True)
+
+
+def _mismatch(s, row):
+    receipt = sale_output(s, row).sales_receipt
+    return BookflowError('E_IDEMPOTENCY_MISMATCH', message=(
+            f"Ticket {row['ticket']} already posted as receipt {receipt.name} ({receipt.id}). "
+            'This cart differs from that sale. Do not ring it again; inspect the posted receipt.'),
+            details={'key': row['ticket'], 'stored_command': COMMAND,
+                     'sales_receipt_id': receipt.id, 'sales_receipt_number': receipt.name})
 
 
 def _minor(amount: str, currency: str) -> int:
@@ -289,7 +328,7 @@ def apply_complete(plan: Plan, ctx, s) -> Applied:
     found = _existing(s, plan.preview.ticket)
     if found is not None:
         if found['input_sha256'] != inp_sha:
-            raise BookflowError('E_IDEMPOTENCY_MISMATCH', details={'key': found['ticket'], 'stored_command': COMMAND})
+            raise _mismatch(s, found)
         return Applied(sale_output(s, found, replayed=True), [], 'no change')
     fresh = sales.prepare(s, ctx, _receipt_input(plan.data['payload']), 'sales_receipt', 'post')
     total = fresh.preview.total
@@ -381,20 +420,33 @@ def search_customers(s, inp) -> CustomerSearchOutput:
     pos_layer.require_seller(s)
     t = c.customers
     q = inp.q.strip().casefold()
+    if len(q) < 3:
+        raise _invalid('q', 'enter at least 3 characters')
+    # Match in SQLite, including formatted phone numbers; only fetch contacts for the bounded result.
+    s.company.conn.connection.driver_connection.create_function('pos_digits', 1, lambda v: _digits(v or ''),
+                                                               deterministic=True)
     digits = _digits(q)
+    k, p = c.customer_contacts, c.customer_contact_points
+
+    def matches(column):
+        text = sa.func.lower(column).contains(q, autoescape=True)
+        if len(digits) >= 3:
+            return sa.or_(text, sa.func.pos_digits(column).contains(digits, autoescape=True))
+        return text
+
+    point_hit = sa.exists(sa.select(p.c.id).where(
+        p.c.contact_id == k.c.id, p.c.active.is_(True), matches(p.c.value)))
+    contact_hit = sa.exists(sa.select(k.c.id).where(
+        k.c.customer_id == t.c.id, k.c.active.is_(True), sa.or_(point_hit, *[
+            matches(column) for column in (k.c.work_phone, k.c.mobile_phone, k.c.home_phone,
+                                           k.c.primary_email, k.c.secondary_email)])))
     rows = s.company.conn.execute(sa.select(t.c.id, t.c.full_name).where(
-        t.c.active.is_(True), t.c.pos_walk_in.is_(False)).order_by(t.c.full_name_key, t.c.id)).all()
+        t.c.active.is_(True), t.c.pos_walk_in.is_(False),
+        sa.or_(t.c.full_name_key.contains(q, autoescape=True), contact_hit)
+    ).order_by(t.c.full_name_key, t.c.id).limit(inp.limit)).all()
     contacts = _contacts(s, [r[0] for r in rows])
-    hits = []
-    for cid, name in rows:
-        phone, email, values = contacts.get(cid, (None, None, []))
-        text_hit = q in name.casefold() or any(q in v.casefold() for v in values)
-        phone_hit = len(digits) >= 3 and any(digits in _digits(v) for v in values)
-        if text_hit or phone_hit:
-            hits.append(PosCustomer(id=cid, name=name, phone=phone, email=email))
-            if len(hits) >= inp.limit:
-                break
-    return CustomerSearchOutput(items=hits)
+    return CustomerSearchOutput(items=[PosCustomer(id=cid, name=name, phone=contacts[cid][0],
+                                                   email=contacts[cid][1]) for cid, name in rows])
 
 
 def plan_add_customer(s, ctx, inp) -> Plan:

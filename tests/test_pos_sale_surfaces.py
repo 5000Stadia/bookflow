@@ -8,6 +8,8 @@ import anyio
 import pytest
 
 from tests.mcp_matrix_support import Matrix
+from tests.test_row3_host import hosted  # noqa: F401
+from tests.test_row3_host import hosted  # noqa: F401 - fixture
 
 COMMANDS = frozenset(('pos sale preview', 'pos sale complete', 'pos customer search', 'pos customer add'))
 CART = {'lines': [{'item': 'Pipe Sealant', 'quantity': '2'}, {'item': 'Mainline Clearing'}]}
@@ -49,3 +51,62 @@ def test_the_same_sale_through_python_cli_http_and_mcp(root, tmp_path):
             await matrix.close()
 
     anyio.run(witness)
+
+
+def test_price_override_checks_levels_rules_and_subcent_prices(hosted):
+    from fastapi.testclient import TestClient
+    from bookflow.hub import pos_presets
+    from tests.test_item_pictures_review import _membership_version
+    from tests.test_pos_layer import H, REASON as HEADERS, _password, _pos
+
+    cid = hosted.company_id
+    _pos(hosted, True)
+
+    def owner(name, body):
+        from bookflow.core import registry
+        headers = HEADERS if registry.get(name.replace('.', ' ')).is_write else None
+        return hosted.ok(name, body, company=cid, headers=headers)
+
+    info = owner('company.show', {})
+    owner('company.update', {'enable_price_levels': True, 'expected_version': info['info_version']})
+    income = owner('account.create', {'name': 'POS price test income', 'type': 'income'})['id']
+    tax_code = owner('sales-tax-code.list', {})['items'][0]['id']
+    items = {}
+    for name, price in [('Subcent', '0.001'), ('Level', '0.00'), ('Rule', '0.00'), ('Free', '0.00')]:
+        items[name] = owner('item.create', {'name': f'POS {name}', 'type': 'service', 'sales_enabled': True,
+                                           'description': name, 'income_account_id': income, 'sales_tax_code_id': tax_code, 'price': price})['id']
+    level = owner('price-level.create', {'name': 'POS nonzero level', 'kind': 'per_item', 'items': [
+        {'item_id': items['Level'], 'price': '7.00', 'adjustment_basis': 'standard_price'}]})['id']
+    customer = owner('customer.create', {'name': 'POS level customer', 'price_level_id': level})['id']
+    owner('price-rule.set-preferences', {'conflict_policy': 'priority'})
+    owner('price-rule.create', {'name': 'POS nonzero rule', 'items': [items['Rule']], 'kind': 'amount',
+                                'direction': 'up', 'value': '4.00'})
+    clerk = pos_presets.preset('pos-clerk')
+    user = hosted.ok('user.add', {'username': 'price-till', 'password': _password('price-till'), 'company': cid,
+                                  'role': 'readonly'}, headers=HEADERS)['user_id']
+    hosted.ok('membership.grant', {'user': user, 'company': cid, 'role': 'readonly', 'grants': clerk['grants'],
+                                   'denies': clerk['denies'], 'expected_version': _membership_version(hosted, user)},
+              headers=HEADERS)
+    with TestClient(hosted.handle.app) as till:
+        assert till.post('/login', json={'username': 'price-till', 'password': _password('price-till')}).status_code == 200
+        for name, expected in [('Subcent', '0.001'), ('Level', '7.00'), ('Rule', '4.00'), ('Free', '0.00')]:
+            cart = {'customer': customer, 'lines': [{'item': items[name]}]}
+            shown = owner('pos.sale.preview', cart)
+            assert shown['lines'][0]['unit_price']['amount'] == expected
+            cart['lines'][0]['unit_price'] = '2.00'
+            response = till.post(f'/companies/{cid}/commands/pos.sale.preview', headers=H, json=cart)
+            if name == 'Free':
+                assert response.status_code == 200, response.text
+                body = dict(cart, ticket='price-changed-retry', expected_total=response.json()['total']['amount'],
+                            tender={'payment_method': 'Cash'})
+                url = f'/companies/{cid}/commands/pos.sale.complete'
+                first = till.post(url, headers=H, json=body)
+                assert first.status_code == 200, first.text
+                owner('price-rule.create', {'name': 'Free now priced', 'items': [items['Free']],
+                                            'kind': 'amount', 'direction': 'up', 'value': '5.00'})
+                replay = till.post(url, headers=H, json=body)
+                assert replay.status_code == 200 and replay.json()['replayed'], replay.text
+                assert replay.json()['sales_receipt'] == first.json()['sales_receipt']
+            else:
+                assert response.status_code == 403, response.text
+                assert response.json()['details']['capability'] == 'pos.price-override'

@@ -183,7 +183,8 @@ class SalesLineInput(StrictModel):
         return self
 
 
-Lines = Annotated[list[SalesLineInput], Field(min_length=1, max_length=200)]
+MAX_SALES_LINES = 200
+Lines = Annotated[list[SalesLineInput], Field(min_length=1, max_length=MAX_SALES_LINES)]
 
 
 class SalesFields(StrictModel):
