@@ -150,7 +150,7 @@ def _write_one(s, ctx, snapshot, customer, position, *, command_name, reversal_b
     s.company.raw.execute(f'SAVEPOINT {SAVEPOINT}')
     try:
         plan = sales.prepare(s, ctx, _invoice_input(snapshot, customer['id']), 'invoice', 'post')
-        applied = effects.persist(plan, ctx, s, command_name=command_name, table_kinds=sales.TABLE_KINDS)
+        applied = sales.persist_prepared(plan, ctx, s, command_name=command_name)
         batches.record_effect(s, reversal_batch_id, record_type='invoice', record_id=applied.output.id,
                               action='created', version_after=applied.output.version,
                               event_id=batches.last_event_id(s))

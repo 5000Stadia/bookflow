@@ -169,7 +169,7 @@ def test_invoice_dry_run_lists_more_than_fifty_effects(books):
 
 
 def test_agent_without_invoice_delete_grant_is_refused_atomically(books):
-    from tests.conftest import make_actor, make_agent, as_user
+    from tests.conftest import make_actor, make_agent
     from bookflow.core.config import Config
 
     out = post(books)
@@ -186,16 +186,22 @@ def test_agent_without_invoice_delete_grant_is_refused_atomically(books):
     books.client.run('membership grant', {
         'user': agent_id, 'company': books.company, 'role': 'standard', 'expected_version': member['version'],
         'denies': ['transaction.invoice.delete']}, reason='Allow posting but not deletion')
-    books.client.run('agent authorize', {'agent': agent_id, 'confirm_permitted_use': True})
+    books.client.run('agent authorize', {'agent': agent_id, 'confirm_permitted_use': True,
+                                         'acknowledge_fresh_context': True})
     config = Config.load(books.root / 'config.toml')
     config.set_user('invoice-reverse-agent', agent_id)
     config.save()
-    agent = as_user(books.root, 'invoice-reverse-agent')
+    from bookflow.core import registry
+    from bookflow.core.context import Context, Interface
+    from bookflow.core.dispatch import run as dispatch_run
     before = unchanged(books)
     for dry_run in (True, False):
         with pytest.raises(BookflowError) as refused:
-            agent.run('batch reverse', {'batch': out['reversal_batch_id']}, company=books.company,
-                      reason='Undo the named invoice batch', dry_run=dry_run)
+            ctx = Context.new(Interface.python, 'invoice reversal witness', on_behalf_of=owner,
+                              reason='Undo the named invoice batch')
+            dispatch_run(registry.get('batch reverse'), {'batch': out['reversal_batch_id']}, ctx,
+                         data_root=str(books.root), company_selector=books.company, company_source='option',
+                         dry_run=dry_run, _login='invoice-reverse-agent')
         assert refused.value.code == 'E_BATCH_BLOCKED'
         assert any(b['code'] == 'E_PERMISSION' for b in refused.value.details['blockers'])
         assert unchanged(books) == before
