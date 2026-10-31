@@ -116,8 +116,8 @@ ACCEPTED = {
     'pos-sale-v1': (878, '1462bee09d7343f15fdc015fa86a114e30671e8d73fc2bab7f5e75444d0450cf'),
     'bank-reconcile-v1': (878, '8673bd998c7e077061301d0bfaea5af7b33cbd3eb773f89dd0e6fdcdbf026e42'),
     'bank-source-v1': (884, '9676dfedbb049b4743cdc1d56915a2d296f6eaf3cda9db30768d912a11d36949'),
-    'reversible-batch-v1': (894, '8a3e694684db93beb8b6dd75961286d1a2106bf19e335efc7a99e86c1ad8a589'),
     'pos-layout-v1': (893, '9f95dba850d8f730aac8e4fdfdd82f23de09109fcf54e7e9499ff9b22dd29916'),
+    'reversible-batch-v1': (894, '8a3e694684db93beb8b6dd75961286d1a2106bf19e335efc7a99e86c1ad8a589'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -131,7 +131,6 @@ FROZEN_DESCRIPTOR = (442, 'c4b724e114772d9940ead6450a4bd64fd490cd1f45ca42092e647
 # while every count above moves, which is how the message below tells the two
 # mistakes apart.
 CHAIN_ADDITIONS = {
-    'reversible-batch-v1': {'batch reverse'},
     'purchase-delete-activation-preparation-v1': {'item-receipt history', 'item-receipt post', 'item-receipt query',
                                                   'item-receipt show', 'item-receipt update', 'item-receipt void'},
     'purchase-permission-setup-v1': {'membership effective', 'permission activate', 'permission show'},
@@ -282,6 +281,7 @@ CHAIN_ADDITIONS = {
                        'bank-feed-connection check', 'bank-feed-connection query', 'bank-feed fetch'},
     'pos-layout-v1': {f'pos-box {verb}' for verb in ('list', 'create', 'update', 'move', 'remove', 'view',
                                                    'seed', 'picture set', 'picture get')},
+    'reversible-batch-v1': {'batch reverse'},
 }
 
 _ANCESTOR_EDIT = """
