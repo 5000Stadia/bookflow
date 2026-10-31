@@ -1,8 +1,8 @@
 """`bank-feed` and `bank-line`: statement files into the bank inbox (R108 increment 1, design/bank-feeds.md).
 
 The work lives in ``company/bank_feeds.py``. Capability `bank-feed` (reads at member, writes at standard), with
-`ledger.read` beside it: the inbox shows the books' entries a line matched. An import posts nothing to the books;
-it is recorded as one batch (kind `bank-import`) so it can be reversed as one unit.
+`ledger.read` beside it: the inbox shows the books' entries a line matched. Import records one batch
+(kind `bank-import`); any entries live rules add belong to that batch and reverse with it.
 """
 import json
 
@@ -16,10 +16,14 @@ _IMPORT = (
     "line is known by its FITID (or, without one, a hash of the line and its occurrence in the file), so a download "
     "that overlaps an earlier one adds only the new lines; a FITID reused for another amount is kept apart and "
     "flagged; a new line that looks like one already in under another id or text is flagged possible_duplicate, never "
-    "dropped. Each line the matcher pairs surely with an entry is matched; the rest wait. Nothing is posted. A file "
+    "dropped. Each line the matcher pairs surely with an entry is matched; the rest wait. Import itself posts "
+    "nothing; live auto-add rules may post entries in its batch. A file "
     "with any unreadable line is refused whole, listing every problem. An OFX file is checked against the account "
     "(E_ACCOUNT_MISMATCH), a CSV by its content (account_confirmed goes on); the same file twice is refused without again (E_ALREADY_IMPORTED). --dry-run is the "
-    'preview. Example: {"account": "Checking", "attachment": "01J..."}.')
+    "preview: check the named account, dates, warnings and overlap counts before importing, then report the counts. "
+    "Find statement attachments with attachment list company_info <company id> (company show supplies the id). "
+    "Do not bypass an account mismatch without the owner's account decision. Sorting uses bank-line commands; "
+    'reconciliation is separate. Example: {"account": "Checking", "attachment": "01J..."}.')
 
 
 def plan_bank_feed_import(inp, ctx, s) -> Plan:
@@ -132,14 +136,19 @@ bank_feed_import.plan_in_write = True
 
 bank_feed_show = _read(
     'bank-feed show', 'Show a bank import: its file, counts, who and why, its batch and state, and its lines '
-    '(`--state waiting` for those still to sort). Example: {"import_id": "01J..."}.', m.ImportSelector,
+    '(`--state waiting` for those still to sort). bank_import.counts records arrival outcomes; by_state and lines '
+    'show the current inbox decisions. Example: {"import_id": "01J..."}.', m.ImportSelector,
     m.ImportShowOutput, plan_bank_feed_show, positional=('import_id',))
 bank_feed_query = _read(
     'bank-feed query', "List bank imports newest first, one account's or all, each with its counts and batch "
-    '(reversed ones with --include-reversed).', m.ImportQueryInput, m.ImportQueryOutput, plan_bank_feed_query)
+    '(reversed ones with --include-reversed). Counts describe arrival outcomes, not current sorting; use '
+    'bank-feed show for current by_state and lines.', m.ImportQueryInput, m.ImportQueryOutput, plan_bank_feed_query)
 bank_line_query = _read(
-    'bank-line query', 'The bank inbox: lines by account, state (waiting, matched, settled...), import, dates, words '
-    'or an exact amount, with counts by state. Example: {"account": "Checking", "state": "waiting"}.',
+    'bank-line query', "The bank inbox: lines by account, state, import, dates, words or exact amount, with counts. "
+    "Page with limit and cursor. Inspect proposals and warnings; match only supported candidates, add with known "
+    "payee/category, and accept transfers with bank-line transfer. Leave ambiguous lines waiting and report their "
+    "ids and what is missing; never guess a category or ignore a line merely to empty the inbox. Matching does "
+    'not reconcile or clear an entry. Example: {"account": "Checking", "state": "waiting"}.',
     m.LineQueryInput, m.LineQueryOutput, plan_bank_line_query)
 
 
@@ -150,10 +159,16 @@ _REVERSE = (
     "its matches, delete the entries it created (with preserved history) and restore the account's record of its "
     "number and last import. Newest first per account: a later live import blocks it (--through reverses the newer "
     "ones with it). Refused (E_BATCH_BLOCKED) naming every blocker and what clears it; then nothing changes. "
-    '--dry-run shows the plan and a fingerprint. Example: {"import_id": "01J..."}.')
+    "--dry-run shows the plan and a fingerprint. Pass it on the real call; follow next until reversed. "
+    "For a wrong account, inspect this preview but execute bank-feed move instead of reversing first: move needs "
+    "the live import. Report blockers; do not undo unrelated work to clear them without instruction. "
+    'Example: {"import_id": "01J..."}.')
 _MOVE = (
     "Move a bank import to the account it belongs in, in one step: reverse it, then import its own stored lines "
     "into the target (no file needed), deduped, matched and checked there; the new import records moved_from. "
+    "Preview move with --dry-run too and pass reversal.fingerprint; follow next until target is present. "
+    "Created entries are taken back; the target lines are sorted afresh and may need categorizing again. "
+    "The target must be the owner's intended account; do not guess it. "
     'Refused whole if the reversal is blocked or the target refuses. Example: {"import_id": "01J...", "to": '
     '"Savings"}.')
 

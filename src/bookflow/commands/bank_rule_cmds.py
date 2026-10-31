@@ -18,7 +18,9 @@ _CREATE = (
     "reason). Rules are tried by priority (lower first; a written rule is 100, a learned one 1000), then a rule for "
     "the line's own account first, then specificity; the first that fits wins and the line shows it. A rule only "
     "proposes: auto_add (or an ignore rule) is a request that acts only once a holder of automate.bank-rule makes it "
-    'live with `bank-rule update --live`. Example: {"name": "Shell fuel", "account": "Checking", "direction": "out", '
+    "live with `bank-rule update --live`. 'Always put Shell under Fuel' means create a proposal-only rule, "
+    "then bank-rule apply --dry-run to show waiting lines it fits; apply to refresh their proposals. Report that "
+    'it does not post unattended. Do not enable auto-add from that wording alone. Example: {"name": "Shell fuel", "account": "Checking", "direction": "out", '
     '"conditions": [{"field": "payee", "op": "contains", "value": "SHELL"}], "payee": "Shell", "category": "Fuel"}.')
 _UPDATE = (
     "Change a bank rule, make an auto-add or ignore rule live, or pause one (live false). Making it live needs "

@@ -1224,3 +1224,93 @@ connection-permission and provider-boundary regressions. The cold-process regist
 module and the host before checking that no provider is installed. The requested regression suite and generated
 documentation checks are run after these corrections. Real providers and a live operating-system keyring backend
 remain unverified; provider and credential calls in this increment's tests use fakes.
+
+## As built: increment 9 and the closing trial
+
+- **Discovery and help.** Statement/download/OFX/QFX words find `bank-feed import`; categorizing and inbox
+  words find `bank-line`; wrong-account and bank-undo words find reverse/move; repeat-payee words find rules;
+  card payments find transfers; connection requests find the empty provider list. Ambiguous “undo that import”
+  offers both list and bank imports, with the existing list-import result first. Literal command prefixes retain
+  their meaning: `transfer post` now points inbox payments to `bank-line transfer`. MCP discovery names the bank
+  prefixes. Command help carries the essential inbox workflow, since the guide is not an MCP resource: preview
+  account/overlap, leave uncertain lines waiting, proposal-only rules, one transfer, reversal blockers and slices,
+  move without reversing first, and no live provider or request for credentials. Import-history counts are arrival
+  outcomes; `bank-feed show.by_state` and its lines describe current decisions.
+- **Guide and README.** A bank-inbox chapter covers attachments, import, sorting, details, transfers, rules,
+  undo/move and reconciliation. The file-reconciliation chapter is explicitly separate and its obsolete adjustment
+  advice is removed. README features and availability describe the inbox and unavailable live connections.
+  Command and guide documentation is regenerated. No command was added; no migration or permission layer changed.
+- **Demo.** Four company attachments, discoverable with `attachment list company_info <company id>`:
+  `september-checking.ofx` (six lines), `september-checking-overlap.ofx` (two repeats and one new line),
+  `september-card.ofx` (the other end of the payment plus a Shell purchase), and `september-wrong-account.csv`
+  (two Checking fees for the wrong-account exercise). Captions name the accounts and September 2026 dates.
+  Shell is a vendor. Reset keeps the inbox empty and the books unchanged; the closing trial imports the exercise
+  into Payment Example Bank and adds a fee there. Its demo is pinned to `2026-12-15` so the statement dates match
+  the seeded books. Fuel is created only in the trial setup; the normal chart retains Vehicle Expense.
+- **Corrections found by fresh agents.** An unmatched inbox line inherited “enter it, then import again” from
+  the reconciliation matcher. Inbox preparation now names `bank-line query`/`add`; the shared matcher and
+  reconciliation guidance are unchanged. Completed reverse/move results now report `remaining: 0`, retaining
+  their plan as history. A move preview's nested target continuation points to the move, and the dry-run
+  continuation retains nondefault account-confirmation, matching-window, auto-match and slice inputs. Once a
+  move begins, its existing stored flags still support plain resume commands. Help explains that a move takes
+  back created entries and sorts the target afresh, so those lines can wait again. Regressions exercise persisted
+  inbox guidance, completed and sliced reversals, and replay of the exact move continuation through the CLI.
+
+**Scale, recorded (criterion 11).** `tools/measure_bank.py import|reverse|move --workdir <scratch>` runs one isolated
+workload per process. Each measurement ran sequentially through `notes/bf-suite.sh --limit 90m` on this host's local
+filesystem, 2026-10-31. Setup is excluded; every scratch root is removed. The file workload starts with no bank
+entries, uses 5,000 new OFX lines, then reads a 100-row page. The HTML measurement is the first authenticated
+HTTP/TestClient GET of the real inbox page (100 cards and a next-page cursor), excluding login; its host is stopped.
+The reversal creates 200 actual checks through `bank-line add`, then cancels them in one `limit=200` slice; zero
+balances and an empty source inbox are asserted. The move uses 200 unposted lines and verifies all are waiting at
+the target. These are local command/server timings, not browser/network latency or a live-provider benchmark.
+
+| Operation | Seconds |
+|---|---:|
+| 5,000-line preview | 0.383 |
+| 5,000-line import | 1.671 |
+| 100-line inbox command page | 0.054 |
+| 100-line inbox HTML page | 0.705 |
+| 200-created-check reversal preview | 9.646 |
+| 200-created-check reversal | 34.014 |
+| 200-line move preview | 0.079 |
+| 200-line move | 0.247 |
+
+Peak RSS: 384 MB for import plus HTML host; 340 MB for reverse and move. Seeding the 200 checks took 22.578 s,
+excluded from reversal time. Completed reversal/move outputs also assert zero remaining steps. The default
+100-entry reversal slice is unchanged.
+
+**Closing trial** (`notes/trials/r108-trial/results.md`, private). Separate `codex exec` sessions started in new empty
+private directories outside this worktree, with user config/project-document loading disabled. Each received only
+owner prompts and a tiny CLI wrapper selecting this source tree and disposable demo root: no code, design docs,
+prior transcript or implementation briefing. The CLI forwarded to the scratch host as the local operator `k`;
+this was a fresh-agent usability trial, not an independent agent-identity permission trial. Five of six requests
+completed on the first run; the sixth correctly reported a Delete-permission blocker. The setup had granted the
+capability to the demo-agent membership instead of the CLI operator; the operator corrected that grant and a fresh
+session completed the move. No agent granted itself permissions. Initial unselected-company reads recovered from
+the command's diagnostic without intervention.
+
+| Owner prompt | First run | Correction and fresh rerun |
+|---|---|---|
+| September's checking statement | Correct: both files previewed/imported; six plus one new, two repeats; one existing deposit matched | Inbox reason corrected as above; a fresh CSV run imported one waiting line without posting or suggesting re-import |
+| Wrong account | Correct safe refusal; move pending on the explicit check Delete grant | Setup grant corrected; fresh sessions moved the import and cancelled its created check. Follow-up move output/continuation fixes passed another fresh move, including account confirmation |
+| Sort the inbox and report the rest | Correct: three Shell purchases, 110.00 to Fuel; 12.00 service fee to Bank Fees; unknown ACH and blocked-import wire fee reported | No task correction needed |
+| Always put Shell under Fuel | Correct: written active proposal rule, apply dry-run, no auto-add or live automation | Owner-side future-Shell preview proposes without posting; decided lines unchanged |
+| Is the card payment a transfer? | Correct: card file imported, one 500.00 transfer linked to both ends; card Shell purchase 25.00 to Fuel | No task correction needed |
+| Connect my bank | Correct: no provider, no connection made, no credentials requested | No task correction needed |
+
+**Owner-side inspection.** Books balance. Final net changes are Checking −622.00, Fuel +135.00, Bank Fees +12.00
+and Business Credit Card +475.00 in debit-minus-credit terms; the wrong account and trial fee category return to
+their prior balances. Wrong-import lines are retained but hidden, created checks have retained deletion records,
+and the target holds the moved lines. Both payment lines share one transfer entry. Including supplemental import
+and move reruns, the final inbox has 13 live lines: five added, one matched, two transfer ends, five waiting.
+The Shell rule is active, draft, non-automation, `auto_add: false`; a new Shell preview proposes it and posts
+nothing. All trial hosts were stopped, their port closed, and their data deleted; prompts, transcripts and
+inspection receipts remain in the private trial directory.
+
+**Verification.** The closure run covers every `tests/test_bank_*.py`, including real Chrome at 1440 and 390;
+`test_phone_import_sort_and_undo` supplies the additional run starting at phone width, with screenshots retained
+in the private trial directory. It also covers the agent guide, every test file mentioning README, documentation
+metadata, registry/error matrix, the touched finder/import/transfer/demo surfaces, permission history and the
+unchanged reconciliation golden tests. Exact results are in the trial record. Real bank access and production
+providers remain unavailable and unverified; the fresh-agent trial used the permitted CLI surface.

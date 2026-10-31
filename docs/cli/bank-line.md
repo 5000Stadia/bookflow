@@ -896,7 +896,7 @@ Example JSON output:
 
 ## `bank-line query`
 
-The bank inbox: lines by account, state (waiting, matched, settled...), import, dates, words or an exact amount, with counts by state. Example: {"account": "Checking", "state": "waiting"}.
+The bank inbox: lines by account, state, import, dates, words or exact amount, with counts. Page with limit and cursor. Inspect proposals and warnings; match only supported candidates, add with known payee/category, and accept transfers with bank-line transfer. Leave ambiguous lines waiting and report their ids and what is missing; never guess a category or ignore a line merely to empty the inbox. Matching does not reconcile or clear an entry. Example: {"account": "Checking", "state": "waiting"}.
 
 | Contract | Value |
 |---|---|

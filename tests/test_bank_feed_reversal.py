@@ -325,6 +325,7 @@ def test_slices_freeze_the_account_stop_blocked_and_resume_after_a_kill(client, 
     assert state(client, done['batch_id']) == 'reversing'
     out = reverse(client, done['import_id'])
     assert out['state'] == 'reversed' and out['reversed_now'] == 1
+    assert out['remaining'] == 0
     assert table(client, 'SELECT count(*), count(DISTINCT transaction_id) FROM journal_deletions WHERE transaction_id '
                          'IN (?, ?, ?, ?)', *(e['id'] for e in made)) == [(4, 4)]
     assert table(client, 'SELECT sum(live) FROM bank_lines WHERE import_id = ?', done['import_id']) == [(0,)]
