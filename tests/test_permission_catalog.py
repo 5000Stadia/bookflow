@@ -137,6 +137,7 @@ RESOURCE_PAIRS = {
         ('pos.layout', 'admin'), ('bank-feed.connect', 'admin')},
     # pos-v1: an item read shows costs only with the books, and vendors only with the vendor list.
     'item_concealment.holds': {('ledger.read', 'member'), ('vendor', 'member')},
+    'payment_authority.pos_scope': {('pos.sell', 'member'), ('pos.void', 'member')},
     'pos_sales.require_price_override': {('pos.price-override', 'member')},  # a typed POS price (R114 inc 5)
     # automation-v1: a rule is read or paused only by a caller its kind's own show and update admit.
     'automation.require_command': {('customer', 'member'), ('customer', 'standard'), ('customer-work', 'member'),

@@ -121,6 +121,7 @@ ACCEPTED = {
     'pos-ticket-takeover-v1': (899, 'bdcea7f8d98d6854d5ecc001b00e4b59f81288ef06af360288f8a2ce28e17bf3'),
     'pos-receipt-v1': (900, '00cfad8461346685e3de9485e8c900e23808206a65626cb72960aec0444a5a06'),
     'pos-refund-v1': (904, '64d5f0eb604a90e20fa872971200cb19419f430531f790d605f4c4d1314e0dde'),
+    'pos-split-v1': (904, 'd868ac1a7a48568272579b330b4ba7047a7d7f39e6cb9ce19e18709ab67ad4f9'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -288,6 +289,7 @@ CHAIN_ADDITIONS = {
     'pos-ticket-takeover-v1': {'pos ticket take-over'},
     'pos-receipt-v1': {'pos receipt show'},
     'pos-refund-v1': {'pos refund', 'pos refund lines', 'pos refund show', 'pos refund receipt'},
+    'pos-split-v1': set(),  # scoped split-sale payment composition
 }
 
 _ANCESTOR_EDIT = """
