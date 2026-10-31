@@ -124,10 +124,11 @@ DESCRIPTIONS = {
     'memorized enter': _ENTER,
     'memorized process': _PROCESS,
     'memorized retry': (
-        'Try a blocked memorized entry again, at the date it was always for. The retry reuses'
-        ' the occurrence\'s own retry key and the exact template revision it captured, so it can'
-        ' neither post a second document nor quietly enter a newer version of the template than'
-        ' the one that was due. A retry that fails again updates the reason and stays blocked.'),
+        'Try a blocked memorized entry again, at the date it was always for. An entry that already'
+        ' committed is recovered without posting twice. An unposted slot uses the current saved'
+        ' template revision; if it changed, preview first and provide expected_facts_fingerprint.'
+        ' A retry that fails again updates the reason and stays blocked. Reversing a retry restores'
+        ' the prior occurrence, and a later corrected retry has a fresh run identity.'),
     'memorized skip': (
         'Set a memorized entry aside without entering it. The occurrence stays on the record as'
         ' skipped, with its date and its reason, so a skipped month is visible rather than'
@@ -148,6 +149,15 @@ DESCRIPTIONS = {
     'memorized-group list': 'List memorized transaction groups with their schedule and how many members each has.',
     'memorized-group enter': _GROUP_ENTER,
 }
+
+for _name in ('memorized enter', 'memorized process', 'memorized retry', 'memorized-group enter'):
+    DESCRIPTIONS[_name] += (
+        ' The returned batch_id identifies this call’s documents and scheduling changes. Preview '
+        '`batch reverse <batch_id> --dry-run`, then reverse the whole run: child documents are deleted '
+        'or voided and prior occurrences, holds and next dates restored. Later runs of the same schedule, '
+        'payments, deposits, reconciliations and sent messages block reversal with their identities. '
+        'Every child inverse and schedule restoration requires the reverser’s own grants.')
+
 
 ERRORS = {
     'memorized create': ['E_VALIDATION', 'E_NAME_TAKEN', 'E_RECORD_NOT_FOUND'],

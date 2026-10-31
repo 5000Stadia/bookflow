@@ -277,6 +277,8 @@ class MemorizedListOutput(BaseModel):
 
 
 class MemorizedEntryOutput(WriteOutput):
+    batch_id: str | None = Field(None, description="Shared reversible run batch.")
+    next: str | None = Field(None, description="Preview the complete run reversal.")
     as_of: str
     entered: list[OccurrenceOutput] = Field(default_factory=list)
     blocked: list[OccurrenceOutput] = Field(default_factory=list)
@@ -290,6 +292,8 @@ class MemorizedEntryOutput(WriteOutput):
 
 
 class OccurrenceWriteOutput(WriteOutput):
+    batch_id: str | None = Field(None, description="Shared reversible run batch.")
+    next: str | None = Field(None, description="Preview the complete run reversal.")
     occurrence: OccurrenceOutput
     facts_fingerprint: str | None = None
     idempotent_replay: bool = False

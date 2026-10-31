@@ -331,7 +331,7 @@ Example JSON output:
 
 ## `memorized-group enter`
 
-Enter every member of a group, in the order the group records, at one date. Each member gets its own entry and its own result: this is not an all-or-nothing batch, so a member that fails does not undo the members that already posted, and running it again for the same date enters only the ones that did not. The membership and order captured for a date are frozen when the run opens, so editing the group afterwards cannot rewrite what that run did.
+Enter every member of a group, in the order the group records, at one date. Each member gets its own entry and its own result: this is not an all-or-nothing batch, so a member that fails does not undo the members that already posted, and running it again for the same date enters only the ones that did not. The membership and order captured for a date are frozen when the run opens, so editing the group afterwards cannot rewrite what that run did. The returned batch_id identifies this call’s documents and scheduling changes. Preview `batch reverse <batch_id> --dry-run`, then reverse the whole run: child documents are deleted or voided and prior occurrences, holds and next dates restored. Later runs of the same schedule, payments, deposits, reconciliations and sent messages block reversal with their identities. Every child inverse and schedule restoration requires the reverser’s own grants.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -403,6 +403,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 |---|---|---|---|---|---|
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
+| `batch_id` | string \| null | no | yes | null | Shared reversible run batch. |
+| `next` | string \| null | no | yes | null | Preview the complete run reversal. |
 | `as_of` | string | yes | no | — | — |
 | `entered` | array[object] | no | no | [] | — |
 | `entered[].id` | string | yes | no | — | — |
@@ -481,6 +483,7 @@ Example JSON output:
 ```json
 {
   "as_of": "value",
+  "batch_id": null,
   "blocked": [],
   "blocked_count": 0,
   "dry_run": false,
@@ -488,6 +491,7 @@ Example JSON output:
   "entered_count": 0,
   "facts_fingerprint": null,
   "idempotent_replay": false,
+  "next": null,
   "pending": [],
   "pending_count": 0,
   "warnings": []

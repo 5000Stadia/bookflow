@@ -136,3 +136,38 @@ demo-reset or checkpoint behavior in this increment. A separate reference-year p
 - Tests exercise exact before-images and effect lists, atomic named refusals, interrupted reversal and resumption,
   denied inverse grants, effect-write rollback, corrected regeneration and the notice inverse across all four
   command surfaces. Reversal history and audit events remain; restored business fields match their prior values.
+
+## As built: increment 3
+
+- `memorized process`, `memorized-group enter`, `memorized enter` and `memorized retry` return `batch_id`
+  and `next`, pointing to `batch reverse <batch_id> --dry-run`. Scheduler results expose the same link.
+  `memorized-run` records its claim, occurrence outcomes and hold changes inside their own transactions;
+  each child document is recorded inside its posting transaction. Nested batch invoicing records each invoice
+  inside its existing savepoint. A crash before outcome recording leaves a reversible claim and the documents
+  that actually committed.
+- The run adapter plans all child inverses through the independent registry, then restores scheduling state as
+  the final resumable effect. It restores prior occurrences, holds, next dates, remaining counts and schedule
+  status. Newly created occurrences are removed; their facts remain in audit and batch effects. Immutable group
+  run and membership history remains. A corrected run uses current template revisions and the restored dates.
+- Later live runs touching any of the same templates or groups block reversal by run id. Changes to captured
+  occurrences, holds or schedule fields also block, naming the changed record. New entry is refused while a
+  reversal of its schedule is unfinished. Payment applications, deposited receipts, finished reconciliations
+  and sent messages block the complete unit before any inverse runs, with their identities.
+- Reversal checks the caller's child-document inverse grants and existing `memorized update` and, when relevant,
+  `memorized-group update` grants, including on resumed slices. Batch reads check memorized and child-document
+  read authority. Public effect and preview data omit nested command receipt bodies. The preview names every
+  occurrence and hold it removes or restores and lists only schedule fields that actually change.
+- Document ownership determines the inverse: checks, card charges, card credits and transfers use their native
+  commands, and receipts and shipments use their aggregate inverses instead of deleting their implementation
+  journals. The registry also declares customer refunds. Native inverse refusals remain blockers; clearing a
+  payment-selection draft is not a complete inverse, so such a child explicitly blocks rather than being
+  silently left behind. A shipment's native billing or draft dependencies remain subject to its own preflight.
+- Reversible choices: document numbers remain allocated, as with other native adopters. Occurrence restoration
+  replaces changed occurrence rows in one audited transaction, preserving the entered-row update fence and
+  the exact prior slot state. Entry attempts use a run-specific retry key; recovery finds the latest receipt
+  and ignores an explicitly reversed attempt, allowing a corrected retry to post a new document. No migration,
+  command or permission layer is added.
+- Tests exercise a three-invoice group with hand-worked balances, exact scheduling restoration, corrected runs,
+  newest-first ordering, payment/sent/deposit/reconciliation blockers, denied inverse grants, interrupted and
+  crash-before-outcome recovery, effect-write rollback, scheduler holds, nested batch invoicing, public receipt
+  redaction and native money-out inverse selection.

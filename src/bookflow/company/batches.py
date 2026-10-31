@@ -81,6 +81,7 @@ ADAPTER_MODULES = {
     'fixed-asset-depreciation': 'fixed_assets', 'finance-charge-assessment': 'finance_charges',
     'barcode-generate': 'barcodes', 'cycle-count-classify': 'cycle_counts',
     'bank-rule-apply': 'bank_rule_reversal', 'notice-generate': 'notices',
+    'memorized-run': 'memorized_reversal',
 }
 
 
@@ -276,8 +277,12 @@ def show(s, ctx, batch_id: str) -> dict:
 
 
 def _effect_out(e: dict) -> dict:
+    before = json.loads(e['before']) if e['before'] else None
+    if e['record_type'] == 'memorized_run' and before and 'prior' in before:
+        from bookflow.company.memorized_reversal import public_state
+        before = {key: public_state(value) for key, value in before.items()}
     return {'seq': e['seq'], 'record_type': e['record_type'], 'record_id': e['record_id'], 'action': e['action'],
-            'version_after': e['version_after'], 'before': json.loads(e['before']) if e['before'] else None,
+            'version_after': e['version_after'], 'before': before,
             'event_id': e['event_id']}
 
 
@@ -464,7 +469,8 @@ REVISIONS = {'work_documents': ('work_revisions', 'document_id'),
 def _document_edit(s, rec: DocumentRecord, record_id: str) -> dict | None:
     """A document edited since the import made it: a revision after its first. Settling it (a payment applied)
     changes its version, not its revisions, and is found as a use instead."""
-    table, column = REVISIONS.get(rec.table.name, ('transaction_revisions', 'transaction_id'))
+    from bookflow.company.reversal_registry import REVISION_TABLES
+    table, column = {**REVISIONS, **REVISION_TABLES}.get(rec.table.name, ('transaction_revisions', 'transaction_id'))
     row = s.company.raw.execute(f'SELECT count(*), max(created_at) FROM {table} WHERE {column} = ?',
                                 (record_id,)).fetchone()
     if not row or row[0] <= 1:
@@ -624,10 +630,14 @@ def _chains(s, batch: dict, keys: list[tuple[str, str]]) -> dict[tuple[str, str]
 
 def _current(s, record_type: str, ids: list[str]) -> dict[str, dict]:
     rec = _record(record_type)
+    from bookflow.company.reversal_registry import record_current
+    special = record_current(s, rec, ids)
+    if special is not None:
+        return special
     t = rec.table
     active = t.c.active if 'active' in t.c else sa.literal(True).label('active')
     cols = [t.c.id, t.c.version, t.c.updated_by, t.c.updated_at, active, t.c[rec.name_field]]
-    if getattr(rec, 'document', False) and t.name == 'transactions':
+    if getattr(rec, 'document', False) and 'status' in t.c:
         cols.append(t.c.status)
     out = {}
     for start in range(0, len(ids), 500):
@@ -783,11 +793,16 @@ def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
     if adapter.planner is not None:
         found = adapter.planner(s, ctx, batch, effects(s, batch_id), _done_steps(s, batch), probe, blockers)
         return {'batch': batch, 'fingerprint': _fingerprint(found['steps']), **found}
-    if batch['kind'] != 'bill-pay' and any(e['record_type'] == 'bill_payment' for e in effects(s, batch_id)):
+    return plan_records(s, ctx, batch, effects(s, batch_id), _done_steps(s, batch), probe, blockers)
+
+
+def plan_records(s, ctx, batch, all_effects, done, probe, blockers):
+    """Plan registered record inverses, also used by adapters with additional run state."""
+    batch_id = batch['id']
+    if batch['kind'] != 'bill-pay' and any(e['record_type'] == 'bill_payment' for e in all_effects):
         from bookflow.company.bill_payments import reversal_blockers
         blockers.extend(reversal_blockers(s, ctx, batch))
-    groups = _groups(effects(s, batch_id))
-    done = _done_steps(s, batch)
+    groups = _groups(all_effects)
     made = {g['key'] for g in groups if g['action'] == 'created'}
     pending = []
     for g in reversed(groups):
