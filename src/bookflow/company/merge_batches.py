@@ -108,6 +108,13 @@ def _check(s, effect):
                 actor_id=s.actor.id, via='', unmerging=True)
         except BookflowError as error:
             block(error.code, error.message, **error.details)
+    if kind in list_merges.KINDS and merge['deactivated_merged']:
+        from bookflow.company import list_service, schema
+        try:
+            table = schema.metadata.tables[TABLES[kind]]
+            list_service.plan_activation(db, table, list_merges._resolve(db, kind, merge['merged_id']))
+        except BookflowError as error:
+            block(error.code, error.message, **error.details)
     if kind == 'item' and merge['deactivated_merged']:
         from bookflow.company import items
         item = items.resolve_item(db, merge['merged_id'])
@@ -147,8 +154,14 @@ def _plan(s, ctx, batch, effects, done, probe, blockers):
             try:
                 batches.run_nested(s, ctx, command, payload, source_ref=f"reverse:{batch['id']}", dry_run=True)
             except BookflowError as error:
-                blockers.append(dict(seq=effect['seq'], record_type=effect['record_type'], record_id=effect['record_id'],
-                                     code=error.code, message=error.message, details=error.details))
+                # Native item unmerge wraps barcode validation in E_MERGE_REFUSED. It is
+                # the same collision already enumerated alongside the kept references.
+                duplicate = any((b['code'] == error.code and b.get('details') == error.details) or (
+                    error.details.get('item_id') and b.get('details', {}).get('item_id') == error.details['item_id'])
+                    for b in problems)
+                if not duplicate:
+                    blockers.append(dict(seq=effect['seq'], record_type=effect['record_type'], record_id=effect['record_id'],
+                                         code=error.code, message=error.message, details=error.details))
         step = dict(seq=effect['seq'], record_type=effect['record_type'], record_id=effect['record_id'],
                     label=f"{kind} merge {effect['record_id']}", operation=command, action='unmerge', version=1,
                     steps=[dict(command=command, payload=payload)], references=references,

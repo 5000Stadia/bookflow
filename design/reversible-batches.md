@@ -148,7 +148,7 @@ demo-reset or checkpoint behavior in this increment. A separate reference-year p
   inside the inverse transaction and records completion there. Interrupted finalization resumes without replaying
   an unmerge. A merge undone separately through its native door is explicitly refused as no longer standing.
 - Refusals list every reference native unmerge would keep, changed or deleted original documents, barcode and
-  reactivation-name collisions, and later live merges into the same survivor. Independent survivors can unwind
+  reactivation-name collisions, inactive ancestors, and later live merges into the same survivor. Independent survivors can unwind
   independently. Changed original work documents and purchase orders are checked beside posted transactions.
   Barcode validation does not hide other reference blockers. Native partial unmerge remains available separately;
   it is never offered as a complete batch reversal.
