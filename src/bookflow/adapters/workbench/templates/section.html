@@ -36,5 +36,5 @@
 <ul class="section-links">{% for link in s.lists %}<li><a href="{{ link.href }}">{{ link.label }}</a></li>{% endfor %}</ul></section>{% endif %}
 </div>{% endif %}
 </div>
-<p class="section-footer">{% if s.slug != 'settings' %}Types, terms and other setup lists are in <a href="/c/{{ company_id }}/_group/settings">Settings</a>. {% endif %}Everything else is in <a href="/c/{{ company_id }}/_all">All commands</a>, or search for any task by name with <a href="/c/{{ company_id }}/_all" data-finder-open>Find</a> at the top of the page.</p>
+<p class="section-footer">{% if s.slug != 'settings' %}Types, terms and other setup lists are in <a href="/c/{{ company_id }}/_group/settings">Settings</a>. {% endif %}{% if (navigation or {}).get('advanced', true) %}Everything else is in <a href="/c/{{ company_id }}/_all">All commands</a>, or search for any task by name with <a href="/c/{{ company_id }}/_all" data-finder-open>Find</a> at the top of the page.{% endif %}</p>
 {% endblock %}

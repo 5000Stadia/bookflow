@@ -2892,3 +2892,19 @@ MATRIX['automation pause'] = {'E_VALIDATION': 'unknown kind', 'E_RECORD_NOT_FOUN
                               'E_IDEMPOTENCY_MISMATCH': 'a reused key with other input',
                               'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
                               'E_DIRECTIVE_INACTIVE': 'deactivated --directive'}
+# The POS layer (R114 increment 4): registers.
+_POS_WRITE = {
+    'E_VALIDATION': 'a deposit account that is not Undeposited Funds or a bank, a refund account that is not a bank, a '
+                    'payment method named twice, an unknown decoder',
+    'E_RECORD_NOT_FOUND': 'unknown register, site, account, payment method or customer',
+    'E_NAME_TAKEN': 'another register has the name',
+    'E_INACTIVE_REFERENCE': 'an inactive account, payment method or customer',
+    'E_FEATURE_DISABLED': 'POS is off for the company',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+    'E_IDEMPOTENCY_MISMATCH': 'a reused operation key with other input',
+}
+MATRIX['pos-register create'] = dict(_POS_WRITE)
+MATRIX['pos-register update'] = dict(_POS_WRITE, E_VERSION_CONFLICT='changed since the version read')
+MATRIX['pos-register show'] = {'E_RECORD_NOT_FOUND': 'unknown register', 'E_FEATURE_DISABLED': 'POS is off'}
+MATRIX['pos-register list'] = {'E_FEATURE_DISABLED': 'POS is off for the company'}

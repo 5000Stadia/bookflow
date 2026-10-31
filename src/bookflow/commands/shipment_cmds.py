@@ -260,3 +260,9 @@ for _write in (plan_shipment_return, plan_shipment_return_void):
     _write.ledger = True
     _write.resource_requirements = (('customer-work', 'standard'),)
     _write.applier(shipment_returns.apply)
+
+
+# A shipment or return names its customer: reading one also needs `customer` (pos-v1).
+for _read in (plan_shipment_show, plan_shipment_query, plan_shipment_history, plan_shipment_return_show,
+              plan_shipment_return_query):
+    _read.resource_requirements = (('customer', 'member'),)

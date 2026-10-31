@@ -1038,6 +1038,9 @@ def plan_account_active_change(
     if active:
         from bookflow.company.list_merges import refuse_while_merged
         refuse_while_merged(db, "account", record_id, "make active")
+    elif requested.get("active"):
+        from bookflow.company.pos_layer import refuse_if_used
+        refuse_if_used(db, "account", record_id, "made inactive")
     _validate_stored_account(db, requested, activating=active)
     if requested.get("system_role") is not None and bool(requested["active"]) is not active:
         raise BookflowError(

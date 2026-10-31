@@ -83,6 +83,10 @@ def capability_words(capability: str) -> str:
         return "Can post, edit and void"
     if capability in _deletions():
         return "Can delete " + _deletions()[capability]
+    if capability.startswith("preset."):
+        from bookflow.hub.pos_presets import PRESETS
+        label = PRESETS.get(capability[7:], (capability[7:],))[0]
+        return f"Can do what a {label} does (made from the {label} preset)"
     return "Can use " + Naming.words(capability.replace(".", " ")).lower()
 
 

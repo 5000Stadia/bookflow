@@ -72,3 +72,4 @@ Database: `company`.
 | `job_sales_rep_id` | VARCHAR(26) | yes | — | — | ix_customers_job_sales_rep_id | sales_reps.id | Job-specific active sales-representative id; null when inherited or unset. |
 | `address_mode` | VARCHAR(7) | no | "own" | — | — | — | Address collection mode: inherit or own. |
 | `contact_mode` | VARCHAR(7) | no | "own" | — | — | — | Contact collection mode: inherit or own. |
+| `pos_walk_in` | BOOLEAN | no | — | — | — | — | Point of sale: this customer is (or was) a register's walk-in customer, the one a sale with no customer is recorded against; never merged or edited in bulk. |

@@ -155,7 +155,8 @@ def _localized(record: items.ItemOutput, session: Session) -> dict[str, Any]:
     from bookflow.company.item_pictures import absolute
     for key in ("picture", "thumbnail"):
         values[key] = absolute(session.company_row["id"], values.get(key))
-    return values
+    from bookflow.company.item_concealment import conceal
+    return conceal(values, session)
 
 
 def _version_meta(

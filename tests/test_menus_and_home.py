@@ -311,8 +311,12 @@ def test_every_page_runs_only_what_it_declares(hosted, monkeypatch):
         ran.append(cmd.name)
         return original(host, cmd, *args, **kwargs)
 
+    # POS on (R114 inc 4), so its page is opened and declared like the rest.
+    hosted.ok("company.update", {"pos_enabled": True, "expected_version": hosted.info()["info_version"]}, company=cid,
+              headers=REASON)
     monkeypatch.setattr(execution, "run_hosted", recording)
     client = _login(hosted, hosted.login, PASSWORD)
+    assert client.get(f"/c/{cid}/pos").status_code == 200
     undeclared = {}
     for destination, named in Home._declared_destinations().items():
         client.get(f"/c/{cid}/")  # every page's own reads warm, so only the page's are recorded

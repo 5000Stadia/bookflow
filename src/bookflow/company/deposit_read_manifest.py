@@ -325,6 +325,7 @@ FIELDS = {
         'delivery_auto_flag_from': ('str', True, False, 'dependency_field'),
         'weight_unit': ('str', False, False, 'dependency_field'),
         'shipping_item_id': ('str', True, False, 'dependency_field'),
+        'pos_enabled': ('bool', False, False, 'dependency_field'),
     },
     'custom_field_defs': {
         'active': ('bool', False, False, 'dependency_field'),
@@ -425,6 +426,7 @@ FIELDS = {
         'job_sales_rep_id': ('str', True, False, 'dependency_field'),
         'address_mode': ('str', False, False, 'dependency_field'),
         'contact_mode': ('str', False, False, 'dependency_field'),
+        'pos_walk_in': ('bool', False, False, 'outside_output'),
     },
     'deposit_cash_cells': {
         'id': ('str', False, True, 'immutable_image'),

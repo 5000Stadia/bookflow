@@ -154,6 +154,8 @@ def plan_site_active(s, ctx, inp, active: bool) -> Plan:
     old = placements.resolve_site(s, inp.site, active=False)
     _version_check('inventory_site', old, inp.expected_version)
     if not active:
+        from bookflow.company.pos_layer import refuse_if_used
+        refuse_if_used(s.company, 'inventory_site', old['id'], 'made inactive')
         if old['is_default']:
             raise _invalid('site', f'"{old["name"]}" is the default site and cannot be deactivated; make another '
                                    'site the default first')

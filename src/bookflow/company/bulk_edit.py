@@ -156,7 +156,7 @@ def select(s, ctx, k, sel, books, *, limit: int = MAX_RECORDS) -> tuple[list[str
             raise BookflowError('E_RECORD_NOT_FOUND', message=(
                 f"No {k.noun} {', '.join(repr(m) for m in missing[:5])}{' ...' if len(missing) > 5 else ''}."),
                 details={'record_type': k.noun, 'selector': missing[0], 'missing': missing[:50]})
-        ids = list(dict.fromkeys(ids))
+        ids = _without_walk_ins(s, k, list(dict.fromkeys(ids)))
         return ids[:limit], len(ids)
     ids, cursor, total = [], None, None
     while True:
@@ -173,7 +173,19 @@ def select(s, ctx, k, sel, books, *, limit: int = MAX_RECORDS) -> tuple[list[str
         if not cursor or len(ids) > limit:
             break
     total = total if isinstance(total, int) else len(ids)
-    return ids[:limit], max(total, len(ids))
+    kept = _without_walk_ins(s, k, ids)
+    return kept[:limit], max(total - (len(ids) - len(kept)), len(kept))
+
+
+def _without_walk_ins(s, k, ids: list[str]) -> list[str]:
+    """A POS register's walk-in customer is never edited in bulk (R114 inc 4): it is left out of every selection."""
+    if k.noun != 'customer' or not ids:
+        return ids
+    import sqlalchemy as sa
+    from bookflow.company import schema as c
+    walk_ins = {r[0] for r in s.company.conn.execute(sa.select(c.customers.c.id).where(
+        c.customers.c.pos_walk_in.is_(True)))}
+    return [i for i in ids if i not in walk_ins]
 
 
 def _dumped(value) -> dict:

@@ -304,6 +304,9 @@ delivery_connection_query = _connection_read(
     'delivery-connection query', 'The sending connections, and the transport kinds this build registers (none: '
     'nothing leaves this machine).', qm.ConnectionQueryInput, qm.ConnectionPageOutput, plan_connection_query,
     errors=[])
+# A sending connection is the outbox's: reading one needs customer-work, as every outbox read does (pos-v1).
+delivery_connection_show.resource_requirements = delivery_connection_query.resource_requirements = (
+    ('customer-work', 'member'),)
 
 
 # ---------------------------------------------------------------- flags, the queue and batches (increment 3)

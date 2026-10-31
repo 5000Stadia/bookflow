@@ -78,6 +78,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `changed` | boolean | no | no | false | — |
 | `companies_needing_administrator` | array[dict] | no | no | [] | — |
 | `affected_agents` | array[string] | no | no | [] | — |
+| `presets_extended` | array[dict] | no | no | [] | Memberships made from a preset (a POS clerk) whose denies this activation extended, so the new catalog gives them nothing `readonly` newly holds: user, scope and the capabilities added to the denies. |
 
 Example JSON output:
 
@@ -90,6 +91,7 @@ Example JSON output:
   "dry_run": false,
   "generation": 1,
   "mode": "value",
+  "presets_extended": [],
   "warnings": []
 }
 ```
@@ -187,6 +189,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `changed` | boolean | no | no | false | — |
 | `companies_needing_administrator` | array[dict] | no | no | [] | — |
 | `affected_agents` | array[string] | no | no | [] | — |
+| `presets_extended` | array[dict] | no | no | [] | Memberships made from a preset (a POS clerk) whose denies this activation extended, so the new catalog gives them nothing `readonly` newly holds: user, scope and the capabilities added to the denies. |
 
 Example JSON output:
 
@@ -199,6 +202,7 @@ Example JSON output:
   "dry_run": false,
   "generation": 1,
   "mode": "value",
+  "presets_extended": [],
   "warnings": []
 }
 ```

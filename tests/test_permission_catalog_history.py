@@ -111,6 +111,7 @@ ACCEPTED = {
     'user-home-v1': (850, 'e3ca5ecf2483bcf9780cdd3e9300c5a9cb9ac74f02d2a9f29175bfe8f0c98b36'),
     'automation-v1': (853, '4df1e05f0db60c9ac166ce314398120e3065dfb07f205327c81f3d5e5348e7ed'),
     'opening-draft-v1': (862, '56a757a3260e92ca76ffafbf79f7cbcac99198a1c292278998588eef117d9aa2'),
+    'pos-v1': (866, '3d55aae9746f7326fb83eab6d2a48e4d6d100ce35e48f6d845cbff2180dacaf2'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -265,6 +266,7 @@ CHAIN_ADDITIONS = {
     'opening-draft-v1': {'opening-draft apply', 'opening-draft create', 'opening-draft discard', 'opening-draft plan',
                          'opening-draft query', 'opening-draft reverse', 'opening-draft show', 'opening-draft tie-out',
                          'opening-draft update'},
+    'pos-v1': {'pos-register create', 'pos-register list', 'pos-register show', 'pos-register update'},
 }
 
 _ANCESTOR_EDIT = """

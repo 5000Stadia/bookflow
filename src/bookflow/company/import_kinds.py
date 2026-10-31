@@ -360,6 +360,7 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
         'bulk-edit preview', 'bulk-edit apply', 'bulk-edit reverse',
         'opening-draft create', 'opening-draft update', 'opening-draft discard', 'opening-draft plan',
         'opening-draft apply', 'opening-draft reverse',
+        'pos-register create', 'pos-register update',
         'account activate', 'accountant reclassify', 'accountant-copy changes', 'accountant-copy import',
         'assembly build', 'assembly update', 'attachment link', 'barcode generate', 'batch-invoice retry',
         'bill payment apply', 'bill update', 'billing-group rename', 'bin activate', 'bin update', 'budget fill',

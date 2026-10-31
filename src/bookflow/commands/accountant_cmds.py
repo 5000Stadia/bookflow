@@ -151,6 +151,10 @@ def plan_copy_status(inp, ctx, s) -> Plan:
     return Plan(acct.status(s))
 
 
+# The accountant's review is the books': reading who reviews them, or whether a copy is out, needs ledger.read (pos-v1).
+plan_accountant_list.resource_requirements = plan_copy_status.resource_requirements = (('ledger.read', 'member'),)
+
+
 accountant_copy_cancel = command(
     'accountant-copy cancel', scope='company',
     description=("Remove the accountant's copy restrictions without importing, as the anchor's Remove Restrictions does: these "

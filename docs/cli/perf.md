@@ -235,7 +235,7 @@ Example JSON output:
 
 ## `perf report`
 
-Report how long commands take: p50, p95 and max per command and surface over a window, and the slowest single calls. Times are inside the command (validation through the response), with SQL statement counts. Nothing about the books' content is recorded.
+Report how long commands take: p50, p95 and max per command and surface over a window, and the slowest single calls. Times are inside the command (validation through the response), with SQL statement counts. Nothing about the books' content is recorded. Outside an installation administrator, only calls on companies whose reports the caller may run are counted.
 
 | Contract | Value |
 |---|---|

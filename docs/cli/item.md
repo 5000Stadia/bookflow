@@ -206,11 +206,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `quantity_committed` | string | yes | no | — | — |
 | `quantity_on_order` | string | yes | no | — | — |
 | `quantity_pending_build` | string | yes | no | — | — |
-| `average_cost` | object | yes | no | — | — |
+| `average_cost` | object \| null | yes | yes | — | — |
 | `average_cost.amount` | string | yes | no | — | — |
 | `average_cost.currency` | string | yes | no | — | — |
 | `average_cost.minor_units` | integer | yes | no | — | — |
-| `inventory_value` | object | yes | no | — | — |
+| `inventory_value` | object \| null | yes | yes | — | — |
 | `inventory_value.amount` | string | yes | no | — | — |
 | `inventory_value.currency` | string | yes | no | — | — |
 | `inventory_value.minor_units` | integer | yes | no | — | — |
@@ -251,11 +251,7 @@ Example JSON output:
   "assembly_build_point": null,
   "asset_account_id": null,
   "asset_number": null,
-  "average_cost": {
-    "amount": "value",
-    "currency": "USD",
-    "minor_units": 1
-  },
+  "average_cost": null,
   "barcode": null,
   "bill_of_material_cost": null,
   "book_basis": null,
@@ -292,11 +288,7 @@ Example JSON output:
   "has_children": false,
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "income_account_id": null,
-  "inventory_value": {
-    "amount": "value",
-    "currency": "USD",
-    "minor_units": 1
-  },
+  "inventory_value": null,
   "inventory_values_available": false,
   "liability_account_id": null,
   "location": null,
@@ -821,11 +813,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `quantity_committed` | string | yes | no | — | — |
 | `quantity_on_order` | string | yes | no | — | — |
 | `quantity_pending_build` | string | yes | no | — | — |
-| `average_cost` | object | yes | no | — | — |
+| `average_cost` | object \| null | yes | yes | — | — |
 | `average_cost.amount` | string | yes | no | — | — |
 | `average_cost.currency` | string | yes | no | — | — |
 | `average_cost.minor_units` | integer | yes | no | — | — |
-| `inventory_value` | object | yes | no | — | — |
+| `inventory_value` | object \| null | yes | yes | — | — |
 | `inventory_value.amount` | string | yes | no | — | — |
 | `inventory_value.currency` | string | yes | no | — | — |
 | `inventory_value.minor_units` | integer | yes | no | — | — |
@@ -863,11 +855,7 @@ Example JSON output:
   "assembly_build_point": null,
   "asset_account_id": null,
   "asset_number": null,
-  "average_cost": {
-    "amount": "value",
-    "currency": "USD",
-    "minor_units": 1
-  },
+  "average_cost": null,
   "barcode": null,
   "bill_of_material_cost": null,
   "book_basis": null,
@@ -903,11 +891,7 @@ Example JSON output:
   "has_children": false,
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "income_account_id": null,
-  "inventory_value": {
-    "amount": "value",
-    "currency": "USD",
-    "minor_units": 1
-  },
+  "inventory_value": null,
   "inventory_values_available": false,
   "liability_account_id": null,
   "location": null,
@@ -1204,11 +1188,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `quantity_committed` | string | yes | no | — | — |
 | `quantity_on_order` | string | yes | no | — | — |
 | `quantity_pending_build` | string | yes | no | — | — |
-| `average_cost` | object | yes | no | — | — |
+| `average_cost` | object \| null | yes | yes | — | — |
 | `average_cost.amount` | string | yes | no | — | — |
 | `average_cost.currency` | string | yes | no | — | — |
 | `average_cost.minor_units` | integer | yes | no | — | — |
-| `inventory_value` | object | yes | no | — | — |
+| `inventory_value` | object \| null | yes | yes | — | — |
 | `inventory_value.amount` | string | yes | no | — | — |
 | `inventory_value.currency` | string | yes | no | — | — |
 | `inventory_value.minor_units` | integer | yes | no | — | — |
@@ -1249,11 +1233,7 @@ Example JSON output:
   "assembly_build_point": null,
   "asset_account_id": null,
   "asset_number": null,
-  "average_cost": {
-    "amount": "value",
-    "currency": "USD",
-    "minor_units": 1
-  },
+  "average_cost": null,
   "barcode": null,
   "bill_of_material_cost": null,
   "book_basis": null,
@@ -1290,11 +1270,7 @@ Example JSON output:
   "has_children": false,
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "income_account_id": null,
-  "inventory_value": {
-    "amount": "value",
-    "currency": "USD",
-    "minor_units": 1
-  },
+  "inventory_value": null,
   "inventory_values_available": false,
   "liability_account_id": null,
   "location": null,
@@ -1582,11 +1558,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].quantity_committed` | string | yes | no | — | — |
 | `items[].quantity_on_order` | string | yes | no | — | — |
 | `items[].quantity_pending_build` | string | yes | no | — | — |
-| `items[].average_cost` | object | yes | no | — | — |
+| `items[].average_cost` | object \| null | yes | yes | — | — |
 | `items[].average_cost.amount` | string | yes | no | — | — |
 | `items[].average_cost.currency` | string | yes | no | — | — |
 | `items[].average_cost.minor_units` | integer | yes | no | — | — |
-| `items[].inventory_value` | object | yes | no | — | — |
+| `items[].inventory_value` | object \| null | yes | yes | — | — |
 | `items[].inventory_value.amount` | string | yes | no | — | — |
 | `items[].inventory_value.currency` | string | yes | no | — | — |
 | `items[].inventory_value.minor_units` | integer | yes | no | — | — |
@@ -2156,11 +2132,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `quantity_committed` | string | yes | no | — | — |
 | `quantity_on_order` | string | yes | no | — | — |
 | `quantity_pending_build` | string | yes | no | — | — |
-| `average_cost` | object | yes | no | — | — |
+| `average_cost` | object \| null | yes | yes | — | — |
 | `average_cost.amount` | string | yes | no | — | — |
 | `average_cost.currency` | string | yes | no | — | — |
 | `average_cost.minor_units` | integer | yes | no | — | — |
-| `inventory_value` | object | yes | no | — | — |
+| `inventory_value` | object \| null | yes | yes | — | — |
 | `inventory_value.amount` | string | yes | no | — | — |
 | `inventory_value.currency` | string | yes | no | — | — |
 | `inventory_value.minor_units` | integer | yes | no | — | — |
@@ -2196,11 +2172,7 @@ Example JSON output:
   "assembly_build_point": null,
   "asset_account_id": null,
   "asset_number": null,
-  "average_cost": {
-    "amount": "value",
-    "currency": "USD",
-    "minor_units": 1
-  },
+  "average_cost": null,
   "barcode": null,
   "bill_of_material_cost": null,
   "book_basis": null,
@@ -2235,11 +2207,7 @@ Example JSON output:
   "has_children": false,
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "income_account_id": null,
-  "inventory_value": {
-    "amount": "value",
-    "currency": "USD",
-    "minor_units": 1
-  },
+  "inventory_value": null,
   "inventory_values_available": false,
   "liability_account_id": null,
   "location": null,
@@ -2725,11 +2693,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `quantity_committed` | string | yes | no | — | — |
 | `quantity_on_order` | string | yes | no | — | — |
 | `quantity_pending_build` | string | yes | no | — | — |
-| `average_cost` | object | yes | no | — | — |
+| `average_cost` | object \| null | yes | yes | — | — |
 | `average_cost.amount` | string | yes | no | — | — |
 | `average_cost.currency` | string | yes | no | — | — |
 | `average_cost.minor_units` | integer | yes | no | — | — |
-| `inventory_value` | object | yes | no | — | — |
+| `inventory_value` | object \| null | yes | yes | — | — |
 | `inventory_value.amount` | string | yes | no | — | — |
 | `inventory_value.currency` | string | yes | no | — | — |
 | `inventory_value.minor_units` | integer | yes | no | — | — |
@@ -2771,11 +2739,7 @@ Example JSON output:
   "assembly_build_point": null,
   "asset_account_id": null,
   "asset_number": null,
-  "average_cost": {
-    "amount": "value",
-    "currency": "USD",
-    "minor_units": 1
-  },
+  "average_cost": null,
   "barcode": null,
   "bill_of_material_cost": null,
   "book_basis": null,
@@ -2812,11 +2776,7 @@ Example JSON output:
   "has_children": false,
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "income_account_id": null,
-  "inventory_value": {
-    "amount": "value",
-    "currency": "USD",
-    "minor_units": 1
-  },
+  "inventory_value": null,
   "inventory_values_available": false,
   "liability_account_id": null,
   "location": null,

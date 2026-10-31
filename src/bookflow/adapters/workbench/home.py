@@ -126,6 +126,13 @@ PANELS: tuple[Panel, ...] = (
                 action=Action("Make a deposit", WRITE, ("deposit post",), "/deposit/post"),
             ),
             Step(
+                id="pos",
+                title="Point of sale",
+                summary="Ring up a sale on a phone, tablet or till; it posts a sales receipt.",
+                action=Action("Open the point of sale", READ, ("pos-register list",), "/pos"),
+                aside=True,
+            ),
+            Step(
                 id="sales-receipt",
                 title="Sales receipt",
                 summary="A sale that is paid at the moment of sale, with no invoice in between.",
@@ -475,6 +482,7 @@ SECTIONS: tuple[Section, ...] = (
             _list("Invoice batches", "batch-invoice query", "/batch-invoice"),
         ),
         tasks=(
+            Action("Point of sale", READ, ("pos-register list",), "/pos"),
             Action("Receive payments", WRITE, ("payment receive",), "/receive-payments"),
             Action("Record a bounced check", WRITE, ("payment bounce",), "/payment/bounce"),
             Action("Move a credit between jobs", WRITE, ("customer-credit transfer",), "/customer-credit/transfer"),
@@ -1168,11 +1176,52 @@ def offered_menu(company_id: str, permits, rows=None) -> list[MenuGroup]:
     return [entry for entry in MENU if section_offers(company_id, entry, permits, rows)]
 
 
+def is_pos(command) -> bool:
+    """A command of the POS layer, offered only while `pos_enabled` is on (design/point-of-sale.md §2): one whose own
+    capability or a resource requirement is a pos.* capability, whatever its noun."""
+    from bookflow.hub.capabilities import pos_capability
+    return pos_capability(command) is not None
+
+
+POS_PAGE = "/pos"
+
+
+def pos_header_links(company_id: str, reader, menu: list[MenuGroup], *, seller: bool = False
+                     ) -> list[dict[str, str]] | None:
+    """A POS clerk's header (design/point-of-sale.md §9, as built in increment 4): when the Point of sale is open to
+    the reader, or they are a seller of a company with POS off (``seller``), and their only sections are Customers
+    through that one entry and Items (looking items up), the header is the minimal one with Point of sale (when on)
+    and Items as its links, and the side menu goes. None otherwise: every other reader's menu is exactly as before."""
+    command = registry.get("pos-register list")
+    offered = command is not None and reader(command) and page_allowed(POS_PAGE, reader)
+    if not (offered or seller):
+        return None
+    pos_href = f"/c/{company_id}{POS_PAGE}"
+    for entry in menu:
+        if entry.slug == "items":
+            continue
+        if entry.slug != "customers" or not offered:
+            return None
+        section = SECTION_BY_SLUG["customers"]
+        records = registry.get(f"{section.records} query")
+        found = resolve_section(company_id, section, permits=reader)
+        hrefs = [link["href"] for key in ("new", "lists", "tasks") for link in found[key]]
+        hrefs += [link["href"] for _, links in found["groups"] for link in links]
+        if (records is not None and reader(records)) or hrefs != [pos_href]:
+            return None
+    links = [dict(label="Point of sale", href=pos_href)] if offered else []
+    if any(entry.slug == "items" for entry in menu):
+        links.append(dict(label="Items", href=f"/c/{company_id}/_group/items"))
+    return links or None
+
+
 def features_offer(command, info: dict[str, Any]) -> bool:
-    """Whether the company's switches offer the command: pick lists (R181 K3) are off until turned on, and new
-    estimates follow `estimates_enabled`. The workbench and `user home set` both ask this."""
+    """Whether the company's switches offer the command: pick lists (R181 K3) and the POS layer are off until turned
+    on, and new estimates follow `estimates_enabled`. The workbench and `user home set` both ask this."""
     if command.name.startswith("pick-list ") and not info.get("pick_and_pack_enabled", False):
         return False
+    if not info.get("pos_enabled", False) and is_pos(command):
+        return False  # the POS layer (R114 increment 4): no POS surface while it is off
     return bool(info.get("estimates_enabled", True)) or command.name not in ("estimate create", "estimate copy",
                                                                                "proposal estimate")
 
@@ -1254,6 +1303,7 @@ PAGE_RUNS: dict[str, tuple[str, ...]] = {
     '/job-type': ('job-type query', 'job-type query options'),
     '/journal/post': ('custom-field list',),
     '/mileage': ('customer list', 'item list', 'mileage-rate list', 'vehicle list'),
+    '/opening': ('opening-draft query',),
     '/other-name': ('other-name query', 'other-name query options'),
     '/other-name/create': ('custom-field list',),
     '/payment': ('payment-method list',),
@@ -1298,7 +1348,11 @@ def page_allowed(destination: str, permits, lookup=None) -> bool:
     flag = PAGE_FLAGS.get(key) or (f"section:{key[8:]}" if key.startswith("/_group/") else None)
     if flag is None:
         return True
-    return permits.flag(flag) if isinstance(permits, Reader) else True
+    if isinstance(permits, Reader):
+        return permits.flag(flag)
+    # A bare predicate (a section page's links): "some company write" is still decidable from it (R114 inc 4: All
+    # commands answers the refusal page without one, so it is not linked either).
+    return Reader("", permits).flag(flag) if flag == "advanced" else True
 
 
 # Pages that are not a noun's own page, and the command each one reads. A Home may be any of these, any destination

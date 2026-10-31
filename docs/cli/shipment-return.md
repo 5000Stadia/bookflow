@@ -12,6 +12,7 @@ List shipment returns, newest first, by shipment, customer, status or date.
 | Kind | read |
 | Required role | member |
 | Capability | item |
+| Additional resources | customer: member |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/shipment-return.query` |
 | External binary body | none |
@@ -130,6 +131,7 @@ Show one shipment return: the shipment, order and customer, its date, whether th
 | Kind | read |
 | Required role | member |
 | Capability | item |
+| Additional resources | customer: member |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/shipment-return.show` |
 | External binary body | none |
