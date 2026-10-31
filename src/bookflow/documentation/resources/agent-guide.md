@@ -112,7 +112,9 @@ account must come from the owner. Reversal may require the created entries' Dele
 
 Reconciliation remains separate: `reconcile import --from-inbox` uses the inbox for the statement
 period, with the owner's statement date and ending balance, and runs the usual reconciliation
-matcher. Matching in the inbox does not certify a statement. Never post an adjustment to force a tie.
+matcher. Matching in the inbox does not certify a statement. As an agent, never post an adjustment
+to force a tie: leave the draft open and tell the owner the difference. A person may explicitly use
+`reconcile finish` with `adjustment={"reason": "..."}`; that input is refused for agents and MCP callers.
 
 “Connect my bank”: live bank connections are not available. `bank-feed-connection query` lists no
 production providers; use statement files. Do not ask for bank credentials. The connection commands
@@ -1190,9 +1192,14 @@ canceled, kept with its history, and leaves the Overview and the owner's entries
 
 ## A reconciliation that will not tie
 
-Never force a statement to tie. `reconcile finish` has no adjustment input. When the difference
-will not reach zero, leave the draft open, record what you checked with `note add reconciliation_draft`,
-and tell the owner the account, statement date and remaining difference from `reconcile preview`.
+Never force a statement to tie. `reconcile finish` accepts `adjustment={"reason": "..."}`
+only from a person; an agent, including a caller over MCP or acting on someone's behalf, is refused
+with `E_PERMISSION`. It posts the exact remaining difference as a journal dated the statement date
+to Reconciliation Discrepancies and certifies with that movement cleared. The caller chooses neither
+the amount nor the account; `--dry-run` previews it, and a statement that already ties posts nothing.
+When the difference will not reach zero, leave the draft open, record what you checked with
+`note add reconciliation_draft`, and tell the owner the account, statement date and remaining
+difference from `reconcile preview`.
 
 ## An item that should have been stocked
 
@@ -1628,8 +1635,9 @@ it and tell the owner what `company verify` reported: nothing you post fixes it.
 Never post, change or tick an entry just to make a reconciliation's difference zero. If a
 statement will not tie, stop: leave the draft open, add a note to it saying what you checked
 (`note add reconciliation_draft <draft id> --body "..."`), and tell the owner. The open draft,
-its difference and your note appear on the owner's Overview. `reconcile finish` has no
-adjustment input; a statement is certified only when its ticked movements tie.
+its difference and your note appear on the owner's Overview. A person may use `reconcile finish`
+with `adjustment={"reason": "..."}` to post the exact difference to Reconciliation Discrepancies
+and certify with that movement cleared; agents and MCP callers are refused with `E_PERMISSION`.
 
 The owner's `report entries-to-review` lists, from any command and any actor, entries dated
 into a reconciled statement period or a closed period but entered later, entries an agent

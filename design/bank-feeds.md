@@ -1237,8 +1237,10 @@ remain unverified; provider and credential calls in this increment's tests use f
   move without reversing first, and no live provider or request for credentials. Import-history counts are arrival
   outcomes; `bank-feed show.by_state` and its lines describe current decisions.
 - **Guide and README.** A bank-inbox chapter covers attachments, import, sorting, details, transfers, rules,
-  undo/move and reconciliation. The file-reconciliation chapter is explicitly separate and its obsolete adjustment
-  advice is removed. README features and availability describe the inbox and unavailable live connections.
+  undo/move and reconciliation. The file-reconciliation chapter is explicitly separate. `reconcile finish`
+  accepts `adjustment={"reason": "..."}` to post the exact difference and certify; this is a person-only act,
+  refused for agents and MCP callers, not an absent feature. The bank chapter and both stop-at-a-difference
+  sections state that distinction. README features and availability describe the inbox and unavailable live connections.
   Command and guide documentation is regenerated. No command was added; no migration or permission layer changed.
 - **Demo.** Four company attachments, discoverable with `attachment list company_info <company id>`:
   `september-checking.ofx` (six lines), `september-checking-overlap.ofx` (two repeats and one new line),
@@ -1280,37 +1282,50 @@ Peak RSS: 384 MB for import plus HTML host; 340 MB for reverse and move. Seeding
 excluded from reversal time. Completed reversal/move outputs also assert zero remaining steps. The default
 100-entry reversal slice is unchanged.
 
-**Closing trial** (`notes/trials/r108-trial/results.md`, private). Separate `codex exec` sessions started in new empty
-private directories outside this worktree, with user config/project-document loading disabled. Each received only
-owner prompts and a tiny CLI wrapper selecting this source tree and disposable demo root: no code, design docs,
-prior transcript or implementation briefing. The CLI forwarded to the scratch host as the local operator `k`;
-this was a fresh-agent usability trial, not an independent agent-identity permission trial. Five of six requests
-completed on the first run; the sixth correctly reported a Delete-permission blocker. The setup had granted the
-capability to the demo-agent membership instead of the CLI operator; the operator corrected that grant and a fresh
-session completed the move. No agent granted itself permissions. Initial unselected-company reads recovered from
-the command's diagnostic without intervention.
+**Closing trial** (`notes/trials/r108-trial/mcp-close/results.md`, private). Separate `codex exec` sessions
+started in new empty directories outside this worktree with user config/project documents and shell tools
+disabled. Each received only the six owner prompts and used Bookflow's three discoverable MCP tools; no repo,
+docs, CLI wrapper or previous transcript was supplied. The run-local stdio launcher connected to an isolated
+host using a token for a company member with role `standard`, `hub_admin: false`, and the explicit
+`transaction.check.delete` grant needed for the seeded wrong-account check. Audit rows verify `interface=mcp`
+and that member's identity. This supersedes the earlier CLI usability trial as closing evidence.
 
-| Owner prompt | First run | Correction and fresh rerun |
+The first launcher invocation was blocked by a Codex MCP approval default before any Bookflow command ran;
+the run-local server configuration was corrected and a new empty-directory session started. On the first
+actual MCP attempt, five of six business requests were correct. The Shell rule used exact payee equality and
+missed a future description with a suffix. Command help now explicitly says to use `contains SHELL` for this
+merchant-wide request and reserve `equals` for an exact-description request. A fresh complete rerun used
+another newly seeded scratch root, the corrected help and the same prompts; all six requests passed.
+The transcripts contain only agent messages and MCP calls (35 on the first actual run, 37 on the rerun).
+
+| Owner prompt | First MCP attempt | Help correction and fresh MCP rerun |
 |---|---|---|
-| September's checking statement | Correct: both files previewed/imported; six plus one new, two repeats; one existing deposit matched | Inbox reason corrected as above; a fresh CSV run imported one waiting line without posting or suggesting re-import |
-| Wrong account | Correct safe refusal; move pending on the explicit check Delete grant | Setup grant corrected; fresh sessions moved the import and cancelled its created check. Follow-up move output/continuation fixes passed another fresh move, including account confirmation |
-| Sort the inbox and report the rest | Correct: three Shell purchases, 110.00 to Fuel; 12.00 service fee to Bank Fees; unknown ACH and blocked-import wire fee reported | No task correction needed |
-| Always put Shell under Fuel | Correct: written active proposal rule, apply dry-run, no auto-add or live automation | Owner-side future-Shell preview proposes without posting; decided lines unchanged |
-| Is the card payment a transfer? | Correct: card file imported, one 500.00 transfer linked to both ends; card Shell purchase 25.00 to Fuel | No task correction needed |
-| Connect my bank | Correct: no provider, no connection made, no credentials requested | No task correction needed |
+| September's checking statement | Correct: both files previewed/imported; six plus one new, two repeats; existing deposit matched | No help correction needed; correct on fresh rerun |
+| Wrong account | Correct: fingerprinted move takes back the check and moves both lines; move dry-run includes the reversal plan instead of a separate reverse dry-run | No help correction needed; correct on fresh rerun |
+| Sort the inbox and report the rest | Correct: Checking Shell purchases 110.00 to Fuel; unidentified fee payees/categories and ACH reported waiting | No help correction needed; correct on fresh rerun |
+| Always put Shell under Fuel | Incomplete: proposal-only rule was safe, but `equals SHELL` missed `SHELL FUTURE` | Explicit contains-versus-equals guidance added; fresh rerun creates `contains SHELL`, apply preview passes and a future-Shell probe proposes Fuel without posting |
+| Is the card payment a transfer? | Correct: one 500.00 transfer linked to both ends; card Shell purchase 25.00 to Fuel | No help correction needed; correct on fresh rerun |
+| Connect my bank | Correct: no provider or connection, no credentials requested | No help correction needed; correct on fresh rerun |
 
-**Owner-side inspection.** Books balance. Final net changes are Checking −622.00, Fuel +135.00, Bank Fees +12.00
-and Business Credit Card +475.00 in debit-minus-credit terms; the wrong account and trial fee category return to
-their prior balances. Wrong-import lines are retained but hidden, created checks have retained deletion records,
-and the target holds the moved lines. Both payment lines share one transfer entry. Including supplemental import
-and move reruns, the final inbox has 13 live lines: five added, one matched, two transfer ends, five waiting.
-The Shell rule is active, draft, non-automation, `auto_add: false`; a new Shell preview proposes it and posts
-nothing. All trial hosts were stopped, their port closed, and their data deleted; prompts, transcripts and
-inspection receipts remain in the private trial directory.
+**Owner-side inspection.** Both MCP runs' books balance with the same postings and inbox counts. Net changes in debit-minus-credit terms are
+Checking −610.00, Fuel +135.00 and Business Credit Card +475.00; the wrong account and Trial Fees return to
+baseline. Wrong-import lines remain in history but are hidden, the created check retains its deletion record,
+and two lines live in the target account. Both payment lines share one transfer entry. The inbox has 11 live
+lines: four added, one matched, two transfer ends and four waiting. The rule is active, draft, non-automation,
+`auto_add: false`; decided lines stay unchanged by apply preview. The future-Shell probe exposed the exact-match
+limitation on the first run. The rerun's future-Shell preview proposes the written rule without posting;
+apply preview leaves decided lines unchanged. Both scratch hosts were stopped, ports closed, tokens and data
+deleted. Private prompts, transcripts and owner-check receipts remain in the trial directory.
 
-**Verification.** The closure run covers every `tests/test_bank_*.py`, including real Chrome at 1440 and 390;
+**Verification.** The earlier closure regression run covered every `tests/test_bank_*.py`, including real Chrome at 1440 and 390;
 `test_phone_import_sort_and_undo` supplies the additional run starting at phone width, with screenshots retained
-in the private trial directory. It also covers the agent guide, every test file mentioning README, documentation
+in the private trial directory. It also covered the agent guide, every test file mentioning README, documentation
 metadata, registry/error matrix, the touched finder/import/transfer/demo surfaces, permission history and the
 unchanged reconciliation golden tests. Exact results are in the trial record. Real bank access and production
-providers remain unavailable and unverified; the fresh-agent trial used the permitted CLI surface.
+providers remain unavailable and unverified; the closing trial uses the actual MCP surface. The MCP rerun
+reported a nonblocking discovery issue: a generic unmatched-line hint names `bank-line add` for a card payment;
+transfer help directed it correctly, and no incorrect posting resulted.
+
+The MCP closure correction ran the required locked suite (`test_agent_guide.py` and
+`test_docs_schema_metadata.py`): **8 passed, 2 warnings**, 73.01 s. `bookflow docs generate --check`
+passed for all 531 files. No test files changed. The pytest basetemp was deleted.
