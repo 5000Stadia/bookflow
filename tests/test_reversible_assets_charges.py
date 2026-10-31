@@ -172,10 +172,8 @@ def test_finance_charge_existing_item_is_not_retired(charge_books):
                                            ('charge_books', 'ledger.post')])
 def test_agent_without_inverse_grant_cannot_reverse_adopter(request, fixture, denied):
     import os
-    from tests.conftest import make_actor, as_user
-    from bookflow.storage.engine import open_database
-    from bookflow.hub import schema as h
-    from bookflow.core import clock
+    from tests.conftest import make_actor, make_agent, as_user
+    from bookflow.core.config import Config
     b = request.getfixturevalue(fixture)
     if fixture == 'asset_books':
         _asset(b)
@@ -191,17 +189,17 @@ def test_agent_without_inverse_grant_cannot_reverse_adopter(request, fixture, de
         b['client'].run('membership grant', dict(user=owner, company=b['company'],
                                                expected_version=owner_member['version'],
                                                grants=['transaction.journal_entry.delete']))
-    agent_id = make_actor(root, 'reverse-agent', kind='agent', owner_user_id=owner)
-    with open_database(root / 'hub.db', writable=True) as db:
-        db.raw.execute('BEGIN IMMEDIATE')
-        db.conn.execute(h.agent_authority.insert().values(agent_user_id=agent_id, epoch=1))
-        db.conn.execute(h.agent_principals.insert().values(agent_user_id=agent_id, principal_user_id=owner,
-                                                         assigned_by=owner, assigned_at=clock.now_iso()))
-        db.raw.execute('COMMIT')
+    agent_id = make_agent(b['client'].run, 'reverse-agent', principals=owner, company=b['company'], owner=owner)
+    member = next(r for r in b['client'].run('membership list', {'company': b['company']})['items']
+                  if r['user_id'] == agent_id and r['scope_type'] == 'company')
     b['client'].run('membership grant', {'user': agent_id, 'company': b['company'], 'role': 'standard',
-                                       'expected_version': 0, 'denies': [denied]}, reason='grant batch reader')
+                                       'expected_version': member['version'], 'denies': [denied]},
+                   reason='grant batch reader')
     b['client'].run('agent authorize', {'agent': agent_id, 'confirm_permitted_use': True,
                                       'acknowledge_fresh_context': True}, reason='authorize reversal test agent')
+    config = Config.load(root / 'config.toml')
+    config.set_user('reverse-agent', agent_id)
+    config.save()
     agent = as_user(root, 'reverse-agent')
     before = _snapshot(b)
     for dry_run in (True, False):
@@ -247,3 +245,21 @@ def test_effect_failure_rolls_back_its_accounting_write(request, monkeypatch, fi
     with pytest.raises(RuntimeError, match='effect fault'):
         b['run'](command, body)
     assert _snapshot(b) == before
+
+
+def test_finance_charge_item_retirement_collision_blocks_before_any_void(charge_books):
+    b = charge_books
+    _charges(b)
+    out = b['run']('finance-charge assess', {'date': '2026-03-02'})
+    name = batches.released_name('Finance Charge', out['batch'])
+    b['run']('item create', {'name': name, 'type': 'other_charge', 'sales_enabled': True,
+                            'income_account_id': b['fc_income'], 'description': 'Name already in use', 'price': '0.00'})
+    before = _snapshot(b)
+    for dry_run in (True, False):
+        with pytest.raises(BookflowError) as refused:
+            b['run']('batch reverse', {'batch': out['batch']}, dry_run=dry_run)
+        assert refused.value.code == 'E_BATCH_BLOCKED'
+        assert any(x['record_type'] == 'item' for x in refused.value.details['blockers'])
+        assert _snapshot(b) == before
+    assert all(b['run']('statement-charge show', {'statement_charge': row['transaction_id']})['status'] == 'posted'
+               for row in out['rows'] if row['status'] == 'assessed')
