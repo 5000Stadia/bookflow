@@ -126,6 +126,13 @@ PANELS: tuple[Panel, ...] = (
                 action=Action("Make a deposit", WRITE, ("deposit post",), "/deposit/post"),
             ),
             Step(
+                id="pos",
+                title="Point of sale",
+                summary="Ring up a sale on a phone, tablet or till; it posts a sales receipt.",
+                action=Action("Open the point of sale", READ, ("pos-register list",), "/pos"),
+                aside=True,
+            ),
+            Step(
                 id="sales-receipt",
                 title="Sales receipt",
                 summary="A sale that is paid at the moment of sale, with no invoice in between.",
@@ -475,6 +482,7 @@ SECTIONS: tuple[Section, ...] = (
             _list("Invoice batches", "batch-invoice query", "/batch-invoice"),
         ),
         tasks=(
+            Action("Point of sale", READ, ("pos-register list",), "/pos"),
             Action("Receive payments", WRITE, ("payment receive",), "/receive-payments"),
             Action("Record a bounced check", WRITE, ("payment bounce",), "/payment/bounce"),
             Action("Move a credit between jobs", WRITE, ("customer-credit transfer",), "/customer-credit/transfer"),
@@ -1167,11 +1175,47 @@ def offered_menu(company_id: str, permits, rows=None) -> list[MenuGroup]:
     return [entry for entry in MENU if section_offers(company_id, entry, permits, rows)]
 
 
+# The POS layer's nouns: offered only while `pos_enabled` is on (design/point-of-sale.md §2).
+POS_NOUNS = frozenset(("pos", "pos-register", "pos-box", "pos-ticket"))
+
+
+POS_PAGE = "/pos"
+
+
+def pos_header_links(company_id: str, reader, menu: list[MenuGroup]) -> list[dict[str, str]] | None:
+    """A POS clerk's header (design/point-of-sale.md §9, as built in increment 4): when the Point of sale is open to
+    the reader and their only sections are Customers through that one entry and Items (looking items up), the
+    header is the minimal one with Point of sale and Items as its links, and the side menu goes. None otherwise:
+    every other reader's menu is exactly as before."""
+    command = registry.get("pos-register list")
+    if command is None or not reader(command) or not page_allowed(POS_PAGE, reader):
+        return None
+    pos_href = f"/c/{company_id}{POS_PAGE}"
+    for entry in menu:
+        if entry.slug == "items":
+            continue
+        if entry.slug != "customers":
+            return None
+        section = SECTION_BY_SLUG["customers"]
+        records = registry.get(f"{section.records} query")
+        found = resolve_section(company_id, section, permits=reader)
+        hrefs = [link["href"] for key in ("new", "lists", "tasks") for link in found[key]]
+        hrefs += [link["href"] for _, links in found["groups"] for link in links]
+        if (records is not None and reader(records)) or hrefs != [pos_href]:
+            return None
+    links = [dict(label="Point of sale", href=pos_href)]
+    if any(entry.slug == "items" for entry in menu):
+        links.append(dict(label="Items", href=f"/c/{company_id}/_group/items"))
+    return links
+
+
 def features_offer(command, info: dict[str, Any]) -> bool:
-    """Whether the company's switches offer the command: pick lists (R181 K3) are off until turned on, and new
-    estimates follow `estimates_enabled`. The workbench and `user home set` both ask this."""
+    """Whether the company's switches offer the command: pick lists (R181 K3) and the POS layer are off until turned
+    on, and new estimates follow `estimates_enabled`. The workbench and `user home set` both ask this."""
     if command.name.startswith("pick-list ") and not info.get("pick_and_pack_enabled", False):
         return False
+    if command.name.split(" ")[0] in POS_NOUNS and not info.get("pos_enabled", False):
+        return False  # the POS layer (R114 increment 4): no POS surface while it is off
     return bool(info.get("estimates_enabled", True)) or command.name not in ("estimate create", "estimate copy",
                                                                                "proposal estimate")
 

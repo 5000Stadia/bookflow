@@ -22,14 +22,24 @@ from . import people_only
 from .permission_capabilities_catalog import CAPABILITIES, CLOSING_DATE_CAPABILITY, COMMAND_CAPABILITY
 
 HUB = frozenset(name for name, (threshold, _) in CAPABILITIES.items() if threshold == 'hub_admin')
+# The POS layer (pos-v1, design/point-of-sale.md §9): an agent holds a pos.* capability only by an explicit grant, as
+# it does the acts above. Unlike them, each POS command names its capability itself, so a person is admitted, or
+# refused by a deny, through the policy like any capability; only the agent's half is asked here.
+from .permission_pos_catalog import CAPABILITIES as _POS  # noqa: E402
+POS = frozenset(_POS)
 
 
 def capability_for(command: str) -> str | None:
-    return COMMAND_CAPABILITY.get(command)
+    found = COMMAND_CAPABILITY.get(command)
+    if found is None and command.startswith('pos'):
+        from bookflow.core import registry
+        cmd = registry.get(command)
+        found = cmd.capability if cmd is not None and cmd.capability in POS else None
+    return found
 
 
 def threshold(capability: str) -> str:
-    return CAPABILITIES[capability][0]
+    return _POS[capability][0] if capability in _POS else CAPABILITIES[capability][0]
 
 
 def _is_person(s) -> bool:

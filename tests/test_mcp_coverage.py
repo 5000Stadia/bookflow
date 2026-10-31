@@ -102,7 +102,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +7 grid edits (R107 increment 6): bulk-edit columns, grid, preview, apply, reverse, show, query.
     # +2 add more details (R108 increment 5): bank-line deposit, bank-line pay-bills.
     # +3 each person's Home (R191): user home set, show, clear.
-    assert len(rows) == 856
+    # +4 the POS layer (R114 increment 4): pos-register create, update, show, list.
+    assert len(rows) == 860
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).

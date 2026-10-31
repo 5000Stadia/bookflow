@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Point of sale — {{ company_label }}{% endblock %}
+{% block body %}
+<section id="pos" aria-label="Point of sale">
+<h1>Point of sale</h1>
+<p data-pos-coming>The register screen is coming: ringing up sales on this page arrives with the next part of point of sale.{% if can_receipt %} Until then, record a sale with a <a href="/c/{{ company_id }}/sales-receipt/post">sales receipt</a>.{% endif %}</p>
+{% if registers %}<h2>{{ 'Registers' if registers | length > 1 else 'Register' }}</h2>
+<ul class="pos-registers">{% for register in registers %}<li data-pos-register="{{ register.name }}"><b>{{ register.name }}</b> · {{ register.site.name }} · takes {{ register.payment_methods | map(attribute='name') | join(', ') or 'no payment method yet' }} · {{ register.receipt_width }} mm receipt</li>{% endfor %}</ul>{% endif %}
+</section>
+{% endblock %}

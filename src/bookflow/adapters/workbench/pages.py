@@ -276,6 +276,8 @@ def _role_allows(cmd: registry.Command, record: dict[str, Any], *, hub_admin: bo
     if hub_admin or record.get("access") == "hub_admin":
         return True
     required = cmd.required_role
+    if cmd.capability in POS_SELLER_CAPABILITIES:
+        required = POS_LEGACY_SELLER_ROLE  # before activation the roles decide: a seller is standard (pos_layer)
     if required is None:
         return True
     if required == "hub_admin":
@@ -284,8 +286,15 @@ def _role_allows(cmd: registry.Command, record: dict[str, Any], *, hub_admin: bo
     return role in ROLE_RANK and ROLE_RANK[role] >= ROLE_FOR_REQUIRED[required]
 
 
+from bookflow.company.pos_layer import LEGACY_SELLER_ROLE as POS_LEGACY_SELLER_ROLE  # noqa: E402
+from bookflow.company.pos_layer import SELLER_CAPABILITIES as POS_SELLER_CAPABILITIES  # noqa: E402
+
+
 def _feature_offers(cmd: registry.Command, info: dict[str, Any]) -> bool:
-    """Whether the company's feature switches offer this command: picking (R181 K3) is off until turned on."""
+    """Whether the company's feature switches offer this command: picking (R181 K3) and the POS layer (R114) are off
+    until turned on."""
+    if cmd.name.split(" ")[0] in Home.POS_NOUNS and not info.get("pos_enabled", False):
+        return False
     return bool(info.get("pick_and_pack_enabled", False)) or not cmd.name.startswith("pick-list ")
 
 
@@ -822,7 +831,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return cached[1]
         reader = company_permits(request, company_view)
         menu = Home.offered_menu(company_view["company_id"], reader)
-        nav = dict(menu=menu, minimal=not menu, users=reader.flag("users"), advanced=reader.flag("advanced"))
+        # A POS clerk: the minimal header with Point of sale and Items as its links (R114 increment 4).
+        links = Home.pos_header_links(company_view["company_id"], reader, menu) if menu else None
+        nav = dict(menu=[] if links else menu, minimal=not menu or bool(links), links=links or [],
+                   users=reader.flag("users"), advanced=reader.flag("advanced"))
         request.state.navigation = (company_view["company_id"], nav)
         return nav
 
@@ -922,6 +934,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     from bookflow.adapters.workbench import fulfillment_pages as FulfillmentPages
     FulfillmentPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                            role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
+    # R114 increment 4: the POS page, shown only while the company has POS on.
+    from bookflow.adapters.workbench import pos_pages as PosPages
+    PosPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                   role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R181 increment 3: pick lists and the pick screen, shown only while the company has picking on.
     from bookflow.adapters.workbench import pick_list_pages as PickListPages
     PickListPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,

@@ -2026,3 +2026,14 @@ EXAMPLES.update({
     'user home show': Example('bookflow user home show --json', {}),
     'user home clear': Example('bookflow user home clear --user jordan --json', {'user': 'jordan'}),
 })
+# R114 increment 4: the POS layer's registers.
+EXAMPLES.update({
+    'pos-register create': Example('bookflow pos-register create --name "Front counter" --receipt-width 58 '
+                                   '--company "Demo Plumbing Co" --json', {'name': 'Front counter', 'receipt_width': 58}),
+    'pos-register update': Example('bookflow pos-register update Main --receipt-message "Thank you!" '
+                                   '--company "Demo Plumbing Co" --json',
+                                   {'pos_register': 'Main', 'receipt_message': 'Thank you!'}),
+    'pos-register show': Example('bookflow pos-register show Main --company "Demo Plumbing Co" --json',
+                                 {'pos_register': 'Main'}),
+    'pos-register list': Example('bookflow pos-register list --company "Demo Plumbing Co" --json', {}),
+})

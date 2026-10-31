@@ -1518,3 +1518,17 @@ Balance Equity outside the move-in, an agent's round, unexplained month-end amou
 bank account, and a customer balance an agent wrote off, or a charge it waived, with a receipt of 0.00 (`write_off`). Your write's result carries a warning when it lands there. Nothing is refused;
 the owner reviews it (`review mark`, a person's step). `report prior-balances` shows any
 reconciled or closed balance that has moved since, with the entries that moved it.
+
+## Point of sale
+
+Point of sale is a person's checkout on a phone, tablet or till, and an optional layer: while `company show` says
+`pos_enabled` is false every `pos*` command refuses with `E_FEATURE_DISABLED`. To record a sale, use `sales-receipt
+post` as always, POS on or off. Each POS act is a capability your principal grants on your membership (`pos.sell`,
+`pos.void`, `pos.refund`, `pos.price-override`, `pos.layout`); your role never gives you one. With `pos.sell`,
+`pos-register list` answers which tills there are, where each one's takings are deposited and which payment methods
+it takes; `pos-register create` and `update` need `pos.layout`.
+
+<!-- bookflow-example: illustrative -->
+```json
+{"command": "pos-register list", "input": {}}
+```

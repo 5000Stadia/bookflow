@@ -2866,3 +2866,18 @@ _BANK_DETAILS = {**_BANK_POST,
                  'E_APPLICATION_INACTIVE': 'a bill voided or deleted'}
 MATRIX['bank-line deposit'] = dict(_BANK_DETAILS)
 MATRIX['bank-line pay-bills'] = dict(_BANK_DETAILS)
+# The POS layer (R114 increment 4): registers.
+_POS_WRITE = {
+    'E_VALIDATION': 'a deposit account that is not Undeposited Funds or a bank, a refund account that is not a bank, a '
+                    'payment method named twice, an unknown decoder',
+    'E_RECORD_NOT_FOUND': 'unknown register, site, account, payment method or customer',
+    'E_NAME_TAKEN': 'another register has the name',
+    'E_INACTIVE_REFERENCE': 'an inactive account, payment method or customer',
+    'E_FEATURE_DISABLED': 'POS is off for the company',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+MATRIX['pos-register create'] = dict(_POS_WRITE)
+MATRIX['pos-register update'] = dict(_POS_WRITE, E_VERSION_CONFLICT='changed since the version read')
+MATRIX['pos-register show'] = {'E_RECORD_NOT_FOUND': 'unknown register', 'E_FEATURE_DISABLED': 'POS is off'}
+MATRIX['pos-register list'] = {'E_FEATURE_DISABLED': 'POS is off for the company'}

@@ -1307,6 +1307,7 @@ The same example as complete `bookflow_run` arguments:
 | `delivery_copy_to` | `--delivery-copy-to` | string \| null | no | yes | null | Email: a Bcc copy of every message to this address; null for none. |
 | `delivery_auto_flag_from` | `--delivery-auto-flag-from` | string \| null | no | yes | null | Email: documents dated on or after this day (YYYY-MM-DD) are to be emailed when the customer prefers email; null is off. |
 | `pick_and_pack_enabled` | `--pick-and-pack-enabled` | boolean | no | no | null | Pick lists, draft shipments and boxes as optional layers on shipping: off by default, when `shipment post` ships straight from the order. Turning it off is refused while a pick list or draft shipment is open. |
+| `pos_enabled` | `--pos-enabled` | boolean | no | no | null | Point of sale as an optional layer on sales receipts: off by default. Turning it on the first time makes register Main and its walk-in customer; turning it off keeps the registers, and is refused while a ticket is held or a shift is open. |
 | `weight_unit` | `--weight-unit` | string \| null | no | yes | null | The one weight unit of item weights and boxes (lb, kg, oz): a label, never converted. |
 | `shipping_item_id` | `--shipping-item-id` | string \| null | no | yes | null | Other-charge or service item a shipment's freight to bill is billed as, by default. |
 

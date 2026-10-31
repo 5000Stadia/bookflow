@@ -325,6 +325,7 @@ FIELDS = {
         'delivery_auto_flag_from': ('str', True, False, 'dependency_field'),
         'weight_unit': ('str', False, False, 'dependency_field'),
         'shipping_item_id': ('str', True, False, 'dependency_field'),
+        'pos_enabled': ('bool', False, False, 'dependency_field'),
     },
     'custom_field_defs': {
         'active': ('bool', False, False, 'dependency_field'),
