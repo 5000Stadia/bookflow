@@ -1049,3 +1049,61 @@ local skip, the next import on the host acting older lines first within the slic
 back with its `--lines` undo and its import's reversal; the company setting holding rules back; `automation list` from
 a fresh CLI process; an agent establisher paused when its principal is narrowed.
 `tests/test_bank_rule_surfaces.py` runs the eight through Python, CLI, HTTP and MCP, editing conditions too.
+
+## As built: increment 7
+
+- **Banking pages.** `/bank-inbox`, `/bank-import` and `/bank-rules`, mounted by the workbench and linked from
+  Banking through its existing page-open permission predicate. The inbox lists 100 lines at a time, with account
+  tabs, last-import dates, state counts, date/text/exact-amount filters, command-provided proposal reasons,
+  duplicate and missing-entry warnings, sorting controls and import history. Generated command forms remain
+  available; no command, permission layer, schema or accounting operation was added.
+- **Sorting.** Add (including splits and Always do this), match, ignore, transfer, return to waiting, deposit
+  payments and pay bills call the existing `bank-line` commands. A complete categorisation proposal has a one-click
+  Add. Other acts open a sheet; Check first is the same command's dry run. Match lists the command's candidates and
+  searches the account's register by date. The deposit and bill pickers show the exact difference returned by the
+  command, preserve selections across pages, and retain entered values after a refusal. Bills show their current
+  open amount; fully paid bills are not selectable. The deposit difference can carry its account, payee, memo and
+  class. Amounts and eligibility are never calculated by the page.
+- **Presentation decisions.** Pairs already identified by the command combine into one card when both ends are on
+  the current page, naming both accounts; a pair outside the current page retains the command's account-and-amount
+  explanation. Bulk actions act on explicitly selected lines on the current page. Account/class choices are
+  overrides when adding those lines, not a separate alteration of stored proposals. At 390 px the primary action
+  spans the card, selection opens a bottom action bar, and sorting is a full-screen sheet with keyboard focus
+  contained and Escape to close. Desktop uses the same cards and controls with wider rows.
+- **Import.** Choose, drop or paste OFX/QFX/CSV, pick a bank/card account, check the command's account identity,
+  counts, overlaps, warnings and proposed outcomes, then confirm the named account and new-line count. Uploads
+  use the shared text decoder and the command's `content` input; parsed lines are retained, but the uploaded file
+  is not separately attached. CSV column and saved-mapping controls translate to the existing mapping input.
+  The completion receipt shows live-rule outcomes and individual held reasons returned by the import. Reloaded
+  inbox cards show the persistent proposals and warnings available from `bank-line query`; that command does not
+  expose a live rule's transient run refusal or pending-run reason.
+- **Undo and move.** Every import opens by its durable ID. Review undo/move dry-runs the existing command, shows
+  the effects and blockers with their clearing instructions, and carries its fingerprint into confirmation. Move
+  offers same-currency accounts and checks the target before confirming. Browser reversal slices are 25 created
+  entries, so each request stays short; Continue explicitly runs the next slice. Reload reads `part_way` and
+  resumes the same undo or move. The browser reverses one import at a time; a later-import blocker names what must
+  be undone first. Older imports remain accessible in paged history.
+- **Rules.** Written and learned rules show conditions, action, priority, hits, lifecycle and automation state.
+  Create/edit supports the command's conditions and categorise/transfer/ignore actions. Suggestions can be accepted
+  or declined; waiting proposals can be checked and applied. Making live and a holder's operative live edit each
+  show the command's exact-details check and submit its fingerprint and expected version in one confirmation.
+  The test box checks actual waiting lines through `bank-rule apply` dry-run and filters those returned results by
+  payee. It does not pretend to test hypothetical text: there is no existing command for that.
+- **Capabilities and transport.** Optional match/deposit/pay-bills sheets have separate GET routes and declared
+  `PAGE_RUNS`, so their additional reads do not restrict access to the basic inbox. Posting forms carry `hx-post`
+  on the form and swap their workspace; refusals retain the form and report the command's own error. Menus and
+  cross-page links use the shared may-open checks. Making live is hidden when the effective permissions explicitly
+  deny its automation capability; the command remains the authority on submission.
+- **Witnesses.** `tests/test_bank_pages_browser.py` uses real Chrome at 1440 and 390: import, proposal Add, explicit
+  Match, Ignore and import Undo with balances restored; rule create, exact live check and confirmed edit; move;
+  deposit difference refusal then exact posting, bills marked paid, and a transfer pair sharing one entry. A phone
+  reloads a part-way undo and resumes it; learned suggestions are accepted/declined and applied through forms.
+  Screenshots are saved outside the repository at `/tmp/m4-shots/bankpages/`. `tests/test_bank_pages.py` checks
+  capability-based access, stale or changed confirmation refusal, and learned-rule decisions over HTTP.
+
+**Final verification:** 119 tests passed after the last code edit (the eleven Chrome cases, three HTTP page tests,
+`test_bank_rules.py`, `test_bank_line_details.py`, `test_menus_and_home.py`, `test_row3_host.py`,
+`test_workbench_forms_htmx.py` and `test_docs_schema_metadata.py`), with two existing dependency/reflection warnings.
+The Chrome regression also verifies a match selected outside the bank date surviving preview, a vendor adjustment
+retaining its payee list, and bulk selections surviving refusal. Forty screenshots cover both widths and the phone's
+resume and learned-suggestion flows. Generated documentation passes `bookflow docs generate --check` (525 files).
