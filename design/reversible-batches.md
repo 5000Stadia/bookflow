@@ -155,7 +155,8 @@ demo-reset or checkpoint behavior in this increment. A separate reference-year p
   and sent messages block the complete unit before any inverse runs, with their identities.
 - Reversal checks the caller's child-document inverse grants and existing `memorized update` and, when relevant,
   `memorized-group update` grants, including on resumed slices. Batch reads check memorized and child-document
-  read authority. Public effect and preview data omit nested command receipt bodies.
+  read authority. Public effect and preview data omit nested command receipt bodies. The preview names every
+  occurrence and hold it removes or restores and lists only schedule fields that actually change.
 - Document ownership determines the inverse: checks, card charges, card credits and transfers use their native
   commands, and receipts and shipments use their aggregate inverses instead of deleting their implementation
   journals. The registry also declares customer refunds. Native inverse refusals remain blockers; clearing a

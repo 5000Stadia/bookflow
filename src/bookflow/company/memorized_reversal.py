@@ -100,6 +100,28 @@ def public_state(state):
                                      for key, row in state['occurrences'].items()}}
 
 
+def state_changes(state):
+    """The precise scheduling edits in the reversal, omitting untouched history and receipt bodies."""
+    prior, after = state['prior'], state['after']
+    changes = {}
+    for kind in ('occurrences', 'holds'):
+        changes[kind] = []
+        for key in sorted(set(prior[kind]) | set(after[kind])):
+            before, current = prior[kind].get(key), after[kind].get(key)
+            if before == current:
+                continue
+            changes[kind].append(dict(id=key, action='remove' if before is None else 'restore',
+                values={k: v for k, v in before.items() if k != 'result'} if before else None))
+    changes['schedules'] = []
+    for table, rows in prior['schedules'].items():
+        for key, row in rows.items():
+            values = {field: value for field, value in row.items()
+                      if value != after['schedules'][table][key][field]}
+            if values:
+                changes['schedules'].append(dict(record_type=table, id=key, values=values))
+    return changes
+
+
 def reversed_attempt(s, key):
     batch_id = key.rsplit('-', 1)[-1]
     return s.company.conn.execute(sa.select(c.batches.c.state).where(c.batches.c.id == batch_id)).scalar() == 'reversed'
@@ -217,7 +239,7 @@ def _plan(s, ctx, batch, effects, done, probe, blockers):
         found['records'] += 1
     if state and not state_done:
         step = dict(seq=0, record_type=STATE, record_id=batch['id'], action='restore', version=None,
-                    steps=['restore occurrences, holds and schedules'], before=public_state(state['prior']))
+                    steps=['restore occurrences, holds and schedules'], changes=state_changes(state))
         found['steps'].append(step)
         found['work'].append(dict(state=state, **step))
         found['pending'] += 1

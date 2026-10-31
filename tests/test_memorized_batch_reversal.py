@@ -68,6 +68,12 @@ def test_group_process_exact_plan_books_dates_and_corrected_run(books):
     restore_steps = [step for step in preview['steps'] if step['record_type'] != 'invoice']
     assert len(restore_steps) == 1
     assert restore_steps[0]['record_type'] == 'memorized_run'
+    changes = restore_steps[0]['changes']
+    assert {(row['id'], row['action']) for row in changes['occurrences']} == {
+        (row['id'], 'remove') for row in out['entered']}
+    assert changes['holds'] == []
+    assert len(changes['schedules']) == 1
+    assert changes['schedules'][0]['values'] == {'next_date': '2026-01-31', 'remaining_count': 4}
     assert len(preview['steps']) == 4
     assert reverse(books, batch)['state'] == 'reversed'
     assert state(books) == before
