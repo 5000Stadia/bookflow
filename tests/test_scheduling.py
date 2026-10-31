@@ -353,7 +353,10 @@ def test_catch_up_enters_recent_missed_slots_and_leaves_older_ones_for_a_person(
     books.run('company update', {'scheduler_catch_up_days': 10}, reason='Catch up ten days at most')
     memorize(books)
     out = tick(books, '2026-03-31')
-    assert out['memorized'] == {'entered': 1, 'blocked': 0, 'waiting': 2, 'left_for_a_person': 2}, out
+    memorized = dict(out['memorized'])
+    # R186: a run that entered something names its reversible batch.
+    assert memorized.pop('next') == 'batch reverse %s --dry-run' % memorized.pop('batch_id'), out
+    assert memorized == {'entered': 1, 'blocked': 0, 'waiting': 2, 'left_for_a_person': 2}, out
     assert dates(books) == ['2026-03-31']
     waiting = sorted(o['slot_date'] for o in occurrences(books) if o['status'] == 'pending')
     assert waiting == ['2026-01-31', '2026-02-28']

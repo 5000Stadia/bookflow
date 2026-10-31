@@ -334,6 +334,7 @@ SOFT_REFERENCES: dict[tuple[str, str], tuple[str, ...] | None] = {
     ('list_merge_references', 'record_id'): None,
     ('list_merge_references', 'owner_id'): None,
     ('delivery_message_documents', 'source_id'): ('customers',),  # a statement's customer
+    ('bank_rules', 'payee_id'): PARTIES,  # a categorising rule's payee
 }
 _PEOPLE = 'a person or principal of the hub, never a list record'
 _INTERNAL = "a document's own row or line, never a list record"

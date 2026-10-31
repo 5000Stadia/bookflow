@@ -457,7 +457,11 @@ def test_memorized_batch_invoice_records_and_reverses_every_nested_invoice(books
     assert reverse(books, out['batch_id'])['state'] == 'reversed'
     assert state(books) == before
     assert _nets(books) == {}
-    assert [_due(books, document) for document in document_ids] == [0, 0, 0]
+    # Reversal deletes each nested invoice (its native inverse), so none is shown without include_deleted.
+    for document in document_ids:
+        with pytest.raises(BookflowError) as gone:
+            books.run('invoice show', {'invoice': document})
+        assert gone.value.code == 'E_RECORD_NOT_FOUND'
     assert process(books)['entered_count'] == 1
     assert sorted(_nets(books).values()) == [-25500, 25500]
 

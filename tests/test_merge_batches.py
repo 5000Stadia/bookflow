@@ -330,6 +330,14 @@ def test_original_document_changed_since_merge_blocks_reversal(books, kind, chan
         command, selector = family + ' update', family
     made = _merge(books, kind, merged, survivor)
     if change == 'delete':
+        # Deleting a posted document needs its explicit delete grant, which no role includes.
+        member = next(m for m in books.run('membership list', {'company': COMPANY})['items']
+                      if m['username'] == 'k')
+        books.run('membership grant', {'user': member['user_id'], 'company': COMPANY,
+                                       'expected_version': member['version'],
+                                       'grants': ['transaction.%s.delete' % ('journal_entry' if selector == 'journal'
+                                                                             else selector)]},
+                  reason='Allow deleting the original document')
         _run(books, command.replace(' update', ' delete'), {selector: document, 'expected_version': 1})
     else:
         _run(books, command, {selector: document, 'expected_version': 1, 'memo': 'Corrected after merge'})
