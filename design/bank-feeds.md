@@ -1092,18 +1092,22 @@ a fresh CLI process; an agent establisher paused when its principal is narrowed.
 - **Capabilities and transport.** Optional match/deposit/pay-bills sheets have separate GET routes and declared
   `PAGE_RUNS`, so their additional reads do not restrict access to the basic inbox. Posting forms carry `hx-post`
   on the form and swap their workspace; refusals retain the form and report the command's own error. Menus and
-  cross-page links use the shared may-open checks. Making live is hidden when the effective permissions explicitly
-  deny its automation capability; the command remains the authority on submission.
+  cross-page links use the shared may-open checks. Posting controls also require the nested posting commands'
+  permissions; a selected-line URL refuses with 403 when its action is unavailable. Making live uses the command's
+  automation establisher predicate, including legacy roles and explicit membership denies. Oversized uploads
+  report the 20 MB limit inside the import workspace. Concurrent submissions of an inbox form are dropped.
 - **Witnesses.** `tests/test_bank_pages_browser.py` uses real Chrome at 1440 and 390: import, proposal Add, explicit
   Match, Ignore and import Undo with balances restored; rule create, exact live check and confirmed edit; move;
   deposit difference refusal then exact posting, bills marked paid, and a transfer pair sharing one entry. A phone
   reloads a part-way undo and resumes it; learned suggestions are accepted/declined and applied through forms.
   Screenshots are saved outside the repository at `/tmp/m4-shots/bankpages/`. `tests/test_bank_pages.py` checks
-  capability-based access, stale or changed confirmation refusal, and learned-rule decisions over HTTP.
+  capability-based access, nested posting denies, readonly direct-sheet refusal, legacy automation denies,
+  oversized-upload workspace errors, stale or changed confirmation refusal, and learned-rule decisions over HTTP.
+  At both widths, Chrome checks Enter submitting through htmx, a bulk double-click sending one request, and
+  successful posting of the selected rows.
 
-**Final verification:** 119 tests passed after the last code edit (the eleven Chrome cases, three HTTP page tests,
-`test_bank_rules.py`, `test_bank_line_details.py`, `test_menus_and_home.py`, `test_row3_host.py`,
-`test_workbench_forms_htmx.py` and `test_docs_schema_metadata.py`), with two existing dependency/reflection warnings.
+**Final verification:** The review-fix regression run includes `test_bank_pages.py`, `test_bank_pages_browser.py`,
+`test_menus_and_home.py`, `test_row3_host.py`, `test_workbench_forms_htmx.py` and `test_docs_schema_metadata.py`.
 The Chrome regression also verifies a match selected outside the bank date surviving preview, a vendor adjustment
-retaining its payee list, and bulk selections surviving refusal. Forty screenshots cover both widths and the phone's
-resume and learned-suggestion flows. Generated documentation passes `bookflow docs generate --check` (525 files).
+retaining its payee list, and bulk selections surviving refusal. Screenshots cover both widths and the phone's
+resume and learned-suggestion flows.

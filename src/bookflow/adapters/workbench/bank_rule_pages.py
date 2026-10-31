@@ -47,7 +47,7 @@ def form_input(form):
     return raw
 
 
-def mount(app, *, render, run, credential, page_error, role_allows):
+def mount(app, *, render, run, credential, page_error, role_allows, automation_allowed):
     def page(request, company_id, *, values=None, selected=None, result=None, error=None, confirmation=None,
              preview=None, preview_payload=None, preview_text=''):
         company = run(request, 'company show', {}, company_id)
@@ -61,8 +61,7 @@ def mount(app, *, render, run, credential, page_error, role_allows):
         allowed = lambda command: role_allows(command, company, credential(request))
         from bookflow.adapters.workbench import home
         may_open = lambda path: home.page_allowed(path, lambda cmd: allowed(cmd.name))
-        effective = getattr(request.state, 'effective', None)
-        can_live = allowed('bank-rule update') and (effective is None or effective.holds('automate.bank-rule') is not False)
+        can_live = allowed('bank-rule update') and automation_allowed(request, company_id, 'automate.bank-rule')
         return render('bank_rules.html', request, company=company, company_id=company['company_id'],
                       rules=listed['rules'], next_cursor=listed.get('next_cursor'), filters=query,
                       values=values, editing=editing, result=result, error=error, confirmation=confirmation,

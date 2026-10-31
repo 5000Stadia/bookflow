@@ -928,8 +928,28 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                         role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R108 increment 7: the bank inbox, statement imports and rules.
     from bookflow.adapters.workbench import bank_pages, bank_import_pages, bank_rule_pages
+    def automation_allowed(request, company_id, capability):
+        # Ask the same establisher predicate as bank-rule update, including legacy membership denies.
+        from bookflow.company.automation import holds_now
+        from bookflow.core.dispatch import _close
+        from bookflow.hub import schema as hub_schema
+        cred = credential(request)
+        session = host.reader_session(cred.user_id, cred.login)
+        try:
+            cred.revalidate(session.hub)
+            session.credential = cred
+            session.company_row = session.hub.conn.execute(
+                hub_schema.companies.select().where(hub_schema.companies.c.id == company_id)).mappings().one()
+            return holds_now(session, capability)
+        finally:
+            try:
+                _close(session)
+            finally:
+                host.reader_done()
+
     for bank_module in (bank_pages, bank_import_pages, bank_rule_pages):
         bank_module.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                          **({"automation_allowed": automation_allowed} if bank_module is bank_rule_pages else {}),
                           role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R107 increment 7: guided opening balances (date and checks, the four grids, tie out and post), on opening-draft.
     from bookflow.adapters.workbench import opening_pages as OpeningPages

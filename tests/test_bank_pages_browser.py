@@ -348,3 +348,47 @@ def test_phone_previews_preserve_match_adjustment_and_bulk_choices(register_brow
     assert set(b.evaluate('[...document.querySelectorAll("[name=selected]:checked")].map(e=>e.value)')) == set(selected)
     actual = _command(b,site,'bank-line.query',{'import_id':imported['import_id']})['lines']
     assert all(x['state']=='waiting' for x in actual if x['id'] in selected)
+
+
+@pytest.mark.parametrize('width', (1440,390))
+def test_enter_and_double_click_bulk_submission(register_browser, width):
+    env, b = register_browser, register_browser.browser
+    site = env.site
+    b.viewport(width, 900)
+    _command(b, site, 'bank-rule.create', {'name':'Keyboard and bulk', 'account':env.bank['id'],
+        'conditions':[{'field':'payee','op':'contains','value':'KEYBOARD BULK'}],
+        'payee':'Central Supply', 'category':env.expense['id']})
+    imported = _command(b, site, 'bank-feed.import', {'account':env.bank['id'], 'auto_match':False,
+        'content':csv_file([('2026-10-01','KEYBOARD BULK ONE','-11.00'),
+                           ('2026-10-02','KEYBOARD BULK TWO','-12.00'),
+                           ('2026-10-03','KEYBOARD BULK THREE','-13.00')])})
+    first, *others = imported['lines']
+    b.navigate(f'{site.base_url}/c/{site.company_id}/bank-inbox/add?' + urlencode({'line':first['id']}))
+    b.wait_for('!!document.querySelector("[data-bank-sort]")', timeout=60)
+    _set(b, '[data-bank-sort] [name=payee]', 'Central Supply')
+    _set(b, '[data-bank-sort] [name=category]', env.expense['id'])
+    b.evaluate('''window.__bankDocument = true; window.__bankOld = document.querySelector('#bank-workspace');
+        window.__bankRequests = 0;
+        document.body.addEventListener('htmx:beforeRequest', e => {
+            if (e.detail.elt.matches('form[hx-post]')) window.__bankRequests++;
+        });
+        document.querySelector('[data-bank-sort] [name="ctx:reason"]').focus();''')
+    for kind in ('keyDown', 'keyUp'):
+        b.call('Input.dispatchKeyEvent', {'type':kind, 'key':'Enter', 'code':'Enter', 'windowsVirtualKeyCode':13,
+                                          **({'text':'\r'} if kind == 'keyDown' else {})})
+    b.wait_for('!window.__bankOld.isConnected', timeout=120)
+    assert b.evaluate('window.__bankDocument === true && window.__bankRequests === 1')
+    assert b.evaluate('!!document.querySelector("[data-bank-preview]")')
+    _click(b, '[data-bank-save]', '#bank-workspace')
+    for line in others:
+        b.evaluate(f'document.querySelector(\'[name=selected][value="{line["id"]}"]\').click()')
+    b.evaluate('''window.__bankRequests = 0; window.__bankOld = document.querySelector('#bank-workspace');
+        const button = document.querySelector('#bank-bulk [name=action][value=add]');
+        button.click(); button.click();''')
+    b.wait_for('!window.__bankOld.isConnected', timeout=120)
+    assert b.evaluate('window.__bankDocument === true && window.__bankRequests === 1')
+    assert b.evaluate('!!document.querySelector("[data-bank-result]") && !document.querySelector("[data-bank-error]")')
+    lines = _command(b, site, 'bank-line.query', {'import_id':imported['import_id']})['lines']
+    assert len(lines) == 3 and all(line['state'] == 'added' for line in lines)
+    assert len({line['entry_id'] for line in lines}) == 3
+    assert b.evaluate('window.__bankRequests === 1')

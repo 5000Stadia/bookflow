@@ -95,3 +95,53 @@ def test_bank_rule_suggestions_accept_decline_and_apply_preview(hosted):
     assert applied.status_code == 200 and 'data-bank-rule-error' not in applied.text
     lines = _call(hosted, 'bank-line.query', {'account':'Checking'})['lines']
     assert next(line for line in lines if line['id']==waiting['id'])['state'] == 'waiting'
+
+
+def test_posting_controls_require_nested_command_permissions(hosted):
+    cid = hosted.company_id
+    _member(hosted, 'no-ledger-post', 'standard', ['ledger.post'])
+    line = _call(hosted, 'bank-feed.import', {'account':'Checking', 'content':csv_file([
+        ('2026-10-01','PERMISSION TEST','-11.00'),
+        ('2026-10-02','PERMISSION DEPOSIT','12.00')])})['lines'][0]
+    client = _login(hosted, 'no-ledger-post')
+    page = client.get(f'/c/{cid}/bank-inbox')
+    assert page.status_code == 200
+    for marker in ('data-bank-add', 'data-bank-details', 'data-bank-transfer', 'data-bank-pay-bills', 'data-bank-deposit'):
+        assert marker not in page.text
+    assert 'value="add"' not in page.text
+    assert client.get(f'/c/{cid}/bank-inbox/add?line={line["id"]}').status_code == 403
+
+
+def test_readonly_direct_sort_sheet_refuses(hosted):
+    _member(hosted, 'sheet-reader', 'readonly')
+    line = _call(hosted, 'bank-feed.import', {'account':'Checking', 'content':csv_file([
+        ('2026-10-01','READONLY TEST','-11.00')])})['lines'][0]
+    page = _login(hosted, 'sheet-reader').get(f'/c/{hosted.company_id}/bank-inbox/add?line={line["id"]}')
+    assert page.status_code == 403
+    assert 'data-bank-sort' not in page.text
+
+
+def test_legacy_automation_deny_hides_live_control(hosted):
+    from bookflow.hub.user_homes import Effective
+    from tests.conftest import make_legacy
+    _member(hosted, 'legacy-rule-denied', 'standard', ['automate.bank-rule'])
+    # Preserve an older installation's stored deny while clearing its activated policy.
+    make_legacy(hosted.root)
+    _call(hosted, 'bank-rule.create', dict(name='Legacy draft', action='ignore',
+        conditions=[{'field':'payee','op':'contains','value':'LEGACY'}]))
+    effective = hosted.ok('membership.effective', {'company':hosted.company_id})
+    assert Effective.from_output(effective).holds('automate.bank-rule') is None
+    page = _login(hosted, 'legacy-rule-denied').get(f'/c/{hosted.company_id}/bank-rules')
+    assert page.status_code == 200 and 'data-bank-rule-save' in page.text
+    assert 'data-rule-live' not in page.text
+
+
+def test_oversized_upload_refuses_inside_workspace(hosted):
+    client = _login(hosted, hosted.login, PASSWORD)
+    for size in (20_000_001, 22_000_001):
+        response = client.post(f'/c/{hosted.company_id}/bank-import', headers={**H, 'HX-Request':'true'},
+            data={'action':'check', 'account':'Checking'}, files={'file':('large.csv', b'x' * size, 'text/csv')})
+        assert response.status_code == 200
+        assert 'id="bank-import-workspace"' in response.text
+        assert 'data-bank-import-error' in response.text
+        assert '20 MB maximum' in response.text

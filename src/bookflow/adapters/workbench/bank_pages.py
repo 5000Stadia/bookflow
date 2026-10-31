@@ -21,9 +21,11 @@ def mount(app, *, render, run, credential, page_error, role_allows):
         company = run(request, 'company show', {}, cid)
         permits = lambda cmd: role_allows(cmd.name, company, credential(request))
         allowed = {act: role_allows('bank-line ' + act, company, credential(request)) for act in ACTS}
-        for act, reads in {'match': ('register query',), 'deposit': ('deposit sources',),
-                           'pay-bills': ('bill query', 'payment-method list')}.items():
-            allowed[act] = allowed[act] and all(role_allows(name, company, credential(request)) for name in reads)
+        for act, commands in {'add': ('check post', 'deposit post', 'card-charge post', 'card-credit post'),
+                           'transfer': ('transfer post',), 'match': ('register query',),
+                           'deposit': ('deposit sources', 'deposit post'),
+                           'pay-bills': ('bill query', 'payment-method list', 'bill pay')}.items():
+            allowed[act] = allowed[act] and all(role_allows(name, company, credential(request)) for name in commands)
         query = {k: source[k] for k in FILTERS if source.get(k)}
         inbox = run(request, 'bank-line query', {**query, 'limit': 100}, cid)
         accounts = run(request, 'account list', {}, cid)['items']
@@ -31,6 +33,8 @@ def mount(app, *, render, run, credential, page_error, role_allows):
                                                   'limit': 50}, cid)
         selected = next((line for line in inbox['lines'] if line['id'] == source.get('line')), None)
         mode = source.get('mode', 'add')
+        if selected and not allowed.get(mode, False):
+            raise BookflowError('E_PERMISSION', message='You may not perform this bank line action.')
         extras = {}
         if selected and mode == 'match':
             extras['register'] = run(request, 'register query', {

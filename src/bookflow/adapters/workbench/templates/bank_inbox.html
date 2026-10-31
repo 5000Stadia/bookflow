@@ -1,7 +1,7 @@
 {% extends 'base.html' %}{% block title %}Bank inbox{% endblock %}{% block body %}
 <link rel="stylesheet" href="{{ static_urls['bank-inbox.css'] }}"><script src="{{ static_urls['bank-inbox.js'] }}" defer></script>
 {% set post = '/c/' ~ company_id ~ '/bank-inbox' %}
-{% macro htmx() %}method="post" action="{{ post }}" hx-post="{{ post }}" hx-target="#bank-workspace" hx-select="#bank-workspace" hx-swap="outerHTML"{% endmacro %}
+{% macro htmx() %}method="post" action="{{ post }}" hx-post="{{ post }}" hx-target="#bank-workspace" hx-select="#bank-workspace" hx-swap="outerHTML" hx-sync="this:drop"{% endmacro %}
 {% macro context(line=none) %}{% for key, value in filters.items() %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}{% if line %}<input type="hidden" name="line" value="{{ line.id }}">{% endif %}{% endmacro %}
 {% macro category(name='category', label='Category', value='') %}<label>{{ label }}<input name="{{ name }}" list="bank-accounts" value="{{ values.get(name, value) }}" placeholder="Choose an account"></label>{% endmacro %}
 <section id="bank-workspace" class="bank-workspace">
@@ -31,7 +31,7 @@
 <a href="/c/{{ company_id }}/bank-import?import={{ line.import_id }}">Import / undo</a></div></article>{% else %}<p class="workspace-card">No bank lines match these filters.</p>{% endfor %}</div>
 {% if inbox.next_cursor %}<a href="{{ bank_url(cursor=inbox.next_cursor) }}">Next 100 lines</a>{% endif %}
 {% if imports.imports %}<section><h2>Recent imports</h2>{% for imp in imports.imports[:3] %}<p><a href="/c/{{ company_id }}/bank-import?import={{ imp.id }}">{{ imp.account }} · {{ imp.created_at[:10] }} · {{ imp.lines_new }} lines · {{ imp.batch_state }} — Inspect / undo</a></p>{% endfor %}<details><summary>Import history</summary>{% for imp in imports.imports[3:] %}<p><a href="/c/{{ company_id }}/bank-import?import={{ imp.id }}">{{ imp.account }} · {{ imp.created_at }} · {{ imp.lines_new }} lines</a></p>{% endfor %}<a href="/c/{{ company_id }}/bank-import">All imports</a></details></section>{% endif %}
-{% if selected %}<section class="bank-sheet" role="dialog" aria-modal="true" aria-labelledby="bank-sheet-title"><div class="bank-sheet-body"><a href="{{ bank_url() }}" class="bank-close">Close</a><h2 id="bank-sheet-title">{{ mode|replace('-',' ')|title }} · {{ selected.payee }}</h2><p>{{ selected.date }} · <strong>{{ selected.amount_decimal }}</strong></p>
+{% if selected and allowed[mode] %}<section class="bank-sheet" role="dialog" aria-modal="true" aria-labelledby="bank-sheet-title"><div class="bank-sheet-body"><a href="{{ bank_url() }}" class="bank-close">Close</a><h2 id="bank-sheet-title">{{ mode|replace('-',' ')|title }} · {{ selected.payee }}</h2><p>{{ selected.date }} · <strong>{{ selected.amount_decimal }}</strong></p>
 {% if error %}<div class="error" role="alert" data-bank-sheet-error>{{ error.message }}{% if error.details and 'difference' in error.details %}<p>Difference remaining: {{ error.details.difference }}</p>{% endif %}</div>{% endif %}
 {% if preview %}<div class="notice" data-bank-preview>{{ preview.summary }}{% if preview.difference is defined %}<p>Selected: {{ preview.selected }} · Difference remaining: {{ preview.difference }}</p>{% endif %}</div>{% endif %}
 {% for p in selected.proposals %}<p>{{ p.reason }}</p>{% endfor %}

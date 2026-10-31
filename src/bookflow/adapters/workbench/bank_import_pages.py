@@ -135,4 +135,6 @@ def mount(app, *, render, run, credential, page_error, role_allows):
             error = BookflowError('E_VALIDATION', message=f'The file could not be read: {e.detail}')
             return await run_in_threadpool(page, request, company_id, error=error.to_dict())
         except BookflowError as e:
+            if e.code == 'E_VALIDATION':
+                return await run_in_threadpool(page, request, company_id, error=e.to_dict())
             return page_error(request, e)
