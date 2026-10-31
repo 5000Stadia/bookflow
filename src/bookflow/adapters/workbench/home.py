@@ -598,6 +598,9 @@ SECTIONS: tuple[Section, ...] = (
             _new("Journal entry", "journal post", "/journal/post"),
         ),
         lists=(
+            _list("Bank inbox", "bank-line query", "/bank-inbox"),
+            _list("Bank rules", "bank-rule query", "/bank-rules"),
+            _list("Statement imports", "bank-feed query", "/bank-import"),
             _list("Deposits", "deposit query", "/deposit"),
             _list("Checks", "check query", "/check"),
             _list("Transfers", "transfer query", "/transfer"),
@@ -1268,6 +1271,13 @@ class Reader:
 # tests/test_menus_and_home.py records them again and fails on any command a page runs that is not declared here,
 # so this cannot drift from the pages. Guarded reads are listed too: hiding a page is the lesser error.
 PAGE_RUNS: dict[str, tuple[str, ...]] = {
+    '/bank-inbox': ('company show', 'bank-line query', 'account list', 'bank-feed query'),
+    **{'/bank-inbox/' + act: ('company show', 'bank-line query', 'account list', 'bank-feed query', *reads)
+       for act, reads in {'add': (), 'ignore': (), 'transfer': (), 'unmatch': (),
+                          'match': ('register query',), 'deposit': ('deposit sources',),
+                          'pay-bills': ('bill query', 'payment-method list')}.items()},
+    '/bank-import': ('company show', 'account list', 'bank-feed query', 'bank-feed show'),
+    '/bank-rules': ('company show', 'bank-rule query', 'bank-rule show'),
     '/account': ('account query options',),
     '/accountant': ('accountant list', 'report accountant-review'),
     '/assembly/build': ('item query',),
@@ -1362,6 +1372,8 @@ def page_allowed(destination: str, permits, lookup=None) -> bool:
 # Pages that are not a noun's own page, and the command each one reads. A Home may be any of these, any destination
 # a tile or section link declares, any visible section, or a noun's own list, record, report or form page.
 FIXED_PAGES: dict[str, tuple[str, ...]] = {
+    **{'bank-inbox/' + act: ('bank-line query',) for act in
+       ('add', 'match', 'ignore', 'transfer', 'unmatch', 'deposit', 'pay-bills')},
     "": ("company show",),  # the Overview
     "_all": ("company show",),
     "find": ("transaction find",),
