@@ -35,7 +35,9 @@ _PAY = (
     ' bill\'s `discount_date` and the `early_discount` its terms still offer, a dry run shows'
     ' `suggested_discount_minor_units` per line for the payment date, and a discount named after'
     ' the discount date is taken with a warning. Vendor credits are separate documents and are'
-    ' not entered here.'
+    ' not entered here. The output names its batch_id; next previews its whole reversal with'
+    ' `batch reverse <batch> --dry-run`. Reversal unapplies and voids its payments; pending'
+    ' check print runs, printed checks, reconciliation and closed periods block it.'
 )
 
 ERRORS = {

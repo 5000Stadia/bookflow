@@ -46,7 +46,7 @@ import sqlalchemy as sa
 
 from bookflow.company.payment_summaries import summarize
 from bookflow.company import (
-    accounts, ap_settlement, bills, check_numbers, early_discounts as early, journals, list_service,
+    accounts, ap_settlement, batches, bills, check_numbers, early_discounts as early, journals, list_service,
     schema as c)
 from bookflow.company import document_effects as effects
 from bookflow.company.bill_payment_facts import Account, BillPaymentProfile, Origin, PaymentMethod, Reference, Vendor
@@ -68,6 +68,39 @@ from bookflow.core.registry import Applied, Plan, Touched
 from bookflow.hub.users import common
 
 DOCUMENT_TYPE = 'bill_payment'
+
+
+def reversal_blockers(s, ctx, batch):
+    """Paper already printed and finished reconciliations cannot be undone as a batch."""
+    from bookflow.company import check_printing, reconciliation_changes
+    found = []
+    for effect in batches.effects(s, batch['id']):
+        if effect['record_type'] != DOCUMENT_TYPE:
+            continue
+        header = s.company.conn.execute(sa.select(c.transactions).where(
+            c.transactions.c.id == effect['record_id'])).mappings().first()
+        if header is None or header['status'] == 'voided':
+            continue
+        common = dict(seq=effect['seq'], record_type=DOCUMENT_TYPE, record_id=header['id'])
+        run = check_printing.in_printer(s, header['id'])
+        if run:
+            found.append(dict(common, code='pending_print',
+                              message=f"Bill payment {header['number']} is held by pending print run {run}.",
+                              clears=f'check print-cancel {run}', details={'run': run}))
+        if check_printing.printed(s, header['id']):
+            found.append(dict(common, code='printed',
+                              message=f"Bill payment {header['number']} has been printed; paper cannot be recalled.",
+                              clears='Ask the principal how to handle the printed check.'))
+        for claim in reconciliation_changes._held(s, transactions=[header['id']]):
+            identifier = claim['certificate_id'] or claim['opening_id']
+            found.append(dict(common, code='reconciled',
+                              message=f"Bill payment {header['number']} is held by reconciliation {identifier}.",
+                              clears='Ask the company owner; a finished reconciliation cannot be undone.',
+                              details={'reconciliation': identifier}))
+    return found
+
+
+batches.register(batches.Adapter('bill-pay', label='Bill payments', preflight=reversal_blockers))
 
 # Insert order matters: an attribution row follows the posting line it hangs off, a source
 # component follows both the source it belongs to and the attribution it names, and an
@@ -1053,11 +1086,11 @@ def prepare_void(s, ctx, inp):
         raise BookflowError('E_REASON_REQUIRED')
     if len(ctx.reason.strip()) > 140:
         raise _invalid('reason', 'must be at most 140 characters')
+    journals.open_dates(s, [revision['date']])
     if ap_settlement.active_applications(s, header['id']):
         raise BookflowError('E_HAS_APPLICATIONS', details={
             'payment_id': header['id'],
             'next': 'Unapply what this payment settled before voiding it.'})
-    journals.open_dates(s, [revision['date']])
     at, event = clock.now_iso(), new_id()
 
     def created():
@@ -1116,6 +1149,13 @@ def apply(plan, ctx, s):
     from bookflow.company.bill_payment_validation import validate
     validate(fresh, s, ctx)
     data = fresh.data
+    batch_id = None
+    if operation == 'pay':
+        batch_id = batches._insert_batch(
+            s, ctx, kind='bill-pay', label=f"Bill payments {data['input'].date}",
+            scope='bill-pay', ordering='record')
+        fresh.preview.batch_id = batch_id
+        fresh.preview.next = f'batch reverse {batch_id} --dry-run'
     touched, summaries = [], []
     for document in data['documents']:
         header, before = document['header'], document.get('before')
@@ -1156,6 +1196,9 @@ def apply(plan, ctx, s):
             check_numbers.write(s, document['instrument'])
         if document.get('print_mark'):
             s.company.conn.execute(c.check_print_marks.insert().values(**document['print_mark']))
+        if batch_id is not None:
+            batches.record_effect(s, batch_id, record_type=DOCUMENT_TYPE, record_id=header['id'],
+                                  action='created', version_after=header['version'], event_id=data['event'])
     for _, after in data['changed_headers']:
         s.company.conn.execute(c.transactions.update().where(
             c.transactions.c.id == after['id']).values(**after))
