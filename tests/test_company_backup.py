@@ -210,6 +210,10 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0119 = importlib.import_module("bookflow.storage.company_migrations.versions.0119_bank_rules")
 
     def older(conn):
+        # co0122: layout boxes refer to items and attachments; drop them before older tables.
+        conn.execute("DROP TABLE pos_boxes")
+        conn.execute("ALTER TABLE company_info DROP COLUMN pos_home_view_style")
+        conn.execute("ALTER TABLE company_info DROP COLUMN pos_layout_version")
         conn.execute("DROP INDEX ix_statement_lines_bank_line")
         # co0121: the nullable bank_line_id FK goes with statement_lines below.
         # Newest first: co0120 (on co0119): its guards, then its table.
@@ -515,7 +519,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))
     restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older",
                                               "organization": "Older Books Organization"})
-    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0121"
+    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0122"
     folder = _folder(client, restored["company_id"])
     # The migration took its verified backup of the restored database first, as every migration does.
     assert list((folder / "backups").glob("*-from-co0062.db"))

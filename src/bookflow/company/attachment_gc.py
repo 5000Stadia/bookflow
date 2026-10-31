@@ -37,7 +37,8 @@ def _io():
 def _unlinked():
     return ~sa.exists(sa.select(c.attachment_links.c.id).where(
         c.attachment_links.c.attachment_id == c.attachments.c.id,
-        c.attachment_links.c.active.is_(True)))
+        c.attachment_links.c.active.is_(True))) & ~sa.exists(sa.select(c.pos_boxes.c.id).where(
+        c.pos_boxes.c.picture_attachment_id == c.attachments.c.id))
 
 
 def metadata_candidates(s, limit):
@@ -223,9 +224,8 @@ def _candidate_path(store, item):
 def _validate_links(s, items):
     for item in items:
         digest = item["sha256"]
-        if digest and s.company.conn.execute(sa.select(c.attachment_links.c.id).join(
-            c.attachments, c.attachments.c.id == c.attachment_links.c.attachment_id).where(
-                c.attachments.c.sha256 == digest, c.attachment_links.c.active.is_(True)).limit(1)).first():
+        if digest and s.company.conn.execute(sa.select(c.attachments.c.id).where(
+                c.attachments.c.sha256 == digest, ~_unlinked()).limit(1)).first():
             raise _io()
 
 

@@ -888,6 +888,46 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   pinned commands (`test_pos_layer.py`) now include the four.
 - **Not verified here.** Real phones (camera to cart, touch, §12's phone targets); a group item's line-by-line amounts.
 
+### As built: increment 6 (layout and view styles)
+
+- **Storage.** co0122 on co0121 adds `pos_boxes` (ordered parent/child boxes, group or item, label, colour,
+  group picture attachment, group view style and common version/audit fields) and `company_info.pos_home_view_style`
+  and `pos_layout_version`. A positive layout revision means it has been saved, including an intentionally empty
+  layout. The layout revision is independent of the company settings revision. Both demo companies keep POS off
+  and their layouts unsaved; their existing item categories supply the seed when POS is enabled.
+- **Starting layout.** `pos-box list` computes increment 5's category tree with deterministic box IDs while the
+  layout revision is zero; reading the till writes nothing. `pos-box seed --mode categories` stores that tree;
+  `--mode empty` stores an empty home. The first other edit also materializes the tree. Once saved, category and
+  inventory changes do not rearrange the boxes. Removing the final box does not reseed the layout.
+- **Commands and authority.** New layer `pos-layout-v1` on `bank-reconcile-v1`: `pos-box list` and `picture get`
+  read with `pos.sell`; `create`, `update`, `move`, `remove`, `seed`, `view` and `picture set` write with
+  `pos.layout` at admin. **Permission decision for this increment:** the build instruction that all layout writes
+  need `pos.layout` supersedes §3's older clerk-writable view choice. Clerks see saved styles, with no layout editor
+  or style controls. The command boundary enforces the same rule over Python, CLI, HTTP and MCP; the screen uses
+  the existing may-open predicate.
+- **Concurrency and removal.** Every write takes `expected_version` from `pos-box list`, a layout-wide revision,
+  so competing reorders, first saves and style changes cannot silently overwrite each other. Each write is audited;
+  changed boxes also advance their own versions. Moving a group into itself or a descendant is refused. Positions
+  are zero-based within a parent. Removing a group removes its descendant boxes; the editor confirms a nonempty
+  group removal. No box removal alters an inventory item, and one item can appear in several groups.
+- **The screen.** Edit layout offers Add group, Add item through the existing lookup, names, colours, group pictures,
+  Move to group, position, Remove and drag reorder. Position also supports arranging on a touch screen without
+  dragging. Posting forms use htmx. The page reads `pos-box list` once alongside registers and items, declared in
+  `home.PAGE_RUNS`; tapping and lookup still use local item data. The breadcrumb follows nested group IDs.
+- **Styles.** Block and List are offered first, Compact and Photo under More. Home and each group save their own
+  style immediately on the server, shared across registers and devices. Style saves are serialized and failures
+  remain visible. List includes on-hand quantities; Compact omits pictures. At 390 px the columns are 2, 1, 3 and 1;
+  at 1440 px they are 5, 1, 6 and 3 respectively.
+- **Pictures.** Item boxes use the inventory item's existing picture and thumbnail. Group pictures use validated
+  JPEG, PNG or WebP attachments and a dedicated `pos.sell` download route with private immutable caching. The chosen
+  picture pointer keeps the file out of attachment collection; clearing it or removing its group releases that
+  reference. Group image writes do not require granting clerks access to attachments.
+- **Verification.** `test_pos_layout.py` covers stored trees, nesting, duplicate items, reorder, stale revisions,
+  removal, styles and permissions. `test_pos_layout_surfaces.py` exercises layout commands and picture transfers
+  through Python, CLI, HTTP and MCP. `test_pos_layout_browser.py` checks the editor and all four styles in real
+  Chrome at 390 and 1440 px, with a second browser reading saved Home and group styles. Screenshots are in
+  `/tmp/m4-shots/pos6/`. Real phone hardware and LAN timing targets remain unverified.
+
 ## 16. Open questions
 
 Each default stands if nobody decides. K1 and K2 are Kabe's.

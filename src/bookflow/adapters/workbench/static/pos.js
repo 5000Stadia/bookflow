@@ -123,26 +123,108 @@
     bar.dataset.kind = error ? 'error' : '';
   }
 
-  // ---- drawing
-  let path = [];   // the group paths walked into, from the home
+  // ---- shared layout; item data stays local so drawing and ringing up never wait on the host
+  let path = [], layoutEditing = false, arranged = null, layoutTail = Promise.resolve();
+  const currentGroup = () => path.length ? path[path.length - 1] : null;
+  const boxById = id => data.layout.items.find(box => box.id === id);
+  const children = parent => data.layout.items.filter(box => box.parent === parent).sort((a, b) => a.position - b.position);
+  const groupName = box => box.label || 'Group';
+  function pictureHtml(url, name, shade) {
+    return url ? `<img class="pos-tile" src="${escape(url)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'pos-tile',textContent:''}))">`
+      : `<span class="pos-tile" style="background:${/^#[0-9a-f]{6}$/i.test(shade || '') ? shade : colour(name)}">${escape(name.slice(0, 2))}</span>`;
+  }
   function boxHtml(box) {
-    if (box.kind === 'group') {
-      return `<button type="button" class="pos-box pos-box-group" role="listitem" data-pos-box-group="${escape(box.path)}"><span class="pos-tile" style="background:${colour(box.name)}">${escape(box.name.slice(0, 2))}</span><span class="pos-box-name">${escape(box.name)}</span><span class="pos-box-price">Group</span></button>`;
-    }
-    const item = items.get(box.id);
-    if (!item) return '';
-    const picture = item.picture
-      ? `<img class="pos-tile" src="${escape(item.picture)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'pos-tile',textContent:''}))">`
-      : `<span class="pos-tile" style="background:${colour(item.name)}">${escape(item.name.slice(0, 2))}</span>`;
-    return `<button type="button" class="pos-box" role="listitem" data-pos-box-item="${escape(item.id)}">${picture}<span class="pos-box-name">${escape(item.name)}</span><span class="pos-box-price">${item.price == null ? '' : money(item.price)}</span></button>`;
+    const group = box.kind === 'group', item = group ? null : items.get(box.item);
+    if (!group && !item) return '';
+    const name = box.label || (group ? 'Group' : item.name);
+    const picture = group ? (box.picture && box.picture.url) : item.picture;
+    const attr = group ? `data-pos-box-group="${escape(name)}" data-pos-group-id="${escape(box.id)}"` : `data-pos-box-item="${escape(item.id)}"`;
+    const onhand = !group && item.on_hand != null ? `${escape(item.on_hand)} on hand` : '';
+    return `<div class="pos-box-wrap" role="listitem" data-pos-box-id="${escape(box.id)}"${layoutEditing ? ' draggable="true"' : ''}><button type="button" class="pos-box${group ? ' pos-box-group' : ''}" ${attr}>${pictureHtml(picture, name, box.colour)}<span class="pos-box-name">${escape(name)}</span><span class="pos-box-price">${group ? 'Group' : item.price == null ? '' : money(item.price)}</span><span class="pos-onhand">${onhand}</span></button>${layoutEditing ? `<button type="button" class="pos-arrange" data-pos-arrange="${escape(box.id)}" aria-label="Arrange ${escape(name)}">Arrange</button>` : ''}</div>`;
   }
   function drawBoxes() {
-    const here = path.length ? (data.layout.groups[path[path.length - 1]] || {boxes: []}).boxes : data.layout.home;
-    $('[data-pos-boxes]').innerHTML = here.map(boxHtml).join('') || '<p class="pos-empty">No sales items here yet.</p>';
+    path = path.filter(id => boxById(id));
+    const group = boxById(currentGroup()), style = group ? group.view_style : data.layout.home_view_style;
+    const grid = $('[data-pos-boxes]');
+    grid.className = `pos-boxes pos-view-${style || 'block'}`;
+    grid.innerHTML = children(currentGroup()).map(boxHtml).join('') || '<p class="pos-empty">No sales items here yet.</p>';
     const crumbs = [`<button type="button" data-pos-crumb="-1"${path.length ? '' : ' aria-current="page"'}>Home</button>`];
-    path.forEach((p, i) => crumbs.push(`<span aria-hidden="true">›</span><button type="button" data-pos-crumb="${i}"${i === path.length - 1 ? ' aria-current="page"' : ''}>${escape(data.layout.groups[p] ? data.layout.groups[p].name : p)}</button>`));
+    path.forEach((id, i) => crumbs.push(`<span aria-hidden="true">›</span><button type="button" data-pos-crumb="${i}"${i === path.length - 1 ? ' aria-current="page"' : ''}>${escape(groupName(boxById(id)))}</button>`));
     if (path.length) crumbs.push(`<button type="button" class="pos-back" data-pos-crumb="${path.length - 2}">Back</button>`);
     $('[data-pos-crumbs]').innerHTML = crumbs.join('');
+    root.querySelectorAll('[data-pos-style]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.posStyle === (style || 'block'))));
+    if (data.can_layout) {
+      $('[data-pos-edit]').setAttribute('aria-pressed', String(layoutEditing));
+      $('[data-pos-edit]').textContent = layoutEditing ? 'Done editing' : 'Edit layout';
+      $('[data-pos-editor-tools]').hidden = !layoutEditing;
+      $('[data-pos-seed-options]').hidden = data.layout.initialized;
+      root.classList.toggle('pos-editing', layoutEditing);
+    }
+  }
+  function layoutStatus(message) {
+    if ($('[data-pos-layout-status]')) $('[data-pos-layout-status]').textContent = message;
+    if ($('[data-pos-box-status]')) $('[data-pos-box-status]').textContent = message;
+  }
+  // One in-flight change, with the revision received from its predecessor. A refusal reloads server state;
+  // the person sees it and chooses again instead of overwriting another device's changes.
+  function layoutWrite(command, body) {
+    const work = layoutTail.catch(() => {}).then(() => new Promise((resolve, reject) => {
+      const form = $('[data-pos-layout-form]');
+      layoutStatus('Saving…');
+      form.elements.command.value = command;
+      form.elements.body.value = JSON.stringify({...body, expected_version: data.layout.version});
+      function finished(event) {
+        if (event.target !== form) return;
+        form.removeEventListener('htmx:afterRequest', finished);
+        let answer;
+        try { answer = JSON.parse(event.detail.xhr.responseText); } catch (_) {}
+        if (event.detail.successful && answer && Array.isArray(answer.items)) {
+          data.layout = answer; drawBoxes(); layoutStatus('Saved.'); resolve(answer);
+        } else {
+          const message = answer && (answer.message || answer.error && answer.error.message) || 'The layout was not saved. Check your connection and try again.';
+          api('pos-box list', {}).then(found => { data.layout = found; drawBoxes(); }).catch(() => {});
+          layoutStatus(message); reject(new Error(message));
+        }
+      }
+      form.addEventListener('htmx:afterRequest', finished);
+      form.requestSubmit();
+    }));
+    layoutTail = work;
+    return work;
+  }
+  function addBoxItem(item) {
+    if (!item.box) { layoutStatus('This item can be rung up from lookup, but cannot be a tap box.'); return; }
+    layoutWrite('create', {kind: 'item', parent: currentGroup(), item: item.id}).catch(() => {});
+  }
+  function openBox(box) {
+    arranged = box || null;
+    const dialog = $('[data-pos-box-dialog]');
+    $('[data-pos-box-title]').textContent = box ? 'Arrange box' : 'Add group';
+    $('[data-pos-box-label]').value = box ? box.label || (items.get(box.item) || {}).name || '' : '';
+    $('[data-pos-box-colour]').value = box && box.colour || '#2e7d6b';
+    $('[data-pos-colour-row]').hidden = !!box && box.kind !== 'group';
+    const descendants = new Set(box ? [box.id] : []);
+    let changed = true;
+    while (changed) { changed = false; data.layout.items.forEach(b => { if (descendants.has(b.parent) && !descendants.has(b.id)) { descendants.add(b.id); changed = true; } }); }
+    function fullName(b) {
+      const names = [groupName(b)]; let parent = boxById(b.parent);
+      while (parent) { names.unshift(groupName(parent)); parent = boxById(parent.parent); }
+      return names.join(' › ');
+    }
+    const pick = $('[data-pos-box-parent]');
+    pick.innerHTML = '<option value="">Home</option>' + data.layout.items.filter(b => b.kind === 'group' && !descendants.has(b.id))
+      .map(b => `<option value="${escape(b.id)}">${escape(fullName(b))}</option>`).join('');
+    pick.value = (box ? box.parent : currentGroup()) || '';
+    $('[data-pos-box-position]').value = box ? box.position + 1 : children(currentGroup()).length + 1;
+    $('[data-pos-box-remove]').hidden = !box;
+    const pictureForm = $('[data-pos-picture-form]');
+    pictureForm.hidden = !box || box.kind !== 'group';
+    pictureForm.elements.pos_box.value = box ? box.id : '';
+    pictureForm.elements.expected_version.value = data.layout.version;
+    pictureForm.elements.picture.value = '';
+    $('[data-pos-picture-clear]').hidden = !box || !box.picture;
+    $('[data-pos-box-status]').textContent = '';
+    dialog.showModal();
   }
 
   const units = () => state.lines.reduce((n, l) => n + (Number(l.quantity) || 0), 0);
@@ -335,15 +417,32 @@
     const target = event.target.closest('button, [data-pos-box-item]');
     if (!target) return;
     const d = target.dataset;
-    if (d.posBoxItem) { const item = items.get(d.posBoxItem); if (item) add(item, '1'); }
-    else if (d.posBoxGroup) { path.push(d.posBoxGroup); drawBoxes(); }
+    if (d.posBoxItem) { const item = items.get(d.posBoxItem); if (layoutEditing) openBox(boxById(target.closest('[data-pos-box-id]').dataset.posBoxId)); else if (item) add(item, '1'); }
+    else if (d.posBoxGroup) { path.push(d.posGroupId); drawBoxes(); }
     else if (d.posCrumb !== undefined) { path = path.slice(0, Number(d.posCrumb) + 1); drawBoxes(); }
     else if (d.posResult) {
       const item = items.get(d.posResult);
       const quantity = (/^(\d+(?:\.\d+)?)\s*\*/.exec(scanInput.value) || [])[1] || '1';
-      if (item) add(item, quantity);
+      if (item) { if (layoutEditing) addBoxItem(item); else add(item, quantity); }
       scanInput.value = '';
       lookup();
+    }
+    else if (d.posStyle) { layoutWrite('view', {pos_box: currentGroup(), style: d.posStyle}).catch(() => {}); }
+    else if (target.matches('[data-pos-edit]')) { layoutEditing = !layoutEditing; drawBoxes(); }
+    else if (d.posSeed) { layoutWrite('seed', {mode: d.posSeed}).catch(() => {}); }
+    else if (d.posArrange) openBox(boxById(d.posArrange));
+    else if (target.matches('[data-pos-add-group]')) openBox(null);
+    else if (target.matches('[data-pos-add-item]')) { scanInput.focus(); layoutStatus('Look up an item above, then tap it to add its box here.'); }
+    else if (target.matches('[data-pos-box-cancel]')) $('[data-pos-box-dialog]').close();
+    else if (target.matches('[data-pos-box-remove]') && arranged) {
+      const box = arranged;
+      if (box.kind === 'group' && children(box.id).length && !confirm('Remove this group and its boxes? Inventory items will be kept.')) return;
+      layoutWrite('remove', {pos_box: box.id}).then(() => $('[data-pos-box-dialog]').close()).catch(() => {});
+    }
+    else if (target.matches('[data-pos-picture-clear]') && arranged) {
+      layoutWrite('update', {pos_box: arranged.id, picture_attachment: null}).then(() => {
+        $('[data-pos-box-dialog]').close(); openBox(boxById(arranged.id));
+      }).catch(() => {});
     }
     else if (d.posLine !== undefined) { if (!state.pending) openLine(state.lines[Number(d.posLine)]); }
     else if (target.matches('[data-pos-qty-step]')) {
@@ -396,6 +495,55 @@
     else if (target.matches('[data-pos-retry]')) retry();
     else if (target.matches('[data-pos-new-sale]')) { $('[data-pos-done]').hidden = true; scanInput.focus(); }
   });
+
+  if (data.can_layout) {
+    $('[data-pos-box-editor]').addEventListener('submit', async event => {
+      event.preventDefault();
+      const box = arranged, label = $('[data-pos-box-label]').value.trim();
+      const parent = $('[data-pos-box-parent]').value || null;
+      const position = Math.max(0, Number($('[data-pos-box-position]').value) - 1);
+      const shade = $('[data-pos-box-colour]').value;
+      try {
+        if (!box) await layoutWrite('create', {kind: 'group', label, colour: shade, parent, position});
+        else {
+          await layoutWrite('update', {pos_box: box.id, label, ...(box.kind === 'group' ? {colour: shade} : {})});
+          if (box.parent !== parent || box.position !== position) await layoutWrite('move', {pos_box: box.id, parent, position});
+        }
+        $('[data-pos-box-dialog]').close();
+      } catch (_) { /* the visible status carries the refusal */ }
+    });
+    const pictureForm = $('[data-pos-picture-form]');
+    pictureForm.addEventListener('htmx:configRequest', event => {
+      event.detail.parameters.expected_version = data.layout.version;
+      layoutStatus('Saving picture…');
+    });
+    pictureForm.addEventListener('htmx:afterRequest', event => {
+      if (event.target !== pictureForm) return;
+      let answer;
+      try { answer = JSON.parse(event.detail.xhr.responseText); } catch (_) {}
+      if (event.detail.successful && answer && Array.isArray(answer.items)) {
+        data.layout = answer; drawBoxes(); layoutStatus('Picture saved.');
+        $('[data-pos-box-dialog]').close();
+      } else layoutStatus(answer && (answer.message || answer.error && answer.error.message) || 'The picture was not saved. Try again.');
+    });
+    let dragged = null;
+    root.addEventListener('dragstart', event => {
+      const box = event.target.closest('[data-pos-box-id]');
+      if (!layoutEditing || !box) return;
+      dragged = box.dataset.posBoxId;
+      event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', dragged);
+    });
+    root.addEventListener('dragover', event => { if (layoutEditing && event.target.closest('[data-pos-box-id]')) event.preventDefault(); });
+    root.addEventListener('drop', event => {
+      const target = event.target.closest('[data-pos-box-id]');
+      if (!layoutEditing || !target || !dragged) return;
+      event.preventDefault();
+      const to = boxById(target.dataset.posBoxId), from = dragged;
+      dragged = null;
+      if (to.id !== from) layoutWrite('move', {pos_box: from, parent: currentGroup(), position: to.position}).catch(() => {});
+    });
+  }
+
   $('[data-pos-tendered]').addEventListener('input', event => { tendered = event.target.value.trim(); change(); });
   $('[data-pos-customer-q]').addEventListener('input', () => { clearTimeout(customerTimer); customerTimer = setTimeout(searchCustomers, 200); });
   $('[data-pos-line-dialog]').addEventListener('close', () => { if (editing) closeLine(false); });
@@ -427,6 +575,7 @@
     },
     state: () => JSON.parse(JSON.stringify(state)),
     server: () => server,
+    layout: () => JSON.parse(JSON.stringify(data.layout)),
   };
 
   drawBoxes();

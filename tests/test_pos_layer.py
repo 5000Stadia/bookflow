@@ -36,7 +36,7 @@ CLERK_COMMANDS = ['barcode lookup', 'bin list', 'bin show', 'company show',
                   'inventory-site list', 'inventory-site show', 'inventory-transfer history', 'inventory-transfer query',
                   'inventory-transfer show', 'item list', 'item picture get', 'item query', 'item query children',
                   'item query options', 'item show', 'lot list', 'lot show', 'pos customer add', 'pos customer search',
-                  'pos sale complete', 'pos sale preview', 'pos-register list', 'pos-register show',
+                  'pos sale complete', 'pos sale preview', 'pos-box list', 'pos-box picture get', 'pos-register list', 'pos-register show',
                   'serial-number list', 'serial-number show']
 
 
@@ -205,6 +205,7 @@ def test_the_clerk_preset_holds_company_item_and_pos_sell_and_lands_on_the_pos(h
     assert landed.status_code == 303 and landed.headers["location"] == f"/c/{cid}/pos"
     page = fresh.get(f"/c/{cid}/pos")
     assert page.status_code == 200 and "app-header-minimal" in page.text
+    assert all(marker not in page.text for marker in ("data-pos-edit", "data-pos-style", "data-pos-layout-form"))
     assert re.findall(r'data-header-link>([^<]+)<', page.text) == ["Point of sale", "Items"]
     assert "data-section=" not in page.text and "data-finder-open" not in page.text and "Switch company" not in page.text
     assert "data-home-button" in page.text

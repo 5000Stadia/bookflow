@@ -105,3 +105,5 @@ Database: `company`.
 | `pos_enabled` | BOOLEAN | no | — | — | — | — | Point of sale: the POS screen and its registers as an optional layer on sales receipts; off by default. |
 | `bank_rule_learning` | VARCHAR(8) | no | — | — | — | — | Bank rules: when two adds of a payee agree, ask (the default: a suggested rule to accept or decline), always (make it active) or never (learn nothing). |
 | `bank_rule_automation` | BOOLEAN | no | — | — | — | — | Bank rules: live auto-add and ignore rules act at imports (true, the default); false holds every one back company-wide, their lines waiting with their proposals. |
+| `pos_home_view_style` | VARCHAR(12) | no | — | — | — | — | Saved POS home style: block, list, compact or photo. |
+| `pos_layout_version` | INTEGER | no | — | — | — | — | POS layout revision, independent of company settings. Zero means the category seed has not yet been saved; positive revisions also preserve an intentionally empty layout. |

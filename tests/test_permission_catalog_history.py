@@ -115,6 +115,7 @@ ACCEPTED = {
     'bank-rule-v1': (874, '12b5f914d21302af037c6cc0b1aeab0ef6912d764015332d7734c12338ad8127'),
     'pos-sale-v1': (878, '1462bee09d7343f15fdc015fa86a114e30671e8d73fc2bab7f5e75444d0450cf'),
     'bank-reconcile-v1': (878, '8673bd998c7e077061301d0bfaea5af7b33cbd3eb773f89dd0e6fdcdbf026e42'),
+    'pos-layout-v1': (887, 'f6e8b86ee1f95e2a8e492c2ec2da0eed796defbc8c8ca59c50283408e8dc5d93'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -274,6 +275,8 @@ CHAIN_ADDITIONS = {
                      'bank-rule decline', 'bank-rule query', 'bank-rule show', 'bank-rule update'},
     'pos-sale-v1': {'pos customer add', 'pos customer search', 'pos sale complete', 'pos sale preview'},
     'bank-reconcile-v1': set(),  # conditional inbox read on the existing reconcile import
+    'pos-layout-v1': {f'pos-box {verb}' for verb in ('list', 'create', 'update', 'move', 'remove', 'view',
+                                                   'seed', 'picture set', 'picture get')},
 }
 
 _ANCESTOR_EDIT = """

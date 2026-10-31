@@ -1599,6 +1599,15 @@ walk-in customer and today's date, and records the ticket and tender beside it; 
 says which register and clerk took it and what was tendered. Answer questions about takings from the receipts; do
 not ring sales up through `pos sale complete` yourself.
 
+`pos-box list` reads the company's tap boxes and layout `version` with `pos.sell`. Every layout write needs
+`pos.layout` and that revision as `expected_version`: `create`, `update`, `move`, `remove`, `view`, `seed`, and
+`picture set`. A stale revision returns `E_VERSION_CONFLICT`; read the layout again before editing. The first
+read shows the category seed without writing it; `seed --mode categories` stores it, or `seed --mode empty`
+starts empty. The first edit also stores the seed. Removing a box never removes its inventory item. A group
+cannot be moved into itself or its descendants. `view --style list` with no box sets Home; naming a group sets
+that group's style. Styles are `block`, `list`, `compact`, and `photo`, shared across devices. Group images use
+`pos-box picture set` and `pos-box picture get`; item boxes display the inventory item's own picture.
+
 <!-- bookflow-example: illustrative -->
 ```json
 {"command": "pos-register list", "input": {}}
