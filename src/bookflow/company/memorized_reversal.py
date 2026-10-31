@@ -239,7 +239,8 @@ def _plan(s, ctx, batch, effects, done, probe, blockers):
         found['records'] += 1
     if state and not state_done:
         step = dict(seq=0, record_type=STATE, record_id=batch['id'], action='restore', version=None,
-                    steps=['restore occurrences, holds and schedules'], changes=state_changes(state))
+                    steps=[{'operation': 'restore occurrences, holds and schedules',
+                            'changes': state_changes(state)}], changes=state_changes(state))
         found['steps'].append(step)
         found['work'].append(dict(state=state, **step))
         found['pending'] += 1
