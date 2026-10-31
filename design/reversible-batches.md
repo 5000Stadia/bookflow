@@ -146,7 +146,8 @@ demo-reset or checkpoint behavior in this increment. A separate reference-year p
 - A count has one shared batch throughout creation, entry and posting. Each write appends its effect in its own
   transaction. Reversal cancels an open count or voids a recorded count through the native command. Later live
   counts or stock documents involving counted items block, including a count whose original difference was zero.
-  The plan names the count, counted items and adjustment documents. Stock, valuation and audit history use the
+  The plan names the count, counted items, exact stock quantity changes by place and adjustment documents.
+  Stock, valuation and audit history use the
   ordinary count inverse; no transaction history is erased.
 - `check print` records its pending run and returns `batch_id` and `next`. The inverse is `check print-cancel`
   under its existing permission and person-only rule. Every cheque must still be pending. A printed outcome

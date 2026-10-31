@@ -102,15 +102,20 @@ def _plan(s, ctx, batch, effects, done, probe, blockers):
                 code=error.code, message=f"Count {count['number']}: {error.message}", details=error.details))
     entries = counts.count_entries(s, count['id'])
     entered = counts.counted_by_line(entries)
+    lines = counts.count_lines(s, count['id'])
+    stock_changes = [dict(item_id=item, site_id=count['site_id'], place_key=place,
+                          quantity_change_microunits=-quantity)
+                     for (item, place), quantity in sorted(counts.live_by_place(s, count, lines).items())]
     detail = dict(seq=effect['seq'], record_type='inventory_count', record_id=count['id'],
         label=f"Count {count['number']}", operation=operation, version=count['version'],
         steps=[dict(operation=operation, **payload)],
         documents=[dict(transaction_id=d['transaction_id'], number=d['number'], action='void differences')
                    for d in counts.postings(s, count['id']) if d['status'] != 'voided'],
         items=[dict(item_id=line['item_id'], counted=entered.get(line['id']))
-               for line in counts.count_lines(s, count['id'])])
+               for line in lines], stock_changes=stock_changes)
     detail['steps'][0].update(documents=detail['documents'], items=detail['items'],
-                              entries=entries, postings=counts.own_movements(s, count))
+                              entries=entries, postings=counts.own_movements(s, count),
+                              stock_changes=stock_changes)
     return dict(steps=[detail], work=[dict(detail, effect=effect, payload=payload)],
                 blockers=blockers, records=1, pending=1)
 

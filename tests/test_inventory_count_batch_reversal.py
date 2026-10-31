@@ -31,6 +31,9 @@ def test_posted_count_reversal_restores_stock_and_valuation(van):
     assert step['documents'] == [dict(transaction_id=count['documents'][0]['transaction_id'],
                                      number=count['documents'][0]['number'], action='void differences')]
     assert step['items'] == [dict(item_id=van['items']['Widget'], counted=2000000)]
+    assert len(step['stock_changes']) == 1
+    assert step['stock_changes'][0]['item_id'] == van['items']['Widget']
+    assert step['stock_changes'][0]['quantity_change_microunits'] == 3000000
     assert _held(books, '2017-03-03')[('Widget', 'Van 1')] == '2'
     assert run('batch reverse', {'batch': count['batch_id']}, reason='Wrong count')['state'] == 'reversed'
     assert _held(books, '2017-03-03')[('Widget', 'Van 1')] == '5'
