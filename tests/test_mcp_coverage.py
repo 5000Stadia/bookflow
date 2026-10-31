@@ -106,7 +106,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +9 guided opening balances (R107 increment 7): opening-draft create, update, show, query, discard, plan, apply,
     # tie-out, reverse.
     # +4 the POS layer (R114 increment 4): pos-register create, update, show, list.
-    assert len(rows) == 872
+    # +4 ringing up (R114 increment 5): pos sale preview, complete, pos customer search, add.
+    assert len(rows) == 876
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).

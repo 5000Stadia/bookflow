@@ -1311,3 +1311,6 @@ from bookflow.company import pos_schema as _pos_schema
 globals().update(_pos_schema.define_tables(metadata, _column, _table, _common))
 company_info.append_column(_pos_schema.company_info_column(_column))
 customers.append_column(_pos_schema.customers_column(_column))
+# POS sales (co0120, R114 increment 5): one row per completed sale, beside the receipt it posted.
+from bookflow.company import pos_sale_schema as _pos_sale_schema
+globals().update(_pos_sale_schema.define_tables(metadata, _column, _table))

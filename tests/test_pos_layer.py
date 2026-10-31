@@ -35,7 +35,8 @@ CLERK_COMMANDS = ['barcode lookup', 'bin list', 'bin show', 'company show',
                   'cycle-class list', 'cycle-class show', 'cycle-count due', 'inventory-count query', 'inventory-count sheet', 'inventory-count show',
                   'inventory-site list', 'inventory-site show', 'inventory-transfer history', 'inventory-transfer query',
                   'inventory-transfer show', 'item list', 'item picture get', 'item query', 'item query children',
-                  'item query options', 'item show', 'lot list', 'lot show', 'pos-register list', 'pos-register show',
+                  'item query options', 'item show', 'lot list', 'lot show', 'pos customer add', 'pos customer search',
+                  'pos sale complete', 'pos sale preview', 'pos-register list', 'pos-register show',
                   'serial-number list', 'serial-number show']
 
 

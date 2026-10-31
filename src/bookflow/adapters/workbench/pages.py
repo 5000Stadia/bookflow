@@ -668,7 +668,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js", "timekeeping.css", "scan.js", "counts.css", "picks.css", "import.css", "import.js", "item-picture.js", "camera-scan.js", "camera-scan.css", "scan-decoder-native.js", "scan-decoder-zxing-wasm.js", "secure-context.js", "bulk-edit.css", "bulk-edit.js", "opening.css")
+        for name in ("workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js", "timekeeping.css", "scan.js", "counts.css", "picks.css", "import.css", "import.js", "item-picture.js", "camera-scan.js", "camera-scan.css", "scan-decoder-native.js", "scan-decoder-zxing-wasm.js", "secure-context.js", "bulk-edit.css", "bulk-edit.js", "opening.css", "pos.js", "pos.css")
     }
     # The Scan field macro (scan_field.html) is imported without the page's context, so its camera scripts come
     # from the environment; their URLs depend only on the files' bytes.
@@ -941,7 +941,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     # R114 increment 4: the POS page, shown only while the company has POS on.
     from bookflow.adapters.workbench import pos_pages as PosPages
     PosPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
-                   role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
+                   role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin),
+                   holds=lambda request, cid, capability: effective_capabilities(request, cid).holds(capability))
     # R181 increment 3: pick lists and the pick screen, shown only while the company has picking on.
     from bookflow.adapters.workbench import pick_list_pages as PickListPages
     PickListPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,

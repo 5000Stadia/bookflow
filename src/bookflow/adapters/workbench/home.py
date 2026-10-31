@@ -1308,6 +1308,8 @@ PAGE_RUNS: dict[str, tuple[str, ...]] = {
     '/other-name/create': ('custom-field list',),
     '/payment': ('payment-method list',),
     '/payment-method': ('payment-method query', 'payment-method query options'),
+    # The POS screen (R114 increment 5): the sales items it rings up, read once with the page.
+    '/pos': ('item list',),
     '/price-level': ('price-level query', 'price-level query options'),
     '/print-checks': ('account list',),
     '/proposal/create': ('custom-field list', 'item show'),

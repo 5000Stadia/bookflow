@@ -204,11 +204,17 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0113 = importlib.import_module("bookflow.storage.company_migrations.versions.0113_import_documents")
     co0116 = importlib.import_module("bookflow.storage.company_migrations.versions.0116_bulk_edit")
     co0118 = importlib.import_module("bookflow.storage.company_migrations.versions.0118_pos_layer")
+    co0120 = importlib.import_module("bookflow.storage.company_migrations.versions.0120_pos_sales")
     co0117 = importlib.import_module("bookflow.storage.company_migrations.versions.0117_opening_drafts")
     co0115 = importlib.import_module("bookflow.storage.company_migrations.versions.0115_item_pictures")
 
     def older(conn):
-        # Newest first: co0118 (on co0117): its guard, its table, then the switch column and the walk-in flag.
+        # Newest first: co0120 (on co0118): its guards, then its table.
+        for trigger in co0120.TRIGGERS:
+            conn.execute(f"DROP TRIGGER {trigger}")
+        for table in co0120.TABLES:
+            conn.execute(f"DROP TABLE {table}")
+        # Then co0118 (on co0117): its guard, its table, then the switch column and the walk-in flag.
         for trigger in co0118.TRIGGERS:
             conn.execute(f"DROP TRIGGER {trigger}")
         for table in co0118.TABLES:
@@ -493,7 +499,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))
     restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older",
                                               "organization": "Older Books Organization"})
-    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0118"
+    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0120"
     folder = _folder(client, restored["company_id"])
     # The migration took its verified backup of the restored database first, as every migration does.
     assert list((folder / "backups").glob("*-from-co0062.db"))

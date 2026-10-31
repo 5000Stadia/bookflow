@@ -1,10 +1,74 @@
 {% extends "base.html" %}
 {% block title %}Point of sale — {{ company_label }}{% endblock %}
-{% block body %}
-<section id="pos" aria-label="Point of sale">
-<h1>Point of sale</h1>
-<p data-pos-coming>The register screen is coming: ringing up sales on this page arrives with the next part of point of sale.{% if can_receipt %} Until then, record a sale with a <a href="/c/{{ company_id }}/sales-receipt/post">sales receipt</a>.{% endif %}</p>
-{% if registers %}<h2>{{ 'Registers' if registers | length > 1 else 'Register' }}</h2>
-<ul class="pos-registers">{% for register in registers %}<li data-pos-register="{{ register.name }}"><b>{{ register.name }}</b> · {{ register.site.name }} · takes {{ register.payment_methods | map(attribute='name') | join(', ') or 'no payment method yet' }} · {{ register.receipt_width }} mm receipt</li>{% endfor %}</ul>{% endif %}
+{% block body %}{% from "scan_field.html" import scan_field %}
+<link rel="stylesheet" href="{{ static_urls['pos.css'] }}">
+<section id="pos" class="pos" aria-label="Point of sale" data-pos data-pos-company="{{ company_id }}">
+<div class="pos-main">
+  <div class="pos-topbar">
+    {% if registers | length > 1 %}<label class="pos-register-pick">Register <select data-pos-register-select>{% for register in registers %}<option value="{{ register.id }}">{{ register.name }}</option>{% endfor %}</select></label>{% elif registers %}<span class="pos-register-name" data-pos-register-name>{{ registers[0].name }}</span>{% endif %}
+  </div>
+  <div class="pos-lookup">{{ scan_field(company_id, 'pos', label='Look up or scan an item') }}
+    <ul class="pos-results pos-view-list" data-pos-results hidden aria-label="Lookup results"></ul>
+  </div>
+  <nav class="pos-crumbs" aria-label="Where you are" data-pos-crumbs></nav>
+  <div class="pos-boxes pos-view-block" data-pos-boxes role="list"></div>
+</div>
+<aside class="pos-cart" aria-label="Sale" data-pos-cart>
+  <div class="pos-cart-head"><button type="button" class="pos-customer" data-pos-customer aria-haspopup="dialog">No customer</button><button type="button" class="pos-sheet-close" data-pos-sheet-close aria-label="Hide the sale">×</button></div>
+  <ol class="pos-lines" data-pos-lines aria-label="Lines"></ol>
+  <p class="pos-empty" data-pos-empty>Tap an item, look one up or scan it.</p>
+  <dl class="pos-totals"><div><dt>Subtotal</dt><dd data-pos-subtotal>—</dd></div><div><dt>Tax</dt><dd data-pos-tax>—</dd></div><div class="pos-total"><dt>Total</dt><dd data-pos-total>—</dd></div></dl>
+  <p class="pos-connection" data-pos-connection role="status" hidden></p>
+  <div class="pos-cart-actions"><button type="button" data-pos-clear>Clear sale</button><button type="button" class="primary pos-charge" data-pos-charge disabled>Charge</button></div>
+</aside>
+<button type="button" class="pos-bar" data-pos-bar aria-label="Show the sale"><span data-pos-bar-count>0 items</span> · <span data-pos-bar-total>—</span> · <b>Charge</b></button>
+<p class="pos-pending" data-pos-pending role="alert" hidden></p>
+
+<dialog class="pos-dialog pos-line-dialog" data-pos-line-dialog aria-label="Line">
+  <form method="dialog"><h2 data-pos-line-name></h2>
+    <label>Quantity <span class="pos-qty"><button type="button" data-pos-qty-step="-1" aria-label="One fewer">−</button><input data-pos-line-qty inputmode="decimal" autocomplete="off"><button type="button" data-pos-qty-step="1" aria-label="One more">+</button></span></label>
+    <label data-pos-line-price-row hidden>Price <input data-pos-line-price inputmode="decimal" autocomplete="off" placeholder="Item price"></label>
+    <label data-pos-line-serial-row hidden>Serial number <input data-pos-line-serial autocomplete="off" placeholder="Scan or type; leave empty to skip"></label>
+    <div class="pos-dialog-actions"><button type="button" data-pos-line-remove>Remove</button><button value="done" class="primary" data-pos-line-done>Done</button></div>
+  </form>
+</dialog>
+
+<dialog class="pos-dialog pos-customer-dialog" data-pos-customer-dialog aria-label="Customer">
+  <form method="dialog"><h2>Customer</h2>
+    <label>Find by name, phone or email <input type="search" data-pos-customer-q autocomplete="off"></label>
+    <ul class="pos-customer-results" data-pos-customer-results></ul>
+    <details data-pos-customer-new><summary>Add a customer</summary>
+      <label>Name <input data-pos-new-name autocomplete="off"></label>
+      <label>Phone <input data-pos-new-phone type="tel" autocomplete="off"></label>
+      <label>Email <input data-pos-new-email type="email" autocomplete="off"></label>
+      <button type="button" data-pos-customer-add>Add and choose</button>
+    </details>
+    <p class="pos-dialog-status" data-pos-customer-status role="status"></p>
+    <div class="pos-dialog-actions"><button type="button" data-pos-customer-clear>No customer</button><button value="close">Close</button></div>
+  </form>
+</dialog>
+
+<dialog class="pos-dialog pos-tender" data-pos-tender aria-label="Take payment">
+  <form method="dialog"><p class="pos-tender-total">Total <b data-pos-tender-total></b></p>
+    <div class="pos-methods" data-pos-methods role="group" aria-label="Payment method"></div>
+    <div data-pos-cash hidden>
+      <div class="pos-quick" data-pos-quick role="group" aria-label="Quick amounts"></div>
+      <label>Amount tendered <input data-pos-tendered inputmode="decimal" autocomplete="off"></label>
+      <div class="pos-keypad" data-pos-keypad>{% for key in ['7','8','9','4','5','6','1','2','3','0','00','⌫'] %}<button type="button" data-pos-key="{{ key }}">{{ key }}</button>{% endfor %}</div>
+      <p class="pos-change-due">Change due <b data-pos-change-due>—</b></p>
+    </div>
+    <label data-pos-reference-row hidden>Reference (optional) <input data-pos-reference autocomplete="off" placeholder="Last four digits or approval code" maxlength="128"></label>
+    <p class="pos-dialog-status" data-pos-tender-status role="alert"></p>
+    <div class="pos-dialog-actions"><button value="cancel">Back</button><button type="button" class="primary" data-pos-complete disabled>Complete</button></div>
+  </form>
+</dialog>
+
+<section class="pos-done" data-pos-done hidden aria-label="Sale complete">
+  <p class="pos-done-label">Change due</p><p class="pos-done-change" data-pos-done-change></p>
+  <p data-pos-done-summary></p>
+  <button type="button" class="primary" data-pos-new-sale>New sale</button>
 </section>
+<script type="application/json" id="pos-data">{{ pos_data | tojson }}</script>
+</section>
+<script src="{{ static_urls['scan.js'] }}" defer></script><script src="{{ static_urls['pos.js'] }}" defer></script>
 {% endblock %}
