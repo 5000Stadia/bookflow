@@ -91,7 +91,7 @@ def _address(lines: list[str], width: int = 5) -> list[str]:
 
 def lists_iif() -> bytes:
     out = ["!HDR\tPROD\tVER\tREL\tIIFVER\tDATE\tTIME\tACCNTNT\tACCNTNTSPLITTIME",
-           f"HDR\tQuickBooks Pro\tVersion 34.0D\tRelease R5P\t1\t07/01/2026\t{STAMP}\tN\t0"]
+           f"HDR\tDesktop Accounting Pro\tVersion 34.0D\tRelease R5P\t1\t07/01/2026\t{STAMP}\tN\t0"]
     ref = iter(range(10, 10_000))
     out.append("\t".join(_ACCNT))
     for number, name, kind, desc, extra in D.ACCOUNTS:
@@ -182,13 +182,13 @@ def trial_balance_csv(gl: dict, as_of: date) -> bytes:
         if not balance:
             continue
         if balance > 0:
-            rows.append([F.qb_account(name), "", F.qb_money(balance), ""])
+            rows.append([F.anchor_account(name), "", F.anchor_money(balance), ""])
             debits += balance
         else:
-            rows.append([F.qb_account(name), "", "", F.qb_money(-balance)])
+            rows.append([F.anchor_account(name), "", "", F.anchor_money(-balance)])
             credits -= balance
     assert debits == credits
-    rows.append(["TOTAL", "", F.qb_money(debits), F.qb_money(credits)])
+    rows.append(["TOTAL", "", F.anchor_money(debits), F.anchor_money(credits)])
     return _csv(rows).encode("cp1252")
 
 
@@ -213,9 +213,9 @@ def open_invoices_csv(ar: dict, as_of: date) -> bytes:
         if doc.kind == "invoice":
             days = _days_past(doc, as_of)
             return ["", "", "Invoice", F.us(doc.date), doc.number, doc.po, doc.terms, F.us(doc.due), "",
-                    str(days) if days > 0 else "", F.qb_money(doc.open)]
+                    str(days) if days > 0 else "", F.anchor_money(doc.open)]
         return ["", "", "Credit Memo" if doc.kind == "credit_memo" else "Payment", F.us(doc.date), doc.number, "",
-                "", F.us(doc.date), "", "", F.qb_money(doc.open)]
+                "", F.us(doc.date), "", "", F.anchor_money(doc.open)]
 
     for top, jobs in sorted(_by_customer(docs).items()):
         rows.append([top, *[""] * 10])
@@ -227,11 +227,11 @@ def open_invoices_csv(ar: dict, as_of: date) -> bytes:
                 rows.append(["", job, *blank])
             rows += [doc_row(d) for d in items]
             if job:
-                rows.append(["", f"Total {job}", *[""] * 8, F.qb_money(job_total)])
+                rows.append(["", f"Total {job}", *[""] * 8, F.anchor_money(job_total)])
             top_total += job_total
-        rows.append([f"Total {top}", *[""] * 9, F.qb_money(top_total)])
+        rows.append([f"Total {top}", *[""] * 9, F.anchor_money(top_total)])
         total += top_total
-    rows.append(["TOTAL", *[""] * 9, F.qb_money(total)])
+    rows.append(["TOTAL", *[""] * 9, F.anchor_money(total)])
     return _csv(rows).encode("cp1252")
 
 
@@ -250,13 +250,13 @@ def _aging_lines(docs: list[F.Doc], as_of: date, report: str) -> tuple[list, dic
             for doc in items:
                 sums[_bucket(doc, as_of)] += doc.open
             detail[f"{top}:{job}" if job else top] = sums
-            cells = [F.qb_money(v) for v in sums] + [F.qb_money(sum(sums))]
+            cells = [F.anchor_money(v) for v in sums] + [F.anchor_money(sum(sums))]
             rows.append(["", job, *cells] if job else [top, "", *cells])
             top_sums = [a + b for a, b in zip(top_sums, sums)]
         if has_jobs:
-            rows.append([f"Total {top}", "", *[F.qb_money(v) for v in top_sums], F.qb_money(sum(top_sums))])
+            rows.append([f"Total {top}", "", *[F.anchor_money(v) for v in top_sums], F.anchor_money(sum(top_sums))])
         grand = [a + b for a, b in zip(grand, top_sums)]
-    rows.append(["TOTAL", "", *[F.qb_money(v) for v in grand], F.qb_money(sum(grand))])
+    rows.append(["TOTAL", "", *[F.anchor_money(v) for v in grand], F.anchor_money(sum(grand))])
     return rows, detail
 
 
@@ -284,13 +284,13 @@ def unpaid_bills_csv(ap: dict, as_of: date) -> bytes:
             if doc.kind == "bill":
                 days = _days_past(doc, as_of)
                 rows.append(["", "", "Bill", F.us(doc.date), doc.number, F.us(doc.due), str(days) if days > 0 else "",
-                             F.qb_money(doc.open)])
+                             F.anchor_money(doc.open)])
             else:
-                rows.append(["", "", "Credit", F.us(doc.date), doc.number, "", "", F.qb_money(doc.open)])
+                rows.append(["", "", "Credit", F.us(doc.date), doc.number, "", "", F.anchor_money(doc.open)])
         subtotal = sum(d.open for d in docs)
-        rows.append([f"Total {name}", *[""] * 6, F.qb_money(subtotal)])
+        rows.append([f"Total {name}", *[""] * 6, F.anchor_money(subtotal)])
         total += subtotal
-    rows.append(["TOTAL", *[""] * 6, F.qb_money(total)])
+    rows.append(["TOTAL", *[""] * 6, F.anchor_money(total)])
     return _csv(rows).encode("cp1252")
 
 
@@ -309,11 +309,11 @@ def inventory_valuation_csv(stock: dict, as_of: date) -> bytes:
     for name in sorted(stock):
         quantity, value = stock[name]
         average = F.money(F.round_half_up(Decimal(value) / quantity)) if quantity else "0.00"
-        rows.append([name, str(quantity), average, F.qb_money(value), _percent(value, value_total),
-                     F.qb_money(F.cents(F.item(name)["price"])), F.qb_money(retail[name]),
+        rows.append([name, str(quantity), average, F.anchor_money(value), _percent(value, value_total),
+                     F.anchor_money(F.cents(F.item(name)["price"])), F.anchor_money(retail[name]),
                      _percent(retail[name], retail_total)])
         quantity_total += quantity
-    rows.append(f'"TOTAL",{quantity_total},,"{F.qb_money(value_total)}","100.0%",,"{F.qb_money(retail_total)}","100.0%"')
+    rows.append(f'"TOTAL",{quantity_total},,"{F.anchor_money(value_total)}","100.0%",,"{F.anchor_money(retail_total)}","100.0%"')
     return _csv(rows).encode("cp1252")
 
 
@@ -322,31 +322,31 @@ def reconciliation_summary_csv(account: str, register: int) -> bytes:
     june = D.JUNE_RECONCILIATION[account]
     uncleared = [u for u in D.UNCLEARED if u[0] == account]
     card = account == "Visa Business Card"
-    rows = [[COMPANY], ["Reconciliation Summary"], [f"{F.qb_account(account)}, Period Ending 06/30/2026"],
+    rows = [[COMPANY], ["Reconciliation Summary"], [f"{F.anchor_account(account)}, Period Ending 06/30/2026"],
             ["", "", "", "Jun 30, 26"],
-            ["Beginning Balance", "", "", F.qb_money(F.cents(june["beginning"]))]]
+            ["Beginning Balance", "", "", F.anchor_money(F.cents(june["beginning"]))]]
     out_label, in_label = (("Charges and Cash Advances", "Payments and Credits") if card
                            else ("Checks and Payments", "Deposits and Credits"))
     out_count, out_total = june["out"]
     in_count, in_total = june["in"]
     cleared = F.cents(out_total) + F.cents(in_total)
     rows += [["", "Cleared Transactions", "", ""],
-             ["", "", f"{out_label} - {out_count} item{'' if out_count == 1 else 's'}", F.qb_money(F.cents(out_total))],
-             ["", "", f"{in_label} - {in_count} item{'' if in_count == 1 else 's'}", F.qb_money(F.cents(in_total))],
-             ["", "Total Cleared Transactions", "", F.qb_money(cleared)],
-             ["Cleared Balance", "", "", F.qb_money(F.cents(june["beginning"]) + cleared)]]
+             ["", "", f"{out_label} - {out_count} item{'' if out_count == 1 else 's'}", F.anchor_money(F.cents(out_total))],
+             ["", "", f"{in_label} - {in_count} item{'' if in_count == 1 else 's'}", F.anchor_money(F.cents(in_total))],
+             ["", "Total Cleared Transactions", "", F.anchor_money(cleared)],
+             ["Cleared Balance", "", "", F.anchor_money(F.cents(june["beginning"]) + cleared)]]
     assert F.cents(june["beginning"]) + cleared == F.cents(D.JUNE_STATEMENTS[account])
     outs = [F.cents(u[6]) for u in uncleared if (F.cents(u[6]) > 0) == card]
     ins = [F.cents(u[6]) for u in uncleared if (F.cents(u[6]) > 0) != card]
     rows.append(["", "Uncleared Transactions", "", ""])
     if outs:
         rows.append(["", "", f"{out_label} - {len(outs)} item{'s' if len(outs) > 1 else ''}",
-                     F.qb_money(sum(outs))])
+                     F.anchor_money(sum(outs))])
     if ins:
-        rows.append(["", "", f"{in_label} - {len(ins)} item{'s' if len(ins) > 1 else ''}", F.qb_money(sum(ins))])
-    rows.append(["", "Total Uncleared Transactions", "", F.qb_money(sum(outs) + sum(ins))])
-    rows.append(["Register Balance as of 06/30/2026", "", "", F.qb_money(register)])
-    rows.append(["Ending Balance", "", "", F.qb_money(register)])
+        rows.append(["", "", f"{in_label} - {len(ins)} item{'s' if len(ins) > 1 else ''}", F.anchor_money(sum(ins))])
+    rows.append(["", "Total Uncleared Transactions", "", F.anchor_money(sum(outs) + sum(ins))])
+    rows.append(["Register Balance as of 06/30/2026", "", "", F.anchor_money(register)])
+    rows.append(["Ending Balance", "", "", F.anchor_money(register)])
     return _csv(rows).encode("cp1252")
 
 
@@ -355,33 +355,33 @@ def uncleared_csv() -> bytes:
             ["", "", "Type", "Date", "Num", "Name", "Memo", "Clr", "Amount", "Balance"]]
     total = 0
     for account in ("Checking", "Visa Business Card"):
-        rows.append([F.qb_account(account), *[""] * 9])
+        rows.append([F.anchor_account(account), *[""] * 9])
         running = 0
         for acct, kind, when, number, name, memo, amount, _ in D.UNCLEARED:
             if acct != account:
                 continue
             value = F.cents(amount) if account == "Checking" else -F.cents(amount)
             running += value
-            rows.append(["", "", kind, F.us(F.day(when)), number, name, memo, "", F.qb_money(value), F.qb_money(running)])
-        rows.append([f"Total {F.qb_account(account)}", *[""] * 7, F.qb_money(running), F.qb_money(running)])
+            rows.append(["", "", kind, F.us(F.day(when)), number, name, memo, "", F.anchor_money(value), F.anchor_money(running)])
+        rows.append([f"Total {F.anchor_account(account)}", *[""] * 7, F.anchor_money(running), F.anchor_money(running)])
         total += running
-    rows.append(["TOTAL", *[""] * 7, F.qb_money(total), F.qb_money(total)])
+    rows.append(["TOTAL", *[""] * 7, F.anchor_money(total), F.anchor_money(total)])
     return _csv(rows).encode("cp1252")
 
 
 def undeposited_csv() -> bytes:
     """The receipts still waiting in Undeposited Funds, as the desktop product's help has a person list them: the
     account's QuickReport, Dates All, filtered to Cleared No (a receipt is cleared there once it is deposited)."""
-    account = F.qb_account("Undeposited Funds")
+    account = F.anchor_account("Undeposited Funds")
     rows = [[COMPANY], ["Account QuickReport"], ["All Transactions"],
             ["", "", "Type", "Date", "Num", "Name", "Memo", "Split", "Amount", "Balance"], [account, *[""] * 9]]
     running = 0
     for when, name, number, amount, _ in D.UNDEPOSITED:
         running += F.cents(amount)
-        rows.append(["", "", "Payment", F.us(F.day(when)), number, name, "", F.qb_account("Accounts Receivable"),
-                     F.qb_money(F.cents(amount)), F.qb_money(running)])
-    rows.append([f"Total {account}", *[""] * 7, F.qb_money(running), F.qb_money(running)])
-    rows.append(["TOTAL", *[""] * 7, F.qb_money(running), F.qb_money(running)])
+        rows.append(["", "", "Payment", F.us(F.day(when)), number, name, "", F.anchor_account("Accounts Receivable"),
+                     F.anchor_money(F.cents(amount)), F.anchor_money(running)])
+    rows.append([f"Total {account}", *[""] * 7, F.anchor_money(running), F.anchor_money(running)])
+    rows.append(["TOTAL", *[""] * 7, F.anchor_money(running), F.anchor_money(running)])
     return _csv(rows).encode("cp1252")
 
 
@@ -395,9 +395,9 @@ def vendor_1099_csv() -> bytes:
             ["", "", "Box 1 Nonemployee Compensation", "TOTAL"]]
     total = 0
     for name, amount in sorted(D.VENDOR_1099_PAID.items()):
-        rows.append([name, "", F.qb_money(F.cents(amount)), F.qb_money(F.cents(amount))])
+        rows.append([name, "", F.anchor_money(F.cents(amount)), F.anchor_money(F.cents(amount))])
         total += F.cents(amount)
-    rows.append(["TOTAL", "", F.qb_money(total), F.qb_money(total)])
+    rows.append(["TOTAL", "", F.anchor_money(total), F.anchor_money(total)])
     return _csv(rows).encode("cp1252")
 
 
@@ -484,11 +484,11 @@ def card_summary(books: F.Books, first: date, last: date, beginning: int) -> byt
     due = F.next_business_day(last + timedelta(days=25))
     out = ["Cedar Prairie Bank Visa Business, account ending 9012", "Harbor Electric LLC",
            f"Statement closing date {F.us(last)}", "",
-           f"Previous balance        {F.qb_money(beginning):>12}",
-           f"Payments                {F.qb_money(payments):>12}",
-           f"Other credits           {F.qb_money(credits):>12}",
-           f"Purchases               {F.qb_money(purchases):>12}",
-           f"New balance             {F.qb_money(ending):>12}", "",
+           f"Previous balance        {F.anchor_money(beginning):>12}",
+           f"Payments                {F.anchor_money(payments):>12}",
+           f"Other credits           {F.anchor_money(credits):>12}",
+           f"Purchases               {F.anchor_money(purchases):>12}",
+           f"New balance             {F.anchor_money(ending):>12}", "",
            f"Payment due date {F.us(due)}. Transactions are in the CSV download for this period."]
     return (CRLF.join(out) + CRLF).encode("ascii")
 
@@ -513,7 +513,7 @@ def _short(d: date) -> str:
 
 
 def _amt(c: int) -> str:
-    return "$" + F.qb_money(c)
+    return "$" + F.anchor_money(c)
 
 
 def _lines_text(lines: list[dict], tax: str, taxable: str, total: str, indent: str = "    ") -> list[str]:
@@ -521,7 +521,7 @@ def _lines_text(lines: list[dict], tax: str, taxable: str, total: str, indent: s
     for line in lines:
         name = line["item"]
         if line["quantity"] is None:
-            out.append(f"{indent}{name} ({line['rate']}) {F.qb_money(F.cents(line['amount']))}  {line['desc']}")
+            out.append(f"{indent}{name} ({line['rate']}) {F.anchor_money(F.cents(line['amount']))}  {line['desc']}")
             continue
         quantity = Decimal(line["quantity"])
         shown = f"{quantity.normalize():f}" + (" hr" if F.item(name)["kind"] == "SERV" and name.endswith(("Labor", "Hour"))
@@ -529,10 +529,10 @@ def _lines_text(lines: list[dict], tax: str, taxable: str, total: str, indent: s
         what = f"{name} {shown} @ {line['rate']}" if (quantity != 1 or F.item(name)["kind"] in ("SERV", "INVENTORY")) \
             else name
         note = f"  {line['desc']}" if line["desc"] != F.item(name)["desc"] else ""
-        out.append(f"{indent}{what} = {F.qb_money(F.cents(line['amount']))}{note}")
+        out.append(f"{indent}{what} = {F.anchor_money(F.cents(line['amount']))}{note}")
     if F.cents(tax):
-        out.append(f"{indent}Sales tax 8.75% on {F.qb_money(F.cents(taxable))} = {F.qb_money(F.cents(tax))}")
-    out.append(f"{indent}Total {F.qb_money(F.cents(total))}")
+        out.append(f"{indent}Sales tax 8.75% on {F.anchor_money(F.cents(taxable))} = {F.anchor_money(F.cents(tax))}")
+    out.append(f"{indent}Total {F.anchor_money(F.cents(total))}")
     return out
 
 
@@ -562,7 +562,7 @@ def _sentence(ev: dict, events: dict) -> list[str]:
         for a in ev["applied"]:
             text = a["invoice"]
             if F.cents(a["discount"]):
-                text += f" (less their discount {F.qb_money(F.cents(a['discount']))})"
+                text += f" (less their discount {F.anchor_money(F.cents(a['discount']))})"
             paid.append(text)
         how = "cash" if ev["method"] == "Cash" else f"check #{ev['ref']}"
         return [f"- {_short(when)}: {ev['customer']}, {how}, {_amt(F.cents(ev['amount']))} for "
@@ -574,12 +574,12 @@ def _sentence(ev: dict, events: dict) -> list[str]:
             if source.startswith("uf:"):
                 name = source[3:]
                 number = next(n for _, who, n, _, _ in D.UNDEPOSITED if who == name)
-                parts.append(f"{name} #{number} {F.qb_money(F.cents(item_['amount']))}")
+                parts.append(f"{name} #{number} {F.anchor_money(F.cents(item_['amount']))}")
             else:
                 src = events[source]
                 label = "cash sale " + src["number"] if src["kind"] == "sales_receipt" else (
                     f"{src['customer']} " + ("cash" if src.get("method") == "Cash" else f"#{src['ref']}"))
-                parts.append(f"{label} {F.qb_money(F.cents(item_['amount']))}")
+                parts.append(f"{label} {F.anchor_money(F.cents(item_['amount']))}")
         return [f"- {_short(when)}: deposited {', '.join(parts)}. Deposit total {_amt(F.cents(ev['total']))}. {note}"]
     if kind in ("bill", "vendor_credit"):
         label = "bill" if kind == "bill" else "credit memo"
@@ -593,16 +593,16 @@ def _sentence(ev: dict, events: dict) -> list[str]:
             job = f"  (job: {line['job']})" if line.get("job") else ""
             if "item" in line:
                 body.append(f"    {line['item']} {Decimal(line['quantity']).normalize():f} @ {line['cost']} = "
-                            f"{F.qb_money(F.cents(line['amount']))}{job}")
+                            f"{F.anchor_money(F.cents(line['amount']))}{job}")
             else:
-                body.append(f"    {line['memo']}: {F.qb_money(F.cents(line['amount']))}{job}")
+                body.append(f"    {line['memo']}: {F.anchor_money(F.cents(line['amount']))}{job}")
         return [head, *body, f"    {note}"]
     if kind == "bill_payment":
         bills = []
         for b in ev["bills"]:
-            text = f"{b['bill']} {F.qb_money(F.cents(b['amount']))}"
+            text = f"{b['bill']} {F.anchor_money(F.cents(b['amount']))}"
             if F.cents(b["discount"]):
-                text += f" (took the {F.qb_money(F.cents(b['discount']))} discount)"
+                text += f" (took the {F.anchor_money(F.cents(b['discount']))} discount)"
             bills.append(text)
         how = f"check {ev['number']}" if ev["method"] == "Check" else "online/autopay"
         return [f"- {_short(when)}: paid {ev['vendor']} {_amt(F.cents(ev['total']))} by {how}: {', '.join(bills)}. {note}"]
@@ -627,15 +627,15 @@ def _sentence(ev: dict, events: dict) -> list[str]:
         return [f"- {_short(when)}: check {ev['number']} to {ev['customer']} {_amt(F.cents(ev['amount']))}. {note}"]
     if kind == "payroll":
         out = [f"- Paywell payroll for pay date {F.day(ev['pay_date']).month}/{F.day(ev['pay_date']).day}, "
-               f"taken from checking {_short(when)}: gross wages {F.qb_money(F.cents(ev['gross']))}, employee taxes "
-               f"withheld {F.qb_money(F.cents(ev['employee_taxes']))}, employer taxes "
-               f"{F.qb_money(F.cents(ev['employer_taxes']))}. Two debits: net pay {F.qb_money(F.cents(ev['net']))} "
-               f"and taxes {F.qb_money(F.cents(ev['tax_debit']))}."]
+               f"taken from checking {_short(when)}: gross wages {F.anchor_money(F.cents(ev['gross']))}, employee taxes "
+               f"withheld {F.anchor_money(F.cents(ev['employee_taxes']))}, employer taxes "
+               f"{F.anchor_money(F.cents(ev['employer_taxes']))}. Two debits: net pay {F.anchor_money(F.cents(ev['net']))} "
+               f"and taxes {F.anchor_money(F.cents(ev['tax_debit']))}."]
         for row in ev["employees"]:
             first, last = row["employee"].split(", ")[1], row["employee"].split(", ")[0]
             hours = f"{row['regular']} hrs" + (f" + {row['overtime']} OT" if row["overtime"] != "0" else "")
-            out.append(f"    {first} {last}: {hours}, gross {F.qb_money(F.cents(row['gross']))}, "
-                       f"net {F.qb_money(F.cents(row['net']))}")
+            out.append(f"    {first} {last}: {hours}, gross {F.anchor_money(F.cents(row['gross']))}, "
+                       f"net {F.anchor_money(F.cents(row['net']))}")
         if note:
             out.append(f"    {note}")
         return out
@@ -771,7 +771,7 @@ def render() -> dict[str, bytes]:
                 intro = [f"From Mike. Everything from {start:%B} {start.day} to {end:%B} {end.day}: invoices, checks, "
                          "bills, card receipts. Card receipts are on the Visa unless I say otherwise."]
                 if n == 1:
-                    intro += ["", "We stopped using QuickBooks on June 30. The exports and the June reconciliation "
+                    intro += ["", "We stopped using the desktop product on June 30. The exports and the June reconciliation "
                               "reports are in the old-books folder. The June statements ended at: checking "
                               f"{_amt(F.cents(D.JUNE_STATEMENTS['Checking']))}, savings "
                               f"{_amt(F.cents(D.JUNE_STATEMENTS['Savings']))}, Visa "

@@ -336,7 +336,7 @@ def parse(content, fmt, places, mapping=None):
     chosen = detect(content) if fmt == 'auto' else fmt
     if chosen in ('ofx', 'qfx'):
         if fmt == 'auto':
-            # Quicken's QFX is OFX with Intuit's <INTU.*> sign-on tags.
+            # QFX is OFX with vendor-specific <INTU.*> sign-on tags.
             chosen = 'qfx' if '<INTU.' in content.upper() else 'ofx'
         return parse_ofx(content, places, fmt=chosen)
     return parse_csv(content, places, mapping)

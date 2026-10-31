@@ -66,7 +66,7 @@
     const load=node('button','Show what can be cleared');load.type='button';
     load.setAttribute('data-reconcile-load','');
     // "Mark all" ticks everything listed in one saved step (`reconcile mark` with `all`), the way
-    // QuickBooks' button does; "Clear all marks" is its undo. Both are previewable on the CLI.
+    // the desktop product's button does; "Clear all marks" is its undo. Both are previewable on the CLI.
     const markAll=node('button','Mark all');markAll.type='button';markAll.setAttribute('data-reconcile-mark-all','');
     const clearAll=node('button','Clear all marks');clearAll.type='button';clearAll.setAttribute('data-reconcile-clear-all','');
     controls.append(query,load,markAll,clearAll);
@@ -74,7 +74,7 @@
     const actions=node('div');actions.className='reconcile-actions';
     const finish=node('button','Finish and certify');finish.type='button';finish.disabled=true;
     finish.setAttribute('data-reconcile-finish','');
-    // A statement that genuinely will not tie: QuickBooks' "Enter Adjustment". Offered only once
+    // A statement that genuinely will not tie: the desktop product's "Enter Adjustment". Offered only once
     // the saved marks still leave a difference and nothing unsaved is pending, so the amount it
     // names is the one the finish will post. Agents are refused by the command itself.
     const adjust=node('section');adjust.className='reconcile-adjust';adjust.hidden=true;

@@ -94,7 +94,7 @@ def test_iif_lists_read_every_section_and_name_what_they_skip():
     sources = read(("lists.iif", None, text))
     assert len(sources.lists["account"]) == 43
     assert sources.ignored_lists == {"CTYPE": 1}
-    assert sources.product == "QuickBooks Pro Version 33.0D"
+    assert sources.product == "Desktop Accounting Pro Version 33.0D"
     utilities = [row for row in sources.lists["account"] if row.path.startswith("Utilities")]
     assert [(row.path, row.get("ACCNUM"), row.get("ACCNTTYPE")) for row in utilities] == [
         ("Utilities", "6700", "EXP"), ("Utilities:Telephone", "6710", "EXP"), ("Utilities:Gas and Electric", "6720", "EXP")]

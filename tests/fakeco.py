@@ -3,7 +3,7 @@
 `python -m tests.fakeco` rewrites tests/fixtures/fakeco/ from tests/fakeco_data.py:
 
 - `handed-over/`: what the owner gives a bookkeeper. The old books at the 2026-06-30 cutover as
-  QuickBooks Desktop exports them (one Lists IIF, trial balance, open invoices, unpaid bills, both
+  the desktop product exports them (one Lists IIF, trial balance, open invoices, unpaid bills, both
   aging summaries, inventory valuation, the June reconciliation summaries and the transactions
   still uncleared), then per month the paperwork in plain words and the bank, savings and card
   statements (checking as OFX and CSV).
@@ -84,7 +84,7 @@ def money(c: int) -> str:
     return f"{sign}{c // 100}.{c % 100:02d}"
 
 
-def qb_money(c: int) -> str:
+def anchor_money(c: int) -> str:
     sign = "-" if c < 0 else ""
     c = abs(c)
     return f"{sign}{c // 100:,}.{c % 100:02d}"
@@ -139,7 +139,7 @@ ACCOUNT_TYPES = {name: kind for _, name, kind, *_ in D.ACCOUNTS + D.NEW_ACCOUNTS
 ACCOUNT_ORDER = [name for number, name, *_ in sorted(D.ACCOUNTS + D.NEW_ACCOUNTS, key=lambda a: (not a[0], a[0]))]
 
 
-def qb_account(name: str) -> str:
+def anchor_account(name: str) -> str:
     """`1500 · Vehicles:1510 · Cost`: the trial balance's form of an account's full name."""
     parts, path = [], []
     for part in name.split(":"):

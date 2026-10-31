@@ -1,6 +1,6 @@
 """`reconcile mark` with `all`: tick everything on the statement in one step (R158).
 
-The blind trial ticked twelve items one command at a time. QuickBooks has "Mark All" on its
+The blind trial ticked twelve items one command at a time. The desktop product has "Mark All" on its
 reconcile window; here it is an option on the same command, so it is previewable with --dry-run,
 versioned like every other draft change, and leaves out what does not belong on this statement:
 movements after the statement date and movements an earlier statement already cleared.

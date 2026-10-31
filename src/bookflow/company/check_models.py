@@ -406,7 +406,7 @@ class _DocumentType:
 
     A check, a card charge and a card credit post through the register and are stored as
     ``transactions.type = 'journal_entry'``; ``document.kind`` is what makes each one itself
-    (QuickBooks keeps them as CHK, CC and CC Credit). Every read and write of one reports that
+    (the desktop product keeps them as CHK, CC and CC Credit). Every read and write of one reports that
     kind as ``type``, so a card charge is never described as a journal entry.
     """
 

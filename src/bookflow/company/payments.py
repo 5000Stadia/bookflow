@@ -1042,7 +1042,7 @@ def coordinate_rows_and_touches(plan):
 
 
 def _where_the_money_went(s, account):
-    """The receipt's own sentence about where the money now sits, as QuickBooks' Deposit To says it."""
+    """The receipt's own sentence about where the money now sits, as the desktop product's Deposit To says it."""
     role = s.company.conn.execute(sa.select(c.accounts.c.system_role).where(c.accounts.c.id == account.id)).scalar_one_or_none()
     if role == 'undeposited_funds':
         return ('It is held in Undeposited Funds until you record the bank deposit with `deposit post`; '

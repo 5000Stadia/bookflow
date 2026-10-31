@@ -2,7 +2,7 @@ Harbor Electric paperwork, week 1: Jul 1 - Jul 5, 2026
 ======================================================
 From Mike. Everything from July 1 to July 5: invoices, checks, bills, card receipts. Card receipts are on the Visa unless I say otherwise.
 
-We stopped using QuickBooks on June 30. The exports and the June reconciliation reports are in the old-books folder. The June statements ended at: checking $21,604.12, savings $18,512.63, Visa $2,486.17.
+We stopped using the desktop product on June 30. The exports and the June reconciliation reports are in the old-books folder. The June statements ended at: checking $21,604.12, savings $18,512.63, Visa $2,486.17.
 
 INVOICES AND SALES
 - Invoice 2387, Wed 7/1, Ridgeline Realty Management:Unit Turnovers (Net 30, due 7/31)
@@ -39,7 +39,7 @@ MONEY IN
 - Thu 7/2: Okafor, Chidi, check #208, $346.03 for 2388. Chidi Okafor paid by check on site.
 
 DEPOSITS
-- Wed 7/1: deposited Schultz, Gary #2207 412.87, Nguyen, Linh #1043 1,249.13. Deposit total $1,662.00. Deposited the two checks that came in Tuesday after the bank closed (Gary Schultz #2207 and Linh Nguyen #1043). Both were already entered in QuickBooks before the switch.
+- Wed 7/1: deposited Schultz, Gary #2207 412.87, Nguyen, Linh #1043 1,249.13. Deposit total $1,662.00. Deposited the two checks that came in Tuesday after the bank closed (Gary Schultz #2207 and Linh Nguyen #1043). Both were already entered in the desktop product before the switch.
 - Thu 7/2: deposited Hendricks, Tom #1182 486.93, Kowalski, Janet #3317 318.27. Deposit total $805.20. Deposited Hendricks and Kowalski.
 
 BILLS THAT CAME IN

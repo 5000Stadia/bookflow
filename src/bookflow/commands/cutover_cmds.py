@@ -18,7 +18,7 @@ _FILES = (" The files are the old books' exports: IIF list exports (chart of acc
 
 
 @command("cutover plan", scope="company", required_role="member", capability="ledger.read",
-         description=("Move a company in from its old books (QuickBooks Desktop IIF and report exports): start here "
+         description=("Move a company in from its old books (desktop-product IIF and report exports): start here "
                       "to import or migrate its accounts, customers, vendors, items, opening balances and open "
                       "invoices and bills, then run `cutover apply` and `cutover tie-out` with the same input. "
                       "Reads the export files and returns what a move-in at the cutover date would make: the "

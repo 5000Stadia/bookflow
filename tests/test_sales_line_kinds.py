@@ -290,7 +290,7 @@ def test_a_cleared_unit_is_no_unit_on_subtotal_and_discount_lines(client, kinds)
 @pytest.mark.parametrize('policy,tax', [
     # Labor 1.00 (taxed) and parts 0.50 (not taxed), a subtotal of 1.50 and a 10% taxable
     # discount of 0.15. The discount shares by net, 0.10 and 0.05, so the nets are 0.90 and 0.45.
-    # QuickBooks' rule, as the person chose it: taxable sales fall by the WHOLE 0.15, all of it
+    # the desktop product's rule, as the person chose it: taxable sales fall by the WHOLE 0.15, all of it
     # from the one taxed line, so labor is taxed on 0.85 -- exactly 8.5 cents.
     ('line_component_half_even', 8),   # half-even: 8.5 -> 8
     ('line_combined_half_up', 9),      # half-up: 8.5 -> 9

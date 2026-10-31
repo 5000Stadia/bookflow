@@ -450,6 +450,7 @@ def plan_list(inp: AttachmentListInput, ctx: Context, s) -> Plan:
 # What `attachment text` reads whole: a statement's summary box, a letter, an export. Anything larger
 # is downloaded with `attachment get`; nothing is cut short.
 TEXT_LIMIT = 65536
+# Keep bank-download format suffixes literal so attachment text detection stays compatible.
 TEXT_EXTENSIONS = frozenset(('.txt', '.text', '.csv', '.tsv', '.ofx', '.qfx', '.qbo', '.iif', '.json', '.xml', '.md', '.htm', '.html'))
 TEXT_MEDIA = frozenset(('application/json', 'application/xml', 'application/csv', 'application/x-ofx', 'application/vnd.intu.qfx',
                         'application/x-qfx', 'application/x-iif'))

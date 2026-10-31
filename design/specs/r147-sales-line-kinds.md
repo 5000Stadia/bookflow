@@ -39,7 +39,7 @@ discount debit, receivable net.
 The discount item's tax code decides whether it reduces taxable sales. A taxable discount
 reduces the taxable base of each line it applies to by that line's share; a non-taxable one
 reduces none. Over taxable and non-taxable lines together, a taxable discount follows
-QuickBooks, as the person chose on gate g7f6adb ("No refusing — QB way please."): taxable sales
+the desktop product, as the person chose on gate g7f6adb (paraphrased: use the desktop product’s behavior without refusing): taxable sales
 fall by the whole discount, taken from the taxable lines it applies to by their taxable bases
 (largest remainder, earlier line first) and recorded per line as `taxable_minor_units` on the
 discount's shares. The tax calculator receives a line's taxable base separately from its net.
@@ -70,5 +70,5 @@ A partly billed line keeps the same floor on the part billed.
 
 ## Decided by the person (gate g7f6adb)
 
-A taxable discount over mixed lines follows QuickBooks, as above. Sharing a subtotal discount by
+A taxable discount over mixed lines follows the desktop product, as above. Sharing a subtotal discount by
 net, which decides tax cents under the two per-line policies, stands as built.

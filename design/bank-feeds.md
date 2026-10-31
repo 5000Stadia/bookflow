@@ -10,7 +10,7 @@ parser, matcher and saved CSV mappings, a new inbox beside the reconciliation, a
 duplicating an overlap; match each line to an entry, add it in one click, ignore it or leave it waiting; rules for repeat
 payees, written or learned; transfers between the business's own accounts recognised; manual reconciliation stays; a
 live-feed connection wired but not connected, to be chosen by a person later and never with keys in a file. **Every
-import is reversible**: "one issue with QuickBooks that comes up as if there is a large bank feed import that turns out
+import is reversible**: "one issue with the desktop product that comes up as if there is a large bank feed import that turns out
 to be the incorrect account ... a stupid amount of manual work to resolve ... I would at the very least like to build this
 with the last import being reversible." Widened the same day to every batch import or modification (bulk-import.md §8a).
 
