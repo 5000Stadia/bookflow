@@ -89,6 +89,7 @@ def test_returns_clerk_voids_but_plain_clerk_cannot_and_banked_sale_names_deposi
     deposit = owner('deposit post', {'operation_key': 'pos-void-deposit', 'document': {
         'mode': 'inline', 'deposit_to': bank, 'date': banked['date'], 'sources': [{
             'source_type': 'sales_receipt', 'source': banked['sales_receipt']['id'], 'expected_version': 1}]}})['deposit']
+    banked_version = owner('sales-receipt show', {'sales_receipt': banked['sales_receipt']['id']})['version']
     for preset, username, permitted in [('pos-clerk', 'plain-void', False),
                                          ('pos-clerk-returns', 'returns-void', True)]:
         settings = pos_presets.preset(preset)
@@ -104,7 +105,7 @@ def test_returns_clerk_voids_but_plain_clerk_cannot_and_banked_sale_names_deposi
                 assert response.status_code == 200 and response.json()['status'] == 'voided', response.text
                 assert set(response.json()) == {'sale_id', 'ticket', 'id', 'number', 'status', 'version',
                                                 'changed', 'warnings', 'dry_run'}, response.text
-                refused = till.post(url, headers={**H, **HEADERS}, json={'sale': banked['id'], 'expected_version': 1})
+                refused = till.post(url, headers={**H, **HEADERS}, json={'sale': banked['id'], 'expected_version': banked_version})
                 assert refused.json()['code'] == 'E_DEPOSIT_DEPENDENCY', refused.text
                 assert refused.json()['details']['deposit'] == deposit['id']
                 assert refused.json()['details']['deposit_number'] == deposit['number']
