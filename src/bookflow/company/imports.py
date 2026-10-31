@@ -964,8 +964,21 @@ def read_table(s, inp) -> tuple[tabular.Table, str | None]:
         attachment_name = row['original_filename']
     else:
         raw = inp.content
-    table = tabular.read(raw, delimiter=inp.delimiter, header_row=inp.header_row, skip_rows=inp.skip_rows,
-                         sheet=inp.sheet)
+    try:
+        table = tabular.read(raw, delimiter=inp.delimiter, header_row=inp.header_row, skip_rows=inp.skip_rows,
+                             sheet=inp.sheet)
+    except BookflowError as error:
+        # One field for a text file and a workbook alike, and the split said for the kind: a document kind's file is
+        # cut only between documents.
+        field = 'attachment' if inp.attachment is not None else 'content'
+        details = error.details or {}
+        if details.get('problem') == 'too_many_rows':
+            extra = {k: v for k, v in details.items() if k == 'sheet'}
+            raise tabular.too_many_rows(details['rows'], more=details['more_than'], field=field,
+                                        documents=kinds.is_document(kinds.kind(inp.kind)), **extra) from None
+        if details.get('problem') == 'too_large':
+            raise tabular.too_large(details['bytes'], field=field) from None
+        raise
     return table, attachment_name
 
 
@@ -1260,9 +1273,10 @@ def apply_preview(s, ctx, prepared: dict) -> dict:
         encoding=table.encoding, delimiter=table.delimiter, row_count=len(prepared['rows']),
         stop_after_refusals=inp.stop_after_refusals, batch_id=None, reason=ctx.reason, version=1, created_at=at,
         created_by=s.actor.id, created_via=str(getattr(ctx.interface, 'value', ctx.interface))[:16], updated_at=at))
-    values = [_row_values(prepared['run_id'], plan, 'preview', at, keep=True) for plan in prepared['rows']]
-    for start in range(0, len(values), 500):
-        s.company.conn.execute(sa.insert(c.import_rows), values[start:start + 500])
+    rows = prepared['rows']
+    for start in range(0, len(rows), 500):  # built 500 at a time, not every row's at once
+        s.company.conn.execute(sa.insert(c.import_rows), [_row_values(prepared['run_id'], plan, 'preview', at, keep=True)
+                                                          for plan in rows[start:start + 500]])
     for ref in prepared['create']:
         s.company.conn.execute(sa.insert(c.import_decisions).values(
             id=new_id(), run_id=prepared['run_id'], field=ref['field'], value=ref['value'],

@@ -154,6 +154,8 @@ def read(raw: bytes, *, sheet: str | None = None, header_row: bool = True, skip_
                 if held:
                     if len(records) >= limit:
                         over += 1  # counted, not kept: the refusal says how many rows the sheet has
+                        if tabular.MAX_ROWS + over > tabular.COUNTED_ROWS:
+                            break
                         continue
                     width = max(held)
                     records.append((line, [held.get(i, '') for i in range(1, width + 1)]))
@@ -165,7 +167,8 @@ def read(raw: bytes, *, sheet: str | None = None, header_row: bool = True, skip_
     finally:
         reader.archive.close()
     if over:
-        raise tabular.too_many_rows(tabular.MAX_ROWS + over, field='attachment', sheet=name)
+        raise tabular.too_many_rows(min(tabular.MAX_ROWS + over, tabular.COUNTED_ROWS), field='attachment',
+                                    more=tabular.MAX_ROWS + over > tabular.COUNTED_ROWS, sheet=name)
     if unsaved:
         raise _refuse(f'{len(unsaved)} cell(s) hold a formula whose result was never saved ('
                       + ', '.join(unsaved[:FORMULA_CELLS_SHOWN]) + '); open the file in a spreadsheet program and save '
