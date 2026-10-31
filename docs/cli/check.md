@@ -870,7 +870,7 @@ Example JSON output:
 
 ## `check print`
 
-Print the queued cheques of one bank account. `first_number` is the number on the first check loaded in the printer (default: the account's next check number); each cheque takes the next number in order, and a number already used on the account is refused rather than skipped. Choose a `style` (voucher, standard, wallet) and, for standard or wallet sheets, `checks_on_first_page` for a partial first sheet. The run and its numbers are recorded and the numbers held until someone answers `check print-confirm`; get the PDF with `check print-pdf`. A cheque dated in a closed period is refused. An agent may prepare a run; confirming it is a person's act.
+Print the queued cheques of one bank account. `first_number` is the number on the first check loaded in the printer (default: the account's next check number); each cheque takes the next number in order, and a number already used on the account is refused rather than skipped. Choose a `style` (voucher, standard, wallet) and, for standard or wallet sheets, `checks_on_first_page` for a partial first sheet. The run and its numbers are recorded and the numbers held until someone answers `check print-confirm`; get the PDF with `check print-pdf`. A cheque dated in a closed period is refused. An agent may prepare a run; confirming it is a person's act. batch_id and next identify the whole-run reversal preview; cancellation is possible only while every cheque is pending. A printed cheque cannot be recalled.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -944,6 +944,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 |---|---|---|---|---|---|
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
+| `batch_id` | string \| null | no | yes | null | Shared reversal batch ID; null for a preview or reprint. |
+| `next` | string \| null | no | yes | null | Preview the whole run reversal before cancelling it. |
 | `id` | string | yes | no | — | — |
 | `kind` | literal["batch", "reprint"] | yes | no | — | — |
 | `account_id` | string | yes | no | — | — |
@@ -990,6 +992,7 @@ Example JSON output:
 {
   "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "account_name": "value",
+  "batch_id": null,
   "checks_on_first_page": 1,
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
@@ -998,6 +1001,7 @@ Example JSON output:
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "items": [],
   "kind": "batch",
+  "next": null,
   "offset_x_hundredths": 1,
   "offset_y_hundredths": 1,
   "pdf": "value",
@@ -1230,6 +1234,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 |---|---|---|---|---|---|
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
+| `batch_id` | string \| null | no | yes | null | Shared reversal batch ID; null for a preview or reprint. |
+| `next` | string \| null | no | yes | null | Preview the whole run reversal before cancelling it. |
 | `id` | string | yes | no | — | — |
 | `kind` | literal["batch", "reprint"] | yes | no | — | — |
 | `account_id` | string | yes | no | — | — |
@@ -1276,6 +1282,7 @@ Example JSON output:
 {
   "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "account_name": "value",
+  "batch_id": null,
   "checks_on_first_page": 1,
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
@@ -1284,6 +1291,7 @@ Example JSON output:
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "items": [],
   "kind": "batch",
+  "next": null,
   "offset_x_hundredths": 1,
   "offset_y_hundredths": 1,
   "pdf": "value",
@@ -1406,6 +1414,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 |---|---|---|---|---|---|
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
+| `batch_id` | string \| null | no | yes | null | Shared reversal batch ID; null for a preview or reprint. |
+| `next` | string \| null | no | yes | null | Preview the whole run reversal before cancelling it. |
 | `id` | string | yes | no | — | — |
 | `kind` | literal["batch", "reprint"] | yes | no | — | — |
 | `account_id` | string | yes | no | — | — |
@@ -1452,6 +1462,7 @@ Example JSON output:
 {
   "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "account_name": "value",
+  "batch_id": null,
   "checks_on_first_page": 1,
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
@@ -1460,6 +1471,7 @@ Example JSON output:
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "items": [],
   "kind": "batch",
+  "next": null,
   "offset_x_hundredths": 1,
   "offset_y_hundredths": 1,
   "pdf": "value",
@@ -1797,6 +1809,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `batch_id` | string \| null | no | yes | null | Shared reversal batch ID; null for a preview or reprint. |
+| `next` | string \| null | no | yes | null | Preview the whole run reversal before cancelling it. |
 | `id` | string | yes | no | — | — |
 | `kind` | literal["batch", "reprint"] | yes | no | — | — |
 | `account_id` | string | yes | no | — | — |
@@ -1843,6 +1857,7 @@ Example JSON output:
 {
   "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "account_name": "value",
+  "batch_id": null,
   "checks_on_first_page": 1,
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
@@ -1850,6 +1865,7 @@ Example JSON output:
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "items": [],
   "kind": "batch",
+  "next": null,
   "offset_x_hundredths": 1,
   "offset_y_hundredths": 1,
   "pdf": "value",
@@ -2327,6 +2343,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 |---|---|---|---|---|---|
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
+| `batch_id` | string \| null | no | yes | null | Shared reversal batch ID; null for a preview or reprint. |
+| `next` | string \| null | no | yes | null | Preview the whole run reversal before cancelling it. |
 | `id` | string | yes | no | — | — |
 | `kind` | literal["batch", "reprint"] | yes | no | — | — |
 | `account_id` | string | yes | no | — | — |
@@ -2373,6 +2391,7 @@ Example JSON output:
 {
   "account_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "account_name": "value",
+  "batch_id": null,
   "checks_on_first_page": 1,
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
@@ -2381,6 +2400,7 @@ Example JSON output:
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "items": [],
   "kind": "batch",
+  "next": null,
   "offset_x_hundredths": 1,
   "offset_y_hundredths": 1,
   "pdf": "value",

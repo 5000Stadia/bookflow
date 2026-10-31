@@ -119,6 +119,7 @@ class BatchItem(BaseModel):
 
 
 class BatchOutput(BaseModel):
+    reversal_batch_id: str | None = Field(default=None, description='Shared batch id; next_commands includes batch reverse --dry-run.')
     batch_id: str | None = None
     number: str | None = None
     state: Literal['preview', 'drafting', 'done', 'cancelled', 'nothing'] = Field(description=(

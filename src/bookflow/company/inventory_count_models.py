@@ -164,6 +164,8 @@ class SameDayDocument(_Output):
 
 
 class CountOutput(_Output):
+    batch_id: str | None = Field(None, description='Shared reversible batch for this count and its recorded differences.')
+    next: str | None = Field(None, description='Preview the complete count reversal through batch reverse.')
     id: str | None = None
     number: str
     version: int

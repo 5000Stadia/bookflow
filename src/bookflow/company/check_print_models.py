@@ -111,6 +111,8 @@ class PrintRunItem(_Strict):
 
 
 class CheckPrintRunOutput(_Strict):
+    batch_id: str | None = Field(None, description='Shared reversal batch ID; null for a preview or reprint.')
+    next: str | None = Field(None, description='Preview the whole run reversal before cancelling it.')
     id: str
     kind: Literal['batch', 'reprint']
     account_id: str

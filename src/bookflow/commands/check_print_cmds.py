@@ -75,7 +75,8 @@ check_print = _write(
     ' and, for standard or wallet sheets, `checks_on_first_page` for a partial first sheet. The run and its numbers'
     ' are recorded and the numbers held until someone answers `check print-confirm`; get the PDF with'
     ' `check print-pdf`. A cheque dated in a closed period is refused. An agent may prepare a run; confirming it is'
-    " a person's act.",
+    " a person's act. batch_id and next identify the whole-run reversal preview; cancellation is possible only"
+    ' while every cheque is pending. A printed cheque cannot be recalled.',
     m.CheckPrintInput, m.CheckPrintWriteOutput, plan_print, p.apply_print,
     errors=['E_RECORD_NOT_FOUND', 'E_VALIDATION', 'E_DUPLICATE_NUMBER', 'E_PERIOD_CLOSED', 'E_VALUE_RANGE', *_TAIL])
 

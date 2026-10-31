@@ -83,6 +83,8 @@ ADAPTER_MODULES = {
     'barcode-generate': 'barcodes', 'cycle-count-classify': 'cycle_counts',
     'bank-rule-apply': 'bank_rule_reversal', 'notice-generate': 'notices',
     'memorized-run': 'memorized_reversal',
+    'inventory-count': 'count_batch_reversal', 'check-print': 'check_print_batch_reversal',
+    'delivery-batch': 'delivery_batch_reversal',
 }
 
 

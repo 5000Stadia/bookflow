@@ -353,7 +353,9 @@ batch_reverse = command(
         'Confirm-first: reverse the entire batch, newest effects first, using your own grants for every inverse. '
         'Run --dry-run and check its exact list with your principal unless this reversal was plainly named. '
         'Every blocker is named and a blocked plan changes nothing. Later edits, dependent records, closed periods, '
-        'reconciled payments and pending or printed checks can block. Sent mail, printed checks and exported files '
-        'cannot be recalled. History stays. Returns a resumable slice; repeat `next` until reversed. '
+        'reconciled payments and pending or printed checks can block. Inventory counts cancel or void through their '
+        'native inverse; pending check-print runs cancel, and delivery batches cancel only with unexported drafts. '
+        'Sent mail, printed cheques and exported files cannot be recalled. A printed cheque or sent message blocks '
+        'the whole batch. History stays. Returns a resumable slice; repeat `next` until reversed. '
         'A batch with nothing reversible says so. Example: {"batch": "01J..."}.'))(plan_batch_reverse)
 batch_reverse.applier(apply_batch_reverse)

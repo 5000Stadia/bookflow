@@ -1717,7 +1717,14 @@ later batch, closed period or missing grant and leaves the attempted slice uncha
 Invoice runs, bill payments, depreciation journals and finance charges retain their history;
 a Finance Charge item created by the assessment is retired after its charges.
 
-Sent mail, printed checks and exported files cannot be recalled. Pending check-print runs
-must be cancelled through their native command before reversal. Reconciled bill payments,
+Inventory count batches cancel an open count or void a posted count, restoring its stock and
+valuation effects. Later dependent counts or stock movements block reversal. Pending
+check-print batches cancel through `check print-cancel`; delivery batches cancel through
+`delivery batch-cancel` only while every message is still an unexported draft. Their dry runs
+name the affected count, cheques or messages before anything changes.
+
+Sent mail, printed cheques and exported files cannot be recalled. A printed cheque or a sent
+message blocks the entire batch. Pending check-print runs attached to a bill payment must
+be cancelled before reversing that bill-payment batch. Reconciled bill payments,
 later edits and later dependent records block the whole batch. A batch with nothing
 reversible says so; a reversal itself cannot be reversed.

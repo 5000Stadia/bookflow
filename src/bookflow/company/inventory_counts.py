@@ -240,7 +240,12 @@ def count_output(s, count, *, cls=CountOutput, status=None, lines=None, reveal=F
                                      purpose=row['purpose'], date=count['count_date'])
                  for row in postings(s, count['id'])] if count.get('id') and count['status'] != 'open' else []
     rendered = line_outputs(s, count, lines, counted, show_expected=show)
-    return cls(id=count.get('id'), number=count['number'], version=count['version'],
+    from bookflow.company.count_batch_reversal import linked
+    batch_id = linked(s, count.get('id'))
+    next_command = (f'bookflow batch reverse {batch_id} --dry-run --reason "Reverse inventory count"'
+                    if batch_id and (status or count['status']) in ('open', 'recorded') else None)
+    return cls(batch_id=batch_id, next=next_command,
+               id=count.get('id'), number=count['number'], version=count['version'],
                status=status or count['status'], site_id=count['site_id'], site_name=names.get(count['site_id'], ''),
                date=count['count_date'], blind=bool(count['blind']), selection=json.loads(count['selection']),
                memo=count['memo'], adjustment_account_id=count.get('adjustment_account_id'),
@@ -442,6 +447,8 @@ def apply_create(plan, ctx, s) -> Applied:
         from sqlalchemy.dialects.sqlite import insert
         stmt = insert(c.sequences).values(**sequence)
         conn.execute(stmt.on_conflict_do_update(index_elements=['name'], set_=sequence))
+    from bookflow.company.count_batch_reversal import record
+    record(s, ctx, count, created=True, event_id=event)
     return Applied(count_output(s, count, warnings=picked_words(s, count, lines)), touched,
                    f'create inventory count {count["number"]}', audited=True)
 
@@ -590,6 +597,9 @@ def apply_enter(plan, ctx, s) -> Applied:
     count = resolve(s, inp.count)
     _require_open(count, 'counted')
     output, touched = _enter(s, ctx, count, inp, persist=True)
+    from bookflow.company.count_batch_reversal import record
+    batch_id = record(s, ctx, count)
+    output = output.model_copy(update={'batch_id': batch_id, 'next': f'bookflow batch reverse {batch_id} --dry-run --reason "Reverse inventory count"'})
     return Applied(output, touched, f'enter count entries on inventory count {count["number"]}', audited=True)
 
 
@@ -1004,7 +1014,10 @@ def _record(s, ctx, count, lines, counted, account_id, class_id, change):
         if line['id'] in counted:
             conn.execute(c.inventory_count_lines.update().where(c.inventory_count_lines.c.id == line['id'])
                          .values(counted_microunits=int(counted[line['id']])))
-    return touched + _write_postings(s, ctx, change, 'inventory-count post')
+    touched += _write_postings(s, ctx, change, 'inventory-count post')
+    from bookflow.company.count_batch_reversal import record
+    record(s, ctx, after, event_id=event)
+    return touched
 
 
 def plan_post(s, ctx, inp) -> Plan:

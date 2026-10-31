@@ -37,7 +37,8 @@ def test_new_process_loads_every_adopter_without_first_running_it():
     from tests.provenance import child_env
     result = subprocess.run([sys.executable, '-c', '''
 from bookflow.company import batches
-for kind in ('batch-invoice', 'bill-pay', 'fixed-asset-depreciation', 'finance-charge-assessment'):
+for kind in ('batch-invoice', 'bill-pay', 'fixed-asset-depreciation', 'finance-charge-assessment',
+             'inventory-count', 'check-print', 'delivery-batch'):
     assert batches.adapter_for(kind).kind == kind
 '''], capture_output=True, text=True, timeout=60, env=child_env())
     assert result.returncode == 0, result.stderr

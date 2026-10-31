@@ -662,8 +662,12 @@ def _output(s, batch, *, messages=(), cancelled=(), kept=(), warnings=(), with_t
     if batch.get('id') and state != 'cancelled':
         commands += [f"delivery query --batch {batch['number']} --status all",
                      f"delivery batch-cancel {batch['number']} --reason ..."]
+    from bookflow.company.delivery_batch_reversal import shared_id
+    reversal_id = shared_id(s, batch['id']) if batch.get('id') else None
+    if reversal_id and state != 'cancelled':
+        commands.append(f'bookflow batch reverse {reversal_id} --dry-run --reason "..."')
     return bm.BatchOutput(
-        batch_id=batch.get('id'), number=batch.get('number'), state=state, kind=batch['kind'],
+        reversal_batch_id=reversal_id, batch_id=batch.get('id'), number=batch.get('number'), state=state, kind=batch['kind'],
         selection=json.loads(batch['selection']), planned=batch['planned'], drafted=drafted, released=released,
         remaining=remaining, would_draft=would, skipped=[_item(x) for x in skipped], messages=list(messages),
         cancelled=list(cancelled), kept=list(kept), next=nxt, version=batch.get('version'),
@@ -929,6 +933,8 @@ def draft_chunk(s, ctx, batch):
         raise BookflowError('E_VERSION_CONFLICT', details={'record_type': RECORD, 'record_id': batch['id']})
     touched.append(Touched(RECORD, batch['id'], 'update', before['version'], batch['version'], batch, before,
                            db='company'))
+    from bookflow.company.delivery_batch_reversal import record
+    record(s, ctx, batch, drafted)
     return drafted, warnings, touched, batch
 
 
