@@ -79,6 +79,8 @@ ADAPTER_MODULES = {
     'bank-import': 'bank_feeds', 'bank-sort': 'bank_feeds', 'automation': 'automation',
     'batch-invoice': 'batch_invoicing', 'bill-pay': 'bill_payments',
     'fixed-asset-depreciation': 'fixed_assets', 'finance-charge-assessment': 'finance_charges',
+    'barcode-generate': 'barcodes', 'cycle-count-classify': 'cycle_counts',
+    'bank-rule-apply': 'bank_rule_reversal', 'notice-generate': 'notices',
 }
 
 
@@ -659,7 +661,8 @@ def _referrers(s, table: str) -> list[tuple[str, str]]:
     return _FK_CACHE[table]
 
 
-def _in_use(s, record_type: str, ids: list[str], made_here: set[str], by_batch: set[str] | None = None) -> dict[str, dict]:
+def _in_use(s, record_type: str, ids: list[str], made_here: set[str], by_batch: set[str] | None = None,
+            restored_classes: dict[str, set[str]] | None = None) -> dict[str, dict]:
     """For each created record, what refers to it elsewhere (foreign keys and the declared references without one):
     per table, the first referring row. A row of a document the same batch made (an opening's invoice line naming the
     customer and item the opening made) is no use: the document is reversed first, newest first. Such records are
@@ -682,6 +685,8 @@ def _in_use(s, record_type: str, ids: list[str], made_here: set[str], by_batch: 
         sql = (f'SELECT "{column}", {key}, {document} FROM "{table}" '
                f'WHERE "{column}" IN (SELECT value FROM json_each(?))')
         for target, referrer, transaction in s.company.raw.execute(sql, (payload,)).fetchall():
+            if table == 'items' and column == 'cycle_class_id' and referrer in (restored_classes or {}).get(target, set()):
+                continue  # this item's earlier inverse releases the seeded class
             if referrer in made_here:  # a record the same batch made (a customer using a type it made too)
                 continue
             if transaction and transaction in made_here:  # a line of a document the same batch made
@@ -696,6 +701,9 @@ def _in_use(s, record_type: str, ids: list[str], made_here: set[str], by_batch: 
                 if retired_documents[transaction]:
                     continue  # history may still name a retired list record; it is not a live dependency
             uses = found.setdefault(target, {'tables': [], 'rows': [], 'documents': []})
+            if table == 'items' and column == 'cycle_class_id' and len(uses['documents']) < 3:
+                name = s.company.conn.execute(sa.select(c.items.c.full_name).where(c.items.c.id == referrer)).scalar()
+                uses['documents'].append(f'item {name or referrer}')
             if transaction and len(uses['documents']) < 3:
                 kind, number = s.company.raw.execute('SELECT type, number FROM transactions WHERE id = ?',
                                                      (transaction,)).fetchone() or ('transaction', None)
@@ -706,6 +714,15 @@ def _in_use(s, record_type: str, ids: list[str], made_here: set[str], by_batch: 
                 uses['tables'].append(table)
                 uses['rows'].append({'table': table, 'column': column, 'id': referrer, 'transaction_id': transaction})
     return found
+
+
+def _restored_classes(groups: list[dict], done: dict | None = None) -> dict[str, set[str]]:
+    """Item inverses that run before retirement and release a class this batch seeded."""
+    return {klass['record_id']: {item['record_id'] for item in groups
+             if item['record_type'] == 'item' and item['action'] == 'updated' and not (done or {}).get(item['key'])
+             and item['seq'] > klass['seq'] and 'cycle_class' in item['before']
+             and item['before']['cycle_class'] != klass['record_id']}
+            for klass in groups if klass['record_type'] == 'cycle_class' and klass['action'] == 'created'}
 
 
 def _steps_for(group: dict, rec: ListRecord, version: int, s=None) -> list[tuple[str, dict]]:
@@ -792,8 +809,9 @@ def plan(s, ctx, batch_id: str, *, probe: bool = True) -> dict:
         by_type.setdefault(g['record_type'], []).append(g['record_id'])
     current = {t: _current(s, t, ids) for t, ids in by_type.items()}
     by_batch: set[str] = set()
+    restored_classes = _restored_classes(groups, done)
     in_use = {t: _in_use(s, t, [g['record_id'] for g, _, _ in pending if g['record_type'] == t
-                                and g['action'] == 'created'], {i for _, i in made}, by_batch)
+                                and g['action'] == 'created'], {i for _, i in made}, by_batch, restored_classes)
               for t in by_type}
     steps_out, work = [], []
     for g, rec, steps_done in pending:
@@ -940,6 +958,10 @@ def _probe(s, ctx, batch, g, rec, row, steps, made) -> list[dict]:
         except BookflowError as error:
             if after_unapply and error.code == 'E_HAS_APPLICATIONS':
                 continue  # this prerequisite is an earlier step of the same record
+            if error.code == 'E_RECORD_IN_USE' and g['record_type'] == 'cycle_class':
+                restored = _restored_classes(_groups(effects(s, batch['id'])), _done_steps(s, batch))
+                if not _in_use(s, 'cycle_class', [g['record_id']], set(), restored_classes=restored):
+                    continue
             if error.code == 'E_ACTIVE_DEPENDENTS' and _only_batch_children(s, rec, row, g, made):
                 continue
             refusal = _blocker(g, rec, error.code, f"{rec.noun} {row[rec.name_field]}: {error.message}",

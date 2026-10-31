@@ -2,7 +2,7 @@
 
 # `company.overdue_notices`
 
-Overdue notices the scheduler generated: one per customer and notice period, waiting to be sent or dismissed.
+Overdue notice history: one unreleased notice per customer and period; reversal dismisses and releases the period for corrected generation.
 
 Database: `company`.
 
@@ -16,8 +16,8 @@ Database: `company`.
 | `updated_at` | VARCHAR(32) | no | — | — | — | — | UTC timestamp of the latest update to this record. |
 | `updated_by` | VARCHAR(26) | no | — | — | — | — | User id recorded for the latest update to this record. |
 | `updated_via` | VARCHAR(16) | no | — | — | — | — | Interface recorded for the latest update to this record. |
-| `customer_id` | VARCHAR(26) | no | — | unique with customer_id + period_key | — | customers.id | Customer or job the notice is to. |
-| `period_key` | VARCHAR(10) | no | — | unique with customer_id + period_key | — | — | First day of the notice schedule period this notice answers (a month, or a week from Monday). |
+| `customer_id` | VARCHAR(26) | no | — | — | uq_overdue_notice_period | customers.id | Customer or job the notice is to. |
+| `period_key` | VARCHAR(10) | no | — | — | uq_overdue_notice_period | — | First day of the notice schedule period this notice answers (a month, or a week from Monday). |
 | `as_of` | VARCHAR(10) | no | — | — | ix_overdue_notices_status_as_of | — | Company-local date the overdue balance was measured. |
 | `template` | VARCHAR(12) | no | — | — | — | — | What is sent: statement (the customer statement) or letter (a short collection letter). |
 | `statement_from` | VARCHAR(10) | no | — | — | — | — | First day of the statement period printed with the notice. |
@@ -32,3 +32,4 @@ Database: `company`.
 | `sent_by` | VARCHAR(26) | yes | — | — | — | — | User who marked it sent; null until then. |
 | `sent_method` | VARCHAR(16) | yes | — | — | — | — | How it went out, as the person marking it said: print, email or other; null until sent. |
 | `dismissed_reason` | VARCHAR(280) | yes | — | — | — | — | Why it was dismissed; null unless dismissed. |
+| `period_released` | BOOLEAN | no | — | — | — | — | True when reversed; the original period remains history and a corrected notice may be generated. |

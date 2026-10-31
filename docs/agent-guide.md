@@ -1275,7 +1275,9 @@ are never sent by Bookflow. `notice list` shows the ones ready, each with `print
 and the letter text; sending one is the owner's decision. Once a person (or a delivery step the
 owner set up) has sent it, `notice mark-sent NOTICE --method email`; if the owner says not to,
 `notice dismiss NOTICE --note "why"`. A dismissed notice is not prepared again until the next
-notice period.
+notice period. To undo a mistaken generation, use its `batch_id` with `batch reverse --dry-run`,
+then reverse the checked batch. Reversal releases the period for corrected generation; it refuses
+sent notices because sent mail cannot be recalled.
 
 ## When to ask, and when to just do it
 

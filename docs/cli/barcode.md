@@ -4,7 +4,7 @@
 
 ## `barcode generate`
 
-Give items without a code an EAN-13 barcode in the restricted-circulation range (prefix 2, for the company's own labels), numbered from the company counter with its check digit. Existing codes never change: a named item that has one is skipped and listed. Each change is an item update in the item's history. `--dry-run` shows the codes it would assign.
+Give items without a code an EAN-13 barcode in the restricted-circulation range (prefix 2, for the company's own labels), numbered from the company counter with its check digit. Existing codes never change: a named item that has one is skipped and listed. Each change is an item update in the item's history. `--dry-run` shows the codes it would assign. The result names a batch; `batch reverse` restores the prior codes unless an item has since changed.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -72,6 +72,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `batch_id` | string \| null | no | yes | null | The reversible batch; null for a preview or no changes. |
+| `next` | string \| null | no | yes | null | Command to preview reversing this run. |
 | `assigned` | array[object] | yes | no | — | Each item given a code, with its new EAN-13. |
 | `assigned[].item_id` | string | yes | no | — | — |
 | `assigned[].item` | string | yes | no | — | — |
@@ -88,6 +90,8 @@ Example JSON output:
 ```json
 {
   "assigned": [],
+  "batch_id": null,
+  "next": null,
   "next_number": 1,
   "skipped": []
 }

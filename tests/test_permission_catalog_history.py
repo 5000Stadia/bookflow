@@ -118,6 +118,7 @@ ACCEPTED = {
     'bank-source-v1': (884, '9676dfedbb049b4743cdc1d56915a2d296f6eaf3cda9db30768d912a11d36949'),
     'pos-layout-v1': (893, '9f95dba850d8f730aac8e4fdfdd82f23de09109fcf54e7e9499ff9b22dd29916'),
     'reversible-batch-v1': (894, '8a3e694684db93beb8b6dd75961286d1a2106bf19e335efc7a99e86c1ad8a589'),
+    'notice-reversal-v1': (895, '567ccbe86942f97a5209adab2b7c659ec13e0b7893fa5f039a24a0ef106a751a'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -282,6 +283,7 @@ CHAIN_ADDITIONS = {
     'pos-layout-v1': {f'pos-box {verb}' for verb in ('list', 'create', 'update', 'move', 'remove', 'view',
                                                    'seed', 'picture set', 'picture get')},
     'reversible-batch-v1': {'batch reverse'},
+    'notice-reversal-v1': {'notice reverse'},
 }
 
 _ANCESTOR_EDIT = """

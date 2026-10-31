@@ -1646,6 +1646,8 @@ EXAMPLES.update({
     "notice show": Example('bookflow notice show 01JNOTICE00000000000000000' + _C, {"notice": "01JNOTICE00000000000000000"}),
     "notice mark-sent": Example('bookflow notice mark-sent 01JNOTICE00000000000000000 --method email' + _C,
                                 {"notice": "01JNOTICE00000000000000000", "method": "email"}),
+    "notice reverse": Example('bookflow notice reverse 01JNOTICE00000000000000000 --note "Corrected run"' + _C,
+                              {"notice": "01JNOTICE00000000000000000", "note": "Corrected run"}),
     "notice dismiss": Example('bookflow notice dismiss 01JNOTICE00000000000000000 --note "Called; paying Friday"' + _C,
                               {"notice": "01JNOTICE00000000000000000", "note": "Called; paying Friday"}),
     "reminders": Example('bookflow reminders --mine' + _C, {"mine": True}),

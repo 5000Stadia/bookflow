@@ -127,6 +127,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `notices_ready[].updated_at` | string | yes | no | — | — |
 | `notices_ready[].updated_by` | string | yes | no | — | — |
 | `notices_ready[].updated_via` | string | yes | no | — | — |
+| `notices_ready[].period_released` | boolean | no | no | false | True when reversal released this period for a corrected generation run. |
 | `notices_ready[].customer_id` | string | yes | no | — | — |
 | `notices_ready[].customer_name` | string | yes | no | — | — |
 | `notices_ready[].period_key` | string | yes | no | — | — |

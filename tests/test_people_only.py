@@ -386,7 +386,7 @@ def test_a_root_activated_at_the_previous_catalog_upgrades_with_nothing_broader_
                                                      "expected_catalog_sha256": state["catalog_sha256"]}, headers=REASON)
         assert upgraded["changed"] and upgraded["affected_agents"] == []
         with sqlite3.connect((root / "hub.db").as_uri() + "?mode=ro", uri=True) as db:
-            assert db.execute("SELECT catalog_version FROM permission_state").fetchone() == ("reversible-batch-v1",)  # reversible-batch-v1, on pos-layout-v1
+            assert db.execute("SELECT catalog_version FROM permission_state").fetchone() == ("notice-reversal-v1",)  # notice-reversal-v1, on reversible-batch-v1
             assert db.execute("SELECT count(*) FROM agent_authority WHERE suspended_at IS NOT NULL AND agent_user_id=?",
                               (agent,)).fetchone() == (0,)
             assert db.execute("SELECT count(*) FROM api_tokens WHERE revoked_at IS NOT NULL").fetchone() == (0,)

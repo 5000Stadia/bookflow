@@ -4,7 +4,7 @@
 
 ## `cycle-count classify`
 
-Propose cycle classes from cost of goods issued over a period (default the last 12 months to today), the ABC way: ranked by issued cost, the items making the first 80% (a_share) are A, the next 15% (b_share) B, the rest C, an item that issued nothing C. Count differences and inventory adjustments do not count as issued. The dry run lists each item, its share and its proposed class; running it sets the classes as item updates. Example: `bookflow cycle-count classify --dry-run`.
+Propose cycle classes from cost of goods issued over a period (default the last 12 months to today), the ABC way: ranked by issued cost, the items making the first 80% (a_share) are A, the next 15% (b_share) B, the rest C, an item that issued nothing C. Count differences and inventory adjustments do not count as issued. The dry run lists each item, its share and its proposed class; running it sets the classes as item updates. The result names a reversible batch: reversal restores prior classes and retires defaults seeded by this run once unused. Example: `bookflow cycle-count classify --dry-run`.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -76,6 +76,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `batch_id` | string \| null | no | yes | null | The reversible classification batch; null for no changes or preview. |
+| `next` | string \| null | no | yes | null | Command to preview restoring the prior classes. |
 | `date_from` | string | yes | no | — | — |
 | `date_to` | string | yes | no | — | — |
 | `total_issued_cost` | object | yes | no | — | — |
@@ -102,10 +104,12 @@ Example JSON output:
 ```json
 {
   "applied": false,
+  "batch_id": null,
   "changes": 1,
   "date_from": "value",
   "date_to": "value",
   "message": null,
+  "next": null,
   "rows": [],
   "total_issued_cost": {
     "amount": "value",

@@ -102,3 +102,31 @@ after one check, and refuses plainly when a payment has since been applied.
   and sliced reversal; and rollback when effect recording fails. The generic door also has a four-adapter witness.
 
 The demo previews and reverses a temporary customer-note batch edit, restoring the original note and leaving balances unchanged.
+
+## As built: increment 2
+
+- `barcode generate` and `cycle-count classify` return `batch_id` and a `next` command for the shared reversal
+  preview. Each item effect records its prior fields inside the command's write transaction. Reversal uses
+  `item update` under the caller's own authority. A later item edit or live batch blocks the unit with the item
+  named; the version check conservatively protects all later item edits. Barcode allocation remains monotonic;
+  reversing restores the item barcode without rewinding the number sequence.
+- Classification records any default cycle classes it seeds before recording item changes. The reverse plan
+  restores items first, then renames and deactivates those classes. Only references released by earlier item
+  inverses in this same batch are excluded from dependency checks; other uses block the whole unit. Existing
+  classes remain. A corrected classification can seed defaults again after all previously seeded classes have
+  been retired by completed classification reversals. Empty classification runs create neither defaults nor batches.
+- `bank-rule apply` records the exact prior proposal and rule id for each changed waiting line. Its adapter
+  restores both in audited transactions under the existing `bank-line undo` grant. Accepted, matched, ignored,
+  no-longer-live, edited and later-batch lines block with their identities. Reapplying a changed rule refreshes
+  its proposal even when its rule id is unchanged. No-op runs create no batch.
+- `notice generate`, including scheduled generation, records its generated notices in the same transaction.
+  Its adapter invokes `notice reverse`, which dismisses a ready notice and releases its period dedupe slot
+  atomically. Ordinary dismissal still reserves that period. Sent notices refuse with their identity and
+  “sent mail cannot be recalled”; later changes and live delivery dependencies also block. Notice batches
+  unwind newest first within their period. Corrected runs retain dismissed history and create new notices.
+- Migration `co0124` adds `overdue_notices.period_released` and a partial unique period index, preserving the
+  original period on historical rows. `notice-reversal-v1` adds the inverse command on the accepted
+  `reversible-batch-v1` permission layer. No accepted permission layer is changed.
+- Tests exercise exact before-images and effect lists, atomic named refusals, interrupted reversal and resumption,
+  denied inverse grants, effect-write rollback, corrected regeneration and the notice inverse across all four
+  command surfaces. Reversal history and audit events remain; restored business fields match their prior values.
