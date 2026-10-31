@@ -135,7 +135,7 @@ def test_bill_pay_batch_and_payments_roll_back_together(books, monkeypatch):
 
 def test_bill_pay_agent_without_inverse_grant_is_refused(books):
     import os
-    from tests.conftest import make_actor, make_agent, as_user
+    from tests.conftest import make_actor, make_agent
     from bookflow.core.config import Config
 
     bills = _bills(books)
@@ -150,16 +150,22 @@ def test_bill_pay_agent_without_inverse_grant_is_refused(books):
         'user': agent_id, 'company': books['company'], 'role': 'standard',
         'expected_version': member['version'], 'denies': ['ledger.post']},
         reason='Read batches without posting authority')
-    books['client'].run('agent authorize', {'agent': agent_id, 'confirm_permitted_use': True})
+    books['client'].run('agent authorize', {'agent': agent_id, 'confirm_permitted_use': True,
+                                           'acknowledge_fresh_context': True})
     config = Config.load(root / 'config.toml')
     config.set_user('reverse-agent', agent_id)
     config.save()
-    agent = as_user(root, 'reverse-agent')
+    from bookflow.core import registry
+    from bookflow.core.context import Context, Interface
+    from bookflow.core.dispatch import run as dispatch_run
     before = _snapshot(books)
     for dry_run in (True, False):
         with pytest.raises(BookflowError) as refused:
-            agent.run('batch reverse', {'batch': paid['batch_id']}, company=books['company'],
-                      reason='Reverse the named bill payments', dry_run=dry_run)
+            ctx = Context.new(Interface.python, 'bill reversal witness', on_behalf_of=owner,
+                              reason='Reverse the named bill payments')
+            dispatch_run(registry.get('batch reverse'), {'batch': paid['batch_id']}, ctx,
+                         data_root=str(root), company_selector=books['company'], company_source='option',
+                         dry_run=dry_run, _login='reverse-agent')
         assert refused.value.code == 'E_BATCH_BLOCKED'
         assert any(row['code'] == 'E_PERMISSION' for row in refused.value.details['blockers'])
         assert _snapshot(books) == before
