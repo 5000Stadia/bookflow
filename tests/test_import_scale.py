@@ -123,6 +123,9 @@ def test_memory_at_ten_thousand_rows_is_within_ten_percent_of_a_thousand(tmp_pat
     small = measure(tmp_path, 'customer', 1000)
     large = measure(tmp_path, 'customer', 10_000, timeout=1400)
     assert large['peak_rss_mb'] <= 1.10 * small['peak_rss_mb'], (small, large)
+    # and the run holds nothing across slices: the most it holds after any slice, too (a reference cycle once kept
+    # each slice's books, every customer, until a full collection: +14 percent at 10,000).
+    assert large['rss_slices_mb']['max'] <= 1.10 * small['rss_slices_mb']['max'], (small, large)
 
 
 def test_a_file_one_row_over_the_cap_is_refused_at_preview_with_its_count_and_how_to_split_it(books):

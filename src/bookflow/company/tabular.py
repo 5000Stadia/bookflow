@@ -31,7 +31,7 @@ from bookflow import BookflowError
 DELIMITERS = (',', ';', '\t', '|')
 DELIMITER_NAMES = {',': 'comma', ';': 'semicolon', '\t': 'tab', '|': 'pipe', 'xlsx': 'worksheet'}
 SNIFF_LINES = 50
-MAX_ROWS = 20_000  # data rows one file may hold, text or .xlsx: the per-run cap (bulk-import.md, increment 5)
+MAX_ROWS = 10_000  # data rows one file may hold, text or .xlsx: the per-run cap, as measured (bulk-import.md, inc 5)
 _CP1252_UNDEFINED = frozenset((0x81, 0x8D, 0x8F, 0x90, 0x9D))
 TRUE_WORDS = frozenset(('yes', 'true', '1', 'y', 't', 'on'))
 FALSE_WORDS = frozenset(('no', 'false', '0', 'n', 'f', 'off'))

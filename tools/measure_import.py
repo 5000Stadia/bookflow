@@ -129,13 +129,14 @@ def main():
         profiler = cProfile.Profile()
         profiler.enable()
     t = time.perf_counter()
-    slices, slowest, rss = 0, 0.0, []
+    slices, slowest, rss, blocks = 0, 0.0, [], []
     while True:
         s0 = time.perf_counter()
         done = run('import run', run_body)
         slices += 1
         slowest = max(slowest, time.perf_counter() - s0)
         rss.append(rss_mb())
+        blocks.append(sys.getallocatedblocks())
         if done['run']['state'] != 'running':
             break
     out['run_s'] = round(time.perf_counter() - t, 3)
@@ -147,6 +148,9 @@ def main():
     out['slowest_slice_s'] = round(slowest, 2)
     out['rss_slices_mb'] = {'first': rss[0], 'middle': rss[len(rss) // 2], 'last': rss[-1], 'max': max(rss)}
     out['peak_rss_mb'] = peak_mb()
+    if '--series' in sys.argv:
+        out['rss_series_mb'] = rss
+        out['python_blocks_series'] = blocks
     out['preview_ms_per_row'] = round(1000 * out['preview_s'] / rows, 2)
     out['run_ms_per_record'] = round(1000 * out['run_s'] / size, 2)
     if '--loop' in sys.argv:

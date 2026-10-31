@@ -1542,23 +1542,28 @@ def run_slice(s, ctx, inp, *, interrupt=None) -> dict:
             raise _Refused(plan)
         return plan
 
-    for stored in _pending_rows(s, run['id'], inp.limit):
-        if stored['row_no'] in finished:
-            continue  # ran already, ahead of its turn, for a row that needed it
-        try:
-            plan = process(stored)
-        except _Refused as refused:
-            _insert_rows(s, buffered)
-            return _roll_back(s, ctx, run, refused.plan)
-        done_now += 1
-        if plan.status == 'refused':
-            refused_now += 1
-            if refused_now >= run['stop_after_refusals']:
-                stopped = True
-        if interrupt is not None:
-            interrupt(done_now)
-        if stopped or time.monotonic() > deadline:
-            break
+    try:
+        for stored in _pending_rows(s, run['id'], inp.limit):
+            if stored['row_no'] in finished:
+                continue  # ran already, ahead of its turn, for a row that needed it
+            try:
+                plan = process(stored)
+            except _Refused as refused:
+                _insert_rows(s, buffered)
+                return _roll_back(s, ctx, run, refused.plan)
+            done_now += 1
+            if plan.status == 'refused':
+                refused_now += 1
+                if refused_now >= run['stop_after_refusals']:
+                    stopped = True
+            if interrupt is not None:
+                interrupt(done_now)
+            if stopped or time.monotonic() > deadline:
+                break
+    finally:
+        # `process` calls itself (a row's reference made first), so it is a reference cycle holding the slice's books
+        # and pending rows: broken here, they are freed when the slice returns, not at the next full collection.
+        process = None  # noqa: F841
     _insert_rows(s, buffered)
     remaining = len(_pending_rows(s, run['id'], 1))
     state = 'stopped' if stopped and remaining else ('done' if not remaining else 'running')
@@ -1624,11 +1629,21 @@ def _recheck(s, run: dict, kind: kinds.Kind, books: Books, columns: dict[str, st
 
 
 def _reference_creator(s, ctx, run: dict, books: Books):
-    """Makes a reference decided `create` when its first row runs: its own create command, nested as the rows are,
-    with its own audit event, recorded in the run's batch so the run's reversal retires it too."""
-    from bookflow.company import lists
+    return _ReferenceCreator(s, ctx, run, books)
 
-    def create(target: str, path: str, value: str, decision: dict) -> str | None:
+
+class _ReferenceCreator:
+    """Makes a reference decided `create` when its first row runs: its own create command, nested as the rows are,
+    with its own audit event, recorded in the run's batch so the run's reversal retires it too. An object, not a
+    closure that set an attribute on itself: that closure was a reference cycle holding the slice's books (every
+    record of the kind) until a full garbage collection, and at 10,000 rows those piled up (increment 5)."""
+
+    def __init__(self, s, ctx, run: dict, books: Books):
+        self.s, self.ctx, self.run, self.books, self.row = s, ctx, run, books, 0
+
+    def __call__(self, target: str, path: str, value: str, decision: dict) -> str | None:
+        from bookflow.company import lists
+        s, run = self.s, self.run
         definition = lists.get_list_definition(target)
         body = {**(decision.get('input') or {}), 'name': decision.get('target') or value}
 
@@ -1638,14 +1653,12 @@ def _reference_creator(s, ctx, run: dict, books: Books):
                                       record_id=output['id'], action='created', version_after=output.get('version'),
                                       before=None, event_id=batches.last_event_id(s_))
         try:
-            output = batches.run_nested(s, ctx, f'{target} create', body,
-                                        source_ref=f"import:{run['id']}:{create.row}", recorder=record)
+            output = batches.run_nested(s, self.ctx, f'{target} create', body,
+                                        source_ref=f"import:{run['id']}:{self.row}", recorder=record)
         except BookflowError:
             return None  # the row is refused as an unknown reference; `import decide` dry-ran this create
-        books.add_reference(target, body['name'], output['id'])
+        self.books.add_reference(target, body['name'], output['id'])
         return output['id']
-    create.row = 0
-    return create
 
 
 def _start(s, ctx, run: dict, kind: kinds.Kind) -> None:

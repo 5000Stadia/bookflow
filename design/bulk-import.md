@@ -677,7 +677,8 @@ For the builder, defaults standing unless review finds otherwise:
 
 1. **Ambiguous date order.** *Default:* ask in the preview, never guess; the browser preselects month-first, as
    `reconcile import`'s auto mode reads US dates.
-2. **Row cap per run.** *Default:* 20,000 until increment 5 measures; larger files are split.
+2. **Row cap per run.** *Default:* 20,000 until increment 5 measures; larger files are split. *Set by increment 5:* 10,000, the
+   largest size measured (see As built: increment 5).
 3. **Reverting an import.** *Changed 2026-10-27.* *Default:* every import run and grid edit is reversible as one unit
    through the shared batch mechanism (§8a), with the caller's own grants; the old default (`revert-plan` only) is
    dropped. Reversal is refused while a created record is in use or an edited record changed again; `--skip-changed` is
@@ -1151,6 +1152,72 @@ tests running; seconds, 2026-10-28):
 
 The run costs about 0.19 s per invoice at both sizes (a fifth less than looping the command, which opens a session
 per call), the preview about 0.055 s per invoice, and the reversal about 0.15 s per invoice (one delete each).
+
+## As built: increment 5
+
+- **What held criterion 8 back.** Throughput already held. Memory did not: at 10,000 customers the run's resident
+  memory climbed from 312 MB to 373 MB over its second half (peak 366-372 MB against 321 MB at 1,000, +14 percent),
+  while Python's allocated blocks grew by more each slice. Tracing one late slice (`tools/diag_import_slices.py 8000
+  13`) showed 0.06 MB still held after a garbage collection: nothing leaked, but each slice's state waited for a full
+  collection. `run_slice`'s `process` calls itself (a row whose referenced record a later row makes runs that row
+  first) and the reference creator set an attribute on itself, so both were reference cycles holding the slice's
+  `Books`, every record of the kind by key, name and id, plus the ledger; the garbage per slice grew with the company,
+  and full collections came rarely among the process's ~800,000 long-lived objects. **Fixed:** the creator is an
+  object (`_ReferenceCreator`), and `run_slice` drops `process` when the slice ends, so a slice's books are freed when
+  it returns. Afterwards resident memory is flat across all slices (311.0 MB on every one of 21 slices at 10,000) and
+  the run is faster: 25.3 ms per customer in the run just after the fix, against 33.0 in the run just before it
+  (both with `--series`, minutes apart on the shared machine).
+- **Pending rows read lazily.** A slice of a kind that can refer to itself (customer, through `parent_id`) read every
+  row not yet run, with its payload, to find a record a later row makes; it now reads them only when a row first
+  refers to such a record that the books lack (`_WaitingOn`). A file without jobs or sub-records never reads them.
+- **Row cap.** A file over the cap is refused at preview by the reader, text or `.xlsx`, before any check: the reader
+  counts the rows past the cap without keeping them, and the refusal (`too_many_rows`) gives the file's row count, the
+  cap, and the number of files to split it into, each with the header row, imported one after another as the same
+  source (`details`: `rows`, `max_rows`, `files`). Nothing is stored.
+- **Backup advice.** It was a note; §5 puts it in `next`. A preview of more than 100 rows (documents, for a document
+  kind) still `previewed` returns `next` = `company backup first (N rows; the import takes none), then import run
+  <run>`; once a slice has run, `next` is `import run <run>` again. Opening balances are increment 7's.
+- **Tools.** `tools/measure_import.py customer|invoice N [WORKDIR] [--loop] [--series] [--profile FILE]` measures
+  one kind and size per process: preview, then `import run` called until done at its default slice, resident memory
+  after the preview and after each slice and the process's peak (`ru_maxrss`, read before the loop), then with
+  `--loop` the same single command looped in-process over the same rows in a second company (`client.run`, as a
+  script would; a customer's terms looked up once, as the import resolves them). `tools/diag_import_slices.py` is
+  the tracing diagnostic above. `tests/test_import_scale.py` runs the tool small for throughput (300 customers, 30
+  invoices), both sizes for memory (marked with its own 1,500 s timeout), kills a run's process outright
+  (`os._exit`) at three points (inside a row's write transaction, after a committed write, while the outcomes of rows
+  that wrote nothing are stored) and resumes it with each customer, key and batch effect once, and checks the cap and
+  the backup advice.
+
+**Measurements** (`tools/measure_import.py`, one process each, one at a time, root NVMe, other builders' suites
+running; 2026-10-30, after the fix; seconds unless named):
+
+| Run | Parse and guess | Preview | Run | Slices (slowest) | Loop of the command | Run over loop | RSS after preview / after every slice | Peak RSS |
+|---|---|---|---|---|---|---|---|---|
+| 1,000 customers | 0.019 | 7.26 (7.3 ms/row) | 21.81 (21.8 ms/row) | 2 (10.9) | 65.48 (65.5 ms/row) | 0.33 | 292.4 / 292.5-292.9 MB | 323.1 MB |
+| 10,000 customers | 0.052 | 72.73 (7.3 ms/row) | 205.91 (20.6 ms/row) | 20 (16.4) | 798.22 (79.8 ms/row) | 0.26 | 306.8 / 309.1 MB, flat | 323.4 MB |
+| 3,334 invoices of 3 lines (10,002 rows) | 0.048 | 175.91 (17.6 ms/row, 52.8 ms/invoice) | 615.87 (184.7 ms/invoice) | 31 (20.6) | 987.75 (296.3 ms/invoice) | 0.62 | 311.1 / 311.1-311.2 MB, flat | 323.0 MB |
+
+Criterion 8 holds: the run is 0.26 to 0.62 of the looped single command (bound 1.25); peak memory at 10,000 rows is
+0.1 percent above 1,000 (323.4 against 323.1 MB; bound 10 percent), and the most held after any slice 5.5 percent
+above (309.1 against 292.9 MB, the larger company's own lists). Each process's peak is reached while the two
+companies are made, before the import (323.0-323.2 MB), and the import never passes it. Before the fix, the same tool
+at 10,000 customers gave a peak of 366.2 and 371.9 MB in two runs (resident memory after the slices 312 rising to 367
+and 373 MB); 1,000 customers, 320.6 MB. A cProfile of a 1,000-customer run put 84.0 of 84.6 s inside the nested
+command: the importer's own cost per row is small.
+
+**Settings chosen from them:**
+- **Slice: 500 rows or 20 seconds, unchanged.** Measured, a slice ran 10.9 s at most for customers at 1,000 and 16.4
+  s at 10,000 (500 rows each, the count ending it), and 20.6 s for invoices (about 108 per slice, the time ending it);
+  every call stays under 21 s, and memory is the same after every slice, so a larger count would only lengthen
+  calls.
+- **Refusal stop: 100, unchanged.** A refused row costs at most one attempt of its command, so 100 refusals take at
+  most about 2.1 s of customers or 18.5 s of invoices at the measured run costs: a runaway stops within one slice.
+- **Row cap: 10,000 rows** (was 20,000, §12 question 2's starting value), the largest size measured. The preview is
+  one call, linear at 7.3 ms per customer row and 17.6 ms per invoice row, so 10,000 rows is a 73 s or 176 s call; at
+  20,000 it would be twice that, and that size was not measured. A larger file is refused with its count and the
+  split; the rerun-safe key ledger makes importing the pieces one after another safe.
+- **Not changed:** the preview is still one call holding the file's rows (306.8-311.1 MB after it at 10,000 rows,
+  13-17 MB above the start); a preview in slices would be the next step past 10,000 rows.
 
 ## As built: increment 6
 
