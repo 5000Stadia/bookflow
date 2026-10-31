@@ -2119,3 +2119,18 @@ EXAMPLES.update({
     'pos customer add': Example('bookflow pos customer add --name "Casey Counter" --phone 555-0142 '
                                 '--company "Demo Plumbing Co" --json', {'name': 'Casey Counter', 'phone': '555-0142'}),
 })
+
+# R108 increment 8: empty provider registry, person-authorized host work.
+EXAMPLES['bank-feed-connection add'] = Example(
+    'bookflow bank-feed-connection add --name "Checking feed" --kind unavailable --account Checking '
+    '--remote-account checking --company "Demo Plumbing Co" --reason "Set up feed" --json',
+    {'name': 'Checking feed', 'kind': 'unavailable', 'account': 'Checking', 'remote_account': 'checking'})
+EXAMPLES['bank-feed-connection query'] = Example(
+    'bookflow bank-feed-connection query --company "Demo Plumbing Co" --json', {})
+for _verb in ('enable', 'disable', 'check'):
+    EXAMPLES['bank-feed-connection ' + _verb] = Example(
+        f'bookflow bank-feed-connection {_verb} --connection "Checking feed" --company "Demo Plumbing Co" '
+        '--reason "Manage feed" --json', {'connection': 'Checking feed'})
+EXAMPLES['bank-feed fetch'] = Example(
+    'bookflow bank-feed fetch --connection "Checking feed" --company "Demo Plumbing Co" --dry-run --json',
+    {'connection': 'Checking feed'})

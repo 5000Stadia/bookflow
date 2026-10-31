@@ -107,7 +107,7 @@ Named here so the three designs cite one list. Humans hold each at the role show
 | `delivery.send` | release a message to leave the machine, and approve another actor's release (R112) | standard |
 | `delivery.mark-sent` | record that a document was sent outside Bookflow | standard |
 | `delivery.connect` | write or check a delivery connection | admin |
-| `bank-feed.connect` | write or check a bank-feed connection, enable a fetch, pass `confirm_account`, the first live backfill | admin |
+| `bank-feed.connect` | add, enable or check a bank-feed connection, enable a fetch, pass `confirm_account`, the first live backfill | admin |
 | `opening.accept-differences` | post an opening whose given totals do not tie (`opening-draft apply --accept-differences`, R107 increment 7). It replaced `import.approve`, whose other acts (approving large imports and grid edits, a look-alike past `create_missing`) were dropped on 2026-10-28: no size thresholds, and a look-alike is refused for every actor | standard |
 
 ## 5. Directives and reasons: the record, not a gate

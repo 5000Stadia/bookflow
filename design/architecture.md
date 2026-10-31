@@ -5286,3 +5286,20 @@ parties are read inactive-tolerant only on this path), the payment method defaul
 stands, which is what a discount does everywhere here and in the anchor: the whole balance, tax
 included, goes to the expense account. An agent's write-off is the `write_off` flag of
 `entry_review`, and warns the agent at write time.
+
+### Live bank feed seam (R108 increment 8)
+
+`company/bank_sources.py` defines the provider contract, exact posted-line page validation and an empty
+registry. `bank_connections.py` and `commands/bank_connection_cmds.py` expose per-account connections
+through `bank-source-v1`, on `bank-reconcile-v1`; connection authority is `bank-feed.connect`, including
+an explicit grant for an agent. Disabling requires only `bank-feed` at standard. Connection reads redact
+the cursor and staged page below admin; provider cursors must never contain credentials. Migration co0122 adds connection and account-cursor tables. Secrets are
+resolved from OS keyring references only, outside the writer.
+
+The host's bank-feed worker obtains bounded work from `bank_feed_tick.py`, calls providers off the
+writer, and returns pages to the writer for an authority/cursor/connection recheck. First pages are
+staged for fingerprint approval. `bank_feeds.prepare_page` feeds the same preparation and write path
+as statement files; its import batch and cursor commit together. Fetched live-rule provenance is
+committed with the page and `bank_rules.run_live(fetched=True)` runs after the import. Restore and
+attach disable every connection and discard staged approval. Provider conformance lives in
+`tests/bankfeed_source_contract.py`; all providers used by the tests are test-only.

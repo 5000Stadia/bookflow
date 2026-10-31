@@ -227,6 +227,13 @@ def _write_line(s, ctx, line: dict, after: dict, *, kind: str, details: dict, ev
     """Change one line's link columns (inside the caller's transaction), append its event, and record the change on
     each batch (its import's, and a --lines act's own): the line as it was, and each entry made or linked."""
     conn = s.company.conn
+    # Fetched pages persist pending-rule provenance before acting, so recovery can
+    # resume after a crash. A completed decision must consume that marker in the
+    # same transaction; unmatching it later is a person's decision to wait.
+    if after.get('state') != 'waiting':
+        proposal = json.loads(after.get('proposal', line.get('proposal')) or '{}')
+        if (proposal.get('rule') or {}).pop('pending', None) is not None:
+            after = {**after, 'proposal': json.dumps(proposal, sort_keys=True)}
     done = conn.execute(c.bank_lines.update().where(
         c.bank_lines.c.id == line['id'], c.bank_lines.c.version == line['version'], c.bank_lines.c.live == 1)
         .values(**after, version=line['version'] + 1))

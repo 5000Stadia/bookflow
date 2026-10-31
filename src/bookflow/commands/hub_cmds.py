@@ -794,6 +794,9 @@ def apply_company_attach(plan: Plan, ctx: Context, s: Session) -> Applied:
             with s.commits.autocommit(db, "hub.attach_projection"):
                 if disable_all(db.raw):
                     s.warnings.append("every sending connection arrived disabled; enable one on this machine to send")
+                from bookflow.company.bank_connections import disable_all as disable_feeds
+                if disable_feeds(db.raw):
+                    s.warnings.append("every bank feed connection arrived disabled; enable one on this machine to fetch")
         return Applied(AttachOutput(company_id=raw["id"], organization_id=orow["id"], display_name=name, path=str(folder)), touched, f"attached company {name} to {orow['display_name']}")
 
 

@@ -142,11 +142,18 @@ def _plan(s, ctx, batch: dict, all_effects: list[dict], done: dict, probe: bool,
         if later is None:
             blockers.append(b)
             continue
+        feed = conn.execute(sa.select(c.bank_feed_connections.c.id).join(
+            c.bank_feed_connection_accounts,
+            c.bank_feed_connection_accounts.c.connection_id == c.bank_feed_connections.c.id).where(
+            c.bank_feed_connection_accounts.c.account_id == imp['account_id'],
+            c.bank_feed_connections.c.enabled.is_(True))).scalar()
+        stop = (f'First disable the connection with `bank-feed-connection disable --connection {feed}`; '
+                if feed else '')
         blockers.append(_blocker(
             'later_import', 'bank_feed_import', later['id'],
             f"a later import on this account is still live: import {later['id']} of {later['created_at'][:10]} "
             f"({later['lines_new']} lines, {later['date_from']} to {later['date_to']}).",
-            f"`bank-feed reverse {later['id']}` first, or `bank-feed reverse {imp['id']} --through` to reverse the "
+            stop + f"`bank-feed reverse {later['id']}` first, or `bank-feed reverse {imp['id']} --through` to reverse the "
             'newer ones with it', batch=b['record_id'], at=later['created_at'], lines=later['lines_new']))
     # A --lines sort (bank-sort batch) of this import's lines being undone, or stopped part way: finish it first.
     sorting = conn.execute(sa.text(
@@ -510,6 +517,20 @@ def _summary(plans) -> str:
             f"delete {entries} created entr{'y' if entries == 1 else 'ies'}, restore the account record")
 
 
+def _disable_feed(s, ctx, imp):
+    """Stop replay in the transaction that starts reversing or moving a feed import."""
+    if not imp.get('connection_id'):
+        return
+    from bookflow.company import bank_connections, bank_connection_models
+    from bookflow.core.audit import write_event_to
+    plan = bank_connections.prepare_change(s, ctx, bank_connection_models.Selector(
+        connection=imp['connection_id']), 'disable')
+    applied = bank_connections.apply(plan, ctx, s)
+    write_event_to(s.company, ctx, 'bank-feed-connection disable',
+                   f"Disabled feed for reversal of import {imp['id']}", applied.touched,
+                   actor_id=s.actor.id, actor_kind=s.actor.kind)
+
+
 def reverse(s, ctx, inp, *, dry_run: bool, then=None, command: str | None = None, on_begin=None) -> dict:
     """Reverse an import (and, with ``through``, the later ones first). Returns the output and, when ``then`` ran,
     its result. ``on_begin(s, reversal_id)`` runs in the transaction that opens the import's reversal."""
@@ -544,9 +565,14 @@ def reverse(s, ctx, inp, *, dry_run: bool, then=None, command: str | None = None
     left, done_now, then_out = inp.limit, 0, None
     for i, (item, found) in enumerate(zip(chain, plans)):
         last = i == len(chain) - 1
+        def begin(session, reversal_id):
+            _disable_feed(session, ctx, item)
+            if last and on_begin is not None:
+                on_begin(session, reversal_id)
+
         result = batches.reverse(s, ctx, item['batch_id'], reason=ctx.reason, limit=left,
                                  fingerprint=found['fingerprint'], then=then if last else None,
-                                 on_begin=on_begin if last else None)
+                                 on_begin=begin)
         done_now += result['reversed_now']
         left = max(1, left - result['reversed_now'])
         if result['state'] != 'reversed':
@@ -699,6 +725,7 @@ def _move(s, ctx, imp: dict, inp, *, dry_run: bool) -> m.MoveOutput:
 
     def reimport():
         prepared = bank_feeds.prepare(s, ctx, target_inp, stored=stored)
+        prepared['connection_id'] = imp.get('connection_id')
         out, _ = bank_feeds.write(s, ctx, prepared, moved_from=imp['id'])
         return out
 

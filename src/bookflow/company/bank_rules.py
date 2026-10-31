@@ -1099,8 +1099,9 @@ def _act(s, row: dict, lines: list[dict], *, importer: tuple[str, str | None] | 
         result.update(outcome='skipped', reason=(
             f"{automation.name_of(s, v['established_by'])}'s authority is lent only through the host (bookflow "
             'serve), or when they import: the lines wait, marked for the host to act on'))
-        _mark(s, [x['id'] for x in todo], dict(why='local', importer=importer[0] if importer else me,
-                                               importer_for=importer[1] if importer else None))
+        if importer is not None:
+            _mark(s, [x['id'] for x in todo], dict(why='local', importer=importer[0],
+                                                 importer_for=importer[1]))
         return budget
     plans = _plans(s, row, todo)
     needs = _needs(row, {k: p for k, p in plans.items() if 'command' in p})

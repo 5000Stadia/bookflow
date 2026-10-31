@@ -33,6 +33,8 @@ def define_tables(metadata, C, T):
         ident('id', 'Stable ULID of this import.', primary_key=True),
         ident('batch_id', 'The batch (kind bank-import) this import is reversed through.', 'batches.id'),
         ident('account_id', 'Bank or credit card account the lines came into.', 'accounts.id'),
+        ident('connection_id', 'Live feed connection that supplied this import; null for file imports.',
+              'bank_feed_connections.id', nullable=True),
         C('format', sa.String(8), f'File format: {", ".join(FORMATS)}.', nullable=False),
         C('file_sha256', sa.String(64), 'SHA-256 of the file text as given; a pasted file is not kept.',
           nullable=False),

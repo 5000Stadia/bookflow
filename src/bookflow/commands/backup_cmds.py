@@ -214,6 +214,8 @@ def apply_company_restore(plan: Plan, ctx: Context, s: Session) -> Applied:
                 # A restored copy cannot send: every sending connection waits for a person to enable it here (R112).
                 from bookflow.company.delivery_connections import disable_all
                 disable_all(db.raw)
+                from bookflow.company.bank_connections import disable_all as disable_feeds
+                disable_feeds(db.raw)
                 info.upsert_principal(db, user_id=s.actor.id, username=s.actor.username, display_name=s.actor.display_name, kind=s.actor.kind)
                 snapshot = {"backup_id": manifest.get("backup_id"), "file_name": path.name, "source_company_id": manifest["company_id"],
                             "company_id": cid, "as_copy": cid != manifest["company_id"], "backup_created_at": manifest["created_at"],

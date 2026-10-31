@@ -70,6 +70,13 @@ class Host:
         self.backup_check_seconds = backup_check_seconds
         self.schedule_check_seconds = schedule_check_seconds
         self._notices_checked: dict[str, Any] = {}  # company id -> when the scheduler last looked at notices
+        self._feed_pending: list[Any] = []
+        self._feed_after_company: str | None = None
+        self._feed_scan_after: dict[str, str] = {}
+        self._feed_thread: threading.Thread | None = None
+        self._feed_busy = False
+        self._feed_closed = False
+        self._feed_lock = threading.Lock()
         self._delivery_pending: list[Any] = []  # (company row, claims, now): sent off the writer after a tick (R112)
         # Document delivery's own thread (R112): the transports are called there, never on the writer or the timer
         # thread, so a hung transport stalls no checkpoint, sweep, backup, scheduler tick or shutdown.
@@ -126,6 +133,7 @@ class Host:
             self._timer.join(timeout=min(10, self.shutdown_wait_seconds))
             if self._timer.is_alive():
                 raise BookflowError("E_DB_BUSY", message="Host timers are still closing; retry shutdown.")
+        self._stop_feeds()
         self._stop_delivery()
         self.retry_transfer_cleanup()
         # A read snapshot can prevent the final checkpoint. Keep the root
@@ -751,8 +759,79 @@ class Host:
         if not self._writer.is_alive():
             return {}
         done = self.submit(lambda: self._schedule_on_writer(now), _maintenance=True)
+        self._fetch_claimed(done, wait=wait)
         self._send_claimed(done, wait=wait)
         return done
+
+    # ---------------------------------------------------------------- bank feeds (R108)
+    def _fetch_claimed(self, done, *, wait=True):
+        """The writer snapshots bounded work; providers run on a separate daemon, never on the timer."""
+        with self._feed_lock:
+            pending, self._feed_pending = self._feed_pending, []
+            if not pending or self._feed_closed:
+                return
+            finished = threading.Event()
+            def run():
+                from bookflow.company import bank_feed_tick
+                try:
+                    for row, claims in pending:
+                        results = []
+                        for claim in claims:
+                            if self._feed_closed:
+                                break
+                            # Recheck authority after queueing, immediately before an outside call.
+                            valid = self.submit(lambda: self._on_feed_company_writer(
+                                row, lambda s: bank_feed_tick.current(s, claim)), _maintenance=True)
+                            if not valid or self._feed_closed:
+                                continue
+                            fetched = bank_feed_tick.fetch(claim)
+                            with self._feed_lock:
+                                if self._feed_closed:
+                                    break
+                            result = self.submit(lambda: self._on_feed_company_writer(
+                                row, lambda s: bank_feed_tick.record(s, claim, fetched)), _maintenance=True)
+                            results.append(result)
+                        done.setdefault(row['id'], {})['bank_feeds'] = results
+                except Exception as error:  # provider messages may contain credentials; never log their text
+                    log.warning('bank feed tick failed: %s', type(error).__name__)
+                finally:
+                    with self._feed_lock:
+                        self._feed_busy = False
+                    finished.set()
+            self._feed_thread = threading.Thread(target=run, name='bookflow-bank-feeds', daemon=True)
+            self._feed_thread.start()
+        if wait:
+            # Providers must obey their timeout; a broken future adapter still cannot hang a caller forever.
+            finished.wait(timeout=45)
+
+    def _on_feed_company_writer(self, snapshot, fn):
+        """Re-resolve registration before opening a company captured by an outside fetch."""
+        import sqlalchemy as sa
+        from bookflow.hub import schema as h
+        from bookflow.storage.migrate import HEADS
+        hub = self._ensure_hub_on_writer()
+        row = hub.conn.execute(sa.select(h.companies).where(
+            h.companies.c.id == snapshot['id'])).mappings().first()
+        identity = ('id', 'organization_id', 'path', 'schema_revision', 'created_at', 'version')
+        if (row is None or row['pending_path'] is not None or row['schema_revision'] != HEADS['company']
+                or any(row[key] != snapshot[key] for key in identity)):
+            return None
+        try:
+            stat = (self.data_root / row['path'] / 'company.db').stat()
+        except OSError:
+            return None
+        if (stat.st_dev, stat.st_ino) != snapshot['_feed_file_identity']:
+            return None
+        return self._on_company_writer(dict(row), fn)
+
+    def _stop_feeds(self):
+        with self._feed_lock:
+            self._feed_closed = True
+            self._feed_pending = []
+        thread = self._feed_thread
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=min(1, self.shutdown_wait_seconds))
+        # A late result is discarded. The cursor was not advanced, so the page can be fetched again.
 
     # ---------------------------------------------------------------- document delivery (R112)
     def _send_claimed(self, done, *, wait: bool = True) -> None:
@@ -913,6 +992,13 @@ class Host:
         rows = [dict(r) for r in hub.conn.execute(sa.select(h.companies).where(
             h.companies.c.pending_path.is_(None)).order_by(h.companies.c.id)).mappings()]
         done: dict[str, Any] = {}
+        from bookflow.company.bank_feed_tick import ACCOUNTS_PER_TICK
+        feed_remaining = ACCOUNTS_PER_TICK
+        # Rotate the start after the last company receiving a feed slot. A busy company's
+        # four pages cannot keep another company's feed waiting forever.
+        if self._feed_after_company is not None:
+            split = next((i + 1 for i, row in enumerate(rows) if row['id'] == self._feed_after_company), 0)
+            rows = rows[split:] + rows[:split]
         for row in rows:
             # A company not yet upgraded is left for `bookflow upgrade`: the scheduler never migrates.
             if row["schema_revision"] != HEADS["company"]:
@@ -953,6 +1039,16 @@ class Host:
                     fired = scheduler._failure(e)
                 if fired is not None:
                     done[row["id"]]["automations"] = fired
+                # Bank feeds: snapshots only on the writer. No provider or keyring access here.
+                if feed_remaining and not self._feed_busy and not self._feed_closed:
+                    from bookflow.company import bank_feed_tick
+                    claims = bank_feed_tick.claim(s, limit=feed_remaining, scan_state=self._feed_scan_after)
+                    if claims:
+                        stat = s.company.path.stat()
+                        feed_row = dict(row, _feed_file_identity=(stat.st_dev, stat.st_ino))
+                        self._feed_pending.append((feed_row, claims))
+                        feed_remaining -= len(claims)
+                        self._feed_after_company = row["id"]
                 # Document delivery (R112): one EXISTS for a company with no connection and nothing in flight.
                 # While the delivery thread is still busy with an earlier tick, nothing more is claimed.
                 busy = self._delivery_busy
@@ -971,6 +1067,8 @@ class Host:
                 done[row["id"]] = scheduler._failure(e)
             finally:
                 s.close_company(release=False)
+        if self._feed_pending:
+            self._feed_busy = True
         self._after_write()
         return done
 

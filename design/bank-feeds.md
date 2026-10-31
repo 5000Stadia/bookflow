@@ -17,7 +17,7 @@ with the last import being reversible." Widened the same day to every batch impo
 > **Changed 2026-10-27 (R187, reshaped the same day).** Builds to [one permission model](principal-directives.md). Replaces
 > the earlier note that had auto-add established by a cited, confirmed directive and a principal's tap. **Auto-add is an
 > automation:** anyone who may write a bank rule drafts it; an actor holding the capability **`automate.bank-rule`** makes it
-> live (§5, §8, K2) and it then runs under that actor's authority. Connection writes need **`bank-feed.connect`**. An agent holds
+> live (§5, §8, K2) and it then runs under that actor's authority. Connection writes other than stopping a feed need **`bank-feed.connect`**. Stopping needs only standard `bank-feed`. An agent holds
 > neither unless its principal granted it. There is no directive citation, confirmation, tap, `automation establish` or agent
 > policy; `bank-rule enable-auto-add` is not built.
 
@@ -328,7 +328,8 @@ bound human's. Permission layers chained per increment: `bank-feed-v1`, `bank-li
 | `bank-feed show`, `query`, `bank-line query`, `show`, `history`, `bank-rule show`, `query`, `suggested`, `batch show`, `query`, `bank-feed-connection query` | member |
 | `bank-feed import`, `bank-line match`, `unmatch`, `add`, `transfer`, `ignore`, `unignore`, `release`, `bank-rule` create, update, accept, decline, `apply`, `bank-feed reverse`, `move` | standard, `bank-feed` plus each act's command authority; **an agent may do all of it** |
 | making a bank rule's `auto_add` or `ignore` live (`bank-rule update --live`) | standard plus capability **`automate.bank-rule`** |
-| every `bank-feed-connection` write and `check`; `bank-feed fetch` enabling for an account; `confirm_account` on an account-mismatch refusal; the first live backfill | admin plus capability **`bank-feed.connect`** |
+| `bank-feed-connection disable` | standard, `bank-feed` only |
+| `bank-feed-connection add`, `enable` and `check`; `bank-feed fetch` enabling for an account; `confirm_account` on an account-mismatch refusal; the first live backfill | admin plus capability **`bank-feed.connect`** |
 
 - **An agent can sort the inbox:** import a file, accept the matcher's matches, add lines that have a proposal, ignore the
   obvious, pair transfers, write and accept rules, draft an auto-add rule, and
@@ -1157,3 +1158,69 @@ newest posted dates across month boundaries, field-specific validation, and reve
 The Chrome regression also verifies a match selected outside the bank date surviving preview, a vendor adjustment
 retaining its payee list, and bulk selections surviving refusal. Screenshots cover both widths and the phone's
 resume and learned-suggestion flows.
+
+## As built: increment 8
+
+- **Storage and permissions.** Migration **co0122**, on co0121, adds `bank_feed_connections` and
+  `bank_feed_connection_accounts`, plus nullable `bank_feed_imports.connection_id` provenance. One connection maps one remote account to one local bank or card account;
+  the local account is unique. The new **bank-source-v1** layer is on bank-reconcile-v1 (884 catalog commands,
+  descriptor `9676dfed`). Every merged descriptor remains unchanged. New writes are classified `not-a-record`
+  for bulk imports. No deposit read-manifest table gains a column.
+- **Six commands.** `bank-feed-connection add`, `enable`, `disable`, `check`, `query`, and `bank-feed fetch`.
+  Add, enable, check and backfill approval require admin `bank-feed.connect`, with bank-inbox and ledger read access. An agent needs
+  its principal's authority and an explicit connect grant. Disable needs only standard `bank-feed`: anyone who may import may stop fetching.
+  Query requires member bank-inbox and ledger read access; cursor and staged page are null below admin.
+  Commands authorize host work; they never contact a provider themselves. Connection changes are versioned,
+  audited and accept idempotency keys.
+- **Provider contract.** `company/bank_sources.py` defines `FeedSource`, `FeedConnection`, `RemoteAccount`,
+  `CheckResult` and `FeedPage`. The production registry is empty: adding an unknown kind refuses and lists
+  available kinds as none. No network client or production provider is installed. Pages carry the same
+  `statement_files.Line` values as file parsing, with stable FITIDs, bank signs, exact integer minor units,
+  posted dates, text, currency and optional reported balance. Invalid, pending, oversized or inexact pages
+  refuse whole. Cursors must never carry credentials. `tests/bankfeed_source_contract.py` is the reusable adapter suite; its fake is test-only.
+- **First backfill.** Add creates a disabled connection. Check explicitly authorizes a host check and fetch
+  of a first page into staging; no inbox line or batch is created. `bank-feed fetch --dry-run` shows that page
+  and its shared import preview, including overlap and account checks. Fetch or enable with `confirm` equal
+  to its SHA-256 fingerprint approves exactly that page. The host imports the approved staged page without
+  fetching a replacement. Requesting another check discards an unapproved old preview. Later pages continue
+  from the committed cursor. A restored connection requires a fresh preview even when a cursor was retained.
+- **Host boundary.** The scheduler snapshots at most four accounts across companies per tick, rotates company
+  and account selection, including accounts whose authority is temporarily unsettled. Provider and keyring calls run on a separate worker,
+  never while holding the writer. Each page is bounded to 500 lines with bounded fields and cursor; remote
+  account discovery is bounded to 1,000 accounts. Adapters must enforce the supplied ten-second timeout on fetch, check and account discovery. A broken adapter cannot block the writer or shutdown: explicit
+  tick waiting is capped at 45 seconds and feed shutdown at one second; a late response is discarded.
+  An empty connection set takes one existence query and returns without reading a secret or calling a provider.
+- **Rechecks and failures.** Before an outside call and before recording its result, the host rechecks the
+  connection version, mapping, cursor, host binding and the establishing actor's current connection/import
+  authority. Company registration, path, schema head and database file identity are re-read before opening
+  queued work; detaching, moving or replacing a company discards its late response. Agent-established imports
+  retain the represented person in their system audit context. A settled loss stops fetching; in-flight results after disable are discarded. Remote discovery
+  supplies the selected account's last four digits, kind and currency, compared with the returned page and
+  the shared file-import account check. Permanent failures disable the connection without moving its cursor;
+  temporary failures leave its cursor for retry. A preparation `E_VALIDATION`, including an account frozen by a reversal,
+  rolls back and skips the tick without disabling the connection; permanent provider failures and account mismatch disable. Provider/keyring exception text is never persisted or logged.
+- **One import path.** `bank_feeds.prepare_page` passes validated lines to the existing preparation/write path
+  as `format=feed`. Dedupe, matching, proposals, batch effects and reversal are identical to file imports.
+  A replay creates no import, batch or line. Import and cursor advancement commit atomically. Fetched rule
+  provenance is saved with the import before `run_live(fetched=True)` acts after commit; deferred slices
+  survive restart. A completed line decision consumes its pending marker in the same transaction, so
+  returning that line to waiting does not silently run the rule again. Older file-import lines retain their
+  importer checks and never acquire fetched authority. A local resume with no importer preserves fetched pending markers.
+  Rule actions remain in the import's batch, so the usual one-step reversal takes them back. Reversal
+  retains the provider cursor and disables the recorded source connection in the transaction that begins reversal or move,
+  with an attributed disable audit event carrying the correction reason. Replayed pages cannot restore reversed lines.
+  A `later_import` refusal on an enabled account tells the person to run `bank-feed-connection disable --connection ID`
+  first, then reverse newer imports (or use `--through`). Reversing the newest feed import stops its connection.
+- **Credentials and copies.** Only `keyring:service/name` references are accepted; credentials are resolved
+  in worker memory. The tick rejects any other scheme before resolving secrets, including legacy `env:` references. Provider settings must be a validated non-secret JSON object. Restore and company attach
+  disable every connection, clear queued checks and staged approvals, and retain the cursor. Host bindings
+  include installation, machine, data-root path and company identity, keeping copied roots inert.
+- **Demo and scope.** The demo exposes an empty connection query and the unavailable-provider refusal; it
+  contains no fake connection. No provider choice, live bank access, connection-specific browser workspace
+  or real credential exchange is verified here. K3 remains undecided. Generated command forms expose the seam.
+
+**Review corrections.** M1/M2 and L1–L6 are covered by the connection-reversal, tick-review,
+connection-permission and provider-boundary regressions. The cold-process registry test loads every command
+module and the host before checking that no provider is installed. The requested regression suite and generated
+documentation checks are run after these corrections. Real providers and a live operating-system keyring backend
+remain unverified; provider and credential calls in this increment's tests use fakes.
