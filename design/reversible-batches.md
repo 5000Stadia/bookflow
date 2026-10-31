@@ -103,6 +103,12 @@ after one check, and refuses plainly when a payment has since been applied.
 
 The demo previews and reverses a temporary customer-note batch edit, restoring the original note and leaving balances unchanged.
 
+The requested regression selection also exposed three existing-test expectation mismatches: the batch-invoicing
+upgrade witness compares customer DDL across all later migrations; the reference-year reset witness expects force
+to trash a non-demo sibling despite the current protection; and the host WAL witness expects a retained RESTART
+checkpoint file below 4 MiB (observed 4,206,552 bytes). These are recorded rather than changing unrelated migration,
+demo-reset or checkpoint behavior in this increment. A separate reference-year preview failure passed on rerun.
+
 ## As built: increment 2
 
 - `barcode generate` and `cycle-count classify` return `batch_id` and a `next` command for the shared reversal
@@ -150,8 +156,3 @@ The demo previews and reverses a temporary customer-note batch edit, restoring t
   retain native unmerge semantics. An edit followed by an undo can still block when versions differ or native
   unmerge would keep a reference. This avoids overwriting later decisions. Existing vendor open-payable and
   inventory stock-history merge restrictions remain; batch reversal does not broaden which entries can merge.
-The requested regression selection also exposed three existing-test expectation mismatches: the batch-invoicing
-upgrade witness compares customer DDL across all later migrations; the reference-year reset witness expects force
-to trash a non-demo sibling despite the current protection; and the host WAL witness expects a retained RESTART
-checkpoint file below 4 MiB (observed 4,206,552 bytes). These are recorded rather than changing unrelated migration,
-demo-reset or checkpoint behavior in this increment. A separate reference-year preview failure passed on rerun.
