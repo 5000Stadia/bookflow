@@ -1,4 +1,5 @@
-"""Add the POS layer (R114 increment 4, design/point-of-sale.md §9) without rewriting any accepted descriptor.
+"""Add the POS layer (R114 increment 4, design/point-of-sale.md §9) on automation-v1, without rewriting any accepted
+descriptor.
 
 Five new capabilities. `pos.sell` (ringing up, holding, looking up customers, a drawer's shift, the day summary for
 one's own register), `pos.void`, `pos.refund` and `pos.price-override` are held by standard, admin and owner (and
@@ -15,10 +16,10 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_user_home_catalog as previous, permission_catalog as c
+from . import permission_automation_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = '5c2616b3277b67fba83914f63cbef741b786673f'
+SOURCE_COMMIT = '06c29f99e0f2ea31a76b3e83877467cab5022c8b'
 _OWNER = 'bookflow.commands.pos_register_cmds.{}|src/bookflow/commands/pos_register_cmds.py'
 # capability -> (threshold its commands name, the roles holding it by default)
 _SELLER = ('standard', 'admin', 'owner', 'hub_admin')

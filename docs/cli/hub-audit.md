@@ -89,6 +89,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].directive_code` | string \| null | yes | yes | — | — |
 | `items[].directive_text` | string \| null | yes | yes | — | — |
 | `items[].source_ref` | string \| null | yes | yes | — | — |
+| `items[].on_rule` | object[string, any] \| null | no | yes | null | An automation's write: the rule (kind, rule_id, name) and who established it, with text 'On rule: <name>, established by <who>'; null for any other write |
 | `items[].undo_of_event_id` | string \| null | no | yes | null | Original company audit event compensated by this event; null otherwise |
 | `items[].summary` | string | yes | no | — | — |
 | `items[].entry_count` | integer | yes | no | — | Number of records touched by this event |
@@ -219,6 +220,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `directive_code` | string \| null | yes | yes | — | — |
 | `directive_text` | string \| null | yes | yes | — | — |
 | `source_ref` | string \| null | yes | yes | — | — |
+| `on_rule` | object[string, any] \| null | no | yes | null | An automation's write: the rule (kind, rule_id, name) and who established it, with text 'On rule: <name>, established by <who>'; null for any other write |
 | `undo_of_event_id` | string \| null | no | yes | null | Original company audit event compensated by this event; null otherwise |
 | `summary` | string | yes | no | — | — |
 | `entry_count` | integer | yes | no | — | Number of records touched by this event |
@@ -254,6 +256,7 @@ Example JSON output:
   "interface": "cli",
   "on_behalf_of": null,
   "on_behalf_of_name": null,
+  "on_rule": null,
   "reason": null,
   "request_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "seq": null,
@@ -382,6 +385,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].directive_code` | string \| null | yes | yes | — | — |
 | `items[].directive_text` | string \| null | yes | yes | — | — |
 | `items[].source_ref` | string \| null | yes | yes | — | — |
+| `items[].on_rule` | object[string, any] \| null | no | yes | null | An automation's write: the rule (kind, rule_id, name) and who established it, with text 'On rule: <name>, established by <who>'; null for any other write |
 | `items[].undo_of_event_id` | string \| null | no | yes | null | Original company audit event compensated by this event; null otherwise |
 | `items[].summary` | string | yes | no | — | — |
 | `items[].entry_count` | integer | yes | no | — | Number of records touched by this event |

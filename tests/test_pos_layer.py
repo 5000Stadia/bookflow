@@ -23,7 +23,7 @@ REASON = {"X-Bookflow-Reason": "pos layer"}
 H = {"X-Bookflow-Workbench": "1", "X-Bookflow-Client-Name": "bookflow-workbench"}
 # The clerk preset's denies on the current catalog: every company capability `readonly` holds but `company` and
 # `item`. A capability added to `readonly` later fails here first, and must be judged before a clerk can read it.
-CLERK_DENIES = ['account', 'activity', 'attachment', 'audit', 'bank-feed', 'bulk-edit', 'chart', 'class',
+CLERK_DENIES = ['account', 'activity', 'attachment', 'audit', 'automation', 'bank-feed', 'bulk-edit', 'chart', 'class',
                 'custom-field', 'customer', 'customer-message', 'customer-type', 'customer-work', 'directive',
                 'employee', 'import', 'item-category', 'job-type', 'ledger.read', 'note', 'other-name',
                 'payment-method', 'price-level', 'profile', 'reports', 'sales-rep', 'sales-tax-code', 'ship-method',

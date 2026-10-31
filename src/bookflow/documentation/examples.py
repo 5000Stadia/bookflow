@@ -2026,6 +2026,16 @@ EXAMPLES.update({
     'user home show': Example('bookflow user home show --json', {}),
     'user home clear': Example('bookflow user home clear --user jordan --json', {'user': 'jordan'}),
 })
+# R187 increment 2: automations across kinds; each kind's own command makes a rule live.
+EXAMPLES.update({
+    'automation list': Example('bookflow automation list --state live --company "Demo Plumbing Co" --json',
+                               {'state': 'live'}),
+    'automation show': Example('bookflow automation show delivery "Daily invoices" --company "Demo Plumbing Co" --json',
+                               {'kind': 'delivery', 'rule': 'Daily invoices'}),
+    'automation pause': Example('bookflow automation pause delivery "Daily invoices" --company "Demo Plumbing Co"'
+                                ' --reason "Customer list under review" --json',
+                                {'kind': 'delivery', 'rule': 'Daily invoices'}),
+})
 # R114 increment 4: the POS layer's registers.
 EXAMPLES.update({
     'pos-register create': Example('bookflow pos-register create --name "Front counter" --receipt-width 58 '
