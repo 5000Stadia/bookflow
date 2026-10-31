@@ -75,12 +75,13 @@ def mount(app, *, render, run, credential, page_error, role_allows, holds=None, 
             held = holds(request, cid, 'pos.price-override') if holds is not None else None
             can_override = bool(held) if held is not None else company.get('role') in _SELLERS
             data = dict(company=cid, currency=company.get('home_currency') or 'USD',
-                        registers=[dict(id=r['id'], name=r['name'], methods=r['payment_methods'])
+                        registers=[dict(id=r['id'], name=r['name'], methods=r['payment_methods'], count_shifts=r['count_shifts'])
                                    for r in registers],
                         items=items, layout=run(request, 'pos-box list', {}, cid), can_override=can_override,
                         can_layout=role_allows('pos-box create', company, credential(request)),
                         can_void=role_allows('pos sale void', company, credential(request)),
                         can_refund=role_allows('pos refund', company, credential(request)),
+                        can_deposit=role_allows('deposit post', company, credential(request)),
                         held=run(request, 'pos ticket list', {}, cid)['items'])
             return render('pos.html', request, company=company, company_id=cid, registers=registers, pos_data=data)
         except BookflowError as e:

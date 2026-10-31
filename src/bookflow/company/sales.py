@@ -750,6 +750,9 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
         from bookflow.company.payment_invoice_corrections import prepare as settlement_prepare
         return settlement_prepare(s, ctx, inp)
     old_header = resolve(s, getattr(inp, document_type), document_type) if operation != 'post' else None
+    if old_header and old_header['status'] != 'voided':
+        from bookflow.company.pos_day import guard_closed_document
+        guard_closed_document(s, old_header['id'], correcting=operation == 'update')
     old_revision = journals.revision(s, old_header) if old_header else None
     meta = _version(s, old_header, inp.expected_version) if old_header else None
     if document_type in SETTLEABLE_RECEIVABLE_TYPES and old_header and operation == 'void':

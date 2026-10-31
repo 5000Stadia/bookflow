@@ -7,6 +7,9 @@
   <div class="pos-topbar">
     {% if registers | length > 1 %}<label class="pos-register-pick">Register <select data-pos-register-select>{% for register in registers %}<option value="{{ register.id }}">{{ register.name }}</option>{% endfor %}</select></label>{% elif registers %}<span class="pos-register-name" data-pos-register-name>{{ registers[0].name }}</span>{% endif %}
     <button type="button" data-pos-held>Held ({{ pos_data.held | length }})</button>
+    <button type="button" data-pos-day-open>Day summary</button>
+    <button type="button" data-pos-shift-open hidden>Open shift</button>
+    <button type="button" data-pos-shift-close hidden>Close shift</button>
     <button type="button" data-pos-reprint-open>Reprint receipt</button>
     {% if pos_data.can_refund %}<button type="button" data-pos-refund-open>Refund</button>{% endif %}
     {% if pos_data.can_void %}<button type="button" data-pos-void-open>Void sale</button>{% endif %}
@@ -175,8 +178,24 @@
   <button type="button" class="primary" data-pos-refund-finish>Back to till</button>
 </section>
 {% endif %}
+<dialog class="pos-dialog pos-day" data-pos-day-dialog aria-label="Day summary">
+  <h2>Day summary</h2>
+  <form data-pos-day-filter><label>Date <input type="date" data-pos-day-date required></label><button type="submit">Show day</button></form>
+  <p data-pos-day-heading></p><div data-pos-day-results></div>
+  {% if pos_data.can_deposit %}<fieldset data-pos-deposit-methods><legend>Payment methods to deposit</legend></fieldset>
+  <a class="button" data-pos-day-deposit hidden>Make deposit</a>{% endif %}
+  <p data-pos-day-status role="status"></p>
+  <div class="pos-dialog-actions"><button type="button" data-pos-day-dismiss>Close</button></div>
+</dialog>
+<dialog class="pos-dialog" data-pos-shift-dialog aria-label="Count shift">
+  <form data-pos-shift-form><h2 data-pos-shift-title>Open shift</h2><p data-pos-shift-explanation></p>
+    <label><span data-pos-shift-label>Opening float</span> <input data-pos-shift-amount inputmode="decimal" required autocomplete="off"></label>
+    <p data-pos-shift-status role="status"></p>
+    <div class="pos-dialog-actions"><button type="button" data-pos-shift-dismiss>Back</button><button type="submit" class="primary" data-pos-shift-submit>Open shift</button></div>
+  </form>
+</dialog>
 <script type="application/json" id="pos-data">{{ pos_data | tojson }}</script>
 </section>
 {% if pos_data.can_refund %}<script src="{{ static_urls['pos-refund.js'] }}" defer></script>{% endif %}
-<script src="{{ static_urls['scan.js'] }}" defer></script><script src="{{ static_urls['pos.js'] }}" defer></script>
+<script src="{{ static_urls['scan.js'] }}" defer></script><script src="{{ static_urls['pos.js'] }}" defer></script><script src="{{ static_urls['pos-day.js'] }}" defer></script>
 {% endblock %}

@@ -7,6 +7,7 @@ def define_tables(metadata, C, T):
         C('id', sa.String(26), 'Stable POS refund identity.', primary_key=True),
         C('operation_key', sa.String(64), 'Permanent device operation key.', nullable=False, unique=True),
         C('input_sha256', sa.String(64), 'Canonical request hash for safe retry.', nullable=False),
+        C('shift_id', sa.String(26), 'Counted shift owning this operation, if any.', sa.ForeignKey('pos_shifts.id')),
         C('register_id', sa.String(26), 'Register fixing site and funding account.', sa.ForeignKey('pos_registers.id'), nullable=False),
         C('sale_id', sa.String(26), 'Original POS sale; null for no receipt.', sa.ForeignKey('pos_sales.id')),
         C('credit_memo_id', sa.String(26), 'Credit memo created atomically.', sa.ForeignKey('transactions.id'), nullable=False),

@@ -593,6 +593,8 @@ def prepare(s, ctx, inp, *, previous=None):
                   status='posted', voided_at=None, voided_by=None, void_reason=None, void_posting_batch_id=None)
     pending = {table: [] for table, _, _ in TABLE_KINDS}
     if previous:
+        from bookflow.company.pos_day import guard_closed_document
+        guard_closed_document(s, previous['header']['id'], correcting=True)
         header = dict(previous['header'], version=previous['header']['version'] + 1,
                       updated_at=at, updated_by=s.actor.id, updated_via=ctx.interface.value)
         from bookflow.company.credit_corrections import release_claims
@@ -868,6 +870,8 @@ def prepare_void(s, ctx, inp, *, posting=True):
     """
     source = facts(s, inp.credit_memo, write=True, posting=posting)
     old_header, revision = source['header'], source['revision']
+    from bookflow.company.pos_day import guard_closed_document
+    guard_closed_document(s, old_header['id'])
     from bookflow.company.prepayments import guard_draw_change
     guard_draw_change(s, old_header['id'], 'voided')
     from bookflow.company.credit_transfers import guard_document

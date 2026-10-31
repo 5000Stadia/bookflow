@@ -110,7 +110,7 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +4 ringing up (R114 increment 5): pos sale preview, complete, pos customer search, add.
     # +9 shared POS layout, styles and group pictures (R114 increment 6).
     # +5 hold/list/resume/discard and completed-sale void (R114 increment 7).
-    assert len(rows) == 910
+    assert len(rows) == 914
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
@@ -457,7 +457,10 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # No new variant kind; the other five commands add no material input node.
     # 4462 -> 4469 (R114 inc 7, measured): hold adds six null branches (register, customer,
     # line price and serials, label and expected_version); complete adds ticket_version.
-    assert sum(len(group["paths"]) for group in mapped)==4469
+    # Merged POS receipts/refunds/ticket recovery bring the prior census to 4482.
+    # Increment 10 adds eight null branches: shift open register (1), report register/date/shift (3),
+    # deposit prepare register/date/shift/method selection (4); close has no optional input.
+    assert sum(len(group["paths"]) for group in mapped)==4490
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

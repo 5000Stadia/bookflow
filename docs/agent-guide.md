@@ -1660,6 +1660,20 @@ walk-in customer and today's date, and records the ticket and tender beside it; 
 says which register and clerk took it and what was tendered. Answer questions about takings from the receipts; do
 not ring sales up through `pos sale complete` yourself.
 
+`report pos-day` answers “what should be in the drawer?” with `expected_drawer`, cash sales, cash refunds,
+change-adjusted tender totals, tax, voids and outstanding tickets. Supply `pos_register` and `date`, or `shift`
+for its Z-report. It needs an explicit `pos.sell` grant for an agent. Counted registers require `pos shift open`
+with a `float` and permanent `operation_key`; `pos shift close` takes `shift`, `counted` and its own permanent
+`operation_key`. Closing posts nothing and records counted minus expected as `over_short`. Retry the same
+inputs and key after a lost answer. Only one shift can be open on a register.
+
+With `ledger.post`, `pos deposit prepare` returns an ordinary `deposit post` document for a day or shift,
+selecting cash by default or the supplied `payment_methods`. Review it, then preview and post it through
+`deposit post` with a new operation key. Cash Over and Short is created on first need: overages are other money,
+shortages cash back. Already banked receipts are excluded; a partly banked cash bundle with a drawer difference
+requires review in Make Deposits. Cash refunds already credit the bank, so the deposit must not deduct them again:
+the deposit plus refund ledger entries gives net cash. Opening float remains in the till.
+
 `pos ticket hold` saves a nonempty cart on the host without posting or reserving stock. `list` returns held and open
 carts across the company, grouped by status and newest first within each, with their versions and last held totals. `resume` claims one using
 `expected_version`; run `pos sale preview` on its returned lines for current prices, then supply the returned

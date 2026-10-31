@@ -14,6 +14,7 @@ Database: `company`.
 | `created_via` | VARCHAR(16) | no | — | — | — | — | Interface the sale was completed through. |
 | `ticket` | VARCHAR(64) | no | — | unique | — | — | The ticket's key, which is also the sale's operation key: a retry with the same key returns this sale and never posts a second. |
 | `input_sha256` | VARCHAR(64) | no | — | — | — | — | SHA-256 of the completed ticket as sent, so a retry that changed the ticket is refused rather than answered with a different sale. |
+| `shift_id` | VARCHAR(26) | yes | — | — | — | pos_shifts.id | Counted shift owning this operation, if any. |
 | `register_id` | VARCHAR(26) | no | — | — | ix_pos_sales_register_id | pos_registers.id | Register the sale was rung up on. |
 | `document_type` | VARCHAR(24) | no | — | — | — | — | Document the sale posted: 'sales_receipt' (one payment method); split tender's invoice arrives later. |
 | `document_id` | VARCHAR(26) | no | — | — | ix_pos_sales_document_id | transactions.id | The posted document. |

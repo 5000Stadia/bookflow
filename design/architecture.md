@@ -5313,3 +5313,16 @@ as statement files; its import batch and cursor commit together. Fetched live-ru
 committed with the page and `bank_rules.run_live(fetched=True)` runs after the import. Restore and
 attach disable every connection and discard staged approval. Provider conformance lives in
 `tests/bankfeed_source_contract.py`; all providers used by the tests are test-only.
+
+## POS day close (R114 increment 10)
+
+`company/pos_day.py` owns register/day reporting and nonposting shift open/close; its typed contracts
+are in `pos_day_models.py`. `pos_shifts` stores opening facts and a single immutable closing snapshot,
+with `pos_sales.shift_id` and `pos_refunds.shift_id` captured in each accounting transaction.
+`company/pos_deposits.py` prepares the existing deposit core's `InlineDocument`, including the named
+Cash Over and Short account mutation when needed. It never creates a second receipt or posts a
+separate kind of deposit. `commands/pos_day_cmds.py` and `pos_deposit_cmds.py` expose these through
+all adapters; `permission_pos_day_catalog.py` adds the immutable catalog layer. `static/pos-day.js`
+provides till controls and durable count retry; `deposit-picker.js` continues the hand-off in Make
+Deposits. Accounting/date/variance rules and limits are specified in
+[point-of-sale.md, increment 10](point-of-sale.md#as-built-increment-10-day-close).

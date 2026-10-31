@@ -2205,3 +2205,18 @@ EXAMPLES.update({
         'bookflow pos refund receipt counter-return-1 --reprint --company "Demo Plumbing Co" --json',
         {'sale': 'counter-return-1', 'reprint': True}),
 })
+
+EXAMPLES.update({
+    'pos shift open': Example(
+        'bookflow pos shift open --pos-register Main --float 50.00 --operation-key morning-1 --company "Demo Plumbing Co" --json',
+        {'pos_register': 'Main', 'float': '50.00', 'operation_key': 'morning-1'}),
+    'pos shift close': Example(
+        'bookflow pos shift close --shift 01J00000000000000000000000 --counted 149.50 --operation-key evening-1 --company "Demo Plumbing Co" --json',
+        {'shift': '01J00000000000000000000000', 'counted': '149.50', 'operation_key': 'evening-1'}),
+    'report pos-day': Example(
+        'bookflow report pos-day --pos-register Main --date 2026-10-31 --company "Demo Plumbing Co" --json',
+        {'pos_register': 'Main', 'date': '2026-10-31'}),
+    'pos deposit prepare': Example(
+        'bookflow pos deposit prepare --pos-register Main --date 2026-10-31 --company "Demo Plumbing Co" --json',
+        {'pos_register': 'Main', 'date': '2026-10-31'}),
+})

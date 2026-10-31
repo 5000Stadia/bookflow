@@ -954,6 +954,9 @@ def prepare_void(s, ctx, inp):
 
 
 def prepare(s, ctx, inp, operation, *, pos_credit=None):
+    if operation != 'post':
+        from bookflow.company.pos_day import guard_closed_document
+        guard_closed_document(s, resolve(s, inp.refund)['id'], correcting=operation == 'update')
     if pos_credit is not None:
         if operation != 'post':
             raise BookflowError('E_PERMISSION', details={'capability': 'ledger.post'})

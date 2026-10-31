@@ -5866,6 +5866,275 @@ Example JSON output:
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 
+## `report pos-day`
+
+Day summary for a register, or a frozen closed-shift Z report: sales, tax, voids, refunds by tender, old held tickets and expected cash in the drawer. Date defaults to today in the company timezone. Needs pos.sell.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | pos.sell |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.pos-day` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report pos-day --pos-register Main --date 2026-10-31 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report pos-day", "input": {"pos_register": "Main", "date": "2026-10-31"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `pos_register` | `--pos-register` | string \| null | no | yes | null | — |
+| `date` | `--date` | string \| null | no | yes | null | — |
+| `shift` | `--shift` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.pos-day`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `date` | string | yes | no | — | — |
+| `pos_register` | object | yes | no | — | — |
+| `pos_register.id` | string | yes | no | — | — |
+| `pos_register.name` | string | yes | no | — | — |
+| `shift` | string \| null | no | yes | null | — |
+| `sales_count` | integer | yes | no | — | — |
+| `gross_sales` | object | yes | no | — | — |
+| `gross_sales.amount` | string | yes | no | — | — |
+| `gross_sales.currency` | string | yes | no | — | — |
+| `gross_sales.minor_units` | integer | yes | no | — | — |
+| `discounts` | object | yes | no | — | — |
+| `discounts.amount` | string | yes | no | — | — |
+| `discounts.currency` | string | yes | no | — | — |
+| `discounts.minor_units` | integer | yes | no | — | — |
+| `tax` | object | yes | no | — | — |
+| `tax.amount` | string | yes | no | — | — |
+| `tax.currency` | string | yes | no | — | — |
+| `tax.minor_units` | integer | yes | no | — | — |
+| `total_sales` | object | yes | no | — | — |
+| `total_sales.amount` | string | yes | no | — | — |
+| `total_sales.currency` | string | yes | no | — | — |
+| `total_sales.minor_units` | integer | yes | no | — | — |
+| `refunds_total` | object | yes | no | — | — |
+| `refunds_total.amount` | string | yes | no | — | — |
+| `refunds_total.currency` | string | yes | no | — | — |
+| `refunds_total.minor_units` | integer | yes | no | — | — |
+| `refund_tax` | object | yes | no | — | — |
+| `refund_tax.amount` | string | yes | no | — | — |
+| `refund_tax.currency` | string | yes | no | — | — |
+| `refund_tax.minor_units` | integer | yes | no | — | — |
+| `voids_count` | integer | yes | no | — | — |
+| `voids_total` | object | yes | no | — | — |
+| `voids_total.amount` | string | yes | no | — | — |
+| `voids_total.currency` | string | yes | no | — | — |
+| `voids_total.minor_units` | integer | yes | no | — | — |
+| `cash_sales` | object | yes | no | — | — |
+| `cash_sales.amount` | string | yes | no | — | — |
+| `cash_sales.currency` | string | yes | no | — | — |
+| `cash_sales.minor_units` | integer | yes | no | — | — |
+| `cash_refunds` | object | yes | no | — | — |
+| `cash_refunds.amount` | string | yes | no | — | — |
+| `cash_refunds.currency` | string | yes | no | — | — |
+| `cash_refunds.minor_units` | integer | yes | no | — | — |
+| `cash_to_deposit` | object | yes | no | — | — |
+| `cash_to_deposit.amount` | string | yes | no | — | — |
+| `cash_to_deposit.currency` | string | yes | no | — | — |
+| `cash_to_deposit.minor_units` | integer | yes | no | — | — |
+| `expected_drawer` | object | yes | no | — | — |
+| `expected_drawer.amount` | string | yes | no | — | — |
+| `expected_drawer.currency` | string | yes | no | — | — |
+| `expected_drawer.minor_units` | integer | yes | no | — | — |
+| `by_tender` | array[object] | yes | no | — | — |
+| `by_tender[].payment_method` | object | yes | no | — | — |
+| `by_tender[].payment_method.id` | string | yes | no | — | — |
+| `by_tender[].payment_method.name` | string | yes | no | — | — |
+| `by_tender[].payment_method.kind` | string | yes | no | — | — |
+| `by_tender[].count` | integer | yes | no | — | — |
+| `by_tender[].amount` | object | yes | no | — | — |
+| `by_tender[].amount.amount` | string | yes | no | — | — |
+| `by_tender[].amount.currency` | string | yes | no | — | — |
+| `by_tender[].amount.minor_units` | integer | yes | no | — | — |
+| `by_tender[].refund_count` | integer | yes | no | — | — |
+| `by_tender[].refund_amount` | object | yes | no | — | — |
+| `by_tender[].refund_amount.amount` | string | yes | no | — | — |
+| `by_tender[].refund_amount.currency` | string | yes | no | — | — |
+| `by_tender[].refund_amount.minor_units` | integer | yes | no | — | — |
+| `shifts` | array[object] | yes | no | — | — |
+| `shifts[].id` | string | yes | no | — | — |
+| `shifts[].pos_register` | object | yes | no | — | — |
+| `shifts[].pos_register.id` | string | yes | no | — | — |
+| `shifts[].pos_register.name` | string | yes | no | — | — |
+| `shifts[].status` | literal["open", "closed"] | yes | no | — | — |
+| `shifts[].date` | string | yes | no | — | — |
+| `shifts[].opened_at` | string | yes | no | — | — |
+| `shifts[].opened_by` | string | yes | no | — | — |
+| `shifts[].float` | object | yes | no | — | — |
+| `shifts[].float.amount` | string | yes | no | — | — |
+| `shifts[].float.currency` | string | yes | no | — | — |
+| `shifts[].float.minor_units` | integer | yes | no | — | — |
+| `shifts[].closed_at` | string \| null | no | yes | null | — |
+| `shifts[].closed_by` | string \| null | no | yes | null | — |
+| `shifts[].counted` | object \| null | no | yes | null | — |
+| `shifts[].counted.amount` | string | yes | no | — | — |
+| `shifts[].counted.currency` | string | yes | no | — | — |
+| `shifts[].counted.minor_units` | integer | yes | no | — | — |
+| `shifts[].expected` | object | yes | no | — | — |
+| `shifts[].expected.amount` | string | yes | no | — | — |
+| `shifts[].expected.currency` | string | yes | no | — | — |
+| `shifts[].expected.minor_units` | integer | yes | no | — | — |
+| `shifts[].over_short` | object \| null | no | yes | null | — |
+| `shifts[].over_short.amount` | string | yes | no | — | — |
+| `shifts[].over_short.currency` | string | yes | no | — | — |
+| `shifts[].over_short.minor_units` | integer | yes | no | — | — |
+| `shifts[].replayed` | boolean | no | no | false | — |
+| `held_tickets` | array[object] | yes | no | — | — |
+| `held_tickets[].id` | string | yes | no | — | — |
+| `held_tickets[].label` | string | yes | no | — | — |
+| `held_tickets[].status` | string | yes | no | — | — |
+| `held_tickets[].held_at` | string | yes | no | — | — |
+| `held_tickets[].older_than_seven_days` | boolean | yes | no | — | — |
+| `held_tickets[].total` | object | yes | no | — | — |
+| `held_tickets[].total.amount` | string | yes | no | — | — |
+| `held_tickets[].total.currency` | string | yes | no | — | — |
+| `held_tickets[].total.minor_units` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "by_tender": [],
+  "cash_refunds": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "cash_sales": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "cash_to_deposit": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "date": "2026-01-01",
+  "discounts": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "expected_drawer": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "gross_sales": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "held_tickets": [],
+  "pos_register": {
+    "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "name": "value"
+  },
+  "refund_tax": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "refunds_total": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "sales_count": 1,
+  "shift": null,
+  "shifts": [],
+  "tax": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "total_sales": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "voids_count": 1,
+  "voids_total": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_WORK_DEPENDENCY` | The accepted or linked work prevents this change; inspect the related document. |
+
 ## `report prior-balances`
 
 Account balances that changed after they were reviewed, as the anchor's Troubleshoot Prior Account Balances shows them. A finished reconciliation reviews its account's balance at its statement date, and the closing date reviews every account's balance at the closing date. For each review dated on or before as_of whose balance has since moved, one balance row gives the balance as of the review date as it stood when reviewed, as it is now, and the change; under it, one entry row per transaction responsible, with its share of the change -- a back-dated entry, or a void or correction of one already there. Balances are in each account's normal sign. Nothing is stored: the reviewed balance is the ledger's immutable lines dated on or before the review date and written before the review. Totals count the reviews, the moved balances and the entries; rows are paged.

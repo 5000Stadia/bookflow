@@ -121,6 +121,7 @@ ACCEPTED = {
     'pos-ticket-takeover-v1': (899, 'bdcea7f8d98d6854d5ecc001b00e4b59f81288ef06af360288f8a2ce28e17bf3'),
     'pos-receipt-v1': (900, '00cfad8461346685e3de9485e8c900e23808206a65626cb72960aec0444a5a06'),
     'pos-refund-v1': (904, '469328cc54c3746bbb7e25fae4c5773e0123f935f5eba136a7a5349491097184'),
+    'pos-day-v1': (908, '4dfeb905ccc2dcf9451f2c7021c9b042016f48382d40b394fa6e73dfa962729b'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -288,6 +289,7 @@ CHAIN_ADDITIONS = {
     'pos-ticket-takeover-v1': {'pos ticket take-over'},
     'pos-receipt-v1': {'pos receipt show'},
     'pos-refund-v1': {'pos refund', 'pos refund lines', 'pos refund show', 'pos refund receipt'},
+    'pos-day-v1': {'pos shift open', 'pos shift close', 'report pos-day', 'pos deposit prepare'},
 }
 
 _ANCESTOR_EDIT = """

@@ -768,6 +768,7 @@
       lookup();
       return line.quantity;
     },
+    register: () => register,
     state: () => JSON.parse(JSON.stringify(state)),
     server: () => server,
     layout: () => JSON.parse(JSON.stringify(data.layout)),

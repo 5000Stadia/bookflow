@@ -88,6 +88,49 @@
       if(bank.value && !bankSelect.value)bankSelect.append(new Option(bank.value,bank.value,true,true));
     }).catch(e=>{error.textContent=e.message;bank.type='text';bankSelect.hidden=true;});
     status.textContent=`${selected.size} receipt(s) selected. Find receipts to review or change this selection.`;
+    // A till hand-off is re-resolved at the command boundary, so already-deposited receipts are omitted.
+    const queryParams=new URLSearchParams(location.search);
+    if(queryParams.has('pos_register')) {
+      const submitButtons=[...form.querySelectorAll('.form-submit button')];
+      submitButtons.forEach(button=>button.disabled=true);
+      status.textContent='Preparing the day’s undeposited receipts…';
+      const input={pos_register:queryParams.get('pos_register')};
+      if(queryParams.get('pos_date'))input.date=queryParams.get('pos_date');
+      if(queryParams.get('pos_shift'))input.shift=queryParams.get('pos_shift');
+      if(queryParams.has('pos_method'))input.payment_methods=queryParams.getAll('pos_method');
+      command('pos deposit prepare',input).then(result=>{
+        const document=result.document;
+        for(const key of ['mode','deposit_to','date','memo'])if(document[key]!=null && field('f:document.'+key))field('f:document.'+key).value=document[key];
+        bankSelect.value=bank.value;
+        selected.clear();for(const source of document.sources)selected.set(source.source,source);sync();
+        const additional=form.querySelector('[data-collection-path="document.additional"]');
+        if(additional) {
+          const target=additional.querySelector(':scope > [data-collection-items]');target.replaceChildren();
+          const template=additional.querySelector(':scope > [data-collection-template]');
+          for(const [index,row] of (document.additional||[]).entries()) {
+            target.insertAdjacentHTML('beforeend',template.innerHTML.replaceAll(template.dataset.indexToken,String(index)));
+            const wrap=target.lastElementChild;
+            for(const [key,value] of Object.entries(row)) {
+              const element=wrap.querySelector('[name="c:document.additional:'+index+':'+key+'"]');
+              if(element && value!=null)element.value=typeof value==='object'?exact.stringify(value):String(value);
+            }
+            if(window.htmx)window.htmx.process(wrap);
+          }
+        }
+        if(document.cash_back)for(const [key,value] of Object.entries(document.cash_back)) {
+          const element=field('f:document.cash_back.'+key);if(element && value!=null)element.value=typeof value==='object'?exact.stringify(value):String(value);
+        }
+        if(document.additional?.length || document.cash_back)extras.open=true;
+        const notice=node('p',result.warning || 'Review the selected receipts and count adjustment before posting.');
+        if(result.excluded_sources?.length)notice.textContent+=` ${result.excluded_sources.length} already deposited or ineligible receipt(s) excluded.`;
+        marker.after(notice);
+        // Later preview swaps must preserve the reviewed form, rather than preparing it again.
+        for(const key of ['pos_register','pos_date','pos_shift','pos_method'])queryParams.delete(key);
+        history.replaceState(null,'',location.pathname+(queryParams.size?'?'+queryParams:''));
+        form.dispatchEvent(new Event('change',{bubbles:true}));
+      }).catch(e=>{error.textContent=e.message;}).finally(()=>submitButtons.forEach(button=>button.disabled=false));
+    }
+
   }
   document.addEventListener('DOMContentLoaded',initialize);document.addEventListener('htmx:afterSwap',initialize);initialize();
 })();

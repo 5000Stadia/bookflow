@@ -289,6 +289,8 @@ def plan_complete(s, ctx, inp) -> Plan:
         raise _invalid('lines', 'the cart is empty')
     from bookflow.company import pos_tickets
     reg = register(s, inp.pos_register)
+    from bookflow.company import pos_day
+    pos_day.active_shift(s, reg)
     pos_tickets.check_complete(s, inp.ticket, inp.ticket_version, reg['id'])
     chosen = customer(s, inp.customer)
     method = payment_method(s, reg, inp.tender.payment_method)
@@ -346,7 +348,9 @@ def apply_complete(plan: Plan, ctx, s) -> Applied:
     applied = sales.persist_prepared(fresh, ctx, s, command_name=COMMAND)
     header = fresh.data['header']
     facts, reg, chosen = plan.data['facts'], plan.data['register'], plan.data['customer']
-    row = dict(id=plan.preview.id, created_at=clock.now_iso(), created_by=s.actor.id, created_via=ctx.interface.value,
+    from bookflow.company import pos_day
+    shift = pos_day.active_shift(s, reg)
+    row = dict(shift_id=shift['id'] if shift else None, id=plan.preview.id, created_at=clock.now_iso(), created_by=s.actor.id, created_via=ctx.interface.value,
                ticket=plan.preview.ticket, input_sha256=inp_sha, register_id=reg['id'], document_type='sales_receipt',
                document_id=header['id'], customer_named=chosen is not None, currency=facts['currency'],
                total_minor_units=facts['total'], tendered_minor_units=facts['tendered'],
