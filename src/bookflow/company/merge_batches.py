@@ -61,6 +61,12 @@ def existing(db, kind, merge_id):
                           (f'{kind}-merge', merge_id)).fetchone()
 
 
+def output_link(db, kind, merge):
+    found = existing(db, kind, merge['id']) if merge else None
+    batch_id = found[0] if found else None
+    return {'batch_id': batch_id, 'next': f'batch reverse {batch_id} --dry-run' if batch_id else None}
+
+
 def _check(s, effect):
     db = s.company
     saved = json.loads(effect['before'])
@@ -144,7 +150,7 @@ def _plan(s, ctx, batch, effects, done, probe, blockers):
                 blockers.append(dict(seq=effect['seq'], record_type=effect['record_type'], record_id=effect['record_id'],
                                      code=error.code, message=error.message, details=error.details))
         step = dict(seq=effect['seq'], record_type=effect['record_type'], record_id=effect['record_id'],
-                    label=f"{kind} merge {effect['record_id']}", operation=command, action='unmerge',
+                    label=f"{kind} merge {effect['record_id']}", operation=command, action='unmerge', version=1,
                     steps=[dict(command=command, payload=payload)], references=references,
                     alias=dict(merged_id=merge['merged_id'], survivor_id=merge['survivor_id'], remove=True))
         steps.append(step)

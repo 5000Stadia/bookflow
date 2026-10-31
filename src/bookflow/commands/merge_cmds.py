@@ -77,16 +77,14 @@ def _commands(kind: str):
     def plan_merge(inp: MergeInput, ctx, s) -> Plan:
         party_merges.require_person(s, kind, "merge")
         planned = party_merges.plan_merge(s.company, kind, inp.merged, inp.into)
-        return Plan(preview=MergeOutput(**party_merges.preview(s.company, planned)), data={"plan": planned})
+        return Plan(preview=MergeOutput(**party_merges.preview(s.company, planned),
+            **merge_batches.output_link(s.company, kind, planned.existing)), data={"plan": planned})
 
     @merge.applier
     def apply_merge(plan: Plan, ctx, s) -> Applied:
         planned = plan.data["plan"]
         if not planned.changed:
-            found = merge_batches.existing(s.company, kind, planned.existing["id"])
-            batch_id = found[0] if found else None
-            return Applied(plan.preview.model_copy(update={"batch_id": batch_id,
-                "next": f"batch reverse {batch_id} --dry-run" if batch_id else None}), [], "already merged")
+            return Applied(plan.preview, [], "already merged")
         merge_id, touched = party_merges.apply_merge(s, ctx, planned, f"{kind} merge")
         batch_id = merge_batches.record(s, ctx, kind, merge_id, planned)
         out = plan.preview.model_copy(update={"merge_id": merge_id, "batch_id": batch_id,
@@ -195,16 +193,14 @@ def _list_commands(kind: str):
     def plan_merge(inp: MergeInput, ctx, s) -> Plan:
         party_merges.require_person(s, kind, "merge")
         planned = list_merges.plan_merge(s.company, kind, inp.merged, inp.into)
-        return Plan(preview=ListMergeOutput(**list_merges.preview(s.company, planned)), data={"plan": planned})
+        return Plan(preview=ListMergeOutput(**list_merges.preview(s.company, planned),
+            **merge_batches.output_link(s.company, kind, planned.existing)), data={"plan": planned})
 
     @merge.applier
     def apply_merge(plan: Plan, ctx, s) -> Applied:
         planned = plan.data["plan"]
         if not planned.changed:
-            found = merge_batches.existing(s.company, kind, planned.existing["id"])
-            batch_id = found[0] if found else None
-            return Applied(plan.preview.model_copy(update={"batch_id": batch_id,
-                "next": f"batch reverse {batch_id} --dry-run" if batch_id else None}), [], "already merged")
+            return Applied(plan.preview, [], "already merged")
         merge_id, touched = list_merges.apply_merge(s, ctx, planned, f"{kind} merge")
         batch_id = merge_batches.record(s, ctx, kind, merge_id, planned)
         out = plan.preview.model_copy(update={"merge_id": merge_id, "batch_id": batch_id,
