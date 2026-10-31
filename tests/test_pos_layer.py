@@ -173,10 +173,11 @@ def test_the_clerk_preset_holds_company_item_and_pos_sell_and_lands_on_the_pos(h
     assert clerk["denies"] == CLERK_DENIES
     assert pos_presets.preset("pos-clerk-returns")["grants"] == ["pos.sell", "pos.void", "pos.refund",
                                                                  "preset.pos-clerk-returns"]
-    assert runtime.current_catalog().CATALOG.version == "pos-receipt-v1"  # on pos-layout-v1
+    assert runtime.current_catalog().CATALOG.version == "pos-refund-v1"  # on pos-layout-v1
     assert sorted(_admitted_commands(clerk)) == CLERK_COMMANDS
     assert "pos sale void" not in _admitted_commands(clerk)
-    assert _admitted_commands(pos_presets.preset("pos-clerk-returns")) == set(CLERK_COMMANDS) | {"pos sale void"}
+    assert _admitted_commands(pos_presets.preset("pos-clerk-returns")) == set(CLERK_COMMANDS) | {
+        "pos sale void", "pos refund", "pos refund lines", "pos refund show", "pos refund receipt"}
     assert not any(name.startswith("bank-feed") for name in _admitted_commands(clerk))
 
     user = hosted.ok("user.add", {"username": "till", "password": _password("till"), "company": cid,
@@ -343,6 +344,8 @@ def test_every_pos_command_names_its_pos_capability():
     expected.update({f'pos ticket {verb}': ('pos.sell', 'member') for verb in ('hold', 'list', 'resume', 'take-over', 'discard')})
     expected['pos sale void'] = ('pos.void', 'member')
     expected['pos receipt show'] = ('pos.sell', 'member')
+    expected.update({name: ('pos.refund', 'member') for name in (
+        'pos refund', 'pos refund lines', 'pos refund show', 'pos refund receipt')})
     assert named == expected
     # The POS layer is decided by capability, not noun: the gate and the switch find each command by its capability.
     from bookflow.adapters.workbench import home as Home

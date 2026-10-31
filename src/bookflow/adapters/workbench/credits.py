@@ -134,14 +134,15 @@ def detail_context(noun, record, company_id, *, preview=False):
                 template=TEMPLATES[noun])
     if noun == 'credit-memo':
         source = record.get('source_current') or {}
-        # Every returned line of one credit memo comes from the same invoice, so the document
-        # says which invoice once rather than repeating an id down the grid.
-        returned_from = next((line['source_transaction_id'] for line in revision['lines']
-                              if line.get('source_transaction_id')), None)
+        # Every returned line comes from one sale; say which document once above the grid.
+        source_line = next((line for line in revision['lines'] if line.get('source_transaction_id')), None)
+        returned_from = source_line['source_transaction_id'] if source_line else None
+        source_noun = ('sales-receipt' if source_line and source_line.get('source_document_type') == 'sales_receipt'
+                       else 'invoice')
         # A preview has no saved document behind it, so it carries no link into one.
         saved = None if preview else record['id']
-        view.update(source=source,
-                    returned_from=_url(company_id, 'invoice', returned_from) if returned_from else None,
+        view.update(source=source, source_label='sales receipt' if source_noun == 'sales-receipt' else 'invoice',
+                    returned_from=_url(company_id, source_noun, returned_from) if returned_from else None,
                     customer_url=_url(company_id, 'customer', record['customer_id']),
                     apply_url=_url(company_id, 'credit-memo', saved, 'apply') if saved else None,
                     refund_url=(_url(company_id, 'customer-refund', 'post', credit_memo=saved)

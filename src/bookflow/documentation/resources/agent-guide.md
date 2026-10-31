@@ -1676,7 +1676,19 @@ receipt number, which the POS selector still accepts after a renumber. This does
 `pos sale void` needs `pos.void`, a required reason, and the receipt's `expected_version` (1 on a new sale).
 Its selector accepts a POS sale ID, ticket key, receipt ID or receipt number; ordinary typed receipts are refused.
 It runs the receipt reversal core and preserves history. A banked sale names its blocking deposit; a reconciled
-sale is refused. The plain POS clerk cannot void; Clerk with returns can.
+sale is refused. A sale with a refund cannot be voided; the refusal names the refund. The plain POS clerk
+cannot void or refund; Clerk with returns can.
+
+`pos refund lines` finds a completed POS sale by its receipt number, barcode value or sale identity and returns
+its remaining returnable quantities. `pos refund` needs `pos.refund` for receipt and no-receipt returns alike.
+Receipt returns preserve the sold price, tax and stock cost and cannot exceed the quantity still returnable.
+No-receipt returns name items at the current or entered price. Use a dry run to confirm the exact total before
+posting, and retain the same operation key and inputs until the host confirms; retries return the saved refund.
+The command posts a credit memo and its cash or original-method payout together, using the register's refund
+bank account, date and stock site. Store credit leaves the credit memo open on a named customer; the walk-in
+customer cannot retain store credit because the balance would be shared by unrelated shoppers. A voided sale
+cannot be refunded. `pos refund show` reads the saved result; `pos refund receipt` supplies the printable REFUND
+receipt through the receipt route, with a content-sized PDF.
 
 `pos-box list` reads the company's tap boxes and layout `version` with `pos.sell`. Every layout write needs
 `pos.layout` and that revision as `expected_version`: `create`, `update`, `move`, `remove`, `view`, `seed`, and

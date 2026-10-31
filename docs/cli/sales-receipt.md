@@ -1028,6 +1028,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.return_cost_minor_units` | integer \| null | no | yes | null | Explicit total value of an unlinked stocked credit memo return. |
 | `revision.lines[].item_snapshot.price_basis_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.standard_price_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.cost_fraction` | integer \| null | no | yes | null | — |
@@ -2524,6 +2525,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.return_cost_minor_units` | integer \| null | no | yes | null | Explicit total value of an unlinked stocked credit memo return. |
 | `revision.lines[].item_snapshot.price_basis_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.standard_price_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.cost_fraction` | integer \| null | no | yes | null | — |
@@ -3436,6 +3438,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.return_cost_minor_units` | integer \| null | no | yes | null | Explicit total value of an unlinked stocked credit memo return. |
 | `revision.lines[].item_snapshot.price_basis_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.standard_price_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.cost_fraction` | integer \| null | no | yes | null | — |
@@ -4762,6 +4765,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.pricing_rule.summary` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.standard_price_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.return_cost_minor_units` | integer \| null | no | yes | null | Explicit total value of an unlinked stocked credit memo return. |
 | `revision.lines[].item_snapshot.price_basis_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.standard_price_fraction` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.cost_fraction` | integer \| null | no | yes | null | — |
