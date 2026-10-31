@@ -375,7 +375,7 @@ Example JSON output:
 
 ## `memorized enter`
 
-Enter one memorized transaction now, as an extra entry outside its schedule. `date` is the accounting date and defaults to today in the company's timezone. This is a new entry with its own identity every time it is run, which is what makes it useful for a one-off; use `memorized process` for the scheduled ones, which are entered once per slot however often it runs. A failure is recorded as a blocked occurrence rather than raised, so the reason is visible on the template afterwards.
+Enter one memorized transaction now, as an extra entry outside its schedule. `date` is the accounting date and defaults to today in the company's timezone. This is a new entry with its own identity every time it is run, which is what makes it useful for a one-off; use `memorized process` for the scheduled ones, which are entered once per slot however often it runs. A failure is recorded as a blocked occurrence rather than raised, so the reason is visible on the template afterwards. The returned batch_id identifies this call’s documents and scheduling changes. Preview `batch reverse <batch_id> --dry-run`, then reverse the whole run: child documents are deleted or voided and prior occurrences, holds and next dates restored. Later runs of the same schedule, payments, deposits, reconciliations and sent messages block reversal with their identities. Every child inverse and schedule restoration requires the reverser’s own grants.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -448,6 +448,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 |---|---|---|---|---|---|
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
+| `batch_id` | string \| null | no | yes | null | Shared reversible run batch. |
+| `next` | string \| null | no | yes | null | Preview the complete run reversal. |
 | `as_of` | string | yes | no | — | — |
 | `entered` | array[object] | no | no | [] | — |
 | `entered[].id` | string | yes | no | — | — |
@@ -526,6 +528,7 @@ Example JSON output:
 ```json
 {
   "as_of": "value",
+  "batch_id": null,
   "blocked": [],
   "blocked_count": 0,
   "dry_run": false,
@@ -533,6 +536,7 @@ Example JSON output:
   "entered_count": 0,
   "facts_fingerprint": null,
   "idempotent_replay": false,
+  "next": null,
   "pending": [],
   "pending_count": 0,
   "warnings": []
@@ -698,7 +702,7 @@ Example JSON output:
 
 ## `memorized process`
 
-Enter every memorized transaction that is due, oldest slot first. A slot is due when its date, less the template's days in advance, has arrived in the company's own timezone -- so a host in one zone never enters a company's transaction a day early. A backlog is entered as a backlog: each missed slot is entered at its own accounting date, not collapsed onto today. Only templates whose mode is `enter_automatically` are entered; one whose mode is `remind` gets a pending occurrence you can see and enter yourself. Running this twice, or on a host that restarted twice in the same day, cannot enter the same slot twice: an occurrence is identified by its template and its nominal slot, and its entry carries a retry key that the command it replays already honours. An entry that fails becomes a blocked occurrence carrying its reason, at its own date, which `memorized retry` runs again and `memorized skip` sets aside; one failure never stops the template or any other template. Document numbers are allocated only by an entry that succeeds. A slot that has not posted enters the template as it is now; the preview (dry run) names, for each entry, the revision that will post and who saved it, and its facts_fingerprint sent back as expected_facts_fingerprint refuses the run as a stale preview if a template changed in between.
+Enter every memorized transaction that is due, oldest slot first. A slot is due when its date, less the template's days in advance, has arrived in the company's own timezone -- so a host in one zone never enters a company's transaction a day early. A backlog is entered as a backlog: each missed slot is entered at its own accounting date, not collapsed onto today. Only templates whose mode is `enter_automatically` are entered; one whose mode is `remind` gets a pending occurrence you can see and enter yourself. Running this twice, or on a host that restarted twice in the same day, cannot enter the same slot twice: an occurrence is identified by its template and its nominal slot, and its entry carries a retry key that the command it replays already honours. An entry that fails becomes a blocked occurrence carrying its reason, at its own date, which `memorized retry` runs again and `memorized skip` sets aside; one failure never stops the template or any other template. Document numbers are allocated only by an entry that succeeds. A slot that has not posted enters the template as it is now; the preview (dry run) names, for each entry, the revision that will post and who saved it, and its facts_fingerprint sent back as expected_facts_fingerprint refuses the run as a stale preview if a template changed in between. The returned batch_id identifies this call’s documents and scheduling changes. Preview `batch reverse <batch_id> --dry-run`, then reverse the whole run: child documents are deleted or voided and prior occurrences, holds and next dates restored. Later runs of the same schedule, payments, deposits, reconciliations and sent messages block reversal with their identities. Every child inverse and schedule restoration requires the reverser’s own grants.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -771,6 +775,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 |---|---|---|---|---|---|
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
+| `batch_id` | string \| null | no | yes | null | Shared reversible run batch. |
+| `next` | string \| null | no | yes | null | Preview the complete run reversal. |
 | `as_of` | string | yes | no | — | — |
 | `entered` | array[object] | no | no | [] | — |
 | `entered[].id` | string | yes | no | — | — |
@@ -849,6 +855,7 @@ Example JSON output:
 ```json
 {
   "as_of": "value",
+  "batch_id": null,
   "blocked": [],
   "blocked_count": 0,
   "dry_run": false,
@@ -856,6 +863,7 @@ Example JSON output:
   "entered_count": 0,
   "facts_fingerprint": null,
   "idempotent_replay": false,
+  "next": null,
   "pending": [],
   "pending_count": 0,
   "warnings": []
@@ -897,7 +905,7 @@ Example JSON output:
 
 ## `memorized retry`
 
-Try a blocked memorized entry again, at the date it was always for. The retry reuses the occurrence's own retry key and the exact template revision it captured, so it can neither post a second document nor quietly enter a newer version of the template than the one that was due. A retry that fails again updates the reason and stays blocked.
+Try a blocked memorized entry again, at the date it was always for. An entry that already committed is recovered without posting twice. An unposted slot uses the current saved template revision; if it changed, preview first and provide expected_facts_fingerprint. A retry that fails again updates the reason and stays blocked. Reversing a retry restores the prior occurrence, and a later corrected retry has a fresh run identity. The returned batch_id identifies this call’s documents and scheduling changes. Preview `batch reverse <batch_id> --dry-run`, then reverse the whole run: child documents are deleted or voided and prior occurrences, holds and next dates restored. Later runs of the same schedule, payments, deposits, reconciliations and sent messages block reversal with their identities. Every child inverse and schedule restoration requires the reverser’s own grants.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -969,6 +977,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 |---|---|---|---|---|---|
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
+| `batch_id` | string \| null | no | yes | null | Shared reversible run batch. |
+| `next` | string \| null | no | yes | null | Preview the complete run reversal. |
 | `occurrence` | object | yes | no | — | — |
 | `occurrence.id` | string | yes | no | — | — |
 | `occurrence.version` | integer | yes | no | — | — |
@@ -998,9 +1008,11 @@ Example JSON output:
 
 ```json
 {
+  "batch_id": null,
   "dry_run": false,
   "facts_fingerprint": null,
   "idempotent_replay": false,
+  "next": null,
   "occurrence": {
     "attempt_count": 1,
     "command": "value",
@@ -1326,6 +1338,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 |---|---|---|---|---|---|
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
+| `batch_id` | string \| null | no | yes | null | Shared reversible run batch. |
+| `next` | string \| null | no | yes | null | Preview the complete run reversal. |
 | `occurrence` | object | yes | no | — | — |
 | `occurrence.id` | string | yes | no | — | — |
 | `occurrence.version` | integer | yes | no | — | — |
@@ -1355,9 +1369,11 @@ Example JSON output:
 
 ```json
 {
+  "batch_id": null,
   "dry_run": false,
   "facts_fingerprint": null,
   "idempotent_replay": false,
+  "next": null,
   "occurrence": {
     "attempt_count": 1,
     "command": "value",

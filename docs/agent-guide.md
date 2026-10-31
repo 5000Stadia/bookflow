@@ -1685,6 +1685,10 @@ check that list once with your principal unless they plainly named the reversal.
 command needs the same `import` read capability as batch show; every inverse also needs
 your own grant. A fingerprint never supplies authority.
 
+Memorized entry and scheduler runs return `batch_id`: their reversal removes or voids the child documents
+and restores occurrences, holds and next dates together. A later run of the same schedule must reverse
+first. Sent messages, deposits and finished reconciliations block the whole run, naming the dependency.
+
 Run `batch reverse <batch>` with a reason, following `next` until reversed. An interrupted
 reversal resumes without repeating completed steps. A blocker names the dependent record,
 later batch, closed period or missing grant and leaves the attempted slice unchanged.

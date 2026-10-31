@@ -154,6 +154,10 @@ def _write_one(s, ctx, snapshot, customer, position, *, command_name, reversal_b
         batches.record_effect(s, reversal_batch_id, record_type='invoice', record_id=applied.output.id,
                               action='created', version_after=applied.output.version,
                               event_id=plan.data['event'])
+        recorder = getattr(s, 'batch_recorder', None)
+        if recorder is not None:
+            from bookflow.core import registry
+            recorder(s, registry.get(command_name), applied, applied.output.model_dump(mode='json'))
     except BookflowError as exc:
         s.company.raw.execute(f'ROLLBACK TO {SAVEPOINT}')
         s.company.raw.execute(f'RELEASE {SAVEPOINT}')

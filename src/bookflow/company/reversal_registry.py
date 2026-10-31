@@ -78,6 +78,65 @@ register('payment', 'payment', 'payment', 'payment delete', table='transactions'
 register('bill_payment', 'bill payment', 'payment', 'bill payment void', table='transactions', type_column='type')
 register('inventory_adjustment', 'inventory', 'adjustment', 'inventory void', table='transactions', type_column='type')
 register('statement_charge', 'statement-charge', 'statement_charge', 'statement-charge void')
+register('card_credit', 'card-credit', 'card_credit', 'card-credit void')
+register('transfer', 'transfer', 'transfer', 'transfer void')
+register('customer_refund', 'customer-refund', 'refund', 'customer-refund void')
+register('item_receipt', 'item-receipt', 'receipt', 'item-receipt void',
+         table='item_receipts', type_column=None)
+register('shipment', 'shipment', 'shipment', 'shipment void', table='shipments', type_column=None)
+
+# Owning aggregate revisions, rather than the revisions of their accounting journals.
+REVISION_TABLES = {
+    'item_receipts': ('item_receipt_revisions', 'receipt_id'),
+    'shipments': ('shipment_revisions', 'shipment_id'),
+}
+
+
+def transaction_record(s, transaction_id: str) -> tuple[str, str] | None:
+    """Resolve the document that owns an accounting transaction, once, for batch recording.
+
+    Money-out documents and stock aggregates post as journal entries. Their own
+    inverse must run: deleting their underlying journal would bypass their state.
+    Derived stock journals belong to the inverse that recalculates stock, and are
+    not independent user-created effects.
+    """
+    for family, table in (('item_receipt', c.item_receipts), ('shipment', c.shipments)):
+        owner = s.company.conn.execute(sa.select(table.c.id).where(
+            table.c.transaction_id == transaction_id)).scalar()
+        if owner is not None:
+            return family, owner
+    kind = s.company.conn.execute(sa.select(c.money_out_documents.c.kind).where(
+        c.money_out_documents.c.transaction_id == transaction_id)).scalar()
+    if kind is not None:
+        return kind, transaction_id
+    inventory_kind = s.company.conn.execute(sa.select(c.inventory_documents.c.kind).where(
+        c.inventory_documents.c.transaction_id == transaction_id)).scalar()
+    if inventory_kind is not None:
+        return ('inventory_adjustment', transaction_id) if inventory_kind == 'adjustment' else None
+    family = s.company.conn.execute(sa.select(c.transactions.c.type).where(
+        c.transactions.c.id == transaction_id)).scalar()
+    return (family, transaction_id) if family is not None else None
+
+
+def record_current(s, rec: DocumentRecord, ids: list[str]) -> dict[str, dict] | None:
+    """Project revision-owned shipment state into the common inverse planner shape.
+
+    None means the ordinary versioned-header reader applies. The shipment header
+    is immutable; its newest revision supplies both version and current state.
+    """
+    if rec.table.name != 'shipments':
+        return None
+    header, revision = c.shipments, c.shipment_revisions
+    newest = sa.select(revision.c.shipment_id, sa.func.max(revision.c.revision_number).label('version')) \
+        .where(revision.c.shipment_id.in_(ids)).group_by(revision.c.shipment_id).subquery()
+    rows = s.company.conn.execute(sa.select(
+        header.c.id, header.c.number, revision.c.revision_number.label('version'), revision.c.status,
+        revision.c.created_by.label('updated_by'), revision.c.created_at.label('updated_at'),
+        sa.literal(True).label('active'))
+        .select_from(header.join(newest, newest.c.shipment_id == header.c.id).join(
+            revision, sa.and_(revision.c.shipment_id == header.c.id,
+                             revision.c.revision_number == newest.c.version)))).mappings()
+    return {row['id']: dict(row) for row in rows}
 
 
 def steps_for(group: dict, rec: ListRecord, version: int, s=None) -> list[tuple[str, dict]]:

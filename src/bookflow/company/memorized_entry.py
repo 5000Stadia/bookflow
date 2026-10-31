@@ -34,6 +34,7 @@ import sqlalchemy as sa
 
 from bookflow.company import (memorized as service, memorized_references as edges,
                               memorized_schedule as schedule, schema as c)
+from bookflow.company import memorized_reversal as reversal
 from bookflow.core import clock
 from bookflow.core.audit import write_event_to
 from bookflow.core.errors import BookflowError
@@ -410,8 +411,13 @@ def apply_entry(plan, ctx, s):
                                finalized=True, audited=True)
             _still_current(s, data.get('revisions'))
             _slot_unchanged(s, data)
+            reversal.start(s, ctx, data, [data['occurrence']['template_id']] if verb == 'retry'
+                           else [item['template']['id'] for item in data['work']])
             claimed = _claim(s, ctx, data, name)
+            for occurrence in claimed:
+                occurrence['_batch_id'] = data.get('batch_id')
             rebase(s, ctx, claimed, name)
+            reversal.record(s, data)
             s.commits.commit(s.company, 'memorized.enter')
         except BaseException:
             if s.company.write_transaction:
@@ -423,7 +429,10 @@ def apply_entry(plan, ctx, s):
         s.company.raw.execute('BEGIN IMMEDIATE')
         try:
             rows, acted = _record(s, ctx, name, claimed, results)
+            reversal.record(s, data)
             out = _entry_output(s, verb, as_of, rows, acted, data)
+            out.batch_id = data.get('batch_id')
+            out.next = f"batch reverse {out.batch_id} --dry-run" if out.batch_id else None
             _store_key(s, ctx, name, data, out)
             s.commits.commit(s.company, 'memorized.enter')
         except BaseException:
@@ -622,24 +631,49 @@ def _group_run(s, ctx, group, slot, at, event, runs, touched):
 def _recover(s, occurrence):
     """Durable evidence that this occurrence already entered, found without an actor filter."""
     receipt = s.company.conn.execute(
-        sa.select(c.idempotency_keys).where(c.idempotency_keys.c.key == occurrence['entry_key'],
+        sa.select(c.idempotency_keys).where(sa.or_(c.idempotency_keys.c.key == occurrence['entry_key'],
+                                            c.idempotency_keys.c.key.startswith(occurrence['entry_key'] + '-')),
                                             c.idempotency_keys.c.command == occurrence['command'],
-                                            c.idempotency_keys.c.state == 'done')).mappings().first()
-    if receipt is not None and receipt['output']:
+                                            c.idempotency_keys.c.state == 'done').order_by(c.idempotency_keys.c.created_at.desc(),
+                                            c.idempotency_keys.c.key.desc())).mappings().first()
+    if receipt is not None and receipt['output'] and not reversal.reversed_attempt(s, receipt['key']):
         try:
-            return {'output': json.loads(receipt['output']), 'source': 'idempotency receipt'}
+            output = json.loads(receipt['output'])
+            if not reversal.retired(s, _identifier(output)):
+                return {'output': output, 'source': 'idempotency receipt'}
         except ValueError:
             pass
     event = s.company.conn.execute(
         sa.select(c.audit_events.c.id).where(c.audit_events.c.source_ref == SOURCE_MARK + occurrence['id'],
                                              c.audit_events.c.command == occurrence['command'])
-        .order_by(c.audit_events.c.seq).limit(1)).scalar_one_or_none()
+        .order_by(c.audit_events.c.seq.desc()).limit(1)).scalar_one_or_none()
     if event is None:
+        return None
+    # Aggregate summaries have their own audit event. Resolve the newest child write
+    # by occurrence provenance rather than requiring the selected summary to be an effect.
+    latest_run_state = s.company.conn.execute(sa.select(c.batches.c.state).select_from(c.batch_effects)
+        .join(c.batches, c.batches.c.id == c.batch_effects.c.batch_id)
+        .join(c.audit_events, c.audit_events.c.id == c.batch_effects.c.event_id).where(
+            c.audit_events.c.source_ref == SOURCE_MARK + occurrence['id'],
+            c.batches.c.kind == reversal.KIND, c.batch_effects.c.record_type != reversal.STATE)
+        .order_by(c.audit_events.c.seq.desc()).limit(1)).scalar()
+    if latest_run_state == 'reversed':
         return None
     entry = s.company.conn.execute(
         sa.select(c.audit_entries.c.record_id).where(c.audit_entries.c.event_id == event,
                                                      c.audit_entries.c.record_type == 'transaction')
         .limit(1)).scalar_one_or_none()
+    if entry is None:
+        entry = s.company.conn.execute(sa.select(c.audit_entries.c.record_id).where(
+            c.audit_entries.c.event_id == event, c.audit_entries.c.record_type.in_(
+                ('invoice_batch', 'item_receipt', 'shipment', 'payment_selection'))).limit(1)).scalar()
+    elif entry is not None:
+        from bookflow.company.reversal_registry import transaction_record
+        owner = transaction_record(s, entry)
+        if owner:
+            entry = owner[1]
+    if entry is None or reversal.retired(s, entry):
+        return None
     return {'output': {'id': entry, 'recovered_from': 'audit'}, 'source': 'company audit trail'}
 
 
@@ -662,11 +696,13 @@ def _enter_one(s, ctx, occurrence, reason=None):
     payload = dict(json.loads(revision['payload']), date=occurrence['slot_date'])
     reason = reason or ctx.reason or f"Memorized entry for {occurrence['slot_date']}"
     entry_ctx = ctx.model_copy(update={
-        'idempotency_key': occurrence['entry_key'],
+        'idempotency_key': occurrence['entry_key'] + ('-' + occurrence['_batch_id'] if occurrence.get('_batch_id') else ''),
         'source_ref': (SOURCE_MARK + occurrence['id'])[:512],
         'reason': reason[:140],
     })
-    saved = (s.company_touched, s.hub_touched, list(s.warnings), s.dry_run)
+    saved = (s.company_touched, s.hub_touched, list(s.warnings), s.dry_run, getattr(s, 'batch_recorder', None))
+    if occurrence.get('_batch_id'):
+        s.batch_recorder = reversal.child_recorder(occurrence['_batch_id'])
     try:
         inp = command.input_model.model_validate(payload)
         output = run_in_session(command, inp, entry_ctx, s)
@@ -677,7 +713,7 @@ def _enter_one(s, ctx, occurrence, reason=None):
         return {'occurrence': occurrence,
                 'error': BookflowError('E_INTERNAL', message=str(error)[:500] or type(error).__name__)}
     finally:
-        s.company_touched, s.hub_touched, s.warnings, s.dry_run = saved[0], saved[1], saved[2], saved[3]
+        s.company_touched, s.hub_touched, s.warnings, s.dry_run, s.batch_recorder = saved
         if s.company is not None and s.company.write_transaction:
             s.company.raw.rollback()
 

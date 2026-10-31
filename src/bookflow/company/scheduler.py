@@ -450,7 +450,9 @@ def enter_due(s, system_id: str, as_of: str) -> dict[str, Any]:
     _act_as(s, system_id)
     ctx = context().model_copy(update={'actor_id': system_id, 'actor_kind': ActorKind.system,
                                        'reason': f'On schedule: memorized transactions due by {as_of}'})
-    released, kept = _reconsider_window_holds(s, ctx, cutoff, as_of, history, agent_note)
+    from bookflow.company import memorized_reversal as reversal
+    data = {'verb': 'process', 'as_of': as_of, 'warnings': []}
+    released, kept = _reconsider_window_holds(s, ctx, cutoff, as_of, history, agent_note, run_data=data)
     if kept:
         summary['held'] = kept
 
@@ -474,19 +476,24 @@ def enter_due(s, system_id: str, as_of: str) -> dict[str, Any]:
     summary['left_for_a_person'] = sum(1 for item in work if not item['enter'] and item.get('occurrence') is None
                                        and _mode(s, item) == 'enter_automatically')
     if not work:
+        if data.get('batch_id'):
+            summary.update(batch_id=data['batch_id'], next=f"batch reverse {data['batch_id']} --dry-run")
         return summary
-    data = {'verb': 'process', 'as_of': as_of, 'warnings': [], 'work': work}
+    data['work'] = work
     with s.commits.operation('memorized.enter', s.hub, s.company):
         s.company.raw.execute('BEGIN IMMEDIATE')
         try:
             _upsert_principals(s, ctx)
+            reversal.start(s, ctx, data, [item['template']['id'] for item in work])
             claimed = memorized_entry._claim(s, ctx, data, PROCESS)
             for occurrence in claimed:
+                occurrence['_batch_id'] = data.get('batch_id')
                 # A blocked slot waits for a person (`memorized retry`); the scheduler never tries it again,
                 # even when the same slot comes round in a group run.
                 if occurrence['status'] == 'blocked' or occurrence['id'] in held:
                     occurrence['_enter'] = False
             memorized_entry.rebase(s, ctx, claimed, PROCESS)
+            reversal.record(s, data)
             s.commits.commit(s.company, 'memorized.enter')
         except BaseException:
             if s.company.write_transaction:
@@ -509,6 +516,7 @@ def enter_due(s, system_id: str, as_of: str) -> dict[str, Any]:
             rows, _ = memorized_entry._record(s, ctx, PROCESS, claimed, results)
             if holds or window:
                 _write_holds(s, ctx, holds + window)
+            reversal.record(s, data)
             if holds:
                 summary['held'] = summary.get('held', 0) + len(holds)
             s.commits.commit(s.company, 'memorized.enter')
@@ -516,6 +524,7 @@ def enter_due(s, system_id: str, as_of: str) -> dict[str, Any]:
             if s.company.write_transaction:
                 s.company.raw.rollback()
             raise
+    summary.update(batch_id=data.get('batch_id'), next=f"batch reverse {data['batch_id']} --dry-run")
     acted = {result['occurrence']['id'] for result in results}
     for row in rows:
         if row['id'] in acted:
@@ -549,7 +558,7 @@ def _write_holds(s, ctx, holds):
                    actor_id=s.actor.id, actor_kind=s.actor.kind, event_id=new_id())
 
 
-def _reconsider_window_holds(s, ctx, cutoff, as_of, history, agent_note=''):
+def _reconsider_window_holds(s, ctx, cutoff, as_of, history, agent_note='', run_data=None):
     """Slots left for a person under a narrower catch-up window that the current window now reaches.
 
     One enters unattended only if every widening since the window it was left under was its
@@ -604,6 +613,11 @@ def _reconsider_window_holds(s, ctx, cutoff, as_of, history, agent_note=''):
     if deletes or changes_touched:
         s.company.raw.execute('BEGIN IMMEDIATE')
         try:
+            from bookflow.company import memorized_reversal as reversal
+            if run_data is not None:
+                occurrence_ids = [r['occurrence_id'] for r in deletes] + [r['occurrence_id'] for r, _ in changes_touched]
+                template_ids = s.company.conn.execute(sa.select(o.c.template_id).where(o.c.id.in_(occurrence_ids))).scalars().all()
+                reversal.start(s, ctx, run_data, template_ids)
             touched = [Touched('scheduled_hold', r['occurrence_id'], 'delete', 1, None, None, dict(r), db='company')
                        for r in deletes]
             touched += [Touched('scheduled_hold', r['occurrence_id'], 'update', 1, 1, dict(r, reason=reason), dict(r),
@@ -617,6 +631,8 @@ def _reconsider_window_holds(s, ctx, cutoff, as_of, history, agent_note=''):
                 s.company.conn.execute(h.delete().where(h.c.occurrence_id.in_([r['occurrence_id'] for r in deletes])))
             for r, reason in changes_touched:
                 s.company.conn.execute(h.update().where(h.c.occurrence_id == r['occurrence_id']).values(reason=reason))
+            if run_data is not None:
+                reversal.record(s, run_data)
             s.commits.commit(s.company, 'scheduler.write')
         except BaseException:
             if s.company.write_transaction:
