@@ -2119,6 +2119,34 @@ EXAMPLES.update({
     'pos customer add': Example('bookflow pos customer add --name "Casey Counter" --phone 555-0142 '
                                 '--company "Demo Plumbing Co" --json', {'name': 'Casey Counter', 'phone': '555-0142'}),
 })
+# R114 increment 6: use the box IDs and current layout revision returned by pos-box list.
+_POS_BOX = '01JPOSBOXEXAMPLE00000000001'
+EXAMPLES.update({
+    'pos-box list': Example('bookflow pos-box list --company "Demo Plumbing Co" --json', {}),
+    'pos-box seed': Example('bookflow pos-box seed --mode categories --expected-version 0 '
+                            '--company "Demo Plumbing Co" --json', {'mode': 'categories', 'expected_version': 0}),
+    'pos-box create': Example('bookflow pos-box create --kind group --label Drinks --expected-version 1 '
+                              '--company "Demo Plumbing Co" --json',
+                              {'kind': 'group', 'label': 'Drinks', 'expected_version': 1}),
+    'pos-box update': Example(f'bookflow pos-box update {_POS_BOX} --label Supplies --expected-version 2 '
+                              '--company "Demo Plumbing Co" --json',
+                              {'pos_box': _POS_BOX, 'label': 'Supplies', 'expected_version': 2}),
+    'pos-box move': Example(f'bookflow pos-box move {_POS_BOX} --position 0 --expected-version 3 '
+                            '--company "Demo Plumbing Co" --json',
+                            {'pos_box': _POS_BOX, 'position': 0, 'expected_version': 3}),
+    'pos-box remove': Example(f'bookflow pos-box remove {_POS_BOX} --expected-version 4 '
+                              '--company "Demo Plumbing Co" --json',
+                              {'pos_box': _POS_BOX, 'expected_version': 4}),
+    'pos-box view': Example('bookflow pos-box view --style list --expected-version 5 '
+                            '--company "Demo Plumbing Co" --json', {'style': 'list', 'expected_version': 5}),
+    'pos-box picture set': Example(f'bookflow pos-box picture set {_POS_BOX} drinks.png --expected-version 6 '
+                                   '--company "Demo Plumbing Co" --json',
+                                   {'pos_box': _POS_BOX, 'original_filename': 'drinks.png', 'expected_version': 6}),
+    'pos-box picture get': Example('bookflow pos-box picture get 01J00000000000000000000001 --out drinks.png '
+                                   '--company "Demo Plumbing Co" --json',
+                                   {'attachment': '01J00000000000000000000001'}),
+})
+
 
 # R108 increment 8: empty provider registry, person-authorized host work.
 EXAMPLES['bank-feed-connection add'] = Example(

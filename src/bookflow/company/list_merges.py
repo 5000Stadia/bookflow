@@ -206,6 +206,9 @@ def _account_references(db, merged: str, survivor: str) -> list[Reference]:
 
 def _item_references(db, merged: str, survivor: str) -> list[Reference]:
     refs: list[Reference] = []
+    for (box_id,) in db.raw.execute("SELECT id FROM pos_boxes WHERE item_id=? ORDER BY id", (merged,)):
+        refs.append(Reference("pos_boxes", box_id, "item_id", "repoint", "pos_box", box_id,
+                              f"POS box {box_id}: item"))
     # Group and assembly members naming M.
     from bookflow.company.items import _graph_reaches
     from bookflow.core.exact import format_quantity_micro_units as qty_text
@@ -498,7 +501,7 @@ def preview(db, plan: MergePlan) -> dict[str, Any]:
 # --- writing ----------------------------------------------------------------------------
 
 _OWNER_TABLES = {"account": schema.accounts, "item": schema.items, "vendor": schema.vendors,
-                 "price_level": schema.price_levels, "company_info": schema.company_info}
+                 "price_level": schema.price_levels, "company_info": schema.company_info, "pos_box": schema.pos_boxes}
 
 
 def _snapshot(db, owner_kind: str, owner_id: str) -> dict[str, Any]:
@@ -536,6 +539,15 @@ def _write(s, ctx, *, kind: str, entry_id: str, entry_active: bool, steps: list[
     for o in order:
         snap, version = before[o]
         touched.append(Touched(o[0], o[1], action, version, version + 1, _snapshot(db, *o), snap, db="company"))
+    if any(owner_kind == "pos_box" for owner_kind, _ in order):
+        t = schema.company_info
+        info = dict(db.conn.execute(sa.select(t.c.id, t.c.pos_layout_version,
+                                             t.c.pos_home_view_style)).mappings().one())
+        after = dict(info, pos_layout_version=info['pos_layout_version'] + 1)
+        db.conn.execute(t.update().where(t.c.id == info['id']).values(
+            pos_layout_version=after['pos_layout_version']))
+        touched.append(Touched('pos_layout', info['id'], action, info['pos_layout_version'],
+                               after['pos_layout_version'], after, info, db='company'))
     return touched
 
 
@@ -607,7 +619,7 @@ def plan_unmerge(db, kind: str, merged_selector: str) -> UnmergePlan:
             schema.list_merge_references.c.position.desc())).mappings():
         ref = dict(ref)
         current = db.raw.execute(f"SELECT {ref['column_name']}, active FROM {ref['table_name']} WHERE id=?",
-                                 (ref["record_id"],)).fetchone() if ref["table_name"] not in ("items", "accounts", "company_info") \
+                                 (ref["record_id"],)).fetchone() if ref["table_name"] not in ("items", "accounts", "company_info", "pos_boxes") \
             else (db.raw.execute(f"SELECT {ref['column_name']}, 1 FROM {ref['table_name']} WHERE id=?",
                                  (ref["record_id"],)).fetchone())
         child = ref["table_name"] not in ("items", "accounts", "company_info")

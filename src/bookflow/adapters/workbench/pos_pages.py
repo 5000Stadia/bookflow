@@ -1,23 +1,16 @@
-"""The POS screen (R114 increment 5, design/point-of-sale.md §3, §11, §12): ``/c/<company>/pos``.
+"""The POS till and shared company layout, edited through the pos-box command boundary.
 
-The menu entry *Point of sale* under Customers, its Overview tile and a POS clerk's Home land here, and only while the
-company has POS on (with it off the page answers the switch's own message, as `pos-register list` does).
-
-The page carries what ringing up needs, read once (`pos-register list`, `item list`): the registers and their payment
-methods, and every active sales item with its name, price, barcode, SKU, description, stock on hand and picture, so a
-tap or a scan adds its line at once, with no host. Everything that decides money goes to the host through the
-command API: `pos sale preview` for the exact total after each change, `pos customer search` and `add` for the
-customer chip, `pos sale complete` to post. ``static/pos.js`` keeps the cart and mirrors it to ``localStorage``.
-
-**The starting layout (§3).** The tap boxes come from the item categories, as *Start from item categories* would make
-them: one group per top-level category, holding its sales items and its subcategories, then the items with no
-category. Editing the layout (`pos-box`, Start empty) arrives with increment 6; until then this is the layout.
+GET reads the stored layout (or its deterministic category seed preview) once alongside the active sales items.
+Taps and lookup remain local. Layout writes use a versioned htmx form, and group pictures use binary transfers.
 """
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi import Request
+from fastapi.responses import JSONResponse, Response
+from starlette.concurrency import run_in_threadpool
 
 from bookflow.core.errors import BookflowError
 
@@ -50,36 +43,7 @@ def _items(listed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
-def starting_layout(items: list[dict[str, Any]]) -> dict[str, Any]:
-    """The home and its groups from the item categories: {'home': [...], 'groups': {path: {name, boxes}}}.
-
-    A box is ``{'kind': 'group', 'path': 'Drinks:Coffee', 'name': 'Coffee'}`` or ``{'kind': 'item', 'id': ...}``.
-    """
-    groups: dict[str, dict[str, Any]] = {}
-
-    def group(path: str) -> dict[str, Any]:
-        if path not in groups:
-            groups[path] = {'name': path.split(':')[-1], 'boxes': []}
-            parent = path.rsplit(':', 1)[0] if ':' in path else None
-            (group(parent)['boxes'] if parent else home_groups).append(
-                {'kind': 'group', 'path': path, 'name': groups[path]['name']})
-        return groups[path]
-
-    home_groups: list[dict[str, Any]] = []
-    home_items: list[dict[str, Any]] = []
-    for item in sorted((i for i in items if i['box']), key=lambda i: i['name'].casefold()):
-        box = {'kind': 'item', 'id': item['id']}
-        if item.get('category'):
-            group(item['category'])['boxes'].append(box)
-        else:
-            home_items.append(box)
-    for found in groups.values():
-        found['boxes'].sort(key=lambda b: (b['kind'] != 'group', b.get('name', '').casefold()))
-    home_groups.sort(key=lambda b: b['name'].casefold())
-    return {'home': home_groups + home_items, 'groups': groups}
-
-
-def mount(app, *, render, run, credential, page_error, role_allows, holds=None):
+def mount(app, *, render, run, credential, page_error, role_allows, holds=None, host=None, make_context=None):
     @app.get('/c/{company_id}/pos')
     def pos_page(request: Request, company_id: str):
         try:
@@ -92,7 +56,112 @@ def mount(app, *, render, run, credential, page_error, role_allows, holds=None):
             data = dict(company=cid, currency=company.get('home_currency') or 'USD',
                         registers=[dict(id=r['id'], name=r['name'], methods=r['payment_methods'])
                                    for r in registers],
-                        items=items, layout=starting_layout(items), can_override=can_override)
+                        items=items, layout=run(request, 'pos-box list', {}, cid), can_override=can_override,
+                        can_layout=role_allows('pos-box create', company, credential(request)))
             return render('pos.html', request, company=company, company_id=cid, registers=registers, pos_data=data)
         except BookflowError as e:
             return page_error(request, e)
+
+    @app.post('/c/{company_id}/pos/layout')
+    async def pos_layout(request: Request, company_id: str):
+        if int(request.headers.get('content-length', '0')) > 65536:
+            return Response(status_code=413)
+        form = await request.form(max_files=0, max_fields=2, max_part_size=65536)
+        name = str(form.get('command', ''))
+        if name not in ('create', 'update', 'move', 'remove', 'view', 'seed'):
+            return JSONResponse({'message': 'Unknown layout change.'}, status_code=400)
+        try:
+            raw = json.loads(str(form.get('body', '{}')))
+        except (ValueError, TypeError):
+            return JSONResponse({'message': 'Invalid layout change.'}, status_code=400)
+
+        def change():
+            try:
+                return JSONResponse(run(request, 'pos-box ' + name, raw, company_id,
+                                        {'X-Bookflow-Reason': 'POS layout'}))
+            except BookflowError as err:
+                return JSONResponse(err.to_dict(), status_code=400)
+        return await run_in_threadpool(change)
+
+    def opened(request, company_id, name, raw):
+        from bookflow.adapters.http.published_transfer import PublishedTransfer
+        from bookflow.core import registry
+        from bookflow.core.dispatch import guard
+        cred = credential(request)
+        ctx = make_context(request, cred).model_copy(update={
+            'client_name': 'bookflow-workbench', 'idempotency_key': None, 'reason': 'POS group picture'})
+        return guard(lambda: PublishedTransfer(host, registry.get(name), raw, ctx, cred.user_id, cred.login,
+                                               company_id, 'option', False, credential=cred), cred.hub_admin), cred
+
+    @app.get('/c/{company_id}/pos/picture/{attachment_id}/{sha256}')
+    async def pos_picture(request: Request, company_id: str, attachment_id: str, sha256: str):
+        from bookflow.adapters.http.transfers import _TransferOwner
+        from bookflow.adapters.workbench.item_picture_pages import _PictureDownload, _ID, _SHA
+        from bookflow.company.item_pictures import sniff
+        from bookflow.core.transfers import CHUNK_BYTES
+        if not _ID.match(attachment_id) or not _SHA.match(sha256):
+            return Response(status_code=404)
+        owner = _TransferOwner()
+        def begin():
+            moved, _ = opened(request, company_id, 'pos-box picture get', {'attachment': attachment_id})
+            owner.adopt(moved)
+            if moved.resource.info.sha256 != sha256:
+                return None
+            moved.check_output()
+            return moved, moved.reader.read(CHUNK_BYTES)
+        keep = False
+        try:
+            try:
+                got = await run_in_threadpool(owner.run, begin)
+            except BookflowError as err:
+                return Response(status_code=404 if err.code in ('E_RECORD_NOT_FOUND', 'E_IO') else 403)
+            kind = got and sniff(got[1][:64])
+            if kind is None:
+                return Response(status_code=404)
+            response = _PictureDownload(got[0], owner, got[1], kind)
+            keep = True
+            return response
+        finally:
+            if not keep:
+                owner.close()
+
+    @app.post('/c/{company_id}/pos/picture')
+    async def pos_picture_upload(request: Request, company_id: str):
+        from bookflow.company.item_pictures import PICTURE_MAX_BYTES
+        from bookflow.core.dispatch import guard
+        from bookflow.core.transfers import CHUNK_BYTES
+        limit = PICTURE_MAX_BYTES + 65536
+        if int(request.headers.get('content-length', '0')) > limit:
+            return JSONResponse({'message': 'The picture is too large.'}, status_code=413)
+        parts, size = [], 0
+        async for part in request.stream():
+            size += len(part)
+            if size > limit:
+                return JSONResponse({'message': 'The picture is too large.'}, status_code=413)
+            parts.append(part)
+        request._body = b''.join(parts)
+        form = await request.form(max_files=1, max_fields=2, max_part_size=limit)
+        picture = form.get('picture')
+        if not hasattr(picture, 'read'):
+            return JSONResponse({'message': 'Choose a picture first.'}, status_code=400)
+        body = await picture.read()
+        try:
+            version = int(str(form.get('expected_version', '')))
+        except ValueError:
+            return JSONResponse({'message': 'Reload the layout before changing its picture.'}, status_code=400)
+        raw = {'pos_box': form.get('pos_box'), 'expected_version': version,
+               'original_filename': picture.filename or 'picture.jpg',
+               'media_type': picture.content_type or 'application/octet-stream'}
+        def upload():
+            try:
+                moved, cred = opened(request, company_id, 'pos-box picture set', raw)
+                try:
+                    for start in range(0, len(body), CHUNK_BYTES):
+                        moved.body.write(body[start:start + CHUNK_BYTES])
+                    result = guard(moved.finish_input, cred.hub_admin)
+                finally:
+                    moved.close()
+                return JSONResponse(result)
+            except BookflowError as err:
+                return JSONResponse(err.to_dict(), status_code=400)
+        return await run_in_threadpool(upload)

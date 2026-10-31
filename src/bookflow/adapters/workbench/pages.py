@@ -966,6 +966,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     # R114 increment 4: the POS page, shown only while the company has POS on.
     from bookflow.adapters.workbench import pos_pages as PosPages
     PosPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                   host=host, make_context=make_context,
                    role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin),
                    holds=lambda request, cid, capability: effective_capabilities(request, cid).holds(capability))
     # R181 increment 3: pick lists and the pick screen, shown only while the company has picking on.

@@ -36,7 +36,7 @@ CLERK_COMMANDS = ['barcode lookup', 'bin list', 'bin show', 'company show',
                   'inventory-site list', 'inventory-site show', 'inventory-transfer history', 'inventory-transfer query',
                   'inventory-transfer show', 'item list', 'item picture get', 'item query', 'item query children',
                   'item query options', 'item show', 'lot list', 'lot show', 'pos customer add', 'pos customer search',
-                  'pos sale complete', 'pos sale preview', 'pos-register list', 'pos-register show',
+                  'pos sale complete', 'pos sale preview', 'pos-box list', 'pos-box picture get', 'pos-register list', 'pos-register show',
                   'serial-number list', 'serial-number show']
 
 
@@ -172,7 +172,9 @@ def test_the_clerk_preset_holds_company_item_and_pos_sell_and_lands_on_the_pos(h
     assert clerk["denies"] == CLERK_DENIES
     assert pos_presets.preset("pos-clerk-returns")["grants"] == ["pos.sell", "pos.void", "pos.refund",
                                                                  "preset.pos-clerk-returns"]
+    assert runtime.current_catalog().CATALOG.version == "pos-layout-v1"  # on bank-source-v1
     assert sorted(_admitted_commands(clerk)) == CLERK_COMMANDS
+    assert not any(name.startswith("bank-feed") for name in _admitted_commands(clerk))
 
     user = hosted.ok("user.add", {"username": "till", "password": _password("till"), "company": cid,
                                   "role": "readonly"}, headers=REASON)["user_id"]
@@ -205,6 +207,7 @@ def test_the_clerk_preset_holds_company_item_and_pos_sell_and_lands_on_the_pos(h
     assert landed.status_code == 303 and landed.headers["location"] == f"/c/{cid}/pos"
     page = fresh.get(f"/c/{cid}/pos")
     assert page.status_code == 200 and "app-header-minimal" in page.text
+    assert all(marker not in page.text for marker in ("data-pos-edit", "data-pos-style", "data-pos-layout-form"))
     assert re.findall(r'data-header-link>([^<]+)<', page.text) == ["Point of sale", "Items"]
     assert "data-section=" not in page.text and "data-finder-open" not in page.text and "Switch company" not in page.text
     assert "data-home-button" in page.text
@@ -243,6 +246,32 @@ def test_the_clerk_preset_holds_company_item_and_pos_sell_and_lands_on_the_pos(h
         refused = fresh.post(f"/companies/{cid}/commands/{name}", headers=H, json=body)
         assert refused.status_code == 403 and refused.json()["code"] == "E_PERMISSION", (name, refused.text)
     assert fresh.post(f"/companies/{cid}/commands/pos-register.list", headers=H, json={}).status_code == 200
+    layout = fresh.post(f"/companies/{cid}/commands/pos-box.list", headers=H, json={})
+    assert layout.status_code == 200, layout.text
+    layout = layout.json()
+    box = next(b['id'] for b in layout['items'] if b['kind'] == 'group')
+    layout_writes = {
+        'create': {'kind': 'group', 'label': 'Not allowed'},
+        'update': {'pos_box': box, 'label': 'Not allowed'},
+        'move': {'pos_box': box, 'position': 0},
+        'remove': {'pos_box': box},
+        'seed': {'mode': 'empty'},
+        'view': {'style': 'list'},
+    }
+    for verb, body in layout_writes.items():
+        refused = fresh.post(f"/companies/{cid}/commands/pos-box.{verb}", headers={**H, **REASON},
+                             json={**body, 'expected_version': layout['version']})
+        assert refused.status_code == 403 and refused.json()['code'] == 'E_PERMISSION', (verb, refused.text)
+    from bookflow.core.transfer_protocol import encode_input
+    from tests.test_item_pictures import png
+    refused = fresh.post(f"/companies/{cid}/transfers/pos-box.picture.set", headers={**H, **REASON, 'Content-Type': 'application/octet-stream',
+        'X-Bookflow-Input': encode_input({'pos_box': box, 'expected_version': layout['version'],
+                                        'original_filename': 'forbidden.png'})}, content=png())
+    assert refused.status_code == 403 and refused.json()['code'] == 'E_PERMISSION', refused.text
+    # The bespoke editor route has the same command-boundary refusal if typed directly.
+    refused = fresh.post(f"/c/{cid}/pos/layout", headers=H,
+                         data={'command': 'view', 'body': json.dumps({'style': 'list', 'expected_version': layout['version']})})
+    assert refused.status_code == 400 and refused.json()['code'] == 'E_PERMISSION', refused.text
     # POS off: the seller keeps the minimal header, now with Items alone.
     _pos(hosted, False)
     off = fresh.get(f"/c/{cid}/_group/items")
@@ -258,6 +287,11 @@ def test_the_clerk_preset_holds_company_item_and_pos_sell_and_lands_on_the_pos(h
             assert not ok and "E_PERMISSION" in json.dumps(reply), reply
             ok, reply = await call("pos-register list", {})
             assert ok and reply["items"][0]["name"] == "Main", reply
+            ok, reply = await call("pos-box list", {})
+            assert ok and reply['version'] == layout['version'], reply
+            for verb, body in layout_writes.items():
+                ok, reply = await call('pos-box ' + verb, {**body, 'expected_version': layout['version']})
+                assert not ok and 'E_PERMISSION' in json.dumps(reply), (verb, reply)
     anyio.run(over_mcp)
 
     # A readonly member with no grant holds no POS capability: no entry, and the command refuses.
@@ -301,6 +335,8 @@ def test_every_pos_command_names_its_pos_capability():
     from bookflow.hub import permission_pos_sale_catalog as sale_layer
     expected = {name: (cap, threshold) for name, cap, threshold, _ in layer._ADDED}
     expected.update({name: ('pos.sell', 'member') for name, _, _ in sale_layer._ADDED})   # increment 5
+    from bookflow.hub import permission_pos_layout_catalog as layout_layer
+    expected.update({name: (cap, threshold) for name, _, cap, threshold, _ in layout_layer._ADDED})
     assert named == expected
     # The POS layer is decided by capability, not noun: the gate and the switch find each command by its capability.
     from bookflow.adapters.workbench import home as Home

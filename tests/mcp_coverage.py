@@ -344,6 +344,9 @@ BIN_COMMANDS = frozenset(('bin activate', 'bin create', 'bin deactivate', 'bin l
 
 # R114 increment 4: the POS layer's registers.
 # R114 increment 5: ringing up at the POS.
+POS_LAYOUT_COMMANDS = frozenset(f'pos-box {verb}' for verb in
+    ('list', 'seed', 'create', 'update', 'move', 'remove', 'view', 'picture set', 'picture get'))
+
 POS_SALE_COMMANDS = frozenset(('pos sale preview', 'pos sale complete', 'pos customer search', 'pos customer add'))
 
 POS_REGISTER_COMMANDS = frozenset(('pos-register create', 'pos-register update', 'pos-register show',
@@ -370,7 +373,7 @@ OPENING_DRAFT_COMMANDS = frozenset(('opening-draft create', 'opening-draft updat
 BANK_SOURCE_COMMANDS = frozenset(('bank-feed-connection add', 'bank-feed-connection enable',
     'bank-feed-connection disable', 'bank-feed-connection check', 'bank-feed-connection query', 'bank-feed fetch'))
 
-FROZEN_COMMANDS = BANK_SOURCE_COMMANDS | POS_SALE_COMMANDS | BANK_RULE_COMMANDS | POS_REGISTER_COMMANDS | OPENING_DRAFT_COMMANDS | AUTOMATION_COMMANDS | USER_HOME_COMMANDS | BULK_EDIT_COMMANDS | ITEM_PICTURE_COMMANDS | BANK_FEED_COMMANDS | IMPORT_COMMANDS | DELIVERY_COMMANDS | SETUP_TRIAL_COMMANDS | SHIPMENT_COMMANDS | AGENT_SETUP_COMMANDS | VERIFY_COMMANDS | FIFO_COMMANDS | LANDED_COST_COMMANDS | BIN_COMMANDS | SERIAL_LOT_COMMANDS | PERF_COMMANDS | SCHEDULING_COMMANDS | INVENTORY_COUNT_COMMANDS | BARCODE_COMMANDS | CHECK_PRINTING_COMMANDS | ACCOUNTANT_REVIEW_COMMANDS | TIMEKEEPING_COMMANDS | INVENTORY_SITE_COMMANDS | PARTIAL_PO_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
+FROZEN_COMMANDS = POS_LAYOUT_COMMANDS | BANK_SOURCE_COMMANDS | POS_SALE_COMMANDS | BANK_RULE_COMMANDS | POS_REGISTER_COMMANDS | OPENING_DRAFT_COMMANDS | AUTOMATION_COMMANDS | USER_HOME_COMMANDS | BULK_EDIT_COMMANDS | ITEM_PICTURE_COMMANDS | BANK_FEED_COMMANDS | IMPORT_COMMANDS | DELIVERY_COMMANDS | SETUP_TRIAL_COMMANDS | SHIPMENT_COMMANDS | AGENT_SETUP_COMMANDS | VERIFY_COMMANDS | FIFO_COMMANDS | LANDED_COST_COMMANDS | BIN_COMMANDS | SERIAL_LOT_COMMANDS | PERF_COMMANDS | SCHEDULING_COMMANDS | INVENTORY_COUNT_COMMANDS | BARCODE_COMMANDS | CHECK_PRINTING_COMMANDS | ACCOUNTANT_REVIEW_COMMANDS | TIMEKEEPING_COMMANDS | INVENTORY_SITE_COMMANDS | PARTIAL_PO_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
 account create
 account deactivate
 account list
@@ -936,6 +939,7 @@ def execution_map():
     from tests.test_pos_layer_surfaces import COMMANDS as POS_LAYER_SURFACE_COMMANDS
     from tests.test_bank_rule_surfaces import COMMANDS as BANK_RULE_SURFACE_COMMANDS
     from tests.test_pos_sale_surfaces import COMMANDS as POS_SALE_SURFACE_COMMANDS
+    from tests.test_pos_layout_surfaces import COMMANDS as POS_LAYOUT_SURFACE_COMMANDS, PICTURE_COMMANDS as POS_LAYOUT_PICTURE_COMMANDS
     from tests.test_inventory_count_surfaces import COMMANDS as INVENTORY_COUNT_SURFACE_COMMANDS
     from tests.test_scheduling_surfaces import COMMANDS as SCHEDULING_SURFACE_COMMANDS
     from tests.test_perf_surfaces import COMMANDS as PERF_SURFACE_COMMANDS
@@ -1049,6 +1053,8 @@ def execution_map():
                    'tests/test_opening_balances_surfaces.py::test_the_same_opening_through_python_cli_http_and_mcp' if cmd.name in OPENING_DRAFT_SURFACE_COMMANDS else  # all four
                    'tests/test_pos_layer_surfaces.py::test_the_same_registers_through_python_cli_http_and_mcp' if cmd.name in POS_LAYER_SURFACE_COMMANDS else  # all four
                    'tests/test_bank_rule_surfaces.py::test_the_same_bank_rules_through_python_cli_http_and_mcp' if cmd.name in BANK_RULE_SURFACE_COMMANDS else  # all four
+                   'tests/test_pos_layout_surfaces.py::test_the_same_layout_through_python_cli_http_and_mcp' if cmd.name in POS_LAYOUT_SURFACE_COMMANDS else
+                   'tests/test_pos_layout_surfaces.py::test_the_same_group_picture_through_python_cli_http_and_mcp' if cmd.name in POS_LAYOUT_PICTURE_COMMANDS else
                    'tests/test_pos_sale_surfaces.py::test_the_same_sale_through_python_cli_http_and_mcp' if cmd.name in POS_SALE_SURFACE_COMMANDS else  # all four
                    'tests/test_inventory_count_surfaces.py::test_the_same_count_through_python_cli_http_and_mcp' if cmd.name in INVENTORY_COUNT_SURFACE_COMMANDS else  # all four
                    'tests/test_scheduling_surfaces.py::test_the_same_to_dos_notices_and_reminders_through_python_cli_http_and_mcp' if cmd.name in SCHEDULING_SURFACE_COMMANDS else  # all four

@@ -2953,6 +2953,26 @@ MATRIX['pos customer add'] = {'E_VALIDATION': 'an empty name', 'E_NAME_TAKEN': '
                               'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
                               'E_DIRECTIVE_INACTIVE': 'deactivated --directive'}
 
+# R114 increment 6: layout writes all compare the shared revision, including style and picture changes.
+_POS_LAYOUT = {
+    'E_VALIDATION': 'invalid group, item, position, colour or image; cyclic move; seed already saved',
+    'E_RECORD_NOT_FOUND': 'unknown box, parent group, sales item or attachment',
+    'E_VERSION_CONFLICT': 'layout changed since pos-box list',
+    'E_FEATURE_DISABLED': 'POS is off for the company',
+    'E_INACTIVE_REFERENCE': 'the selected sales item is inactive',
+    'E_IO': 'picture bytes are unavailable or unreadable',
+    'E_VALUE_RANGE': 'image or attachment size exceeds its limit',
+    'E_DB_BUSY': 'attachment collection is pending',
+    'E_IDEMPOTENCY_MISMATCH': 'operation key was used with other input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+for _verb in ('create', 'update', 'move', 'remove', 'seed', 'view', 'picture set'):
+    MATRIX['pos-box ' + _verb] = dict(_POS_LAYOUT)
+MATRIX['pos-box list'] = {'E_FEATURE_DISABLED': 'POS is off for the company'}
+MATRIX['pos-box picture get'] = {key: _POS_LAYOUT[key] for key in (
+    'E_RECORD_NOT_FOUND', 'E_FEATURE_DISABLED', 'E_IO', 'E_DB_BUSY', 'E_VALUE_RANGE')}
+
 # R108 increment 8: connection writes only authorize bounded host work.
 for _name in ('bank-feed-connection add', 'bank-feed-connection enable', 'bank-feed-connection disable',
               'bank-feed-connection check', 'bank-feed fetch'):

@@ -5287,6 +5287,17 @@ stands, which is what a discount does everywhere here and in the anchor: the who
 included, goes to the expense account. An agent's write-off is the `write_off` flag of
 `entry_review`, and warns the agent at write time.
 
+
+## POS layout and view styles (R114 increment 6)
+
+`company/pos_layout.py` owns the company-wide box tree and deterministic unsaved category seed.
+`pos_layout_models.py` defines its typed command contract, and `pos_layout_schema.py` defines storage added by
+co0123. `pos-box` commands run through `pos-layout-v1`, chained on `bank-source-v1`. Reads use `pos.sell`;
+all layout writes use `pos.layout` and the layout's revision, independent of company settings and per-box revisions.
+The workbench reads the tree once and renders it from local item data; htmx forms apply edits and shared styles.
+The full behavior, permission decision, screenshot location and verification limits are in
+[Point of sale, as built increment 6](point-of-sale.md#as-built-increment-6-layout-and-view-styles).
+
 ### Live bank feed seam (R108 increment 8)
 
 `company/bank_sources.py` defines the provider contract, exact posted-line page validation and an empty
