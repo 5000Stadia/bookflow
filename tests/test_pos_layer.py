@@ -36,9 +36,9 @@ CLERK_COMMANDS = ['barcode lookup', 'bin list', 'bin show', 'company show',
                   'inventory-site list', 'inventory-site show', 'inventory-transfer history', 'inventory-transfer query',
                   'inventory-transfer show', 'item list', 'item picture get', 'item query', 'item query children',
                   'item query options', 'item show', 'lot list', 'lot show', 'pos customer add', 'pos customer search',
-                  'pos receipt show', 'pos sale complete', 'pos sale preview',
+                  'pos receipt show', 'pos sale complete', 'pos sale preview', 'pos shift close', 'pos shift open',
                   'pos ticket discard', 'pos ticket hold', 'pos ticket list', 'pos ticket resume', 'pos ticket take-over', 'pos-box list', 'pos-box picture get', 'pos-register list', 'pos-register show',
-                  'serial-number list', 'serial-number show']
+                  'report pos-day', 'serial-number list', 'serial-number show']
 
 
 def _admitted_commands(preset):
@@ -173,7 +173,7 @@ def test_the_clerk_preset_holds_company_item_and_pos_sell_and_lands_on_the_pos(h
     assert clerk["denies"] == CLERK_DENIES
     assert pos_presets.preset("pos-clerk-returns")["grants"] == ["pos.sell", "pos.void", "pos.refund",
                                                                  "preset.pos-clerk-returns"]
-    assert runtime.current_catalog().CATALOG.version == "pos-refund-v1"  # on pos-layout-v1
+    assert runtime.current_catalog().CATALOG.version == "pos-day-v1"  # on pos-layout-v1
     assert sorted(_admitted_commands(clerk)) == CLERK_COMMANDS
     assert "pos sale void" not in _admitted_commands(clerk)
     assert _admitted_commands(pos_presets.preset("pos-clerk-returns")) == set(CLERK_COMMANDS) | {
@@ -346,12 +346,14 @@ def test_every_pos_command_names_its_pos_capability():
     expected['pos receipt show'] = ('pos.sell', 'member')
     expected.update({name: ('pos.refund', 'member') for name in (
         'pos refund', 'pos refund lines', 'pos refund show', 'pos refund receipt')})
+    expected.update({'pos shift open': ('pos.sell', 'member'), 'pos shift close': ('pos.sell', 'member'),
+                     'pos deposit prepare': ('ledger.post', 'standard')})
     assert named == expected
     # The POS layer is decided by capability, not noun: the gate and the switch find each command by its capability.
     from bookflow.adapters.workbench import home as Home
     from bookflow.hub import capabilities
     assert all(capabilities.capability_for(name) == cap for name, (cap, _) in named.items())
-    assert all(Home.is_pos(registry.get(name)) for name in named) and not Home.is_pos(registry.get("item show"))
+    assert all(Home.is_pos(registry.get(name)) for name in named if name != 'pos deposit prepare') and not Home.is_pos(registry.get("item show"))
     # The shipment, return and pick-list reads need `customer` too.
     for name, needed in layer.EXTRA_READS.items():
         assert (needed.capability, needed.threshold) in registry.get(name).resource_requirements, name

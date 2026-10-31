@@ -3062,3 +3062,19 @@ MATRIX['pos refund receipt'].pop('E_WORK_DEPENDENCY')
 
 MATRIX['pos refund']['E_RETURN_EXHAUSTED'] = 'the selected quantity exceeds the source line remainder'
 MATRIX['pos refund']['E_SOURCE_CORRECTION_CONFLICT'] = 'a correction changed the source return facts'
+
+
+# R114 increment 10: nonposting drawer count and ordinary deposit hand-off.
+for _command in ('report pos-day', 'pos shift open', 'pos shift close', 'pos deposit prepare'):
+    MATRIX[_command] = {
+        'E_FEATURE_DISABLED': 'POS is off for the company',
+        'E_VALIDATION': 'invalid register, amount, shift or selected payment methods',
+        'E_RECORD_NOT_FOUND': 'unknown register or shift',
+        'E_WORK_DEPENDENCY': 'the register already has an open shift, the shift is closed, or no eligible receipts remain',
+        'E_IDEMPOTENCY_MISMATCH': 'the permanent operation key was used for a different count or float',
+        'E_INACTIVE_REFERENCE': 'the deposit bank or cash variance account is inactive',
+        'E_AMOUNT_PRECISION': 'the count or float exceeds currency precision',
+        'E_VALUE_RANGE': 'the count or float is outside its valid range',
+        'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+        'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+    }

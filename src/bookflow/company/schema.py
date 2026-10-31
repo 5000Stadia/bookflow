@@ -1336,3 +1336,6 @@ globals().update(_pos_ticket_schema.define_tables(metadata, _column, _table, _co
 
 from bookflow.company import pos_refund_schema as _pos_refund_schema
 globals().update(_pos_refund_schema.define_tables(metadata, _column, _table))
+
+from bookflow.company import pos_day_schema as _pos_day_schema
+globals().update(_pos_day_schema.define_tables(metadata, _column, _table))

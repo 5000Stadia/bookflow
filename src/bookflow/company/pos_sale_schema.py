@@ -20,6 +20,7 @@ def define_tables(metadata, C, T):
           'key returns this sale and never posts a second.', nullable=False),
         C('input_sha256', sa.String(64), 'SHA-256 of the completed ticket as sent, so a retry that changed the ticket '
           'is refused rather than answered with a different sale.', nullable=False),
+        C('shift_id', sa.String(26), 'Counted shift owning this operation, if any.', sa.ForeignKey('pos_shifts.id')),
         C('register_id', sa.String(26), 'Register the sale was rung up on.', sa.ForeignKey('pos_registers.id'),
           nullable=False),
         C('document_type', sa.String(24), "Document the sale posted: 'sales_receipt' (one payment method); split "

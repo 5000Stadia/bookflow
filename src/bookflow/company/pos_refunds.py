@@ -139,6 +139,8 @@ def prepare(s, ctx, inp):
     if inp.settlement == 'store_credit' and (_walk_in(s, customer) or (sale and not sale['customer_named'])):
         raise _invalid('settlement', 'Store credit needs a named customer. The walk-in customer is shared by anonymous '
                        'sales, so credit left there cannot belong to this shopper. Choose cash or a named customer.')
+    from bookflow.company import pos_day
+    pos_day.active_shift(s, reg)
     date = pos_sales._today(s)
     currency = s.company.conn.execute(sa.select(c.company_info.c.home_currency)).scalar_one()
     entries, cost_items = [], {}
@@ -221,7 +223,9 @@ def apply(plan, ctx, s):
         paid = refunds.apply(refunds.prepare(s, ctx, refund_input, 'post',
             pos_credit=(credit.output.id, ctx.request_id)), ctx, s, command_name='pos refund')
         out.refund = Named(id=paid.output.id, name=paid.output.number)
-    row = dict(id=out.id, operation_key=out.operation_key, input_sha256=_hash(fresh.data['input']),
+    from bookflow.company import pos_day
+    shift = pos_day.active_shift(s, fresh.data['register'])
+    row = dict(shift_id=shift['id'] if shift else None, id=out.id, operation_key=out.operation_key, input_sha256=_hash(fresh.data['input']),
         register_id=out.pos_register.id, sale_id=out.sale_id, credit_memo_id=out.credit_memo.id,
         refund_id=out.refund.id if out.refund else None, customer_named=out.customer is not None,
         created_at=out.created_at, created_by=s.actor.id, created_via=ctx.interface.value,

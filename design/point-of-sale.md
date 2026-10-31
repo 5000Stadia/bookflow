@@ -1096,6 +1096,50 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   return needs the bookkeeper's inventory adjustment. Split-tender sales remain increment 11. Physical printers,
   real phone hardware and LAN timing targets have not been verified in this increment.
 
+### As built: increment 10 (day close)
+
+- **Commands and authority.** `report pos-day`, `pos shift open` and `pos shift close` use `pos.sell`;
+  a plain clerk can count the drawer. `pos deposit prepare` and the ordinary `deposit post` require
+  `ledger.post`. The new immutable `pos-day-v1` permission layer follows `pos-refund-v1`; existing
+  layers are unchanged. An agent needs an explicit `pos.sell` grant to answer drawer questions.
+- **Counts and recovery.** co0127 on co0126 adds `pos_shifts` and nullable `shift_id` on sales and
+  refunds. Both demo companies acquire empty shift state and keep POS off. A counted register must
+  have an open shift before a sale or return; a unique partial index permits only one. Opening float
+  and closing count have permanent operation keys. A retry returns the original shift, while changed
+  inputs refuse. Counting posts nothing. Expected cash is float plus cash tendered minus change and
+  cash refunds; counted minus expected is the over/short. There is no paid-out feature in this design.
+  A database guard permits one close and no deletion; the close captures an immutable Z-report.
+- **The report.** A register/day report shows gross sales, discounts, tax, sale and void counts,
+  net-of-change tender amounts, refunds by method, expected cash and held/open tickets, flagging
+  those older than seven days. An explicit shift includes its complete overnight activity. Day views
+  include shifts spanning the selected date. Voids remove the original receipt's contribution and
+  appear separately on its accounting date. Uncounted corrected documents use current accounting
+  facts; counted documents refuse corrections, and closed-shift documents refuse voids, through the
+  ordinary accounting commands too. Open-shift voided refund payouts no longer reduce drawer cash.
+- **Make Deposits.** `pos deposit prepare` returns an ordinary deposit document with selected methods'
+  undeposited receipts (cash by default), defaulting the bank to the register's refund account. An
+  overage becomes other money from **Cash Over and Short**, a shortage cash back to it. This named
+  expense account is created through the ordinary account core on first need. Opening float remains
+  in the till. Cash refunds already credit the bank: the deposit banks gross receipts plus/minus the
+  difference, and the deposit and refund entries together give net cash; subtracting the refund again
+  from the deposit would count it twice. An overnight shift's deposit date is no earlier than its
+  receipts or close. Already banked sources are excluded, and the ordinary deposit claim/version
+  checks prevent stale hand-offs from banking them twice.
+- **Bundle safeguards.** A nonzero difference requires the whole cash bundle: selecting only some cash
+  methods, a partly banked cash bundle, or a date slice of an overnight shift refuses with guidance.
+  Use the complete shift for overnight counts. A hand-off with no eligible receipts refuses; a
+  difference without any cash receipts needs a hand-entered deposit after review. Card-only deposits
+  leave the drawer difference for the cash bundle. The existing deposit form remains editable and its
+  ordinary preview/post validations apply.
+- **The screen.** The till has Open shift, Close shift and Day summary. Float/count entry uses money
+  fields; denomination entry is omitted. A lost answer preserves the exact operation and locks its
+  count until retried, including after reload. Day summary offers date selection, per-method totals,
+  shift counts, old tickets and a method selector for Make deposit. The hand-off preselects the existing
+  Make Deposits form's sources and over/short rows for review and ordinary posting.
+- **Limits.** Physical phone hardware, LAN timing targets, actual printers and bank reconciliation on
+  a live company remain unverified. Split tender is increment 11; its payment identities must remain
+  available to the deposit hand-off when the branches are integrated.
+
 ## 16. Open questions
 
 Each default stands if nobody decides. K1 and K2 are Kabe's.

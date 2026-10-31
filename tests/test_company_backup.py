@@ -211,6 +211,10 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0119 = importlib.import_module("bookflow.storage.company_migrations.versions.0119_bank_rules")
 
     def older(conn):
+        # co0127 shifts reference registers; remove sale/refund ownership before the shift table.
+        conn.execute("ALTER TABLE pos_sales DROP COLUMN shift_id")
+        conn.execute("ALTER TABLE pos_refunds DROP COLUMN shift_id")
+        conn.execute("DROP TABLE pos_shifts")
         # co0126 refunds reference sales, registers and accounting documents.
         conn.execute("DROP TABLE pos_refunds")
         conn.execute("DROP TRIGGER " + co0126.RETURN_GUARD_NAME)
@@ -529,7 +533,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))
     restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older",
                                               "organization": "Older Books Organization"})
-    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0126"
+    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0127"
     folder = _folder(client, restored["company_id"])
     # The migration took its verified backup of the restored database first, as every migration does.
     assert list((folder / "backups").glob("*-from-co0062.db"))

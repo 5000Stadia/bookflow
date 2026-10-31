@@ -189,6 +189,7 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.BANK_RULE_POLICY_VERSION: '12b5f914d21302af037c6cc0b1aeab0ef6912d764015332d7734c12338ad8127',
     c.POS_SALE_POLICY_VERSION: '1462bee09d7343f15fdc015fa86a114e30671e8d73fc2bab7f5e75444d0450cf',
     c.BANK_RECONCILE_POLICY_VERSION: '8673bd998c7e077061301d0bfaea5af7b33cbd3eb773f89dd0e6fdcdbf026e42',
+    c.POS_DAY_POLICY_VERSION: 'b1983466da4e8fc1e4bb26be9b0849cacfcc0ac101031848dcd466072fe104fb',
     c.POS_REFUND_POLICY_VERSION: '64d5f0eb604a90e20fa872971200cb19419f430531f790d605f4c4d1314e0dde',
     c.POS_RECEIPT_POLICY_VERSION: '00cfad8461346685e3de9485e8c900e23808206a65626cb72960aec0444a5a06',
     c.POS_TICKET_TAKEOVER_POLICY_VERSION: 'bdcea7f8d98d6854d5ecc001b00e4b59f81288ef06af360288f8a2ce28e17bf3',
@@ -359,6 +360,7 @@ def _full_known():
     from . import permission_bank_rule_catalog
     from . import permission_pos_sale_catalog
     from . import permission_bank_reconcile_catalog
+    from . import permission_pos_day_catalog
     from . import permission_pos_refund_catalog
     from . import permission_pos_ticket_catalog, permission_pos_ticket_takeover_catalog, permission_pos_receipt_catalog
     from . import permission_pos_layout_catalog
@@ -456,6 +458,7 @@ def _full_known():
         c.POS_TICKET_POLICY_VERSION: permission_pos_ticket_catalog,
         c.POS_TICKET_TAKEOVER_POLICY_VERSION: permission_pos_ticket_takeover_catalog,
         c.POS_RECEIPT_POLICY_VERSION: permission_pos_receipt_catalog,
+        c.POS_DAY_POLICY_VERSION: permission_pos_day_catalog,
         c.POS_REFUND_POLICY_VERSION: permission_pos_refund_catalog,
         c.POS_LAYOUT_POLICY_VERSION: permission_pos_layout_catalog,
         c.BANK_SOURCE_POLICY_VERSION: permission_bank_source_catalog,
@@ -619,7 +622,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.POS_REFUND_POLICY_VERSION)
+    return known_catalog(c.POS_DAY_POLICY_VERSION)
 
 
 def catalog_for_root(tx):

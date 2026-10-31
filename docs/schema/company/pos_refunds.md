@@ -11,6 +11,7 @@ Database: `company`.
 | `id` | VARCHAR(26) | no | — | primary key 1 | — | — | Stable POS refund identity. |
 | `operation_key` | VARCHAR(64) | no | — | unique | — | — | Permanent device operation key. |
 | `input_sha256` | VARCHAR(64) | no | — | — | — | — | Canonical request hash for safe retry. |
+| `shift_id` | VARCHAR(26) | yes | — | — | — | pos_shifts.id | Counted shift owning this operation, if any. |
 | `register_id` | VARCHAR(26) | no | — | — | — | pos_registers.id | Register fixing site and funding account. |
 | `sale_id` | VARCHAR(26) | yes | — | — | ix_pos_refunds_sale_id | pos_sales.id | Original POS sale; null for no receipt. |
 | `credit_memo_id` | VARCHAR(26) | no | — | — | — | transactions.id | Credit memo created atomically. |
