@@ -1048,6 +1048,54 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   1440 px. Generated documentation passes `bookflow docs generate --check`. Independent source review passed;
   the seven screenshots under `/tmp/m4-shots/pos8/` were inspected. Test hosts and browsers were closed.
 
+### As built: increment 9 (refunds)
+
+- **Commands and authority.** `pos refund` posts receipt-linked or no-receipt returns under `pos.refund`.
+  `pos refund lines` resolves the printed receipt number, POS sale ID or ticket key and returns line identities,
+  captured prices and remaining quantities; `pos refund show` reads a completed return; `pos refund receipt`
+  supplies its printable facts. New immutable layer `pos-refund-v1` follows `pos-receipt-v1`. Plain clerks cannot
+  refund; Clerk with returns can. No-receipt returns and their entered prices belong to the returns capability,
+  without a separate price-override grant. Agents need an explicit `pos.refund` grant.
+- **One accounting transaction.** The command calls the ordinary credit-memo and customer-refund cores, including
+  their independent posting validations, inside the command's writer transaction. The register fixes today's date,
+  inventory site and refund bank account. Cash chooses an active cash-kind method offered by the register; Original
+  uses the sale's captured method, even if it is no longer offered, but refuses an inactive method. Both leave the
+  register's refund account. Card references are recorded; no processor is contacted. Audit events for the memo,
+  stock, payout and POS return name `pos refund` and retain the acting clerk and interface.
+- **Partial returns.** The credit core's `source_invoice` selector now also accepts a sales receipt. Its existing
+  endpoint claims divide the captured net, sales tax and issued stock cost, including prior hand-entered credit
+  memos. A second partial return can claim only the remaining quantity. Discounts stay in their affected item nets;
+  subtotal and discount rows are not independently returned. Ordinary receipt corrections and voids refuse active
+  credit claims. The till refuses a corrected receipt and directs the bookkeeper to its corrected credit-memo path.
+  A POS sale with any recorded POS refund refuses void, naming that refund; a voided sale refuses returns.
+- **No receipt.** Returned individual items use current pricing or an entered price. For stocked items the POS
+  resolves the selling unit through the credit core, then values the returned base quantity at current company-wide
+  average cost. With no positive stock it uses the item's current purchase cost, or zero when absent. This is an
+  estimate for an unknown sale, distinct from a receipt return's captured issue cost. The ordinary credit-memo line
+  accepts explicit total `return_cost` and captures it for corrections, stock valuation and reversal. A price alone
+  still cannot value a standalone stocked credit. Groups are returned as their individual items.
+- **Store credit.** The memo stays open without a payout. It requires a named customer; the shared walk-in cannot
+  own a shopper's credit. The refusal explains this. This includes a regular customer configured as a register's
+  walk-in and an anonymous original sale whose register's walk-in was later changed. Anonymous names are omitted
+  from the till result and printed refund.
+- **Storage and recovery.** co0126 on co0125 adds insert-only `pos_refunds`, linking register, optional original sale,
+  credit memo, optional payout and captured till result. Its unique permanent operation key and request hash prevent
+  duplicate posting across retries, clerks and devices; a changed request under that key is refused. `expected_total`
+  guards a reviewed total but is excluded from retry identity. The migration also widens the existing credit-claim
+  source-type guard to receipts, retaining its other ownership and release guards. Both demo companies acquire the
+  empty table and keep POS off.
+- **The screen and receipt.** Refund appears on the till and completed-sale screen only with returns authority.
+  Receipt Scan uses increment 8's barcode/camera input; the picker shows sold and available quantities. No receipt
+  offers item lookup, quantity, optional price and customer selection. Review shows server subtotal, tax and total;
+  confirmation shows Refund paid or Store credit issued. A lost answer preserves the exact request on the device
+  and offers retry after reload. `/pos/receipt/<refund>?refund=true` and its PDF use the existing thermal route,
+  prominently marked REFUND, with the credit memo number, original return facts and named customer only. Refund
+  copies omit the barcode: credit memo and sale receipt numbers have separate sequences, so encoding the memo
+  number could select an unrelated sale when scanned at the till.
+- **Limits.** As with ordinary credit memos, a return must have a positive monetary total; a free-line-only stock
+  return needs the bookkeeper's inventory adjustment. Split-tender sales remain increment 11. Physical printers,
+  real phone hardware and LAN timing targets have not been verified in this increment.
+
 ## 16. Open questions
 
 Each default stands if nobody decides. K1 and K2 are Kabe's.

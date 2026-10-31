@@ -33,8 +33,8 @@ class CreditLineInput(StrictModel):
     """One credited line: either an item you name, or a quantity you send back.
 
     A standalone line prices itself exactly as an invoice line does. A returned line names a
-    source invoice line instead and prices nothing: its net and every tax cent come from what
-    that invoice captured, which is why it refuses a price, an amount and a tax code.
+    source invoice or sales receipt line instead and prices nothing: its net and every tax cent come from what
+    that sale captured, which is why it refuses a price, an amount and a tax code.
 
     ``line_id`` is the permanent identity a correction carries: give a saved line's identity
     and the corrected revision keeps that line, leave it out and a new line is written.
@@ -42,12 +42,15 @@ class CreditLineInput(StrictModel):
 
     line_id: Selector | None = None
     item: Selector | None = None
-    source_invoice: Selector | None = None
+    source_invoice: Selector | None = Field(default=None, description="Source invoice or sales receipt ID or number; use an ID when the number is ambiguous.")
     source_line: Selector | None = None
     quantity: Quantity = "1"
     unit: Selector | None = None
     unit_price: str | SalesPriceInput | None = None
     net_amount: str | SalesMoneyInput | None = None
+    return_cost: str | SalesMoneyInput | None = Field(default=None, description=(
+        "Total inventory value of a standalone stocked return, explicitly valued when no original sale is known. "
+        "Required for standalone stocked items; unavailable on linked returns, which recover the sale's cost."))
     description: Text | None = None
     class_id: Selector | None = None
     tax_code: Selector | None = None
@@ -76,7 +79,7 @@ class CreditLineInput(StrictModel):
         if not linked and self.item is None:
             raise ValueError("name an item, or name source_invoice and source_line to return one")
         if linked:
-            priced = self.model_fields_set & {"unit", "unit_price", "net_amount", "tax_code", "use_defaults"}
+            priced = self.model_fields_set & {"unit", "unit_price", "net_amount", "tax_code", "use_defaults", "return_cost"}
             if priced:
                 raise ValueError("a returned line takes its price and tax from the source invoice; "
                                  "remove " + ", ".join(sorted(priced)))
@@ -245,6 +248,8 @@ class CreditLineOutput(CreatedOutput):
     class_id: str | None
     class_name: str | None
     source_transaction_id: str | None
+    source_document_type: Literal['invoice', 'sales_receipt'] | None = Field(default=None,
+        exclude_if=lambda v: v is None, description='Document family of the returned source, when linked.')
     source_revision_id: str | None
     source_line_id: str | None
     item_snapshot: SalesLineProfile

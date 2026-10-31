@@ -367,7 +367,7 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
         'bulk-edit preview', 'bulk-edit apply', 'bulk-edit reverse',
         'opening-draft create', 'opening-draft update', 'opening-draft discard', 'opening-draft plan',
         'opening-draft apply', 'opening-draft reverse',
-        'pos-register create', 'pos-register update', 'pos sale complete', 'pos customer add',
+        'pos-register create', 'pos-register update', 'pos sale complete', 'pos customer add', 'pos refund',
         'pos-box create', 'pos-box update', 'pos-box move', 'pos-box remove', 'pos-box view', 'pos-box seed',
         'pos-box picture set', 'pos ticket hold', 'pos ticket resume',
         'account activate', 'accountant reclassify', 'accountant-copy changes', 'accountant-copy import',

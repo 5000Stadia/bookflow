@@ -187,9 +187,9 @@ _NUMBER_FIELD = {'credit': 'credit_memo_number', 'payment': 'payment_number'}
 _SOURCE_NOUN = {'credit': 'credit memo', 'payment': 'payment'}
 
 
-def _credit_source(s, selector, released):
+def _credit_source(s, selector, released, *, pos_credit=None):
     """One credit memo, as the uniform source shape both kinds resolve to."""
-    facts = credits.facts(s, selector, write=True)
+    facts = credits.facts(s, selector, write=True, pos_credit=pos_credit)
     header = facts['header']
     if header['status'] != 'posted':
         raise BookflowError('E_APPLICATION_INACTIVE', details={
@@ -243,7 +243,7 @@ def _payment_source(s, selector, released):
                 remaining={component['id']: worth[key_id]}, available=worth[key_id])
 
 
-def _sources(s, entries, currency, guard, released=None):
+def _sources(s, entries, currency, guard, released=None, *, pos_credit=None):
     """Resolve every named source, check what it is still worth, and take exactly that much.
 
     The customer, receivable account and currency come from the sources rather than from the
@@ -261,7 +261,10 @@ def _sources(s, entries, currency, guard, released=None):
     released = released or {}
     resolved, seen, key = [], set(), None
     for kind, selector, requested in entries:
-        facts = (_credit_source if kind == 'credit' else _payment_source)(s, selector, released)
+        if pos_credit is not None and (kind != 'credit' or selector != pos_credit[0] or len(entries) != 1):
+            raise BookflowError('E_PERMISSION', details={'capability': 'ledger.post'})
+        facts = (_credit_source(s, selector, released, pos_credit=pos_credit) if kind == 'credit'
+                 else _payment_source(s, selector, released))
         header = facts['header']
         if header['id'] in seen:
             raise _invalid('sources', 'name each credit memo or payment once')
@@ -597,7 +600,7 @@ def _semantic(profile):
     return value
 
 
-def _resolve(s, inp, *, previous=None, released=None):
+def _resolve(s, inp, *, previous=None, released=None, pos_credit=None):
     """Everything the refund is made of: what was supplied, over what the revision captured.
 
     One reader for both verbs. A new refund has nothing to fall back on and every field is the
@@ -641,7 +644,7 @@ def _resolve(s, inp, *, previous=None, released=None):
         issuer = {key: value for key, value in info.items()
                   if key in ('id', 'legal_name', 'home_currency')
                   or key.startswith(('address_', 'legal_address_'))}
-    sources, key = _sources(s, entries, currency, inp.customer, released)
+    sources, key = _sources(s, entries, currency, inp.customer, released, pos_credit=pos_credit)
     total = sum(row['amount'] for row in sources)
     if total <= 0 or total > INT64_MAX:
         raise BookflowError('E_VALUE_RANGE', details={'field': 'amount'})
@@ -846,8 +849,13 @@ def _unchanged_plan(s, inp, previous):
                 dict(input=inp, operation='update', changed=False))
 
 
-def prepare_post(s, ctx, inp, released=None):
-    return _compose(s, ctx, inp, _resolve(s, inp, released=released))
+def prepare_post(s, ctx, inp, released=None, *, pos_credit=None):
+    if pos_credit is not None and pos_credit[1] != ctx.request_id:
+        raise BookflowError('E_PERMISSION', details={'capability': 'ledger.post'})
+    plan = _compose(s, ctx, inp, _resolve(s, inp, released=released, pos_credit=pos_credit))
+    if pos_credit is not None:
+        plan.data['pos_credit'] = pos_credit
+    return plan
 
 
 def prepare_update(s, ctx, inp):
@@ -945,16 +953,20 @@ def prepare_void(s, ctx, inp):
 # ---------------------------------------------------------------- persistence
 
 
-def prepare(s, ctx, inp, operation):
+def prepare(s, ctx, inp, operation, *, pos_credit=None):
+    if pos_credit is not None:
+        if operation != 'post':
+            raise BookflowError('E_PERMISSION', details={'capability': 'ledger.post'})
+        return prepare_post(s, ctx, inp, pos_credit=pos_credit)
     return {'post': prepare_post, 'void': prepare_void, 'update': prepare_update}[operation](s, ctx, inp)
 
 
-def apply(plan, ctx, s):
+def apply(plan, ctx, s, *, command_name=None):
     # Rebuilt inside the writer transaction: what each credit is still worth, the numbering
     # and the open period are only decisive here, and the preview read them before anyone
     # held the lock.
     operation = plan.data['operation']
-    fresh = prepare(s, ctx, plan.data['input'], operation)
+    fresh = prepare(s, ctx, plan.data['input'], operation, pos_credit=plan.data.get('pos_credit'))
     if not fresh.data['changed']:
         return Applied(fresh.preview, [], 'no change')
     from bookflow.company.refund_validation import validate
@@ -973,7 +985,7 @@ def apply(plan, ctx, s):
     if instrument:
         from bookflow.company import check_numbers
         touched.extend(check_numbers.touches(instrument))
-    command_name = 'customer-refund ' + operation
+    command_name = command_name or 'customer-refund ' + operation
     summary_text = f"{operation} customer refund {header['number']}"
     audit.write_event_to(s.company, ctx, command_name, summary_text, touched,
                          actor_id=s.actor.id, actor_kind=s.actor.kind,

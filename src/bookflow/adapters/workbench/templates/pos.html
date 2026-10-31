@@ -8,6 +8,7 @@
     {% if registers | length > 1 %}<label class="pos-register-pick">Register <select data-pos-register-select>{% for register in registers %}<option value="{{ register.id }}">{{ register.name }}</option>{% endfor %}</select></label>{% elif registers %}<span class="pos-register-name" data-pos-register-name>{{ registers[0].name }}</span>{% endif %}
     <button type="button" data-pos-held>Held ({{ pos_data.held | length }})</button>
     <button type="button" data-pos-reprint-open>Reprint receipt</button>
+    {% if pos_data.can_refund %}<button type="button" data-pos-refund-open>Refund</button>{% endif %}
     {% if pos_data.can_void %}<button type="button" data-pos-void-open>Void sale</button>{% endif %}
   </div>
   <div class="pos-lookup">{{ scan_field(company_id, 'pos', label='Look up or scan an item') }}
@@ -140,9 +141,42 @@
   <p data-pos-done-summary></p>
   <a data-pos-print target="_blank" rel="noopener">Print receipt</a>
   {% if pos_data.can_void %}<button type="button" data-pos-void-last>Void this sale</button>{% endif %}
+  {% if pos_data.can_refund %}<button type="button" data-pos-refund-last>Refund this sale</button>{% endif %}
   <button type="button" class="primary" data-pos-new-sale>New sale</button>
 </section>
+{% if pos_data.can_refund %}
+<dialog class="pos-dialog pos-refund" data-pos-refund-dialog aria-label="Refund">
+  <h2>Refund</h2>
+  <fieldset data-pos-refund-editor>
+    <form data-pos-refund-find>
+      <div data-scan data-scan-mode="receipt"><label>Receipt number <input data-scan-input data-pos-refund-sale autocomplete="off"></label><button type="button" data-scan-camera hidden>Camera</button><p data-scan-status role="status"></p></div>
+      <div class="pos-dialog-actions"><button type="button" data-pos-refund-no-receipt>No receipt</button><button type="submit">Find receipt</button></div>
+    </form>
+    <p data-pos-refund-source></p>
+    <div data-pos-refund-unlinked hidden>
+      <label>Find a returned item <input type="search" data-pos-refund-item-search autocomplete="off" placeholder="Name, SKU or barcode"></label>
+      <ul class="pos-customer-results" data-pos-refund-items></ul>
+      <label>Customer (optional) <input type="search" data-pos-refund-customer-search autocomplete="off" placeholder="Name, phone or email"></label>
+      <ul class="pos-customer-results" data-pos-refund-customers></ul>
+      <p data-pos-refund-customer>No customer</p><button type="button" data-pos-refund-customer-clear>No customer</button>
+    </div>
+    <ol class="pos-refund-lines" data-pos-refund-lines aria-label="Returned lines"></ol>
+    <label>Refund as <select data-pos-refund-settlement><option value="cash">Cash</option><option value="original">Original payment method</option><option value="store_credit">Store credit</option></select></label>
+    <p data-pos-refund-credit-help>Store credit needs a named customer so the credit can be used on their account.</p>
+    <label>Reference (optional) <input data-pos-refund-reference maxlength="128" autocomplete="off"></label>
+  </fieldset>
+  <dl class="pos-totals"><div><dt>Subtotal</dt><dd data-pos-refund-subtotal>—</dd></div><div><dt>Tax</dt><dd data-pos-refund-tax>—</dd></div><div class="pos-total"><dt>Refund total</dt><dd data-pos-refund-total>—</dd></div></dl>
+  <p data-pos-refund-status role="status"></p>
+  <div class="pos-dialog-actions"><button type="button" data-pos-refund-back>Back</button><button type="button" data-pos-refund-preview>Review total</button><button type="button" class="primary" data-pos-refund-complete disabled>Complete refund</button></div>
+</dialog>
+<section class="pos-done" data-pos-refund-done hidden aria-label="Refund complete">
+  <p class="pos-done-label" data-pos-refund-done-label>Refund paid</p><p class="pos-done-change" data-pos-refund-done-amount></p>
+  <p data-pos-refund-done-summary></p><a data-pos-refund-print target="_blank" rel="noopener">Print refund receipt</a>
+  <button type="button" class="primary" data-pos-refund-finish>Back to till</button>
+</section>
+{% endif %}
 <script type="application/json" id="pos-data">{{ pos_data | tojson }}</script>
 </section>
+{% if pos_data.can_refund %}<script src="{{ static_urls['pos-refund.js'] }}" defer></script>{% endif %}
 <script src="{{ static_urls['scan.js'] }}" defer></script><script src="{{ static_urls['pos.js'] }}" defer></script>
 {% endblock %}

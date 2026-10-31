@@ -45,21 +45,23 @@ def _items(listed: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def mount(app, *, render, run, credential, page_error, role_allows, holds=None, host=None, make_context=None):
     @app.get('/c/{company_id}/pos/receipt/{sale}.pdf')
-    def receipt_pdf(request: Request, company_id: str, sale: str, reprint: bool = False):
+    def receipt_pdf(request: Request, company_id: str, sale: str, reprint: bool = False, refund: bool = False):
         from bookflow.documents.pos_receipt import pdf
         try:
-            receipt = run(request, 'pos receipt show', {'sale': sale, 'reprint': reprint}, company_id)
+            receipt = run(request, 'pos refund receipt' if refund else 'pos receipt show',
+                          {'sale': sale, 'reprint': reprint}, company_id)
             return Response(pdf(receipt), media_type='application/pdf', headers={'Cache-Control': 'private, no-store'})
         except BookflowError as error:
             return page_error(request, error)
 
     @app.get('/c/{company_id}/pos/receipt/{sale}')
-    def receipt_page(request: Request, company_id: str, sale: str, reprint: bool = False):
+    def receipt_page(request: Request, company_id: str, sale: str, reprint: bool = False, refund: bool = False):
         from bookflow.documents.pos_receipt import barcode_svg
         try:
-            receipt = run(request, 'pos receipt show', {'sale': sale, 'reprint': reprint}, company_id)
+            receipt = run(request, 'pos refund receipt' if refund else 'pos receipt show',
+                          {'sale': sale, 'reprint': reprint}, company_id)
             return render('pos_receipt.html', request, company_id=company_id, receipt=receipt,
-                          barcode=barcode_svg(receipt['number']))
+                          barcode='' if refund else barcode_svg(receipt['number']))
         except BookflowError as error:
             return page_error(request, error)
 
@@ -78,6 +80,7 @@ def mount(app, *, render, run, credential, page_error, role_allows, holds=None, 
                         items=items, layout=run(request, 'pos-box list', {}, cid), can_override=can_override,
                         can_layout=role_allows('pos-box create', company, credential(request)),
                         can_void=role_allows('pos sale void', company, credential(request)),
+                        can_refund=role_allows('pos refund', company, credential(request)),
                         held=run(request, 'pos ticket list', {}, cid)['items'])
             return render('pos.html', request, company=company, company_id=cid, registers=registers, pos_data=data)
         except BookflowError as e:
