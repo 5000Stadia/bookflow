@@ -1025,8 +1025,8 @@ document kinds below); `import template <kind>` shows its header and fields.
 
 "Same export as last month" needs no setup: `import preview` with the same `source` (or `mapping`) on the new file
 finds the saved mapping (`matched` says exact or probable, with the new and missing columns), then `import run`.
-Rows already in come back `already_in` or `unchanged`; only new rows are made. A changed value in an old row is
-`differs`, never a second record: to change existing records, preview again with `mode` `update` or `upsert`.
+Rows created by an earlier run of the same source come back `already_in`; changed rows carry code
+`changed_since` naming the changed fields. Only `mode` `update` changes these rows; `upsert` leaves them unchanged.
 
 "That import was wrong" (terms mapped to the wrong name, the wrong file) is undone as one unit: `import show <run>`
 to name it, `import reverse <run> --dry-run` to see the plan, then `import reverse <run>`. Records it made leave the

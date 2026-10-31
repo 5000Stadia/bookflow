@@ -5,10 +5,14 @@ words find the import, opening and grid-edit commands; the agent guide teaches t
 """
 from importlib.resources import files
 
+import anyio
 import pytest
 
 from bookflow.adapters.mcp.catalog import list_commands
 from tests.test_imports import books, run_all  # noqa: F401 - fixture
+from tests.test_row3_host import hosted, live  # noqa: F401 - fixtures
+from tests.test_publication_review_behaviors import member
+from tests import provenance
 
 DEMO = "Demo Plumbing Co"
 
@@ -73,10 +77,32 @@ def test_a_column_no_field_takes_is_named_unless_left_out_on_purpose(client):
     assert not any(n.startswith("not imported") for n in quiet), quiet
 
 
-def test_template_fields_name_their_input_path_for_every_caller(client):
-    """Closing trial: over MCP every `path` key is nulled for anyone but a hub admin, so each field also says `field`."""
-    fields = client.run("import template", {"kind": "customer"}, company=DEMO)["fields"]
-    assert fields[0]["field"] == "name" and all(f["field"] == f["path"] for f in fields)
+def test_template_fields_name_their_input_path_for_every_caller(hosted, live, tmp_path):
+    """Closing trial: non-admin MCP replies redact `path` but retain usable `field` values."""
+    from mcp import ClientSession
+    from mcp.client.stdio import StdioServerParameters, stdio_client
+
+    _, headers = member(hosted, role="standard")
+    secret = headers["Authorization"].removeprefix("Bearer ")
+    expected = hosted.ok("import.template", {"kind": "customer"}, company=hosted.company_id)["fields"]
+    assert expected and expected[0]["path"] == "name"
+
+    async def witness():
+        params = StdioServerParameters(command=provenance.launcher(), args=["mcp", "--url", live],
+            env=provenance.child_env(BOOKFLOW_TOKEN=secret, BOOKFLOW_COMPANY=hosted.company_id,
+                                    BOOKFLOW_DATA_ROOT=str(tmp_path / "absent")), cwd=str(tmp_path))
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.discover()
+                reply = await session.call_tool("bookflow_run", {
+                    "command": "import template", "input": {"kind": "customer"}})
+                assert not reply.is_error, reply
+                fields = reply.structured_content["fields"]
+                assert [f["field"] for f in fields] == [f["path"] for f in expected]
+                assert all(isinstance(f["field"], str) and f["field"] for f in fields)
+                assert all(f["path"] is None for f in fields)
+
+    anyio.run(witness)
 
 
 def test_next_months_file_compares_rows_an_earlier_run_made(books):
