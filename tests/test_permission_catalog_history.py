@@ -118,6 +118,7 @@ ACCEPTED = {
     'bank-source-v1': (884, '9676dfedbb049b4743cdc1d56915a2d296f6eaf3cda9db30768d912a11d36949'),
     'pos-layout-v1': (893, '9f95dba850d8f730aac8e4fdfdd82f23de09109fcf54e7e9499ff9b22dd29916'),
     'pos-ticket-v1': (898, '6639dc50b25389df49db0c4bd6e45d637a6271a4c9f81c8abd579abfb0d7ff35'),
+    'pos-ticket-takeover-v1': (899, 'bdcea7f8d98d6854d5ecc001b00e4b59f81288ef06af360288f8a2ce28e17bf3'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -282,6 +283,7 @@ CHAIN_ADDITIONS = {
     'pos-layout-v1': {f'pos-box {verb}' for verb in ('list', 'create', 'update', 'move', 'remove', 'view',
                                                    'seed', 'picture set', 'picture get')},
     'pos-ticket-v1': {'pos ticket hold', 'pos ticket list', 'pos ticket resume', 'pos ticket discard', 'pos sale void'},
+    'pos-ticket-takeover-v1': {'pos ticket take-over'},
 }
 
 _ANCESTOR_EDIT = """

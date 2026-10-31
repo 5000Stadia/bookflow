@@ -1660,13 +1660,13 @@ walk-in customer and today's date, and records the ticket and tender beside it; 
 says which register and clerk took it and what was tendered. Answer questions about takings from the receipts; do
 not ring sales up through `pos sale complete` yourself.
 
-`pos ticket hold` saves a nonempty cart on the host without posting or reserving stock. `list` returns held
-carts across the company, newest first, with their versions and last held totals. `resume` claims one using
+`pos ticket hold` saves a nonempty cart on the host without posting or reserving stock. `list` returns held and open
+carts across the company, grouped by status and newest first within each, with their versions and last held totals. `resume` claims one using
 `expected_version`; run `pos sale preview` on its returned lines for current prices, then supply the returned
 version as `ticket_version` to Complete. Holding it again needs `expected_version`. `discard` accepts held or
 resumed tickets and keeps their audit trail. All four commands need `pos.sell`; hold also checks typed-price
 authority. Use an idempotency key on mutations and keep the identical request and key until the host confirms.
-Turning POS off is refused while a ticket is held, naming the ticket.
+Turning POS off is refused while tickets are held or open, naming every label and ID.
 
 `pos sale void` needs `pos.void`, a required reason, and the receipt's `expected_version` (1 on a new sale).
 Its selector accepts a POS sale ID, ticket key, receipt ID or receipt number; ordinary typed receipts are refused.
@@ -1686,3 +1686,8 @@ that group's style. Styles are `block`, `list`, `compact`, and `photo`, shared a
 ```json
 {"command": "pos-register list", "input": {}}
 ```
+
+Open POS tickets remain visible after a device is lost. `pos ticket take-over` claims an open ticket with its
+`expected_version`, invalidating the old device copy; supply `device` to identify the replacement in audit.
+Confirm the displayed clerk and register before taking over or discarding an open ticket. Explicit stored prices
+survive resume, but preview, hold and completion still require `pos.price-override` to use an overridden price.

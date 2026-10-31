@@ -344,7 +344,7 @@ BIN_COMMANDS = frozenset(('bin activate', 'bin create', 'bin deactivate', 'bin l
 
 # R114 increment 4: the POS layer's registers.
 # R114 increment 5: ringing up at the POS.
-POS_TICKET_COMMANDS = frozenset('pos ticket ' + verb for verb in ('hold', 'list', 'resume', 'discard')) | {'pos sale void'}
+POS_TICKET_COMMANDS = frozenset('pos ticket ' + verb for verb in ('hold', 'list', 'resume', 'take-over', 'discard')) | {'pos sale void'}
 
 POS_LAYOUT_COMMANDS = frozenset(f'pos-box {verb}' for verb in
     ('list', 'seed', 'create', 'update', 'move', 'remove', 'view', 'picture set', 'picture get'))

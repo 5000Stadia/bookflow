@@ -46,7 +46,7 @@ def test_hold_resume_discard_do_not_post_and_survive_another_client(co, root):
     assert other.run('pos ticket list')['items'] == [ticket]
     resumed = change(other, 'resume', ticket)
     assert resumed['status'] == 'open' and resumed['version'] == 2
-    assert other.run('pos ticket list')['count'] == 0
+    assert other.run('pos ticket list')['items'] == [resumed]
     discarded = change(other, 'discard', resumed)
     assert discarded['status'] == 'discarded' and discarded['version'] == 3
     assert facts(co) == before
@@ -131,8 +131,66 @@ def test_lost_hold_resume_discard_answers_replay_without_reapplying(co):
     repeated = co.run('pos ticket resume', {'ticket': 'retry', 'expected_version': 1}, idempotency_key='resume-retry')
     assert repeated['version'] == resumed['version'] == 2
     co.run('pos ticket hold', {'ticket': 'retry', 'lines': [{'item': 'Pipe Sealant'}]}, idempotency_key='hold-retry')
-    assert co.run('pos ticket list')['items'] == []
+    assert co.run('pos ticket list')['items'] == [resumed]
     discarded = co.run('pos ticket discard', {'ticket': 'retry', 'expected_version': 2}, idempotency_key='discard-retry')
     repeated = co.run('pos ticket discard', {'ticket': 'retry', 'expected_version': 2}, idempotency_key='discard-retry')
     assert repeated['version'] == discarded['version'] == 3
     assert held['version'] == 1
+
+
+def test_lost_device_takeover_versions_audit_and_off_dependency(co):
+    held = hold(co, label='Device lost order')
+    first = co.run('pos ticket resume', dict(ticket=held['id'], expected_version=1, device='device-1'))
+    info = co.run('company show')
+    off = co.fails('company update', dict(pos_enabled=False, expected_version=info['info_version']))
+    assert off.code == 'E_WORK_DEPENDENCY'
+    assert held['label'] in off.message and held['id'] in off.message
+    body = dict(ticket=held['id'], expected_version=first['version'], device='device-2')
+    second = co.run('pos ticket take-over', body, idempotency_key='takeover-retry')
+    assert second['version'] == 3 and second['device'] == 'device-2'
+    assert co.run('pos ticket take-over', body, idempotency_key='takeover-retry')['version'] == 3
+    for verb, extra in [('hold', {'lines': first['lines']}), ('discard', {})]:
+        assert co.fails('pos ticket ' + verb, dict(ticket=first['id'], expected_version=first['version'], **extra)).code == 'E_VERSION_CONFLICT'
+    with pytest.raises(bookflow.BookflowError) as stale:
+        complete(co, first)
+    assert stale.value.code == 'E_VERSION_CONFLICT'
+    sale = complete(co, second)
+    with pytest.raises(bookflow.BookflowError) as stale:
+        complete(co, first)
+    assert stale.value.code == 'E_VERSION_CONFLICT'
+    assert complete(co, second)['id'] == sale['id']
+    events = co.run('audit list', {'record_type': 'pos_ticket', 'record_id': held['id']})['items']
+    event = next(e for e in events if e['command'] == 'pos ticket take-over')
+    detail = co.run('audit show', {'event': event['id']})
+    assert 'device-1' in str(detail) and 'device-2' in str(detail)
+    assert first['clerk_id'] in str(detail)
+
+
+def test_explicit_price_survives_hold_resume_and_completion(co):
+    held = co.run('pos ticket hold', dict(ticket='override-cart', lines=[{'item': 'Pipe Sealant', 'unit_price': '2.34'}]))
+    resumed = change(co, 'resume', held)
+    assert resumed['lines'][0]['unit_price'] == '2.34'
+    sale = complete(co, resumed)
+    assert sale['total']['amount'] == co.run('pos sale preview', {'lines': resumed['lines']})['total']['amount']
+
+
+def test_takeover_race_and_grouped_list(co, root):
+    first = hold(co, 'first-open', label='First open')
+    assert first['device'] == 'unknown'
+    opened = change(co, 'resume', first)
+    held = hold(co, 'still-held', label='Still held')
+    listed = co.run('pos ticket list')['items']
+    assert [t['id'] for t in listed] == [held['id'], opened['id']]
+    info = co.run('company show')
+    refusal = co.fails('company update', {'pos_enabled': False, 'expected_version': info['info_version']})
+    assert all(t[key] in refusal.message for t in listed for key in ('id', 'label'))
+    def take(device):
+        other = Company(root)
+        try:
+            return other.run('pos ticket take-over', dict(ticket=opened['id'], expected_version=opened['version'], device=device))
+        except bookflow.BookflowError as error:
+            return error.code
+    with ThreadPoolExecutor(2) as pool:
+        results = list(pool.map(take, ['device-a', 'device-b']))
+    assert sum(isinstance(result, dict) for result in results) == 1
+    assert next(result for result in results if isinstance(result, str)) in ('E_VERSION_CONFLICT', 'E_DB_BUSY')

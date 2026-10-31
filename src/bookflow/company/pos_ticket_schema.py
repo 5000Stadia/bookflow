@@ -6,6 +6,7 @@ def define_tables(metadata, C, T, common):
     columns = common()
     columns[0] = C('id', sa.String(64), 'Device ticket key; also the completed sale operation key.', primary_key=True)
     tickets = T('pos_tickets', *columns,
+        C('device', sa.String(128), 'Device identity at the latest hold, resume or take-over.', nullable=False, server_default='unknown'),
         C('register_id', sa.String(26), 'Register whose fixed facts apply to this cart.',
           sa.ForeignKey('pos_registers.id'), nullable=False),
         C('customer_id', sa.String(26), 'Chosen customer; null means the register walk-in.',

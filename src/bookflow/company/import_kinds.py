@@ -313,7 +313,7 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
         'invoice restore', 'journal restore',
     )),
     'destructive': frozenset((
-        'pos ticket discard', 'pos sale void',
+        'pos ticket discard', 'pos ticket take-over', 'pos sale void',
         'account deactivate', 'accountant-copy cancel', 'attachment unlink', 'bill payment unapply',
         'billing-group remove', 'bin deactivate', 'budget clear', 'class deactivate', 'clock cancel',
         'company compact', 'costing-method withdraw', 'custom-field deactivate', 'customer deactivate',

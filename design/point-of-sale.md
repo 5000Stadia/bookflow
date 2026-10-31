@@ -62,7 +62,7 @@ held tickets and drawer counts. None of it posts.
 - **The switch.** `company_info.pos_enabled`, off by default, set with `company update` (admin), shown in Company
   settings under *Sales* ("Use point of sale"), following the pick-and-pack switch (pick-pack-ship.md, as built inc 3).
   While off, every `pos*` command refuses with `E_FEATURE_DISABLED` (`setting`, `enable_command`), no POS surface shows,
-  and nothing else changes. Turning it off is refused (`E_WORK_DEPENDENCY`) while a ticket is held or a shift is open.
+  and nothing else changes. Turning it off is refused (`E_WORK_DEPENDENCY`) while a ticket is held or open, or a shift is open.
 - **Registers.** Turning POS on makes register **Main**. A register (`pos-register create/update/show/list`) holds: name;
   inventory site; deposit-to account (default Undeposited Funds); the payment methods offered, in order (default Cash,
   then the company's card and check methods); the walk-in customer (default **Walk-in**, created on first use with the
@@ -147,8 +147,8 @@ always a sales receipt. Make Deposits then sees each payment under its own metho
 ### Hold and resume
 
 Hold stores the cart as a held ticket (`pos ticket hold`, optional label; default the time and first item) and starts a
-new sale. *Held (n)* lists the company's held tickets, newest first, with register, clerk and total; Resume reopens one
-on this device, at today's prices. Held tickets post nothing and commit no stock. Discard asks once. Tickets held more
+new sale. *Held (n)* lists the company's held tickets and, separately, open tickets, newest first in each group, with register, clerk and total; Resume reopens a held ticket
+on this device, at today's prices. Held tickets post nothing and commit no stock. Open tickets show who is using them and since when; Take over asks once, then invalidates the old device version. Discard asks once, identifying the current clerk and register for an open ticket. Tickets held more
 than 7 days are listed in the day summary.
 
 ### Voids and refunds
@@ -290,7 +290,7 @@ Bluetooth scanner in keyboard mode keeps working exactly as today, and both can 
 
 | Capability | Gives | Humans hold it at | Agents |
 |---|---|---|---|
-| `pos.sell` | `pos sale preview`, `complete`; `pos ticket` hold/list/resume/discard; `pos customer search`, `add`; `pos-box view`; `pos shift open`, `close`; `report pos-day` for own register | standard | none until granted |
+| `pos.sell` | `pos sale preview`, `complete`; `pos ticket` hold/list/resume/take-over/discard; `pos customer search`, `add`; `pos-box view`; `pos shift open`, `close`; `report pos-day` for own register | standard | none until granted |
 | `pos.void` | `pos sale void` | standard | none |
 | `pos.refund` | `pos refund` | standard | none |
 | `pos.price-override` | typing a price on a POS line | standard | none |
@@ -944,7 +944,7 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   changes. The plain clerk's admitted-command pin includes the four ticket commands and excludes void;
   Clerk with returns admits void. Price override remains increment 5's conditional check and also guards hold.
 - **Ticket lifecycle.** Hold saves a nonempty cart and its preview total without posting or reserving stock.
-  A blank label defaults to hold time and first item. List returns all company held tickets newest first with
+  A blank label defaults to hold time and first item. List returns company held and open tickets grouped by state, newest first in each, with
   register, clerk and total. Resume atomically changes `held` to `open`; another device's stale resume is refused.
   The returned lines retain explicit prices, while omitted prices are resolved afresh by `pos sale preview` before
   charging. The returned total is explicitly the last held total, not a quote for the resumed sale. Hold uses the
@@ -957,7 +957,7 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   the ordinary idempotency key; the screen saves the exact pending request and key before sending and retries them
   after a lost response or reload. Expired or uncached stale requests fail their version/state checks, never
   reapply a transition. Discard accepts held or open tickets and preserves their audit history. Turning POS off
-  while any ticket is held refuses with its label and ID.
+  while any ticket is held or open refuses with every label and ID.
 - **The screen.** Held (n), refreshed when opened, lists the company's tickets. Hold starts a fresh local cart
   after host confirmation. Resume keeps the ticket's original register and requires an empty device cart there;
   it never replaces another local sale. Clear on a resumed cart discards it on the host, with one confirmation.
@@ -988,6 +988,29 @@ group and answers "what should be in the drawer?". Checked afterwards: criteria 
   screenshots at 390 and 1440 px were inspected; Unicode and literal-percent void reasons are preserved in audit.
 - **Not verified here.** Physical phone hardware, LAN timing targets and printers. Receipt printing, refunds,
   shifts and the day summary (including tickets older than seven days) remain their later increments.
+
+### As built: increment 7 follow-up (open tickets)
+
+- **Recovery.** `pos ticket list` and Held (n) include held and open tickets in separate groups, newest first
+  within each. Open rows show register, clerk, time and device. `pos ticket take-over` is a separate command,
+  keeping resume's held-only contract. Any `pos.sell` holder can take an open ticket at `expected_version`;
+  it atomically advances the version and audits before/after clerk and device. The screen asks once before
+  take-over or open-ticket discard and protects an existing local cart.
+- **Storage and authority.** co0125 adds `pos_tickets.device`; pre-existing rows say `unknown`. Browsers keep a
+  stable device key in localStorage; CLI and MCP may supply a device label. Device identity is audit context,
+  not authorization: the version guards writes. New layer `pos-ticket-takeover-v1` follows `pos-ticket-v1`
+  without changing the merged descriptor. Plain clerks receive take-over through `pos.sell`.
+- **Stale copies.** Complete, hold and discard reject a prior device version. Even after the replacement device
+  completes, a stale Complete is refused; the completing revision still gets the original sale on retry.
+  POS-off refuses every held/open ticket, naming each label and ID.
+- **Price decision.** Resume preserves an explicit stored price; it does not grant override authority. A clerk
+  without `pos.price-override` may resume and discard the ticket, but preview, hold and complete refuse its
+  explicit override. Removing that price uses current pricing; an authorized clerk may keep and complete it.
+  The legacy void refusal now names the exact `pos.void` catalog capability.
+- **Checks.** Core tests cover lost-device completion, stale mutations and completed-sale retries, takeover audit,
+  POS-off, explicit price persistence and cross-clerk refusal. Surface tests include take-over through Python,
+  CLI, HTTP and MCP; browser tests cover confirmation cancel/accept at 390 and 1440 px. The MCP seller without
+  `pos.void` is refused. Screenshots are under `/tmp/m4-shots/pos8/`. Physical device loss remains simulated.
 
 ## 16. Open questions
 

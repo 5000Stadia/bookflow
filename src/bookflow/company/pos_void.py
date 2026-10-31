@@ -40,7 +40,7 @@ def _output(sale, receipt):
 def authorize(inp, ctx, s):
     pos_layer.require_enabled(s)
     # Before catalog activation, POS seller capabilities require the standard role.
-    pos_layer.require_seller(s)
+    pos_layer.require_seller(s, 'pos.void')
 
 
 def resolve(s, selector):

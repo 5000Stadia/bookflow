@@ -16,6 +16,7 @@ Database: `company`.
 | `updated_at` | VARCHAR(32) | no | — | — | ix_pos_tickets_status_updated | — | UTC timestamp of the latest update to this record. |
 | `updated_by` | VARCHAR(26) | no | — | — | — | — | User id recorded for the latest update to this record. |
 | `updated_via` | VARCHAR(16) | no | — | — | — | — | Interface recorded for the latest update to this record. |
+| `device` | VARCHAR(128) | no | — | — | — | — | Device identity at the latest hold, resume or take-over. |
 | `register_id` | VARCHAR(26) | no | — | — | — | pos_registers.id | Register whose fixed facts apply to this cart. |
 | `customer_id` | VARCHAR(26) | yes | — | — | — | customers.id | Chosen customer; null means the register walk-in. |
 | `label` | VARCHAR(400) | no | — | — | — | — | Clerk label, defaulting to hold time and first item. |

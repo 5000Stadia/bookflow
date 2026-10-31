@@ -145,7 +145,8 @@ def test_ticket_write_lost_answer_recovers_after_reload_without_losing_cart(brow
             assert b.evaluate('window.bookflowPos.state().ticket') == ticket
             assert _lines(b) == [['Mainline Clearing', '1']]
             _confirmed(b)
-            assert _command(b, site, 'pos.ticket.list', {})['items'] == []
+            opened = _command(b, site, 'pos.ticket.list', {})['items']
+            assert len(opened) == 1 and opened[0]['id'] == ticket and opened[0]['status'] == 'open'
     finally:
         b.close()
 

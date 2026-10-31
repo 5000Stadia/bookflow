@@ -3010,7 +3010,7 @@ _POS_TICKET = {
     'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
 }
 MATRIX['pos ticket hold'] = dict(_POS_TICKET)
-for _verb in ('resume', 'discard'):
+for _verb in ('resume', 'take-over', 'discard'):
     MATRIX['pos ticket ' + _verb] = {code: _POS_TICKET[code] for code in (
         'E_FEATURE_DISABLED', 'E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_WORK_DEPENDENCY',
         'E_IDEMPOTENCY_MISMATCH', 'E_DIRECTIVE_NOT_FOUND', 'E_DIRECTIVE_INACTIVE')}

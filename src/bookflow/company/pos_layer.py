@@ -68,7 +68,7 @@ def require_enabled(s) -> None:
         raise disabled_error()
 
 
-def require_seller(s) -> None:
+def require_seller(s, capability='pos.sell') -> None:
     """Before activation the roles decide: a POS seller is standard or above (pos.sell's role defaults)."""
     from bookflow.hub import access
     from bookflow.hub.permission_access import activated
@@ -76,7 +76,7 @@ def require_seller(s) -> None:
         return
     acc, role = access.company_role(s, s.company_row['id'], s.company_row['organization_id'])
     if not access.role_satisfies(role, acc, LEGACY_SELLER_ROLE, s.is_hub_admin):
-        raise BookflowError('E_PERMISSION', details={'capability': 'pos.sell', 'required_role': LEGACY_SELLER_ROLE,
+        raise BookflowError('E_PERMISSION', details={'capability': capability, 'required_role': LEGACY_SELLER_ROLE,
                                                      'role': role})
 
 
@@ -88,13 +88,14 @@ def legacy_required_role(cmd) -> str | None:
 
 
 def check_turning_off(s) -> None:
-    """Refuse POS off while a held cart would be hidden."""
-    row = s.company.conn.execute(sa.select(c.pos_tickets.c.id, c.pos_tickets.c.label).where(
-        c.pos_tickets.c.status == 'held').order_by(c.pos_tickets.c.updated_at).limit(1)).mappings().first()
-    if row:
-        raise BookflowError('E_WORK_DEPENDENCY', message=f"Held ticket {row['label']} prevents turning point of sale off. Resume or discard it first.",
-            details={'ticket': row['id'], 'label': row['label'], 'resume_command': 'pos ticket resume',
-                     'discard_command': 'pos ticket discard'})
+    """Refuse POS off while any outstanding cart would be hidden."""
+    rows = s.company.conn.execute(sa.select(c.pos_tickets.c.id, c.pos_tickets.c.label).where(
+        c.pos_tickets.c.status.in_(('held', 'open'))).order_by(c.pos_tickets.c.updated_at)).mappings().all()
+    if rows:
+        labels = ', '.join(f"{row['label']} ({row['id']})" for row in rows)
+        raise BookflowError('E_WORK_DEPENDENCY', message=f"Outstanding tickets prevent turning point of sale off: {labels}. Complete or discard them first.",
+            details={'ticket': rows[0]['id'], 'label': rows[0]['label'], 'tickets': [dict(row) for row in rows],
+                     'resume_command': 'pos ticket resume', 'discard_command': 'pos ticket discard'})
 
 
 def plan_setup_on(s, ctx) -> Plan | None:
