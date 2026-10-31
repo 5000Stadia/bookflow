@@ -4,7 +4,7 @@
 
 ## `pos sale complete`
 
-Complete a POS sale: posts the sales receipt `sales-receipt post` would, through the same core, with the facts the register fixes (its deposit account, its site, today's date, the chosen customer or its walk-in, a payment method it offers), and records the ticket, register, clerk and tender. One payment method: cash takes at least the total and returns the change; any other method takes the total, with an optional reference. expected_total is the total shown (pos sale preview); a different total posts nothing (E_PREVIEW_STALE). The ticket key is the operation key: completing again with the same key returns the sale already posted and never posts twice. An agent records sales with `sales-receipt post`. Needs pos.sell; a typed unit_price also pos.price-override. Off unless company setting pos_enabled is on (E_FEATURE_DISABLED).
+Complete a POS sale: posts the sales receipt `sales-receipt post` would, through the same core, with the facts the register fixes (its deposit account, its site, today's date, the chosen customer or its walk-in, payment methods it offers), and records the ticket, register, clerk and tenders. Split tenders post an invoice Due on receipt and one payment per distinct method in the same transaction. Supply tender for one method, or tenders with explicit positive amounts; only cash can give change. One payment method: cash takes at least the total and returns the change; any other method takes the total, with an optional reference. expected_total is the total shown (pos sale preview); a different total posts nothing (E_PREVIEW_STALE). The ticket key is the operation key: completing again with the same key returns the sale already posted and never posts twice. An agent records sales with `sales-receipt post`. Needs pos.sell; a typed unit_price also pos.price-override. Off unless company setting pos_enabled is on (E_FEATURE_DISABLED).
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -43,8 +43,11 @@ The same example as complete `bookflow_run` arguments:
 | `ticket_version` | `--ticket-version` | integer \| null | no | yes | null | Required version for a resumed held ticket. |
 | `ticket` | `--ticket` | string | yes | no | — | The ticket's key, chosen by the device when the sale starts (a ULID or any 1-64 letters, digits, '.', '_', ':' or '-'). It is the sale's operation key: completing again with the same key returns the sale already posted and never posts a second.; pattern "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$" |
 | `tender.payment_method` | `--tender-payment-method` | string | yes | no | — | One of the payment methods the register offers (ID or name).; minimum length 1; maximum length 1004 |
-| `tender.amount` | `--tender-amount` | string \| null | no | yes | null | Amount tendered. For cash, at least the total (the change is the difference); for any other method it is the total, the default. |
+| `tender.amount` | `--tender-amount` | string \| null | no | yes | null | Amount tendered. Single tender defaults to the total; cash may give change. Every split tender needs an explicit positive amount, and only cash can exceed the remaining balance. |
 | `tender.reference` | `--tender-reference` | string \| null | no | yes | null | Card or check reference (last four digits, approval code), stored as the receipt's payment reference. |
+| `tenders[].payment_method` | inside `--tenders` JSON array | string | yes | no | — | One of the payment methods the register offers (ID or name).; minimum length 1; maximum length 1004 |
+| `tenders[].amount` | inside `--tenders` JSON array | string \| null | no | yes | null | Amount tendered. Single tender defaults to the total; cash may give change. Every split tender needs an explicit positive amount, and only cash can exceed the remaining balance. |
+| `tenders[].reference` | inside `--tenders` JSON array | string \| null | no | yes | null | Card or check reference (last four digits, approval code), stored as the receipt's payment reference. |
 | `expected_total` | `--expected-total` | string | yes | no | — | `pos sale preview`'s total, which the clerk saw. If the sale now totals anything else (a price changed meanwhile), nothing posts and E_PREVIEW_STALE carries the new total.; minimum length 1; maximum length 32; pattern "^\\d+(\\.\\d{1,2})?$" |
 
 ### Command and context options
@@ -88,9 +91,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `pos_register` | object | yes | no | — | — |
 | `pos_register.id` | string | yes | no | — | — |
 | `pos_register.name` | string | yes | no | — | — |
-| `sales_receipt` | object | yes | no | — | The sales receipt posted: its id, and its number as `name`. |
+| `sales_receipt` | object | yes | no | — | Posted sale document identity (invoice for a split sale); retained field name for compatibility. |
 | `sales_receipt.id` | string | yes | no | — | — |
 | `sales_receipt.name` | string | yes | no | — | — |
+| `document_type` | literal["sales_receipt", "invoice"] | no | no | "sales_receipt" | — |
+| `version` | integer | no | no | 1 | — |
 | `customer` | object \| null | yes | yes | — | The chosen customer; null for the walk-in. |
 | `customer.id` | string | yes | no | — | — |
 | `customer.name` | string | yes | no | — | — |
@@ -118,6 +123,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `tenders[].amount.amount` | string | yes | no | — | — |
 | `tenders[].amount.currency` | string | yes | no | — | — |
 | `tenders[].amount.minor_units` | integer | yes | no | — | — |
+| `tenders[].applied` | object \| null | no | yes | null | — |
+| `tenders[].applied.amount` | string | yes | no | — | — |
+| `tenders[].applied.currency` | string | yes | no | — | — |
+| `tenders[].applied.minor_units` | integer | yes | no | — | — |
+| `tenders[].change` | object \| null | no | yes | null | — |
+| `tenders[].change.amount` | string | yes | no | — | — |
+| `tenders[].change.currency` | string | yes | no | — | — |
+| `tenders[].change.minor_units` | integer | yes | no | — | — |
 | `tenders[].reference` | string \| null | yes | yes | — | — |
 | `replayed` | boolean | no | no | false | True when this ticket had already completed: this is that sale, and nothing new was posted. |
 | `warnings` | array[string] | no | no | [] | — |
@@ -135,6 +148,7 @@ Example JSON output:
   "created_at": "2026-01-01T00:00:00Z",
   "customer": null,
   "date": "2026-01-01",
+  "document_type": "sales_receipt",
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "pos_register": {
     "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -157,6 +171,7 @@ Example JSON output:
     "currency": "USD",
     "minor_units": 1
   },
+  "version": 1,
   "warnings": []
 }
 ```
@@ -377,7 +392,7 @@ Example JSON output:
 
 ## `pos sale void`
 
-Void a completed POS sale through the same reversal as sales-receipt void, with a required context reason and receipt expected_version. The sale selector accepts the POS sale ID, ticket key, receipt ID or number; an ordinary typed receipt is refused. Keeps the original receipt and immutable reversal history. A deposited sale is refused naming its deposit; a reconciled sale is refused. Needs pos.void, not pos.sell or ledger.post. Off unless company setting pos_enabled is on (E_FEATURE_DISABLED).
+Void a completed POS sale through the same reversal as sales-receipt void, with a required context reason and document expected_version (use the current version from sale output). A split reverses all payments and its invoice together. Select by POS sale ID, ticket key, document ID, receipt number or INV:invoice-number; an ordinary typed receipt is refused. Keeps the original receipt and immutable reversal history. A deposited sale is refused naming its deposit; a reconciled sale is refused. A sale with a POS refund is refused naming the refund. Needs pos.void, not pos.sell or ledger.post. Off unless company setting pos_enabled is on (E_FEATURE_DISABLED).
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -407,8 +422,8 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `sale` | `SALE` | string | yes | no | — | POS sale ID, ticket key, sales receipt ID or receipt number.; minimum length 1; maximum length 1004 |
-| `expected_version` | `--expected-version` | integer | yes | no | — | The current sales receipt version; a newly completed sale is version 1.; minimum 1 |
+| `sale` | `SALE` | string | yes | no | — | POS sale ID, ticket key, document ID, receipt number or INV:invoice-number.; minimum length 1; maximum length 1004 |
+| `expected_version` | `--expected-version` | integer | yes | no | — | The sale output's current version; a split invoice advances as its payments settle it.; minimum 1 |
 
 ### Command and context options
 
@@ -450,8 +465,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `warnings` | array[string] | no | no | [] | — |
 | `sale_id` | string | yes | no | — | — |
 | `ticket` | string | yes | no | — | — |
-| `id` | string | yes | no | — | Sales receipt ID. |
-| `number` | string | yes | no | — | Sales receipt number. |
+| `id` | string | yes | no | — | Posted sale document ID. |
+| `number` | string | yes | no | — | Posted sale document number. |
 | `status` | literal["voided"] | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
 | `changed` | boolean | yes | no | — | — |

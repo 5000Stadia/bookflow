@@ -14,12 +14,13 @@ Database: `company`.
 | `created_via` | VARCHAR(16) | no | — | — | — | — | Interface the sale was completed through. |
 | `ticket` | VARCHAR(64) | no | — | unique | — | — | The ticket's key, which is also the sale's operation key: a retry with the same key returns this sale and never posts a second. |
 | `input_sha256` | VARCHAR(64) | no | — | — | — | — | SHA-256 of the completed ticket as sent, so a retry that changed the ticket is refused rather than answered with a different sale. |
+| `shift_id` | VARCHAR(26) | yes | — | — | — | pos_shifts.id | Counted shift owning this operation, if any. |
 | `register_id` | VARCHAR(26) | no | — | — | ix_pos_sales_register_id | pos_registers.id | Register the sale was rung up on. |
-| `document_type` | VARCHAR(24) | no | — | — | — | — | Document the sale posted: 'sales_receipt' (one payment method); split tender's invoice arrives later. |
+| `document_type` | VARCHAR(24) | no | — | — | — | — | Document the sale posted: sales_receipt for one method, invoice for split tenders. |
 | `document_id` | VARCHAR(26) | no | — | — | ix_pos_sales_document_id | transactions.id | The posted document. |
 | `customer_named` | BOOLEAN | no | — | — | — | — | Whether a customer was chosen; false when the register's walk-in customer was used (never shown on the POS screen or the receipt). |
 | `currency` | VARCHAR(3) | no | — | — | — | — | Currency of the amounts. |
 | `total_minor_units` | BIGINT | no | — | — | — | — | Sale total in minor units, as posted. |
 | `tendered_minor_units` | BIGINT | no | — | — | — | — | Amount tendered in minor units. |
 | `change_minor_units` | BIGINT | no | — | — | — | — | Change given in minor units (tendered less total; cash only). |
-| `tenders` | TEXT | no | — | — | — | — | JSON list of tenders: payment_method_id, kind, amount_minor_units, reference. |
+| `tenders` | TEXT | no | — | — | — | — | JSON tenders: payment_method_id, kind, amount_minor_units, applied_minor_units, change_minor_units, reference; split tenders also carry payment_id. |

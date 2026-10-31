@@ -1,6 +1,7 @@
 """Schema documentation metadata is complete and describes the shipped database structures."""
 
 from pathlib import Path
+import re
 
 import pytest
 import sqlalchemy as sa
@@ -24,6 +25,22 @@ def _sql_type(type_: sa.types.TypeEngine) -> str:
     return type_.compile(dialect=SQLITE_DIALECT).upper()
 
 
+def _index_sql(sql: str) -> str:
+    # A space between the indexed table name and its column list is insignificant.
+    # Leave every expression, quoted value, order and predicate otherwise exact.
+    return re.sub(r'^(CREATE (?:UNIQUE )?INDEX .*? ON (?:"[^"]+"|\w+))\s*\(', r'\1 (', sql)
+
+
+def _unique_columns(connection, table_name):
+    # SQLite enforces inline UNIQUE even when SQLAlchemy's DDL parser misses it
+    # (for example UNIQUE before NOT NULL). Inspect the actual unique constraints,
+    # excluding explicit unique indexes (origin c) and the primary key (origin pk).
+    names = connection.exec_driver_sql(
+        "SELECT name FROM pragma_index_list(?) WHERE origin='u'", (table_name,)).scalars()
+    return sorted(tuple(row[0] for row in connection.exec_driver_sql(
+        'SELECT name FROM pragma_index_info(?) ORDER BY seqno', (name,))) for name in names)
+
+
 def _metadata_shape(metadata: sa.MetaData) -> dict:
     shape = {}
     for table in metadata.tables.values():
@@ -39,7 +56,7 @@ def _metadata_shape(metadata: sa.MetaData) -> dict:
                 if isinstance(constraint, sa.UniqueConstraint)
             ),
             "indexes": sorted(
-                str(CreateIndex(index).compile(dialect=SQLITE_DIALECT))
+                _index_sql(str(CreateIndex(index).compile(dialect=SQLITE_DIALECT)))
                 for index in table.indexes
             ),
             "foreign_keys": sorted(
@@ -69,14 +86,11 @@ def _database_shape(inspector: sa.Inspector, connection) -> dict:
                 for column in inspector.get_columns(table_name)
             },
             "primary_key": tuple(inspector.get_pk_constraint(table_name)["constrained_columns"]),
-            "unique": sorted(
-                tuple(constraint["column_names"])
-                for constraint in inspector.get_unique_constraints(table_name)
-            ),
+            "unique": _unique_columns(connection, table_name),
             # SQLAlchemy SQLite reflection omits expression indexes. Compare
             # every physical explicit index's complete DDL instead, including
             # its name, expression, order, uniqueness and partial predicate.
-            "indexes": sorted(connection.exec_driver_sql(
+            "indexes": sorted(_index_sql(sql) for sql in connection.exec_driver_sql(
                 "SELECT sql FROM sqlite_schema WHERE type='index' AND tbl_name=? AND sql IS NOT NULL",
                 (table_name,)).scalars()),
             "foreign_keys": sorted(

@@ -1203,6 +1203,9 @@ def pos_header_links(company_id: str, reader, menu: list[MenuGroup], *, seller: 
     for entry in menu:
         if entry.slug == "items":
             continue
+        if entry.slug == "reports" and offered and not any(
+                cmd.name.startswith("report ") and not is_pos(cmd) and reader(cmd) for cmd in registry.all_commands()):
+            continue  # only POS reports (`report pos-day`, increment 10): the till's Day summary already offers them
         if entry.slug != "customers" or not offered:
             return None
         section = SECTION_BY_SLUG["customers"]
@@ -1322,8 +1325,8 @@ PAGE_RUNS: dict[str, tuple[str, ...]] = {
     '/payment-method': ('payment-method query', 'payment-method query options'),
     # The POS screen (R114 increment 5): the sales items it rings up, read once with the page.
     '/pos': ('item list', 'pos-box list', 'pos ticket list'),
-    '/pos/receipt/{sale}': ('pos receipt show',),
-    '/pos/receipt/{sale}.pdf': ('pos receipt show',),
+    '/pos/receipt/{sale}': ('pos receipt show', 'pos refund receipt'),
+    '/pos/receipt/{sale}.pdf': ('pos receipt show', 'pos refund receipt'),
     '/price-level': ('price-level query', 'price-level query options'),
     '/print-checks': ('account list',),
     '/proposal/create': ('custom-field list', 'item show'),

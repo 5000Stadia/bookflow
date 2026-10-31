@@ -27,7 +27,8 @@ def test_manifest_matches_the_reachable_private_graph_exactly():
     # every one private like the rest of the sales line profile.
     # 424: R110 added SalesLineProfile.pricing_rule and the thirteen fields of AppliedPriceRule.
     # 429: R150 added three sub-cent fractions to SalesLineProfile, one to PriceRule, one to AppliedPriceRule.
-    assert sum(len(fields) for fields in manifest.FIELDS.values()) == 429
+    # 430: POS refunds capture returned stock valuation, private to the sales line.
+    assert sum(len(fields) for fields in manifest.FIELDS.values()) == 430
 
 
 def test_every_field_carries_exactly_one_known_disposition():

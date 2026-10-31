@@ -3036,3 +3036,45 @@ MATRIX['pos receipt show'] = {
     'E_RECORD_NOT_FOUND': 'the selector names no POS sale',
     'E_VALIDATION': 'the selector names multiple POS sales',
 }
+
+
+# R114 increment 9: one credit memo and optional payout through the ordinary cores.
+MATRIX['pos refund'] = {
+    'E_VALIDATION': 'invalid returned line or store credit for the walk-in customer',
+    'E_RECORD_NOT_FOUND': 'unknown receipt, customer, item or register',
+    'E_FEATURE_DISABLED': 'POS is off for the company',
+    'E_PERMISSION': 'the caller lacks the returns capability',
+    'E_PERIOD_CLOSED': 'today is on or before the closing date',
+    'E_VALUE_RANGE': 'quantity or amount outside its range',
+    'E_AMOUNT_PRECISION': 'a price with more places than the currency',
+    'E_INACTIVE_REFERENCE': 'a posting reference is inactive',
+    'E_PREVIEW_STALE': 'the refund differs from the total confirmed by the clerk',
+    'E_IDEMPOTENCY_MISMATCH': 'the operation key was already used with other inputs',
+    'E_WORK_DEPENDENCY': 'a voided sale cannot be refunded',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+for _verb in ('lines', 'show', 'receipt'):
+    MATRIX['pos refund ' + _verb] = {code: MATRIX['pos refund'][code] for code in (
+        'E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_FEATURE_DISABLED', 'E_PERMISSION', 'E_WORK_DEPENDENCY')}
+
+MATRIX['pos refund receipt'].pop('E_WORK_DEPENDENCY')
+
+MATRIX['pos refund']['E_RETURN_EXHAUSTED'] = 'the selected quantity exceeds the source line remainder'
+MATRIX['pos refund']['E_SOURCE_CORRECTION_CONFLICT'] = 'a correction changed the source return facts'
+
+
+# R114 increment 10: nonposting drawer count and ordinary deposit hand-off.
+for _command in ('report pos-day', 'pos shift open', 'pos shift close', 'pos deposit prepare'):
+    MATRIX[_command] = {
+        'E_FEATURE_DISABLED': 'POS is off for the company',
+        'E_VALIDATION': 'invalid register, amount, shift or selected payment methods',
+        'E_RECORD_NOT_FOUND': 'unknown register or shift',
+        'E_WORK_DEPENDENCY': 'the register already has an open shift, the shift is closed, or no eligible receipts remain',
+        'E_IDEMPOTENCY_MISMATCH': 'the permanent operation key was used for a different count or float',
+        'E_INACTIVE_REFERENCE': 'the deposit bank or cash variance account is inactive',
+        'E_AMOUNT_PRECISION': 'the count or float exceeds currency precision',
+        'E_VALUE_RANGE': 'the count or float is outside its valid range',
+        'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+        'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+    }

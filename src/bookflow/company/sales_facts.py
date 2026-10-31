@@ -305,6 +305,8 @@ class SalesLineProfile(StrictModel):
     pricing_rule: AppliedPriceRule | None = None
     standard_price_minor_units: int | None = None
     cost_minor_units: int | None = None
+    return_cost_minor_units: int | None = Field(default=None, ge=0, le=INT64_MAX, exclude_if=lambda v: v is None,
+        description="Explicit total value of an unlinked stocked credit memo return.")
     price_basis_minor_units: int | None = None
     # R150: each price's thousandths of a minor unit beyond its rounded minor units; absent when whole.
     standard_price_fraction: int | None = Field(default=None, ge=-500, le=500, exclude_if=lambda v: v is None)

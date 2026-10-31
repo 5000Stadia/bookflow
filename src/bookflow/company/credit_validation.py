@@ -199,7 +199,7 @@ def _returns(s, pending, lines, profile):
                  'claim names its credited source capture')
         source = _source(s, line)
         _require(source['profile']['customer_id'] == profile['customer_id']
-                 and source['profile']['control_account_id'] == profile['ar_account_id'],
+                 and (source['type'] == 'sales_receipt' or source['profile']['control_account_id'] == profile['ar_account_id']),
                  'a returned line belongs to an invoice of the exact credited party')
         quantity = int(source['line']['base_quantity_microunits'])
         net = int(source['line']['net_minor_units'])
@@ -249,7 +249,10 @@ def _source(s, line):
     source_profile = s.company.conn.execute(sa.select(c.sales_profiles).where(
         c.sales_profiles.c.revision_id == line['source_revision_id'])).mappings().all()
     _require(len(source_profile) == 1, 'the claimed source revision exists')
-    return dict(line=dict(row[0]), taxes=taxes, profile=dict(source_profile[0]))
+    source_type = s.company.conn.execute(sa.select(c.transactions.c.type).where(
+        c.transactions.c.id == line['source_transaction_id'])).scalar_one()
+    _require(source_type in ('invoice', 'sales_receipt'), 'the returned source is a sale')
+    return dict(line=dict(row[0]), taxes=taxes, profile=dict(source_profile[0]), type=source_type)
 
 
 def validate_void(plan, s, ctx):
@@ -558,6 +561,12 @@ def _movements(s, data):
                  and facts.asset_account.id == row['asset_account_id']
                  and facts.cogs_account.id == row['offset_account_id'],
                  'a stock receipt was written for a line that carries no stock')
+        if line['source_transaction_id'] is None:
+            _require(facts.return_cost_minor_units is not None
+                     and row['value_minor_units'] == facts.return_cost_minor_units
+                     and row['returns_movement_id'] is None,
+                     'an unlinked stock receipt must carry its explicitly captured return cost')
+            continue
         own = claims.get(row['document_line_id'], [])
         issue = inventory_effects.live_issue(
             s, line['source_transaction_id'], line['source_document_line_id'])

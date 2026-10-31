@@ -1,9 +1,9 @@
 """Inputs and outputs of ringing up a POS sale (R114 increment 5, design/point-of-sale.md §3, §4)."""
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from bookflow.company.items import MoneyOutput
 from bookflow.company.pos_models import Named, PaymentMethodRef
@@ -53,8 +53,8 @@ class PosSalePreviewInput(_Cart):
 class Tender(_Strict):
     payment_method: Selector = Field(description='One of the payment methods the register offers (ID or name).')
     amount: Amount | None = Field(None, description=(
-        'Amount tendered. For cash, at least the total (the change is the difference); for any other method it is '
-        'the total, the default.'))
+        'Amount tendered. Single tender defaults to the total; cash may give change. Every split tender needs an '
+        'explicit positive amount, and only cash can exceed the remaining balance.'))
     reference: str | None = Field(None, max_length=128, description=(
         'Card or check reference (last four digits, approval code), stored as the receipt\'s payment reference.'))
 
@@ -62,7 +62,15 @@ class Tender(_Strict):
 class PosSaleCompleteInput(_Cart):
     ticket_version: _Version | None = Field(None, ge=1, description="Required version for a resumed held ticket.")
     ticket: Ticket
-    tender: Tender
+    tender: Tender | None = None
+    tenders: list[Tender] | None = Field(None, min_length=2, max_length=20, description="Split payments in order; every amount is required. Change comes only from cash.")
+
+    @model_validator(mode="after")
+    def one_tender_form(self):
+        if (self.tender is None) == (self.tenders is None):
+            raise ValueError("provide either tender or tenders")
+        return self
+
     expected_total: Amount = Field(description=(
         '`pos sale preview`\'s total, which the clerk saw. If the sale now totals anything else (a price changed '
         'meanwhile), nothing posts and E_PREVIEW_STALE carries the new total.'))
@@ -95,6 +103,8 @@ class PosSalePreviewOutput(_Strict):
 class TenderOutput(_Strict):
     payment_method: PaymentMethodRef
     amount: MoneyOutput
+    applied: MoneyOutput | None = None
+    change: MoneyOutput | None = None
     reference: str | None
 
 
@@ -102,7 +112,9 @@ class PosSaleOutput(_Strict):
     id: str
     ticket: str
     pos_register: Named
-    sales_receipt: Named = Field(description='The sales receipt posted: its id, and its number as `name`.')
+    sales_receipt: Named = Field(description='Posted sale document identity (invoice for a split sale); retained field name for compatibility.')
+    document_type: Literal['sales_receipt', 'invoice'] = 'sales_receipt'
+    version: int = 1
     customer: Named | None = Field(description='The chosen customer; null for the walk-in.')
     clerk_id: str
     created_at: str

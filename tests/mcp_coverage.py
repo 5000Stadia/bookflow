@@ -375,7 +375,11 @@ OPENING_DRAFT_COMMANDS = frozenset(('opening-draft create', 'opening-draft updat
 BANK_SOURCE_COMMANDS = frozenset(('bank-feed-connection add', 'bank-feed-connection enable',
     'bank-feed-connection disable', 'bank-feed-connection check', 'bank-feed-connection query', 'bank-feed fetch'))
 
-FROZEN_COMMANDS = frozenset(('pos receipt show',)) | POS_TICKET_COMMANDS | POS_LAYOUT_COMMANDS | BANK_SOURCE_COMMANDS | POS_SALE_COMMANDS | BANK_RULE_COMMANDS | POS_REGISTER_COMMANDS | OPENING_DRAFT_COMMANDS | AUTOMATION_COMMANDS | USER_HOME_COMMANDS | BULK_EDIT_COMMANDS | ITEM_PICTURE_COMMANDS | BANK_FEED_COMMANDS | IMPORT_COMMANDS | DELIVERY_COMMANDS | SETUP_TRIAL_COMMANDS | SHIPMENT_COMMANDS | AGENT_SETUP_COMMANDS | VERIFY_COMMANDS | FIFO_COMMANDS | LANDED_COST_COMMANDS | BIN_COMMANDS | SERIAL_LOT_COMMANDS | PERF_COMMANDS | SCHEDULING_COMMANDS | INVENTORY_COUNT_COMMANDS | BARCODE_COMMANDS | CHECK_PRINTING_COMMANDS | ACCOUNTANT_REVIEW_COMMANDS | TIMEKEEPING_COMMANDS | INVENTORY_SITE_COMMANDS | PARTIAL_PO_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
+POS_REFUND_COMMANDS = frozenset(('pos refund', 'pos refund lines', 'pos refund show', 'pos refund receipt'))
+
+POS_DAY_COMMANDS = frozenset(('pos shift open', 'pos shift close', 'report pos-day', 'pos deposit prepare'))
+
+FROZEN_COMMANDS = POS_DAY_COMMANDS | POS_REFUND_COMMANDS | frozenset(('pos receipt show',)) | POS_TICKET_COMMANDS | POS_LAYOUT_COMMANDS | BANK_SOURCE_COMMANDS | POS_SALE_COMMANDS | BANK_RULE_COMMANDS | POS_REGISTER_COMMANDS | OPENING_DRAFT_COMMANDS | AUTOMATION_COMMANDS | USER_HOME_COMMANDS | BULK_EDIT_COMMANDS | ITEM_PICTURE_COMMANDS | BANK_FEED_COMMANDS | IMPORT_COMMANDS | DELIVERY_COMMANDS | SETUP_TRIAL_COMMANDS | SHIPMENT_COMMANDS | AGENT_SETUP_COMMANDS | VERIFY_COMMANDS | FIFO_COMMANDS | LANDED_COST_COMMANDS | BIN_COMMANDS | SERIAL_LOT_COMMANDS | PERF_COMMANDS | SCHEDULING_COMMANDS | INVENTORY_COUNT_COMMANDS | BARCODE_COMMANDS | CHECK_PRINTING_COMMANDS | ACCOUNTANT_REVIEW_COMMANDS | TIMEKEEPING_COMMANDS | INVENTORY_SITE_COMMANDS | PARTIAL_PO_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
 account create
 account deactivate
 account list
@@ -955,7 +959,8 @@ def execution_map():
     permissions = {row['command']: row for row in inventory()}
     result = []
     for cmd in commands:
-        witness = ('tests/test_bank_connection_surfaces.py::test_connection_seam_through_python_cli_http_and_mcp' if cmd.name in BANK_SOURCE_COMMANDS else
+        witness = ('tests/test_pos_day_surfaces.py::test_day_close_four_surfaces' if cmd.name in POS_DAY_COMMANDS else
+                   'tests/test_bank_connection_surfaces.py::test_connection_seam_through_python_cli_http_and_mcp' if cmd.name in BANK_SOURCE_COMMANDS else
                    'tests/test_mcp_registry_browsing.py::test_list_browsing_four_interfaces' if cmd.name in BROWSING_COMMANDS else
                    'tests/test_mcp_registry_lists.py::test_each_list_lifecycle_valid_rejected_and_preview_parity' if cmd.name in LISTS else
                    'tests/test_mcp_registry_financial.py::test_financial_lifecycle_full_documents_and_ledger_parity' if cmd.name in FINANCIAL else
@@ -1061,6 +1066,7 @@ def execution_map():
                    'tests/test_pos_layout_surfaces.py::test_the_same_layout_through_python_cli_http_and_mcp' if cmd.name in POS_LAYOUT_SURFACE_COMMANDS else
                    'tests/test_pos_layout_surfaces.py::test_the_same_group_picture_through_python_cli_http_and_mcp' if cmd.name in POS_LAYOUT_PICTURE_COMMANDS else
                    'tests/test_pos_ticket_surfaces.py::test_tickets_through_python_cli_http_and_mcp' if cmd.name in POS_TICKET_SURFACE_COMMANDS else
+                   'tests/test_pos_refund_surfaces.py::test_refund_surfaces' if cmd.name in POS_REFUND_COMMANDS else
                    'tests/test_pos_receipt_surfaces.py::test_receipt_through_python_cli_http_and_mcp' if cmd.name in POS_RECEIPT_SURFACE_COMMANDS else
                    'tests/test_pos_void_surfaces.py::test_void_through_python_cli_http_and_mcp' if cmd.name in POS_VOID_SURFACE_COMMANDS else
                    'tests/test_pos_sale_surfaces.py::test_the_same_sale_through_python_cli_http_and_mcp' if cmd.name in POS_SALE_SURFACE_COMMANDS else  # all four
@@ -1156,6 +1162,10 @@ def variant_policies():
     money = 'tests/test_numeric_entry_browser.py::test_generated_sales_math_preview_and_save'
     payment = 'tests/test_mcp_payment_form_browser.py::test_saved_selection_control_previews_real_receipt'
     return {
+        ('anyOf', ('Tender', 'null')): ([parent,
+            'tests/test_pos_split_browser.py::test_split_change_reload_retry_and_receipt',
+            'tests/test_pos_sale_browser.py::test_ring_up_by_tap_lookup_and_scan_then_cash_and_the_change_screen_at_390'],
+            ['the generated fallback form has no Tender-specific explicit-null browser case; the POS screen uses omitted tender for split payments']),
         ('anyOf', ('Address', 'null')): ([parent, 'tests/test_mcp_address_payee_browser.py::test_sales_address_default_explicit_null_and_return_to_current_default'], []),
         ('anyOf', ('AddressInput', 'null')): ([parent, 'tests/test_mcp_address_payee_browser.py::test_party_address_create_patch_clear_and_omission'], []),
         ('anyOf', ('RegisterParty', 'null')): ([nested, parent, 'tests/test_mcp_address_payee_browser.py::test_top_level_register_payee_prefill_null_replacement_and_journal_destination'], []),
