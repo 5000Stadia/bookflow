@@ -131,7 +131,9 @@ RESOURCE_PAIRS = {
         ('automate.bank-rule', 'standard'), ('automate.invoice', 'standard')},
     # automation-v1: a rule is read or paused only by a caller its kind's own show and update admit.
     'automation.require_command': {('customer', 'member'), ('customer', 'standard'), ('customer-work', 'member'),
-                                   ('ledger.read', 'member')},
+                                   ('ledger.read', 'member'),
+                                   # bank-rule-v1: a bank rule is read and paused through bank-rule show and update.
+                                   ('bank-feed', 'member'), ('bank-feed', 'standard')},
     # transaction-find-v1: a family is searched only for a caller its own `show` admits.
     'transaction_find._withheld': {('customer-work', 'member'), ('ledger.read', 'member')},
     'transaction_deletion_facts.admit': {('ledger.read', 'member'), ('transaction.invoice.delete', 'standard'), ('transaction.journal_entry.delete', 'standard'), ('transaction.payment.delete', 'standard'), ('transaction.sales_receipt.delete', 'standard')},

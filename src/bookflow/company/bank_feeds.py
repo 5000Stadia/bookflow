@@ -579,6 +579,8 @@ def prepare(s, ctx, inp, *, stored: dict | None = None, exclude_import: str | No
         r.setdefault('state', 'waiting')
         r.setdefault('entry', None)
         r.setdefault('reason', '')
+    prepared_rules = dict(new=new, account_id=account_id, places=places, counts={})
+    _rules.annotate(s, prepared_rules)
 
     reused = sum(1 for r in new if 'fitid_reused' in r['warnings'])
     if reused:
@@ -593,7 +595,8 @@ def prepare(s, ctx, inp, *, stored: dict | None = None, exclude_import: str | No
                   soft_duplicates=soft, fitid_reused=reused,
                   matched=sum(1 for r in new if r['state'] == 'matched'),
                   settled=sum(1 for r in new if r['state'] == 'settled'),
-                  waiting=sum(1 for r in new if r['state'] == 'waiting'))
+                  waiting=sum(1 for r in new if r['state'] == 'waiting'),
+                  proposed=prepared_rules['counts']['proposed'])
     total = sum(r['line'].amount for r in new)
     dates = [r['line'].date for r in rows]
     already = counts['already_in'] + counts['in_statement']
@@ -715,7 +718,10 @@ def output(prepared: dict, *, import_id=None, batch_id=None, line_ids=None, dry_
             entry_id=_entry_id(r['entry']) if r.get('entry') is not None else None,
             suggestions=tuple(m.Suggestion(entry_id=_entry_id(v), date=v.date, amount=v.amount, number=v.number,
                                            payees=v.payees) for v in options[:5]),
-            possible_duplicate_of=r.get('duplicate_of'), warnings=tuple(r['warnings'])))
+            possible_duplicate_of=r.get('duplicate_of'), warnings=tuple(r['warnings']),
+            rule_id=(r.get('rule') or {}).get('id'),
+            rule_reason=(r.get('rule') or r.get('history') or {}).get('reason'),
+            rule_acts=(r.get('rule') or {}).get('acts')))
     counts = prepared['counts']
     if dry_run:
         step = ('Dry run: nothing was written. Run the same call without --dry-run to import '
@@ -789,6 +795,7 @@ def write(s, ctx, prepared: dict, *, moved_from: str | None = None) -> tuple[m.I
             line, entry = r['line'], r['entry']
             line_id = new_id()
             line_ids[id(r)] = line_id
+            r['line_id'] = line_id
             line_rows.append(dict(
                 id=line_id, import_id=import_id, ordinal=n, account_id=account_id, line_key=r['key'],
                 fitid=line.fitid, date=line.date, amount=line.amount, payee=line.payee, memo=line.memo,
@@ -798,7 +805,7 @@ def write(s, ctx, prepared: dict, *, moved_from: str | None = None) -> tuple[m.I
                 entry_date=entry.date if entry is not None else None,
                 link_how='auto' if entry is not None else None, match_reason=(r['reason'] or None) and r['reason'][:500],
                 possible_duplicate_of=r.get('duplicate_of'), warnings=json.dumps(r['warnings']),
-                proposal=_proposal(r)))
+                proposal=_proposal(r), rule_id=(r.get('rule') or {}).get('id') if r['state'] == 'waiting' else None))
             event_rows.append(dict(
                 id=new_id(), line_id=line_id, kind='imported', import_id=import_id, batch_id=batch_id,
                 details=json.dumps({'state': r['state'], 'reason': r['reason'], 'warnings': r['warnings'],
@@ -859,7 +866,7 @@ def _proposal(r: dict) -> str | None:
         return None
     result = r.get('result')
     options = r.get('suggest') or (result.suggestions if result is not None and result.status == 'suggested' else [])
-    return _sort.proposal_for(r.get('reason') or '', [_entry_id(v) for v in options])
+    return _rules.merged_proposal(_sort.proposal_for(r.get('reason') or '', [_entry_id(v) for v in options]), r)
 
 
 # ------------------------------------------------------------------ reading the inbox
@@ -883,7 +890,7 @@ def _line_out(row: dict, places: int) -> dict:
                 entry_id=row['entry_id'], link_how=row['link_how'], reason=row['match_reason'],
                 possible_duplicate_of=row['possible_duplicate_of'], warnings=tuple(json.loads(row['warnings'])),
                 version=row['version'], created=bool(row.get('created')), payee_display=row.get('payee_display'),
-                ignore_reason=row.get('ignore_reason'))
+                ignore_reason=row.get('ignore_reason'), rule_id=row.get('rule_id'))
 
 
 def _decorated(s, rows: list[dict], places_for) -> tuple:
@@ -991,3 +998,4 @@ def line_query(s, inp) -> dict:
 
 from bookflow.company import bank_reversal as _reversal  # noqa: E402,F401  (registers the bank-import adapter)
 from bookflow.company import bank_sort as _sort  # noqa: E402,F401  (registers the bank-sort adapter)
+from bookflow.company import bank_rules as _rules  # noqa: E402,F401  (registers the bank-rule automation kind)

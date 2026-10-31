@@ -2884,3 +2884,21 @@ MATRIX['automation pause'] = {'E_VALIDATION': 'unknown kind', 'E_RECORD_NOT_FOUN
                               'E_IDEMPOTENCY_MISMATCH': 'a reused key with other input',
                               'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
                               'E_DIRECTIVE_INACTIVE': 'deactivated --directive'}
+# Bank rules and learning (R108 increment 4).
+_BANK_RULE = {'E_VALIDATION': 'a field the action does not take, an auto-add with no payee or category, a condition '
+                              'that cannot be read, a suggestion edited by status, a retired rule, making live '
+                              'without the check confirmed or a rule that only proposes',
+              'E_RECORD_NOT_FOUND': 'unknown rule, account, payee or class',
+              'E_VERSION_CONFLICT': 'the rule or a line changed meanwhile',
+              'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+              'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+              'E_DIRECTIVE_INACTIVE': 'deactivated --directive'}
+MATRIX['bank-rule create'] = {**_BANK_RULE, 'E_NAME_TAKEN': 'a rule of that name exists',
+                              'E_AMOUNT_PRECISION': 'an amount condition with more places than the currency has'}
+MATRIX['bank-rule update'] = {**MATRIX['bank-rule create'],
+                              'E_PERMISSION': 'making it live without automate.bank-rule',
+                              'E_DB_BUSY': 'the establisher\'s authority cannot be read now'}
+for _name in ('bank-rule deactivate', 'bank-rule accept', 'bank-rule decline', 'bank-rule apply'):
+    MATRIX[_name] = dict(_BANK_RULE)
+MATRIX['bank-rule show'] = {'E_VALIDATION': 'invalid input', 'E_RECORD_NOT_FOUND': 'unknown rule'}
+MATRIX['bank-rule query'] = {'E_VALIDATION': 'invalid input or cursor', 'E_RECORD_NOT_FOUND': 'unknown account'}

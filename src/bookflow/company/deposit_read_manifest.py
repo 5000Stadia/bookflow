@@ -325,6 +325,7 @@ FIELDS = {
         'delivery_auto_flag_from': ('str', True, False, 'dependency_field'),
         'weight_unit': ('str', False, False, 'dependency_field'),
         'shipping_item_id': ('str', True, False, 'dependency_field'),
+        'bank_rule_learning': ('str', False, False, 'outside_output'),  # R108 increment 4
     },
     'custom_field_defs': {
         'active': ('bool', False, False, 'dependency_field'),

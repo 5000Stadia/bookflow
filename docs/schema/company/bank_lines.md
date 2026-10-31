@@ -34,3 +34,5 @@ Database: `company`.
 | `proposal` | TEXT | yes | — | — | — | — | What the matcher suggested at import, with its reason, as a JSON object; null when nothing. |
 | `ignore_reason` | VARCHAR(16) | yes | — | — | — | — | Why the line was set aside: already_entered, not_ours, duplicate, other; null unless ignored. |
 | `entry_date` | VARCHAR(10) | yes | — | — | — | — | The entry's date on this account when the line was linked to it (YYYY-MM-DD), so a later change shows as entry_gone; null while none. |
+| `rule_id` | VARCHAR(26) | yes | — | — | — | bank_rules.id | The rule that proposed for this line, or acted on it; null when none. |
+| `answer` | TEXT | yes | — | — | — | — | What the line was added as (payee, account, class) as a JSON object, read by history proposals and learning; null unless added with one account. |

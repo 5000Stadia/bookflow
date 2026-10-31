@@ -1303,3 +1303,9 @@ sa.Index("ix_items_picture_thumbnail_attachment_id", items.c.picture_thumbnail_a
 # Grid edits (co0116, R107 increment 6): a selection's diff, applied as one reversible batch.
 from bookflow.company import bulk_edit_schema as _bulk_edit_schema
 globals().update(_bulk_edit_schema.define_tables(metadata, _column, _table))
+# Bank rules and learning (co0119, R108 increment 4): rules, their versions, declined keys; a line's rule and answer.
+from bookflow.company import bank_rule_schema as _bank_rule_schema
+globals().update(_bank_rule_schema.define_tables(metadata, _column, _table))
+for _bank_rule_column in _bank_rule_schema.line_columns(_column):
+    bank_lines.append_column(_bank_rule_column)
+company_info.append_column(_bank_rule_schema.company_info_column(_column))

@@ -652,6 +652,9 @@ def tick(s, system_id: str, now) -> dict | None:
 
 def _register_batches():
     from bookflow.company import batches
+    # Imported by the company schema (bank rules take `columns`) while batches itself loads: batches registers it.
+    if not hasattr(batches, 'Adapter') or not hasattr(batches, 'register'):
+        return
     if BATCH_KIND not in batches.ADAPTERS:
         batches.register(batches.Adapter(BATCH_KIND, 'record', label='Automation run'))
 

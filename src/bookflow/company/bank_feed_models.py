@@ -75,6 +75,11 @@ class Line(Model):
     suggestions: tuple[Suggestion, ...] = ()
     possible_duplicate_of: str | None = Field(None, description='A live inbox line this one probably repeats.')
     warnings: tuple[str, ...] = ()
+    rule_id: ID | None = Field(None, description='The bank rule that fits this waiting line (the first, in order).')
+    rule_reason: str | None = Field(None, description="Why: the rule and the conditions it met, or 'from history: "
+                                                      "4 of 5 times'.")
+    rule_acts: Literal['add', 'ignore'] | None = Field(None, description=(
+        'A live auto-add or ignore rule acts on the line at the import (its establisher checked first).'))
 
 
 class AccountCheck(Model):
@@ -112,6 +117,19 @@ class ImportCounts(Model):
     matched: Count
     settled: Count
     waiting: Count
+    proposed: Count = Field(0, description='Waiting lines a bank rule or their history proposes for.')
+
+
+class RuleRun(Model):
+    rule_id: ID
+    name: str
+    outcome: Literal['acted', 'paused', 'skipped'] = Field(description=(
+        'acted: it added or ignored its lines as its establisher; paused: its establisher no longer holds '
+        'automate.bank-rule (or was refused), so its lines wait and one to-do was raised; skipped: not checked now.'))
+    added: Count
+    ignored: Count
+    refused: tuple[dict, ...] = Field((), description='Lines it could not enter (each waits), with the code and why.')
+    reason: str | None = None
 
 
 class ImportOutput(Model):
@@ -134,6 +152,8 @@ class ImportOutput(Model):
     lines: tuple[Line, ...]
     has_more_lines: bool
     next: str
+    automations: tuple[RuleRun, ...] = Field((), description=(
+        'Live auto-add and ignore rules that fit lines of this import, and what each did.'))
 
 
 class ImportSelector(Model):
@@ -168,13 +188,19 @@ class ImportRow(Model):
 
 
 class Proposal(Model):
-    kind: Literal['match', 'transfer'] = Field(description=(
-        'match: an entry already in the books; transfer: the other end of a movement between two of your accounts.'))
+    kind: Literal['match', 'transfer', 'rule', 'history'] = Field(description=(
+        'match: an entry already in the books; transfer: the other end of a movement between two of your accounts; '
+        'rule: what a bank rule says the line is; history: what the account\'s earlier lines of this payee were '
+        'added as.'))
     reason: str = Field(description='Why it is proposed; when several fit equally, says so (never chosen for you).')
     entry_ids: tuple[ID, ...] = ()
     line_ids: tuple[ID, ...] = Field((), description='Lines of other accounts (transfer).')
     unique: bool = Field(description='True when exactly one fits: the act with no choice named accepts it.')
     next: str = Field(description='The command that accepts it, or names one of several.')
+    rule_id: ID | None = Field(None, description='rule: the bank rule.')
+    payee: str | None = Field(None, description='rule or history: the payee it enters the line under.')
+    account_id: ID | None = Field(None, description='rule or history: the account (or a transfer rule\'s other '
+                                                    'account).')
 
 
 class InboxLine(Model):
@@ -207,6 +233,7 @@ class InboxLine(Model):
         "Set when the line's entry was voided, deleted or changed in amount or date since it was linked, with why: the "
         "line is not done (bank-line unmatch returns it to waiting)."))
     proposals: tuple[Proposal, ...] = Field((), description='For a waiting line: what it could be, with why.')
+    rule_id: ID | None = Field(None, description='The bank rule that proposed for the line, or acted on it.')
 
 
 class ImportShowOutput(Model):
@@ -345,6 +372,9 @@ class AddItem(_Entering):
 
 
 class AddInput(_Entering):
+    always: bool = Field(False, description=(
+        "Always do this: make a rule now, so this payee's later lines in this account are proposed the same payee, "
+        'account and class (a learned rule, active at once; it never adds on its own).'))
     line: ID | None = Field(None, description='The waiting line to enter in the books.')
     lines: tuple[AddItem, ...] = Field((), max_length=500, description=_BATCH + (
         ' Each item may carry its own payee, account and so on; fields given at the top fill what an item leaves out.'))

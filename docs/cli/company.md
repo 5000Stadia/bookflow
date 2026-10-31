@@ -1309,6 +1309,7 @@ The same example as complete `bookflow_run` arguments:
 | `pick_and_pack_enabled` | `--pick-and-pack-enabled` | boolean | no | no | null | Pick lists, draft shipments and boxes as optional layers on shipping: off by default, when `shipment post` ships straight from the order. Turning it off is refused while a pick list or draft shipment is open. |
 | `weight_unit` | `--weight-unit` | string \| null | no | yes | null | The one weight unit of item weights and boxes (lb, kg, oz): a label, never converted. |
 | `shipping_item_id` | `--shipping-item-id` | string \| null | no | yes | null | Other-charge or service item a shipment's freight to bill is billed as, by default. |
+| `bank_rule_learning` | `--bank-rule-learning` | literal["ask", "always", "never"] \| null | no | yes | null | Bank rules: when two adds of a payee in a bank or card account agree, ask (the default: a suggested rule to accept or decline), always (make the rule active at once) or never (learn nothing). A learned rule only proposes; it never adds on its own. |
 
 ### Command and context options
 

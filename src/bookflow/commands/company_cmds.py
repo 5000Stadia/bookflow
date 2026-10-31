@@ -261,6 +261,7 @@ class CompanyUpdateInput(BaseModel):
     pick_and_pack_enabled: bool = Field(None, strict=True, description="Pick lists, draft shipments and boxes as optional layers on shipping: off by default, when `shipment post` ships straight from the order. Turning it off is refused while a pick list or draft shipment is open.")
     weight_unit: str | None = Field(None, min_length=1, max_length=16, description="The one weight unit of item weights and boxes (lb, kg, oz): a label, never converted.")
     shipping_item_id: str | None = Field(None, description="Other-charge or service item a shipment's freight to bill is billed as, by default.")
+    bank_rule_learning: Literal["ask", "always", "never"] | None = Field(None, description="Bank rules: when two adds of a payee in a bank or card account agree, ask (the default: a suggested rule to accept or decline), always (make the rule active at once) or never (learn nothing). A learned rule only proposes; it never adds on its own.")
 
     @field_validator("legal_name", "tax_id", "industry", "contact_name", "phone", "fax", "email", "website", "timezone", "closing_date", "free_on_board", "finance_charge_annual_rate", "finance_charge_minimum", "finance_charge_account_id", "overdue_notice_minimum", "delivery_reply_to", "delivery_copy_to", "delivery_auto_flag_from", mode="before")
     @classmethod
@@ -281,6 +282,7 @@ NOT_NULLABLE = {
     "order_printable_checks", "attachment_max_bytes", "negative_number_style",
     "finance_charge_grace_days", "finance_charge_on_overdue_charges", "finance_charge_from", "finance_charge_mark_to_print",
     "overdue_notice_frequency", "overdue_notice_template", "invoice_when_shipping", "pick_and_pack_enabled", "weight_unit",
+    "bank_rule_learning",
 }
 
 
