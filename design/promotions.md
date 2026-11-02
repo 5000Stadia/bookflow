@@ -403,6 +403,7 @@ These are reversible design decisions recorded here, not questions for the princ
 - **K1 — Scope beyond membership prices.** Include paid/renewing memberships, accumulated loyalty points, gift cards
   or externally delivered coupons? **Default:** no. Dated membership pricing and same-sale benefits only; no fee,
   renewal charge, stored-value liability or external messaging. Any addition gets its own accounting/permission design.
+  **Settled 2026-11-02:** the principal let the default stand.
 - **K2 — Tax/legal scope.** Must this release handle reimbursement-funded coupons or legally distinct gift-tax rules
   beyond the current discount tax-code model? **Default:** no new tax regime; configure the existing taxable/non-taxable
   discount treatment explicitly, preserve it on the sale and expose the worked tax preview. Cases that cannot be

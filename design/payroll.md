@@ -491,6 +491,7 @@ Only these are reserved for Kabe; defaults do not stop the local bookkeeping inc
 - **K1 — Form scope and private identifiers.** Is official printable form completion/full employee tax-ID storage
   wanted beyond masked review worksheets? **Default:** worksheets/export only, full identifiers completed outside
   Bookflow, no filing-ready claim. Legal form certification and private-data storage need their own design if chosen.
+  **Settled 2026-11-02:** the principal let the default stand.
 - **K2 — Legal recovery policy.** Which employee agreements/jurisdictions permit recovery of paid commission or
   other wage overpayment through later payroll? **Default:** none automatically; recovery stays pending or is
   separately repaid/waived under R189. No payroll recovery deduction command is enabled by these increments.

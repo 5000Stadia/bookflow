@@ -338,9 +338,11 @@ Only these questions belong to Kabe; defaults let the design proceed without aut
 - **K2 — Contract/legal recovery policy.** May paid commission be recovered or deducted from later earnings, and for
   which recipient agreements? **Default:** no automatic offsets/deductions; show recovery pending and require an
   explicit waive or verified recovery transaction. Bookflow does not choose an employment or affiliate contract.
+  **Settled 2026-11-02:** the principal let the default stand.
 - **K3 — Additional earning schemes.** Are collection-based earning, margin, targets or tiered bonuses required in
   this scope? **Default:** net-sales percentage earned at posting only; no inferred collection policy. Add a separately
   designed optional layer if requested; never silently reinterpret an existing plan.
+  **Settled 2026-11-02:** the principal let the default stand.
 
 ## Appendix: references read and adoption
 
