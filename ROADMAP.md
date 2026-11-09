@@ -188,7 +188,7 @@ review cb5fcd7 (gate g96052d).
 - [x] R120 Finance charges: assess late charges on overdue customer balances by a company policy.
 - [x] R121 Accountant review: a period hand-off an outside accountant can review and adjust, with the changes coming back attributed.
 - [~] R122 Approvals: purchase and bill approval steps before posting. Approved (Kabe 2026-10-31: "Full approve, hold off on 113 125 155"); design written (design/approvals.md); inc 1 saved drafts building 2026-11-08; builds now run on Claude (rule u15f06e0c).
-- [ ] R123 Intercompany: linked transactions that post matching entries in two companies of one organization. Approved (Kabe 2026-10-31: "Full approve, hold off on 113 125 155"); design queued.
+- [ ] R123 Intercompany: linked transactions that post matching entries in two companies of one organization. Approved (Kabe 2026-10-31: "Full approve, hold off on 113 125 155"); design written (design/intercompany.md, 2026-11-09): hub-coordinated two-company posting with a durable decision and recovery fence; 6 increments, inc 1 relationship setup and local drafts (M) queued.
 - [x] R124 Customer deposits on orders: money received before invoicing, held as a liability until the order bills.
 - [ ] R125 Receipt capture: read a photographed receipt or bill and draft the entry for review. On hold: Kabe 2026-10-31 "hold off on 113 125 155".
 - [ ] R126 Payment providers: take card and bank payments through a provider and record them automatically. On hold: Kabe 2026-10-22 "Not now" (outside account and real money).
