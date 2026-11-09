@@ -5,7 +5,7 @@ import subprocess
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PUBLIC_PATHS = ('src', 'docs', 'design', 'README.md', 'tools', 'tests')
+PUBLIC_PATHS = ('src', 'docs', 'design', 'README.md', 'ROADMAP.md', 'tools', 'tests')
 # Compressed binaries (fonts, images, wasm) hold arbitrary bytes that can spell two letters by chance.
 OPAQUE_SUFFIXES = ('.ttf', '.otf', '.woff', '.woff2', '.wasm', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.pdf')
 PATTERN = re.compile(r'quickbooks|(?<![a-z])(?:intuit|qbo|qbd|qb)(?![a-z])', re.IGNORECASE)
