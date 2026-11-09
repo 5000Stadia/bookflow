@@ -1,8 +1,7 @@
 # Multi-currency and non-US tax (R127)
 
-Design contract, 2026-11-09. Approved scope: **“Multi-currency and non-US tax: foreign-currency ledgers,
-revaluation, and tax regimes beyond US sales tax, after a design pass. Approved (Kabe 2026-10-31: \"Full approve,
-hold off on 113 125 155\"); design queued.”** This is the design pass, not an implementation. Commands and tables
+Design contract, 2026-11-09. Approved scope (roadmap R127): foreign-currency ledgers, revaluation, and tax regimes
+beyond US sales tax, after a design pass. This is the design pass, not an implementation. Commands and tables
 below are proposed. Existing single-currency US books retain their behavior and every historical posting.
 
 **Outcome.** Bill and pay in the currency agreed with a customer or vendor, reconcile a foreign bank in its own
