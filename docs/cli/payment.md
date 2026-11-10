@@ -309,6 +309,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].request.input.use_defaults` | array[literal["sales_tax_calculation", "billing_address", "shipping_address", "terms", "due_date", "ship_method", "sales_rep", "class_id", "customer_tax_code", "sales_tax_item", "price_level", "payment_method"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines` | array[object] \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].commission` | object \| null | no | yes | null | Invoice attribution: exactly one sales-rep recipient with share 100; required for enabled new items when attribution is on. Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].commission.recipients` | array[object] | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].commission.recipients[].recipient` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].commission.recipients[].share` | literal[100] | no | no | 100 | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines[].line_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines[].item` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines[].quantity` | string | no | no | "1" | Present in InvoiceUpdatePreviewRequest. |
@@ -1851,6 +1855,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].request.input.use_defaults` | array[literal["sales_tax_calculation", "billing_address", "shipping_address", "terms", "due_date", "ship_method", "sales_rep", "class_id", "customer_tax_code", "sales_tax_item", "price_level", "payment_method"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines` | array[object] \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].commission` | object \| null | no | yes | null | Invoice attribution: exactly one sales-rep recipient with share 100; required for enabled new items when attribution is on. Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].commission.recipients` | array[object] | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].commission.recipients[].recipient` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].commission.recipients[].share` | literal[100] | no | no | 100 | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines[].line_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines[].item` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines[].quantity` | string | no | no | "1" | Present in InvoiceUpdatePreviewRequest. |
@@ -3011,6 +3019,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].request.input.use_defaults` | array[literal["sales_tax_calculation", "billing_address", "shipping_address", "terms", "due_date", "ship_method", "sales_rep", "class_id", "customer_tax_code", "sales_tax_item", "price_level", "payment_method"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines` | array[object] \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].commission` | object \| null | no | yes | null | Invoice attribution: exactly one sales-rep recipient with share 100; required for enabled new items when attribution is on. Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].commission.recipients` | array[object] | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].commission.recipients[].recipient` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].commission.recipients[].share` | literal[100] | no | no | 100 | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines[].line_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines[].item` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines[].quantity` | string | no | no | "1" | Present in InvoiceUpdatePreviewRequest. |
@@ -3507,6 +3519,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].request.input.use_defaults` | array[literal["sales_tax_calculation", "billing_address", "shipping_address", "terms", "due_date", "ship_method", "sales_rep", "class_id", "customer_tax_code", "sales_tax_item", "price_level", "payment_method"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines` | array[object] \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].commission` | object \| null | no | yes | null | Invoice attribution: exactly one sales-rep recipient with share 100; required for enabled new items when attribution is on. Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].commission.recipients` | array[object] | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].commission.recipients[].recipient` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].commission.recipients[].share` | literal[100] | no | no | 100 | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines[].line_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines[].item` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines[].quantity` | string | no | no | "1" | Present in InvoiceUpdatePreviewRequest. |
@@ -3990,6 +4006,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].request.input.use_defaults` | array[literal["sales_tax_calculation", "billing_address", "shipping_address", "terms", "due_date", "ship_method", "sales_rep", "class_id", "customer_tax_code", "sales_tax_item", "price_level", "payment_method"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines` | array[object] \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].commission` | object \| null | no | yes | null | Invoice attribution: exactly one sales-rep recipient with share 100; required for enabled new items when attribution is on. Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].commission.recipients` | array[object] | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].commission.recipients[].recipient` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.lines[].commission.recipients[].share` | literal[100] | no | no | 100 | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines[].line_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines[].item` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.lines[].quantity` | string | no | no | "1" | Present in InvoiceUpdatePreviewRequest. |

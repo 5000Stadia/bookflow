@@ -47,6 +47,7 @@ class ItemUpdateInput(StrictInput):
     category_id: str | None = Field(default=None, min_length=26, max_length=26)
     description: str | None = None
     purchase_description: str | None = None
+    commission_enabled: bool = Field(None, strict=True, description="Require a commission recipient on new invoice lines; needs commission.manage and attribution enabled to turn on. Omission preserves; null refuses.")
     sales_enabled: bool | None = None
     purchase_enabled: bool | None = None
     price: Any | None = None
@@ -207,7 +208,14 @@ def _touched(mutation: items.ItemMutation) -> Touched:
     )
 
 
+def _commission_authority(inp, session: Session) -> None:
+    if "commission_enabled" in inp.model_fields_set:
+        from bookflow.company.commissions import require_capability
+        require_capability(session, "commission.manage", "admin")
+
+
 def plan_item_create(inp: ItemCreateInput, ctx: Context, session: Session) -> Plan:
+    _commission_authority(inp, session)
     mutation = items.plan_item_create(
         session.company,
         inp.model_dump(mode="python", exclude_unset=True),
@@ -234,6 +242,7 @@ def apply_item_create(plan: Plan, ctx: Context, session: Session) -> Applied:
 
 
 def plan_item_update(inp: ItemUpdateInput, ctx: Context, session: Session) -> Plan:
+    _commission_authority(inp, session)
     current = items.resolve_item(session.company, inp.item)
     changes = {
         field: getattr(inp, field)

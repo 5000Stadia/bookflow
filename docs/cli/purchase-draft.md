@@ -157,6 +157,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `preview.expenses[].billable` | boolean | yes | no | — | — |
+| `preview.items` | array[object] | no | no | [] | — |
+| `preview.items[].item` | object | yes | no | — | — |
+| `preview.items[].item.id` | string | yes | no | — | — |
+| `preview.items[].item.name` | string | yes | no | — | — |
+| `preview.items[].description` | string \| null | yes | yes | — | — |
+| `preview.items[].quantity` | string | yes | no | — | — |
+| `preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `preview.items[].amount` | object | yes | no | — | — |
+| `preview.items[].amount.amount` | string | yes | no | — | — |
+| `preview.items[].amount.currency` | string | yes | no | — | — |
+| `preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `preview.purchase_order` | object \| null | no | yes | null | — |
+| `preview.purchase_order.id` | string | yes | no | — | — |
+| `preview.purchase_order.name` | string | yes | no | — | — |
+| `preview.receipts` | array[object] | no | no | [] | — |
+| `preview.receipts[].id` | string | yes | no | — | — |
+| `preview.receipts[].number` | string | yes | no | — | — |
+| `preview.receipts[].quantity` | string | yes | no | — | — |
 | `preview.vendor` | object | yes | no | — | — |
 | `preview.vendor.id` | string | yes | no | — | — |
 | `preview.vendor.name` | string | yes | no | — | — |
@@ -245,6 +266,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `history[].preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `history[].preview.expenses[].billable` | boolean | yes | no | — | — |
+| `history[].preview.items` | array[object] | no | no | [] | — |
+| `history[].preview.items[].item` | object | yes | no | — | — |
+| `history[].preview.items[].item.id` | string | yes | no | — | — |
+| `history[].preview.items[].item.name` | string | yes | no | — | — |
+| `history[].preview.items[].description` | string \| null | yes | yes | — | — |
+| `history[].preview.items[].quantity` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `history[].preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `history[].preview.items[].amount` | object | yes | no | — | — |
+| `history[].preview.items[].amount.amount` | string | yes | no | — | — |
+| `history[].preview.items[].amount.currency` | string | yes | no | — | — |
+| `history[].preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `history[].preview.purchase_order` | object \| null | no | yes | null | — |
+| `history[].preview.purchase_order.id` | string | yes | no | — | — |
+| `history[].preview.purchase_order.name` | string | yes | no | — | — |
+| `history[].preview.receipts` | array[object] | no | no | [] | — |
+| `history[].preview.receipts[].id` | string | yes | no | — | — |
+| `history[].preview.receipts[].number` | string | yes | no | — | — |
+| `history[].preview.receipts[].quantity` | string | yes | no | — | — |
 | `history[].preview.vendor` | object | yes | no | — | — |
 | `history[].preview.vendor.id` | string | yes | no | — | — |
 | `history[].preview.vendor.name` | string | yes | no | — | — |
@@ -301,6 +343,9 @@ Example JSON output:
     "currency": "USD",
     "due_date": "2026-01-01",
     "expenses": [],
+    "items": [],
+    "purchase_order": null,
+    "receipts": [],
     "total": {
       "amount": "value",
       "currency": "USD",
@@ -702,6 +747,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `preview.expenses[].billable` | boolean | yes | no | — | — |
+| `preview.items` | array[object] | no | no | [] | — |
+| `preview.items[].item` | object | yes | no | — | — |
+| `preview.items[].item.id` | string | yes | no | — | — |
+| `preview.items[].item.name` | string | yes | no | — | — |
+| `preview.items[].description` | string \| null | yes | yes | — | — |
+| `preview.items[].quantity` | string | yes | no | — | — |
+| `preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `preview.items[].amount` | object | yes | no | — | — |
+| `preview.items[].amount.amount` | string | yes | no | — | — |
+| `preview.items[].amount.currency` | string | yes | no | — | — |
+| `preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `preview.purchase_order` | object \| null | no | yes | null | — |
+| `preview.purchase_order.id` | string | yes | no | — | — |
+| `preview.purchase_order.name` | string | yes | no | — | — |
+| `preview.receipts` | array[object] | no | no | [] | — |
+| `preview.receipts[].id` | string | yes | no | — | — |
+| `preview.receipts[].number` | string | yes | no | — | — |
+| `preview.receipts[].quantity` | string | yes | no | — | — |
 | `preview.vendor` | object | yes | no | — | — |
 | `preview.vendor.id` | string | yes | no | — | — |
 | `preview.vendor.name` | string | yes | no | — | — |
@@ -790,6 +856,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `history[].preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `history[].preview.expenses[].billable` | boolean | yes | no | — | — |
+| `history[].preview.items` | array[object] | no | no | [] | — |
+| `history[].preview.items[].item` | object | yes | no | — | — |
+| `history[].preview.items[].item.id` | string | yes | no | — | — |
+| `history[].preview.items[].item.name` | string | yes | no | — | — |
+| `history[].preview.items[].description` | string \| null | yes | yes | — | — |
+| `history[].preview.items[].quantity` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `history[].preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `history[].preview.items[].amount` | object | yes | no | — | — |
+| `history[].preview.items[].amount.amount` | string | yes | no | — | — |
+| `history[].preview.items[].amount.currency` | string | yes | no | — | — |
+| `history[].preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `history[].preview.purchase_order` | object \| null | no | yes | null | — |
+| `history[].preview.purchase_order.id` | string | yes | no | — | — |
+| `history[].preview.purchase_order.name` | string | yes | no | — | — |
+| `history[].preview.receipts` | array[object] | no | no | [] | — |
+| `history[].preview.receipts[].id` | string | yes | no | — | — |
+| `history[].preview.receipts[].number` | string | yes | no | — | — |
+| `history[].preview.receipts[].quantity` | string | yes | no | — | — |
 | `history[].preview.vendor` | object | yes | no | — | — |
 | `history[].preview.vendor.id` | string | yes | no | — | — |
 | `history[].preview.vendor.name` | string | yes | no | — | — |
@@ -846,6 +933,9 @@ Example JSON output:
     "currency": "USD",
     "due_date": "2026-01-01",
     "expenses": [],
+    "items": [],
+    "purchase_order": null,
+    "receipts": [],
     "total": {
       "amount": "value",
       "currency": "USD",
@@ -1047,6 +1137,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `items[].preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `items[].preview.expenses[].billable` | boolean | yes | no | — | — |
+| `items[].preview.items` | array[object] | no | no | [] | — |
+| `items[].preview.items[].item` | object | yes | no | — | — |
+| `items[].preview.items[].item.id` | string | yes | no | — | — |
+| `items[].preview.items[].item.name` | string | yes | no | — | — |
+| `items[].preview.items[].description` | string \| null | yes | yes | — | — |
+| `items[].preview.items[].quantity` | string | yes | no | — | — |
+| `items[].preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `items[].preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `items[].preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `items[].preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `items[].preview.items[].amount` | object | yes | no | — | — |
+| `items[].preview.items[].amount.amount` | string | yes | no | — | — |
+| `items[].preview.items[].amount.currency` | string | yes | no | — | — |
+| `items[].preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `items[].preview.purchase_order` | object \| null | no | yes | null | — |
+| `items[].preview.purchase_order.id` | string | yes | no | — | — |
+| `items[].preview.purchase_order.name` | string | yes | no | — | — |
+| `items[].preview.receipts` | array[object] | no | no | [] | — |
+| `items[].preview.receipts[].id` | string | yes | no | — | — |
+| `items[].preview.receipts[].number` | string | yes | no | — | — |
+| `items[].preview.receipts[].quantity` | string | yes | no | — | — |
 | `items[].preview.vendor` | object | yes | no | — | — |
 | `items[].preview.vendor.id` | string | yes | no | — | — |
 | `items[].preview.vendor.name` | string | yes | no | — | — |
@@ -1135,6 +1246,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].history[].preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `items[].history[].preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `items[].history[].preview.expenses[].billable` | boolean | yes | no | — | — |
+| `items[].history[].preview.items` | array[object] | no | no | [] | — |
+| `items[].history[].preview.items[].item` | object | yes | no | — | — |
+| `items[].history[].preview.items[].item.id` | string | yes | no | — | — |
+| `items[].history[].preview.items[].item.name` | string | yes | no | — | — |
+| `items[].history[].preview.items[].description` | string \| null | yes | yes | — | — |
+| `items[].history[].preview.items[].quantity` | string | yes | no | — | — |
+| `items[].history[].preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `items[].history[].preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `items[].history[].preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `items[].history[].preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `items[].history[].preview.items[].amount` | object | yes | no | — | — |
+| `items[].history[].preview.items[].amount.amount` | string | yes | no | — | — |
+| `items[].history[].preview.items[].amount.currency` | string | yes | no | — | — |
+| `items[].history[].preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `items[].history[].preview.purchase_order` | object \| null | no | yes | null | — |
+| `items[].history[].preview.purchase_order.id` | string | yes | no | — | — |
+| `items[].history[].preview.purchase_order.name` | string | yes | no | — | — |
+| `items[].history[].preview.receipts` | array[object] | no | no | [] | — |
+| `items[].history[].preview.receipts[].id` | string | yes | no | — | — |
+| `items[].history[].preview.receipts[].number` | string | yes | no | — | — |
+| `items[].history[].preview.receipts[].quantity` | string | yes | no | — | — |
 | `items[].history[].preview.vendor` | object | yes | no | — | — |
 | `items[].history[].preview.vendor.id` | string | yes | no | — | — |
 | `items[].history[].preview.vendor.name` | string | yes | no | — | — |
@@ -1331,6 +1463,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `preview.expenses[].billable` | boolean | yes | no | — | — |
+| `preview.items` | array[object] | no | no | [] | — |
+| `preview.items[].item` | object | yes | no | — | — |
+| `preview.items[].item.id` | string | yes | no | — | — |
+| `preview.items[].item.name` | string | yes | no | — | — |
+| `preview.items[].description` | string \| null | yes | yes | — | — |
+| `preview.items[].quantity` | string | yes | no | — | — |
+| `preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `preview.items[].amount` | object | yes | no | — | — |
+| `preview.items[].amount.amount` | string | yes | no | — | — |
+| `preview.items[].amount.currency` | string | yes | no | — | — |
+| `preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `preview.purchase_order` | object \| null | no | yes | null | — |
+| `preview.purchase_order.id` | string | yes | no | — | — |
+| `preview.purchase_order.name` | string | yes | no | — | — |
+| `preview.receipts` | array[object] | no | no | [] | — |
+| `preview.receipts[].id` | string | yes | no | — | — |
+| `preview.receipts[].number` | string | yes | no | — | — |
+| `preview.receipts[].quantity` | string | yes | no | — | — |
 | `preview.vendor` | object | yes | no | — | — |
 | `preview.vendor.id` | string | yes | no | — | — |
 | `preview.vendor.name` | string | yes | no | — | — |
@@ -1419,6 +1572,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `history[].preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `history[].preview.expenses[].billable` | boolean | yes | no | — | — |
+| `history[].preview.items` | array[object] | no | no | [] | — |
+| `history[].preview.items[].item` | object | yes | no | — | — |
+| `history[].preview.items[].item.id` | string | yes | no | — | — |
+| `history[].preview.items[].item.name` | string | yes | no | — | — |
+| `history[].preview.items[].description` | string \| null | yes | yes | — | — |
+| `history[].preview.items[].quantity` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `history[].preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `history[].preview.items[].amount` | object | yes | no | — | — |
+| `history[].preview.items[].amount.amount` | string | yes | no | — | — |
+| `history[].preview.items[].amount.currency` | string | yes | no | — | — |
+| `history[].preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `history[].preview.purchase_order` | object \| null | no | yes | null | — |
+| `history[].preview.purchase_order.id` | string | yes | no | — | — |
+| `history[].preview.purchase_order.name` | string | yes | no | — | — |
+| `history[].preview.receipts` | array[object] | no | no | [] | — |
+| `history[].preview.receipts[].id` | string | yes | no | — | — |
+| `history[].preview.receipts[].number` | string | yes | no | — | — |
+| `history[].preview.receipts[].quantity` | string | yes | no | — | — |
 | `history[].preview.vendor` | object | yes | no | — | — |
 | `history[].preview.vendor.id` | string | yes | no | — | — |
 | `history[].preview.vendor.name` | string | yes | no | — | — |
@@ -1475,6 +1649,9 @@ Example JSON output:
     "currency": "USD",
     "due_date": "2026-01-01",
     "expenses": [],
+    "items": [],
+    "purchase_order": null,
+    "receipts": [],
     "total": {
       "amount": "value",
       "currency": "USD",
@@ -1666,6 +1843,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `preview.expenses[].billable` | boolean | yes | no | — | — |
+| `preview.items` | array[object] | no | no | [] | — |
+| `preview.items[].item` | object | yes | no | — | — |
+| `preview.items[].item.id` | string | yes | no | — | — |
+| `preview.items[].item.name` | string | yes | no | — | — |
+| `preview.items[].description` | string \| null | yes | yes | — | — |
+| `preview.items[].quantity` | string | yes | no | — | — |
+| `preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `preview.items[].amount` | object | yes | no | — | — |
+| `preview.items[].amount.amount` | string | yes | no | — | — |
+| `preview.items[].amount.currency` | string | yes | no | — | — |
+| `preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `preview.purchase_order` | object \| null | no | yes | null | — |
+| `preview.purchase_order.id` | string | yes | no | — | — |
+| `preview.purchase_order.name` | string | yes | no | — | — |
+| `preview.receipts` | array[object] | no | no | [] | — |
+| `preview.receipts[].id` | string | yes | no | — | — |
+| `preview.receipts[].number` | string | yes | no | — | — |
+| `preview.receipts[].quantity` | string | yes | no | — | — |
 | `preview.vendor` | object | yes | no | — | — |
 | `preview.vendor.id` | string | yes | no | — | — |
 | `preview.vendor.name` | string | yes | no | — | — |
@@ -1754,6 +1952,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `history[].preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `history[].preview.expenses[].billable` | boolean | yes | no | — | — |
+| `history[].preview.items` | array[object] | no | no | [] | — |
+| `history[].preview.items[].item` | object | yes | no | — | — |
+| `history[].preview.items[].item.id` | string | yes | no | — | — |
+| `history[].preview.items[].item.name` | string | yes | no | — | — |
+| `history[].preview.items[].description` | string \| null | yes | yes | — | — |
+| `history[].preview.items[].quantity` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `history[].preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `history[].preview.items[].amount` | object | yes | no | — | — |
+| `history[].preview.items[].amount.amount` | string | yes | no | — | — |
+| `history[].preview.items[].amount.currency` | string | yes | no | — | — |
+| `history[].preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `history[].preview.purchase_order` | object \| null | no | yes | null | — |
+| `history[].preview.purchase_order.id` | string | yes | no | — | — |
+| `history[].preview.purchase_order.name` | string | yes | no | — | — |
+| `history[].preview.receipts` | array[object] | no | no | [] | — |
+| `history[].preview.receipts[].id` | string | yes | no | — | — |
+| `history[].preview.receipts[].number` | string | yes | no | — | — |
+| `history[].preview.receipts[].quantity` | string | yes | no | — | — |
 | `history[].preview.vendor` | object | yes | no | — | — |
 | `history[].preview.vendor.id` | string | yes | no | — | — |
 | `history[].preview.vendor.name` | string | yes | no | — | — |
@@ -1810,6 +2029,9 @@ Example JSON output:
     "currency": "USD",
     "due_date": "2026-01-01",
     "expenses": [],
+    "items": [],
+    "purchase_order": null,
+    "receipts": [],
     "total": {
       "amount": "value",
       "currency": "USD",
@@ -2205,6 +2427,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `preview.expenses[].billable` | boolean | yes | no | — | — |
+| `preview.items` | array[object] | no | no | [] | — |
+| `preview.items[].item` | object | yes | no | — | — |
+| `preview.items[].item.id` | string | yes | no | — | — |
+| `preview.items[].item.name` | string | yes | no | — | — |
+| `preview.items[].description` | string \| null | yes | yes | — | — |
+| `preview.items[].quantity` | string | yes | no | — | — |
+| `preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `preview.items[].amount` | object | yes | no | — | — |
+| `preview.items[].amount.amount` | string | yes | no | — | — |
+| `preview.items[].amount.currency` | string | yes | no | — | — |
+| `preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `preview.purchase_order` | object \| null | no | yes | null | — |
+| `preview.purchase_order.id` | string | yes | no | — | — |
+| `preview.purchase_order.name` | string | yes | no | — | — |
+| `preview.receipts` | array[object] | no | no | [] | — |
+| `preview.receipts[].id` | string | yes | no | — | — |
+| `preview.receipts[].number` | string | yes | no | — | — |
+| `preview.receipts[].quantity` | string | yes | no | — | — |
 | `preview.vendor` | object | yes | no | — | — |
 | `preview.vendor.id` | string | yes | no | — | — |
 | `preview.vendor.name` | string | yes | no | — | — |
@@ -2293,6 +2536,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `history[].preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `history[].preview.expenses[].billable` | boolean | yes | no | — | — |
+| `history[].preview.items` | array[object] | no | no | [] | — |
+| `history[].preview.items[].item` | object | yes | no | — | — |
+| `history[].preview.items[].item.id` | string | yes | no | — | — |
+| `history[].preview.items[].item.name` | string | yes | no | — | — |
+| `history[].preview.items[].description` | string \| null | yes | yes | — | — |
+| `history[].preview.items[].quantity` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `history[].preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `history[].preview.items[].amount` | object | yes | no | — | — |
+| `history[].preview.items[].amount.amount` | string | yes | no | — | — |
+| `history[].preview.items[].amount.currency` | string | yes | no | — | — |
+| `history[].preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `history[].preview.purchase_order` | object \| null | no | yes | null | — |
+| `history[].preview.purchase_order.id` | string | yes | no | — | — |
+| `history[].preview.purchase_order.name` | string | yes | no | — | — |
+| `history[].preview.receipts` | array[object] | no | no | [] | — |
+| `history[].preview.receipts[].id` | string | yes | no | — | — |
+| `history[].preview.receipts[].number` | string | yes | no | — | — |
+| `history[].preview.receipts[].quantity` | string | yes | no | — | — |
 | `history[].preview.vendor` | object | yes | no | — | — |
 | `history[].preview.vendor.id` | string | yes | no | — | — |
 | `history[].preview.vendor.name` | string | yes | no | — | — |
@@ -2349,6 +2613,9 @@ Example JSON output:
     "currency": "USD",
     "due_date": "2026-01-01",
     "expenses": [],
+    "items": [],
+    "purchase_order": null,
+    "receipts": [],
     "total": {
       "amount": "value",
       "currency": "USD",
@@ -2563,6 +2830,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `preview.expenses[].billable` | boolean | yes | no | — | — |
+| `preview.items` | array[object] | no | no | [] | — |
+| `preview.items[].item` | object | yes | no | — | — |
+| `preview.items[].item.id` | string | yes | no | — | — |
+| `preview.items[].item.name` | string | yes | no | — | — |
+| `preview.items[].description` | string \| null | yes | yes | — | — |
+| `preview.items[].quantity` | string | yes | no | — | — |
+| `preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `preview.items[].amount` | object | yes | no | — | — |
+| `preview.items[].amount.amount` | string | yes | no | — | — |
+| `preview.items[].amount.currency` | string | yes | no | — | — |
+| `preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `preview.purchase_order` | object \| null | no | yes | null | — |
+| `preview.purchase_order.id` | string | yes | no | — | — |
+| `preview.purchase_order.name` | string | yes | no | — | — |
+| `preview.receipts` | array[object] | no | no | [] | — |
+| `preview.receipts[].id` | string | yes | no | — | — |
+| `preview.receipts[].number` | string | yes | no | — | — |
+| `preview.receipts[].quantity` | string | yes | no | — | — |
 | `preview.vendor` | object | yes | no | — | — |
 | `preview.vendor.id` | string | yes | no | — | — |
 | `preview.vendor.name` | string | yes | no | — | — |
@@ -2651,6 +2939,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `history[].preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `history[].preview.expenses[].billable` | boolean | yes | no | — | — |
+| `history[].preview.items` | array[object] | no | no | [] | — |
+| `history[].preview.items[].item` | object | yes | no | — | — |
+| `history[].preview.items[].item.id` | string | yes | no | — | — |
+| `history[].preview.items[].item.name` | string | yes | no | — | — |
+| `history[].preview.items[].description` | string \| null | yes | yes | — | — |
+| `history[].preview.items[].quantity` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `history[].preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `history[].preview.items[].amount` | object | yes | no | — | — |
+| `history[].preview.items[].amount.amount` | string | yes | no | — | — |
+| `history[].preview.items[].amount.currency` | string | yes | no | — | — |
+| `history[].preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `history[].preview.purchase_order` | object \| null | no | yes | null | — |
+| `history[].preview.purchase_order.id` | string | yes | no | — | — |
+| `history[].preview.purchase_order.name` | string | yes | no | — | — |
+| `history[].preview.receipts` | array[object] | no | no | [] | — |
+| `history[].preview.receipts[].id` | string | yes | no | — | — |
+| `history[].preview.receipts[].number` | string | yes | no | — | — |
+| `history[].preview.receipts[].quantity` | string | yes | no | — | — |
 | `history[].preview.vendor` | object | yes | no | — | — |
 | `history[].preview.vendor.id` | string | yes | no | — | — |
 | `history[].preview.vendor.name` | string | yes | no | — | — |
@@ -2707,6 +3016,9 @@ Example JSON output:
     "currency": "USD",
     "due_date": "2026-01-01",
     "expenses": [],
+    "items": [],
+    "purchase_order": null,
+    "receipts": [],
     "total": {
       "amount": "value",
       "currency": "USD",

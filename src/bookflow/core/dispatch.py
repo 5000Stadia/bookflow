@@ -446,7 +446,11 @@ def guard(fn, allowed=False, refusal_facts=None):
                 facts = refusal_facts(message) or {}
             except Exception:  # the lookup only enriches the report; it must never mask the refusal
                 facts = {}
-        _log.error("guard trigger refused a write: guard=%r facts=%r", message, facts, exc_info=True)
+        from bookflow.core.deployment import redact_diagnostics
+        if redact_diagnostics():
+            _log.error("guard trigger refused a write (E_GUARD_REFUSED)")
+        else:
+            _log.error("guard trigger refused a write: guard=%r facts=%r", message, facts, exc_info=True)
         raise redact_error(guard_refused(message, facts), ok()) from None
     except (OSError, sqlite3.Error) as e:
         raise redact_error(io_error("command", e, getattr(e, "filename", None)), ok())

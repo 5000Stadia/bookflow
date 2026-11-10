@@ -80,6 +80,9 @@ RESOURCE_PAIRS = {
     'approvals.decision_authority': {('approval.decide', 'standard'), ('ledger.read', 'member')},
     'approval_commit_reversal._read': {('ledger.read', 'member')},
     'approval_commit_reversal._native': {('ledger.post', 'standard'), ('ledger.read', 'member')},
+    'crm.require_read': {('crm.read', 'member')},
+    'crm.may': {('crm.write', 'standard'), ('note', 'member')},
+    'todos.admit_link': {('crm.read', 'member')},
     # One per Delete delta. Each declares its own admit site in its own catalog
     # module; none of them could be listed here while the assertion below named the
     # frozen ancestor's inventory, which by construction cannot carry a site a later
@@ -103,7 +106,7 @@ RESOURCE_PAIRS = {
     'billing_queries.sale_source_output': {('customer-work', 'member')},
     'deposit_resolution.resolve': {('ledger.post', 'standard')},
     'audit_visibility.admitted': {(name, 'member') for name in (
-        'account', 'attachment', 'class', 'company', 'custom-field', 'customer', 'customer-message',
+        'account', 'attachment', 'class', 'company', 'crm.read', 'custom-field', 'customer', 'customer-message',
         'customer-type', 'customer-work', 'directive', 'employee', 'item', 'item-category', 'job-type',
         'ledger.read', 'note', 'other-name', 'payment-method', 'price-level', 'sales-rep',
         'sales-tax-code', 'ship-method', 'term', 'unit-of-measure', 'vendor', 'vendor-type')},
@@ -129,7 +132,9 @@ RESOURCE_PAIRS = {
     # opening-draft-v1: posting an opening that does not tie is a person's act an agent holds only by grant.
     'opening_drafts.require_accept': {('opening.accept-differences', 'standard')},
     # capabilities-v1: an agent's former people-only act, admitted for it and its principal (hub.capabilities).
+    'payroll_privacy.require_archive_read': {('payroll.read', 'member')},
     'capability_gate.require_held': {
+        ('payroll.read', 'member'), ('payroll.prepare', 'standard'), ('payroll.configure', 'admin'),
         ('party.merge', 'standard'), ('list.merge', 'standard'), ('restore.document', 'standard'),
         ('item.convert', 'standard'), ('check.print-confirm', 'standard'), ('clock.link', 'standard'),
         ('accountant.manage', 'admin'), ('costing.method', 'admin'), ('company.closing-date', 'admin'),
@@ -139,7 +144,10 @@ RESOURCE_PAIRS = {
         ('automate.bank-rule', 'standard'), ('automate.invoice', 'standard'),
         # pos-v1: an agent holds a POS capability only by its own grant.
         ('pos.sell', 'member'), ('pos.void', 'member'), ('pos.refund', 'member'), ('pos.price-override', 'member'),
-        ('pos.layout', 'admin'), ('bank-feed.connect', 'admin')},
+        ('pos.layout', 'admin'), ('bank-feed.connect', 'admin'),
+        ('commission.attribute', 'standard'), ('commission.read', 'standard'), ('commission.manage', 'admin')},
+    'commissions.require_capability': {('commission.attribute', 'standard'), ('commission.read', 'standard'),
+                                       ('commission.manage', 'admin')},
     # pos-v1: an item read shows costs only with the books, and vendors only with the vendor list.
     'item_concealment.holds': {('ledger.read', 'member'), ('vendor', 'member')},
     'payment_authority.pos_scope': {('pos.sell', 'member'), ('pos.void', 'member')},
@@ -177,6 +185,7 @@ def _import_read_pairs():
 
 
 def test_every_resource_call_site_has_explicit_owner_disposition():
+    registry.load_all()
     declared = {**RESOURCE_PAIRS, 'batches.require_read': _import_read_pairs()}
     sites = {}
     for folder in ('commands', 'company'):

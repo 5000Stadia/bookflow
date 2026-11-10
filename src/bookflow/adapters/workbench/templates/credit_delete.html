@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block title %}Delete credit memo {{ credit.revision.number }}{% endblock %}{% block body %}<section id="credit-deletion" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+{% extends "base.html" %}{% block title %}Delete credit memo {{ credit.revision.number }}{% endblock %}{% block body %}<section id="credit-deletion" data-swap-validation-errors>
 <nav class="crumbs"><a href="/c/{{ company_id }}/credit-memo">Credit memos</a> / Delete</nav>
 <h1>Delete credit memo {{ credit.revision.number }}</h1>
 {% include "credit_memo_detail.html" %}

@@ -20,8 +20,9 @@ from urllib.parse import urlencode
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response, JSONResponse
 from starlette.concurrency import run_in_threadpool
-from jinja2 import Environment, FileSystemLoader, select_autoescape
+from jinja2 import Environment, select_autoescape
 
+from bookflow.adapters.workbench.security_templates import NonceLoader
 from bookflow.adapters.workbench import forms as F
 from bookflow.adapters.workbench import activity as Activity
 from bookflow.adapters.workbench import admin as Admin
@@ -66,7 +67,7 @@ from bookflow.storage import migrate
 HERE = Path(__file__).parent
 LAST_COMPANY = "bookflow_company"
 FLASH_TTL_SECONDS = 60.0
-env = Environment(loader=FileSystemLoader(str(HERE / "templates")), autoescape=select_autoescape(["html"]))
+env = Environment(loader=NonceLoader(str(HERE / "templates")), autoescape=select_autoescape(["html"]))
 # One humaniser for every template, so no table anywhere heads a column with a field name.
 env.filters["label"] = Naming.column_label
 # One spelling of a noun inside a URL, so no template ever writes a raw space into an href.
@@ -273,6 +274,9 @@ def _role_allows(cmd: registry.Command, record: dict[str, Any], *, hub_admin: bo
         decided = effective.decide(cmd)
         if decided is not None:
             return decided
+    # Payroll has no legacy role-only admission, including for installation administrators.
+    if cmd is not None and (cmd.capability or '').startswith('payroll.'):
+        return False
     if hub_admin or record.get("access") == "hub_admin":
         return True
     required = legacy_required_role(cmd)  # before activation the roles decide: a POS seller is standard
@@ -344,6 +348,8 @@ def _noun_meta(noun):
 
 def _editable_values(noun: str, shown: dict[str, Any]) -> dict[str, Any]:
     """Project the authoritative editable object from a show result."""
+    if noun == 'lead':
+        return {**shown, "owner": shown.get("owner_id")}
     if noun == 'item-receipt':
         return dict(date=shown['date'], vendor=shown['profile']['vendor']['id'],
             ap_account=shown['profile']['ap_account']['id'], memo=shown['memo'], reference=shown['reference'], shipping=shown['shipping']['amount'],
@@ -668,7 +674,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js", "timekeeping.css", "scan.js", "counts.css", "picks.css", "import.css", "import.js", "item-picture.js", "camera-scan.js", "camera-scan.css", "scan-decoder-native.js", "scan-decoder-zxing-wasm.js", "secure-context.js", "bulk-edit.css", "bulk-edit.js", "opening.css", "pos.js", "pos-day.js", "pos-refund.js", "pos.css", "bank-inbox.css", "bank-inbox.js", "bank-import.css", "bank-import.js")
+        for name in ("transport-security.js", "csp-events.js", "crm.css", "workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js", "timekeeping.css", "scan.js", "counts.css", "picks.css", "import.css", "import.js", "item-picture.js", "camera-scan.js", "camera-scan.css", "scan-decoder-native.js", "scan-decoder-zxing-wasm.js", "secure-context.js", "bulk-edit.css", "bulk-edit.js", "opening.css", "pos.js", "pos-day.js", "pos-refund.js", "pos.css", "bank-inbox.css", "bank-inbox.js", "bank-import.css", "bank-import.js")
     }
     # The Scan field macro (scan_field.html) is imported without the page's context, so its camera scripts come
     # from the environment; their URLs depend only on the files' bytes.
@@ -980,6 +986,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     from bookflow.adapters.workbench import finance_charges as FinanceCharges
     FinanceCharges.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                          role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
+    # R116 increment 1: private, saved manual paycheck calculations.
+    from bookflow.adapters.workbench import payroll_pages as PayrollPages
+    PayrollPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                       role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R106: Weekly Timesheet, the time clock and the job calendar.
     from bookflow.adapters.workbench import timekeeping_pages as TimekeepingPages
     TimekeepingPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
@@ -1028,9 +1038,23 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     # R153: bill part of a purchase order, or close its lines by hand.
     from bookflow.adapters.workbench import purchase_order_billing_pages as PartialOrderPages
     PartialOrderPages.mount(app, render=render, run=run, credential=credential, page_error=page_error)
+    # R115 increment 1: leads share native notes, files and to-dos.
+    from bookflow.adapters.workbench import crm_pages as CrmPages
+    CrmPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                   annotations=annotations,
+                   role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R111: Reminders, the to-do list and the overdue notice queue.
     from bookflow.adapters.workbench import scheduling_pages as SchedulingPages
     SchedulingPages.mount(app, render=render, run=run, credential=credential, page_error=page_error)
+
+    @app.get('/c/{company_id}/commission-options')
+    def commission_options(request: Request, company_id: str):
+        try:
+            raw = {key: request.query_params[key] for key in ('item', 'sales_rep', 'customer', 'search')
+                   if request.query_params.get(key)}
+            return JSONResponse(run(request, 'commission recipient-options', raw, company_id))
+        except BookflowError as err:
+            return JSONResponse(err.to_dict(), status_code=403 if err.code == 'E_PERMISSION' else 400)
 
     @app.get("/static/{name}")
     @permission_read_package(host)
@@ -2251,6 +2275,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 return page_error(request, error)
             originals = {'deposit': record_id, 'expected_version': shown['current']['version']}
         originals = originals or {}
+        if noun == 'lead' and verb == 'archive' and shown:
+            # The action offered from a lead toggles its separate archive flag.
+            originals['archived'] = not shown['archived']
         if noun in (*Document.MONEY_OUT, 'item-receipt', 'bill') and verb == 'update' and attempted.get('originals'):
             # Keep the baseline the person edited across preview/refusal/stale responses.
             # A newer server revision must not become an implicit replacement payload.
@@ -2813,7 +2840,16 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 described = Admin.decorate_form(noun, verb, described, record_id, lambda name, raw: run(request, name, raw, None))
             except BookflowError as err:
                 return page_error(request, err)
+        if noun == 'item' and (not (authorized_company or {}).get('info', {}).get('commission_attribution_enabled')
+                or not effective_capabilities(request, company_id).holds('commission.manage')):
+            described = [leaf for leaf in described if leaf['path'] != 'commission_enabled']
         return render("form.html", request, company_id=company_id, noun=noun, verb=verb, cmd=cmd, leaves=described, originals=originals,
+                      commission_labels={allocation['recipient_id']: allocation['recipient_label']
+                          for line in (result or shown or {}).get('revision', {}).get('lines', [])
+                          for allocation in (line.get('item_snapshot', {}).get('commission') or {}).get('recipients', [])},
+                      commission_entry=(noun == 'invoice' and verb in ('post', 'update')
+                          and bool((authorized_company or {}).get('info', {}).get('commission_attribution_enabled'))
+                          and effective_capabilities(request, company_id).holds('commission.attribute')),
                       crumb=meta.get("plural_label") or (Naming.list_heading(noun, meta) if company_id is None and noun in Admin.COLUMNS else None),
                       plain_errors=company_id is None and noun in Admin.COLUMNS, field_labels=Admin.FIELD_LABELS,
                       panel_return=panel_return,
@@ -3128,7 +3164,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return HTMLResponse(
                 "<!doctype html><meta charset=utf-8><title>Created</title>"
                 f"<p>Created. <a href=\"{escape(record_url, quote=True)}\">Open record</a></p>"
-                f"<script>const message={payload};if(window.opener){{window.opener.postMessage(message,location.origin);window.close();}}</script>",
+                f'<script nonce="{escape(getattr(request.state, "csp_nonce", ""), quote=True)}">const message={payload};if(window.opener){{window.opener.postMessage(message,location.origin);window.close();}}</script>',
                 headers={"Cache-Control": "no-store"},
             )
         target = _success_target(cmd, company_id, noun, record_id, out)

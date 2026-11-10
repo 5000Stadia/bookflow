@@ -351,7 +351,7 @@ part of this design commit.
 
 
    The shared commands add simple bill policy create/update/publish/show/list, draft submit/withdraw/commit,
-   and approval decide/show/history. Migration `co0130` adds policy revisions, requests, append-only events,
+   and approval decide/show/history. Migration `co0133` adds policy revisions, requests, append-only events,
    commit attempts and permanent operation receipts. Policy publication controls the existing bill switch;
    all approval switches still migrate off. Pending requests retain their published policy when setup changes.
    Drafts accept native item, purchase-order and receipt selections and correction targets. Native preparation

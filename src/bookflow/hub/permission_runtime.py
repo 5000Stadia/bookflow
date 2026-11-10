@@ -100,6 +100,7 @@ def catalog_bundle() -> s.CatalogBundle:
 # the chain is imported anyway -- at module scope it would force that import on every
 # command and cost roughly half a second, against nothing here.
 ACCEPTED_DESCRIPTOR_SHA256 = {
+    c.PAYROLL_DRAFT_POLICY_VERSION: '365f7a60586a9ad2bef7341b77905c85a4816b033177fc22215ac0c63155419a',
     c.SCOPED_POLICY_VERSION: 'a0823e6d9ae98e96c98e2b6e4e73042ecc8ecb7cf0e7d4d9b50e8febc7ed6979',
     c.SETUP_POLICY_VERSION: '5d71ff2a0970f85e12b6fca0f84ff2736176565db44064b0668f84a3c132e2f2',
     c.DELETE_POLICY_VERSION: 'bdcd036b653a165a65279386fc91a6ac8ead2dc45fa49e7791e943067c989f9e',
@@ -189,9 +190,11 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.BANK_RULE_POLICY_VERSION: '12b5f914d21302af037c6cc0b1aeab0ef6912d764015332d7734c12338ad8127',
     c.POS_SALE_POLICY_VERSION: '1462bee09d7343f15fdc015fa86a114e30671e8d73fc2bab7f5e75444d0450cf',
     c.BANK_RECONCILE_POLICY_VERSION: '8673bd998c7e077061301d0bfaea5af7b33cbd3eb773f89dd0e6fdcdbf026e42',
+    c.CRM_LEADS_POLICY_VERSION: '2391f97a14862f9e1b000380a94508db57869b458bc6b6125f8a56a0075ca672',
     c.PURCHASE_DRAFT_POLICY_VERSION: 'a6faac71521b11c6e09f9c515a346b71bc783a1b5e44ef985f95373f11ede861',
-    c.BILL_APPROVAL_POLICY_VERSION: 'c408b27f198ca3ac153aebf40acf3d22c6d51826a82beb5fd108e8d15fc14774',
+    c.BILL_APPROVAL_POLICY_VERSION: '2c3aa75ea00d9b2be1276eb3847bb3d712a84026df49c03eaeef97ff430f618e',
     c.NOTICE_REVERSAL_POLICY_VERSION: 'a8255242bbbb0b1a4ac0f5eaf8aa62a5cb84c291a7a03316584b2bbf06b67932',
+    c.COMMISSION_ATTRIBUTION_POLICY_VERSION: 'b8f3b2224ff689ed09c689687114678d118a379d75c56756e80a85267bf2cc13',
     c.REVERSIBLE_BATCH_POLICY_VERSION: 'b6ab69b716a3b999e88d86716f54fef5fcc7174768f3f0f6e4c073ce8cf515ce',
     c.POS_SPLIT_POLICY_VERSION: '73027f1c23b43bf348babaa0afffdfc3bd15d53f52a62b6ab2e9a00685972480',
     c.POS_DAY_POLICY_VERSION: '4dfeb905ccc2dcf9451f2c7021c9b042016f48382d40b394fa6e73dfa962729b',
@@ -368,8 +371,13 @@ def _full_known():
     from . import permission_pos_day_catalog
     from . import permission_pos_refund_catalog, permission_pos_split_catalog
     from . import permission_pos_ticket_catalog, permission_pos_ticket_takeover_catalog, permission_pos_receipt_catalog
-    from . import permission_purchase_draft_catalog, permission_bill_approval_catalog
+    from . import permission_bill_approval_catalog
+    from . import permission_crm_leads_catalog
+    from . import permission_payroll_draft_catalog
+
+    from . import permission_purchase_draft_catalog
     from . import permission_notice_reversal_catalog
+    from . import permission_commission_attribution_catalog
     from . import permission_reversible_batch_catalog
     from . import permission_pos_layout_catalog
     from . import permission_bank_source_catalog
@@ -470,9 +478,13 @@ def _full_known():
         c.POS_REFUND_POLICY_VERSION: permission_pos_refund_catalog,
         c.POS_SPLIT_POLICY_VERSION: permission_pos_split_catalog,
         c.POS_LAYOUT_POLICY_VERSION: permission_pos_layout_catalog,
+        c.CRM_LEADS_POLICY_VERSION: permission_crm_leads_catalog,
+        c.PAYROLL_DRAFT_POLICY_VERSION: permission_payroll_draft_catalog,
+
         c.PURCHASE_DRAFT_POLICY_VERSION: permission_purchase_draft_catalog,
         c.BILL_APPROVAL_POLICY_VERSION: permission_bill_approval_catalog,
         c.NOTICE_REVERSAL_POLICY_VERSION: permission_notice_reversal_catalog,
+        c.COMMISSION_ATTRIBUTION_POLICY_VERSION: permission_commission_attribution_catalog,
         c.REVERSIBLE_BATCH_POLICY_VERSION: permission_reversible_batch_catalog,
         c.BANK_SOURCE_POLICY_VERSION: permission_bank_source_catalog,
     }

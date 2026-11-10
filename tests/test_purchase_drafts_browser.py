@@ -67,5 +67,6 @@ def test_phone_saved_bill_draft_workflow(register_browser):
     assert not b.evaluate("!!document.querySelector('[data-draft-edit]')")
     b.navigate(base + '?state=cancelled')
     b.wait_for("!!document.querySelector('#purchase-drafts')")
+    assert b.evaluate("Array.from(document.querySelector('[name=state]').options, x => x.value)") == ['', 'draft', 'pending', 'approved', 'rejected', 'committed', 'cancelled']
     assert 'Draft phone supplier' in b.evaluate("document.querySelector('#purchase-drafts').innerText")
     assert b.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')

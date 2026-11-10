@@ -20,7 +20,8 @@ def test_manifest_matches_the_reachable_private_graph_exactly():
     # The complete closure, not just the two output roots.
     # 55, not 52: R147 added LineAdjustment, AdjustmentTarget and LineGroup to SalesLineProfile.
     # 56: R110 added AppliedPriceRule (SalesLineProfile.pricing_rule).
-    assert len(models) == len(manifest.FIELDS) == 56
+    # 58: commission attribution adds its captured snapshot and recipient models.
+    assert len(models) == len(manifest.FIELDS) == 58
     # 393, not 391: inventory added cogs_account and asset_account to SalesLineProfile and both
     # are dispositioned private like every other field of that model. 410, not 393: R147 added
     # adjustment and group to SalesLineProfile and the 9 + 3 + 3 fields of its three new models,
@@ -28,7 +29,8 @@ def test_manifest_matches_the_reachable_private_graph_exactly():
     # 424: R110 added SalesLineProfile.pricing_rule and the thirteen fields of AppliedPriceRule.
     # 429: R150 added three sub-cent fractions to SalesLineProfile, one to PriceRule, one to AppliedPriceRule.
     # 430: POS refunds capture returned stock valuation, private to the sales line.
-    assert sum(len(fields) for fields in manifest.FIELDS.values()) == 430
+    # 438: commission adds its sales-line field and seven captured attribution fields.
+    assert sum(len(fields) for fields in manifest.FIELDS.values()) == 438
 
 
 def test_every_field_carries_exactly_one_known_disposition():

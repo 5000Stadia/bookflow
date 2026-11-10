@@ -1,8 +1,8 @@
-"""co0130: revision-bound simple bill approval and atomic reversible commitments."""
+"""co0133: revision-bound simple bill approval and atomic reversible commitments."""
 from alembic import op
 import sqlalchemy as sa
-revision = 'co0130'
-down_revision = 'co0129'
+revision = 'co0133'
+down_revision = 'co0132'
 branch_labels = depends_on = None
 
 

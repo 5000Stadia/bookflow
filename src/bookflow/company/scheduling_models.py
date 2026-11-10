@@ -13,7 +13,7 @@ _Date = Annotated[str, Field(min_length=10, max_length=10, pattern=r'^[0-9]{4}-[
 _Selector = Annotated[str, Field(min_length=1, max_length=200)]
 _Version = Annotated[int, Field(strict=True, ge=1)]
 Priority = Literal['high', 'medium', 'low']
-LinkType = Literal['customer', 'vendor', 'transaction', 'memorized']
+LinkType = Literal['customer', 'vendor', 'transaction', 'memorized', 'lead']
 
 
 class _Input(BaseModel):
@@ -28,8 +28,8 @@ class TodoCreateInput(_Input):
     due_date: _Date | None = Field(None, description="When it is due; omitted, today in the company's timezone.")
     priority: Priority = Field('medium', description='high, medium or low.')
     assignee: _Selector | None = Field(None, description='Who it is assigned to: a username or user id of a person or an agent who is a member of this company, or "me". Omitted, it is assigned to whoever creates it.')
-    link_type: LinkType | None = Field(None, description='Kind of record it is about: customer, vendor, transaction (any document) or memorized (a memorized transaction).')
-    link: _Selector | None = Field(None, description='That record: a customer or vendor name or id, a document id, or a memorized transaction name or id. Needs link_type.')
+    link_type: LinkType | None = Field(None, description='Kind of record it is about: lead, customer, vendor, transaction (any document) or memorized (a memorized transaction).')
+    link: _Selector | None = Field(None, description='That record: a lead, customer or vendor name or id, a document id, or a memorized transaction name or id. Needs link_type.')
 
 
 class TodoUpdateInput(_Input):
@@ -55,6 +55,7 @@ class TodoShowInput(_Input):
 
 
 class TodoListInput(_Input):
+    assignee_state: Literal['all', 'unassigned', 'departed'] = Field('all', description='Filter work with no assignee or an assignee who is no longer an active company member.')
     mine: bool = Field(False, description='Only the to-dos assigned to whoever is asking -- how an agent finds its own work.')
     assignee: _Selector | None = Field(None, description='Only the to-dos assigned to this username or user id.')
     status: Literal['open', 'done', 'inactive', 'all'] = Field('open', description='Which to-dos: open (the default), done, inactive or all.')
@@ -62,6 +63,7 @@ class TodoListInput(_Input):
     link_type: LinkType | None = Field(None, description='Only the to-dos about this kind of record.')
     link: _Selector | None = Field(None, description='Only the to-dos about this record (needs link_type).')
     limit: int = Field(100, strict=True, ge=1, le=500)
+    cursor: str | None = Field(None, max_length=4096, description='Continue the same authorized selection; restart after a write.')
 
 
 class TodoOutput(CommonOut):
@@ -91,6 +93,8 @@ class TodoListOutput(BaseModel):
     items: list[TodoOutput]
     count: int
     truncated: bool
+    total_count: int = Field(description='Exact count of all authorized matches, including subsequent pages.')
+    next_cursor: str | None = None
 
 
 # ---------------------------------------------------------------- overdue notices
@@ -187,6 +191,7 @@ class NoticeGenerateOutput(WriteOutput):
 
 class RemindersInput(_Input):
     as_of: _Date | None = Field(None, description="What is due as of this date; omitted, today in the company's timezone.")
+    todos_cursor: str | None = Field(None, max_length=4096, description='Continue due to-dos from todos_next_cursor with the same filters and date.')
     bills_days_ahead: int = Field(10, strict=True, ge=0, le=365, description='Bills to pay: list bills due within this many days (the anchor reminds 10 days before).')
     mine: bool = Field(False, description='To-dos: only those assigned to whoever is asking.')
     limit: int = Field(25, strict=True, ge=1, le=200, description='Most rows listed under each heading; every count and total covers them all.')
@@ -242,6 +247,7 @@ class RemindersOutput(BaseModel):
     memorized_due: list[MemorizedReminder]
     memorized_failed: list[MemorizedReminder]
     todos_due: list[TodoOutput]
+    todos_next_cursor: str | None = None
     notices_ready: list[NoticeOutput]
     overdue_invoices: list[InvoiceReminder]
     bills_to_pay: list[BillReminder]

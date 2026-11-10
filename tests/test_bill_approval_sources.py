@@ -33,6 +33,11 @@ def test_approved_source_competition_revalidates_without_consuming_twice(root, c
         order_lines=[dict(line=line, quantity='5')]), 'five')
     assert six['preview']['total']['minor_units'] == 7200
     assert five['preview']['total']['minor_units'] == 6000
+    assert six['preview']['purchase_order']['name'] == order['number']
+    assert six['preview']['items'][0]['item']['name'] == 'Approval source part'
+    assert six['preview']['items'][0]['quantity'] == '6'
+    assert six['preview']['items'][0]['amount']['minor_units'] == 7200
+    assert six['history'][0]['preview'] == six['preview']
     six_request = approve(client, other, six, 'submit-six')
     five_request = approve(client, other, five, 'submit-five')
     assert financial(client) == before
@@ -53,6 +58,14 @@ def test_approved_source_competition_revalidates_without_consuming_twice(root, c
         assert sum(row[0] for row in legs) == sum(row[1] for row in legs) == 7200
         assert db.execute('SELECT count(*) FROM approval_commits WHERE draft_id=?', (five['id'],)).fetchone() == (0,)
     assert run(client, 'purchase-draft show', dict(draft=five['id']))['state'] == 'approved'
+    receipt = run(client, 'item-receipt post', dict(date='2026-06-15', vendor=payload['vendor'],
+        items=[dict(item=item, quantity='3', unit_cost='12.00')]))
+    received = saved(client, dict(date='2026-06-15', receipts=[dict(receipt_line=receipt['items'][0]['id'],
+        expected_receipt_version=receipt['version'], quantity='2')]), 'received')
+    assert received['preview']['receipts'] == [dict(id=receipt['id'], number=receipt['number'], quantity='2')]
+    assert received['preview']['items'][0]['amount']['minor_units'] == 2400
+    assert client.run('purchase-draft preview', dict(draft=received['id']), company=COMPANY)['preview'] == received['preview']
+
 
 
 def test_import_and_memorized_bill_routes_name_approval_refusal(root, client):

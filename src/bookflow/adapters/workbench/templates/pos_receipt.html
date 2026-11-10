@@ -8,8 +8,8 @@ nav { display: flex; flex-wrap: wrap; gap: 10px; padding: 16px; } nav a, nav but
 h1 { font-size: 16px; margin: 0; } p { margin: 4px 0; } header, footer { text-align: center; } .lines { border-top: 1px dashed; border-bottom: 1px dashed; margin: 12px 0; padding: 8px 0; }
 .item { margin: 0 0 8px; break-inside: avoid; } .amounts { display: flex; justify-content: space-between; gap: 8px; } .amount { white-space: nowrap; flex-shrink: 0; } .total { font-size: 16px; font-weight: bold; margin-top: 8px; } .barcode svg { width: 100%; height: auto; max-height: 18mm; } .barcode { margin-top: 12px; } .status { font-size: 20px; font-weight: bold; }
 @media print { body { background: white; } nav { display: none; } .receipt { margin: 0; } }
-</style></head><body>
-<nav><a href="/c/{{ company_id }}/pos">Back to POS</a><button type="button" onclick="window.print()">Print receipt</button><a href="/c/{{ company_id }}/pos/receipt/{{ receipt.sale.id }}.pdf?reprint={{ 'true' if receipt.reprint else 'false' }}{% if receipt.kind == 'refund' %}&amp;refund=true{% endif %}">Save PDF</a></nav>
+</style><script src="{{ static_urls['csp-events.js'] }}"></script></head><body>
+<nav><a href="/c/{{ company_id }}/pos">Back to POS</a><button type="button" data-print-page>Print receipt</button><a href="/c/{{ company_id }}/pos/receipt/{{ receipt.sale.id }}.pdf?reprint={{ 'true' if receipt.reprint else 'false' }}{% if receipt.kind == 'refund' %}&amp;refund=true{% endif %}">Save PDF</a></nav>
 <main class="receipt"><header><h1>{{ receipt.company_name }}</h1>{% for line in receipt.address %}<p>{{ line }}</p>{% endfor %}{% if receipt.phone %}<p>{{ receipt.phone }}</p>{% endif %}
 {% if receipt.kind == 'refund' %}<p class="status">REFUND</p>{% endif %}{% if receipt.reprint %}<p class="status">Reprint</p>{% endif %}{% if receipt.status == 'voided' %}<p class="status">VOID</p>{% endif %}
 <p>{{ receipt.sale.created_at }}</p><p>{{ receipt.sale.pos_register.name }} · {{ receipt.clerk }}</p><p>{{ 'Credit memo' if receipt.kind == 'refund' else 'Receipt' }} {{ receipt.number }}</p>{% if receipt.customer %}<p>{{ receipt.customer }}</p>{% endif %}</header>

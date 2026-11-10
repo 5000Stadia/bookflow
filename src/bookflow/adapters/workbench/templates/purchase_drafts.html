@@ -3,7 +3,7 @@
 <script src="{{ static_urls['purchase-drafts.js'] }}" defer></script>
 {% macro lines(p) %}
 {% for line in p.expenses %}<p>{{ line.account.name }} · {{ display_money(line.amount) }}{% if line.memo %} · {{ line.memo }}{% endif %}</p>{% endfor %}
-{% for line in p['items'] %}<p data-draft-item>{{ line.item.name }}{% if line.description %} · {{ line.description }}{% endif %} · Quantity {{ line.quantity }}{% if line.unit_cost %} · Unit cost {{ display_money(line.unit_cost) }}{% endif %} · Amount {{ display_money(line.amount) }}</p>{% endfor %}
+{% for line in p['items'] %}<p data-draft-item>{{ line.item.name }}{% if line.description %} · {{ line.description }}{% endif %} · Quantity {{ line.quantity }}{% if line.unit_cost %} · Unit cost {{ line.unit_cost.amount }}{% endif %} · Amount {{ display_money(line.amount) }}</p>{% endfor %}
 {% if p.purchase_order %}<p>Purchase order {{ p.purchase_order.name }}</p>{% endif %}
 {% for source in p.receipts %}<p>Receipt {{ source.number }} · Quantity {{ source.quantity }}</p>{% endfor %}
 {% endmacro %}

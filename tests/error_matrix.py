@@ -53,7 +53,7 @@ MATRIX = {
     "directive deactivate": {"E_DIRECTIVE_NOT_FOUND": "unknown id or code", "E_DIRECTIVE_INACTIVE": "deactivated --directive", "E_PERMISSION": "readonly member"},
     "presence set": {"E_RECORD_NOT_FOUND": "unknown record id", "E_VALIDATION": "unknown record type"},
     "presence clear": {"E_VALIDATION": "unknown record type", "E_RECORD_NOT_FOUND": "unknown record id"},
-    "serve": {"E_NETWORK_NOT_ALLOWED": "--bind outside loopback without --allow-network", "E_VERSION_MISMATCH": "a forwarded call from another Bookflow version",
+    "serve": {"E_SECURITY_NOT_READY": "wider profile has named unmet deployment prerequisites", "E_NETWORK_NOT_ALLOWED": "--bind outside loopback without --allow-network", "E_VERSION_MISMATCH": "a forwarded call from another Bookflow version",
               "E_COMPANY_MISSING": "registered folder absent (reported per company, never fatal)", "E_DB_BUSY": "another command or host holds the data-root lock",
               "E_NOT_INITIALIZED": "no hub database", "E_NO_ACTOR": "the OS login maps to no user", "E_PERMISSION": "the OS login is not a hub admin",
               "E_VALIDATION": "--bind is not host:port"},

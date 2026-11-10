@@ -126,7 +126,10 @@ ACCEPTED = {
     'reversible-batch-v1': (909, 'b6ab69b716a3b999e88d86716f54fef5fcc7174768f3f0f6e4c073ce8cf515ce'),
     'notice-reversal-v1': (910, 'a8255242bbbb0b1a4ac0f5eaf8aa62a5cb84c291a7a03316584b2bbf06b67932'),
     'purchase-draft-v1': (916, 'a6faac71521b11c6e09f9c515a346b71bc783a1b5e44ef985f95373f11ede861'),
-    'bill-approval-v1': (927, 'c408b27f198ca3ac153aebf40acf3d22c6d51826a82beb5fd108e8d15fc14774'),
+    'payroll-draft-v1': (922, '365f7a60586a9ad2bef7341b77905c85a4816b033177fc22215ac0c63155419a'),
+    'commission-attribution-v1': (924, 'b8f3b2224ff689ed09c689687114678d118a379d75c56756e80a85267bf2cc13'),
+    'crm-leads-v1': (931, '2391f97a14862f9e1b000380a94508db57869b458bc6b6125f8a56a0075ca672'),
+    'bill-approval-v1': (942, '2c3aa75ea00d9b2be1276eb3847bb3d712a84026df49c03eaeef97ff430f618e'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -298,7 +301,10 @@ CHAIN_ADDITIONS = {
     'pos-split-v1': set(),  # scoped split-sale payment composition
     'reversible-batch-v1': {'batch reverse'},
     'notice-reversal-v1': {'notice reverse'},
-    'purchase-draft-v1': {'purchase-draft ' + verb for verb in ('create', 'update', 'cancel', 'preview', 'show', 'list')},
+    'purchase-draft-v1': {'purchase-draft ' + verb for verb in ('create', 'update', 'preview', 'cancel', 'show', 'list')},
+    'payroll-draft-v1': {'payroll setup', 'payroll settings', 'payroll draft', 'payroll show', 'payroll list', 'payroll prepare'},
+    'commission-attribution-v1': {'commission recipient-options', 'report commission-attribution'},
+    'crm-leads-v1': {'lead ' + verb for verb in ('create', 'update', 'show', 'list', 'close', 'reopen', 'archive')},
     'bill-approval-v1': {'purchase-draft submit', 'purchase-draft withdraw', 'purchase-draft commit',
                          'approval decide', 'approval show', 'approval history', 'approval-policy create',
                          'approval-policy update', 'approval-policy publish', 'approval-policy show', 'approval-policy list'},

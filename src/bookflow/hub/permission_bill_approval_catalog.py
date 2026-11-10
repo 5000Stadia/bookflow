@@ -1,8 +1,8 @@
-"""One-step bill approvals on the immutable purchase-draft-v1 catalog."""
+"""One-step bill approvals on the immutable crm-leads-v1 catalog."""
 from dataclasses import asdict, replace
 import hashlib
 import json
-from . import permission_purchase_draft_catalog as previous, permission_catalog as c
+from . import permission_crm_leads_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
 SOURCE_COMMIT = 'b1b435aa1d433b272921de19f232e04d02f510a1'
@@ -47,10 +47,10 @@ _ADDED_SOURCES = (
         (('src/bookflow/company/approvals.py', 50),),
         (c.Requirement('ledger.post', 'standard'),)),
     c.ResourceSource('bookflow.company.approvals.recover',
-        (('src/bookflow/company/approvals.py', 182),),
+        (('src/bookflow/company/approvals.py', 199),),
         (c.Requirement('ledger.post', 'standard'),)),
     c.ResourceSource('bookflow.company.approvals.decision_authority',
-        (('src/bookflow/company/approvals.py', 200), ('src/bookflow/company/approvals.py', 201)),
+        (('src/bookflow/company/approvals.py', 217), ('src/bookflow/company/approvals.py', 218)),
         (c.Requirement('approval.decide', 'standard'), c.Requirement('ledger.read', 'member'))),
     c.ResourceSource('bookflow.company.approval_commit_reversal._read',
         (('src/bookflow/company/approval_commit_reversal.py', 19),),

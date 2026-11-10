@@ -2835,6 +2835,106 @@ command = "batch reverse"
 reason = "Restore the original customer note"
 input = { batch = "${reversible_note_run.run.batch.id}", fingerprint = "${reversible_note_plan.fingerprint}" }
 
+# R115: name-only and contact-rich prospects, native notes, files and follow-ups.
+[[commands]]
+command = "lead create"
+capture = "crm_enquiry"
+reason = "Record an incoming repair enquiry"
+input = { display_name = "Garden workshop enquiry" }
+
+[[commands]]
+command = "lead create"
+capture = "crm_contact"
+reason = "Record a prospect contact"
+input = { display_name = "Northside Studio", source = "Referral", rating = "warm", contacts = [{ role = "primary", display_name = "Morgan Reed", primary_email = "morgan@example.test", work_phone = "555-0108" }] }
+
+[[commands]]
+command = "note add"
+reason = "Retain the enquiry details"
+input = { record_type = "lead", record_id = "${crm_enquiry.id}", body = "Asked about replacing the workshop tap. Call to arrange a visit." }
+
+[[commands]]
+command = "todo create"
+reason = "Arrange the next call"
+input = { title = "Call about the workshop tap", link_type = "lead", link = "${crm_enquiry.id}", priority = "high" }
+
+[[commands]]
+command = "attachment add"
+body_fixture = "example.pdf"
+reason = "Keep the enquiry brief"
+input = { record_type = "lead", record_id = "${crm_contact.id}", original_filename = "enquiry-brief.pdf", media_type = "application/pdf", caption = "Prospect enquiry brief" }
+# R189 increment 1: names and one item flag suffice for invoice attribution.
+# A preview demonstrates two recipients without changing the demo's accounting balances.
+[[commands]]
+command = "sales-rep create"
+capture = "commission_affiliate"
+reason = "Add a referral recipient for the attribution example"
+input = { name = "Alex Referral", initials = "AR", name_type = "other_name", name_id = "${conversion_candidate.id}" }
+
+[[commands]]
+command = "company update"
+reason = "Show the optional invoice attribution layer"
+input = { commission_attribution_enabled = true }
+
+[[commands]]
+command = "item create"
+capture = "commission_service"
+reason = "Flag a service for one recipient per invoice line"
+input = { name = "Attributed Service", type = "service", description = "Service with a named sales recipient", price = "40", income_account_id = "${income_account.id}", sales_tax_code_id = "${tax_code.id}", commission_enabled = true }
+
+[[commands]]
+command = "commission recipient-options"
+input = { item = "${commission_service.id}" }
+
+[[commands]]
+command = "invoice post"
+dry_run = true
+reason = "Preview different recipients on two service lines without changing balances"
+input = { date = "2026-09-05", customer = "${sale_customer.id}", lines = [{ item = "${commission_service.id}", quantity = "1", commission = { recipients = [{ recipient = "${sales_rep.id}", share = 100 }] } }, { item = "${commission_service.id}", quantity = "1", commission = { recipients = [{ recipient = "${commission_affiliate.id}", share = 100 }] } }] }
+
+[[commands]]
+command = "company update"
+reason = "Keep optional attribution off in the default demo"
+input = { commission_attribution_enabled = false }
+# R116 increment 1: fictional P1 manual calculator. These are test inputs, not statutory rates.
+# Payroll is returned to off after preparing the specimen; authorized historical reads still work.
+[[commands]]
+command = "account create"
+input = { name = "Demo Payroll Wages", type = "expense" }
+
+[[commands]]
+command = "account create"
+input = { name = "Demo Payroll Employer Expense", type = "expense" }
+
+[[commands]]
+command = "account create"
+input = { name = "Demo Payroll Net Payable", type = "other_current_liability" }
+
+[[commands]]
+command = "account create"
+input = { name = "Demo Payroll Tax Payable", type = "other_current_liability" }
+
+[[commands]]
+command = "payroll setup"
+reason = "Prepare fictional payroll demonstration"
+input = { enabled = true, expected_version = 0, operation_key = "demo-payroll-enable", wage_account = "Demo Payroll Wages", employer_tax_account = "Demo Payroll Employer Expense", net_pay_account = "Demo Payroll Net Payable" }
+
+[[commands]]
+command = "payroll draft"
+capture = "payroll_p1"
+reason = "Save fictional manual paycheck"
+input = { employee = "${employee.id}", operation_key = "demo-payroll-p1", period_start = "2026-09-01", period_end = "2026-09-07", pay_date = "2026-09-09", taxes_confirmed = true, earnings = [{ code = "Fictional regular wages", quantity = "40", rate = "25" }], items = [{ code = "Fictional employee tax", kind = "employee_tax", amount_minor_units = 10000, liability_account = "Demo Payroll Tax Payable", payee = "Fictional agency", source_note = "Fictional P1 test: independently calculated 10 percent of gross; not tax guidance" }, { code = "Fictional employer tax", kind = "employer_tax", amount_minor_units = 5000, liability_account = "Demo Payroll Tax Payable", payee = "Fictional agency", source_note = "Fictional P1 test: independently calculated 5 percent of gross; not tax guidance" }] }
+
+[[commands]]
+command = "payroll prepare"
+reason = "Review fictional P1 arithmetic without posting"
+input = { draft = "${payroll_p1.id}", expected_version = "${payroll_p1.version}", operation_key = "demo-payroll-calculate" }
+
+[[commands]]
+command = "payroll setup"
+reason = "Leave optional payroll switched off"
+input = { enabled = false, expected_version = 1, operation_key = "demo-payroll-disable" }
+
 # Saved purchase drafts are separate from accounts payable; approval switches stay off.
 [[commands]]
 command = "purchase-draft create"
