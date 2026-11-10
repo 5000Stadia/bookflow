@@ -118,8 +118,9 @@ def reminders(s, inp):
     cache: dict[str, bool] = {}
     may = {key: _may(s, capability, cache) for key, capability in SECTION_CAPABILITY.items()}
     due, failed = _memorized(s, as_of, limit) if may['memorized_due'] else ([], [])
-    todo_rows = todos.query(s, assignee_id=s.actor.id if inp.mine else None, status='open', due_by=as_of,
-                            limit=500)[0] if may['todos_due'] else []
+    todo_rows, todo_count, todo_cursor = todos.paged_rows(
+        s, assignee_id=s.actor.id if inp.mine else None, status='open', due_by=as_of,
+        limit=limit, cursor=inp.todos_cursor, as_of=as_of) if may['todos_due'] else ([], 0, None)
     labels = todos._labels(s, todo_rows)
     notice_rows = notices.query(s, status='ready', limit=500)[0] if may['notices_ready'] else []
     names = notices._names(s, notice_rows)
@@ -130,7 +131,7 @@ def reminders(s, inp):
     sections = [
         ReminderSection(key='memorized_due', title='Memorized transactions due', count=len(due), total=None),
         ReminderSection(key='memorized_failed', title='Memorized entries that need a person', count=len(failed), total=None),
-        ReminderSection(key='todos_due', title='To do notes', count=len(todo_rows), total=None),
+        ReminderSection(key='todos_due', title='To do notes', count=todo_count, total=None),
         ReminderSection(key='notices_ready', title='Overdue notices to send', count=len(notice_rows),
                         total=total(notice_rows, 'overdue_minor_units')),
         ReminderSection(key='overdue_invoices', title='Overdue invoices', count=len(invoices), total=total(invoices, 'open_balance')),
@@ -140,7 +141,7 @@ def reminders(s, inp):
     with_money = lambda rows: [dict(row, open_balance=_money(row['open_balance'], currency)) for row in rows[:limit]]  # noqa: E731
     return RemindersOutput(
         as_of=as_of, sections=sections, memorized_due=due[:limit], memorized_failed=failed[:limit],
-        todos_due=[todos.project(s, row, labels, as_of) for row in todo_rows[:limit]],
+        todos_due=[todos.project(s, row, labels, as_of) for row in todo_rows], todos_next_cursor=todo_cursor,
         notices_ready=[notices.project(s, row, names, company_name) for row in notice_rows[:limit]],
         overdue_invoices=with_money(invoices), bills_to_pay=with_money(bills),
         total_count=sum(section.count for section in sections))

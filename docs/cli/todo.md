@@ -135,6 +135,7 @@ Example JSON output:
 
 | Code | Meaning |
 |---|---|
+| `E_AMBIGUOUS_SELECTOR` | More than one permitted record matches; select a stable id from the candidates. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
 | `E_CONFIG_INVALID` | The configuration file could not be read. |
@@ -166,7 +167,7 @@ Example JSON output:
 
 ## `todo create`
 
-Create a to-do: something to be done by a date, assigned to a person or an agent -- the anchor's To Do note. `title` says what; `notes` the details; `due_date` defaults to today; `priority` is high, medium (the default) or low. `assignee` is a username or user id of a member of this company, or "me"; omitted, the to-do is yours. An agent assigned a to-do finds it with `todo list --mine`. `link_type` and `link` say what it is about: a customer, a vendor, a document (transaction id) or a memorized transaction.
+Create a to-do: something to be done by a date, assigned to a person or an agent -- the anchor's To Do note. `title` says what; `notes` the details; `due_date` defaults to today; `priority` is high, medium (the default) or low. `assignee` is a username or user id of a member of this company, or "me"; omitted, the to-do is yours. An agent assigned a to-do finds it with `todo list --mine`. `link_type` and `link` say what it is about: a lead, customer, vendor, document (transaction id) or memorized transaction. Lead links require CRM read access.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -201,8 +202,8 @@ The same example as complete `bookflow_run` arguments:
 | `due_date` | `--due-date` | string \| null | no | yes | null | When it is due; omitted, today in the company's timezone. |
 | `priority` | `--priority` | literal["high", "medium", "low"] | no | no | "medium" | high, medium or low. |
 | `assignee` | `--assignee` | string \| null | no | yes | null | Who it is assigned to: a username or user id of a person or an agent who is a member of this company, or "me". Omitted, it is assigned to whoever creates it. |
-| `link_type` | `--link-type` | literal["customer", "vendor", "transaction", "memorized"] \| null | no | yes | null | Kind of record it is about: customer, vendor, transaction (any document) or memorized (a memorized transaction). |
-| `link` | `--link` | string \| null | no | yes | null | That record: a customer or vendor name or id, a document id, or a memorized transaction name or id. Needs link_type. |
+| `link_type` | `--link-type` | literal["customer", "vendor", "transaction", "memorized", "lead"] \| null | no | yes | null | Kind of record it is about: lead, customer, vendor, transaction (any document) or memorized (a memorized transaction). |
+| `link` | `--link` | string \| null | no | yes | null | That record: a lead, customer or vendor name or id, a document id, or a memorized transaction name or id. Needs link_type. |
 
 ### Command and context options
 
@@ -302,6 +303,7 @@ Example JSON output:
 
 | Code | Meaning |
 |---|---|
+| `E_AMBIGUOUS_SELECTOR` | More than one permitted record matches; select a stable id from the candidates. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
 | `E_CONFIG_INVALID` | The configuration file could not be read. |
@@ -360,13 +362,15 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
+| `assignee_state` | `--assignee-state` | literal["all", "unassigned", "departed"] | no | no | "all" | Filter work with no assignee or an assignee who is no longer an active company member. |
 | `mine` | `--mine` | boolean | no | no | false | Only the to-dos assigned to whoever is asking -- how an agent finds its own work. |
 | `assignee` | `--assignee` | string \| null | no | yes | null | Only the to-dos assigned to this username or user id. |
 | `status` | `--status` | literal["open", "done", "inactive", "all"] | no | no | "open" | Which to-dos: open (the default), done, inactive or all. |
 | `due_by` | `--due-by` | string \| null | no | yes | null | Only the to-dos due on or before this date. |
-| `link_type` | `--link-type` | literal["customer", "vendor", "transaction", "memorized"] \| null | no | yes | null | Only the to-dos about this kind of record. |
+| `link_type` | `--link-type` | literal["customer", "vendor", "transaction", "memorized", "lead"] \| null | no | yes | null | Only the to-dos about this kind of record. |
 | `link` | `--link` | string \| null | no | yes | null | Only the to-dos about this record (needs link_type). |
 | `limit` | `--limit` | integer | no | no | 100 | minimum 1; maximum 500 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | Continue the same authorized selection; restart after a write. |
 
 ### Command and context options
 
@@ -421,6 +425,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].source_ref` | string \| null | yes | yes | — | What created it when the scheduler did; null for one a person or agent made. |
 | `count` | integer | yes | no | — | — |
 | `truncated` | boolean | yes | no | — | — |
+| `total_count` | integer | yes | no | — | Exact count of all authorized matches, including subsequent pages. |
+| `next_cursor` | string \| null | no | yes | null | — |
 
 Example JSON output:
 
@@ -429,6 +435,8 @@ Example JSON output:
   "as_of": "value",
   "count": 0,
   "items": [],
+  "next_cursor": null,
+  "total_count": 1,
   "truncated": false
 }
 ```
@@ -454,6 +462,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
 | `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
@@ -642,7 +651,7 @@ The same example as complete `bookflow_run` arguments:
 | `due_date` | `--due-date` | string \| null | no | yes | null | New due date. |
 | `priority` | `--priority` | literal["high", "medium", "low"] \| null | no | yes | null | — |
 | `assignee` | `--assignee` | string \| null | no | yes | null | New assignee: a username or user id, or "me"; null leaves it unassigned. |
-| `link_type` | `--link-type` | literal["customer", "vendor", "transaction", "memorized"] \| null | no | yes | null | New kind of linked record; null with link null removes the link. |
+| `link_type` | `--link-type` | literal["customer", "vendor", "transaction", "memorized", "lead"] \| null | no | yes | null | New kind of linked record; null with link null removes the link. |
 | `link` | `--link` | string \| null | no | yes | null | — |
 | `status` | `--status` | literal["open", "inactive"] \| null | no | yes | null | open, or inactive when it no longer needs doing. Use `todo complete` to mark it done. |
 
@@ -745,6 +754,7 @@ Example JSON output:
 
 | Code | Meaning |
 |---|---|
+| `E_AMBIGUOUS_SELECTOR` | More than one permitted record matches; select a stable id from the candidates. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
 | `E_CONFIG_INVALID` | The configuration file could not be read. |

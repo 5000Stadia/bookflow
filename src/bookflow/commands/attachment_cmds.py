@@ -334,6 +334,8 @@ def _apply_link(plan, s, touched):
     if plan.data["new_link"]:
         s.company.conn.execute(c.attachment_links.insert().values(**row))
         touched.append(Touched("attachment_link", row["id"], "create", None, 1, row, db="company"))
+    if touched:
+        touched.extend(reference_touches(s, "attachment_link", row["id"]))
     return Applied(plan.preview, touched, "linked attachment" if touched else "no change")
 
 
@@ -402,7 +404,7 @@ def apply_unlink(plan: Plan, ctx: Context, s) -> Applied:
     if not plan.data["changed"]:
         return Applied(plan.preview, [], "no change")
     s.company.conn.execute(c.attachment_links.update().where(c.attachment_links.c.id == row["id"]).values(**row))
-    return Applied(plan.preview, [Touched("attachment_link", row["id"], "update", row["version"]-1, row["version"], row, db="company")], "unlinked attachment")
+    return Applied(plan.preview, [Touched("attachment_link", row["id"], "update", row["version"]-1, row["version"], row, db="company"), *reference_touches(s, "attachment_link", row["id"])], "unlinked attachment")
 
 
 attachment_get = command("attachment get", scope="company", description="Download verified attachment bytes with original metadata.",
@@ -503,3 +505,7 @@ def plan_text(inp: AttachmentSelector, ctx: Context, s) -> Plan:
         text, encoding = raw.decode("cp1252", errors="replace"), "windows-1252"
     out = _out(s, row, AttachmentOut)
     return Plan(AttachmentTextOut(**out.model_dump(), text=text, encoding=encoding, line_count=len(text.splitlines())))
+
+from bookflow.company.crm_admission import authorize_annotation, reference_touches
+for _cmd in (attachment_add, attachment_link, attachment_unlink, attachment_get, attachment_list, attachment_text):
+    _cmd.cmd.authorize_input = authorize_annotation

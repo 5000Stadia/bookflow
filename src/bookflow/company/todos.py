@@ -42,7 +42,40 @@ def _row(s, todo_id) -> dict[str, Any]:
     row = s.company.conn.execute(sa.select(c.todos).where(c.todos.c.id == todo_id)).mappings().first()
     if row is None:
         raise BookflowError('E_RECORD_NOT_FOUND', details={'record_type': RECORD, 'selector': todo_id})
+    admit_link(s, row['link_type'])
     return dict(row)
+
+
+def admit_link(s, link_type):
+    if link_type == 'lead':
+        from bookflow.hub.access import require_resource
+        require_resource(s, 'crm.read', 'member')
+
+
+def authorize_input(inp, ctx, s):
+    """Conditional target admission also runs before an idempotency-cache hit."""
+    if getattr(inp, 'todo', None):
+        _row(s, inp.todo)
+    admit_link(s, getattr(inp, 'link_type', None))
+
+
+def replay(inp, ctx, s, hit):
+    import json
+    if hit['state'] == 'done' and hit['output']:
+        output = json.loads(hit['output'])
+        admit_link(s, output.get('link_type'))
+        return output
+    return None
+
+
+def may_read_leads(s):
+    try:
+        admit_link(s, 'lead')
+        return True
+    except BookflowError as error:
+        if error.code not in ('E_PERMISSION', 'E_UNAUTHENTICATED', 'E_COMPANY_NOT_FOUND'):
+            raise
+        return False
 
 
 def _check_version(row, expected):
@@ -82,6 +115,10 @@ def resolve_link(s, link_type: str | None, selector: str | None) -> tuple[str | 
         return None, None
     if link_type is None or selector is None:
         raise _invalid('link' if selector is None else 'link_type', 'give link_type and link together')
+    admit_link(s, link_type)
+    if link_type == 'lead':
+        from bookflow.company.crm import resolve
+        return link_type, resolve(s, selector)['id']
     if link_type in ('customer', 'vendor'):
         from bookflow.company.parties import resolve_party
         return link_type, resolve_party(s.company, link_type, selector)['id']
@@ -103,7 +140,9 @@ def _labels(s, rows) -> tuple[dict[str, tuple[str, str]], dict[tuple[str, str], 
         if row['link_type']:
             by_type.setdefault(row['link_type'], set()).add(row['link_id'])
     for kind, ids in by_type.items():
-        if kind == 'customer':
+        if kind == 'lead':
+            q = sa.select(c.crm_leads.c.id, c.crm_leads.c.display_name).where(c.crm_leads.c.id.in_(ids))
+        elif kind == 'customer':
             q = sa.select(c.customers.c.id, c.customers.c.full_name).where(c.customers.c.id.in_(ids))
         elif kind == 'vendor':
             q = sa.select(c.vendors.c.id, c.vendors.c.name).where(c.vendors.c.id.in_(ids))
@@ -215,7 +254,14 @@ def apply(plan: Plan, ctx, s) -> Applied:
         touched = Touched(RECORD, row['id'], 'update', before['version'], row['version'], row, before, db='company')
         summary = (f"completed the to-do {row['title']!r}" if data['verb'] == 'complete'
                    else f"changed the to-do {row['title']!r}")
-    return Applied(TodoWriteOutput(**project(s, row)), [touched], summary)
+    touched_rows = [touched]
+    # Capture source admission in immutable history as well as the current link.
+    # Removing a link later must not disclose earlier lead task snapshots in audit.
+    lead_ids = {r['link_id'] for r in (before, row) if r and r['link_type'] == 'lead'}
+    for lead_id in sorted(lead_ids):
+        touched_rows.append(Touched('lead', lead_id, 'reference', None, None,
+            {'todo_id': row['id']}, db='company'))
+    return Applied(TodoWriteOutput(**project(s, row)), touched_rows, summary)
 
 
 def scheduler_todo(s, ctx, *, source_ref, title, notes, assignee_id, due_date, link_type=None, link_id=None):
@@ -237,20 +283,44 @@ def show(s, inp):
     return TodoOutput(**project(s, _row(s, inp.todo)))
 
 
-def query(s, *, assignee_id=None, status='open', due_by=None, link=None, limit=100):
+def current_assignee_ids(s):
+    from bookflow.hub import schema as h
+    company = s.company_row
+    member = sa.exists(sa.select(h.memberships.c.id).where(
+        h.memberships.c.user_id == h.users.c.id, h.memberships.c.revoked_at.is_(None),
+        sa.or_(sa.and_(h.memberships.c.scope_type == 'company', h.memberships.c.scope_id == company['id']),
+               sa.and_(h.memberships.c.scope_type == 'organization',
+                       h.memberships.c.scope_id == company['organization_id']))))
+    return list(s.hub.conn.execute(sa.select(h.users.c.id).where(
+        h.users.c.active.is_(True), h.users.c.kind != 'system', sa.or_(h.users.c.hub_admin.is_(True), member))).scalars())
+
+
+def selection(s, *, assignee_id=None, status='open', due_by=None, link=None, assignee_state='all'):
     t = c.todos
     q = sa.select(t)
+    if not may_read_leads(s):
+        q = q.where(sa.or_(t.c.link_type.is_(None), t.c.link_type != 'lead'))
     if status != 'all':
         q = q.where(t.c.status == status)
     if assignee_id is not None:
         q = q.where(t.c.assignee_id == assignee_id)
+    if assignee_state == 'unassigned':
+        q = q.where(t.c.assignee_id.is_(None))
+    elif assignee_state == 'departed':
+        q = q.where(t.c.assignee_id.is_not(None), t.c.assignee_id.not_in(current_assignee_ids(s)))
     if due_by is not None:
         q = q.where(t.c.due_date <= due_by)
     if link is not None:
         q = q.where(t.c.link_type == link[0], t.c.link_id == link[1])
+    return q
+
+
+def query(s, *, assignee_id=None, status='open', due_by=None, link=None, limit=100, offset=0, assignee_state='all'):
+    t = c.todos
+    q = selection(s, assignee_id=assignee_id, status=status, due_by=due_by, link=link, assignee_state=assignee_state)
     priority = sa.case((t.c.priority == 'high', 0), (t.c.priority == 'medium', 1), else_=2)
     rows = [dict(r) for r in s.company.conn.execute(q.order_by(t.c.due_date, priority, t.c.created_at, t.c.id)
-                                                    .limit(limit + 1)).mappings()]
+                                                    .offset(offset).limit(limit + 1)).mappings()]
     return rows[:limit], len(rows) > limit
 
 
@@ -262,7 +332,30 @@ def page(s, inp):
     elif inp.assignee is not None:
         assignee_id = resolve_assignee(s, inp.assignee)['id']
     link = resolve_link(s, inp.link_type, inp.link) if (inp.link_type or inp.link) else None
-    rows, truncated = query(s, assignee_id=assignee_id, status=inp.status, due_by=inp.due_by, link=link, limit=inp.limit)
-    labels, as_of = _labels(s, rows), today(s)
+    as_of = today(s)
+    rows, total_count, next_cursor = paged_rows(s, assignee_id=assignee_id, status=inp.status,
+        due_by=inp.due_by, link=link, limit=inp.limit, cursor=inp.cursor, as_of=as_of, assignee_state=inp.assignee_state)
+    labels = _labels(s, rows)
     items = [project(s, row, labels, as_of) for row in rows]
-    return TodoListOutput(as_of=as_of, items=items, count=len(items), truncated=truncated)
+    return TodoListOutput(as_of=as_of, items=items, count=len(items), truncated=next_cursor is not None,
+                          total_count=total_count, next_cursor=next_cursor)
+
+
+def paged_rows(s, *, assignee_id=None, status='open', due_by=None, link=None, limit=100, cursor=None, as_of=None, assignee_state='all'):
+    from bookflow.company.query import page_state, continuation
+
+    class Contract:
+        query = None
+
+        def model_dump(self, **kwargs):
+            return dict(assignee_id=assignee_id, status=status, due_by=due_by, link=link, limit=limit,
+                        as_of=as_of, crm_read=may_read_leads(s), memberships=s.memberships, assignee_state=assignee_state,
+                        current_assignees=sorted(current_assignee_ids(s)) if assignee_state == 'departed' else None)
+
+    contract = Contract()
+    contract.cursor = cursor
+    state = page_state(s, 'todo list', contract)
+    selected = selection(s, assignee_id=assignee_id, status=status, due_by=due_by, link=link, assignee_state=assignee_state)
+    total_count = s.company.conn.execute(sa.select(sa.func.count()).select_from(selected.subquery())).scalar_one()
+    rows, more = query(s, assignee_id=assignee_id, status=status, due_by=due_by, link=link, limit=limit, offset=state.offset, assignee_state=assignee_state)
+    return rows, total_count, continuation(state, len(rows), more)

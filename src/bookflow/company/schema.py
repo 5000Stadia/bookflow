@@ -1339,3 +1339,11 @@ globals().update(_pos_refund_schema.define_tables(metadata, _column, _table))
 
 from bookflow.company import pos_day_schema as _pos_day_schema
 globals().update(_pos_day_schema.define_tables(metadata, _column, _table))
+
+# CRM starts empty and never manufactures a customer for a prospect.
+from bookflow.company.crm_schema import define_tables as _define_crm_tables
+import sys as _sys
+globals().update(_define_crm_tables(_sys.modules[__name__]))
+for _setting in ('crm_pipeline_enabled', 'crm_campaigns_enabled'):
+    company_info.append_column(_column(_setting, sa.Boolean,
+        'Reserved optional CRM layer; off until its increment is installed.', nullable=False, server_default='0'))

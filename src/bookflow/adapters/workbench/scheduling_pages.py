@@ -36,9 +36,14 @@ def mount(app, *, render, run, credential, page_error):
             if (request.query_params.get('bills_days_ahead') or '').strip():
                 days = request.query_params['bills_days_ahead'].strip()
                 raw['bills_days_ahead'] = int(days) if days.isdigit() else days  # anything else is refused by the command
+            if request.query_params.get('todos_cursor'):
+                raw['todos_cursor'] = request.query_params['todos_cursor']
             listed = run(request, 'reminders', raw, company_id)
+            next_url = None
+            if listed.get('todos_next_cursor'):
+                next_url = f'/c/{company_id}/reminders?' + urlencode(dict(request.query_params, todos_cursor=listed['todos_next_cursor']))
             return render('reminders.html', request, company_id=company_id, company_label=company_label(request, company_id),
-                          r=listed, mine=raw['mine'], bills_days_ahead=raw.get('bills_days_ahead', 10),
+                          r=listed, todos_next_url=next_url, mine=raw['mine'], bills_days_ahead=raw.get('bills_days_ahead', 10),
                           notice=request.query_params.get('done'))
         except BookflowError as e:
             return page_error(request, e)
@@ -48,9 +53,18 @@ def mount(app, *, render, run, credential, page_error):
         try:
             everyone = request.query_params.get('all') == '1'
             status = request.query_params.get('status') or 'open'
-            listed = run(request, 'todo list', {'mine': not everyone, 'status': status}, company_id)
+            raw = {'mine': not everyone, 'status': status}
+            for key in ('link_type', 'link', 'due_by', 'cursor'):
+                if request.query_params.get(key):
+                    raw[key] = request.query_params[key]
+            if raw.get('link'):
+                raw['mine'] = False
+            listed = run(request, 'todo list', raw, company_id)
+            next_url = None
+            if listed.get('next_cursor'):
+                next_url = f'/c/{company_id}/todo?' + urlencode(dict(request.query_params, cursor=listed['next_cursor']))
             return render('todos.html', request, company_id=company_id, company_label=company_label(request, company_id),
-                          todos=listed['items'], everyone=everyone, status=status, as_of=listed['as_of'],
+                          todos=listed['items'], next_url=next_url, total_count=listed.get('total_count', listed['count']), everyone=everyone, status=status, as_of=listed['as_of'],
                           notice=request.query_params.get('done'))
         except BookflowError as e:
             return page_error(request, e)

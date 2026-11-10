@@ -413,6 +413,32 @@ are future build acceptance, not instructions to add tests in this design-only c
    follow-up, visible once in Reminders with both optional layers off. **Tests:** contact validation, ambiguous names,
    disabled layers, local-date boundary, assignee membership, target permission denial, old customer migration,
    501-plus due tasks with exact counts and continuation, CLI/MCP and one 390 px journey.
+
+   #### As built — increment 1
+
+   `lead create/update/show/list/close/reopen/archive` stores prospects independently of accounting customers.
+   Contacts and typed contact points use the native shapes and reconciliation rules with lead-owned stable IDs.
+   Exact-name selectors refuse ambiguity; IDs select a specific lead. Updates require versions, and closes require
+   the command reason. Duplicate links reject cycles. Archive and closure leave native follow-ups open.
+
+   Migration `co0129` starts the three lead tables empty, preserves existing customer/contact rows, adds disabled
+   `crm_pipeline_enabled` and `crm_campaigns_enabled` fields, and extends the native to-do link constraint and index.
+   These settings are reserved and cannot be enabled in this increment. No pipeline or campaign tables exist.
+
+   Notes and attachments accept lead and lead-contact targets. Native tasks, annotation reads, cached retries and
+   audit visibility enforce CRM target admission alongside each source's ordinary capability. `crm-leads-v1` adds
+   `crm.read` at member and `crm.write` at standard for human roles; agent grants remain explicit. Ownership grants
+   no authority. Lead summaries omit task projections without note access. To-do and Reminders queries count the full
+   admitted selection and return snapshot-bound continuation; unassigned and departed-assignee tasks are filterable.
+
+   Customers links to a searchable lead list and full-page detail with notes/files, native follow-up creation and
+   completion, and phone-sized controls. The demo includes two prospects, a contact, an attributed note, a task and
+   a file. Generated command/schema references include the new contracts. No money is posted and nothing is sent.
+
+   Conversion/import reversal, manual communications, pipeline, financial snapshots and campaign grouping remain
+   in increments 2–6. The CRM integration fixtures use the current schema because the unrelated historical fresh
+   company migration chain refuses its settlement guard at `co0043`; the CRM upgrade itself is tested from `co0128`.
+
 2. **Conversion and reversible lead imports (M).** Native customer validation, new/existing conversion, contact maps,
    unified lead/customer history, source-key imports and R186 inverse adapter. **Done when:** a person continues an
    agent's converted lead and a mistaken unused import/conversion reverses as one unit without lost history.

@@ -60,6 +60,7 @@ RECONCILIATION_CODES: dict[str, str] = {
 }
 
 COMMAND_CODES: dict[str, str] = {
+    "E_AMBIGUOUS_SELECTOR": "More than one permitted record matches; select a stable id from the candidates.",
     **RECONCILIATION_CODES,
     "E_RECOVERY_PENDING": "Resolve the active recovery before editing or recording this selection.",
     "E_RECOVERY_INCOMPLETE": "The complete attempted edits must be uploaded and reviewed before confirmation.",

@@ -21,7 +21,7 @@ import sqlalchemy as sa
 
 TODO_STATUSES = ('open', 'done', 'inactive')
 PRIORITIES = ('high', 'medium', 'low')
-LINK_TYPES = ('customer', 'vendor', 'transaction', 'memorized')
+LINK_TYPES = ('customer', 'vendor', 'transaction', 'memorized', 'lead')
 NOTICE_STATUSES = ('ready', 'sent', 'dismissed')
 NOTICE_TEMPLATES = ('statement', 'letter')
 NOTICE_FREQUENCIES = ('weekly', 'monthly')
@@ -54,6 +54,7 @@ def define_tables(metadata, C, T, common):
         sa.CheckConstraint("(status = 'done') = (completed_at IS NOT NULL)", name='ck_todo_completed'),
         sa.Index('ix_todos_assignee_status_due', 'assignee_id', 'status', 'due_date'),
         sa.Index('ix_todos_status_due', 'status', 'due_date'),
+        sa.Index('ix_todos_link_due', 'link_type', 'link_id', 'status', 'due_date'),
         sa.Index('ux_todos_source_ref', 'source_ref', unique=True, sqlite_where=sa.text('source_ref IS NOT NULL')),
         description='To-do notes: something to do by a date, assigned to a person or an agent, optionally about one record.')
 

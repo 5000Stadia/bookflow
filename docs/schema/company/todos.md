@@ -18,12 +18,12 @@ Database: `company`.
 | `updated_via` | VARCHAR(16) | no | — | — | — | — | Interface recorded for the latest update to this record. |
 | `title` | VARCHAR(160) | no | — | — | — | — | What is to be done, in a few words. |
 | `notes` | TEXT | yes | — | — | — | — | Details: what to do and anything the person doing it needs to know; null when none. |
-| `due_date` | VARCHAR(10) | no | — | — | ix_todos_assignee_status_due, ix_todos_status_due | — | Company-local date the to-do is due, YYYY-MM-DD. |
+| `due_date` | VARCHAR(10) | no | — | — | ix_todos_assignee_status_due, ix_todos_link_due, ix_todos_status_due | — | Company-local date the to-do is due, YYYY-MM-DD. |
 | `priority` | VARCHAR(8) | no | — | — | — | — | high, medium or low. |
 | `assignee_id` | VARCHAR(26) | yes | — | — | ix_todos_assignee_status_due | — | Hub user (a person or an agent) the to-do is assigned to; null when unassigned. |
-| `status` | VARCHAR(10) | no | — | — | ix_todos_assignee_status_due, ix_todos_status_due | — | open until done; inactive when it no longer needs doing. |
-| `link_type` | VARCHAR(16) | yes | — | — | — | — | Kind of record the to-do is about: customer, vendor, transaction or memorized; null when none. |
-| `link_id` | VARCHAR(26) | yes | — | — | — | — | Stable id of that record; null when none. |
+| `status` | VARCHAR(10) | no | — | — | ix_todos_assignee_status_due, ix_todos_link_due, ix_todos_status_due | — | open until done; inactive when it no longer needs doing. |
+| `link_type` | VARCHAR(16) | yes | — | — | ix_todos_link_due | — | Kind of record the to-do is about: customer, vendor, transaction or memorized; null when none. |
+| `link_id` | VARCHAR(26) | yes | — | — | ix_todos_link_due | — | Stable id of that record; null when none. |
 | `completed_at` | VARCHAR(32) | yes | — | — | — | — | UTC time it was marked done; null while it is not. |
 | `completed_by` | VARCHAR(26) | yes | — | — | — | — | User who marked it done; null while it is not. |
 | `source_ref` | VARCHAR(64) | yes | — | — | ux_todos_source_ref | — | What created it when the scheduler did (memorized-occurrence:<id>); null for one a person or agent made. |

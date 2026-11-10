@@ -16,6 +16,9 @@ _TARGETS = {
     for definition in all_list_definitions()
 }
 _TARGETS.update({
+    "lead": ("crm_leads", "id"),
+    "lead_contact": ("crm_lead_contacts", "id"),
+    "lead_contact_point": ("crm_lead_contact_points", "id"),
     "company_info": ("company_info", "id"),
     "directive": ("directives", "id"),
     "principal": ("principals", "user_id"),
@@ -68,6 +71,8 @@ def resolve(session, record_type: str, record_id: str) -> str:
         raise BookflowError("E_VALIDATION", details={"fields": [{
             "field": "record_type", "problem": "unsupported annotation target type",
         }]})
+    from bookflow.company.crm_admission import authorize_target
+    authorize_target(session, record_type, record_id)
     found = None
     if is_ulid(record_id):
         record_id = normalize_ulid(record_id)

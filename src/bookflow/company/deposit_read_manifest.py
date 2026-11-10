@@ -327,6 +327,8 @@ FIELDS = {
         'shipping_item_id': ('str', True, False, 'dependency_field'),
         'bank_rule_learning': ('str', False, False, 'outside_output'),  # R108 increment 4
         'bank_rule_automation': ('bool', False, False, 'outside_output'),
+        'crm_pipeline_enabled': ('bool', False, False, 'outside_output'),
+        'crm_campaigns_enabled': ('bool', False, False, 'outside_output'),
         'pos_enabled': ('bool', False, False, 'dependency_field'),
         'pos_home_view_style': ('str', False, False, 'outside_output'),
         'pos_layout_version': ('int', False, False, 'outside_output'),

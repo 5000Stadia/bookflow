@@ -36,6 +36,10 @@ EXACT = {
     'principal': frozenset(('company',)),
     'directive': frozenset(('directive',)),
     'note': frozenset(('note',)),
+    'todo': frozenset(('note',)),
+    'lead': frozenset(('crm.read',)),
+    'lead_contact': frozenset(('crm.read',)),
+    'lead_contact_point': frozenset(('crm.read',)),
     'attachment': frozenset(('attachment',)),
     'attachment_link': frozenset(('attachment',)),
     'attachment_collection': frozenset(('attachment',)),
@@ -139,4 +143,9 @@ def visible_events(event_id, held: frozenset[str]):
             clauses.append(sa.exists(sa.select(sa.literal(1)).select_from(entries.join(
                 target, sa.and_(entries.c.record_type == kind, entries.c.record_id == target.c.id))).where(
                     entries.c.event_id == event_id, _hidden(target.c.record_type, held))))
+    if 'crm.read' not in held:
+        tasks = c.todos.alias('visibility_todos')
+        clauses.append(sa.exists(sa.select(sa.literal(1)).select_from(entries.join(
+            tasks, sa.and_(entries.c.record_type == 'todo', entries.c.record_id == tasks.c.id))).where(
+                entries.c.event_id == event_id, tasks.c.link_type == 'lead')))
     return ~sa.or_(*clauses)
