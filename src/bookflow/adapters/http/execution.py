@@ -86,17 +86,16 @@ def _run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run, *, before_
             # answered as itself. Reporting every one of these as a filesystem failure told a
             # person whose settlement had been refused that their disk had failed, and named
             # the wrong subsystem to anyone reading the symptom afterwards.
-            log.info("publication finish refused: command=%s code=%s reason=%s request=%s",
-                     cmd.name, exc.code, (exc.details or {}).get("reason"),
+            log.info("publication finish refused: command=%s code=%s request=%s",
+                     cmd.name, exc.code,
                      getattr(ctx, "request_id", None))
             raise
         except Exception:
             # An untyped failure is what the broad catch is genuinely for: it can carry
             # internals -- a path, a query, a stack -- through a boundary that must not
             # describe what it could not certify. The caller keeps the generic certificate
-            # failure; the exact cause and its traceback go to the server log, which the
-            # operator reads and the caller never sees.
-            log.exception("publication finish failed: command=%s request=%s",
+            # failure; only safe command/request identifiers go to the server log.
+            log.error("publication finish failed: command=%s request=%s",
                           cmd.name, getattr(ctx, "request_id", None))
             raise BookflowError("E_IO", details={"stage": "publication", "outcome": "unknown",
                                                   "reason": "receipt_certificate"}) from None

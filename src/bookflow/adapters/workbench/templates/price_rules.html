@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block title %}Price rules{% endblock %}{% block body %}<section id="price-rules" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+{% extends "base.html" %}{% block title %}Price rules{% endblock %}{% block body %}<section id="price-rules" data-swap-validation-errors>
 <nav class="crumbs"><a href="/c/{{ company_id }}/_group/customers">Customers</a> / Price rules</nav>
 <h1>Price rules</h1>
 <p class="muted">A rule sets the price a sales line starts at when its item, customer, class, rep, date and quantity match. A price you type on a line always wins, and saved documents keep the prices they were given.</p>

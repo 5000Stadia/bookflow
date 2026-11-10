@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block title %}Delete bill {{ bill.revision.number }}{% endblock %}{% block body %}<section id="bill-deletion" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+{% extends "base.html" %}{% block title %}Delete bill {{ bill.revision.number }}{% endblock %}{% block body %}<section id="bill-deletion" data-swap-validation-errors>
 <nav class="crumbs"><a href="/c/{{ company_id }}/bill">Bills</a> / Delete</nav>
 <h1>Delete bill {{ bill.revision.number }}</h1>
 {% include "bill_detail.html" %}

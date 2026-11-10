@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block title %}Shipment {{ shipment.number }}{% endblock %}{% block body %}<section id="shipment-page" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+{% extends "base.html" %}{% block title %}Shipment {{ shipment.number }}{% endblock %}{% block body %}<section id="shipment-page" data-swap-validation-errors>
 <nav class="crumbs"><a href="/c/{{ company_id }}/shipments">Shipments</a> / {{ shipment.number }}</nav>
 <h1>Shipment {{ shipment.number }}</h1>
 {% if result %}<div role="status" class="notice" data-shipment-result><p><strong>Shipment {{ result.number }}: {{ result.status }}</strong>{% if result.warnings %}</p>{% for w in result.warnings %}<p>{{ w }}</p>{% endfor %}<p>{% endif %}</p></div>{% endif %}

@@ -1,6 +1,6 @@
 {% extends "base.html" %}{% block title %}Delete deposit {{ detail.selected.number }}{% endblock %}{% block body %}
 <link rel="stylesheet" href="{{ static_urls['deposit.css'] }}">
-<section id="deposit-deletion" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+<section id="deposit-deletion" data-swap-validation-errors>
 <nav class="crumbs deposit-crumbs"><a href="{{ list_url }}">Saved deposits</a> / <a href="{{ detail_url }}">Deposit {{ detail.selected.number }}</a> / Delete</nav>
 <h1 class="deposit-heading">Delete deposit {{ detail.selected.number }}</h1>
 <p class="deposit-lede"><span class="deposit-amount">{{ detail.totals.bank_total.display|money(detail.totals.bank_total.currency, home=math_company_currency) }}</span> into {{ detail.selected.deposit_to.display_label }} on {{ detail.selected.date|longday }}</p>

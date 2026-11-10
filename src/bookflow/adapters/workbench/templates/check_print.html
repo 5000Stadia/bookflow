@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block title %}Print checks{% endblock %}{% block body %}<section id="print-checks" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+{% extends "base.html" %}{% block title %}Print checks{% endblock %}{% block body %}<section id="print-checks" data-swap-validation-errors>
 {% set post = '/c/' ~ company_id ~ '/print-checks' %}
 <nav class="crumbs"><a href="/c/{{ company_id }}/_group/banking">Banking</a> / Print checks</nav>
 <h1>Print checks</h1>
@@ -7,7 +7,7 @@
 {% if error %}<div role="alert" class="error"><strong>{{ error.code }}</strong>: {{ error.message }}{% for f in (error.details or {}).get('fields', []) %}<br>{{ f.field }}: {{ f.problem }}{% endfor %}</div>{% endif %}
 
 <form method="get" action="{{ post }}" class="workspace-card" aria-label="Bank account">
-<label>Bank account <select name="account" onchange="this.form.submit()">{% for b in banks %}<option value="{{ b.id }}" {% if b.id == account %}selected{% endif %}>{{ b.full_name or b.name }}</option>{% endfor %}</select></label>
+<label>Bank account <select name="account" data-submit-on-change>{% for b in banks %}<option value="{{ b.id }}" {% if b.id == account %}selected{% endif %}>{{ b.full_name or b.name }}</option>{% endfor %}</select></label>
 <noscript><button type="submit">Show</button></noscript>
 </form>
 

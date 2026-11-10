@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from bookflow.adapters.http import auth
+from bookflow.adapters.http.redaction import public_error
 from bookflow.core import registry
 from bookflow.core.context import Context, Interface
 from bookflow.core.errors import ALL_CODES, INFRASTRUCTURE_CODES, BookflowError
@@ -38,7 +39,7 @@ CONTEXT_HEADERS = {"reason": "X-Bookflow-Reason", "directive_id": "X-Bookflow-Di
 # nothing to be written, and ignoring it would post for real.
 REQUEST_HEADERS = frozenset(h.lower() for h in (*CONTEXT_HEADERS.values(), "X-Bookflow-Context-Encoding",
                             "X-Bookflow-Company", "X-Bookflow-Workbench", "X-Bookflow-Client-Host",
-                            "X-Bookflow-Session-Id", "X-Bookflow-Input"))
+                            "X-Bookflow-Session-Id", "X-Bookflow-Input", "X-Bookflow-CSRF"))
 
 
 def refuse_unknown_headers(headers) -> None:
@@ -202,13 +203,23 @@ def create_app(host, *, secure_cookies: bool, public_origin: str | None = None, 
     from bookflow.core import scan_decoders as sd
     registry.load_all()
     app = FastAPI(title="Bookflow", version=host.version, docs_url=None, redoc_url=None, openapi_url=None)
+    from bookflow.core.deployment import Deployment
+    deployment = Deployment.load(host.data_root, public_origin=public_origin, bind=bind, secure_cookies=secure_cookies)
+    deployment.require_transport()
+    app.state.deployment = deployment
     app.state.public_origin = public_origin
     app.state.scan_decoders = sd.resolve(scan_decoders)
     app.add_middleware(CookieRenewalMiddleware, secure_cookies=secure_cookies)
     from bookflow.adapters.http.publication import PublicationMiddleware
-    app.add_middleware(PublicationMiddleware, host=host)
-    # Added last, so it runs first: the origin check refuses before publication or cookie handling see a request.
+    if not deployment.wider:
+        app.add_middleware(PublicationMiddleware, host=host)
+    # Wider refusals also pass through the outer publication/frame owner.
     app.add_middleware(PublicOriginMiddleware, public_origin=public_origin, bind=bind)
+    if deployment.wider:
+        from bookflow.adapters.http.transport_security import TransportSecurity, SecurityHeaders
+        app.add_middleware(TransportSecurity, deployment=deployment)
+        app.add_middleware(PublicationMiddleware, host=host)
+        app.add_middleware(SecurityHeaders)
 
     # ------------------------------------------------------------ credentials
     def credential(request: Request, *, renew_cookie: bool = True, publication: bool = True) -> Credential:
@@ -261,7 +272,12 @@ def create_app(host, *, secure_cookies: bool, public_origin: str | None = None, 
     def run_command(cmd, raw: dict[str, Any], ctx: Context, cred: Credential, selector: str | None, source: str, dry_run: bool) -> dict[str, Any]:
         from bookflow.core.performance import span
         with span("command", command=cmd.name, mode="hosted"):
-            return run_command_body(cmd, raw, ctx, cred, selector, source, dry_run)
+            try:
+                return run_command_body(cmd, raw, ctx, cred, selector, source, dry_run)
+            except BookflowError as err:
+                if deployment.wider:
+                    raise public_error(err) from None
+                raise
 
     def run_command_body(cmd, raw: dict[str, Any], ctx: Context, cred: Credential, selector: str | None, source: str, dry_run: bool) -> dict[str, Any]:
         from bookflow.adapters.http.execution import run_hosted
@@ -294,7 +310,7 @@ def create_app(host, *, secure_cookies: bool, public_origin: str | None = None, 
 
     @app.exception_handler(BookflowError)
     async def _handle(request: Request, err: BookflowError):
-        result = error_response(err)
+        result = error_response(public_error(err) if deployment.wider else err)
         if request.url.path.startswith("/adapters/mcp"):
             from bookflow.adapters.mcp.catalog import BRIDGE_VERSION
             result.headers["X-Bookflow-MCP-Version"] = str(BRIDGE_VERSION)
@@ -306,9 +322,9 @@ def create_app(host, *, secure_cookies: bool, public_origin: str | None = None, 
         if isinstance(exc, ConnectionAbortedError):
             # The response's connection ended or its admission was cancelled mid-send; the
             # transport layer decides what that means. It is not an internal failure.
-            log.info("response abandoned %s: %s", rid, exc)
+            log.info("response abandoned request=%s", rid)
         else:
-            log.exception("internal failure %s", rid)
+            log.error("internal failure request=%s", rid)
         return error_response(BookflowError("E_INTERNAL", message="Internal failure; see the host log.", details={"request_id": rid}))
 
     def selector_of(request: Request, company_id: str | None) -> tuple[str | None, str]:

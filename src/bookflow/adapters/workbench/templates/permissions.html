@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Users & permissions — {{ company_label }}{% endblock %}
 {% block body %}
-<section id="company-permissions" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+<section id="company-permissions" data-swap-validation-errors>
 <style>#company-permissions fieldset label { display:block; padding:.35rem 0; }</style>
 <h1>Users & permissions</h1><p>{{ company_label }}. Company permissions apply to this company; organization memberships also cover its current and future companies.</p>
 {% if current.mode == 'legacy' %}<p class="warn">Permissions have not been activated. An installation administrator can <a href="/hub/permission">review and activate permissions</a>. Existing role access remains in effect.</p>{% endif %}

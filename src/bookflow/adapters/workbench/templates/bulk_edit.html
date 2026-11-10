@@ -20,7 +20,7 @@
 
 {% if step == 'grid' %}
 <form class="bulk-pick" method="get" action="{{ post }}" data-bulk-pick>
-<label class="bulk-label">List <select name="kind" onchange="this.form.submit()">{% for k, label in kinds %}<option value="{{ k }}"{% if k == kind %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+<label class="bulk-label">List <select name="kind" data-submit-on-change>{% for k, label in kinds %}<option value="{{ k }}"{% if k == kind %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
 <label class="bulk-label">Search <input type="search" name="q" value="{{ q }}" placeholder="name contains…"></label>
 <label class="choice"><input type="checkbox" name="inactive" value="on"{% if inactive %} checked{% endif %}> Include inactive</label>
 <details class="bulk-columns"><summary>Columns ({{ chosen|length }})</summary><div class="bulk-column-list">{% for c in columns %}<label class="choice"><input type="checkbox" name="col" value="{{ c.field }}"{% if c.field in chosen %} checked{% endif %} data-bulk-column> {{ c.label }}</label>{% endfor %}</div>

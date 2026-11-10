@@ -4,7 +4,7 @@
    picture (R114). #}
 {% macro card(href, name, amount='', parts=(), cls='', extra='', data={}, thumb='') -%}
 <li class="list-card{{ ' ' ~ cls if cls }}"{% for key, value in data.items() %} data-{{ key }}="{{ value }}"{% endfor %}>
-<div class="list-card-main">{% if thumb %}<img class="item-thumb" src="{{ thumb }}" alt="" loading="lazy" onerror="this.hidden=true">{% endif %}{% if href %}<a class="list-card-link" href="{{ href }}">{{ name if name is not none else '' }}</a>{% else %}<span class="list-card-link">{{ name if name is not none else '' }}</span>{% endif %}{% if amount %}<span class="list-card-amount">{{ amount }}</span>{% endif %}</div>
+<div class="list-card-main">{% if thumb %}<img class="item-thumb" src="{{ thumb }}" alt="" loading="lazy" data-hide-on-error>{% endif %}{% if href %}<a class="list-card-link" href="{{ href }}">{{ name if name is not none else '' }}</a>{% else %}<span class="list-card-link">{{ name if name is not none else '' }}</span>{% endif %}{% if amount %}<span class="list-card-amount">{{ amount }}</span>{% endif %}</div>
 {% set shown = parts | reject('none') | map('string') | map('trim') | select | list %}{% if shown %}<p class="list-card-sub">{{ shown | join(' · ') }}</p>{% endif %}
 {% if extra %}<div class="list-card-extra">{{ extra }}</div>{% endif %}
 </li>

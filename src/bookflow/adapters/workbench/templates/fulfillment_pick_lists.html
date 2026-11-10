@@ -8,5 +8,5 @@
 {% for l in rows %}<tr><td>{{ l.item_name }}{% if l.short %} (short){% endif %}</td><td>{% if l.lot %}Lot {{ l.lot }}{% if l.lot_expiry %}, expires {{ l.lot_expiry }}{% endif %}{% elif l.serial_hints %}{{ l.serial_hints|join(', ') }}{% endif %}</td><td>{{ l.sales_order }}</td><td class="num">{{ l.quantity }}</td><td class="box"></td></tr>{% endfor %}
 </tbody></table>{% endfor %}
 </section>{% endfor %}
-<p><a href="javascript:window.print()">Print</a></p>
+<p><a href="#" data-print-page>Print</a></p>
 </body></html>
