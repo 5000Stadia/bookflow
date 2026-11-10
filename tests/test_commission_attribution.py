@@ -11,7 +11,8 @@ from tests.test_row3_host import hosted
 @pytest.fixture
 def shop(books):
     def call(command, **raw):
-        return books.run(command, raw, reason='Invoice attribution setup')
+        context = {'reason': 'Invoice attribution setup'} if registry.get(command).is_write else {}
+        return books.run(command, raw, **context)
     call('company update', commission_attribution_enabled=True)
     income = call('account create', name='Attribution sales', type='income')['id']
     code = next(r['id'] for r in call('sales-tax-code list')['items'] if not r['taxable'])

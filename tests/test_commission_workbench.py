@@ -73,6 +73,7 @@ def test_invoice_recipient_prompt_cancel_and_reopened_report_at_390px(register_b
     b.wait_for('!!document.querySelector(".commission-picker[open]")')
     b.evaluate('document.querySelector("[data-commission-cancel]").click()')
     assert b.evaluate('[...document.querySelectorAll("[data-commission-value]")].map(e=>e.value)') == before
+    _fill(b, 'ctx:reason', 'Record invoice commission attribution')
     _preview(b)
     _click(b, 'submit')
     invoice = _saved(b, 'invoice')
@@ -84,14 +85,19 @@ def test_invoice_recipient_prompt_cancel_and_reopened_report_at_390px(register_b
     b.wait_for('!!document.querySelector("[data-sales-form]")')
     _fill(b, 'f:memo', 'Keep historical recipient on correction')
     _fill(b, 'c:lines:1:quantity', '2')
+    _fill(b, 'ctx:reason', 'Correct invoice quantity')
     _preview(b)
     _click(b, 'submit')
     assert _saved(b, 'invoice') == invoice
     corrected = run('invoice.show', {'invoice': invoice})
     assert corrected['revision']['lines'][0]['item_snapshot']['commission']['recipients'][0]['recipient_label'] == 'Ada Commission'
-    report = f'{env.site.base_url}/c/{env.site.company_id}/report/commission-attribution?date_from=2026-01-01&date_to=2026-12-31'
+    report = f'{env.site.base_url}/c/{env.site.company_id}/report/commission-attribution'
     for _ in range(2):
         b.navigate(report)
+        b.wait_for('!!document.getElementsByName("f:date_from")[0]')
+        _fill(b, 'f:date_from', '2026-01-01')
+        _fill(b, 'f:date_to', '2026-12-31')
+        _click(b, 'submit')
         b.wait_for('!!document.querySelector("[data-commission-report]")')
         text = b.evaluate('document.querySelector("[data-commission-report]").innerText')
         assert 'Ada Commission' in text and 'Bo Commission' in text and '$25.00' in text
