@@ -4,7 +4,9 @@
 
 ## `delivery approve`
 
-A person's go for ready messages waiting for one (an agent's release): by number, or all_waiting. A message leaves only with a go, and only through a sending connection. Needs delivery.send. Example: {"messages": ["M-1001"]}.
+A go for ready messages waiting for one (released without delivery.send): by number, or all_waiting. A message leaves only with a go, and only through a sending connection. Needs delivery.send, which a principal may grant an agent. Example: {"messages": ["M-1001"]}.
+
+Confirm first (send): what it sends cannot be recalled. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -189,6 +191,8 @@ Example JSON output:
 
 Draft many messages in one act: queued (to-be-emailed documents), unsent with a kind (filters date_from, date_to, customer_type, customer), kind statement with period and balance_over (one per customer with a balance), or kind notice with ready. Always run it with dry_run first and show the person who gets what and who is skipped and why; then run it with the dry run's fingerprint (a changed set is refused). It drafts 10 per call and returns next: call again with it until done. reversal_batch_id identifies the shared reversal batch; next_commands includes its batch reverse preview. Only unchanged, unreleased drafts with no exported files can be reversed as a whole. send releases them too; combine puts a customer's documents in one message. To repeat it every month or day, use delivery-schedule create. Example: {"kind": "statement", "period": "2026-09", "balance_over": "0", "method": "email"}.
 
+Confirm first (send): what it sends cannot be recalled. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
@@ -323,7 +327,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `kept[].fingerprint` | string \| null | no | yes | null | This row: documents, versions and recipients. |
 | `next` | dict \| null | no | yes | null | Input for the next chunk (delivery batch), while drafting. |
 | `fingerprint` | string \| null | no | yes | null | The exact set (documents, versions, recipients); pass it to the run so a changed set is refused. |
-| `go` | boolean | no | no | false | Whether its releases carry a person's go (decided when it began). |
+| `go` | boolean | no | no | false | Whether its releases carry a go (decided when it began: its starter held delivery.send). |
 | `open_batches` | array[string] | no | no | [] | Dry run: unfinished batches over this same selection; continue one instead of starting another. |
 | `version` | integer \| null | no | yes | null | — |
 | `warnings` | array[string] | no | no | [] | — |
@@ -395,6 +399,8 @@ Example JSON output:
 ## `delivery batch-cancel`
 
 Cancel a batch as one unit, with --reason: every message it drafted that was never released or exported is cancelled; the ones that block (released, exported, sent) are named and stay.
+
+Confirm first (batch reversal): it undoes a whole batch at once. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -514,7 +520,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `kept[].fingerprint` | string \| null | no | yes | null | This row: documents, versions and recipients. |
 | `next` | dict \| null | no | yes | null | Input for the next chunk (delivery batch), while drafting. |
 | `fingerprint` | string \| null | no | yes | null | The exact set (documents, versions, recipients); pass it to the run so a changed set is refused. |
-| `go` | boolean | no | no | false | Whether its releases carry a person's go (decided when it began). |
+| `go` | boolean | no | no | false | Whether its releases carry a go (decided when it began: its starter held delivery.send). |
 | `open_batches` | array[string] | no | no | [] | Dry run: unfinished batches over this same selection; continue one instead of starting another. |
 | `version` | integer \| null | no | yes | null | — |
 | `warnings` | array[string] | no | no | [] | — |
@@ -650,7 +656,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].planned` | integer | yes | no | — | — |
 | `rows[].position` | integer | yes | no | — | — |
 | `rows[].drafts` | integer | yes | no | — | Messages still drafts. |
-| `rows[].waiting` | integer | yes | no | — | Ready messages waiting for a person's go. |
+| `rows[].waiting` | integer | yes | no | — | Ready messages waiting for a go. |
 | `rows[].created_at` | string | yes | no | — | — |
 | `rows[].next_commands` | array[string] | no | no | [] | — |
 | `count` | integer | yes | no | — | — |
@@ -803,7 +809,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `kept[].fingerprint` | string \| null | no | yes | null | This row: documents, versions and recipients. |
 | `next` | dict \| null | no | yes | null | Input for the next chunk (delivery batch), while drafting. |
 | `fingerprint` | string \| null | no | yes | null | The exact set (documents, versions, recipients); pass it to the run so a changed set is refused. |
-| `go` | boolean | no | no | false | Whether its releases carry a person's go (decided when it began). |
+| `go` | boolean | no | no | false | Whether its releases carry a go (decided when it began: its starter held delivery.send). |
 | `open_batches` | array[string] | no | no | [] | Dry run: unfinished batches over this same selection; continue one instead of starting another. |
 | `version` | integer \| null | no | yes | null | — |
 | `warnings` | array[string] | no | no | [] | — |
@@ -1704,7 +1710,9 @@ Example JSON output:
 
 ## `delivery mark-sent`
 
-Record that a person sent the message from their own mail program (shown 'Sent by hand', never delivered). For an overdue notice it also marks the notice sent. Needs delivery.mark-sent, which a principal may grant an agent.
+Record that someone sent the message from their own mail program (shown 'Sent by hand', never delivered). For an overdue notice it also marks the notice sent. Needs delivery.mark-sent, which a principal may grant an agent.
+
+Confirm first (send): what it sends cannot be recalled. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -1959,7 +1967,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `status` | `--status` | literal["draft", "ready", "waiting", "sending", "sent", "held", "failed", "cancelled", "attention", "live", "all"] | no | no | "live" | live (every unsent, uncancelled message; the default), draft, ready, waiting (ready, waiting for a person's go), sent, attention (held or failed), held, failed, cancelled or all. |
+| `status` | `--status` | literal["draft", "ready", "waiting", "sending", "sent", "held", "failed", "cancelled", "attention", "live", "all"] | no | no | "live" | live (every unsent, uncancelled message; the default), draft, ready, waiting (ready, waiting for a go), sent, attention (held or failed), held, failed, cancelled or all. |
 | `kind` | `--kind` | literal["invoice", "sales-receipt", "estimate", "statement", "notice"] \| null | no | yes | null | — |
 | `customer` | `--customer` | string \| null | no | yes | null | Only this customer or job. |
 | `source` | `--source` | string \| null | no | yes | null | Only messages carrying this document's id. |
@@ -2184,7 +2192,9 @@ Example JSON output:
 
 ## `delivery retry`
 
-Put a failed message, or one held because an attempt ended without an answer, back in the outbox. Check the sent mail first: if it went, mark it sent instead. A person's retry is their go; an agent's waits.
+Put a failed message, or one held because an attempt ended without an answer, back in the outbox. Check the sent mail first: if it went, mark it sent instead. A retry by a holder of delivery.send is its go; anyone else's waits for one.
+
+Confirm first (send): what it sends cannot be recalled. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -2410,6 +2420,8 @@ Example JSON output:
 
 One dispatch pass now: claim due messages with a go, send each through the sending connection, record what it said (sent, try again later, failed, or held when the answer is unknown). With no connection it claims nothing. The host does this on its own about once a minute.
 
+Confirm first (send): what it sends cannot be recalled. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
@@ -2548,7 +2560,9 @@ Example JSON output:
 
 ## `delivery send`
 
-Release drafts to the outbox (ready). A person's release is also their go; an agent's waits for one. No sending connection exists yet, so a ready message waits there; export it to send it yourself. A message whose document changed or was voided is held instead.
+Release drafts to the outbox (ready). The release of a holder of delivery.send (a person at standard; an agent its principal granted it) is also its go; anyone else's waits for one. No sending connection exists yet, so a ready message waits there; export it to send it yourself. A message whose document changed or was voided is held instead.
+
+Confirm first (send): what it sends cannot be recalled. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

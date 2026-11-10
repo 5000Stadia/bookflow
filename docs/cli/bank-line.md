@@ -1216,6 +1216,8 @@ Example JSON output:
 
 Undo a bank-line batch (the batch_id of a --lines act) as one unit: delete the entries it made (with preserved history, by each family's own command) and return its lines to how they stood. Refused, naming each blocker, when a line was sorted again since or an entry was edited or used. --dry-run shows the plan. Example: {"batch": "01J..."}.
 
+Confirm first (batch reversal): it undoes a whole batch at once. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |

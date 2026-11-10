@@ -1,12 +1,15 @@
 """The queue: approving, retrying and dispatching messages (R112 increment 2; design/document-delivery.md §2, §4, §7).
 
-**The go.** A ready message leaves only with a go: a person's release (``delivery send``) or approval (``delivery
-approve``). An agent's release leaves it waiting. A go is given for the exact frozen content and recipients it saw:
-holding, editing or refreshing the message, or an agent's release, ends it. A go counts only while the person who gave
-it is active and holds a membership of this company (or its organization) at standard or above that does not deny
-``customer``, and, where permissions are activated, while the policy still admits them; an installation administrator
-without a membership does not count. At the claim, a go that no longer holds is withdrawn and the message waits for a
-new one. (R187 converts "a person" to "an actor holding ``delivery.send``".)
+**The go.** A ready message leaves only with a go: the release (``delivery send``), retry or approval (``delivery
+approve``) of an actor holding ``delivery.send`` (R187). A person's release is their go, as before; an agent's is a
+go only while it holds ``delivery.send`` (its own explicit grant, intersected with its principal's, as everywhere),
+else the message waits. A go is given for the exact frozen content and recipients it saw: holding, editing or
+refreshing the message, or a release by an actor without ``delivery.send``, ends it. A person's go counts only while
+they are active and hold a membership of this company (or its organization) at standard or above that does not deny
+``customer`` or ``delivery.send``, and, where permissions are activated, while the policy still admits them; an
+installation administrator without a membership does not count. An agent's go counts while ``automation.lost`` finds
+it holding ``delivery.send`` for every person it acts for now (``go_lost``). At the claim, a go that no longer holds
+is withdrawn and the message waits for a new one.
 
 **Dispatch** is three steps, so no database write is open while a transport talks to the outside:
 
@@ -76,31 +79,82 @@ def _iso(moment: datetime) -> str:
 
 @contextmanager
 def acting_as(s, user_id):
-    """Load ``user_id`` as the session's actor for a block (its authority read afresh), then put the actor back."""
+    """Load ``user_id`` as the session's actor for a block (its authority read afresh), then put the actor back. An
+    agent reads for a person it acts for now (the first, in id order): ``go_lost`` has already asked that it holds
+    ``delivery.send`` for every one of them, and an agent's reads are never wider than any one principal's. Its
+    authority epoch is read now, as that check just was."""
     from bookflow.company.scheduler import _act_as
     saved = (s.actor, list(s.memberships), s.credential, s.directive_code)
     try:
-        _act_as(s, user_id)
+        principal = next(iter(_principals(s, user_id)), None)
+        epoch = None
+        if principal is not None:
+            from bookflow.hub import credentials
+            _, epoch = credentials._binding(s.hub, user_id, principal)
+        _act_as(s, user_id, principal, epoch)
         yield
     finally:
         s.actor, s.memberships, s.credential, s.directive_code = saved
 
 
-GO_CAPABILITY = ('customer', 'standard')  # R187: delivery.send
+GO_CAPABILITY = ('customer', 'standard')  # a person's go: the role that sent before R187, and no deny of delivery.send
+SEND = 'delivery.send'
+
+
+def gives_go(s) -> bool:
+    """Whether the acting actor's release or retry is also its go: a person's always is (``go_lost`` withdraws one
+    that does not count at the claim, as before); an agent's only while it holds ``delivery.send`` now."""
+    if s.actor is None:
+        return False
+    if s.actor.kind == 'human':
+        return True
+    if s.actor.kind != 'agent':
+        return False
+    from bookflow.company import automation
+    return automation.holds_now(s, SEND)
+
+
+def _principals(s, agent_id) -> list[str]:
+    from bookflow.hub import schema as h
+    p = h.agent_principals
+    return [r[0] for r in s.hub.conn.execute(sa.select(p.c.principal_user_id).where(
+        p.c.agent_user_id == agent_id, p.c.revoked_at.is_(None)).order_by(p.c.principal_user_id))]
+
+
+def _agent_go_lost(s, user) -> str | None:
+    """An agent's go (R187): it counts while the agent holds ``delivery.send`` -- active, unsuspended, its own explicit
+    grant with no deny, admitted by the policy with its principal, who holds it as a person -- for every person it
+    acts for now. The message does not record which principal the go was given for, so each is asked: a go stands
+    only where it would stand for any of them (never wider than the narrowest)."""
+    from bookflow.company import automation
+    who = user['display_name'] or user['username']
+    principals = _principals(s, user['id'])
+    if not principals:
+        return f'{who} (an agent) no longer acts for anyone'
+    for principal in principals:
+        try:
+            why = automation.lost(s, SEND, user['id'], principal)
+        except automation.Unsettled as e:
+            return f"{who}'s go cannot be vouched for now ({e.reason})"  # a go the policy cannot vouch for
+        if why is not None:
+            return why
+    return None
 
 
 def go_lost(s, go_by) -> str | None:
-    """Why a go no longer counts, or None. Interim rule until R187: an active person with a standing membership of
-    this company (or its organization) at standard or above whose denies do not name ``customer``, admitted by the
-    activated policy where there is one. An installation administrator counts only through such a membership.
-    R187: the go counts while its giver holds ``delivery.send``."""
+    """Why a go no longer counts, or None. A person: active, with a standing membership of this company (or its
+    organization) at standard or above whose denies name neither ``customer`` nor ``delivery.send``, admitted by the
+    activated policy where there is one (an installation administrator counts only through such a membership). An
+    agent: while it holds ``delivery.send`` (``_agent_go_lost``)."""
     from bookflow.hub import schema as h
     from bookflow.hub.access import ROLE_RANK
     user = s.hub.conn.execute(sa.select(h.users).where(h.users.c.id == go_by)).mappings().first()
     if user is None or not user['active']:
-        return 'the person who gave the go is no longer active'
+        return 'the one who gave the go is no longer active'
+    if user['kind'] == 'agent':
+        return _agent_go_lost(s, user)
     if user['kind'] != 'human':
-        return "a go is a person's act"  # R187: delivery.send, which a principal may grant an agent
+        return f'a go is given by a holder of {SEND}'
     who = user['display_name'] or user['username']
     capability, role = GO_CAPABILITY
     m, row = h.memberships, s.company_row
@@ -113,8 +167,8 @@ def go_lost(s, go_by) -> str | None:
             denies = set(json.loads(member['denies'] or '[]'))
         except ValueError:
             denies = {capability}  # unreadable denies: assume the worst
-        if capability in denies or 'delivery.send' in denies:
-            return f"{who} is denied {capability} in this company"
+        if capability in denies or SEND in denies:
+            return f"{who} is denied {SEND if SEND in denies else capability} in this company"
         held = held or ROLE_RANK.get(member['role'], -1) >= ROLE_RANK[role]
     if not held:
         return f"{who} may no longer send this company's email"
@@ -668,7 +722,8 @@ APPROVE_LIMIT = 100
 
 
 def prepare_approve(s, ctx, inp) -> Plan:
-    """A person's go for ready messages waiting for one. People-only; R187: ``delivery.send``."""
+    """A go for ready messages waiting for one, by a holder of ``delivery.send`` (a person at standard; an agent by
+    its principal's grant)."""
     t = c.delivery_messages
     batch, warnings = None, []
     given = [k for k in ('messages', 'all_waiting', 'batch') if getattr(inp, k, None)]
@@ -741,8 +796,8 @@ RETRYABLE_HOLDS = ('outcome_unknown', 'no_recipient', 'template_error')
 
 
 def prepare_retry(s, ctx, inp) -> Plan:
-    """A held or failed message back to ready. A person's retry is also their go; an agent's waits for one
-    (R187: ``delivery.send``). A message held because its document changed is refreshed instead."""
+    """A held or failed message back to ready. A retry by a holder of ``delivery.send`` (``gives_go``) is also its
+    go; anyone else's waits for one. A message held because its document changed is refreshed instead."""
     before = d._row(s, inp.message)
     d._check_version(before, inp.expected_version)
     if before['status'] not in ('held', 'failed'):
@@ -759,7 +814,7 @@ def prepare_retry(s, ctx, inp) -> Plan:
         raise d._invalid('to', f"message {before['number']} has no To address; add one with delivery update",
                          number=before['number'])
     at = clock.now_iso()
-    person = s.actor.kind == 'human'
+    person = gives_go(s)
     after = dict(d._touch(s, ctx, before, at), status='ready', hold_reason=None, next_attempt_at=None,
                  lease_until=None, failure_code=None, failure_text=None,
                  go_by=s.actor.id if person else None, go_at=at if person else None)
@@ -770,6 +825,7 @@ def prepare_retry(s, ctx, inp) -> Plan:
         warnings.append('An earlier attempt may have reached the customer. Retry only after checking the sent mail '
                         'of the connection; if it went, mark it sent instead.')
     if not person:
-        warnings.append("An agent's retry waits for a person's go (delivery approve).")
+        warnings.append("Your retry waits for a go: you do not hold delivery.send, so a holder approves it "
+                        "(delivery approve). Ask your principal to grant it if this is yours to do.")
     return d._plan_single(s, ctx, before, after, 'retried', details, f"retried message {before['number']}",
                           warnings=warnings)

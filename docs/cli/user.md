@@ -6,6 +6,8 @@
 
 Bring a deactivated person back: they can log in again with their password. Old sessions and tokens stay revoked, and agents suspended by the deactivation stay suspended until authorized.
 
+Confirm first (permission change): it changes who may do what. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
@@ -128,6 +130,8 @@ Example JSON output:
 ## `user add`
 
 Add a person who can log in from their own workstation, optionally giving them a company at the same time.
+
+Confirm first (permission change): it changes who may do what. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -266,6 +270,8 @@ Example JSON output:
 ## `user deactivate`
 
 Retire a person's account: they can no longer log in or act, their sessions and tokens are revoked, every agent acting for them is suspended, all in one audited change, and they leave the default lists. Their history stays. The last active installation administrator cannot be deactivated.
+
+Confirm first (permission change): it changes who may do what. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -512,6 +518,8 @@ Example JSON output:
 ## `user set-password`
 
 Set a user's password so they can log in to the workbench.
+
+Confirm first (permission change): it changes who may do what. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

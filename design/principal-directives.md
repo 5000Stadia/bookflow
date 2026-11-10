@@ -370,3 +370,74 @@ asks for those specifics and never fills them in by guessing. The agent guide sa
   and then a deny each stop the go of the next chunk, pause the schedule with one to-do and nothing more leaves. A root
   activated at `bank-feed-reverse-v1`: an owner makes a schedule live and the tick leaves it live.
   `tests/test_automation_surfaces.py` runs list, show and pause through Python, the CLI, HTTP and MCP.
+
+## As built: increment 3 (the consumers' go) (2026-11-10)
+
+- **An agent's go is `delivery.send`.** `delivery_dispatch.gives_go(s)` decides whether a release or retry is also a
+  go: a person's always is (withdrawn at the claim if it no longer counts, as before); an agent's while
+  `automation.holds_now(s, 'delivery.send')`. `delivery send`, `delivery retry` and `delivery batch --send` use it, so an
+  agent holding the grant releases with its own go; one without is told its release waits, names `delivery.send` and
+  is asked to request it. `delivery approve` already required the capability; its refusal names it.
+- **The claim-time check for an agent** (`go_lost` -> `_agent_go_lost`): the agent must hold `delivery.send` under
+  `automation.lost` for *every* person it acts for now. The message row records who gave the go but not for whom, so
+  the go stands only where it would stand for any of its principals (never wider than the narrowest); with no
+  principals it is withdrawn ("no longer acts for anyone"); an unsettled catalog withdraws it with the reason. No
+  column was added: recording the principal of a go is left for the day an agent works for several people in one
+  company and the narrow rule bites.
+- **Reading as an agent at the claim.** The tick reads the document as the go's giver. For an agent it now loads the
+  first current principal (id order) with the agent's authority epoch read at that moment, as a scheduled binding;
+  without them the policy refused the read and the claim failed. Found by the new test.
+- **A delivery schedule** made live by an agent needs `automate.delivery` and `delivery.send`; the refusal
+  (`no_send_authority`) now carries `capability: delivery.send` and says so. "A person makes it live" is now "a holder
+  of `automate.delivery` makes it live" everywhere it was shown (status label, command hint, warnings, help).
+- **Wording.** `delivery mark-sent` help says *someone* sends by hand; its refusal names `delivery.mark-sent` (the
+  capability gate's own message). `delivery approve`, `retry`, the connection commands and `delivery-schedule live`
+  say which capability they need and that a principal may grant it to an agent. Field descriptions in the models no
+  longer say "a person's go". The schema column comments ("Person whose go it carries") are left as they are: changing
+  them would churn the schema documents and a migration for no behaviour.
+- **Left outside the five on purpose:** the reconcile finish adjustment stays a person's by its domain check
+  (`reconciliation_discrepancies.py`), as increment 1 left it; not changed here.
+- No migration, no new permission layer (no new command or capability).
+- **Proved** (`tests/test_principal_guidance.py`): an agent without `delivery.send` releases and is told it waits,
+  naming the capability; its approval is refused naming `delivery.send`, `mark-sent` naming `delivery.mark-sent`; the
+  tick claims nothing. Granted `delivery.send`, its approval is a go and the tick sends; mark-sent is still refused;
+  its own release is a go at once (`go_by` is the agent), and with the grant withdrawn before the claim the run
+  withdraws the go and sends nothing. `tests/test_automation.py` asserts the schedule refusal names `delivery.send`.
+
+## As built: increment 4 (guidance and close) (2026-11-10)
+
+- **Confirm-first marks** (`core/confirm_first.py`, one table): `Command.confirm_first` is true for every command
+  whose last word is `void`, `delete` or `transfer-void`, and for those named: removals (`company detach`, `demo
+  reset`, `delivery-connection remove`, `pos-box remove`, `budget clear`); batch reversals (`batch reverse`,
+  `bank-feed reverse`, `bank-line undo`, `bulk-edit reverse`, `import reverse`, `import cancel`, `opening-draft
+  reverse`, `delivery batch-cancel`); sends (`delivery send`, `approve`, `retry`, `run`, `batch`, `mark-sent`, `notice
+  mark-sent`, `delivery-schedule run`, `delivery-connection enable`); permission changes (`membership grant`/`revoke`,
+  `permission activate`, `agent assign`/`unassign`/`authorize`/`activate`/`deactivate`, `user
+  add`/`activate`/`deactivate`/`set-password`, `token issue`/`revoke`, `accountant add`/`remove`, `accountant-copy
+  cancel`); making an automation live (`delivery-schedule live`/`update`, `bank-rule update`); broad lasting changes
+  (`bulk-edit apply`, `import run`, `cutover apply`, `opening-draft apply`, `accountant-copy import`, `costing-method
+  set`/`withdraw`, `backup schedule`); merges (customer, vendor, account and item `merge` and `unmerge`). Left
+  unmarked on purpose: discards of drafts, cancels, unapply, restores, `fixed-asset dispose`, chart and profile apply,
+  `bank-rule apply`, `company update`, `agent create`, and every ordinary post.
+- The mark shows in `--help` (first paragraph of the epilog), the generated reference (a line under the purpose),
+  the MCP command list (`confirm_first: true`, listed only when true) and `bookflow_help` (`confirm_first_note`). It
+  is information: nothing reads it to refuse or to ask, and no command asks "are you sure".
+- **Setup's level step** (§6): `bookflow setup --preset bookkeeper|read-only|trusted` (default bookkeeper) and
+  `--automate bank-rule|delivery|invoice` (trusted only). Bookkeeper is `standard` with no grants; Read-only is
+  `readonly`; Trusted is `standard` with `delivery.send` and `opening.accept-differences` plus the `automate.*` kinds
+  picked. Each says what it cannot do. The result's `level` lists the three presets, one line per `automate.*` naming
+  what it runs unattended and that it runs as its establisher, the one command that reverses a batch, and what `audit
+  list` shows. The grants are applied with `membership grant` only when permissions are activated (they exist only
+  there); otherwise the step is skipped and names `permission activate` and the exact grant command. A rerun keeps
+  role and grants unless `--role` or `--preset` is given. Nothing in it blocks.
+- **Agent guide**: the people-only sentences are gone (capabilities by name; the five stay a person's); the "When to
+  ask" section is the addendum's rules exactly; a new chapter "Your level and how to ask for more" covers presets,
+  reading one's own level, a refusal's capability and next step, the bank-rule closing case, automations running as
+  their establisher, batch reversal and the audit list. README and `docs/agent-install.md` match.
+- No migration, no new permission layer; command count 967 and variant paths 4746 unchanged.
+- **Proved** (`tests/test_principal_guidance.py`): `--help`, `bookflow_help` and the MCP list mark `invoice void`,
+  `invoice delete`, `batch reverse` and `delivery send` and not `invoice post`; every named mark is a real command;
+  "are you sure" appears in no source but the mark's own docstring. The closing case: an agent at Bookkeeper drafts an
+  auto-add rule for Shell fuel, making it live is refused naming `automate.bank-rule` with the grant as next step;
+  granted, one dry-run check and it is live under the agent, and the next import adds the line. The level guidance
+  names every preset, automation, the reversal command and the audit fields.

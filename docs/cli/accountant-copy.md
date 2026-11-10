@@ -6,6 +6,8 @@
 
 Remove the accountant's copy restrictions without importing, as the anchor's Remove Restrictions does: these books take changes on or before the dividing date again, and the copy's change file can no longer be imported. Needs a reason. A person's step.
 
+Confirm first (permission change): it changes who may do what. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
@@ -434,6 +436,8 @@ Example JSON output:
 ## `accountant-copy import`
 
 Take an accountant's changes back from their change file, as the anchor's Import Accountant's Changes: every new change, or only the keys in `changes`. Each is posted as the external accountant the copy was made for (never as a name the file gives), under its own audit event naming the copy and the accountant's reason; each change is taken at most once. The copy comes back and is closed: these books take changes on or before the dividing date again, changes left out are declined, and the file (or any other for that copy) is refused from then on. A person's step: an agent may preview, never import.
+
+Confirm first (broad lasting change): it changes many records, or how the business works from then on. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

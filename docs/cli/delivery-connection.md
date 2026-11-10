@@ -4,7 +4,7 @@
 
 ## `delivery-connection add`
 
-A sending connection: where mail goes, under keys held in the keyring or environment (secret_ref), never in Bookflow. A person's act. Add one, disabled, of a kind this build registers (none yet: every kind is refused, naming the kinds available).
+A sending connection: where mail goes, under keys held in the keyring or environment (secret_ref), never in Bookflow. Needs delivery.connect, which a principal may grant an agent. Add one, disabled, of a kind this build registers (none yet: every kind is refused, naming the kinds available).
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -155,7 +155,7 @@ Example JSON output:
 
 ## `delivery-connection check`
 
-A sending connection: where mail goes, under keys held in the keyring or environment (secret_ref), never in Bookflow. A person's act. Ask its transport whether it can connect with its secret; the answer is kept.
+A sending connection: where mail goes, under keys held in the keyring or environment (secret_ref), never in Bookflow. Needs delivery.connect, which a principal may grant an agent. Ask its transport whether it can connect with its secret; the answer is kept.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -303,7 +303,7 @@ Example JSON output:
 
 ## `delivery-connection disable`
 
-A sending connection: where mail goes, under keys held in the keyring or environment (secret_ref), never in Bookflow. A person's act. Stop sending through it; ready messages wait.
+A sending connection: where mail goes, under keys held in the keyring or environment (secret_ref), never in Bookflow. Needs delivery.connect, which a principal may grant an agent. Stop sending through it; ready messages wait.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -453,7 +453,9 @@ Example JSON output:
 
 ## `delivery-connection enable`
 
-A sending connection: where mail goes, under keys held in the keyring or environment (secret_ref), never in Bookflow. A person's act. Let it send from this machine (a copy or restore elsewhere stays disabled).
+A sending connection: where mail goes, under keys held in the keyring or environment (secret_ref), never in Bookflow. Needs delivery.connect, which a principal may grant an agent. Let it send from this machine (a copy or restore elsewhere stays disabled).
+
+Confirm first (send): what it sends cannot be recalled. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -725,7 +727,9 @@ Example JSON output:
 
 ## `delivery-connection remove`
 
-A sending connection: where mail goes, under keys held in the keyring or environment (secret_ref), never in Bookflow. A person's act. Remove it (kept for the history).
+A sending connection: where mail goes, under keys held in the keyring or environment (secret_ref), never in Bookflow. Needs delivery.connect, which a principal may grant an agent. Remove it (kept for the history).
+
+Confirm first (delete): it deletes or removes records. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -1009,7 +1013,7 @@ Example JSON output:
 
 ## `delivery-connection update`
 
-A sending connection: where mail goes, under keys held in the keyring or environment (secret_ref), never in Bookflow. A person's act. Change its name, settings, secret_ref or daily limit.
+A sending connection: where mail goes, under keys held in the keyring or environment (secret_ref), never in Bookflow. Needs delivery.connect, which a principal may grant an agent. Change its name, settings, secret_ref or daily limit.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

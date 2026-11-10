@@ -737,7 +737,8 @@ def prepare_batch(s, ctx, inp) -> Plan:
     if inp.fingerprint and inp.fingerprint != fingerprint and not s.dry_run:
         raise _changed(None, what='preview', seen=inp.seen, targets=targets, skipped=skipped)
     selection = _selection(inp)
-    person = s.actor.kind == 'human'
+    from bookflow.company.delivery_dispatch import gives_go
+    person = bool(inp.send) and gives_go(s)  # a person, or an agent holding delivery.send
     preview = dict(id=None, number=None, kind=kind, selection=json.dumps(selection, sort_keys=True),
                    targets=json.dumps(targets), skipped=json.dumps(skipped), planned=len(targets), position=0,
                    send=inp.send, state='preview' if s.dry_run else ('drafting' if targets else 'nothing'),
@@ -904,8 +905,8 @@ def draft_chunk(s, ctx, batch):
         message = plan.data['row']
         drafted.append(message['number'])
         if batch['send']:
-            # Freshly drafted in this write, so not stale. R187: the go is the one decided when the batch began: a
-            # person who asked to send gave it; an agent's batch waits for a person's approval of these messages.
+            # Freshly drafted in this write, so not stale. The go is the one decided when the batch began: a holder
+            # of delivery.send who asked to send gave it; anyone else's batch waits for a holder's approval.
             at = message['updated_at']
             after = dict(d._touch(s, ctx, message, at), status='ready', released_by=s.actor.id, released_at=at)
             details = {'released_by': s.actor.id, 'batch': batch['id']}
@@ -920,7 +921,8 @@ def draft_chunk(s, ctx, batch):
             message = after
         stamps[message['id']] = stamp(s, message)
     if batch['send'] and drafted and not go_by:
-        warnings.append("An agent's release waits for a person's go (delivery approve --batch).")
+        warnings.append('These releases wait for a go: the batch was begun without delivery.send, so a holder '
+                        'approves them (delivery approve --batch).')
     before = dict(batch)
     at = clock.now_iso()
     batch = dict(batch, position=end, skipped=json.dumps(skipped), drafted=json.dumps(stamps, sort_keys=True),

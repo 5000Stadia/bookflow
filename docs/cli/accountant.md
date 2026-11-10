@@ -6,6 +6,8 @@
 
 Make a member of this company its external accountant, the anchor's External Accountant user: they read everything, and write only adjusting journal entries (`journal post`, correcting or voiding only their own), reclassifications (`accountant reclassify`), review marks (`accountant mark-entry`, `accountant reviewed-through`) and notes, all dated on or before `through`, the end of the review period. Everything else they try is refused, and every change is attributed to them. The user must be a person holding the standard role on the company (no admin, as the anchor's External Accountant). Run again to move the period end. A person's step: an agent is refused.
 
+Confirm first (permission change): it changes who may do what. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
@@ -722,6 +724,8 @@ Example JSON output:
 ## `accountant remove`
 
 End a member's external accountant designation; their membership is unchanged. A person's step.
+
+Confirm first (permission change): it changes who may do what. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
