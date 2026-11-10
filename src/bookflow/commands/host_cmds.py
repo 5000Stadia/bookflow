@@ -403,8 +403,10 @@ def start_serving(data_root: Path | str, version: str, *, bind: str = DEFAULT_BI
     from bookflow.core.forward import socket_path
     from bookflow.core.host import Host
     root = Path(data_root)
-    from bookflow.core.deployment import Deployment
-    Deployment.load(root, public_origin=public_origin, bind=bind, secure_cookies=secure_cookies).require_startup()
+    from bookflow.core.deployment import Deployment, configure_diagnostics
+    deployment = Deployment.load(root, public_origin=public_origin, bind=bind, secure_cookies=secure_cookies)
+    deployment.require_startup()
+    configure_diagnostics(deployment)
     # How often the scheduler looks for due work (R111). An operator may slow it down; tests that drive it
     # themselves through Host.schedule_now set it high so a live test host never races them.
     try:

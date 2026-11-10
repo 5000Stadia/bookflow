@@ -14,6 +14,21 @@ from bookflow.core.errors import BookflowError
 from bookflow.core import public_origin as po
 
 
+# One host process has one deployment posture. Offline use defaults to local.
+_redact_diagnostics = False
+
+
+def configure_diagnostics(deployment: "Deployment") -> None:
+    """Set once during host/app construction, before serving requests."""
+    global _redact_diagnostics
+    _redact_diagnostics = deployment.wider
+
+
+def redact_diagnostics() -> bool:
+    """Whether host logs must omit exception bodies, facts and tracebacks."""
+    return _redact_diagnostics
+
+
 @dataclass(frozen=True)
 class Blocker:
     code: str

@@ -203,9 +203,10 @@ def create_app(host, *, secure_cookies: bool, public_origin: str | None = None, 
     from bookflow.core import scan_decoders as sd
     registry.load_all()
     app = FastAPI(title="Bookflow", version=host.version, docs_url=None, redoc_url=None, openapi_url=None)
-    from bookflow.core.deployment import Deployment
+    from bookflow.core.deployment import Deployment, configure_diagnostics, redact_diagnostics
     deployment = Deployment.load(host.data_root, public_origin=public_origin, bind=bind, secure_cookies=secure_cookies)
     deployment.require_transport()
+    configure_diagnostics(deployment)
     app.state.deployment = deployment
     app.state.public_origin = public_origin
     app.state.scan_decoders = sd.resolve(scan_decoders)
@@ -322,9 +323,15 @@ def create_app(host, *, secure_cookies: bool, public_origin: str | None = None, 
         if isinstance(exc, ConnectionAbortedError):
             # The response's connection ended or its admission was cancelled mid-send; the
             # transport layer decides what that means. It is not an internal failure.
-            log.info("response abandoned request=%s", rid)
+            if redact_diagnostics():
+                log.info("response abandoned request=%s", rid)
+            else:
+                log.info("response abandoned %s: %s", rid, exc)
         else:
-            log.error("internal failure request=%s", rid)
+            if redact_diagnostics():
+                log.error("internal failure request=%s", rid)
+            else:
+                log.exception("internal failure %s", rid)
         return error_response(BookflowError("E_INTERNAL", message="Internal failure; see the host log.", details={"request_id": rid}))
 
     def selector_of(request: Request, company_id: str | None) -> tuple[str | None, str]:

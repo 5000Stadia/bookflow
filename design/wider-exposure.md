@@ -529,8 +529,19 @@ ships a partial “wider ready” claim; readiness remains blocked until all req
    binding so htmx script fragments remain compatible with their document policy. JavaScript eval is disabled;
    local vendored WASM compilation remains permitted. Inline event handlers became delegated static listeners;
    htmx history snapshots are disabled in wider pages. Downloads use attachment disposition and a non-executable
-   MIME type. Infrastructure diagnostics suppress raw errors/SQL, and log sites no longer retain exception bodies;
+   MIME type. Wider infrastructure diagnostics suppress raw errors/SQL and exception bodies in logs;
+   the default local profile retains full diagnostic messages, facts and tracebacks as before;
    business error reasons, conflict facts and validation contracts survive secret-field redaction.
+
+   The local administrator's CLI uses the separate Unix-domain `LocalListener`, whose handler calls
+   `run_hosted` directly with an OS-bound identity; it never enters the ASGI middleware. Wider HTTP
+   requests with no client address remain refused. This refusal does not lock out local socket forwarding;
+   wider service startup remains blocked by the pending evidence providers.
+
+   Open points for increments 3 and 4:
+   - The CSP nonce is stable for a whole session, not per response.
+   - A safe GET carrying a foreign Referer is refused, including links opened from another site or webmail.
+   - CSRF and nonce keys are per process; a host restart invalidates open pages until reload.
 
    The proxy must reject unexpected Host, overwrite forwarded fields, redirect HTTP to HTTPS, apply HSTS only to
    this host (no includeSubDomains), disable access logging of login/setup URLs and bodies, and keep its upstream

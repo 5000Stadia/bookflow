@@ -272,3 +272,94 @@ def test_internal_exception_never_logs_submitted_secret(transport, caplog):
     assert response.status_code == 500
     assert 'DO-NOT-PRINT' not in response.text + caplog.text
     assert response.headers['cache-control'] == 'private, no-store'
+
+
+@pytest.fixture(autouse=True)
+def restore_diagnostic_posture(monkeypatch):
+    # Synthetic local and wider apps share this pytest process, unlike hosts.
+    from bookflow.core import deployment
+    monkeypatch.setattr(deployment, '_redact_diagnostics', False)
+
+
+@pytest.mark.parametrize('profile', ['local', 'wider'])
+def test_internal_failure_log_diagnostics_follow_profile(app_host, caplog, profile):
+    from bookflow.adapters.http.app import create_app
+    from bookflow.core.config import Config
+    host, _ = app_host
+    config = Config.load(host.data_root / 'config.toml')
+    config.data['host']['deployment_profile'] = profile
+    config.save()
+    app = create_app(host, secure_cookies=True, public_origin=ORIGIN, bind='127.0.0.1:8123')
+
+    @app.get('/diagnostic-failure')
+    def crash():
+        raise RuntimeError('diagnostic-private-cause')
+
+    api = TestClient(app, base_url=ORIGIN, client=('127.0.0.1', 1234), raise_server_exceptions=False)
+    response = api.get('/diagnostic-failure')
+    assert response.status_code == 500
+    assert 'diagnostic-private-cause' not in response.text
+    if profile == 'local':
+        assert 'Traceback (most recent call last)' in caplog.text
+        assert 'RuntimeError: diagnostic-private-cause' in caplog.text
+        assert any(record.exc_info for record in caplog.records)
+    else:
+        assert 'Traceback' not in caplog.text
+        assert 'diagnostic-private-cause' not in caplog.text
+        assert not any(record.exc_info for record in caplog.records)
+
+
+def test_wider_missing_http_client_is_refused(transport):
+    api = TestClient(transport.app, base_url=ORIGIN, client=None)
+    assert api.get('/health').status_code == 403
+
+
+def test_wider_local_cli_socket_bypasses_http_middleware(app_host, tmp_path, monkeypatch):
+    from bookflow.adapters.http.app import create_app
+    from bookflow.adapters.http.local import LocalListener
+    from bookflow.commands.host_cmds import make_local_handler
+    from bookflow.core.context import Context, Interface, client_version
+    from bookflow.core.forward import call_host
+    host, _ = app_host
+    create_app(host, secure_cookies=True, public_origin=ORIGIN, bind='127.0.0.1:8123')
+
+    async def unexpected_http(*args, **kwargs):
+        pytest.fail('local CLI forwarding must not enter HTTP transport middleware')
+
+    monkeypatch.setattr(TransportSecurity, '__call__', unexpected_http)
+    listener = LocalListener(host, tmp_path / 'cli.sock', make_local_handler(host, client_version()))
+    listener.start()
+    try:
+        reply = call_host(str(listener.path), {
+            'command': 'company list', 'input': {}, 'version': client_version(),
+            'context': Context.new(Interface.cli, 'diagnostic-test').model_dump(mode='json'),
+        })
+        assert 'error' not in reply, reply
+        assert 'output' in reply, reply
+    finally:
+        listener.stop()
+
+
+@pytest.mark.parametrize('profile', ['local', 'wider'])
+def test_guard_refusal_log_diagnostics_follow_profile(profile, caplog):
+    import sqlite3
+    from bookflow.core.deployment import configure_diagnostics
+    from bookflow.core.dispatch import guard
+    configure_diagnostics(Deployment(profile))
+    error = sqlite3.IntegrityError('private-guard-message')
+    error.sqlite_errorcode = sqlite3.SQLITE_CONSTRAINT_TRIGGER
+
+    def refuse():
+        raise error
+
+    with pytest.raises(BookflowError) as refused:
+        guard(refuse, True, lambda message: {'request': 'private-guard-facts'})
+    assert refused.value.code == 'E_GUARD_REFUSED'
+    if profile == 'local':
+        assert 'private-guard-message' in caplog.text
+        assert 'private-guard-facts' in caplog.text
+        assert 'Traceback (most recent call last)' in caplog.text
+    else:
+        assert 'private-guard' not in caplog.text
+        assert 'Traceback' not in caplog.text
+        assert not any(record.exc_info for record in caplog.records)

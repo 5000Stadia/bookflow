@@ -1,6 +1,7 @@
 """Shared hosted command executor and publication boundary."""
 
 import logging
+from bookflow.core.deployment import redact_diagnostics
 from bookflow.core.context_options import normalize_options
 from bookflow.core.dispatch import _close, execute, guard
 from bookflow.core.errors import BookflowError, explain_permission
@@ -86,17 +87,22 @@ def _run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run, *, before_
             # answered as itself. Reporting every one of these as a filesystem failure told a
             # person whose settlement had been refused that their disk had failed, and named
             # the wrong subsystem to anyone reading the symptom afterwards.
-            log.info("publication finish refused: command=%s code=%s request=%s",
-                     cmd.name, exc.code,
-                     getattr(ctx, "request_id", None))
+            if redact_diagnostics():
+                log.info("publication finish refused: command=%s code=%s request=%s",
+                         cmd.name, exc.code, getattr(ctx, "request_id", None))
+            else:
+                log.info("publication finish refused: command=%s code=%s reason=%s request=%s",
+                         cmd.name, exc.code, (exc.details or {}).get("reason"),
+                         getattr(ctx, "request_id", None))
             raise
         except Exception:
             # An untyped failure is what the broad catch is genuinely for: it can carry
             # internals -- a path, a query, a stack -- through a boundary that must not
             # describe what it could not certify. The caller keeps the generic certificate
-            # failure; only safe command/request identifiers go to the server log.
-            log.error("publication finish failed: command=%s request=%s",
-                          cmd.name, getattr(ctx, "request_id", None))
+            # failure; local operators retain the exact cause and traceback.
+            logger = log.error if redact_diagnostics() else log.exception
+            logger("publication finish failed: command=%s request=%s",
+                   cmd.name, getattr(ctx, "request_id", None))
             raise BookflowError("E_IO", details={"stage": "publication", "outcome": "unknown",
                                                   "reason": "receipt_certificate"}) from None
 
