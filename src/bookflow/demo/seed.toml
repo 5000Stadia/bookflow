@@ -2863,6 +2863,31 @@ command = "attachment add"
 body_fixture = "example.pdf"
 reason = "Keep the enquiry brief"
 input = { record_type = "lead", record_id = "${crm_contact.id}", original_filename = "enquiry-brief.pdf", media_type = "application/pdf", caption = "Prospect enquiry brief" }
+
+# R115 increment 2: an existing customer's enquiry linked to it (link only, nothing on the customer changes), and a
+# small source-keyed prospect list that a repeated import would leave unchanged; each is one reversible batch.
+[[commands]]
+command = "lead create"
+capture = "crm_existing_enquiry"
+reason = "Record an existing customer's new enquiry"
+input = { display_name = "Riverside second building enquiry", source = "Phone", rating = "hot" }
+
+[[commands]]
+command = "customer show"
+capture = "crm_link_customer"
+input = { customer = "${customer.id}" }
+
+[[commands]]
+command = "lead convert"
+capture = "crm_linked"
+reason = "The enquiry is from an existing customer"
+input = { lead = "${crm_existing_enquiry.id}", expected_version = 1, target = "existing", customer = "${crm_link_customer.id}", customer_expected_version = "${crm_link_customer.version}" }
+
+[[commands]]
+command = "lead import"
+capture = "crm_fair_import"
+reason = "Trade fair sign-up list"
+input = { source = "trade-fair-2026", rows = [{ source_key = "1", display_name = "Harbor Cafe", source = "Trade fair" }, { source_key = "2", display_name = "Elm Street Dental", source = "Trade fair", contacts = [{ role = "primary", display_name = "Dana Elm", primary_email = "dana@elm.example.test" }] }] }
 # R189 increment 1: names and one item flag suffice for invoice attribution.
 # A preview demonstrates two recipients without changing the demo's accounting balances.
 [[commands]]

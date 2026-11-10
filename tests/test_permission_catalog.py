@@ -86,6 +86,10 @@ RESOURCE_PAIRS = {
     'approval_commit_reversal._native': {('ledger.post', 'standard'), ('ledger.read', 'member')},
     'crm.require_read': {('crm.read', 'member')},
     'crm.may': {('crm.write', 'standard'), ('note', 'member')},
+    # crm-convert-v1: conversion, history and lead-import rights beside each native source's own.
+    'crm_conversion.require': {('attachment', 'member'), ('crm.bulk', 'standard'), ('crm.convert', 'standard'),
+                               ('crm.write', 'standard'), ('customer', 'member'), ('customer', 'standard'),
+                               ('import', 'standard'), ('note', 'member')},
     'todos.admit_link': {('crm.read', 'member')},
     # One per Delete delta. Each declares its own admit site in its own catalog
     # module; none of them could be listed here while the assertion below named the

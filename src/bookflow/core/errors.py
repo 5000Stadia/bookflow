@@ -96,6 +96,7 @@ COMMAND_CODES: dict[str, str] = {
     "E_CREDIT_UNAVAILABLE": "That credit has already been applied or refunded; it is not worth what was asked for.",
     "E_HAS_REFUND": "A refund has consumed this credit; void the refund before changing the credit memo.",
     "E_NAME_TAKEN": "That display name is already used.",
+    "E_CRM_ALREADY_CONVERTED": "This lead is already converted; reverse that conversion before choosing another target.",
     "E_ORGANIZATION_REQUIRED": "More than one organization is visible; name one with --organization.",
     "E_ROLLOUT_INCOMPLETE": "Company creation did not finish; a folder remains.",
     "E_RENAME_INCOMPLETE": "The name changed but the folder was not moved; rerun rename --move.",
