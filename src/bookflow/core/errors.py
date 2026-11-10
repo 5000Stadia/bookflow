@@ -204,7 +204,7 @@ def permission_message(details: dict[str, Any]) -> str:
             and capability.startswith("transaction.") and capability.endswith(".delete") and required):
         # No role includes Delete: an owner refused here is missing the grant, not a role.
         return (f"Deleting needs an explicit {capability} grant for you in this company's user "
-                f"setup, at role {required} or above; no role includes it. An administrator "
+                "setup; no role includes this grant. An administrator "
                 "grants it with `membership grant`.")
     if required in _ROLE_WORDS:
         return f"Only {_ROLE_WORDS[required]} may do this" + (f" ({capability})." if capability else ".")
