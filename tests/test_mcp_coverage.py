@@ -461,7 +461,8 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # Increment 10 adds eight null branches: shift open register (1), report register/date/shift (3),
     # deposit prepare register/date/shift/method selection (4); close has no optional input.
     # Increment 11 adds four: complete's nullable tender and tenders plus the list tender amount/reference.
-    assert sum(len(group["paths"]) for group in mapped)==4497  # R186: batch reverse fingerprint adds one nullable input; notice reverse adds nullable note and expected_version
+    # R122 adds 28: create/update 13 each, list 2; cancel/preview/show 0. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==4525  # R186: batch reverse fingerprint adds one nullable input; notice reverse adds nullable note and expected_version
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

@@ -23,7 +23,7 @@ def draft_books(client):
         return value
     def run(verb, data, **context):
         return client.run('purchase-draft ' + verb, data, company=COMPANY,
-                          reason=context.pop('reason', 'Saved bill witness'), **context)
+                          reason=context.pop('reason', 'Saved bill witness' if verb in ('create', 'update', 'cancel') else None), **context)
     return payload, run
 
 

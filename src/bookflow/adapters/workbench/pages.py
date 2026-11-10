@@ -954,7 +954,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     # R107 increment 7: guided opening balances (date and checks, the four grids, tie out and post), on opening-draft.
     from bookflow.adapters.workbench import purchase_draft_pages as PurchaseDraftPages
     PurchaseDraftPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
-                            role_allows=_role_allows)
+                            role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
 
     from bookflow.adapters.workbench import opening_pages as OpeningPages
     OpeningPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,

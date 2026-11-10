@@ -332,6 +332,12 @@ part of this design commit.
    and batch operations remain for later increments. This increment does not enable an approval setting or change
    ordinary bill posting.
 
+   Fix round: the browser mount adapts the shared permission callback just like neighboring pages. Tests send
+   reasons only for writes. The deposit read manifest explicitly classifies the four reserved company switches as
+   outside deposit output; all exact schema/type/edge checks remain intact. The six commands have a four-adapter
+   execution witness and contribute 28 measured material schema nodes (13 each for create/update, two for list).
+   No money rules, capability defaults, migration or later-increment scope changed.
+
 2. **One-step bill approval and posting (M).** Simple policy, submit/decide/withdraw/commit, capabilities and all native
    bill post/update gates; source-aware bill drafts. **Done when:** fixture 1 and direct/import/automated bypass
    refusals pass, and cancelled drafts have no financial residue. **Tests:** revision races, source revalidation,
