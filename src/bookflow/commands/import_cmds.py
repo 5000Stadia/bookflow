@@ -349,7 +349,7 @@ import_mapping_deactivate = _write('import-mapping deactivate', 'Stop a source\'
 batch_reverse = command(
     'batch reverse', scope='company', writes={'company'}, capability='import', required_role='member',
     input_model=m.BatchReverseInput, output_model=m.BatchReverseOutput, positional=['batch'],
-    error_codes=['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_BATCH_BLOCKED', 'E_VERSION_CONFLICT'],
+    error_codes=['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_BATCH_BLOCKED', 'E_VERSION_CONFLICT', 'E_REASON_REQUIRED'],
     description=(
         'Confirm-first: reverse the entire batch, newest effects first, using your own grants for every inverse. '
         'Run --dry-run and check its exact list with your principal unless this reversal was plainly named. '

@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -70,6 +71,10 @@ class Adapter:
     release_document_numbers: bool = True  # import corrections can reuse file numbers
     blocks: bool = False
     preflight: Callable | None = None  # (s, ctx, batch) -> blockers for native run dependencies
+    # A kind whose reasons are private (payroll): ctx -> the context the shared rows and the general audit event
+    # see (a neutral reason, no directive). The reversal batch's row and `reversal_reason` keep that neutral text,
+    # the finishing audit event carries it, and the reversal batch is read under this kind's own reader.
+    private_context: Callable[[Any], Any] | None = None
 
 
 ADAPTERS: dict[str, Adapter] = {}
@@ -220,6 +225,13 @@ def run_nested(s, ctx, name: str, payload: dict, *, source_ref: str, dry_run: bo
     try:
         return run_in_session(command, validate_input(command, payload), nested, s, dry_run=dry_run,
                               _recovery_checked=not recovery)
+    except (sqlite3.IntegrityError, sa.exc.IntegrityError) as error:
+        # Payroll's posting-line backstop is a named refusal of this one step (an import row), as at the top level.
+        from bookflow.storage.engine import guard_refusal_text
+        from bookflow.company import payroll_owner
+        if guard_refusal_text(error) == payroll_owner.RESERVED_MESSAGE:
+            raise payroll_owner.reserved_refusal() from None
+        raise
     finally:
         s.company_touched, s.hub_touched, s.warnings, s.dry_run, s.batch_recorder, s.batch_before = saved
         if s.company is not None and s.company.write_transaction:
@@ -286,6 +298,13 @@ def show(s, ctx, batch_id: str) -> dict:
     batch = _batch(s, batch_id)
     _load_adapter(batch['kind'])
     reader = ADAPTERS[batch['kind']].reader if batch['kind'] in ADAPTERS else None
+    if batch['reversal_of'] is not None:
+        # The reversal of a private kind reads as that kind does (its effects name the same records).
+        original = _batch(s, batch['reversal_of'])
+        _load_adapter(original['kind'])
+        kept = ADAPTERS.get(original['kind'])
+        if kept is not None and kept.private_context is not None:
+            reader = lambda s, _batch: kept.reader(s, original)  # noqa: E731
     (reader or require_batch_read)(s, batch)
     out = describe(s, batch, with_plan=True, ctx=ctx)
     out['effects'] = [_effect_out(e) for e in effects(s, batch_id)[:200]]
@@ -1169,7 +1188,12 @@ def reverse(s, ctx, batch_id: str, *, reason: str | None, dry_run: bool = False,
                     skipped=skipped[:MAX_BLOCKERS], skipped_total=len(skipped))
     if batch['state'] == 'blocked':
         _set_state(s, batch_id, 'reversing')
-    reversal_id = batch['reversed_by'] or _begin(s, ctx, batch, reason, on_begin)
+    # The shared rows and the general audit event of a private kind keep its neutral context; its runner still
+    # gets the caller's, for the kind's own private history.
+    shared = adapter.private_context(ctx) if adapter.private_context is not None else ctx
+    if shared is not ctx:
+        reason = shared.reason
+    reversal_id = batch['reversed_by'] or _begin(s, shared, batch, reason, on_begin)
     batch = _batch(s, batch_id)
     work = found['work'][:max(1, limit)]
     reversed_now = 0
@@ -1213,7 +1237,7 @@ def reverse(s, ctx, batch_id: str, *, reason: str | None, dry_run: bool = False,
         rest = found['steps'][len(work):]
         return dict(_result(s, dict(found, steps=rest, fingerprint=_fingerprint(rest)), state='reversing',
                             reversed_now=reversed_now), skipped=skipped[:MAX_BLOCKERS], skipped_total=len(skipped))
-    event_id, then_out = _finish(s, ctx, batch_id, reversal_id, batch, then,
+    event_id, then_out = _finish(s, shared, batch_id, reversal_id, batch, then,
                                  state='reversed_partly' if skipped else 'reversed')
     final = _batch(s, batch_id)
     return {'batch': describe(s, final), 'state': final['state'], 'reversed_now': reversed_now, 'remaining': 0,
@@ -1342,7 +1366,9 @@ def _finish(s, ctx, batch_id: str, reversal_id: str, batch: dict, then: Callable
             event_id = write_event_to(s.company, ctx, 'batch reverse', summary,
                                       [Touched('batch', batch_id, 'update', None, None, {'state': state},
                                                {'state': batch['state']}, db='company')],
-                                      actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code)
+                                      actor_id=s.actor.id, actor_kind=s.actor.kind,
+                                      directive_code=None if adapter_for(batch['kind']).private_context is not None
+                                      else s.directive_code)
             s.company.conn.execute(sa.update(c.batches).where(c.batches.c.id == batch_id).values(
                 state=state, reversal_event_id=event_id))
             finished = adapter_for(batch['kind']).on_finished

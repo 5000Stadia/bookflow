@@ -40,6 +40,7 @@ WORDS = {'cash_earning': 'Payroll wages', 'employee_tax': 'Payroll employee tax 
          'employee_deduction': 'Payroll employee deduction', 'employer_tax': 'Payroll employer tax',
          'employer_contribution': 'Payroll employer contribution', 'net_pay': 'Payroll net pay'}
 EMPLOYEE_SIDE = ('employee_tax', 'employee_deduction')
+MAX_LEGS = 200  # the shared journal writer's line limit
 _CENTS = ('gross', 'employee_tax', 'employee_deduction', 'employer_cost', 'net')
 
 
@@ -154,7 +155,8 @@ def page(s, inp):
     q = sa.select(c.payroll_paychecks).order_by(c.payroll_paychecks.c.pay_date.desc(),
         c.payroll_paychecks.c.created_at.desc(), c.payroll_paychecks.c.id)
     if inp.employee:
-        q = q.where(c.payroll_paychecks.c.employee_id == p.employee(s, inp.employee))
+        # A former employee's paychecks stay listed; only new pay needs an active employee.
+        q = q.where(c.payroll_paychecks.c.employee_id == p.employee(s, inp.employee, active=False))
     return m.PaycheckListOutput(rows=[output(s, dict(r)) for r in s.company.conn.execute(q.limit(inp.limit)).mappings()])
 
 
@@ -188,6 +190,9 @@ def _journal(pay_date, components):
                     amount=MoneyInput(minor_units=x['amount_minor_units'], currency='USD')))
     if len(lines) < 2:
         p.fail('earnings', 'This paycheck has no amounts to post; enter its earnings and prepare it again.')
+    if len(lines) > MAX_LEGS:
+        p.fail('items', f'A paycheck posts at most {MAX_LEGS} ledger lines; split its earnings and items over '
+                        'two paychecks or combine items that share a liability account.')
     return JournalPostInput(date=pay_date, memo='Payroll paycheck', lines=lines)
 
 
@@ -200,10 +205,16 @@ def _later(s, pc_employee, year, pay_date, exclude=None):
     return s.company.conn.execute(q.limit(1)).scalar()
 
 
-def _check_plan(s, ctx, pc, net, net_pay_account, check):
-    """The ordinary check that settles this net pay, planned by the check writer itself."""
+def _check_plan(s, ctx, pc, net, net_pay_account, check, prefix=''):
+    """The ordinary check that settles this net pay, planned by the check writer itself. ``prefix`` names the
+    command's own fields (`check_` on `payroll post`)."""
     from bookflow.company import checks
     from bookflow.company.check_models import CheckPostInput
+    if check.number is not None and (check.to_be_printed or check.no_number):
+        p.fail(prefix + 'number', 'Give a check number, or queue the check to print, or record it with no number: '
+                                  'only one of them.')
+    if check.to_be_printed and check.no_number:
+        p.fail(prefix + 'no_number', 'A check queued to print has a number when printed; leave out no_number.')
     date = check.date or pc['pay_date']
     if date < pc['pay_date']:
         p.fail('date', 'A net-pay check may not be dated before the pay date.')
@@ -280,7 +291,8 @@ def prepare_post(inp, ctx, s):
         net_pay_account_id=config.net_pay_account,
         snapshot=json.dumps({'input': json.loads(draft['payload']), 'calculation': calc.model_dump()}, sort_keys=True),
         created_at=at, created_by=s.actor.id, voided_at=None)
-    check = _check_plan(s, ctx, pc, calc.net_minor_units, config.net_pay_account, inp.net_check) if inp.net_check else None
+    check = _check_plan(s, ctx, pc, calc.net_minor_units, config.net_pay_account, inp.net_check,
+                        'check_') if inp.net_check else None
     before = _ytd(s, emp, year)
     ytd = {n: before[n] + pc[f'{n}_minor_units'] for n in _CENTS}
     preview = output(s, pc, [dict(x, paycheck_id=pc['id']) for x in components], None, ytd, ctx.directive_id)
@@ -347,12 +359,22 @@ def _current(s, inp):
     return pc
 
 
+def _not_reversing(s, pc):
+    """A paycheck whose batch reversal is part way is finished by `batch reverse`, not by a direct write."""
+    state = s.company.conn.execute(sa.select(c.batches.c.state).where(c.batches.c.id == pc['batch_id'])).scalar()
+    if state in ('reversing', 'blocked'):
+        raise BookflowError('E_VALIDATION', message=(
+            "A reversal of this paycheck's batch is part way; run `batch reverse` on that batch again to finish it."),
+            details={'fields': [{'field': 'paycheck', 'problem': 'batch_reversal_in_progress'}], 'batch': pc['batch_id']})
+
+
 def prepare_pay(inp, ctx, s):
     prior = p.retry(s, ctx, inp, 'payroll pay-net', m.PaycheckOutput)
     if isinstance(prior, Plan):
         return prior
-    p.enabled(s)
+    # Settling a posted paycheck stays available with the payroll layer off (design section 2).
     pc = _current(s, inp)
+    _not_reversing(s, pc)
     if pc['status'] != 'posted':
         p.fail('paycheck', 'A voided paycheck has no net pay to record.')
     if _payment(s, pc['id']):
@@ -451,6 +473,7 @@ def prepare_void_payment(inp, ctx, s):
     if isinstance(prior, Plan):
         return prior
     pc = _current(s, inp)
+    _not_reversing(s, pc)
     payment = _payment(s, pc['id'])
     if payment is None:
         p.fail('paycheck', 'This paycheck has no recorded net payment to void.')
@@ -491,6 +514,7 @@ def prepare_void(inp, ctx, s):
     if isinstance(prior, Plan):
         return prior
     pc = _current(s, inp)
+    _not_reversing(s, pc)
     found = paycheck_blockers(s, pc)
     if found:
         _refuse(found)
@@ -571,6 +595,9 @@ def _problems(s, effect, pending_payment):
 
 
 def _plan(s, ctx, batch, effects, done, probe, blockers):
+    if ctx is not None and not (ctx.reason or '').strip():
+        # Payroll's own history needs the reason; refuse before the shared door commits the reversal batch.
+        raise BookflowError('E_REASON_REQUIRED', message='Give a reason for reversing this paycheck (--reason).')
     steps, work = [], []
     ordered = sorted(effects, key=lambda e: e['seq'], reverse=True)  # the net payment before its paycheck
     pending_payment = any(e['record_type'] == PAYMENT and (PAYMENT, e['record_id']) not in done for e in ordered)
@@ -632,4 +659,4 @@ def _run(s, ctx, batch, reversal_id, item):
 
 
 batches.register(batches.Adapter(KIND, planner=_plan, runner=_run, reader=_read,
-    release_document_numbers=False, blocks=True, label='Payroll paychecks'))
+    release_document_numbers=False, blocks=True, label='Payroll paychecks', private_context=safe))

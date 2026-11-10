@@ -9,7 +9,8 @@ grants for every one, intersected with their principal's rights. Six commands: `
 One new conditional source, `bookflow.company.payroll_paychecks.require`: the extra rights a paycheck write or the
 `payroll` batch adapter asks at run time (`payroll.pay` for a check recorded with `payroll post`; reading and
 reversing a paycheck batch). The agent gate learns the three capabilities, and audit visibility now asks
-`payroll.read` for every `payroll_` record type, so an event that posts or voids a paycheck needs it to be seen.
+`payroll.read` for every `payroll_` record type (and for no other), so an event that posts or voids a paycheck needs it
+to be seen.
 """
 from dataclasses import asdict, replace
 import hashlib
@@ -58,10 +59,10 @@ _GATE = next(x for x in previous.CATALOG.conditional_sources
              if x.owner == 'bookflow.company.capability_gate.require_held')
 GATE_SOURCE = replace(_GATE, requirements=_sorted((*_GATE.requirements, *_NEW)))
 _AUDIT = next(x for x in previous.CATALOG.conditional_sources if x.owner == 'bookflow.company.audit_visibility.admitted')
-AUDIT_SOURCE = replace(_AUDIT, call_sites=(('src/bookflow/company/audit_visibility.py', 106),),
+AUDIT_SOURCE = replace(_AUDIT, call_sites=(('src/bookflow/company/audit_visibility.py', 109),),
     requirements=_sorted((*_AUDIT.requirements, READ)))
 PAYCHECK_SOURCE = c.ResourceSource('bookflow.company.payroll_paychecks.require',
-    (('src/bookflow/company/payroll_paychecks.py', 50),),
+    (('src/bookflow/company/payroll_paychecks.py', 51),),
     _sorted((READ, c.Requirement('ledger.read', 'member'), c.Requirement('payroll.pay', 'standard'),
              c.Requirement('payroll.void', 'standard'), POST)))
 _REPLACED = {GATE_SOURCE.owner, AUDIT_SOURCE.owner}

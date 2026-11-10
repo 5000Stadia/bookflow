@@ -2,15 +2,19 @@
 
 Payroll posts through the shared journal and check writers inside `writing()`. Outside it, the
 three accounts payroll settings name while payroll is on (wages, employer expense, net pay) -- and any
-account a posted paycheck captured for those roles -- refuse journal, register, check, import and memorized-entry
-lines, transfers and merges; and a transaction payroll owns refuses journal, register and check
-edits, voids and deletes. Item liability accounts stay open: the design lets an ordinary entry touch
-them and shows it later as an unattributed difference (increment 3).
+account a posted, unvoided paycheck captured for those roles (its net pay unpaid or paid) -- refuse journal,
+register, check, import and memorized-entry lines, transfers and merges; and a transaction payroll owns
+refuses journal, register and check edits, voids and deletes. Once every paycheck that used an account is
+voided or reversed (and payroll no longer names it), it is an ordinary account again. Item liability
+accounts stay open: the design lets an ordinary entry touch them and shows it later as an unattributed
+difference (increment 3); an item's liability account may not be the net-pay account.
 
-Writers that post without the journal line path (bills, sales documents, deposits) meet the same rule
-in the `payroll_reserved_posting` trigger on `posting_lines`: a new, unreversed leg on a reserved
-account is refused unless its transaction carries a payroll ledger link, which payroll writes before
-its legs. Reversal legs of older entries are not refused, so history from before setup can still be voided.
+An existing ordinary entry stays editable when the edit leaves its lines on a reserved account as they
+were (same account, same side and amount), and may always be voided. Bills, sales documents and deposits
+check their pending legs the same way at plan time (`require_unreserved_legs`), dry runs included. The
+`payroll_reserved_posting` trigger on `posting_lines` is the backstop: a new, unreversed leg on a reserved
+account is refused unless its transaction carries a payroll ledger link (written before payroll's legs) or
+already holds the same live leg (an unchanged line of an edited entry).
 """
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -48,7 +52,7 @@ def reserved(conn, identifiers):
     if not ids or not _table(conn, 'payroll_settings'):
         return set()
     found = set()
-    # Settings name accounts only while the layer is on; a posted paycheck's accounts stay reserved.
+    # Settings name accounts only while the layer is on; a posted, unvoided paycheck's accounts stay reserved.
     row = conn.execute(sa.select(*(c.payroll_settings.c[r] for r in _ROLES)).where(
         c.payroll_settings.c.enabled.is_(True))).first()
     if row:
@@ -56,7 +60,8 @@ def reserved(conn, identifiers):
     if _table(conn, 'payroll_paychecks'):
         p = c.payroll_paychecks
         for column in _CAPTURED:
-            found |= set(conn.execute(sa.select(p.c[column]).where(p.c[column].in_(ids)).distinct()).scalars())
+            found |= set(conn.execute(sa.select(p.c[column]).where(p.c[column].in_(ids), p.c.status == 'posted')
+                                      .distinct()).scalars())
     return found
 
 
@@ -79,6 +84,29 @@ def require_unreserved_account(db, *identifiers):
         from bookflow.company import schema as c
         raise reserved_refusal(db.conn.execute(sa.select(c.accounts.c.name).where(
             c.accounts.c.id == sorted(held)[0])).scalar())
+
+
+def require_unreserved_legs(db, legs):
+    """Plan-time check of a writer's pending posting legs (bills, sales documents, deposits): a new leg on a
+    reserved account is refused by name, as the journal route refuses it. Reversal legs pass, and so does a leg
+    its transaction already holds live (an unchanged line of an edited entry)."""
+    if active():
+        return
+    fresh = [x for x in legs if not x.get('reversed_line_id') and x.get('account_id')]
+    held = reserved(db.conn, {x['account_id'] for x in fresh})
+    if not held:
+        return
+    from bookflow.company import schema as c
+    pl = c.posting_lines
+    for leg in fresh:
+        if leg['account_id'] not in held or owned(db.conn, leg.get('transaction_id')):
+            continue
+        kept = db.conn.execute(sa.select(pl.c.id).where(pl.c.transaction_id == leg.get('transaction_id'),
+            pl.c.account_id == leg['account_id'], pl.c.debit_minor_units == leg.get('debit_minor_units', 0),
+            pl.c.credit_minor_units == leg.get('credit_minor_units', 0), pl.c.reversed_line_id.is_(None)).limit(1)).first()
+        if kept is None:
+            raise reserved_refusal(db.conn.execute(sa.select(c.accounts.c.name).where(
+                c.accounts.c.id == leg['account_id'])).scalar())
 
 
 def owned(conn, transaction_id):

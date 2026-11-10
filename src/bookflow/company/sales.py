@@ -997,6 +997,10 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
         from bookflow.company.sales_orders import attach_invoice_orders
         attach_invoice_orders(s, plan.preview.revision)
     from bookflow.company.sales_validation import validate
+    if plan.data.get('changed') and plan.data.get('pending'):
+        # Payroll's reserved accounts refuse by name here, dry runs included (the posting-line trigger is the backstop).
+        from bookflow.company.payroll_owner import require_unreserved_legs
+        require_unreserved_legs(s.company, plan.data['pending'].get('posting_lines', ()))
     validate(plan, s, ctx)
     return plan
 

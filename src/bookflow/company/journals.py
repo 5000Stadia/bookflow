@@ -192,8 +192,6 @@ def line_values(s, inp, currency, old=None, refresh=False, *, date=None, rate=No
     account = active(accounts.resolve_account(s.company, inp.account, by_number=True, follow_merge=True), 'account')
     from bookflow.company.intercompany_account_owner import require_unreserved
     require_unreserved(s.company, account['id'])
-    from bookflow.company.payroll_owner import require_unreserved_account
-    require_unreserved_account(s.company, account['id'])
     if account['type'] == 'non_posting':
         raise invalid('account', 'must be a posting account')
     role = account.get('system_role')
@@ -230,6 +228,12 @@ def line_values(s, inp, currency, old=None, refresh=False, *, date=None, rate=No
         party_name=(party.get('full_name') or party.get('name') or party.get('display_name')) if party else None,
         class_id=klass['id'] if klass else None, class_name=(klass.get('full_name') or klass.get('name')) if klass else None,
         description=inp.description)
+    # Payroll's reserved accounts: an edit that leaves an existing line on one as it was (same account, side and
+    # amount) is still an ordinary entry's own history; any new or changed line on one is refused.
+    if not (old and (old['account_id'], old['side'], old['amount_minor_units']) ==
+            (result['account_id'], result['side'], result['amount_minor_units'])):
+        from bookflow.company.payroll_owner import require_unreserved_account
+        require_unreserved_account(s.company, account['id'])
     if old and not refresh:
         if result['account_id'] == old['account_id']:
             result['account_snapshot'] = old['account_snapshot']

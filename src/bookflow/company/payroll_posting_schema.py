@@ -117,7 +117,11 @@ TRIGGERS = tuple(
           for table in RETAINED)
 TRIGGERS += ("CREATE TRIGGER payroll_reserved_posting BEFORE INSERT ON posting_lines WHEN NEW.reversed_line_id IS NULL "
              "AND NOT EXISTS (SELECT 1 FROM payroll_ledger_links l WHERE l.transaction_id = NEW.transaction_id) "
+             # An unchanged line of an edited ordinary entry: its transaction already holds the same live leg.
+             "AND NOT EXISTS (SELECT 1 FROM posting_lines o WHERE o.transaction_id = NEW.transaction_id AND "
+             "o.account_id = NEW.account_id AND o.debit_minor_units = NEW.debit_minor_units AND "
+             "o.credit_minor_units = NEW.credit_minor_units AND o.reversed_line_id IS NULL) "
              "AND (EXISTS (SELECT 1 FROM payroll_settings s WHERE s.enabled = 1 AND NEW.account_id IN "
              "(s.wage_account, s.employer_tax_account, s.net_pay_account)) OR EXISTS (SELECT 1 FROM payroll_paychecks p "
-             "WHERE NEW.account_id IN (p.wage_account_id, p.employer_account_id, p.net_pay_account_id))) "
+             "WHERE p.status = 'posted' AND NEW.account_id IN (p.wage_account_id, p.employer_account_id, p.net_pay_account_id))) "
              "BEGIN SELECT RAISE(ABORT, 'Account is reserved for payroll'); END",)

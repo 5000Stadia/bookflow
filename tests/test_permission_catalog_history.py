@@ -134,8 +134,8 @@ ACCEPTED = {
     'intercompany-setup-v1': (960, '67602d51a720ba672a62fe16afbe33cab1f266d96b4ceaf24ebedd3705f7f63f'),
     'commission-pos-v1': (961, '8171794a1952fea02695361d7c712f5e10c8e0b74506d66db6a2d810f325299e'),
     'crm-convert-v1': (964, '93a120a2e91e0f151878d417cb63c87d3649ce9799265208e31997af2f988a3b'),
-    'payroll-post-v1': (970, 'b61bf2a8f7f2e3db2a764fabd589304131851fed00a828c1ae4296e1cf311211'),
-    'membership-sales-v1': (973, '67d40463de1ce8c896d1362ad9f520079ded670285d5b880a64e72daff816b2a'),
+    'payroll-post-v1': (970, 'b7f6bca6de63ed276c9a9694b8d5e8a54f95d92af19d8ea377aab3c0d1fa1579'),
+    'membership-sales-v1': (973, '416ee89bdba918f08467b90081426200f28d498208877a3b81bb7f81b3606e4f'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores

@@ -1439,6 +1439,10 @@ def _prepare_native(s, ctx, inp, operation):
         # they had simply left with no lines.
         raise _invalid('items', 'a bill needs at least one expense line or item line')
     from bookflow.company.bill_validation import validate
+    if plan.data.get('changed') and plan.data.get('pending'):
+        # Payroll's reserved accounts refuse by name here, dry runs included (the posting-line trigger is the backstop).
+        from bookflow.company.payroll_owner import require_unreserved_legs
+        require_unreserved_legs(s.company, plan.data['pending'].get('posting_lines', ()))
     validate(plan, s, ctx)
     return plan
 

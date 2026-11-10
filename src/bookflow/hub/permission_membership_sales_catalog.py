@@ -15,7 +15,7 @@ import json
 from . import permission_payroll_post_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = '23276ea65c4e02e1c6623837598ba4f595e65a1b'
+SOURCE_COMMIT = '645bba8c7a5693413e1abafac9d485d48c3403c7'
 _OWNER = 'bookflow.commands.membership_cmds.{}|src/bookflow/commands/membership_cmds.py'
 _WRITE = (c.Requirement('customer', 'standard'),)
 _READ = (c.Requirement('customer', 'member'),)

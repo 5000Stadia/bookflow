@@ -46,14 +46,14 @@ def enabled(s):
     return config
 
 
-def employee(s, selector):
+def employee(s, selector, active=True):
     from bookflow.company.list_service import resolve_selector
     from bookflow.company.lists import get_list_definition
     try:
         row = resolve_selector(s.company, c.employees, get_list_definition('employee'), selector)
     except BookflowError:
         fail('employee', 'Select an existing employee.')
-    if not row['active']:
+    if active and not row['active']:
         fail('employee', 'Select an active employee; final-pay treatment is not available in this increment.')
     return row['id']
 
@@ -188,10 +188,15 @@ def validate_inputs(s, inp):
     if len(set(codes)) != len(codes):
         fail('items', 'Use a distinct code for each earning and item.')
     earnings = {x.code for x in inp.earnings}
+    net_pay = settings(s).net_pay_account
     for item in inp.items:
         if item.base is not None and not set(item.base) <= earnings:
             fail('items.base', 'A percentage base names only earning codes on this paycheck.')
         item.liability_account = account(s, item.liability_account, ('other_current_liability',), 'items.liability_account')
+        if net_pay and item.liability_account == net_pay:
+            # Net pay is reserved for payroll; a liability must stay remittable through an ordinary entry.
+            fail('items.liability_account', "An item's liability account may not be the net-pay account; select the "
+                                            "account that holds what is owed to the item's payee.")
 
 
 def prepare_draft(inp, ctx, s):
