@@ -155,7 +155,10 @@ def calculate(s, ctx, payload, operation='create', original_id=None, original_ve
         header = purchase_orders.resolve(s, normalized['purchase_order'])
         revision = purchase_orders.revision(s, header)
         sources.append(dict(kind='purchase_order', id=header['id'], version=header['version'], revision=revision['id'],
-                            selections=normalized.get('order_lines')))
+                            selections=normalized.get('order_lines'),
+                            lines=[{key: line.get(key) for key in ('line_id', 'quantity_microunits',
+                                'amount_minor_units', 'rate_minor_units', 'rate_fraction')}
+                                for line in purchase_orders.saved_lines(s, revision)]))
     received = plan.data.get('received')
     if received:
         sources.extend(dict(kind='item_receipt', id=x['header']['id'], version=x['header']['version'],
