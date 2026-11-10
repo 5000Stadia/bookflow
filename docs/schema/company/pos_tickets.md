@@ -24,3 +24,4 @@ Database: `company`.
 | `lines` | TEXT | no | — | — | — | — | Ordered cart JSON with stable item IDs and explicit prices only; no stock reservation. |
 | `currency` | VARCHAR(3) | no | — | — | — | — | Home currency of the last held total. |
 | `total_minor_units` | BIGINT | no | — | — | — | — | Last held total; informational, repriced when resumed. |
+| `membership_token` | VARCHAR(200) | yes | — | — | — | — | Membership version the held cart was priced with: enrollment, versions and level, or none; a different one at completion makes the preview stale. |

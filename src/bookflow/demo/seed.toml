@@ -3027,6 +3027,43 @@ capture = "member_enrollment"
 reason = "Enroll the example customer for the fourth quarter"
 input = { customer = "${member_customer.id}", plan = "${member_plan.id}", start_date = "2026-10-01", end_date = "2026-12-31", member_number = "M-1001" }
 
+# R188 increment 2: a job inherits its parent customer's membership; a second job is set
+# to keep only its own (none), and two customers are enrolled together as one reversible batch.
+[[commands]]
+command = "customer create"
+capture = "member_job"
+reason = "Fictional job priced through its parent's membership"
+input = { name = "Workshop Fit-out", parent_id = "${member_customer.id}" }
+
+[[commands]]
+command = "customer create"
+capture = "member_job_own"
+reason = "Fictional job billed at ordinary prices"
+input = { name = "Warranty Calls", parent_id = "${member_customer.id}" }
+
+[[commands]]
+command = "customer membership inherit"
+reason = "Warranty work is billed at ordinary prices"
+input = { customer = "${member_job_own.id}", inherit = false }
+
+[[commands]]
+command = "customer create"
+capture = "member_bulk_one"
+reason = "Fictional customer for the bulk enrollment example"
+input = { name = "Trade Counter North" }
+
+[[commands]]
+command = "customer create"
+capture = "member_bulk_two"
+reason = "Fictional customer for the bulk enrollment example"
+input = { name = "Trade Counter South" }
+
+[[commands]]
+command = "customer membership enroll"
+capture = "member_batch"
+reason = "Enroll the trade counters for the fourth quarter as one batch"
+input = { customers = ["${member_bulk_one.id}", "${member_bulk_two.id}"], plan = "${member_plan.id}", start_date = "2026-10-01", end_date = "2026-12-31" }
+
 [[commands]]
 command = "company update"
 reason = "Keep optional pricing layers off in the default demo"

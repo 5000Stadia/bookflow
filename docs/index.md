@@ -283,6 +283,7 @@ An AI agent installing Bookflow for someone starts with the agent install page: 
 - [`company/customer_contact_points`](schema/company/customer_contact_points.md)
 - [`company/customer_contacts`](schema/company/customer_contacts.md)
 - [`company/customer_credit_transfers`](schema/company/customer_credit_transfers.md)
+- [`company/customer_membership_inheritance`](schema/company/customer_membership_inheritance.md)
 - [`company/customer_memberships`](schema/company/customer_memberships.md)
 - [`company/customer_messages`](schema/company/customer_messages.md)
 - [`company/customer_refund_consumptions`](schema/company/customer_refund_consumptions.md)

@@ -1712,7 +1712,7 @@ DEPOSIT_TABLES = ('transaction_revisions', 'deposit_profiles', 'document_line_id
 # POS returns add private captured return_cost_minor_units to SalesLineProfile; enclosing codecs rehashed.
 # R189: private invoice attribution snapshots extend the nested sales line codecs.
 # R189 increment 2: a group sales line's nullable member_commissions (input only) rehashes CoordinateOutput.
-CODECS = {'CoordinateOutput': '2dc79d572b872f5f7500079a7545371cb7d9624ae447c94bf914a25245a865ca', 'Effect': '00a48b968cc9adaa718b0c68b6bdbff9126baa0cc28745556327c74c8393f08a', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': '0a8b5e8d4011595c635851b83406487b06efad35c0bca048e1f49ee3c2d6ceee', 'Manifest': 'a3d46c6985fc4e595e32dfaf83b6537af7955812573f9dfc251dc71a019fd0f0', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
+CODECS = {'CoordinateOutput': 'ec98489c25b902dfbf3ffad43d95af8894b11bc785cf915faa62498fd4b50bf8', 'Effect': '455a817e38943e3bdfbf73055745a84129db2c949134839a5ba319f3bc227b7a', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': '14c53a47c03d331b38d7d97b3aa7e63e388a2b2c7b5a37f8c804da3504c68d65', 'Manifest': '0499dcffb02674bd48187a5dd586aaffde925df3033e735875e01c65aaeb577b', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
 
 # Explicit dependency inspection registry closure, separate from disclosure.
 DEPENDENCY_OWNERS = {'account': ('accounts',

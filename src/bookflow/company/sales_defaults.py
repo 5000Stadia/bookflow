@@ -209,6 +209,8 @@ def _tax_rules(db, selector, source=None):
 # credit memo takes it back out, and a statement charge puts it there with no invoice around
 # it, so all three resolve the same account the same way.
 RECEIVABLE_TYPES = ('invoice', 'credit_memo', 'statement_charge')
+# R188: the sales whose default price level an effective membership supplies; returns use original facts.
+MEMBER_PRICED = ('invoice', 'sales_receipt')
 
 
 def resolve_header(s, inp, doc_type, *, previous: SalesProfile | None = None,
@@ -253,9 +255,10 @@ def resolve_header(s, inp, doc_type, *, previous: SalesProfile | None = None,
     out = {'customer': customer, 'preferences': prefs}
     if previous and prefs != previous.preferences:
         warnings.append('preferences: current company settings captured by refresh')
-    # R188 increment 1: on an invoice, the sold-to customer's own enrollment covering the invoice date
-    # supplies the default price level in place of the customer's ordinary one. An explicit level or
-    # unit price stays explicit; with the layer off this is never consulted.
+    # R188: on an invoice or sales receipt (a POS sale is one), the sold-to customer's effective enrollment
+    # covering the sale date -- its own, else for a job its nearest inheriting ancestor's (increment 2) --
+    # supplies the default price level in place of the customer's ordinary one. An explicit level or unit
+    # price stays explicit; with the layer off this is never consulted.
     member = {}
     member_date = getattr(inp, 'date', None) or old_date
     for field in ('terms', 'ship_method', 'sales_rep', 'class_id', 'customer_tax_code', 'price_level', 'payment_method'):
@@ -265,7 +268,7 @@ def resolve_header(s, inp, doc_type, *, previous: SalesProfile | None = None,
         if not enabled and field in fields.supplied and getattr(inp, field) is not None:
             raise _invalid(field, 'feature is disabled in company preferences')
         default = party_default(default_map[field])
-        if field == 'price_level' and doc_type == 'invoice' and enabled and info.get('membership_pricing_enabled'):
+        if field == 'price_level' and doc_type in MEMBER_PRICED and enabled and info.get('membership_pricing_enabled'):
             def default(ordinary=default):
                 from bookflow.company.memberships import effective_fact
                 fact = effective_fact(db, row['id'], member_date)
@@ -291,7 +294,7 @@ def resolve_header(s, inp, doc_type, *, previous: SalesProfile | None = None,
                 default = lambda: (None, source)
         out[field] = fields.reference(db, field, default, dependency=customer_changed,
                                       active=needed or field in fields.supplied or refresh)
-    if doc_type == 'invoice':
+    if doc_type in MEMBER_PRICED:
         origin = fields.origins.get('price_level')
         if origin is None or origin.kind != 'default':
             out['membership'] = None

@@ -154,6 +154,396 @@ Example JSON output:
 | `E_VALIDATION` | Invalid input. |
 | `E_VERSION_CONFLICT` | The record changed since the version you read. |
 
+## `customer membership enroll`
+
+Enroll several customers (up to 200, each once) in one plan for the same dates, all or none, as one reversible batch. Preview it with --dry-run first. A mistaken run is undone as a unit with `batch reverse <batch>`, which refuses, naming each, while an enrollment was changed since or a saved sale captured it; ending an enrollment is the separate, prospective act. The membership pricing layer must be on (`company update --membership-pricing-enabled true`); off, the command is refused with E_FEATURE_DISABLED and prices resolve as they always have.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | promotion.assign |
+| Additional resources | customer: standard |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/customer.membership.enroll` |
+| External binary body | none |
+
+### CLI
+
+`bookflow customer membership enroll --customers '["Trade Counter North","Trade Counter South"]' --plan "Trade members" --start-date 2026-10-01 --end-date 2026-12-31 --company "Demo Plumbing Co" --reason "Fourth-quarter trade counters" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "customer membership enroll", "input": {"customers": ["Trade Counter North", "Trade Counter South"], "plan": "Trade members", "start_date": "2026-10-01", "end_date": "2026-12-31"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `customers` | `--customers` | array[string] | yes | no | — | Customers or jobs to enroll (IDs or names), each once. |
+| `plan` | `--plan` | string | yes | no | — | Active membership plan ID or name.; minimum length 1; maximum length 1004 |
+| `start_date` | `--start-date` | string | yes | no | — | First company-local transaction date covered, inclusive.; minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
+| `end_date` | `--end-date` | string \| null | no | yes | null | Last transaction date covered, inclusive; omit for no end yet. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/customer.membership.enroll`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `batch` | string \| null | yes | yes | — | Reversible batch ID (`batch reverse <id>`); null in a dry run. |
+| `enrolled` | array[object] | yes | no | — | — |
+| `enrolled[].id` | string | yes | no | — | — |
+| `enrolled[].version` | integer | yes | no | — | — |
+| `enrolled[].customer` | object | yes | no | — | — |
+| `enrolled[].customer.id` | string | yes | no | — | — |
+| `enrolled[].customer.label` | string | yes | no | — | — |
+| `enrolled[].plan` | object | yes | no | — | — |
+| `enrolled[].plan.id` | string | yes | no | — | — |
+| `enrolled[].plan.label` | string | yes | no | — | — |
+| `enrolled[].price_level` | object | yes | no | — | — |
+| `enrolled[].price_level.id` | string | yes | no | — | — |
+| `enrolled[].price_level.label` | string | yes | no | — | — |
+| `enrolled[].start_date` | string | yes | no | — | — |
+| `enrolled[].end_date` | string \| null | yes | yes | — | — |
+| `enrolled[].status` | literal["active", "suspended", "ended"] | yes | no | — | — |
+| `enrolled[].member_number` | string \| null | yes | yes | — | — |
+| `count` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "batch": null,
+  "count": 0,
+  "enrolled": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MEMBERSHIP_OVERLAP` | The customer already has an enrollment covering part of that interval; end it first. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NAME_TAKEN` | That display name is already used. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
+## `customer membership inherit`
+
+Say whether a job inherits its nearest ancestor's membership (true, the default for every job) or uses only its own enrollment (false). A job with its own enrollment covering the sale date always uses it. Sales already saved keep the membership they captured. The membership pricing layer must be on (`company update --membership-pricing-enabled true`); off, the command is refused with E_FEATURE_DISABLED and prices resolve as they always have.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | promotion.assign |
+| Additional resources | customer: standard |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/customer.membership.inherit` |
+| External binary body | none |
+
+### CLI
+
+`bookflow customer membership inherit 01ARZ3NDEKTSV4RRFFQ69G5FAV --inherit false --company "Demo Plumbing Co" --reason "Warranty work is billed at ordinary prices" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "customer membership inherit", "input": {"customer": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "inherit": false}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `customer` | `CUSTOMER` | string | yes | no | — | Job ID or name (a customer with a parent).; minimum length 1; maximum length 1004 |
+| `inherit` | `--inherit` | boolean | yes | no | — | true: the job uses its nearest ancestor's enrollment when it has none of its own; false: only its own. |
+| `expected_version` | `--expected-version` | integer \| null | no | yes | null | The setting's version you read (inheritance_version from customer membership show); omit for a job with no setting yet. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/customer.membership.inherit`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `customer` | object | yes | no | — | — |
+| `customer.id` | string | yes | no | — | — |
+| `customer.label` | string | yes | no | — | — |
+| `inherit` | boolean | yes | no | — | — |
+| `version` | integer \| null | yes | yes | — | Version of the setting row; null when the job has none. |
+| `changed` | boolean | no | no | true | — |
+
+Example JSON output:
+
+```json
+{
+  "changed": true,
+  "customer": {
+    "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "label": "value"
+  },
+  "inherit": false,
+  "version": null
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
+## `customer membership list`
+
+The customers a membership prices on as_of (today by default), in name order: those enrolled and, unless include_inherited is false, the jobs that inherit from them, each with whose enrollment it is. Filter by plan. Member numbers are not listed. Empty while the layer is off.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | standard |
+| Capability | promotion.read |
+| Additional resources | customer: member |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/customer.membership.list` |
+| External binary body | none |
+
+### CLI
+
+`bookflow customer membership list --plan "Trade members" --as-of 2026-11-15 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "customer membership list", "input": {"plan": "Trade members", "as_of": "2026-11-15"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `plan` | `--plan` | string \| null | no | yes | null | Only members of this plan (ID or name). |
+| `as_of` | `--as-of` | string \| null | no | yes | null | Date whose effective memberships to list; today when omitted. |
+| `include_inherited` | `--include-inherited` | boolean | no | no | true | Include jobs priced through an ancestor's enrollment. |
+| `limit` | `--limit` | integer | no | no | 100 | Most customers to return, in name order.; minimum 1; maximum 500 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | next_cursor from the previous page. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/customer.membership.list`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `items` | array[object] | yes | no | — | — |
+| `items[].customer` | object | yes | no | — | — |
+| `items[].customer.id` | string | yes | no | — | — |
+| `items[].customer.label` | string | yes | no | — | — |
+| `items[].membership` | string | yes | no | — | Enrollment ID that prices this customer on as_of. |
+| `items[].plan` | object | yes | no | — | — |
+| `items[].plan.id` | string | yes | no | — | — |
+| `items[].plan.label` | string | yes | no | — | — |
+| `items[].price_level` | object | yes | no | — | — |
+| `items[].price_level.id` | string | yes | no | — | — |
+| `items[].price_level.label` | string | yes | no | — | — |
+| `items[].start_date` | string | yes | no | — | — |
+| `items[].end_date` | string \| null | yes | yes | — | — |
+| `items[].owner` | object | yes | no | — | Whose enrollment it is: the customer itself or the ancestor a job inherits from. |
+| `items[].owner.id` | string | yes | no | — | — |
+| `items[].owner.label` | string | yes | no | — | — |
+| `items[].inherited` | boolean | yes | no | — | — |
+| `as_of` | string | yes | no | — | — |
+| `layer_enabled` | boolean | yes | no | — | — |
+| `next_cursor` | string \| null | no | yes | null | — |
+
+Example JSON output:
+
+```json
+{
+  "as_of": "value",
+  "items": [],
+  "layer_enabled": false,
+  "next_cursor": null
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
 ## `customer membership set`
 
 Enroll a customer (or a job, by itself) in a membership plan from start_date through end_date, both inclusive company-local dates (omit end_date for no end yet); give membership and expected_version to change an existing enrollment instead. An invoice dated inside the interval defaults to the plan's price level in place of the customer's ordinary one; an explicit price level or unit price still wins, and price rules compete as usual. Overlapping enrollments are refused with E_MEMBERSHIP_OVERLAP. The customer record's own price level and saved invoices never change. The membership pricing layer must be on (`company update --membership-pricing-enabled true`); off, the command is refused with E_FEATURE_DISABLED and prices resolve as they always have.
@@ -187,7 +577,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `customer` | `CUSTOMER` | string | yes | no | — | Customer or job ID or name. A job is enrolled itself; it does not inherit a parent enrollment yet.; minimum length 1; maximum length 1004 |
+| `customer` | `CUSTOMER` | string | yes | no | — | Customer or job ID or name. A job enrolled itself uses its own enrollment; one not enrolled inherits its nearest ancestor's unless its inheritance is off.; minimum length 1; maximum length 1004 |
 | `plan` | `--plan` | string | yes | no | — | Active membership plan ID or name.; minimum length 1; maximum length 1004 |
 | `start_date` | `--start-date` | string | yes | no | — | First company-local transaction date covered, inclusive.; minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
 | `end_date` | `--end-date` | string \| null | no | yes | null | Last transaction date covered, inclusive; omit for no end yet. |
@@ -378,7 +768,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `customer.label` | string | yes | no | — | — |
 | `layer_enabled` | boolean | yes | no | — | — |
 | `as_of` | string | yes | no | — | — |
-| `effective` | object \| null | yes | yes | — | The enrollment covering as_of, if any and the layer is on. |
+| `effective` | object \| null | yes | yes | — | The enrollment covering as_of, if any and the layer is on: its own, or for a job the one it inherits. |
 | `effective.id` | string | yes | no | — | — |
 | `effective.version` | integer | yes | no | — | — |
 | `effective.customer` | object | yes | no | — | — |
@@ -410,6 +800,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].end_date` | string \| null | yes | yes | — | — |
 | `history[].status` | literal["active", "suspended", "ended"] | yes | no | — | — |
 | `history[].member_number` | string \| null | yes | yes | — | — |
+| `effective_owner` | object \| null | no | yes | null | Whose enrollment applies on as_of: this customer, or the ancestor a job inherits from. |
+| `effective_owner.id` | string | yes | no | — | — |
+| `effective_owner.label` | string | yes | no | — | — |
+| `inherits` | boolean \| null | no | yes | null | For a job, whether it inherits its nearest ancestor's enrollment; null for a top-level customer. |
+| `inheritance_version` | integer \| null | no | yes | null | Version of the job's inheritance setting; null while it has none (it inherits). |
 
 Example JSON output:
 
@@ -421,7 +816,10 @@ Example JSON output:
     "label": "value"
   },
   "effective": null,
+  "effective_owner": null,
   "history": [],
+  "inheritance_version": null,
+  "inherits": null,
   "layer_enabled": false
 }
 ```

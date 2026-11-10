@@ -129,3 +129,6 @@ input[data-date] { min-width:0; max-width:100%; }
 .visually-hidden{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 img.item-thumb{width:2.5rem;height:2.5rem;object-fit:cover;border-radius:4px;vertical-align:middle;margin-right:.4rem;background:#f0f0f0}
 @media (max-width:600px){.item-picture-frame{width:100%;max-width:20rem;height:14rem}}
+/* R188 increment 2: the Members view stacks each member at phone width, so no name or date is clipped. */
+.members-table{width:100%;border-collapse:collapse}.members-table th,.members-table td{text-align:left;padding:6px 8px;vertical-align:top;overflow-wrap:anywhere}
+@media(max-width:600px){.members-table thead{display:none}.members-table,.members-table tbody,.members-table tr,.members-table td{display:block;width:100%}.members-table tr{border-bottom:1px solid #ddd;padding:6px 0}.members-table td{padding:2px 0}.members-table caption{text-align:left}#members-workspace textarea{width:100%;box-sizing:border-box}}

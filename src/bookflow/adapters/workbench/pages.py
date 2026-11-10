@@ -1040,8 +1040,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     PartialOrderPages.mount(app, render=render, run=run, credential=credential, page_error=page_error)
     # R188 increment 1: a customer's membership enrollments and a member price preview.
     from bookflow.adapters.workbench import membership_pages as MembershipPages
-    MembershipPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
-                          role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
+    # R188 increment 2: mount also answers whether the customer list shows its Members view.
+    members_link_for = MembershipPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                                             role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R115 increment 1: leads share native notes, files and to-dos.
     from bookflow.adapters.workbench import crm_pages as CrmPages
     CrmPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
@@ -1678,8 +1679,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         if definition is not None and company_id:
             from bookflow.adapters.workbench import browsing
             try:
+                # R188 increment 2: the customer list links its Members view while the membership layer is on.
+                members = noun == "customer" and members_link_for(request, company_id)
                 return browsing.page(request, company_id, noun, definition, page_verbs, meta,
-                    lambda name, raw, company: run(request, name, raw, company), render)
+                    lambda name, raw, company: run(request, name, raw, company),
+                    lambda *args, **kw: render(*args, members_link=members, **kw))
             except BookflowError as err:
                 if err.code == 'E_QUERY_STALE' or (err.code == 'E_VALIDATION' and request.query_params.get('cursor')):
                     restart = request.url.path + '?' + urlencode([(k, v) for k, v in request.query_params.multi_items() if k != 'cursor'])

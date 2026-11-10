@@ -468,6 +468,47 @@ first slice leaves codes, offers, POS and commissions entirely optional.
    version revalidation and membership batch inverse. **Done when:** a person and agent see the same membership price
    and a broad mistaken enrollment is reversible. **Tests:** ancestor/owner identity, renewal/expiry on held ticket,
    merge overlap, later-sale reversal blocker, 1440/390 list and sale journeys.
+
+   **As built — increment 2.** Migration `co0138` adds `customer_membership_inheritance` (one versioned row per job
+   that has a setting; no row means the job inherits) and a nullable `pos_tickets.membership_token`; existing
+   companies migrate with no rows, no tokens and the layer still off. Three commands sit on the permission layer
+   `membership-sales-v1`, chained on `payroll-post-v1`, under increment 1's capabilities (no new capability or
+   default): `customer membership inherit` (promotion.assign and customer write), `customer membership list`
+   (promotion.read and customer read) and `customer membership enroll` (promotion.assign and customer write).
+   - *Jobs.* `memberships.effective_fact` stays the one resolver: a customer with no own enrollment on the date climbs
+     to its parent while each job on the way inherits, so a suppressing job stops the climb for itself and the jobs
+     below it. A job's own enrollment always wins. The captured `membership` fact now names its `owner` (whose
+     enrollment it is) beside the sale's own sold-to customer. `customer membership show` reports the effective
+     enrollment, whether it is inherited and from whom, and the job's setting and version. Suppression is a separate
+     table rather than a customer column, so customer outputs, imports and manifests are unchanged; a top-level
+     customer has no setting (`E_VALIDATION`).
+   - *Sales receipts and POS.* The hook in `sales_defaults.resolve_header` now serves invoices and sales receipts
+     (`MEMBER_PRICED`); a POS sale is a sales receipt (a split tender an invoice) through the same path, so all three
+     price the same customer, date and item identically. Credit memos keep their ordinary levels. `pos sale preview`
+     reports the plan, level, owner and a membership token (enrollment and plan versions, level and owner);
+     `pos ticket hold` stores the token, and `pos sale complete` refuses with `E_PREVIEW_STALE` when the token it was
+     given (`expected_membership`, else the held ticket's) no longer matches, even when the total is unchanged (a
+     renewal at the same level). The till sends its latest preview's token. Saved invoices and receipts keep their
+     captured facts, as in increment 1.
+   - *Merges.* A merged-away customer's enrollments count for the survivor (one entitlement identity), and
+     `customer merge` is refused (`E_MERGE_REFUSED`, problem `membership_overlap`) when the two customers'
+     enrollments meet; adjacent ones merge.
+   - *Bulk enrollment.* `customer membership enroll` enrolls up to 200 named customers in one plan and interval, all
+     or none, as one R186 batch of kind `membership-enroll`. `batch reverse` deletes its enrollments newest first
+     under the caller's own `customer membership set` authority (and reads under `customer membership show`), so
+     `bookflow.company.automation.require_command`'s declared requirements gain promotion.read and promotion.assign.
+     Deleting is the true inverse: an ended enrollment would still price inside its interval. Reversal is refused by
+     name while any enrollment changed since (end it instead) or priced a saved sale (`in_use` names the sale's type
+     and number). The register's walk-in customer and inactive customers cannot be enrolled.
+   - *Screens.* While the layer is on, the customer list links a Members view: who a plan prices on a date, own or
+     inherited from whom, a bulk enrollment form, and a reversal button on its result. A job's Membership panel shows
+     whose enrollment applies and an inherit or stop-inheriting form. All forms use htmx. A shared-form defect from
+     R189 increment 2 was fixed on the way: the generated sales form sends an empty `member_commissions` list on
+     every line, which an ordinary line now accepts as naming no one.
+   - *Not yet.* Per-customer limits across an owner's jobs arrive with the offers that have limits (increments 3 and
+     4); the Members view takes customer names typed one per line rather than a selection from the customer list,
+     and it does not yet show a Membership column on the customer list itself; turning the layer off does not yet list
+     held carts in its dry run (completing one is refused as stale all the same); there is still no suspend command.
 3. **One code and visible discount (M).** Code/offer definitions, customer attachment, one fixed/percentage benefit,
    generated target mode, captured shares and explanation in ordinary sales. This slice offers unlimited-use codes
    only; it records source provenance and refuses cap fields until increment 4 supplies enforcement. **Done when:** mixed-tax §7 fixture

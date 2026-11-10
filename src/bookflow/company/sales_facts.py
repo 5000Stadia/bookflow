@@ -96,7 +96,7 @@ class PriceRule(Reference):
 
 
 class MembershipFact(StrictModel):
-    """Where an invoice's default price level came from when a membership supplied it (R188).
+    """Where a sale's default price level came from when a membership supplied it (R188).
 
     Captured whole on the revision: ending or changing the enrollment, or editing the plan, never
     changes a saved invoice. ``price_level_id`` is the plan's level the header captured."""
@@ -106,6 +106,10 @@ class MembershipFact(StrictModel):
     price_level_id: str
     start_date: str
     end_date: str | None = None
+    # R188 increment 2: the entitlement owner, the customer whose enrollment qualified the sale (the sold-to
+    # customer itself or, for a job, its nearest inheriting ancestor). Absent on increment 1 captures, which
+    # were always the sold-to customer's own.
+    owner: Reference | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 class AppliedPriceRule(Reference):

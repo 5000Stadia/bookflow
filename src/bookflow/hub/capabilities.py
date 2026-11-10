@@ -37,9 +37,11 @@ _APPROVAL = {
 COMMAND_CAPABILITY.update({name: cap for cap, (_, names) in _APPROVAL.items() for name in names})
 # R188 increment 1 (membership-pricing-v1): an agent enrolls or reads memberships only by explicit grant.
 _PROMOTION = {
-    'promotion.read': ('standard', ('membership-plan show', 'membership-plan list', 'customer membership show')),
+    'promotion.read': ('standard', ('membership-plan show', 'membership-plan list', 'customer membership show',
+                                    'customer membership list')),
     'promotion.manage': ('standard', ('membership-plan create', 'membership-plan update')),
-    'promotion.assign': ('standard', ('customer membership set', 'customer membership end')),
+    'promotion.assign': ('standard', ('customer membership set', 'customer membership end',
+                                      'customer membership inherit', 'customer membership enroll')),
 }
 COMMAND_CAPABILITY.update({name: cap for cap, (_, names) in _PROMOTION.items() for name in names})
 _INTERCOMPANY = {

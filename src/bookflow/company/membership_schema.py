@@ -46,3 +46,20 @@ def define_tables(metadata, C, T, common):
                  sqlite_where=sa.text('member_number_key IS NOT NULL')),
         description='Dated customer enrollments in a membership plan; at most one effective per customer and date.')
     return {'membership_plans': plans, 'customer_memberships': memberships}
+
+
+# R188 increment 2: a job inherits its nearest ancestor's enrollment unless a row here says it does not.
+def define_inheritance(metadata, C, T, common):
+    inheritance = T('customer_membership_inheritance', *common(),
+        C('customer_id', sa.String(26), 'Job whose inheritance this row sets; a job with no row inherits.',
+          sa.ForeignKey('customers.id', ondelete='RESTRICT'), nullable=False),
+        C('inherit', sa.Boolean, 'false: the job uses only its own enrollment, never an ancestor\'s.', nullable=False),
+        sa.UniqueConstraint('customer_id', name='uq_customer_membership_inheritance_customer'),
+        sa.CheckConstraint('inherit IN (0,1)', name='ck_customer_membership_inheritance_inherit'),
+        description='Per-job membership inheritance: whether a job uses its nearest ancestor\'s enrollment.')
+    return {'customer_membership_inheritance': inheritance}
+
+
+def ticket_column(C):
+    return C('membership_token', sa.String(200), 'Membership version the held cart was priced with: enrollment, '
+             'versions and level, or none; a different one at completion makes the preview stale.', nullable=True)

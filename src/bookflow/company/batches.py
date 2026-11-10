@@ -93,6 +93,7 @@ ADAPTER_MODULES = {
     'approval-commit': 'approval_commit_reversal',
     'crm-conversion': 'crm_conversion', 'crm-lead-import': 'crm_imports',
     'payroll': 'payroll_paychecks',
+    'membership-enroll': 'membership_batch_reversal',
 }
 
 
