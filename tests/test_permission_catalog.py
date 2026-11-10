@@ -77,7 +77,7 @@ FROZEN_DESCRIPTOR_SHA256 = 'c4b724e114772d9940ead6450a4bd64fd490cd1f45ca42092e64
 RESOURCE_PAIRS = {
     'approvals.native_write': {('ledger.post', 'standard')},
     'approvals.recover': {('ledger.post', 'standard')},
-    'approvals.decision_authority': {('approval.decide', 'admin'), ('ledger.read', 'member')},
+    'approvals.decision_authority': {('approval.decide', 'standard'), ('ledger.read', 'member')},
     'approval_commit_reversal._read': {('ledger.read', 'member')},
     'approval_commit_reversal._native': {('ledger.post', 'standard'), ('ledger.read', 'member')},
     # One per Delete delta. Each declares its own admit site in its own catalog

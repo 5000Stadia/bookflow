@@ -13,18 +13,19 @@ _ADDED = (
     ('purchase-draft submit', 'plan_submit', 'approval.prepare', 'standard', True, False),
     ('purchase-draft withdraw', 'plan_withdraw', 'approval.prepare', 'standard', True, False),
     ('purchase-draft commit', 'plan_commit', 'approval.prepare', 'standard', True, True),
-    ('approval decide', 'plan_decide', 'approval.decide', 'admin', True, False),
+    ('approval decide', 'plan_decide', 'approval.decide', 'standard', True, False),
     ('approval show', 'plan_show', 'approval.read', 'standard', False, False),
     ('approval history', 'plan_history', 'approval.read', 'standard', False, False),
-    ('approval-policy create', 'plan_policy_create', 'approval.manage', 'admin', True, False),
-    ('approval-policy update', 'plan_policy_update', 'approval.manage', 'admin', True, False),
-    ('approval-policy publish', 'plan_policy_publish', 'approval.manage', 'admin', True, False),
+    ('approval-policy create', 'plan_policy_create', 'approval.manage', 'standard', True, False),
+    ('approval-policy update', 'plan_policy_update', 'approval.manage', 'standard', True, False),
+    ('approval-policy publish', 'plan_policy_publish', 'approval.manage', 'standard', True, False),
     ('approval-policy show', 'plan_policy_show', 'approval.read', 'standard', False, False),
     ('approval-policy list', 'plan_policy_list', 'approval.read', 'standard', False, False),
 )
-ADDED_CAPABILITIES = tuple(c.CapabilitySpec(name, ('admin',), ('admin',))
+# Admin is the default grant bundle, not an ungrantable role floor.
+ADDED_CAPABILITIES = tuple(c.CapabilitySpec(name, ('standard',), ('standard',))
                            for name in ('approval.decide', 'approval.manage'))
-ADDED_DEFAULTS = tuple(c.DefaultEntry(role, c.Requirement(name, 'admin'))
+ADDED_DEFAULTS = tuple(c.DefaultEntry(role, c.Requirement(name, 'standard'))
     for role in ('admin', 'owner', 'hub_admin')
     for name in ('approval.decide', 'approval.manage'))
 
@@ -50,7 +51,7 @@ _ADDED_SOURCES = (
         (c.Requirement('ledger.post', 'standard'),)),
     c.ResourceSource('bookflow.company.approvals.decision_authority',
         (('src/bookflow/company/approvals.py', 200), ('src/bookflow/company/approvals.py', 201)),
-        (c.Requirement('approval.decide', 'admin'), c.Requirement('ledger.read', 'member'))),
+        (c.Requirement('approval.decide', 'standard'), c.Requirement('ledger.read', 'member'))),
     c.ResourceSource('bookflow.company.approval_commit_reversal._read',
         (('src/bookflow/company/approval_commit_reversal.py', 19),),
         (c.Requirement('ledger.read', 'member'),)),

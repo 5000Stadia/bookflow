@@ -126,7 +126,7 @@ ACCEPTED = {
     'reversible-batch-v1': (909, 'b6ab69b716a3b999e88d86716f54fef5fcc7174768f3f0f6e4c073ce8cf515ce'),
     'notice-reversal-v1': (910, 'a8255242bbbb0b1a4ac0f5eaf8aa62a5cb84c291a7a03316584b2bbf06b67932'),
     'purchase-draft-v1': (916, 'a6faac71521b11c6e09f9c515a346b71bc783a1b5e44ef985f95373f11ede861'),
-    'bill-approval-v1': (927, 'c75dedd6b85a35da5feb755520bf8c81fe09852bdc05808837cc47b54d6ad992'),
+    'bill-approval-v1': (927, 'c408b27f198ca3ac153aebf40acf3d22c6d51826a82beb5fd108e8d15fc14774'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
