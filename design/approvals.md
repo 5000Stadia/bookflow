@@ -304,6 +304,40 @@ part of this design commit.
 1. **Saved purchase drafts (S).** Create/edit/preview/cancel/show/list for expense-only bill drafts, with browser and
    shared command contract; layers remain off. **Done when:** a bookkeeper saves a bill and another actor resumes it
    with no AP effect. **Tests:** exact $80 preview, stale edit, cancelled history, permissions, migration and 390 px.
+   #### As built — increment 1
+
+   `purchase-draft create/update/preview/cancel/show/list` is the shared command contract for expense-only bill
+   creation drafts. Create/update dry runs calculate the unsaved bill; preview revalidates a saved draft without
+   replacing its captured revision. The browser's Purchase drafts page provides the same acts through htmx,
+   preserves stale-edit inputs, and uses stacked expense controls at 390 px. Demo records include an $80 saved
+   draft and a cancelled draft with retained history.
+
+   Drafts use separate company-local headers, insert-only revisions and permanent operation receipts. Every write
+   requires a reason and operation key; edits and cancellation require the exact version. Operation keys are scoped
+   to command and actor within the company, and retries recheck current authority. Updates replace the entire
+   commercial payload, making omitted optional fields reset to their native defaults. Cancellation is terminal.
+   Native bill header/expense validation resolves references and due dates; each expense is positive integer cents
+   in company currency, and the total is checked for integer overflow. The native expense grid also accepts its
+   usual cost-of-goods-sold and permitted asset accounts. No document number is reserved, and no AP, ledger, stock,
+   billable-cost or purchase-source record is written.
+
+   Migration `co0129` adds this storage and four switches defaulting off. Permission layer `purchase-draft-v1`
+   extends `notice-reversal-v1`: writes require standard `approval.prepare`, reads/preview standard `approval.read`,
+   and all require member `ledger.read`. Human standard/admin/owner roles receive the new defaults; agents require
+   explicit grants intersected with their principal's current rights. Native posting authority is unnecessary.
+
+   Tests cover exact $80 preview, another actor resuming without posting rights, stale edits, cancellation history,
+   permanent retries, explicit agent grants, migration preservation and the real browser workflow at 390 px.
+   Approval decisions, posting, correction/restoration proposals, source/item lines, attachments, routing, reminders
+   and batch operations remain for later increments. This increment does not enable an approval setting or change
+   ordinary bill posting.
+
+   Fix round: the browser mount adapts the shared permission callback just like neighboring pages. Tests send
+   reasons only for writes. The deposit read manifest explicitly classifies the four reserved company switches as
+   outside deposit output; all exact schema/type/edge checks remain intact. The six commands have a four-adapter
+   execution witness and contribute 28 measured material schema nodes (13 each for create/update, two for list).
+   No money rules, capability defaults, migration or later-increment scope changed.
+
 2. **One-step bill approval and posting (M).** Simple policy, submit/decide/withdraw/commit, capabilities and all native
    bill post/update gates; source-aware bill drafts. **Done when:** fixture 1 and direct/import/automated bypass
    refusals pass, and cancelled drafts have no financial residue. **Tests:** revision races, source revalidation,

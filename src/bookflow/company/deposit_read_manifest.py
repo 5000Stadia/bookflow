@@ -231,6 +231,11 @@ FIELDS = {
         'path': ('str', False, False, 'outside_output'),
     },
     'company_info': {
+        # Purchase approval switches do not affect captured deposit cash provenance.
+        'purchase_approvals_enabled': ('bool', False, False, 'outside_output'),
+        'bill_approvals_enabled': ('bool', False, False, 'outside_output'),
+        'approval_routing_enabled': ('bool', False, False, 'outside_output'),
+        'approval_reminders_enabled': ('bool', False, False, 'outside_output'),
         'id': ('str', False, True, 'dependency_field'),
         'version': ('int', False, False, 'outside_output'),
         'created_at': ('str', False, False, 'outside_output'),
