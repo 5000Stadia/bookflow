@@ -1,9 +1,7 @@
 # Intercompany (R123)
 
-Design contract, 2026-11-09. The full approved roadmap scope is **“Intercompany: linked transactions that post
-matching entries in two companies of one organization. Approved (Kabe 2026-10-31: \"Full approve, hold off on
-113 125 155\"); design queued.”** This document proposes commands, storage and build increments. It does not
-claim an implemented feature or authorize product implementation.
+Design contract for linked transactions that post matching entries in two companies of one organization.
+Increment 1 implements relationship setup and local drafts only; later increments below own ledger posting.
 
 **Outcome.** Enter a transaction once, preview both balanced entries, and keep their identities, corrections and
 cancellations together. Each company's due-to/due-from ledger explains its own balance. A person or agent can
@@ -400,13 +398,53 @@ Only future scope/money decisions remain. Defaults permit the increments below; 
 ## 11. Build increments
 
 S is a narrow slice, M a bounded workflow, L a cross-cutting accounting change. Each includes demo fixtures, typed
-help, generated references and migration/permission checks. “Tests” below describes future build acceptance; this
-design-only change adds no product code or tests.
+help, generated references and migration/permission checks. “Tests” below names each increment’s acceptance checks.
 
 1. **Relationship setup and local drafts (M).** Feature switches, local mappings, hub registry metadata, projections
    and untargeted drafts. **Done when:** a both-authorized actor configures a valid pair and an A-only actor can save
    local work without discovering B; no money is posted. **Tests:** zero-balance/account ownership rules, organization/
    currency mismatch, duplicate relationships, disabled layers, actor/principal denies, local-only audit and migration.
+
+### As built — increment 1
+
+Eleven shared commands expose local settings, untargeted draft create/update/show/list,
+immutable local mapping revisions, and relationship create/update/show/list. `update` with
+`enabled=false` disables a relationship; enabling it again retains its ID. All switches start off.
+Settings are a separate company-local singleton; no existing company preference or ledger row
+changes on upgrade. Historical reads remain available when new use is disabled.
+
+Setup is staged. Enable each company, save its local mapping with `intercompany-mapping set`,
+then register the pair with `intercompany-relationship create`. Each command writes exactly one
+database in one transaction. Local staging reserves dedicated accounts but does not activate a
+relationship. The hub validates both saved revisions and captures their digests. It stores no
+account names, balances or financial plans. Each subsequent registry revision is retained.
+
+Company migration `co0135` follows the already shipped `co0134`; hub migration `hub0018`
+follows the independent hub head `hub0017`. Local mappings use a keyed opaque peer reference,
+not a registered company ID. The key lives only in the hub. Local mapping retry hashes use that
+same opaque reference, and local mapping outputs and audit snapshots omit peer identity. A
+portable company file cannot translate those references or discover registry activation state.
+Copy/reattach coordination remains part of later increments.
+
+The `intercompany-setup-v1` permission layer follows `membership-pricing-v1`. Setup checks
+current management, account-read and company-settings rights in both scopes before opening
+the peer read-only; read projections require intercompany and ledger reads on both sides.
+Agents additionally need explicit grants, intersected with their principal. Local drafts never
+accept or resolve peers. Unavailable peers have the same error as unknown IDs. Retried and
+hosted response publication repeat the relevant admission checks.
+
+Setup audit events are filtered as whole events before counts, paging and watermarks, including
+hub-admin and own-event views. Private setup audit events cannot be annotation targets in this
+increment; this prevents notes and file links from becoming alternate disclosure paths. Draft
+audit stays local and follows draft read authority. User-authored local text remains local evidence.
+
+Mapped accounts must be active, correctly typed, home-currency, unused, and without merged
+history. Reservations reject ordinary ledger insertions, account retyping/currency/deactivation,
+and either side of an account merge. They survive layer disable. No R123 command posts money;
+prepared plans, posting ownership exceptions, recovery admission fences, corrections, repayments,
+templates, bulk entry and complete browser workflows remain in increments 2–6. Demo data contains
+10,000-cent and 2,500-cent untargeted proposals and leaves the layer off.
+
 2. **Coordinated posting and recovery (L).** Two admitted sessions, durable protocol, all-path publication fences,
    advance/allocation posting and portable certificates. **Done when:** a pair is both applied or neither and every
    interrupted phase recovers or fences safely before books are served. **Tests:** independent balancing, process

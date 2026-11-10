@@ -81,6 +81,17 @@ def resolve(session, record_type: str, record_id: str) -> str:
         found = session.company.conn.execute(
             sa.select(table.c[key]).where(table.c[key] == record_id).limit(1)
         ).scalar_one_or_none()
+    if found is not None and record_type in ('audit_event', 'audit_entry'):
+        from bookflow.company.intercompany_visibility import hidden_events
+        event_id = str(found)
+        if record_type == 'audit_entry':
+            event_id = session.company.conn.execute(sa.select(schema.audit_entries.c.event_id).where(
+                schema.audit_entries.c.id == found)).scalar_one()
+        setup_event = session.company.raw.execute("SELECT 1 FROM audit_entries WHERE event_id=? AND record_type='intercompany_mapping' LIMIT 1", (event_id,)).fetchone()
+        if setup_event or hidden_events(session, event_id=event_id):
+            # Use exactly the ordinary unknown-target refusal. Annotation and
+            # activity selectors must not become a private setup existence probe.
+            found = None
     if found is None:
         raise BookflowError("E_RECORD_NOT_FOUND", details={
             "record_type": record_type, "record_id": record_id, "suggestions": [],

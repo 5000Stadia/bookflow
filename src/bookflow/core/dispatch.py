@@ -750,6 +750,10 @@ def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, co
             raise BookflowError("E_USAGE", message=f"`{cmd.name}` does not accept an idempotency key.")
         key_db = s.company if cmd.truth == "company" else s.hub
         retry_input = inp.model_dump(mode="json")
+        if cmd.name == 'intercompany-mapping set':
+            # A portable local receipt must not provide a known-peer existence oracle.
+            from bookflow.company.intercompany import peer_reference
+            retry_input['peer'] = peer_reference(s, inp.peer)
         if cmd.transfer is not None and cmd.transfer.direction == "input":
             retry_input = {"input": retry_input, "body": {
                 "sha256": s.transfer.info.sha256, "size_bytes": s.transfer.info.size_bytes}}

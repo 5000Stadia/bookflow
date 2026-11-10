@@ -115,6 +115,8 @@ def _same(account):
 def _end(s, selector, field, currency):
     """One end of the transfer: active, eligible, and kept in the home currency."""
     account = journals.active(accounts.resolve_account(s.company, selector, follow_merge=True), 'account')
+    from bookflow.company.intercompany_account_owner import require_unreserved
+    require_unreserved(s.company, account['id'])
     if account['type'] not in ELIGIBLE:
         raise _ineligible(field, account)
     held = account.get('currency')

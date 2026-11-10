@@ -171,6 +171,11 @@ def plan_activity(inp: ActivityInput, ctx: Context, s) -> Plan:
     previous = _decode(inp.cursor, scope) if inp.cursor is not None else None
     events, entries = c.audit_events, c.audit_entries
     shown = visibility.visible_events(events.c.id, held)
+    from bookflow.company.intercompany_visibility import hidden_events
+    private = hidden_events(s)
+    if private:
+        allowed = events.c.id.not_in(private)
+        shown = allowed if shown is None else sa.and_(shown, allowed)
     newest = sa.select(sa.func.max(events.c.seq))
     newest = s.company.conn.execute(newest if shown is None else newest.where(shown)).scalar() or 0
     high_water = previous.high_water if previous else newest
