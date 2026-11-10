@@ -11,6 +11,9 @@ from bookflow.company.pos_sale_schema import TICKET_PATTERN
 from bookflow.company.journal_models import _Version
 from bookflow.company.sales_models import MAX_SALES_LINES, Quantity, Selector
 from bookflow.company import serial_lot_models as _SL
+from bookflow.company.commission_models import CommissionInput, CommissionLabels, MemberCommissionInput
+
+_UNSET = dict(default=None, exclude_if=lambda v: v is None)
 
 
 class _Strict(BaseModel):
@@ -34,6 +37,13 @@ class PosLineInput(_Strict):
     serial_numbers: _SL.LineSerials = Field(default=None, max_length=1000, description=(
         'Serial numbers of the units sold, for a serial-tracked item; omitted, the units stay unassigned, as the '
         'sales receipt allows.'))
+    # R189: who sold this line, chosen when it was rung up; omitted for lines with no attribution, so a cart, its
+    # held ticket and its retry fingerprint read exactly as before for companies that never use commissions.
+    commission: CommissionInput | None = Field(**_UNSET, description=(
+        'One recipient for a commission-enabled item, from `pos commission-options` (needs commission.attribute). '
+        'Required for every enabled line while commission attribution is on.'))
+    member_commissions: list[MemberCommissionInput] | None = Field(**_UNSET, max_length=200, description=(
+        'A group line: one recipient per commission-enabled member, by 1-based member position.'))
 
 
 class _Cart(_Strict):
@@ -85,6 +95,8 @@ class PosLineOutput(_Strict):
     unit_price: MoneyOutput | None
     net: MoneyOutput
     tax: MoneyOutput
+    commission: CommissionLabels | None = Field(**_UNSET, description=(
+        "Who gets this line's commission: recipient IDs and display names only, never rates or amounts."))
 
 
 class PosSalePreviewOutput(_Strict):

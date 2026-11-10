@@ -47,7 +47,7 @@ class ItemUpdateInput(StrictInput):
     category_id: str | None = Field(default=None, min_length=26, max_length=26)
     description: str | None = None
     purchase_description: str | None = None
-    commission_enabled: bool = Field(None, strict=True, description="Require a commission recipient on new invoice lines; needs commission.manage and attribution enabled to turn on. Omission preserves; null refuses.")
+    commission_enabled: bool = Field(None, strict=True, description="Require a commission recipient on new invoice, sales receipt and POS lines; needs commission.manage and attribution enabled to turn on. Omission preserves; null refuses.")
     sales_enabled: bool | None = None
     purchase_enabled: bool | None = None
     price: Any | None = None

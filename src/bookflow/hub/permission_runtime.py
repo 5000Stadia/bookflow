@@ -194,6 +194,7 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.PURCHASE_DRAFT_POLICY_VERSION: 'a6faac71521b11c6e09f9c515a346b71bc783a1b5e44ef985f95373f11ede861',
     c.BILL_APPROVAL_POLICY_VERSION: '2c3aa75ea00d9b2be1276eb3847bb3d712a84026df49c03eaeef97ff430f618e',
     c.MEMBERSHIP_PRICING_POLICY_VERSION: '14c33f7743c47b7721d8825be60f3fb4e89d287f515d97166286b59bc189d4a6',
+    c.COMMISSION_POS_POLICY_VERSION: '1f11a8c74d71ae74cec0b2dd74d947fcb5afd95c6227001014d3c6ee0f96c46f',
     c.NOTICE_REVERSAL_POLICY_VERSION: 'a8255242bbbb0b1a4ac0f5eaf8aa62a5cb84c291a7a03316584b2bbf06b67932',
     c.COMMISSION_ATTRIBUTION_POLICY_VERSION: 'b8f3b2224ff689ed09c689687114678d118a379d75c56756e80a85267bf2cc13',
     c.REVERSIBLE_BATCH_POLICY_VERSION: 'b6ab69b716a3b999e88d86716f54fef5fcc7174768f3f0f6e4c073ce8cf515ce',
@@ -374,6 +375,7 @@ def _full_known():
     from . import permission_pos_ticket_catalog, permission_pos_ticket_takeover_catalog, permission_pos_receipt_catalog
     from . import permission_bill_approval_catalog
     from . import permission_membership_pricing_catalog
+    from . import permission_commission_pos_catalog
     from . import permission_crm_leads_catalog
     from . import permission_payroll_draft_catalog
 
@@ -486,6 +488,7 @@ def _full_known():
         c.PURCHASE_DRAFT_POLICY_VERSION: permission_purchase_draft_catalog,
         c.BILL_APPROVAL_POLICY_VERSION: permission_bill_approval_catalog,
         c.MEMBERSHIP_PRICING_POLICY_VERSION: permission_membership_pricing_catalog,
+        c.COMMISSION_POS_POLICY_VERSION: permission_commission_pos_catalog,
         c.NOTICE_REVERSAL_POLICY_VERSION: permission_notice_reversal_catalog,
         c.COMMISSION_ATTRIBUTION_POLICY_VERSION: permission_commission_attribution_catalog,
         c.REVERSIBLE_BATCH_POLICY_VERSION: permission_reversible_batch_catalog,
@@ -650,7 +653,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.MEMBERSHIP_PRICING_POLICY_VERSION)
+    return known_catalog(c.COMMISSION_POS_POLICY_VERSION)
 
 
 def catalog_for_root(tx):

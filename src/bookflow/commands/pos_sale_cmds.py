@@ -7,7 +7,7 @@ from bookflow.company import pos_sale_models as m
 from bookflow.core.registry import Plan, command
 
 _OFF = ' Off unless company setting pos_enabled is on (E_FEATURE_DISABLED).'
-_SALE_ERRORS = ['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE', 'E_FEATURE_DISABLED', 'E_PERIOD_CLOSED',
+_SALE_ERRORS = ['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE', 'E_FEATURE_DISABLED', 'E_PERIOD_CLOSED', 'E_COMMISSION_REQUIRED',
                 'E_VALUE_RANGE', 'E_AMOUNT_PRECISION']
 
 
@@ -25,6 +25,16 @@ def plan_customer_search(inp, ctx, s) -> Plan:
 
 def plan_customer_add(inp, ctx, s) -> Plan:
     return pos_sales.plan_add_customer(s, ctx, inp)
+
+
+def plan_commission_options(inp, ctx, s) -> Plan:
+    from bookflow.company import commissions, pos_layer
+    from bookflow.company.commission_models import RecipientOptionsInput
+    pos_layer.require_enabled(s)
+    pos_layer.require_seller(s)
+    commissions.require_capability(s, 'commission.attribute', commissions.ATTRIBUTE_THRESHOLD)
+    return Plan(commissions.recipient_options(s, RecipientOptionsInput(
+        item=inp.item, customer=inp.customer, search=inp.search, limit=inp.limit, document_kind='pos_sale')))
 
 
 sale_preview = command(
@@ -49,7 +59,9 @@ sale_complete = command(
         'reference. expected_total is the total shown (pos sale preview); a different total posts nothing '
         '(E_PREVIEW_STALE). The ticket key is the operation key: completing again with the same key returns the sale '
         'already posted and never posts twice. An agent records sales with `sales-receipt post`. Needs pos.sell; a '
-        'typed unit_price also pos.price-override.' + _OFF),
+        'typed unit_price also pos.price-override. While commission attribution is on, each commission-enabled line '
+        'names its recipient (`commission`, or `member_commissions` on a group line; needs commission.attribute), '
+        'else E_COMMISSION_REQUIRED names the lines.' + _OFF),
     input_model=m.PosSaleCompleteInput, output_model=m.PosSaleOutput, writes={'company'}, required_role='member',
     capability='pos.sell', accepts_idempotency_key=True,
     error_codes=_SALE_ERRORS + ['E_PERMISSION', 'E_PREVIEW_STALE', 'E_IDEMPOTENCY_MISMATCH', 'E_VERSION_CONFLICT', 'E_WORK_DEPENDENCY'])(plan_complete)
@@ -73,3 +85,14 @@ customer_add = command(
     capability='pos.sell', accepts_idempotency_key=True,
     error_codes=['E_VALIDATION', 'E_NAME_TAKEN', 'E_FEATURE_DISABLED'])(plan_customer_add)
 customer_add.applier(pos_sales.apply_add_customer)
+
+from bookflow.company.commission_models import PosCommissionOptionsInput, RecipientOptionsOutput  # noqa: E402
+
+commission_options = command(
+    'pos commission-options', scope='company', description=(
+        "Who can get a till line's commission (salesperson, affiliate, \"who sold it\"): active recipient IDs and names "
+        'only, with the customer\'s header rep as a suggestion, never a selection. No rates, earnings, payout or '
+        'payroll details. commission_enabled false means the item (or the company) needs no recipient. Needs pos.sell '
+        'and commission.attribute (the "Clerk with commission attribution" preset).' + _OFF),
+    input_model=PosCommissionOptionsInput, output_model=RecipientOptionsOutput, writes=set(), required_role='member',
+    capability='pos.sell', error_codes=['E_FEATURE_DISABLED', 'E_PERMISSION', 'E_RECORD_NOT_FOUND'])(plan_commission_options)

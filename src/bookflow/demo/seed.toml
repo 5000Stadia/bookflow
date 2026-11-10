@@ -2892,6 +2892,13 @@ dry_run = true
 reason = "Preview different recipients on two service lines without changing balances"
 input = { date = "2026-09-05", customer = "${sale_customer.id}", lines = [{ item = "${commission_service.id}", quantity = "1", commission = { recipients = [{ recipient = "${sales_rep.id}", share = 100 }] } }, { item = "${commission_service.id}", quantity = "1", commission = { recipients = [{ recipient = "${commission_affiliate.id}", share = 100 }] } }] }
 
+# R189 increment 2: a sales receipt keeps the same per-line recipients; two identical lines, two people.
+[[commands]]
+command = "sales-receipt post"
+dry_run = true
+reason = "Preview different recipients on two identical receipt lines without changing balances"
+input = { date = "2026-09-05", customer = "${sale_customer.id}", deposit_to = "Checking", payment_method = "Check", lines = [{ item = "${commission_service.id}", quantity = "1", commission = { recipients = [{ recipient = "${sales_rep.id}", share = 100 }] } }, { item = "${commission_service.id}", quantity = "1", commission = { recipients = [{ recipient = "${commission_affiliate.id}", share = 100 }] } }] }
+
 [[commands]]
 command = "company update"
 reason = "Keep optional attribution off in the default demo"

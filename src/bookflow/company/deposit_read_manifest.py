@@ -1711,7 +1711,8 @@ DEPOSIT_TABLES = ('transaction_revisions', 'deposit_profiles', 'document_line_id
 # Merged R104 increment 4 (serial/lot fields) with the co0091 fraction on CoordinateSalesLineProfilesRow, then increment 5's line bin field and main's LineLot/LineSerials types: CoordinateOutput rehashed.
 # POS returns add private captured return_cost_minor_units to SalesLineProfile; enclosing codecs rehashed.
 # R189: private invoice attribution snapshots extend the nested sales line codecs.
-CODECS = {'CoordinateOutput': '399f7cc78ea6eb3950624e35255b013d7dcba0810d4fe38894a60f29ecf9f1de', 'Effect': '00a48b968cc9adaa718b0c68b6bdbff9126baa0cc28745556327c74c8393f08a', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': '0a8b5e8d4011595c635851b83406487b06efad35c0bca048e1f49ee3c2d6ceee', 'Manifest': 'a3d46c6985fc4e595e32dfaf83b6537af7955812573f9dfc251dc71a019fd0f0', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
+# R189 increment 2: a group sales line's nullable member_commissions (input only) rehashes CoordinateOutput.
+CODECS = {'CoordinateOutput': '2dc79d572b872f5f7500079a7545371cb7d9624ae447c94bf914a25245a865ca', 'Effect': '00a48b968cc9adaa718b0c68b6bdbff9126baa0cc28745556327c74c8393f08a', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': '0a8b5e8d4011595c635851b83406487b06efad35c0bca048e1f49ee3c2d6ceee', 'Manifest': 'a3d46c6985fc4e595e32dfaf83b6537af7955812573f9dfc251dc71a019fd0f0', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
 
 # Explicit dependency inspection registry closure, separate from disclosure.
 DEPENDENCY_OWNERS = {'account': ('accounts',

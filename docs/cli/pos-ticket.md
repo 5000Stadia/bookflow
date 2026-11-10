@@ -89,10 +89,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].quantity` | string | no | no | "1" | Quantity, in the item base unit; default 1. |
 | `lines[].unit_price` | string \| null | no | yes | null | A typed unit price, overriding the register's price (needs pos.price-override). Omitted, the price is the sales receipt's own: the item price, the customer's price level and the price rules. |
 | `lines[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers of the units sold, for a serial-tracked item; omitted, the units stay unassigned, as the sales receipt allows. |
+| `lines[].commission` | object \| null | no | yes | null | One recipient for a commission-enabled item, from `pos commission-options` (needs commission.attribute). Required for every enabled line while commission attribution is on. |
+| `lines[].commission.recipients` | array[object] | yes | no | — | — |
+| `lines[].commission.recipients[].recipient` | string | yes | no | — | — |
+| `lines[].commission.recipients[].share` | literal[100] | no | no | 100 | — |
+| `lines[].member_commissions` | array[object] \| null | no | yes | null | A group line: one recipient per commission-enabled member, by 1-based member position. |
+| `lines[].member_commissions[].member` | integer | yes | no | — | 1-based position of the group's active member, in member order. |
+| `lines[].member_commissions[].commission` | object | yes | no | — | — |
+| `lines[].member_commissions[].commission.recipients` | array[object] | yes | no | — | — |
+| `lines[].member_commissions[].commission.recipients[].recipient` | string | yes | no | — | — |
+| `lines[].member_commissions[].commission.recipients[].share` | literal[100] | no | no | 100 | — |
 | `total` | object | yes | no | — | Total when last held; preview resumed lines for current prices before charging. |
 | `total.amount` | string | yes | no | — | — |
 | `total.currency` | string | yes | no | — | — |
 | `total.minor_units` | integer | yes | no | — | — |
+| `commission_review` | array[object] | no | no | [] | Held commission selections that no longer stand (an inactive recipient, a newly enabled or disabled item): choose again before charging; completing as held is refused. |
+| `commission_review[].line` | integer | yes | no | — | 1-based position of the ticket line. |
+| `commission_review[].member` | integer \| null | no | yes | null | 1-based group member, when the line is a group. |
+| `commission_review[].item_id` | string | yes | no | — | — |
+| `commission_review[].problem` | literal["recipient_inactive", "selection_required", "item_not_enabled"] | yes | no | — | — |
+| `commission_review[].recipient_id` | string \| null | no | yes | null | — |
+| `commission_review[].recipient_label` | string \| null | no | yes | null | — |
 | `device` | string | yes | no | — | — |
 | `clerk_id` | string | yes | no | — | — |
 | `clerk_name` | string | yes | no | — | — |
@@ -109,6 +126,7 @@ Example JSON output:
 {
   "clerk_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "clerk_name": "value",
+  "commission_review": [],
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -206,6 +224,11 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].quantity` | inside `--lines` JSON array | string | no | no | "1" | Quantity, in the item base unit; default 1. |
 | `lines[].unit_price` | inside `--lines` JSON array | string \| null | no | yes | null | A typed unit price, overriding the register's price (needs pos.price-override). Omitted, the price is the sales receipt's own: the item price, the customer's price level and the price rules. |
 | `lines[].serial_numbers` | inside `--lines` JSON array | array[string] \| null | no | yes | null | Serial numbers of the units sold, for a serial-tracked item; omitted, the units stay unassigned, as the sales receipt allows. |
+| `lines[].commission.recipients[].recipient` | inside `--lines` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
+| `lines[].commission.recipients[].share` | inside `--lines` JSON array | literal[100] | no | no | 100 | — |
+| `lines[].member_commissions[].member` | inside `--lines` JSON array | integer | yes | no | — | 1-based position of the group's active member, in member order.; minimum 1; maximum 200 |
+| `lines[].member_commissions[].commission.recipients[].recipient` | inside `--lines` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
+| `lines[].member_commissions[].commission.recipients[].share` | inside `--lines` JSON array | literal[100] | no | no | 100 | — |
 | `ticket` | `--ticket` | string | yes | no | — | The ticket's key, chosen by the device when the sale starts (a ULID or any 1-64 letters, digits, '.', '_', ':' or '-'). It is the sale's operation key: completing again with the same key returns the sale already posted and never posts a second.; pattern "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$" |
 | `device` | `--device` | string | no | no | "unknown" | Device identity for ticket hand-off audit.; minimum length 1; maximum length 128 |
 | `label` | `--label` | string \| null | no | yes | null | Optional label; default hold time and first item. |
@@ -262,10 +285,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].quantity` | string | no | no | "1" | Quantity, in the item base unit; default 1. |
 | `lines[].unit_price` | string \| null | no | yes | null | A typed unit price, overriding the register's price (needs pos.price-override). Omitted, the price is the sales receipt's own: the item price, the customer's price level and the price rules. |
 | `lines[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers of the units sold, for a serial-tracked item; omitted, the units stay unassigned, as the sales receipt allows. |
+| `lines[].commission` | object \| null | no | yes | null | One recipient for a commission-enabled item, from `pos commission-options` (needs commission.attribute). Required for every enabled line while commission attribution is on. |
+| `lines[].commission.recipients` | array[object] | yes | no | — | — |
+| `lines[].commission.recipients[].recipient` | string | yes | no | — | — |
+| `lines[].commission.recipients[].share` | literal[100] | no | no | 100 | — |
+| `lines[].member_commissions` | array[object] \| null | no | yes | null | A group line: one recipient per commission-enabled member, by 1-based member position. |
+| `lines[].member_commissions[].member` | integer | yes | no | — | 1-based position of the group's active member, in member order. |
+| `lines[].member_commissions[].commission` | object | yes | no | — | — |
+| `lines[].member_commissions[].commission.recipients` | array[object] | yes | no | — | — |
+| `lines[].member_commissions[].commission.recipients[].recipient` | string | yes | no | — | — |
+| `lines[].member_commissions[].commission.recipients[].share` | literal[100] | no | no | 100 | — |
 | `total` | object | yes | no | — | Total when last held; preview resumed lines for current prices before charging. |
 | `total.amount` | string | yes | no | — | — |
 | `total.currency` | string | yes | no | — | — |
 | `total.minor_units` | integer | yes | no | — | — |
+| `commission_review` | array[object] | no | no | [] | Held commission selections that no longer stand (an inactive recipient, a newly enabled or disabled item): choose again before charging; completing as held is refused. |
+| `commission_review[].line` | integer | yes | no | — | 1-based position of the ticket line. |
+| `commission_review[].member` | integer \| null | no | yes | null | 1-based group member, when the line is a group. |
+| `commission_review[].item_id` | string | yes | no | — | — |
+| `commission_review[].problem` | literal["recipient_inactive", "selection_required", "item_not_enabled"] | yes | no | — | — |
+| `commission_review[].recipient_id` | string \| null | no | yes | null | — |
+| `commission_review[].recipient_label` | string \| null | no | yes | null | — |
 | `device` | string | yes | no | — | — |
 | `clerk_id` | string | yes | no | — | — |
 | `clerk_name` | string | yes | no | — | — |
@@ -282,6 +322,7 @@ Example JSON output:
 {
   "clerk_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "clerk_name": "value",
+  "commission_review": [],
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -312,6 +353,7 @@ Example JSON output:
 | Code | Meaning |
 |---|---|
 | `E_AMOUNT_PRECISION` | The amount has more decimal places than the currency allows. |
+| `E_COMMISSION_REQUIRED` | Choose a recipient for every commission-enabled sales line. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
 | `E_CONFIG_INVALID` | The configuration file could not be read. |
@@ -419,10 +461,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].lines[].quantity` | string | no | no | "1" | Quantity, in the item base unit; default 1. |
 | `items[].lines[].unit_price` | string \| null | no | yes | null | A typed unit price, overriding the register's price (needs pos.price-override). Omitted, the price is the sales receipt's own: the item price, the customer's price level and the price rules. |
 | `items[].lines[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers of the units sold, for a serial-tracked item; omitted, the units stay unassigned, as the sales receipt allows. |
+| `items[].lines[].commission` | object \| null | no | yes | null | One recipient for a commission-enabled item, from `pos commission-options` (needs commission.attribute). Required for every enabled line while commission attribution is on. |
+| `items[].lines[].commission.recipients` | array[object] | yes | no | — | — |
+| `items[].lines[].commission.recipients[].recipient` | string | yes | no | — | — |
+| `items[].lines[].commission.recipients[].share` | literal[100] | no | no | 100 | — |
+| `items[].lines[].member_commissions` | array[object] \| null | no | yes | null | A group line: one recipient per commission-enabled member, by 1-based member position. |
+| `items[].lines[].member_commissions[].member` | integer | yes | no | — | 1-based position of the group's active member, in member order. |
+| `items[].lines[].member_commissions[].commission` | object | yes | no | — | — |
+| `items[].lines[].member_commissions[].commission.recipients` | array[object] | yes | no | — | — |
+| `items[].lines[].member_commissions[].commission.recipients[].recipient` | string | yes | no | — | — |
+| `items[].lines[].member_commissions[].commission.recipients[].share` | literal[100] | no | no | 100 | — |
 | `items[].total` | object | yes | no | — | Total when last held; preview resumed lines for current prices before charging. |
 | `items[].total.amount` | string | yes | no | — | — |
 | `items[].total.currency` | string | yes | no | — | — |
 | `items[].total.minor_units` | integer | yes | no | — | — |
+| `items[].commission_review` | array[object] | no | no | [] | Held commission selections that no longer stand (an inactive recipient, a newly enabled or disabled item): choose again before charging; completing as held is refused. |
+| `items[].commission_review[].line` | integer | yes | no | — | 1-based position of the ticket line. |
+| `items[].commission_review[].member` | integer \| null | no | yes | null | 1-based group member, when the line is a group. |
+| `items[].commission_review[].item_id` | string | yes | no | — | — |
+| `items[].commission_review[].problem` | literal["recipient_inactive", "selection_required", "item_not_enabled"] | yes | no | — | — |
+| `items[].commission_review[].recipient_id` | string \| null | no | yes | null | — |
+| `items[].commission_review[].recipient_label` | string \| null | no | yes | null | — |
 | `items[].device` | string | yes | no | — | — |
 | `items[].clerk_id` | string | yes | no | — | — |
 | `items[].clerk_name` | string | yes | no | — | — |
@@ -558,10 +617,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].quantity` | string | no | no | "1" | Quantity, in the item base unit; default 1. |
 | `lines[].unit_price` | string \| null | no | yes | null | A typed unit price, overriding the register's price (needs pos.price-override). Omitted, the price is the sales receipt's own: the item price, the customer's price level and the price rules. |
 | `lines[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers of the units sold, for a serial-tracked item; omitted, the units stay unassigned, as the sales receipt allows. |
+| `lines[].commission` | object \| null | no | yes | null | One recipient for a commission-enabled item, from `pos commission-options` (needs commission.attribute). Required for every enabled line while commission attribution is on. |
+| `lines[].commission.recipients` | array[object] | yes | no | — | — |
+| `lines[].commission.recipients[].recipient` | string | yes | no | — | — |
+| `lines[].commission.recipients[].share` | literal[100] | no | no | 100 | — |
+| `lines[].member_commissions` | array[object] \| null | no | yes | null | A group line: one recipient per commission-enabled member, by 1-based member position. |
+| `lines[].member_commissions[].member` | integer | yes | no | — | 1-based position of the group's active member, in member order. |
+| `lines[].member_commissions[].commission` | object | yes | no | — | — |
+| `lines[].member_commissions[].commission.recipients` | array[object] | yes | no | — | — |
+| `lines[].member_commissions[].commission.recipients[].recipient` | string | yes | no | — | — |
+| `lines[].member_commissions[].commission.recipients[].share` | literal[100] | no | no | 100 | — |
 | `total` | object | yes | no | — | Total when last held; preview resumed lines for current prices before charging. |
 | `total.amount` | string | yes | no | — | — |
 | `total.currency` | string | yes | no | — | — |
 | `total.minor_units` | integer | yes | no | — | — |
+| `commission_review` | array[object] | no | no | [] | Held commission selections that no longer stand (an inactive recipient, a newly enabled or disabled item): choose again before charging; completing as held is refused. |
+| `commission_review[].line` | integer | yes | no | — | 1-based position of the ticket line. |
+| `commission_review[].member` | integer \| null | no | yes | null | 1-based group member, when the line is a group. |
+| `commission_review[].item_id` | string | yes | no | — | — |
+| `commission_review[].problem` | literal["recipient_inactive", "selection_required", "item_not_enabled"] | yes | no | — | — |
+| `commission_review[].recipient_id` | string \| null | no | yes | null | — |
+| `commission_review[].recipient_label` | string \| null | no | yes | null | — |
 | `device` | string | yes | no | — | — |
 | `clerk_id` | string | yes | no | — | — |
 | `clerk_name` | string | yes | no | — | — |
@@ -578,6 +654,7 @@ Example JSON output:
 {
   "clerk_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "clerk_name": "value",
+  "commission_review": [],
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",
@@ -724,10 +801,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].quantity` | string | no | no | "1" | Quantity, in the item base unit; default 1. |
 | `lines[].unit_price` | string \| null | no | yes | null | A typed unit price, overriding the register's price (needs pos.price-override). Omitted, the price is the sales receipt's own: the item price, the customer's price level and the price rules. |
 | `lines[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers of the units sold, for a serial-tracked item; omitted, the units stay unassigned, as the sales receipt allows. |
+| `lines[].commission` | object \| null | no | yes | null | One recipient for a commission-enabled item, from `pos commission-options` (needs commission.attribute). Required for every enabled line while commission attribution is on. |
+| `lines[].commission.recipients` | array[object] | yes | no | — | — |
+| `lines[].commission.recipients[].recipient` | string | yes | no | — | — |
+| `lines[].commission.recipients[].share` | literal[100] | no | no | 100 | — |
+| `lines[].member_commissions` | array[object] \| null | no | yes | null | A group line: one recipient per commission-enabled member, by 1-based member position. |
+| `lines[].member_commissions[].member` | integer | yes | no | — | 1-based position of the group's active member, in member order. |
+| `lines[].member_commissions[].commission` | object | yes | no | — | — |
+| `lines[].member_commissions[].commission.recipients` | array[object] | yes | no | — | — |
+| `lines[].member_commissions[].commission.recipients[].recipient` | string | yes | no | — | — |
+| `lines[].member_commissions[].commission.recipients[].share` | literal[100] | no | no | 100 | — |
 | `total` | object | yes | no | — | Total when last held; preview resumed lines for current prices before charging. |
 | `total.amount` | string | yes | no | — | — |
 | `total.currency` | string | yes | no | — | — |
 | `total.minor_units` | integer | yes | no | — | — |
+| `commission_review` | array[object] | no | no | [] | Held commission selections that no longer stand (an inactive recipient, a newly enabled or disabled item): choose again before charging; completing as held is refused. |
+| `commission_review[].line` | integer | yes | no | — | 1-based position of the ticket line. |
+| `commission_review[].member` | integer \| null | no | yes | null | 1-based group member, when the line is a group. |
+| `commission_review[].item_id` | string | yes | no | — | — |
+| `commission_review[].problem` | literal["recipient_inactive", "selection_required", "item_not_enabled"] | yes | no | — | — |
+| `commission_review[].recipient_id` | string \| null | no | yes | null | — |
+| `commission_review[].recipient_label` | string \| null | no | yes | null | — |
 | `device` | string | yes | no | — | — |
 | `clerk_id` | string | yes | no | — | — |
 | `clerk_name` | string | yes | no | — | — |
@@ -744,6 +838,7 @@ Example JSON output:
 {
   "clerk_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "clerk_name": "value",
+  "commission_review": [],
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
   "created_via": "cli",

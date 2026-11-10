@@ -223,7 +223,12 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
     restored = _restored(lines)
     from bookflow.company import serial_lots
     numbered = serial_lots.revision_display(s, revision['id']) if not pending else {}
+    from bookflow.company import commissions
+    readable = None
     for line in lines:
+        snapshot_facts = json.loads(line['item_snapshot'])
+        if snapshot_facts.get('commission') and readable is None:
+            readable = commissions.holds_read(s)
         taxes = []
         for component in sorted((row for row in components if row['document_line_id'] == line['id']),
                                 key=lambda row: json.loads(row['component_snapshot'])['position']):
@@ -231,7 +236,7 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
                 tax=Money(component['tax_minor_units'], currency).to_dict(),
                 taxable=Money(component['taxable_minor_units'], currency).to_dict()))
         from bookflow.company.billing_allocations import quantity_output
-        rendered.append(dict(line, tax_ordinal=tax_ordinals.get(line['id']), order=orders.get(line['id']), item_snapshot=json.loads(line['item_snapshot']), **quantity_output(line),
+        rendered.append(dict(line, tax_ordinal=tax_ordinals.get(line['id']), order=orders.get(line['id']), item_snapshot=commissions.project_snapshot(s, snapshot_facts, readable=readable), **quantity_output(line),
             **shown_amount(line, currency, restored.get(line['position'], 0)),
             unit_price=unit_price.to_dict(unit_price.row_units(line, 'unit_price'), currency) if line['unit_price_minor_units'] is not None else None,
             pricing_basis=line.get('pricing_basis', 'unit'), net=Money(line['net_minor_units'], currency).to_dict(),
@@ -665,14 +670,17 @@ def expand_groups(s, entered):
     from bookflow.core.exact import format_quantity_micro_units, parse_quantity_micro_units
     result = []
     for index, line in enumerate(entered):
+        line._commission_key = f'line_{index + 1}'
         if line.line_id is not None:
             result.append((line, None))
             continue
         item = sales_defaults._row(s.company, 'item', line.item)
         if item['type'] != 'group':
+            if line.member_commissions is not None:
+                raise _invalid(f'lines.{index}.member_commissions', 'only a new group line names member recipients')
             result.append((line, None))
             continue
-        extra = sorted(line.model_fields_set - {'item', 'quantity'}) + (['use_defaults'] if line.use_defaults else [])
+        extra = sorted(line.model_fields_set - {'item', 'quantity', 'member_commissions'}) + (['use_defaults'] if line.use_defaults else [])
         if extra:
             raise _invalid(f'lines.{index}.{extra[0]}', 'a group line takes an item and a quantity; '
                            'change its members once they are on the sale')
@@ -686,7 +694,13 @@ def expand_groups(s, entered):
         times = parse_quantity_micro_units(line.quantity)
         group = LineGroup(item=sales_defaults._ref(item), description=item['description'],
                           print_members=bool(item['print_members']))
-        for member in members:
+        # R189: one recipient per enabled member, by its position among the active members (design §3).
+        chosen = {}
+        for entry in line.member_commissions or ():
+            if entry.member > len(members) or entry.member in chosen:
+                raise _invalid(f'lines.{index}.member_commissions', f'name each of the group\'s {len(members)} active members at most once')
+            chosen[entry.member] = entry.commission
+        for position, member in enumerate(members, 1):
             quantity, rest = divmod(member['quantity_microunits'] * times, 1_000_000)
             name = sales_defaults._row(s.company, 'item', member['component_item_id'], active=False)['full_name']
             if not member['quantity_microunits']:
@@ -697,7 +711,11 @@ def expand_groups(s, entered):
             values = dict(item=member['component_item_id'], quantity=format_quantity_micro_units(quantity))
             if member['unit_id'] is not None:
                 values['unit'] = member['unit_id']
-            result.append((SalesLineInput(**values), group))
+            if position in chosen:
+                values['commission'] = chosen[position]
+            expanded = SalesLineInput(**values)
+            expanded._commission_key = f'line_{index + 1}.member_{position}'
+            result.append((expanded, group))
     return result
 
 

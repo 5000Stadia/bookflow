@@ -631,7 +631,7 @@ def layout(noun, leaves, hidden=()):
     grid = () if transfer else BILL_GRID if bill else VENDOR_CREDIT_GRID if vendor_credit else \
         REFUND_GRID if refund else CREDIT_GRID if credit else EXPENSE_GRID if money_out else \
         WORK_GRID if noun == 'estimate' else SALE_GRID
-    if noun == 'invoice' and 'commission' not in hidden:
+    if noun in ('invoice', 'sales-receipt') and 'commission' not in hidden:
         grid = (*grid, ('commission', 'Commission'))
 
     def take(paths):

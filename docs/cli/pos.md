@@ -2,6 +2,112 @@
 
 # `pos` commands
 
+## `pos commission-options`
+
+Who can get a till line's commission (salesperson, affiliate, "who sold it"): active recipient IDs and names only, with the customer's header rep as a suggestion, never a selection. No rates, earnings, payout or payroll details. commission_enabled false means the item (or the company) needs no recipient. Needs pos.sell and commission.attribute (the "Clerk with commission attribution" preset). Off unless company setting pos_enabled is on (E_FEATURE_DISABLED).
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | pos.sell |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/pos.commission-options` |
+| External binary body | none |
+
+### CLI
+
+`bookflow pos commission-options --item "Attributed Service" --search Alex --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "pos commission-options", "input": {"item": "Attributed Service", "search": "Alex"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `item` | `--item` | string \| null | no | yes | null | Item ID or name the clerk just rang up. |
+| `customer` | `--customer` | string \| null | no | yes | null | The ticket's chosen customer, whose header rep is only suggested. |
+| `search` | `--search` | string | no | no | "" | maximum length 200 |
+| `limit` | `--limit` | integer | no | no | 100 | minimum 1; maximum 200 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/pos.commission-options`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `commission_enabled` | boolean | yes | no | — | — |
+| `items` | array[object] | yes | no | — | — |
+| `items[].id` | string | yes | no | — | — |
+| `items[].name` | string | yes | no | — | — |
+| `suggested_recipient_id` | string \| null | no | yes | null | — |
+
+Example JSON output:
+
+```json
+{
+  "commission_enabled": false,
+  "items": [],
+  "suggested_recipient_id": null
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
 ## `pos refund`
 
 Return selected POS receipt lines, or items without a receipt. Posts a credit memo and a customer refund atomically; store_credit leaves the memo open for a named customer and refuses the shared walk-in. Receipt returns preserve captured price, tax and stock cost and cannot exceed sold quantities less active returns. No-receipt returns use current or entered prices and current average inventory value (purchase cost when no positive stock exists). Cash and original-method refunds leave the register refund bank account; card references are recorded, not sent to a processor. A corrected receipt needs a bookkeeper credit memo. Use dry_run to preview, then expected_total to guard the amount. operation_key never expires: retry the same request after a lost answer. Requires pos.refund; this also authorizes no-receipt prices.

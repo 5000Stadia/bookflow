@@ -105,6 +105,9 @@ The same example as complete `bookflow_run` arguments:
 | `request.input.custom_field_kinds` | `--request-input-custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in InvoiceUpdatePreviewRequest. |
 | `request.input.lines[].commission.recipients[].recipient` | inside `--request-input-lines` JSON array | string | no | no | — | Present in InvoiceUpdatePreviewRequest.; minimum length 1; maximum length 1004 |
 | `request.input.lines[].commission.recipients[].share` | inside `--request-input-lines` JSON array | literal[100] | no | no | 100 | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].member_commissions[].member` | inside `--request-input-lines` JSON array | integer | no | no | — | 1-based position of the group's active member, in member order. Present in InvoiceUpdatePreviewRequest.; minimum 1; maximum 200 |
+| `request.input.lines[].member_commissions[].commission.recipients[].recipient` | inside `--request-input-lines` JSON array | string | no | no | — | Present in InvoiceUpdatePreviewRequest.; minimum length 1; maximum length 1004 |
+| `request.input.lines[].member_commissions[].commission.recipients[].share` | inside `--request-input-lines` JSON array | literal[100] | no | no | 100 | Present in InvoiceUpdatePreviewRequest. |
 | `request.input.lines[].line_id` | inside `--request-input-lines` JSON array | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `request.input.lines[].item` | inside `--request-input-lines` JSON array | string | no | no | — | Present in InvoiceUpdatePreviewRequest.; minimum length 1; maximum length 1004 |
 | `request.input.lines[].quantity` | inside `--request-input-lines` JSON array | string | no | no | "1" | Present in InvoiceUpdatePreviewRequest. |

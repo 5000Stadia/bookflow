@@ -427,6 +427,58 @@ implementation is authorized by this documentation commit itself.
 2. **Sales receipts and POS (M).** Shared line facts in receipt/POS, groups, scan coalescing, hold/resume and clerk preset.
    **Done when:** all §3 routes preserve distinct recipients and the clerk sees no earnings. **Tests:** tap/scan/group
    at both widths, different recipients for identical items, retry and held-ticket stale recipient, native receipt parity.
+   #### As built — increment 2
+
+   **One attribution path.** `sales-receipt post/update` and every POS sale (one tender posts a sales receipt, split
+   tender an invoice) go through increment 1's capture in the sales core; nothing else captures. Receipts accept the
+   same `commission` line input, refuse the same way (missing → `E_COMMISSION_REQUIRED` naming the line keys, unknown →
+   `E_RECORD_NOT_FOUND`, inactive → `E_INACTIVE_REFERENCE`, off → `E_FEATURE_DISABLED`), and store the same snapshot.
+   Quotes, orders and work orders still refuse a selection. The attribution report now lists invoice and receipt lines
+   with a `document_type` column; the browser report says "Sales attribution" and links each row to its document.
+
+   **Groups.** A group line takes `member_commissions: [{member, commission}]`, `member` being the 1-based position
+   among the group's active members; the selection is attached to that member's expanded line before capture, so a
+   group asks once per enabled member and each member keeps its own recipient. A missing member is reported as
+   `line_N.member_M`; an out-of-range, duplicate or non-group use is a validation refusal.
+
+   **POS.** `PosLineInput` gains the same `commission` and `member_commissions`, omitted when unset, so legacy carts,
+   held tickets and the retry fingerprint read byte-for-byte as before. Previews and sales show `commission` on each
+   line as recipient IDs and names only. A retried ticket with the same lines replays the posted sale; the same ticket
+   with a different recipient is `E_IDEMPOTENCY_MISMATCH`. A till sale with a selection and no typed reason records the
+   fixed reason "POS sale: commission recipients chosen at the till" (the attributed-write reason rule stays). The
+   customer receipt carries no commission at all.
+
+   **Held tickets.** Hold stores the selections in the ticket's lines. Every ticket read (hold, list, resume,
+   take-over) returns `commission_review`: lines or members whose recipient went inactive, whose item became enabled
+   with nothing chosen, or whose item is no longer enabled. Completing such a ticket unchanged is refused by the
+   capture itself. Turning attribution off is refused (`E_WORK_DEPENDENCY`, naming the ticket) while a held or open
+   ticket carries a selection, as POS-off already is for any ticket.
+
+   **Authority (catalog `commission-pos-v1` on `membership-pricing-v1`).** A selection is a `member` act: the
+   `commission.attribute` spec gains the member threshold and standard, admin, owner and installation administrators
+   hold it at member by default (they already held it at standard). The capture and the till lookup ask it at member,
+   so a `readonly` clerk can hold it by grant. The new preset "Clerk with commission attribution"
+   (`pos-clerk-commission`) is the POS clerk plus `commission.attribute`, with its own marker grant. New command
+   `pos commission-options` (`pos.sell`, member): the till's recipient lookup, names and IDs only, off-layer answering
+   `commission_enabled: false`. The plain clerk is admitted to that command but its plan refuses without
+   `commission.attribute`, and an enabled item in its cart is refused naming that capability; neither clerk reaches
+   `commission recipient-options` or the attribution report. Without `commission.read`, sales reads project the snapshot
+   through an allow-list (who, share, the line's own net and currency), so fields a later increment adds stay hidden
+   until listed. The agent half of `commission.attribute` is asked at member too. No migration: the switch and item
+   flag from `co0131` suffice.
+
+   **Screens.** The till asks before a commission-enabled line joins the cart, by tap, scan or lookup; a group asks per
+   enabled member and Cancel at any step drops the whole new line or group. Nothing combines before the choice; after it,
+   a line combines only with one of the same item, price and recipient(s). Lines show "Commission: name"; the line
+   keypad has Change recipient. The picker is full-height at 390 px and a modal at 1440 px, every target 44 px, and
+   focus returns where it was. A resumed ticket with review entries clears those choices, asks again at once and keeps
+   Charge disabled until each is answered. The sales receipt form gets the invoice form's Commission column and picker.
+
+   **Left for later increments.** The receipt form's picker covers ordinary lines only; a group on the native receipt
+   form is attributed through the command (`member_commissions`), not yet per member in that form. No rates, earnings,
+   accrual or payout (increments 3-4). A held ticket's stored IDs are shown by name after resume from the till lookup,
+   so a recipient renamed since hold shows the new name.
+
 3. **Calculation and earning history (M).** Plan revisions, exact net basis, earned events, reports, source-linked
    partial return/void/restore and reattribution. **Done when:** earned reports tie to §5 without any GL effect.
    **Tests:** independent mixed-tax fixture, half-cent rounding, fractional quantities, closed-period current credit,

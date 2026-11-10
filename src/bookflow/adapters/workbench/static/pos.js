@@ -71,6 +71,10 @@
     const out = {item: line.item_id, quantity: line.quantity};
     if (line.unit_price != null && line.unit_price !== '') out.unit_price = line.unit_price;
     if (line.serial) out.serial_numbers = line.serial.split('\n').map(value => value.trim()).filter(Boolean);
+    // R189: who sold it, chosen at the till; omitted when nothing was chosen, so carts read as before.
+    if (line.commission) out.commission = {recipients: [{recipient: line.commission.id}]};
+    if (line.member_commissions && line.member_commissions.length) out.member_commissions = line.member_commissions.map(
+      m => ({member: m.member, commission: {recipients: [{recipient: m.id}]}}));
     return out;
   };
   const cartInput = () => ({pos_register: register.id, customer: state.customer ? state.customer.id : null,
@@ -103,25 +107,139 @@
 
   // ---- ringing up
   function add(item, quantity, serial) {
-    if (locked()) return null;
+    if (locked() || picking) return null;
     quantity = String(quantity || '1');
-    const tracked = item.tracking === 'serial';
-    let line = tracked ? null : [...state.lines].reverse().find(l => l.item_id === item.id && !l.unit_price && !l.serial);
-    if (line) {
-      const sum = Number(line.quantity) + Number(quantity);
-      line.quantity = Number.isInteger(sum) ? String(sum) : String(Math.round(sum * 1e6) / 1e6);
-    } else {
-      line = {key: newTicket(), item_id: item.id, name: item.name, price: item.price, quantity, unit_price: null,
-              serial: serial || null, tracking: item.tracking || 'none', attributes: {}};
-      state.lines.push(line);
+    const line = {key: newTicket(), item_id: item.id, name: item.name, price: item.price, quantity, unit_price: null,
+                  serial: serial || null, tracking: item.tracking || 'none', attributes: {}};
+    if (asks(item)) {
+      // Never combined before the choice (design/commissions.md §3): the new line waits, off the cart, for its
+      // recipient; Cancel leaves the cart as it was.
+      if (!data.can_attribute) {
+        say(`${item.name} needs the person who sold it, which this sign-in cannot choose. Ask a manager to ring it up.`, true);
+        return null;
+      }
+      chooseFor(line, item).then(chosen => { if (chosen) place(item, line, quantity); });
+      return line;
     }
-    afterAdd(line);   // the seam R189's commission picker would prompt from (design §3)
+    return place(item, line, quantity);
+  }
+  // Combined only with a line of the same item, price and recipient(s).
+  const recipientKey = line => JSON.stringify([line.commission ? line.commission.id : null,
+    (line.member_commissions || []).map(m => [m.member, m.id])]);
+  function place(item, line, quantity) {
+    const tracked = item.tracking === 'serial';
+    const same = tracked || line.serial ? null : [...state.lines].reverse().find(l => l.item_id === item.id && !l.unit_price
+      && !l.serial && !l.needs && recipientKey(l) === recipientKey(line));
+    if (same) {
+      const sum = Number(same.quantity) + Number(quantity);
+      same.quantity = Number.isInteger(sum) ? String(sum) : String(Math.round(sum * 1e6) / 1e6);
+      line = same;
+    } else state.lines.push(line);
     schedule();
     if (unpriced(item) && !line.unit_price) openLine(line);
     else if (tracked && !line.serial) openLine(line);
     return line;
   }
-  function afterAdd(line) { return line; }
+
+  // ---- who sold it (R189 increment 2): one recipient per enabled line, and per enabled member of a group
+  const asks = item => !!(data.commission_on && item && (item.commission || (item.commission_members || []).length));
+  const recipientNames = new Map();
+  let picking = false;
+  function pickRecipient(itemId, title) {
+    const dialog = $('[data-pos-commission-dialog]');
+    const back = document.activeElement;
+    const list = dialog.querySelector('[data-pos-commission-results]');
+    const status = dialog.querySelector('[data-pos-commission-status]');
+    const search = dialog.querySelector('[data-pos-commission-q]');
+    const cancel = dialog.querySelector('[data-pos-commission-cancel]');
+    dialog.querySelector('[data-pos-commission-title]').textContent = title;
+    search.value = '';
+    list.innerHTML = '';
+    let asked = 0, timer = null;
+    return new Promise(resolve => {
+      const finish = value => {
+        search.oninput = list.onclick = cancel.onclick = dialog.oncancel = null;
+        clearTimeout(timer);
+        if (dialog.open) dialog.close();
+        if (back && back.isConnected && back.focus) back.focus();
+        resolve(value);
+      };
+      async function lookup() {
+        const mine = ++asked;
+        status.textContent = 'Loading recipients…';
+        try {
+          const answer = await api('pos commission-options', {item: itemId, search: search.value.trim(), limit: 50});
+          if (mine !== asked) return;
+          answer.items.forEach(r => recipientNames.set(r.id, r.name));
+          list.innerHTML = answer.items.map(r => `<li><button type="button" data-pos-recipient="${escape(r.id)}">${escape(r.name)}</button></li>`).join('');
+          status.textContent = answer.items.length ? '' : 'No active recipient matches.';
+        } catch (error) { if (mine === asked) status.textContent = error.message; }
+      }
+      cancel.onclick = () => finish(null);
+      dialog.oncancel = event => { event.preventDefault(); finish(null); };
+      list.onclick = event => {
+        const button = event.target.closest('[data-pos-recipient]');
+        if (button) finish({id: button.dataset.posRecipient, name: button.textContent});
+      };
+      search.oninput = () => { clearTimeout(timer); timer = setTimeout(lookup, 200); };
+      dialog.showModal();
+      search.focus();
+      lookup();
+    });
+  }
+  // Asks for the line itself and each enabled member (only those listed in `only`, null meaning the line); false on
+  // Cancel, which drops a new line or group whole and leaves an existing line as it was.
+  async function chooseFor(line, item, only) {
+    if (picking || !item) return false;
+    picking = true;
+    try {
+      let commission = line.commission || null;
+      if (item.commission && (!only || only.includes(null))) {
+        commission = await pickRecipient(item.id, `Who sold ${item.name}?`);
+        if (!commission) return false;
+      }
+      const members = (item.commission_members || []).filter(m => !only || only.includes(m.member));
+      const chosen = (line.member_commissions || []).filter(m => !members.some(x => x.member === m.member));
+      for (const member of members) {
+        const who = await pickRecipient(member.item, `Who sold ${member.name} in ${item.name}?`);
+        if (!who) return false;
+        chosen.push({member: member.member, ...who});
+      }
+      line.commission = commission;
+      line.member_commissions = chosen.sort((a, b) => a.member - b.member);
+      line.needs = false;
+      line.needs_members = null;
+      return true;
+    } finally { picking = false; }
+  }
+  function commissionLabel(line) {
+    if (line.needs) return '<small class="pos-line-commission-label" data-needs data-pos-line-commission-label>Choose who sold this</small>';
+    const names = [line.commission, ...(line.member_commissions || [])].filter(Boolean).map(x => x.name || recipientNames.get(x.id) || 'chosen');
+    return names.length ? `<small class="pos-line-commission-label" data-pos-line-commission-label>Commission: ${escape([...new Set(names)].join(', '))}</small>` : '';
+  }
+  // A resumed ticket is checked again: a recipient gone inactive, or an item newly enabled, is asked before Charge.
+  async function reviewResumed(problems) {
+    const chosen = state.lines.flatMap(l => [l.commission, ...(l.member_commissions || [])]).filter(Boolean);
+    if (chosen.length && data.can_attribute) {
+      try { (await api('pos commission-options', {limit: 200})).items.forEach(r => recipientNames.set(r.id, r.name)); }
+      catch (error) { /* the names fill in as they are chosen */ }
+    }
+    chosen.forEach(x => { x.name = recipientNames.get(x.id) || x.name || null; });
+    for (const problem of problems) {
+      const line = state.lines[problem.line - 1];
+      if (!line) continue;
+      if (problem.member == null) line.commission = null;
+      else line.member_commissions = (line.member_commissions || []).filter(m => m.member !== problem.member);
+      if (problem.problem === 'item_not_enabled') continue;
+      line.needs = true;
+      line.needs_members = [...(line.needs_members || []), problem.member];
+    }
+    schedule();
+    for (const line of state.lines.filter(l => l.needs)) {
+      if (!data.can_attribute || !(await chooseFor(line, items.get(line.item_id), line.needs_members))) break;
+      schedule();
+    }
+  }
   // An item with no price (0.00) takes one typed at the till; a discount or subtotal has none to type.
   const unpriced = item => item.box !== false && item.price != null && Number(item.price) === 0;
 
@@ -253,7 +371,7 @@
     lines.innerHTML = state.lines.map((line, i) => {
       const price = line.unit_price != null && line.unit_price !== '' ? line.unit_price : line.price;
       const amount = nets ? nets[i] : (price == null ? null : String(Number(price) * Number(line.quantity)));
-      return `<li><button type="button" class="pos-line" data-pos-line="${i}" data-pos-line-item="${escape(line.item_id)}"><span class="pos-line-name">${escape(line.name)}${line.serial ? ` <small>SN ${escape(line.serial)}</small>` : ''}</span><span class="pos-line-qty" data-pos-line-quantity>${escape(line.quantity)} × ${price == null ? '…' : money(price)}</span><span class="pos-line-amount">${amount == null ? '…' : money(amount)}</span></button></li>`;
+      return `<li><button type="button" class="pos-line" data-pos-line="${i}" data-pos-line-item="${escape(line.item_id)}"><span class="pos-line-name">${escape(line.name)}${line.serial ? ` <small>SN ${escape(line.serial)}</small>` : ''}${commissionLabel(line)}</span><span class="pos-line-qty" data-pos-line-quantity>${escape(line.quantity)} × ${price == null ? '…' : money(price)}</span><span class="pos-line-amount">${amount == null ? '…' : money(amount)}</span></button></li>`;
     }).join('');
     $('[data-pos-empty]').hidden = state.lines.length > 0;
     const pending = locked();
@@ -263,7 +381,7 @@
     $('[data-pos-tax]').textContent = confirmed ? money(server.tax.amount) : waiting;
     $('[data-pos-total]').textContent = confirmed ? money(server.total.amount) : waiting;
     $('[data-pos-total]').dataset.state = confirmed ? 'confirmed' : (state.lines.length ? (offline ? 'offline' : 'updating') : 'empty');
-    $('[data-pos-charge]').disabled = !confirmed || pending;
+    $('[data-pos-charge]').disabled = !confirmed || pending || state.lines.some(l => l.needs);
     $('[data-pos-hold]').disabled = !state.lines.length || pending;
     $('[data-pos-clear]').disabled = pending;
     const registerSelect = $('[data-pos-register-select]');
@@ -312,6 +430,10 @@
     dialog.querySelector('[data-pos-line-price]').placeholder = priced ? money(line.price) : 'Price';
     dialog.querySelector('[data-pos-line-serial-row]').hidden = line.tracking !== 'serial';
     dialog.querySelector('[data-pos-line-serial]').value = line.serial || '';
+    const item = items.get(line.item_id), row = dialog.querySelector('[data-pos-line-commission-row]');
+    row.hidden = !(asks(item) && data.can_attribute);
+    dialog.querySelector('[data-pos-line-commission-name]').innerHTML = commissionLabel(line) || 'No recipient yet';
+    dialog.querySelector('[data-pos-line-commission]').textContent = line.needs ? 'Choose recipient' : 'Change recipient';
     if (!dialog.open) dialog.showModal();
     dialog.querySelector(priced || priceRow.hidden ? '[data-pos-line-qty]' : '[data-pos-line-price]').select();
   }
@@ -533,10 +655,13 @@
             const item = items.get(line.item) || {};
             return {key: newTicket(), item_id: line.item, name: item.name || line.item, price: item.price,
               quantity: line.quantity, unit_price: line.unit_price, serial: (line.serial_numbers || []).join('\n') || null,
-              tracking: item.tracking || 'none', attributes: line.attributes || {}};
+              tracking: item.tracking || 'none', attributes: line.attributes || {},
+              commission: line.commission ? {id: line.commission.recipients[0].recipient, name: null} : null,
+              member_commissions: (line.member_commissions || []).map(m => ({member: m.member, id: m.commission.recipients[0].recipient, name: null}))};
           })};
         $('[data-pos-held-dialog]').close();
         root.classList.add('pos-sheet-open');
+        reviewResumed(answer.commission_review || []);
       } else if (request.action === 'hold' || request.clear) {
         state = fresh();
         $('[data-pos-hold-dialog]').close();
@@ -664,6 +789,11 @@
       schedule();
     }
     else if (target.matches('[data-pos-line-done]')) { event.preventDefault(); closeLine(true); }
+    else if (target.matches('[data-pos-line-commission]') && editing) {
+      const line = editing;
+      closeLine(true);
+      chooseFor(line, items.get(line.item_id), line.needs ? line.needs_members : null).then(() => schedule());
+    }
     else if (target.matches('[data-pos-clear]')) {
       if (locked() || (!state.lines.length && !state.ticket_version)) return;
       if (state.ticket_version) {

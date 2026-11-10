@@ -4,7 +4,7 @@
 
 ## `commission recipient-options`
 
-Find active sales representatives for who sold an invoice line: names and IDs only, with an optional header-rep suggestion. Attribution uses sales-rep list names; no rates, earnings or payments.
+Find active sales representatives for who sold an invoice or sales receipt line ("who sold it", salesperson, affiliate): names and IDs only, with an optional header-rep suggestion. Attribution uses sales-rep list names; no rates, earnings or payments. At the till use `pos commission-options`.
 
 | Contract | Value |
 |---|---|
@@ -36,7 +36,7 @@ The same example as complete `bookflow_run` arguments:
 | `item` | `--item` | string \| null | no | yes | null | — |
 | `sales_rep` | `--sales-rep` | string \| null | no | yes | null | — |
 | `search` | `--search` | string | no | no | "" | maximum length 200 |
-| `document_kind` | `--document-kind` | literal["invoice"] | no | no | "invoice" | — |
+| `document_kind` | `--document-kind` | literal["invoice", "sales_receipt", "pos_sale"] | no | no | "invoice" | — |
 | `limit` | `--limit` | integer | no | no | 100 | minimum 1; maximum 200 |
 
 ### Command and context options

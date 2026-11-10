@@ -5,6 +5,7 @@ from bookflow.company.pos_sale_models import _Strict, _Cart, Ticket, PosLineInpu
 from bookflow.company.pos_models import Named
 from bookflow.company.items import MoneyOutput
 from bookflow.company.journal_models import _Version
+from bookflow.company.commission_models import CommissionReview
 
 
 class HoldInput(_Cart):
@@ -33,6 +34,9 @@ class TicketOutput(_Strict):
     customer: Named | None
     lines: list[PosLineInput]
     total: MoneyOutput = Field(description="Total when last held; preview resumed lines for current prices before charging.")
+    commission_review: list[CommissionReview] = Field(default_factory=list, description=(
+        'Held commission selections that no longer stand (an inactive recipient, a newly enabled or disabled item): '
+        'choose again before charging; completing as held is refused.'))
     device: str
     clerk_id: str
     clerk_name: str

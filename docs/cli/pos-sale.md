@@ -4,7 +4,7 @@
 
 ## `pos sale complete`
 
-Complete a POS sale: posts the sales receipt `sales-receipt post` would, through the same core, with the facts the register fixes (its deposit account, its site, today's date, the chosen customer or its walk-in, payment methods it offers), and records the ticket, register, clerk and tenders. Split tenders post an invoice Due on receipt and one payment per distinct method in the same transaction. Supply tender for one method, or tenders with explicit positive amounts; only cash can give change. One payment method: cash takes at least the total and returns the change; any other method takes the total, with an optional reference. expected_total is the total shown (pos sale preview); a different total posts nothing (E_PREVIEW_STALE). The ticket key is the operation key: completing again with the same key returns the sale already posted and never posts twice. An agent records sales with `sales-receipt post`. Needs pos.sell; a typed unit_price also pos.price-override. Off unless company setting pos_enabled is on (E_FEATURE_DISABLED).
+Complete a POS sale: posts the sales receipt `sales-receipt post` would, through the same core, with the facts the register fixes (its deposit account, its site, today's date, the chosen customer or its walk-in, payment methods it offers), and records the ticket, register, clerk and tenders. Split tenders post an invoice Due on receipt and one payment per distinct method in the same transaction. Supply tender for one method, or tenders with explicit positive amounts; only cash can give change. One payment method: cash takes at least the total and returns the change; any other method takes the total, with an optional reference. expected_total is the total shown (pos sale preview); a different total posts nothing (E_PREVIEW_STALE). The ticket key is the operation key: completing again with the same key returns the sale already posted and never posts twice. An agent records sales with `sales-receipt post`. Needs pos.sell; a typed unit_price also pos.price-override. While commission attribution is on, each commission-enabled line names its recipient (`commission`, or `member_commissions` on a group line; needs commission.attribute), else E_COMMISSION_REQUIRED names the lines. Off unless company setting pos_enabled is on (E_FEATURE_DISABLED).
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -40,6 +40,11 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].quantity` | inside `--lines` JSON array | string | no | no | "1" | Quantity, in the item base unit; default 1. |
 | `lines[].unit_price` | inside `--lines` JSON array | string \| null | no | yes | null | A typed unit price, overriding the register's price (needs pos.price-override). Omitted, the price is the sales receipt's own: the item price, the customer's price level and the price rules. |
 | `lines[].serial_numbers` | inside `--lines` JSON array | array[string] \| null | no | yes | null | Serial numbers of the units sold, for a serial-tracked item; omitted, the units stay unassigned, as the sales receipt allows. |
+| `lines[].commission.recipients[].recipient` | inside `--lines` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
+| `lines[].commission.recipients[].share` | inside `--lines` JSON array | literal[100] | no | no | 100 | — |
+| `lines[].member_commissions[].member` | inside `--lines` JSON array | integer | yes | no | — | 1-based position of the group's active member, in member order.; minimum 1; maximum 200 |
+| `lines[].member_commissions[].commission.recipients[].recipient` | inside `--lines` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
+| `lines[].member_commissions[].commission.recipients[].share` | inside `--lines` JSON array | literal[100] | no | no | 100 | — |
 | `ticket_version` | `--ticket-version` | integer \| null | no | yes | null | Required version for a resumed held ticket. |
 | `ticket` | `--ticket` | string | yes | no | — | The ticket's key, chosen by the device when the sale starts (a ULID or any 1-64 letters, digits, '.', '_', ':' or '-'). It is the sale's operation key: completing again with the same key returns the sale already posted and never posts a second.; pattern "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$" |
 | `tender.payment_method` | `--tender-payment-method` | string | yes | no | — | One of the payment methods the register offers (ID or name).; minimum length 1; maximum length 1004 |
@@ -181,6 +186,7 @@ Example JSON output:
 | Code | Meaning |
 |---|---|
 | `E_AMOUNT_PRECISION` | The amount has more decimal places than the currency allows. |
+| `E_COMMISSION_REQUIRED` | Choose a recipient for every commission-enabled sales line. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
 | `E_CONFIG_INVALID` | The configuration file could not be read. |
@@ -251,6 +257,11 @@ The same example as complete `bookflow_run` arguments:
 | `lines[].quantity` | inside `--lines` JSON array | string | no | no | "1" | Quantity, in the item base unit; default 1. |
 | `lines[].unit_price` | inside `--lines` JSON array | string \| null | no | yes | null | A typed unit price, overriding the register's price (needs pos.price-override). Omitted, the price is the sales receipt's own: the item price, the customer's price level and the price rules. |
 | `lines[].serial_numbers` | inside `--lines` JSON array | array[string] \| null | no | yes | null | Serial numbers of the units sold, for a serial-tracked item; omitted, the units stay unassigned, as the sales receipt allows. |
+| `lines[].commission.recipients[].recipient` | inside `--lines` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
+| `lines[].commission.recipients[].share` | inside `--lines` JSON array | literal[100] | no | no | 100 | — |
+| `lines[].member_commissions[].member` | inside `--lines` JSON array | integer | yes | no | — | 1-based position of the group's active member, in member order.; minimum 1; maximum 200 |
+| `lines[].member_commissions[].commission.recipients[].recipient` | inside `--lines` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
+| `lines[].member_commissions[].commission.recipients[].share` | inside `--lines` JSON array | literal[100] | no | no | 100 | — |
 | `payment_method` | `--payment-method` | string \| null | no | yes | null | Payment method ID or name the sale will be paid by; omitted, the register's first. The total does not depend on it. |
 
 ### Command and context options
@@ -308,6 +319,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `lines[].tax.amount` | string | yes | no | — | — |
 | `lines[].tax.currency` | string | yes | no | — | — |
 | `lines[].tax.minor_units` | integer | yes | no | — | — |
+| `lines[].commission` | object \| null | no | yes | null | Who gets this line's commission: recipient IDs and display names only, never rates or amounts. |
+| `lines[].commission.recipients` | array[object] | yes | no | — | — |
+| `lines[].commission.recipients[].recipient_id` | string | yes | no | — | — |
+| `lines[].commission.recipients[].recipient_label` | string | yes | no | — | — |
 | `subtotal` | object | yes | no | — | — |
 | `subtotal.amount` | string | yes | no | — | — |
 | `subtotal.currency` | string | yes | no | — | — |
@@ -362,6 +377,7 @@ Example JSON output:
 | Code | Meaning |
 |---|---|
 | `E_AMOUNT_PRECISION` | The amount has more decimal places than the currency allows. |
+| `E_COMMISSION_REQUIRED` | Choose a recipient for every commission-enabled sales line. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
 | `E_CONFIG_INVALID` | The configuration file could not be read. |

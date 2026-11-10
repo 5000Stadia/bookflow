@@ -39,6 +39,9 @@ The same example as complete `bookflow_run` arguments:
 | `customers` | `--customers` | array[string] \| null | no | yes | null | Explicit customers or jobs to invoice, in the order given; use instead of billing_group. |
 | `lines[].commission.recipients[].recipient` | inside `--lines` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
 | `lines[].commission.recipients[].share` | inside `--lines` JSON array | literal[100] | no | no | 100 | — |
+| `lines[].member_commissions[].member` | inside `--lines` JSON array | integer | yes | no | — | 1-based position of the group's active member, in member order.; minimum 1; maximum 200 |
+| `lines[].member_commissions[].commission.recipients[].recipient` | inside `--lines` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
+| `lines[].member_commissions[].commission.recipients[].share` | inside `--lines` JSON array | literal[100] | no | no | 100 | — |
 | `lines[].line_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].item` | inside `--lines` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
 | `lines[].quantity` | inside `--lines` JSON array | string | no | no | "1" | — |

@@ -2136,6 +2136,9 @@ The same example as complete `bookflow_run` arguments:
 | `title` | `--title` | string | yes | no | — | minimum length 1; maximum length 200 |
 | `lines[].commission.recipients[].recipient` | inside `--lines` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
 | `lines[].commission.recipients[].share` | inside `--lines` JSON array | literal[100] | no | no | 100 | — |
+| `lines[].member_commissions[].member` | inside `--lines` JSON array | integer | yes | no | — | 1-based position of the group's active member, in member order.; minimum 1; maximum 200 |
+| `lines[].member_commissions[].commission.recipients[].recipient` | inside `--lines` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
+| `lines[].member_commissions[].commission.recipients[].share` | inside `--lines` JSON array | literal[100] | no | no | 100 | — |
 | `lines[].line_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].item` | inside `--lines` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
 | `lines[].quantity` | inside `--lines` JSON array | string | no | no | "1" | — |
@@ -4141,10 +4144,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.use_defaults` | array[literal["sales_tax_calculation", "billing_address", "shipping_address", "terms", "due_date", "ship_method", "sales_rep", "class_id", "customer_tax_code", "sales_tax_item", "price_level", "payment_method"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines` | array[object] \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
-| `settlement.prospective_pages[].request.input.lines[].commission` | object \| null | no | yes | null | Invoice attribution: exactly one sales-rep recipient with share 100; required for enabled new items when attribution is on. Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].commission` | object \| null | no | yes | null | Invoice or sales receipt attribution: exactly one sales-rep recipient with share 100; required for enabled new items when attribution is on. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].commission.recipients` | array[object] | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].commission.recipients[].recipient` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].commission.recipients[].share` | literal[100] | no | no | 100 | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].member_commissions` | array[object] \| null | no | yes | null | A new group line only: one recipient per commission-enabled member, by 1-based member position, asked in member order. Members not named and not enabled carry no attribution. Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].member_commissions[].member` | integer | no | no | — | 1-based position of the group's active member, in member order. Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].member_commissions[].commission` | object | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].member_commissions[].commission.recipients` | array[object] | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].member_commissions[].commission.recipients[].recipient` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].member_commissions[].commission.recipients[].share` | literal[100] | no | no | 100 | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].line_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].item` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].quantity` | string | no | no | "1" | Present in InvoiceUpdatePreviewRequest. |
@@ -6105,10 +6114,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.use_defaults` | array[literal["sales_tax_calculation", "billing_address", "shipping_address", "terms", "due_date", "ship_method", "sales_rep", "class_id", "customer_tax_code", "sales_tax_item", "price_level", "payment_method"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines` | array[object] \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
-| `settlement.prospective_pages[].request.input.lines[].commission` | object \| null | no | yes | null | Invoice attribution: exactly one sales-rep recipient with share 100; required for enabled new items when attribution is on. Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].commission` | object \| null | no | yes | null | Invoice or sales receipt attribution: exactly one sales-rep recipient with share 100; required for enabled new items when attribution is on. Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].commission.recipients` | array[object] | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].commission.recipients[].recipient` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].commission.recipients[].share` | literal[100] | no | no | 100 | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].member_commissions` | array[object] \| null | no | yes | null | A new group line only: one recipient per commission-enabled member, by 1-based member position, asked in member order. Members not named and not enabled carry no attribution. Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].member_commissions[].member` | integer | no | no | — | 1-based position of the group's active member, in member order. Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].member_commissions[].commission` | object | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].member_commissions[].commission.recipients` | array[object] | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].member_commissions[].commission.recipients[].recipient` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].member_commissions[].commission.recipients[].share` | literal[100] | no | no | 100 | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].line_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].item` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].quantity` | string | no | no | "1" | Present in InvoiceUpdatePreviewRequest. |
@@ -7415,6 +7430,9 @@ The same example as complete `bookflow_run` arguments:
 | `active` | `--active` | boolean | no | no | true | — |
 | `lines[].commission.recipients[].recipient` | inside `--lines` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
 | `lines[].commission.recipients[].share` | inside `--lines` JSON array | literal[100] | no | no | 100 | — |
+| `lines[].member_commissions[].member` | inside `--lines` JSON array | integer | yes | no | — | 1-based position of the group's active member, in member order.; minimum 1; maximum 200 |
+| `lines[].member_commissions[].commission.recipients[].recipient` | inside `--lines` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
+| `lines[].member_commissions[].commission.recipients[].share` | inside `--lines` JSON array | literal[100] | no | no | 100 | — |
 | `lines[].line_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].item` | inside `--lines` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
 | `lines[].quantity` | inside `--lines` JSON array | string | no | no | "1" | — |

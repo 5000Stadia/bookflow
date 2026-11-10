@@ -24,7 +24,7 @@ H = {"X-Bookflow-Workbench": "1", "X-Bookflow-Client-Name": "bookflow-workbench"
 # The clerk preset's denies on the current catalog: every company capability `readonly` holds but `company` and
 # `item`. A capability added to `readonly` later fails here first, and must be judged before a clerk can read it.
 CLERK_DENIES = ['account', 'activity', 'attachment', 'audit', 'automation', 'bank-feed', 'bulk-edit', 'chart', 'class',
-                'custom-field', 'customer', 'customer-message', 'customer-type', 'customer-work', 'directive',
+                'crm.read', 'custom-field', 'customer', 'customer-message', 'customer-type', 'customer-work', 'directive',
                 'employee', 'import', 'item-category', 'job-type', 'ledger.read', 'note', 'other-name',
                 'payment-method', 'price-level', 'profile', 'reports', 'sales-rep', 'sales-tax-code', 'ship-method',
                 'term', 'unit-of-measure', 'vendor', 'vendor-type']
@@ -35,7 +35,7 @@ CLERK_COMMANDS = ['barcode lookup', 'bin list', 'bin show', 'company show',
                   'cycle-class list', 'cycle-class show', 'cycle-count due', 'inventory-count query', 'inventory-count sheet', 'inventory-count show',
                   'inventory-site list', 'inventory-site show', 'inventory-transfer history', 'inventory-transfer query',
                   'inventory-transfer show', 'item list', 'item picture get', 'item query', 'item query children',
-                  'item query options', 'item show', 'lot list', 'lot show', 'pos customer add', 'pos customer search',
+                  'item query options', 'item show', 'lot list', 'lot show', 'pos commission-options', 'pos customer add', 'pos customer search',
                   'pos receipt show', 'pos sale complete', 'pos sale preview', 'pos shift close', 'pos shift open',
                   'pos ticket discard', 'pos ticket hold', 'pos ticket list', 'pos ticket resume', 'pos ticket take-over', 'pos-box list', 'pos-box picture get', 'pos-register list', 'pos-register show',
                   'report pos-day', 'serial-number list', 'serial-number show']
@@ -173,8 +173,14 @@ def test_the_clerk_preset_holds_company_item_and_pos_sell_and_lands_on_the_pos(h
     assert clerk["denies"] == CLERK_DENIES
     assert pos_presets.preset("pos-clerk-returns")["grants"] == ["pos.sell", "pos.void", "pos.refund",
                                                                  "preset.pos-clerk-returns"]
-    assert runtime.current_catalog().CATALOG.version == "commission-attribution-v1"
+    assert runtime.current_catalog().CATALOG.version == "commission-pos-v1"
+    # commission-pos-v1: the till lookup is a pos.sell command whose plan also asks commission.attribute, which only
+    # the "Clerk with commission attribution" preset adds; neither clerk reaches the back-office commission commands.
     assert not {"commission recipient-options", "report commission-attribution"} & _admitted_commands(clerk)
+    with_commission = pos_presets.preset("pos-clerk-commission")
+    assert with_commission["role"] == "readonly" and with_commission["denies"] == CLERK_DENIES
+    assert with_commission["grants"] == ["pos.sell", "commission.attribute", "preset.pos-clerk-commission"]
+    assert _admitted_commands(with_commission) == set(CLERK_COMMANDS)
     assert sorted(_admitted_commands(clerk)) == CLERK_COMMANDS
     assert "pos sale void" not in _admitted_commands(clerk)
     assert _admitted_commands(pos_presets.preset("pos-clerk-returns")) == set(CLERK_COMMANDS) | {

@@ -5,7 +5,7 @@ import re
 from bookflow.company import serial_lot_models as _SL
 from typing import Annotated, ClassVar, Literal
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_serializer, model_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, PrivateAttr, model_serializer, model_validator
 
 from bookflow.company.tax_policy import Policy
 from bookflow.company.custom_fields import CustomFieldKindExpectations, CustomFieldValuePatch
@@ -131,11 +131,16 @@ def _default_conflicts(model):
         raise ValueError("use_defaults conflicts with explicit input: " + ", ".join(sorted(conflicts)))
 
 
-from bookflow.company.commission_models import CommissionInput
+from bookflow.company.commission_models import CommissionInput, MemberCommissionInput
 
 
 class SalesLineInput(StrictModel):
-    commission: CommissionInput | None = Field(None, description="Invoice attribution: exactly one sales-rep recipient with share 100; required for enabled new items when attribution is on.")
+    commission: CommissionInput | None = Field(None, description="Invoice or sales receipt attribution: exactly one sales-rep recipient with share 100; required for enabled new items when attribution is on.")
+    member_commissions: list[MemberCommissionInput] | None = Field(None, max_length=200, description=(
+        "A new group line only: one recipient per commission-enabled member, by 1-based member position, asked in "
+        "member order. Members not named and not enabled carry no attribution."))
+    # The entry a refusal names (`line_2`, `line_2.member_1`); set while groups expand, never input.
+    _commission_key: str | None = PrivateAttr(default=None)
     line_id: Selector | None = None
     item: Selector
     quantity: Quantity = "1"
@@ -162,8 +167,9 @@ class SalesLineInput(StrictModel):
     @model_serializer(mode="wrap")
     def legacy_line_request(self, handler):
         values = handler(self)
-        if "commission" not in self.model_fields_set:
-            values.pop("commission", None)
+        for field in ("commission", "member_commissions"):
+            if field not in self.model_fields_set:
+                values.pop(field, None)
         if "percent" not in self.model_fields_set:
             values.pop("percent", None)
         if "site" not in self.model_fields_set:

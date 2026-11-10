@@ -103,6 +103,10 @@ def receipt_payload(s, inp, reg, method, chosen, reference=None) -> dict[str, An
             entry['unit_price'] = line.unit_price
         if line.serial_numbers:
             entry['serial_numbers'] = list(line.serial_numbers)
+        if line.commission is not None:
+            entry['commission'] = line.commission.model_dump(mode='json')
+        if line.member_commissions is not None:
+            entry['member_commissions'] = [m.model_dump(mode='json') for m in line.member_commissions]
         lines.append(entry)
     payload = dict(customer=chosen['id'] if chosen else reg['walk_in_customer_id'], date=_today(s),
                    deposit_to=reg['deposit_account_id'], payment_method=method['id'], site=reg['site_id'],
@@ -185,11 +189,13 @@ def _lines(revision) -> list[PosLineOutput]:
     out = []
     for line in revision.get('lines') or []:
         snap = (line.get('item_snapshot') or {}).get('item') or {}
+        from bookflow.company import commissions
         out.append(PosLineOutput(position=line.get('position') or len(out) + 1, item_id=line.get('item_id'),
                                  item_name=snap.get('label'), description=line.get('description'),
                                  quantity=line.get('quantity'),
                                  unit_price=_money(line['unit_price']) if line.get('unit_price') else None,
-                                 net=_money(line['net']), tax=_money(line['tax'])))
+                                 net=_money(line['net']), tax=_money(line['tax']),
+                                 commission=commissions.labels((line.get('item_snapshot') or {}).get('commission'))))
     return out
 
 
@@ -201,9 +207,21 @@ def _zero(s) -> dict:
     return Money(0, _currency(s)).to_dict()
 
 
+TILL_REASON = 'POS sale: commission recipients chosen at the till'
+
+
+def _attributed(ctx, payload):
+    """An attributed sale records a reason (R189); at the till the act itself is the reason unless one is given."""
+    if ctx.reason and ctx.reason.strip():
+        return ctx
+    if any('commission' in line or 'member_commissions' in line for line in payload['lines']):
+        return ctx.model_copy(update={'reason': TILL_REASON})
+    return ctx
+
+
 def _sale_plan(s, ctx, payload):
     from bookflow.company import sales
-    return sales.prepare(s, ctx, _receipt_input(payload), 'sales_receipt', 'post')
+    return sales.prepare(s, _attributed(ctx, payload), _receipt_input(payload), 'sales_receipt', 'post')
 
 
 def preview(s, ctx, inp) -> PosSalePreviewOutput:
@@ -296,7 +314,7 @@ def tender_facts(s, reg, inp, total: dict) -> dict[str, Any]:
 def _posting_plan(s, ctx, payload, split):
     from bookflow.company import sales
     from bookflow.company.sales_models import InvoicePostInput
-    return (sales.prepare(s, ctx, InvoicePostInput.model_validate(payload), 'invoice', 'post')
+    return (sales.prepare(s, _attributed(ctx, payload), InvoicePostInput.model_validate(payload), 'invoice', 'post')
             if split else _sale_plan(s, ctx, payload))
 
 
@@ -376,7 +394,7 @@ def apply_complete(plan: Plan, ctx, s) -> Applied:
     from bookflow.company import pos_tickets
     ticket_touched = pos_tickets.complete(s, ctx, plan.preview.ticket, plan.data['ticket_version'],
                                            plan.data['register']['id'])
-    applied = sales.persist_prepared(fresh, ctx, s, command_name=COMMAND)
+    applied = sales.persist_prepared(fresh, _attributed(ctx, plan.data['payload']), s, command_name=COMMAND)
     header = fresh.data['header']
     facts, reg, chosen = plan.data['facts'], plan.data['register'], plan.data['customer']
     tender_rows = []

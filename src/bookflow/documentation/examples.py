@@ -2245,6 +2245,10 @@ EXAMPLES.update({
     'report commission-attribution': Example(
         'bookflow report commission-attribution --date-from 2026-01-01 --date-to 2026-12-31' + _C + ' --json',
         {'date_from': '2026-01-01', 'date_to': '2026-12-31'}),
+    # R189 increment 2: the till's recipient lookup, names and IDs only.
+    'pos commission-options': Example(
+        'bookflow pos commission-options --item "Attributed Service" --search Alex' + _C + ' --json',
+        {'item': 'Attributed Service', 'search': 'Alex'}),
 })
 
 # R116 increment 1: fictional manual amounts, never installed rates or tax tables.

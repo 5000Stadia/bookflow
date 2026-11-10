@@ -104,9 +104,20 @@
     <label>Quantity <span class="pos-qty"><button type="button" data-pos-qty-step="-1" aria-label="One fewer">−</button><input data-pos-line-qty inputmode="decimal" autocomplete="off"><button type="button" data-pos-qty-step="1" aria-label="One more">+</button></span></label>
     <label data-pos-line-price-row hidden>Price <input data-pos-line-price inputmode="decimal" autocomplete="off" placeholder="Item price"></label>
     <label data-pos-line-serial-row hidden>Serial numbers <textarea data-pos-line-serial autocomplete="off" rows="3" placeholder="One per line; leave empty to skip"></textarea></label>
+    <p class="pos-line-commission" data-pos-line-commission-row hidden><span data-pos-line-commission-name></span> <button type="button" data-pos-line-commission>Change recipient</button></p>
     <div class="pos-dialog-actions"><button type="button" data-pos-line-remove>Remove</button><button value="done" class="primary" data-pos-line-done>Done</button></div>
   </form>
 </dialog>
+{% if pos_data.commission_on %}
+<dialog class="pos-dialog pos-commission-dialog" data-pos-commission-dialog aria-labelledby="pos-commission-title">
+  <form method="dialog"><h2 id="pos-commission-title" data-pos-commission-title>Who sold this?</h2>
+    <label>Find a recipient <input type="search" data-pos-commission-q autocomplete="off"></label>
+    <p class="pos-dialog-status" data-pos-commission-status role="status"></p>
+    <ul class="pos-customer-results pos-commission-results" data-pos-commission-results></ul>
+    <div class="pos-dialog-actions"><button type="button" data-pos-commission-cancel>Cancel</button></div>
+  </form>
+</dialog>
+{% endif %}
 
 <dialog class="pos-dialog pos-customer-dialog" data-pos-customer-dialog aria-label="Customer">
   <form method="dialog"><h2>Customer</h2>

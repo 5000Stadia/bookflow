@@ -131,6 +131,7 @@ ACCEPTED = {
     'crm-leads-v1': (931, '2391f97a14862f9e1b000380a94508db57869b458bc6b6125f8a56a0075ca672'),
     'bill-approval-v1': (942, '2c3aa75ea00d9b2be1276eb3847bb3d712a84026df49c03eaeef97ff430f618e'),
     'membership-pricing-v1': (949, '14c33f7743c47b7721d8825be60f3fb4e89d287f515d97166286b59bc189d4a6'),
+    'commission-pos-v1': (950, '1f11a8c74d71ae74cec0b2dd74d947fcb5afd95c6227001014d3c6ee0f96c46f'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -311,6 +312,7 @@ CHAIN_ADDITIONS = {
                          'approval-policy update', 'approval-policy publish', 'approval-policy show', 'approval-policy list'},
     'membership-pricing-v1': {'membership-plan create', 'membership-plan update', 'membership-plan show', 'membership-plan list',
                               'customer membership set', 'customer membership end', 'customer membership show'},
+    'commission-pos-v1': {'pos commission-options'},
 }
 
 _ANCESTOR_EDIT = """
