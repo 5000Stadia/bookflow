@@ -141,7 +141,8 @@ def plan_add(inp: NoteAddInput, ctx: Context, s) -> Plan:
 def apply_add(plan: Plan, ctx: Context, s) -> Applied:
     row = plan.data["row"]
     s.company.conn.execute(c.notes.insert().values(**row))
-    return Applied(plan.preview, [Touched("note", row["id"], "create", None, 1, row, db="company")],
+    return Applied(plan.preview, [Touched("note", row["id"], "create", None, 1, row, db="company"),
+            *reference_touches(s, "note", row["id"])],
         f"added note to {row['record_type']} {row['record_id']}")
 
 
@@ -188,7 +189,7 @@ def apply_edit(plan: Plan, ctx: Context, s) -> Applied:
         return Applied(plan.preview, [], "no change")
     s.company.conn.execute(c.notes.update().where(c.notes.c.id == row["id"]).values(**row))
     return Applied(plan.preview, [Touched("note", row["id"], "update", row["version"] - 1,
-        row["version"], row, db="company")], f"edited note {row['id']}")
+        row["version"], row, db="company"), *reference_touches(s, "note", row["id"])], f"edited note {row['id']}")
 
 
 note_list = command("note list", scope="company", description="Page current comments for a record, newest id first; refresh to see newly added notes.",
@@ -233,3 +234,8 @@ def plan_list(inp: NoteListInput, ctx: Context, s) -> Plan:
     if more:
         cursor = base64.urlsafe_b64encode(_Cursor(**scope, before=rows[-1]["id"]).model_dump_json().encode()).decode().rstrip("=")
     return Plan(NotePage(items=_output_rows(s, rows), count=len(rows), has_more=more, next_cursor=cursor))
+
+# Recheck target authority even when the request is an idempotent replay.
+from bookflow.company.crm_admission import authorize_annotation, reference_touches
+for _cmd in (note_add, note_show, note_edit, note_list):
+    _cmd.cmd.authorize_input = authorize_annotation

@@ -348,6 +348,8 @@ def _noun_meta(noun):
 
 def _editable_values(noun: str, shown: dict[str, Any]) -> dict[str, Any]:
     """Project the authoritative editable object from a show result."""
+    if noun == 'lead':
+        return {**shown, "owner": shown.get("owner_id")}
     if noun == 'item-receipt':
         return dict(date=shown['date'], vendor=shown['profile']['vendor']['id'],
             ap_account=shown['profile']['ap_account']['id'], memo=shown['memo'], reference=shown['reference'], shipping=shown['shipping']['amount'],
@@ -672,7 +674,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("transport-security.js", "csp-events.js", "workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js", "timekeeping.css", "scan.js", "counts.css", "picks.css", "import.css", "import.js", "item-picture.js", "camera-scan.js", "camera-scan.css", "scan-decoder-native.js", "scan-decoder-zxing-wasm.js", "secure-context.js", "bulk-edit.css", "bulk-edit.js", "opening.css", "pos.js", "pos-day.js", "pos-refund.js", "pos.css", "bank-inbox.css", "bank-inbox.js", "bank-import.css", "bank-import.js")
+        for name in ("transport-security.js", "csp-events.js", "crm.css", "workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js", "timekeeping.css", "scan.js", "counts.css", "picks.css", "import.css", "import.js", "item-picture.js", "camera-scan.js", "camera-scan.css", "scan-decoder-native.js", "scan-decoder-zxing-wasm.js", "secure-context.js", "bulk-edit.css", "bulk-edit.js", "opening.css", "pos.js", "pos-day.js", "pos-refund.js", "pos.css", "bank-inbox.css", "bank-inbox.js", "bank-import.css", "bank-import.js")
     }
     # The Scan field macro (scan_field.html) is imported without the page's context, so its camera scripts come
     # from the environment; their URLs depend only on the files' bytes.
@@ -1036,6 +1038,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     # R153: bill part of a purchase order, or close its lines by hand.
     from bookflow.adapters.workbench import purchase_order_billing_pages as PartialOrderPages
     PartialOrderPages.mount(app, render=render, run=run, credential=credential, page_error=page_error)
+    # R115 increment 1: leads share native notes, files and to-dos.
+    from bookflow.adapters.workbench import crm_pages as CrmPages
+    CrmPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                   annotations=annotations,
+                   role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R111: Reminders, the to-do list and the overdue notice queue.
     from bookflow.adapters.workbench import scheduling_pages as SchedulingPages
     SchedulingPages.mount(app, render=render, run=run, credential=credential, page_error=page_error)
@@ -2268,6 +2275,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 return page_error(request, error)
             originals = {'deposit': record_id, 'expected_version': shown['current']['version']}
         originals = originals or {}
+        if noun == 'lead' and verb == 'archive' and shown:
+            # The action offered from a lead toggles its separate archive flag.
+            originals['archived'] = not shown['archived']
         if noun in (*Document.MONEY_OUT, 'item-receipt', 'bill') and verb == 'update' and attempted.get('originals'):
             # Keep the baseline the person edited across preview/refusal/stale responses.
             # A newer server revision must not become an implicit replacement payload.

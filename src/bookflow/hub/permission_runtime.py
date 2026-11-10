@@ -190,6 +190,7 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.BANK_RULE_POLICY_VERSION: '12b5f914d21302af037c6cc0b1aeab0ef6912d764015332d7734c12338ad8127',
     c.POS_SALE_POLICY_VERSION: '1462bee09d7343f15fdc015fa86a114e30671e8d73fc2bab7f5e75444d0450cf',
     c.BANK_RECONCILE_POLICY_VERSION: '8673bd998c7e077061301d0bfaea5af7b33cbd3eb773f89dd0e6fdcdbf026e42',
+    c.CRM_LEADS_POLICY_VERSION: '2391f97a14862f9e1b000380a94508db57869b458bc6b6125f8a56a0075ca672',
     c.PURCHASE_DRAFT_POLICY_VERSION: 'a6faac71521b11c6e09f9c515a346b71bc783a1b5e44ef985f95373f11ede861',
     c.NOTICE_REVERSAL_POLICY_VERSION: 'a8255242bbbb0b1a4ac0f5eaf8aa62a5cb84c291a7a03316584b2bbf06b67932',
     c.COMMISSION_ATTRIBUTION_POLICY_VERSION: 'b8f3b2224ff689ed09c689687114678d118a379d75c56756e80a85267bf2cc13',
@@ -369,6 +370,7 @@ def _full_known():
     from . import permission_pos_day_catalog
     from . import permission_pos_refund_catalog, permission_pos_split_catalog
     from . import permission_pos_ticket_catalog, permission_pos_ticket_takeover_catalog, permission_pos_receipt_catalog
+    from . import permission_crm_leads_catalog
     from . import permission_payroll_draft_catalog
 
     from . import permission_purchase_draft_catalog
@@ -474,6 +476,7 @@ def _full_known():
         c.POS_REFUND_POLICY_VERSION: permission_pos_refund_catalog,
         c.POS_SPLIT_POLICY_VERSION: permission_pos_split_catalog,
         c.POS_LAYOUT_POLICY_VERSION: permission_pos_layout_catalog,
+        c.CRM_LEADS_POLICY_VERSION: permission_crm_leads_catalog,
         c.PAYROLL_DRAFT_POLICY_VERSION: permission_payroll_draft_catalog,
 
         c.PURCHASE_DRAFT_POLICY_VERSION: permission_purchase_draft_catalog,
@@ -641,7 +644,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.COMMISSION_ATTRIBUTION_POLICY_VERSION)
+    return known_catalog(c.CRM_LEADS_POLICY_VERSION)
 
 
 def catalog_for_root(tx):

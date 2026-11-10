@@ -13,7 +13,7 @@ from bookflow.company.scheduling_models import (
 )
 from bookflow.core.registry import Plan, command
 
-_TODO_ERRORS = ['E_VALIDATION', 'E_RECORD_NOT_FOUND']
+_TODO_ERRORS = ['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_AMBIGUOUS_SELECTOR']
 
 DESCRIPTIONS = {
     'todo create': (
@@ -21,7 +21,7 @@ DESCRIPTIONS = {
         ' note. `title` says what; `notes` the details; `due_date` defaults to today; `priority` is high, medium'
         ' (the default) or low. `assignee` is a username or user id of a member of this company, or "me"; omitted,'
         ' the to-do is yours. An agent assigned a to-do finds it with `todo list --mine`. `link_type` and `link`'
-        ' say what it is about: a customer, a vendor, a document (transaction id) or a memorized transaction.'),
+        ' say what it is about: a lead, customer, vendor, document (transaction id) or memorized transaction. Lead links require CRM read access.'),
     'todo update': (
         'Change a to-do: title, details, due date, priority, assignee, what it is about, or its status (open, or'
         ' inactive when it no longer needs doing). Fields you do not name stay as they are; null clears notes, the'
@@ -90,6 +90,8 @@ def _todo_write(verb, model, positional):
                   version_source=None if verb == 'create' else ('todo show', 'todo', 'version'),
                   error_codes=_TODO_ERRORS + ([] if verb == 'create' else ['E_VERSION_CONFLICT']))(planner)
     cmd.applier(todos.apply)
+    cmd.authorize_input = todos.authorize_input
+    cmd.replay = todos.replay
     return cmd
 
 
@@ -114,7 +116,8 @@ todo_create = _todo_write('create', TodoCreateInput, [])
 todo_update = _todo_write('update', TodoUpdateInput, ['todo'])
 todo_complete = _todo_write('complete', TodoCompleteInput, ['todo'])
 todo_show = _read('todo show', TodoShowInput, TodoOutput, todos.show, ['todo'], 'note')
-todo_list = _read('todo list', TodoListInput, TodoListOutput, todos.page, [], 'note')
+todo_list = _read('todo list', TodoListInput, TodoListOutput, todos.page, [], 'note',
+                  errors=['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_QUERY_STALE'])
 
 notice_generate = command(
     'notice generate', scope='company', description=DESCRIPTIONS['notice generate'], input_model=NoticeGenerateInput,
@@ -128,7 +131,7 @@ notice_dismiss = _notice_write('dismiss', NoticeDismissInput)
 notice_reverse = _notice_write('reverse', NoticeDismissInput)
 
 reminders_list = _read('reminders', RemindersInput, RemindersOutput, reminders.reminders, [], 'ledger.read',
-                       errors=['E_VALIDATION'])
+                       errors=['E_VALIDATION', 'E_QUERY_STALE'])
 
 SCHEDULING_COMMANDS = [todo_create, todo_update, todo_complete, todo_show, todo_list,
                        notice_generate, notice_list, notice_show, notice_mark_sent, notice_dismiss, notice_reverse, reminders_list]

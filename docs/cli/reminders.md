@@ -33,6 +33,7 @@ The same example as complete `bookflow_run` arguments:
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `as_of` | `--as-of` | string \| null | no | yes | null | What is due as of this date; omitted, today in the company's timezone. |
+| `todos_cursor` | `--todos-cursor` | string \| null | no | yes | null | Continue due to-dos from todos_next_cursor with the same filters and date. |
 | `bills_days_ahead` | `--bills-days-ahead` | integer | no | no | 10 | Bills to pay: list bills due within this many days (the anchor reminds 10 days before).; minimum 0; maximum 365 |
 | `mine` | `--mine` | boolean | no | no | false | To-dos: only those assigned to whoever is asking. |
 | `limit` | `--limit` | integer | no | no | 25 | Most rows listed under each heading; every count and total covers them all.; minimum 1; maximum 200 |
@@ -118,6 +119,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `todos_due[].completed_at` | string \| null | yes | yes | — | — |
 | `todos_due[].completed_by` | string \| null | yes | yes | — | — |
 | `todos_due[].source_ref` | string \| null | yes | yes | — | What created it when the scheduler did; null for one a person or agent made. |
+| `todos_next_cursor` | string \| null | no | yes | null | — |
 | `notices_ready` | array[object] | yes | no | — | — |
 | `notices_ready[].id` | string | yes | no | — | — |
 | `notices_ready[].version` | integer | yes | no | — | — |
@@ -201,6 +203,7 @@ Example JSON output:
   "overdue_invoices": [],
   "sections": [],
   "todos_due": [],
+  "todos_next_cursor": null,
   "total_count": 1
 }
 ```
@@ -226,6 +229,7 @@ Example JSON output:
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
 | `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |

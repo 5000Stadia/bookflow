@@ -128,6 +128,7 @@ ACCEPTED = {
     'purchase-draft-v1': (916, 'a6faac71521b11c6e09f9c515a346b71bc783a1b5e44ef985f95373f11ede861'),
     'payroll-draft-v1': (922, '365f7a60586a9ad2bef7341b77905c85a4816b033177fc22215ac0c63155419a'),
     'commission-attribution-v1': (924, 'b8f3b2224ff689ed09c689687114678d118a379d75c56756e80a85267bf2cc13'),
+    'crm-leads-v1': (931, '2391f97a14862f9e1b000380a94508db57869b458bc6b6125f8a56a0075ca672'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -302,6 +303,7 @@ CHAIN_ADDITIONS = {
     'purchase-draft-v1': {'purchase-draft ' + verb for verb in ('create', 'update', 'preview', 'cancel', 'show', 'list')},
     'payroll-draft-v1': {'payroll setup', 'payroll settings', 'payroll draft', 'payroll show', 'payroll list', 'payroll prepare'},
     'commission-attribution-v1': {'commission recipient-options', 'report commission-attribution'},
+    'crm-leads-v1': {'lead ' + verb for verb in ('create', 'update', 'show', 'list', 'close', 'reopen', 'archive')},
 }
 
 _ANCESTOR_EDIT = """

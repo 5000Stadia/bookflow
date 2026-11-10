@@ -75,6 +75,9 @@ def test_complete_unfiltered_registry_descriptors_and_action_owners():
 FROZEN_DESCRIPTOR_SHA256 = 'c4b724e114772d9940ead6450a4bd64fd490cd1f45ca42092e647284e2fef123'
 
 RESOURCE_PAIRS = {
+    'crm.require_read': {('crm.read', 'member')},
+    'crm.may': {('crm.write', 'standard'), ('note', 'member')},
+    'todos.admit_link': {('crm.read', 'member')},
     # One per Delete delta. Each declares its own admit site in its own catalog
     # module; none of them could be listed here while the assertion below named the
     # frozen ancestor's inventory, which by construction cannot carry a site a later
@@ -98,7 +101,7 @@ RESOURCE_PAIRS = {
     'billing_queries.sale_source_output': {('customer-work', 'member')},
     'deposit_resolution.resolve': {('ledger.post', 'standard')},
     'audit_visibility.admitted': {(name, 'member') for name in (
-        'account', 'attachment', 'class', 'company', 'custom-field', 'customer', 'customer-message',
+        'account', 'attachment', 'class', 'company', 'crm.read', 'custom-field', 'customer', 'customer-message',
         'customer-type', 'customer-work', 'directive', 'employee', 'item', 'item-category', 'job-type',
         'ledger.read', 'note', 'other-name', 'payment-method', 'price-level', 'sales-rep',
         'sales-tax-code', 'ship-method', 'term', 'unit-of-measure', 'vendor', 'vendor-type')},

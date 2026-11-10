@@ -2227,6 +2227,17 @@ EXAMPLES.update({
         {'pos_register': 'Main', 'date': '2026-10-31'}),
 })
 
+# Leads need no optional CRM configuration; their follow-ups use todo commands.
+EXAMPLES.update({
+    'lead create': Example('bookflow lead create "Workshop enquiry" --reason "Incoming enquiry" --json', {'display_name': 'Workshop enquiry'}),
+    'lead show': Example(f'bookflow lead show {ID} --json', {'lead': ID}),
+    'lead list': Example('bookflow lead list --search Workshop --limit 50 --json', {'search': 'Workshop', 'limit': 50}),
+    'lead update': Example(f'bookflow lead update {ID} --expected-version 1 --rating warm --reason "Qualified enquiry" --json', {'lead': ID, 'expected_version': 1, 'rating': 'warm'}),
+    'lead close': Example(f'bookflow lead close {ID} --expected-version 1 --reason "No further work" --json', {'lead': ID, 'expected_version': 1}),
+    'lead reopen': Example(f'bookflow lead reopen {ID} --expected-version 2 --reason "New enquiry" --json', {'lead': ID, 'expected_version': 2}),
+    'lead archive': Example(f'bookflow lead archive {ID} --expected-version 3 --reason "File enquiry" --json', {'lead': ID, 'expected_version': 3}),
+})
+
 EXAMPLES.update({
     'commission recipient-options': Example(
         'bookflow commission recipient-options --item "Attributed Service" --search Alex' + _C + ' --json',

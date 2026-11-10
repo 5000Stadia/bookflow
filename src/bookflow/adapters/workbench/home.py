@@ -465,6 +465,7 @@ SECTIONS: tuple[Section, ...] = (
             _new("Billing group", "billing-group create", "/billing-group/create"),
         ),
         lists=(
+            _list("Leads", "lead list", "/lead"),
             _list("Invoices", "invoice query", "/invoice"),
             _list("Estimates", "estimate query", "/estimate"),
             _list("Sales orders", "sales-order query", "/sales-order"),

@@ -154,7 +154,7 @@ def test_predecessor_migration_preserves_existing_data_and_creates_empty_drafts(
             before = {name: db.raw.execute('SELECT * FROM ' + name).fetchall()
                       for name in ('transactions', 'posting_batches', 'posting_lines', 'audit_events')}
     with open_database(path, writable=True) as db:
-        assert migrate_to_head(db, 'company', None) == ('co0128', 'co0131')
+        assert migrate_to_head(db, 'company', None) == ('co0128', 'co0132')
         assert db.raw.execute('SELECT * FROM local_purchase_witness').fetchall() == [('preserved',)]
         for name, rows in before.items():
             assert db.raw.execute('SELECT * FROM ' + name).fetchall() == rows
@@ -162,7 +162,7 @@ def test_predecessor_migration_preserves_existing_data_and_creates_empty_drafts(
             assert db.raw.execute('SELECT count(*) FROM ' + name).fetchone() == (0,)
         assert db.raw.execute('PRAGMA foreign_key_check').fetchall() == []
         assert db.raw.execute('PRAGMA integrity_check').fetchall() == [('ok',)]
-        assert migrate_to_head(db, 'company', None) == ('co0131', 'co0131')
+        assert migrate_to_head(db, 'company', None) == ('co0132', 'co0132')
 
 
 def test_agent_needs_explicit_prepare_and_read_grants(root, client, draft_books):
