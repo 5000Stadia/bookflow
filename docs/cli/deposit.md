@@ -6,6 +6,8 @@
 
 Delete this deposit with a required reason and exact expected_version. Cancel its bank effect by exact reversal at the original date and return every receipt it banked to Undeposited Funds, where each one stays posted and can be deposited again; retain immutable history and its number. Requires the explicit family Delete grant and ledger.read, independently of ledger.post. A reconciled deposit refuses atomically and names the reconciliation holding it; a closed period refuses. Preview first with dry_run, then save with the `dependency_guard` the preview returned, exactly as the other deposit verbs are confirmed.
 
+Confirm first (delete): it deletes or removes records. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
@@ -2097,6 +2099,8 @@ Example JSON output:
 ## `deposit void`
 
 Void a deposit with an exact reversal at its original date; the receipts it banked stay posted and become available to deposit again.
+
+Confirm first (void): it voids a posted document. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

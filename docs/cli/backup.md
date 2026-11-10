@@ -248,6 +248,8 @@ Example JSON output:
 
 Set when a company is backed up by the running host (daily at a time in the company's timezone), the folder that receives the backups and how many to keep; --off turns it off. Each scheduled backup is the verified archive `company backup` writes, left read-only with an audit checkpoint beside it. Only a person who is an installation administrator changes the schedule.
 
+Confirm first (broad lasting change): it changes many records, or how the business works from then on. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |

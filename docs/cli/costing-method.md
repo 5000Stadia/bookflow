@@ -6,6 +6,8 @@
 
 Change how stock is costed, for every stocked item, from a date: fifo (first in, first out: each sale takes the oldest units' cost) or average (weighted average, the default). A person's act, on the accountant's advice: a method is meant to be kept. effective_from must be after the closing date and after the last switch. On that date the stock on hand becomes one opening FIFO layer at its average (switching back, the layers merge into the average): nothing is revalued and the switch posts nothing. Sales, returns and adjustments already dated on or after it are costed again by the new method, each corrected at its own date. The dry run shows, per item and in total, the change in stock value and cost of goods sold, and each correction entry. Example: `bookflow costing-method set --method fifo --from 2027-01-01 --reason "FIFO from the new year, on our accountant's advice"`.
 
+Confirm first (broad lasting change): it changes many records, or how the business works from then on. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
@@ -270,6 +272,8 @@ Example JSON output:
 ## `costing-method withdraw`
 
 Take back a costing-method switch whose date has not come, by its id or date; anything already dated on or after it is costed again by the method before it. A person's act. Example: `bookflow costing-method withdraw 2027-01-01 --reason "Staying on average for now"`.
+
+Confirm first (broad lasting change): it changes many records, or how the business works from then on. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

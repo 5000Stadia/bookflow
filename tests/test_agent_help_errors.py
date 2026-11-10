@@ -292,7 +292,9 @@ def test_a_wrong_command_name_suggests_the_closest_real_ones(client):
     with pytest.raises(BookflowError) as caught:
         client.run("sales tax liability", {"as_of": "2026-09-27"}, company=CO)
     assert caught.value.details["suggestions"][0] == "sales-tax liability"
-    assert list_commands(prefix="reconcile begin")["suggestions"][0] == "reconcile start"
+    # A wrong verb on a real noun now finds the real command by keyword; a name that matches nothing gets suggestions.
+    page = list_commands(prefix="reconcile begin")
+    assert "reconcile start" in (page.get("suggestions") or [row["name"] for row in page["commands"]])
     assert "suggestions" not in list_commands(prefix="reconcile")
 
 

@@ -516,6 +516,8 @@ Example JSON output:
 
 Void a sales tax remittance with a required reason. Its accounting is reversed at its own date, the agency goes back to being owed what it was owed before, its number stays occupied and its history stays readable. There is no correction: a remittance is one amount to one agency on one date, so a wrong one is voided and written again.
 
+Confirm first (void): it voids a posted document. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |

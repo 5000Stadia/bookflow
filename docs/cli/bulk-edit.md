@@ -6,6 +6,8 @@
 
 Apply a previewed grid edit: one ordinary update per record carrying the version the preview read, each its own audit event, all one batch. A record someone changed meanwhile merges when they changed other fields, and is refused (conflict, naming who and when) when they changed the same one; the rest go on (all or nothing undoes them instead). Returns each record's outcome. `limit` applies a slice (call again to go on); `cancel` stops an unfinished apply and puts back what it changed. Example: {"run": "01J..."}.
 
+Confirm first (broad lasting change): it changes many records, or how the business works from then on. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
@@ -584,6 +586,8 @@ Example JSON output:
 ## `bulk-edit reverse`
 
 Undo a grid edit as one unit: every record it changed gets its exact prior values back through its update. Refused (E_BATCH_BLOCKED), naming each record and who changed it when, if any was edited again since; `skip_changed` restores the rest and leaves those (reversed_partly). A later edit is someone's decision: before passing skip_changed, name those records to the owner and ask whether to leave them and restore the rest; do nothing until they answer. Refused while the apply is unfinished (finish or cancel it first). --dry-run shows the plan and a fingerprint. Example: {"run": "01J..."}.
+
+Confirm first (batch reversal): it undoes a whole batch at once. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

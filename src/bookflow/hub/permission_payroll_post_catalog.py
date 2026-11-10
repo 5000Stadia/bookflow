@@ -1,4 +1,4 @@
-"""Posting one paycheck, net pay by check and voids (R116 increment 2) on the immutable commission-pos-v1 catalog.
+"""Posting one paycheck, net pay by check and voids (R116 increment 2) on the immutable crm-convert-v1 catalog.
 
 Three new payroll capabilities at `standard`, held by default by admin, owner and installation administrators only
 (as increment 1's are): `payroll.post` posts a prepared draft, `payroll.pay` records the one check that settles its
@@ -15,10 +15,10 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_commission_pos_catalog as previous, permission_catalog as c
+from . import permission_crm_convert_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = '12056be35944174594bd4b45a4e174286516ecc7'
+SOURCE_COMMIT = 'b078189fea0a7d215f7f1625ff0ff9d4263ab5f7'
 _OWNER = 'bookflow.commands.payroll_cmds.{}|src/bookflow/commands/payroll_cmds.py'
 CAPABILITIES = {'payroll.post': 'standard', 'payroll.pay': 'standard', 'payroll.void': 'standard'}
 READ, POST = c.Requirement('payroll.read', 'member'), c.Requirement('ledger.post', 'standard')
@@ -58,7 +58,7 @@ _GATE = next(x for x in previous.CATALOG.conditional_sources
              if x.owner == 'bookflow.company.capability_gate.require_held')
 GATE_SOURCE = replace(_GATE, requirements=_sorted((*_GATE.requirements, *_NEW)))
 _AUDIT = next(x for x in previous.CATALOG.conditional_sources if x.owner == 'bookflow.company.audit_visibility.admitted')
-AUDIT_SOURCE = replace(_AUDIT, call_sites=(('src/bookflow/company/audit_visibility.py', 105),),
+AUDIT_SOURCE = replace(_AUDIT, call_sites=(('src/bookflow/company/audit_visibility.py', 106),),
     requirements=_sorted((*_AUDIT.requirements, READ)))
 PAYCHECK_SOURCE = c.ResourceSource('bookflow.company.payroll_paychecks.require',
     (('src/bookflow/company/payroll_paychecks.py', 50),),

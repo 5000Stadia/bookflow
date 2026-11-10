@@ -35,8 +35,8 @@ class _Fields(_Strict):
     stop_date: IsoDate | None = Field(default=None, description='No slot after this day.')
     remaining_runs: int | None = Field(default=None, ge=1, le=10000, description='Stop after this many runs.')
     mode: Literal['draft', 'send'] | None = Field(default=None, description=(
-        'draft: each run leaves drafts. send: each run releases them; they leave only once a person has made the '
-        'schedule live (delivery-schedule live), and until then wait for a go.'))
+        'draft: each run leaves drafts. send: each run releases them; they leave only once a holder of '
+        'automate.delivery has made the schedule live (delivery-schedule live), and until then wait for a go.'))
     catch_up_days: int | None = Field(default=None, ge=0, le=31, description=(
         'After the host was off, the latest missed slot runs only if no older than this (default 7).'))
     run_time: str | None = Field(default=None, pattern=r'^([01][0-9]|2[0-3]):[0-5][0-9]$', description=(
@@ -67,7 +67,7 @@ class ScheduleSelector(_Strict):
 class ScheduleShowInput(ScheduleSelector):
     runs: int = Field(default=10, ge=1, le=400, description='How many recent runs to list, newest first.')
     check: bool = Field(default=False, description=(
-        'Include the check a person sees before making it live: the exact selection, cadence, first run and who it '
+        'Include the check a holder of automate.delivery sees before making it live: the exact selection, cadence, first run and who it '
         'would reach today.'))
 
 
@@ -105,7 +105,7 @@ class RunOutput(BaseModel):
 
 
 class LiveCheck(BaseModel):
-    """What a person confirms before a send schedule goes live: one check of its exact details."""
+    """What a holder of automate.delivery confirms before a send schedule goes live: one check of its exact details."""
     selection: str = Field(description='What each run drafts, in words.')
     cadence: str = Field(description='How often, from when, until when.')
     first_run: str | None = Field(description='The slot that runs next.')

@@ -86,7 +86,7 @@ class QueryInput(_Strict):
     status: Literal['draft', 'ready', 'waiting', 'sending', 'sent', 'held', 'failed', 'cancelled',
                     'attention', 'live', 'all'] = Field(default='live', description=(
         'live (every unsent, uncancelled message; the default), draft, ready, waiting (ready, waiting for a '
-        "person's go), sent, attention (held or failed), held, failed, cancelled or all."))
+        "go), sent, attention (held or failed), held, failed, cancelled or all."))
     kind: Kind | None = None
     customer: Selector | None = Field(default=None, description='Only this customer or job.')
     source: Selector | None = Field(default=None, description="Only messages carrying this document's id.")

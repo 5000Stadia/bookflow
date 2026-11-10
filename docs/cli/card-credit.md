@@ -1803,6 +1803,8 @@ Example JSON output:
 
 Void a credit card credit with a required reason. Its accounting is reversed exactly, at the credit’s own date, and its history stays readable.
 
+Confirm first (void): it voids a posted document. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |

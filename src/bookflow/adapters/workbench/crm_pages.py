@@ -22,14 +22,15 @@ def mount(app, *, render, run, credential, page_error, role_allows, annotations)
         company = run(request, 'company show', {}, company_id)
         allowed = {name: permitted(request, company, name) for name in (
             'lead create', 'lead update', 'lead close', 'lead reopen', 'lead archive',
-            'todo list', 'todo create', 'todo complete')}
+            'todo list', 'todo create', 'todo complete', 'lead convert', 'crm timeline', 'batch show')}
         back = back_url(company_id, request.query_params.get('back'))
         context = dict(company_id=company_id, allowed=allowed, error=error, values=values or {},
                        notice=request.query_params.get('done'), back=back)
         if lead_id:
             lead = run(request, 'lead show', {'lead': lead_id}, company_id)
             tasks = run(request, 'todo list', {'link_type': 'lead', 'link': lead_id, 'status': 'all'}, company_id) if allowed['todo list'] else None
-            context.update(lead=lead, tasks=tasks, annotations=annotations(
+            history = run(request, 'crm timeline', {'lead': lead_id, 'limit': 50}, company_id) if allowed['crm timeline'] else None
+            context.update(lead=lead, tasks=tasks, history=history, annotations=annotations(
                 company_id, 'lead', lead_id, lead, company, credential(request)))
         else:
             raw = {'status': request.query_params.get('status') or 'open',
@@ -79,6 +80,14 @@ def mount(app, *, render, run, credential, page_error, role_allows, annotations)
                         raw[key] = form[key].strip()
                 run(request, 'todo create', raw, company_id, headers=headers)
                 said = 'Follow-up added.'
+            elif action == 'convert':
+                raw = {'lead': lead_id, 'expected_version': int(form['expected_version']), 'target': form.get('target')}
+                if form.get('target') == 'existing':
+                    raw.update(customer=form.get('customer', ''), customer_expected_version=int(form['customer_expected_version']))
+                elif form.get('name', '').strip():
+                    raw['name'] = form['name'].strip()
+                result = run(request, 'lead convert', raw, company_id, headers=headers)
+                said = f"Converted to customer {result['conversion']['customer_name']}."
             elif action == 'complete':
                 run(request, 'todo complete', {'todo': form.get('todo'), 'expected_version': int(form['expected_version'])}, company_id, headers=headers)
                 said = 'Follow-up completed.'
@@ -101,3 +110,51 @@ def mount(app, *, render, run, credential, page_error, role_allows, annotations)
     @app.post('/c/{company_id}/lead/{lead_id:ulid}')
     async def lead_action(request: Request, company_id: str, lead_id: str):
         return await run_in_threadpool(submit, request, company_id, dict(await request.form()), lead_id)
+
+    def convert_page(request, company_id, lead_id, *, values=None, error=None, status_code=200):
+        """The short review sheet: an explicit target, the dry-run preview and a visible cancel."""
+        lead = run(request, 'lead show', {'lead': lead_id}, company_id)
+        values = values or dict(request.query_params)
+        target = 'existing' if values.get('target') == 'existing' else 'new'
+        preview, customer = None, None
+        reason = {'X-Bookflow-Reason': 'Preview lead conversion'}
+        try:
+            raw = {'lead': lead_id, 'expected_version': lead['version'], 'target': target}
+            if target == 'existing':
+                if values.get('customer', '').strip():
+                    customer = run(request, 'customer show', {'customer': values['customer'].strip()}, company_id)
+                    raw.update(customer=customer['id'], customer_expected_version=customer['version'])
+                    preview = run(request, 'lead convert', raw, company_id, headers=reason, dry_run=True)
+            else:
+                if values.get('name', '').strip():
+                    raw['name'] = values['name'].strip()
+                preview = run(request, 'lead convert', raw, company_id, headers=reason, dry_run=True)
+        except BookflowError as e:
+            if e.code in ('E_UNAUTHENTICATED', 'E_WORKBENCH_HEADER'):
+                raise
+            error = error or e.to_dict()
+        return render('crm_convert.html', request, status_code=status_code, company_id=company_id, lead=lead,
+                      target=target, preview=preview, customer=customer, values=values, error=error,
+                      back=back_url(company_id, request.query_params.get('back')))
+
+    @app.get('/c/{company_id}/lead/{lead_id:ulid}/convert')
+    def lead_convert(request: Request, company_id: str, lead_id: str):
+        try:
+            return convert_page(request, company_id, lead_id)
+        except BookflowError as e:
+            return page_error(request, e)
+
+    @app.get('/c/{company_id}/crm/history')
+    def crm_history(request: Request, company_id: str):
+        try:
+            raw = {'limit': 50}
+            for key in ('lead', 'customer', 'cursor'):
+                if request.query_params.get(key):
+                    raw[key] = request.query_params[key]
+            history = run(request, 'crm timeline', raw, company_id)
+            next_url = None
+            if history.get('next_cursor'):
+                next_url = f'/c/{company_id}/crm/history?' + urlencode(dict(request.query_params, cursor=history['next_cursor']))
+            return render('crm_history.html', request, company_id=company_id, history=history, next_url=next_url)
+        except BookflowError as e:
+            return page_error(request, e)

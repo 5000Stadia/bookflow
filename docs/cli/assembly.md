@@ -215,6 +215,8 @@ Example JSON output:
 
 Delete a build with a required reason. A pending build is removed and its components released; a posted build is voided first, exactly as `assembly void` does. The build drops off `assembly list`; its history stays readable with `assembly show` and `--status deleted`.
 
+Confirm first (delete): it deletes or removes records. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
@@ -1109,6 +1111,8 @@ Example JSON output:
 ## `assembly void`
 
 Void a posted build with a required reason: the components go back on the shelf and the assembly comes off, both at exactly what the build posted, and later documents are recosted by dated corrections. A pending build posted nothing; delete it instead. A closed period is refused.
+
+Confirm first (void): it voids a posted document. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

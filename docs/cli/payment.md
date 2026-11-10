@@ -885,6 +885,8 @@ Example JSON output:
 
 Delete this customer payment with a required reason and exact expected_version. Cancel its cash and receivable postings at their original dates; retain immutable history and its number. Requires the explicit family Delete grant and ledger.read, independently of ledger.post. Applied, deposited, reconciled or closed effects refuse atomically and name what blocks them.
 
+Confirm first (delete): it deletes or removes records. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
@@ -3733,6 +3735,8 @@ Example JSON output:
 ## `payment void`
 
 Void an unapplied receipt with exact original-date ledger reversals; applications must be explicitly unapplied first.
+
+Confirm first (void): it voids a posted document. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 Preview/save: choose input.operation_key once for this business operation. Call with top-level dry_run=true. Copy the returned preview result's facts_fingerprint into input.expected_facts_fingerprint, then save with dry_run=false using the same operation_key, the same business inputs and the same reason/directive. The fingerprint is returned by Bookflow; do not calculate it. A stale preview requires a fresh preview and review of the changed facts before saving.
 After an uncertain transport result, recover the existing transport reference first. For an exact business retry, preserve the original operation_key, input and context; payment operation show retrieves the canonical saved request and historical effect. A new business operation needs a new operation_key. The permanent operation_key is distinct from the optional top-level idempotency_key and from the transport reference.

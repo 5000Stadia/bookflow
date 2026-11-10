@@ -581,7 +581,7 @@ commit. Later increments never become prerequisites for the early simple route.
    intersection, print/reconciliation blockers, paired post/check atomicity and direct journal refusal.
    #### As built — increment 2
 
-   Migration co0136 (`0136_payroll_posting`) adds six company-local tables: `payroll_paychecks`,
+   Migration co0137 (`0137_payroll_posting`) adds six company-local tables: `payroll_paychecks`,
    `payroll_paycheck_components`, `payroll_net_payments`, `payroll_ytd_events`, `payroll_paycheck_events` and
    `payroll_ledger_links`, plus a private `directive_id` on `payroll_draft_revisions`. Components, YTD events,
    paycheck events and ledger links refuse update and delete; paychecks and net payments refuse delete. Permission

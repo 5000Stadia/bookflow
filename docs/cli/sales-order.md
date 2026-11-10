@@ -6033,6 +6033,8 @@ Example JSON output:
 
 Withdraw an order with a required reason (at most 140 characters). It posts nothing, so nothing is reversed; every revision stays readable and the reason is recorded as its decision. Terminal. Refused while an active invoice consumes any of its lines or a customer prepayment is held on it.
 
+Confirm first (void): it voids a posted document. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |

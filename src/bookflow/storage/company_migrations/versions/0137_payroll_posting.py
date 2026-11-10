@@ -1,12 +1,12 @@
-"""co0136: posted paychecks, net payments and year-to-date facts (R116 increment 2).
+"""co0137: posted paychecks, net payments and year-to-date facts (R116 increment 2).
 
 Existing companies keep their drafts and settings untouched; nothing is enabled. The private draft
 revision row gains the directive it was saved under, null for every existing revision.
 """
 from alembic import op
 
-revision = 'co0136'
-down_revision = 'co0135'
+revision = 'co0137'
+down_revision = 'co0136'
 branch_labels = depends_on = None
 TABLES = ('payroll_paychecks', 'payroll_paycheck_components', 'payroll_net_payments', 'payroll_ytd_events', 'payroll_paycheck_events', 'payroll_ledger_links')
 ALTER = ('ALTER TABLE payroll_draft_revisions ADD COLUMN directive_id VARCHAR(26)',)
@@ -18,7 +18,7 @@ def upgrade():
     db = op.get_bind()
     present = {row[0] for row in db.exec_driver_sql("SELECT name FROM sqlite_schema WHERE type='table'")}
     if present & set(TABLES):
-        raise RuntimeError('co0136 payroll posting tables already exist')
+        raise RuntimeError('co0137 payroll posting tables already exist')
     for statement in ALTER + DDL + TRIGGERS:
         db.exec_driver_sql(statement)
 

@@ -1920,6 +1920,8 @@ Example JSON output:
 
 Withdraw a purchase order with a required reason. An order posts nothing, so nothing is reversed and no money moves; what changes is that it can no longer become a bill, and it stays readable in full — every revision, line and captured fact, with the reason recorded. Terminal: a voided order cannot be updated or voided again, and it is refused once a bill has already been entered from it.
 
+Confirm first (void): it voids a posted document. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |

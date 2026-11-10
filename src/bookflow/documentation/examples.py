@@ -2236,6 +2236,12 @@ EXAMPLES.update({
     'lead close': Example(f'bookflow lead close {ID} --expected-version 1 --reason "No further work" --json', {'lead': ID, 'expected_version': 1}),
     'lead reopen': Example(f'bookflow lead reopen {ID} --expected-version 2 --reason "New enquiry" --json', {'lead': ID, 'expected_version': 2}),
     'lead archive': Example(f'bookflow lead archive {ID} --expected-version 3 --reason "File enquiry" --json', {'lead': ID, 'expected_version': 3}),
+    'lead convert': Example(f'bookflow lead convert {ID} --expected-version 2 --target new --dry-run --reason "Won the work" --json',
+                            {'lead': ID, 'expected_version': 2, 'target': 'new'}),
+    'lead import': Example('bookflow lead import --source fair-2026 --rows \'[{"source_key":"17","display_name":"Ada Lane"}]\' '
+                           '--reason "Trade fair list" --json',
+                           {'source': 'fair-2026', 'rows': [{'source_key': '17', 'display_name': 'Ada Lane'}]}),
+    'crm timeline': Example(f'bookflow crm timeline --lead {ID} --limit 50 --json', {'lead': ID, 'limit': 50}),
 })
 
 EXAMPLES.update({
