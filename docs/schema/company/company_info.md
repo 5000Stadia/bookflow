@@ -108,3 +108,7 @@ Database: `company`.
 | `pos_home_view_style` | VARCHAR(12) | no | — | — | — | — | Saved POS home style: block, list, compact or photo. |
 | `pos_layout_version` | INTEGER | no | — | — | — | — | POS layout revision, independent of company settings. Zero means the category seed has not yet been saved; positive revisions also preserve an intentionally empty layout. |
 | `commission_attribution_enabled` | BOOLEAN | no | — | — | — | — | Enable commission attribution on invoice lines; no calculation or payout setup. |
+| `purchase_approvals_enabled` | BOOLEAN | no | — | — | — | — | Reserved approval layer switch; off until the approval workflow is available. |
+| `bill_approvals_enabled` | BOOLEAN | no | — | — | — | — | Reserved approval layer switch; off until the approval workflow is available. |
+| `approval_routing_enabled` | BOOLEAN | no | — | — | — | — | Reserved approval layer switch; off until the approval workflow is available. |
+| `approval_reminders_enabled` | BOOLEAN | no | — | — | — | — | Reserved approval layer switch; off until the approval workflow is available. |

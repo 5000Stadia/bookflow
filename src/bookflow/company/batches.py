@@ -254,18 +254,27 @@ def describe(s, batch: dict, *, with_plan: bool = False, ctx=None) -> dict:
         if batch['state'] in ('live', 'reversing', 'blocked') and batch['reversal_of'] is None \
                 and batch['kind'] in ADAPTERS:
             try:
-                found = plan(s, ctx, batch['id'], probe=False)
+                # Reads have no write reason. Supply one only to the dry-run plan so
+                # native reason gates cannot mask authority or dependency blockers.
+                probe_ctx = ctx.model_copy(update={'reason': ctx.reason or 'Inspect batch reversibility'}) \
+                    if ctx is not None else None
+                found = plan(s, probe_ctx, batch['id'], probe=True)
             except BookflowError as error:
                 if error.code != 'E_PERMISSION':
                     raise
                 # The records are not the caller's to read: no names, values or blockers from them.
                 out['reversible'], out['first_blocker'] = False, {'code': 'E_PERMISSION', 'message': (
                     'You cannot read every kind of record this batch touched.'), 'details': error.details}
+                out['blockers'] = [out['first_blocker']]
+                out['blocker_count'] = 1
                 return out
-            out['reversible'] = not found['blockers']
-            out['first_blocker'] = found['blockers'][0] if found['blockers'] else None
+            out['blockers'] = summarize_blockers(found['blockers'])
+            out['blocker_count'] = len(out['blockers'])
+            out['reversible'] = not out['blockers'] and bool(found['steps'])
+            out['first_blocker'] = out['blockers'][0] if out['blockers'] else None
         else:
             out['reversible'], out['first_blocker'] = False, None
+            out['blockers'], out['blocker_count'] = [], 0
     return out
 
 
@@ -289,7 +298,7 @@ def _effect_out(e: dict) -> dict:
             'event_id': e['event_id']}
 
 
-def query(s, ctx, *, kind=None, state=None, scope=None, limit=50, cursor=None) -> dict:
+def query(s, ctx, *, kind=None, state=None, scope=None, date_from=None, date_to=None, limit=50, cursor=None) -> dict:
     q = sa.select(c.batches).order_by(c.batches.c.created_at.desc(), c.batches.c.id.desc())
     if kind:
         q = q.where(c.batches.c.kind == kind)
@@ -297,6 +306,10 @@ def query(s, ctx, *, kind=None, state=None, scope=None, limit=50, cursor=None) -
         q = q.where(c.batches.c.state == state)
     if scope:
         q = q.where(c.batches.c.scope == scope)
+    if date_from:
+        q = q.where(sa.func.substr(c.batches.c.created_at, 1, 10) >= date_from.isoformat())
+    if date_to:
+        q = q.where(sa.func.substr(c.batches.c.created_at, 1, 10) <= date_to.isoformat())
     if cursor:
         q = q.where(c.batches.c.id < cursor)
     rows = [dict(r) for r in s.company.conn.execute(q.limit(limit + 1)).mappings().all()]
@@ -432,6 +445,10 @@ def document_record(record_type: str) -> DocumentRecord | None:
     return DOCUMENTS.get(record_type)
 
 
+def _document_inverse(rec: DocumentRecord, batch: dict) -> str:
+    return 'invoice void' if rec.type_value == 'invoice' and batch['kind'] == 'batch-invoice' else rec.inverse
+
+
 def _document_steps(s, group: dict, rec: DocumentRecord) -> list[tuple[str, dict]]:
     """A document's retiring command; a payment or bill payment still applied is unapplied first, since a payment is
     deleted (a bill payment voided) only once nothing stands applied."""
@@ -457,7 +474,8 @@ def _document_steps(s, group: dict, rec: DocumentRecord) -> list[tuple[str, dict
     if adapter_for(_batch(s, group['batch_id'])['kind']).release_document_numbers \
             and renumbers(rec) and not _retired_here(s, rec, group):
         steps.append(('renumber', {}))
-    steps.append((rec.inverse, {rec.selector: group['record_id']}))
+    inverse = _document_inverse(rec, _batch(s, group['batch_id']))
+    steps.append((inverse, {rec.selector: group['record_id']}))
     return steps
 
 
@@ -823,7 +841,7 @@ def plan_records(s, ctx, batch, all_effects, done, probe, blockers):
         if getattr(rec, 'document', False):
             # A document's remaining steps are read from the books (a payment's unapply only while applied): it is
             # done once its retiring command ran.
-            if any(json.loads(e['before'] or '{}').get('command') == rec.inverse for e in steps_done):
+            if any(json.loads(e['before'] or '{}').get('command') in (rec.inverse, _document_inverse(rec, batch)) for e in steps_done):
                 continue
             steps_done = []
         elif len(steps_done) >= (1 if g['action'] == 'updated' else 2):
@@ -893,7 +911,11 @@ def plan_records(s, ctx, batch, all_effects, done, probe, blockers):
                                      f"{label} is in use: " + (', '.join(use['documents']) if use['documents'] else
                                                                'rows of ' + ', '.join(use['tables']))
                                      + (' refers to it.' if len(use['documents']) == 1 else ' refer to it.'),
-                                     clears=f"void, delete or move what uses {label} first", used_by=use['rows']))
+                                     clears=(('; '.join(f'unapply {document} from {label} first' for document in use['documents']))
+                                             if set(use['tables']) <= {'applications', 'ap_applications'} else
+                                             f'void, delete or move what uses {label} first'), used_by=use['rows'],
+                                     shared_message='In use by ' + ', '.join(use['documents']),
+                                     member_name=row[rec.name_field]))
             continue
         steps = _steps_for(g, rec, row['version'], s)[len(steps_done):]
         steps_out.append({'seq': g['seq'], 'record_type': g['record_type'], 'record_id': g['record_id'],
@@ -992,7 +1014,8 @@ def _probe(s, ctx, batch, g, rec, row, steps, made) -> list[dict]:
             if error.code == 'E_ACTIVE_DEPENDENTS' and _only_batch_children(s, rec, row, g, made):
                 continue
             refusal = _blocker(g, rec, error.code, f"{rec.noun} {row[rec.name_field]}: {error.message}",
-                               clears=_clears_for(error, rec), details=error.details)
+                               clears=_clears_for(error, rec), details=error.details,
+                               shared_message=error.message, member_name=row[rec.name_field])
             if refusal not in refusals:
                 refusals.append(refusal)
     return refusals
@@ -1009,7 +1032,10 @@ def _only_batch_children(s, rec, row, g, made) -> bool:
 
 def _clears_for(error: BookflowError, rec: ListRecord) -> str:
     if error.code == 'E_PERMISSION':
-        return 'ask your principal or an admin for the grant the details name'
+        return (f"ask an admin to grant {error.details.get('capability', 'the capability named in the details')} "
+                "and resolve any denies or record rules shown by `membership effective`")
+    if error.code == 'E_PERIOD_CLOSED':
+        return 'ask an authorized admin to reopen the closed period first'
     if error.code == 'E_ACTIVE_DEPENDENTS':
         return f'deactivate or move what sits under this {rec.noun} first'
     if error.code == 'E_VERSION_CONFLICT':
@@ -1024,8 +1050,38 @@ def _progress(found: dict) -> str:
     return f"The reversal is part way ({done} of {found['records']} records reversed) and cannot go on. "
 
 
+def summarize_blockers(blockers: list[dict]) -> list[dict]:
+    """Group identical causes without dropping any affected member or its details."""
+    grouped = {}
+    for blocker in blockers:
+        message = blocker.get('shared_message', blocker['message'])
+        if blocker['code'] == 'later_batch' and blocker.get('batch'):
+            message = f"Later batch {blocker['batch']} still holds these members."
+        key = (blocker['code'], message)
+        if blocker.get('used_by'):
+            key += (tuple(sorted({r.get('transaction_id', r['id']) for r in blocker['used_by']})),)
+        if key not in grouped:
+            grouped[key] = {k: v for k, v in blocker.items()
+                            if k not in ('shared_message', 'member_name')}
+            grouped[key].update(message=message, count=0, members=[], _single=blocker['message'])
+        out = grouped[key]
+        member = {k: blocker[k] for k in ('seq', 'record_type', 'record_id', 'details', 'clears', 'used_by') if k in blocker}
+        if 'member_name' in blocker:
+            member['name'] = blocker['member_name']
+        if member not in out['members']:
+            out['members'].append(member)
+            out['count'] += 1
+        out['clears'] = '; '.join(dict.fromkeys(m['clears'] for m in out['members'] if m.get('clears'))) or None
+    for out in grouped.values():
+        # One affected record: keep its own message, which names the record as well as the cause.
+        single = out.pop('_single')
+        if out['count'] == 1:
+            out['message'] = single
+    return list(grouped.values())
+
+
 def refuse(found: dict) -> BookflowError:
-    blockers = found['blockers']
+    blockers = summarize_blockers(found['blockers'])
     first = blockers[0]
     return BookflowError('E_BATCH_BLOCKED', message=(
         _progress(found) + f"The batch cannot be reversed: {len(blockers)} blocker{'s' if len(blockers) != 1 else ''}, "

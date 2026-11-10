@@ -505,6 +505,7 @@ SECTIONS: tuple[Section, ...] = (
         "vendors", records="vendor", records_label="Vendor list",
         new=(
             _new("Bill", "bill post", "/bill/post"),
+            _new("Bill draft", "purchase-draft create", "/purchase-drafts?new=1"),
             _new("Check", "check post", "/check/post"),
             _new("Credit card charge", "card-charge post", "/card-charge/post"),
             _new("Credit card credit", "card-credit post", "/card-credit/post"),
@@ -515,6 +516,7 @@ SECTIONS: tuple[Section, ...] = (
         ),
         lists=(
             _list("Bills", "bill query", "/bill"),
+            _list("Purchase drafts", "purchase-draft list", "/purchase-drafts"),
             _list("Bill payments", "bill payment query", "/bill-payment"),
             _list("Checks", "check query", "/check"),
             _list("Credit card charges", "card-charge query", "/card-charge"),
@@ -553,6 +555,7 @@ SECTIONS: tuple[Section, ...] = (
             _list("Time entries", "time-activity query", "/time-activity"),
         ),
         tasks=(
+            Action("Payroll", READ, ("payroll settings", "payroll list"), "/payroll"),
             Action("Use weekly timesheet", READ, ("timesheet show",), "/timesheet"),
             Action("Time clock", READ, ("clock status",), "/clock"),
             Action("Job calendar", READ, ("schedule calendar",), "/calendar"),
@@ -738,7 +741,7 @@ NOUN_SECTION = {
         "sales-tax-code", "class", "custom-field", "profile", "chart")},
     **{noun: "banking" for noun in (
         "register", "deposit", "reconcile", "reconcile opening", "transfer", "rate")},
-    **{noun: "vendors" for noun in ("purchase-order", "item-receipt", "sales-tax", "sales-tax payment",
+    **{noun: "vendors" for noun in ("purchase-draft", "purchase-order", "item-receipt", "sales-tax", "sales-tax payment",
                                                 "sales-tax adjustment")},
     **{noun: "customers" for noun in (
         "payment operation", "payment preview", "payment recovery", "payment selection", "payment settlement")},
@@ -1274,6 +1277,8 @@ class Reader:
 # tests/test_menus_and_home.py records them again and fails on any command a page runs that is not declared here,
 # so this cannot drift from the pages. Guarded reads are listed too: hiding a page is the lesser error.
 PAGE_RUNS: dict[str, tuple[str, ...]] = {
+    '/purchase-drafts': ('company show', 'purchase-draft list'),
+    '/purchase-drafts?new=1': ('company show',),
     '/bank-inbox': ('company show', 'bank-line query', 'account list', 'bank-feed query'),
     **{'/bank-inbox/' + act: ('company show', 'bank-line query', 'account list', 'bank-feed query', *reads)
        for act, reads in {'add': (), 'ignore': (), 'transfer': (), 'unmatch': (),
@@ -1319,6 +1324,7 @@ PAGE_RUNS: dict[str, tuple[str, ...]] = {
     '/journal/post': ('custom-field list',),
     '/mileage': ('customer list', 'item list', 'mileage-rate list', 'vehicle list'),
     '/opening': ('opening-draft query',),
+    '/payroll': ('payroll settings', 'payroll list'),
     '/other-name': ('other-name query', 'other-name query options'),
     '/other-name/create': ('custom-field list',),
     '/payment': ('payment-method list',),

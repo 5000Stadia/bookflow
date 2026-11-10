@@ -213,6 +213,17 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     def older(conn):
         conn.execute("ALTER TABLE company_info DROP COLUMN commission_attribution_enabled")
         conn.execute("ALTER TABLE items DROP COLUMN commission_enabled")
+        # co0130 private payroll tables reference employees/accounts; remove before rewind.
+        for table in ("payroll_operations", "payroll_draft_revisions", "payroll_drafts", "payroll_settings"):
+            conn.execute(f"DROP TABLE {table}")
+
+        # co0129's saved purchase history and off-by-default switches are additive.
+        conn.execute("DROP TABLE purchase_draft_operations")
+        conn.execute("DROP TABLE purchase_draft_revisions")
+        conn.execute("DROP TABLE purchase_drafts")
+        for flag in ("purchase_approvals_enabled", "bill_approvals_enabled",
+                     "approval_routing_enabled", "approval_reminders_enabled"):
+            conn.execute("ALTER TABLE company_info DROP COLUMN " + flag)
         # co0127 shifts reference registers; remove sale/refund ownership before the shift table.
         conn.execute("ALTER TABLE pos_sales DROP COLUMN shift_id")
         conn.execute("ALTER TABLE pos_refunds DROP COLUMN shift_id")
@@ -536,7 +547,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))
     restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older",
                                               "organization": "Older Books Organization"})
-    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0129"
+    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0131"
     folder = _folder(client, restored["company_id"])
     # The migration took its verified backup of the restored database first, as every migration does.
     assert list((folder / "backups").glob("*-from-co0062.db"))

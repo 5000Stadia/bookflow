@@ -2868,3 +2868,59 @@ input = { date = "2026-09-05", customer = "${sale_customer.id}", lines = [{ item
 command = "company update"
 reason = "Keep optional attribution off in the default demo"
 input = { commission_attribution_enabled = false }
+# R116 increment 1: fictional P1 manual calculator. These are test inputs, not statutory rates.
+# Payroll is returned to off after preparing the specimen; authorized historical reads still work.
+[[commands]]
+command = "account create"
+input = { name = "Demo Payroll Wages", type = "expense" }
+
+[[commands]]
+command = "account create"
+input = { name = "Demo Payroll Employer Expense", type = "expense" }
+
+[[commands]]
+command = "account create"
+input = { name = "Demo Payroll Net Payable", type = "other_current_liability" }
+
+[[commands]]
+command = "account create"
+input = { name = "Demo Payroll Tax Payable", type = "other_current_liability" }
+
+[[commands]]
+command = "payroll setup"
+reason = "Prepare fictional payroll demonstration"
+input = { enabled = true, expected_version = 0, operation_key = "demo-payroll-enable", wage_account = "Demo Payroll Wages", employer_tax_account = "Demo Payroll Employer Expense", net_pay_account = "Demo Payroll Net Payable" }
+
+[[commands]]
+command = "payroll draft"
+capture = "payroll_p1"
+reason = "Save fictional manual paycheck"
+input = { employee = "${employee.id}", operation_key = "demo-payroll-p1", period_start = "2026-09-01", period_end = "2026-09-07", pay_date = "2026-09-09", taxes_confirmed = true, earnings = [{ code = "Fictional regular wages", quantity = "40", rate = "25" }], items = [{ code = "Fictional employee tax", kind = "employee_tax", amount_minor_units = 10000, liability_account = "Demo Payroll Tax Payable", payee = "Fictional agency", source_note = "Fictional P1 test: independently calculated 10 percent of gross; not tax guidance" }, { code = "Fictional employer tax", kind = "employer_tax", amount_minor_units = 5000, liability_account = "Demo Payroll Tax Payable", payee = "Fictional agency", source_note = "Fictional P1 test: independently calculated 5 percent of gross; not tax guidance" }] }
+
+[[commands]]
+command = "payroll prepare"
+reason = "Review fictional P1 arithmetic without posting"
+input = { draft = "${payroll_p1.id}", expected_version = "${payroll_p1.version}", operation_key = "demo-payroll-calculate" }
+
+[[commands]]
+command = "payroll setup"
+reason = "Leave optional payroll switched off"
+input = { enabled = false, expected_version = 1, operation_key = "demo-payroll-disable" }
+
+# Saved purchase drafts are separate from accounts payable; approval switches stay off.
+[[commands]]
+command = "purchase-draft create"
+capture = "saved_bill_draft"
+reason = "Save a bill for another bookkeeper to finish"
+input = { operation_key = "demo-saved-bill", vendor = "${backup_vendor.id}", date = "2026-09-15", supplier_reference = "DRAFT-80", memo = "Saved for review; no accounts payable effect", expenses = [{ account = "${expense_account.id}", amount = "60.25", memo = "Service" }, { account = "${expense_account.id}", amount = "19.75", memo = "Freight" }] }
+
+[[commands]]
+command = "purchase-draft create"
+capture = "cancelled_bill_draft"
+reason = "Prepare a duplicate draft for cancellation"
+input = { operation_key = "demo-cancelled-bill", vendor = "${backup_vendor.id}", date = "2026-09-15", supplier_reference = "DRAFT-CANCEL", expenses = [{ account = "${expense_account.id}", amount = "80.00" }] }
+
+[[commands]]
+command = "purchase-draft cancel"
+reason = "Cancel the duplicate while preserving its history"
+input = { draft = "${cancelled_bill_draft.id}", expected_version = 1, operation_key = "demo-cancel-bill" }

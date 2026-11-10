@@ -528,6 +528,47 @@ commit. Later increments never become prerequisites for the early simple route.
    calculation trace and save/resume; no posting. **Done when:** P1 can be entered, hand-checked and reopened by a
    permitted colleague without GL effects or a table. **Tests:** P1 preview, exact cents, negative net, no ordinary
    employee-read leakage, stale draft, CLI/MCP and 390 px workflow.
+   #### As built — increment 1
+
+   Six shared commands: `payroll setup/settings/draft/show/list/prepare`. The opt-in switch defaults off in a
+   separate private settings table; enabling requires existing active USD wage expense, employer-tax expense and
+   net-pay liability accounts. The company must use USD. Payroll reads require `payroll.read`; draft/calculation
+   writes also require `payroll.prepare`; setup additionally requires `payroll.configure` and company admin.
+   Defaults are admin-only, agents need explicit grants, and legacy unactivated permission policies refuse payroll.
+
+   Drafts hold an existing active employee, period, optional actual payday, exact decimal quantity/rate earnings or
+   fixed cents, and explicitly confirmed fixed employee taxes/deductions and employer taxes/contributions. Each
+   fixed item names a liability account, payee and source note; zero is explicit. P1 uses independently entered
+   fixed taxes of 10000 and 5000 cents, producing gross 100000, net 90000 and equal conceptual totals of 105000 cents.
+   No percentage rules are shipped in this increment. Earnings round half-up per line, employer costs never reduce
+   net, and zero net is permitted. Negative net refuses with a generic field error: the privacy requirement takes
+   precedence over putting the excess amount in an error payload. The authorized trace exposes exact arithmetic.
+
+   Save replaces an entire draft at its expected version and clears its calculation. Prepare revalidates employee
+   and accounts, saves its trace and advances the version. Every write runs inside one company transaction, requires
+   a reason and a permanent `operation_key`, and refuses changed-input reuse. Old input/output revisions and retry
+   receipts are private, immutable records. Replays recheck current command authority. Disabling payroll prevents
+   new saves/calculations while retaining permitted reads. No employee columns or ordinary employee projections
+   contain payroll data. No GL, YTD, source claim, posting batch, tax table or payment is created.
+
+   Money is stored in `payroll_drafts.payload/calculation`, `payroll_draft_revisions.snapshot`, and
+   `payroll_operations.output`; private reasons/source notes may also contain it. These tables are company-local.
+   Only authorized payroll command responses and the private browser page expose them through the application.
+   General audit retains neutral action/identity/version facts; reasons and operation keys are omitted there.
+   Ordinary deposit/export projections do not include these tables. Portable company backups and accountant copies
+   require payroll read authority when private records exist; raw files, existing archives and scheduled host backups
+   remain under trusted filesystem custody. The browser disables htmx history snapshots and sends `no-store`.
+
+   Employees → Payroll provides htmx setup, multiple input rows, save/resume, separate gross/net/employer sections
+   and expandable calculation traces. A fictional P1 demo is saved and prepared, then its switch is returned to off.
+   Tests cover independent arithmetic, privacy, archive guards, stale edits/retries, CLI/MCP continuation and a real
+   390 px htmx workflow. Full integration/browser execution is left to the full test runner when fixture setup
+   exceeds the builder's 25-second command limit; focused arithmetic and manifest checks are run locally.
+
+   Later increments retain posting, percentage rules and tax-base/YTD revisions, final-pay treatment for inactive
+   employees, reusable profiles/items/benefits, reimbursements and noncash treatment, time/commission claims, runs,
+   settlement, corrections and form worksheets. No external filing, rates, bank transmission or payment is added.
+
 2. **Single posting and net pay (L).** Owned paychecks, flat-rate items, component/YTD facts, source-free posting,
    net-pay settlement/check adapter, void and R186 adapter. **Done when:** P1 records one check and eligible reversal
    restores books; all bypass routes refuse. **Tests:** P1/P6 cents and zero net, duplicate post, closed date, permission

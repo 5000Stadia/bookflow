@@ -79,6 +79,7 @@ COMMAND_CODES: dict[str, str] = {
     "E_UNBALANCED_ENTRY": "Journal debits and credits must be equal.",
     "E_TAX_BASIS_UNSUPPORTED": "Sales tax on this liability basis is not derivable from what the books record.",
     "E_PERIOD_CLOSED": "An affected accounting date is in a closed period.",
+    "E_APPROVAL_STATE": "This draft state does not allow the requested act; inspect its legal next actions.",
     "E_WORK_DEPENDENCY": "The accepted or linked work prevents this change; inspect the related document.",
     "E_CONVERSION_KEY_REUSED": "That permanent conversion key was used for different work or input.",
     "E_DUPLICATE_NUMBER": "That document number is already used in this document's number series.",
@@ -205,7 +206,7 @@ def permission_message(details: dict[str, Any]) -> str:
             and capability.startswith("transaction.") and capability.endswith(".delete") and required):
         # No role includes Delete: an owner refused here is missing the grant, not a role.
         return (f"Deleting needs an explicit {capability} grant for you in this company's user "
-                f"setup, at role {required} or above; no role includes it. An administrator "
+                "setup; no role includes this grant. An administrator "
                 "grants it with `membership grant`.")
     if required in _ROLE_WORDS:
         return f"Only {_ROLE_WORDS[required]} may do this" + (f" ({capability})." if capability else ".")

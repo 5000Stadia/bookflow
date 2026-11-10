@@ -273,6 +273,9 @@ def _role_allows(cmd: registry.Command, record: dict[str, Any], *, hub_admin: bo
         decided = effective.decide(cmd)
         if decided is not None:
             return decided
+    # Payroll has no legacy role-only admission, including for installation administrators.
+    if cmd is not None and (cmd.capability or '').startswith('payroll.'):
+        return False
     if hub_admin or record.get("access") == "hub_admin":
         return True
     required = legacy_required_role(cmd)  # before activation the roles decide: a POS seller is standard
@@ -952,6 +955,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                           **({"automation_allowed": automation_allowed} if bank_module is bank_rule_pages else {}),
                           role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R107 increment 7: guided opening balances (date and checks, the four grids, tie out and post), on opening-draft.
+    from bookflow.adapters.workbench import purchase_draft_pages as PurchaseDraftPages
+    PurchaseDraftPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                            role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
+
     from bookflow.adapters.workbench import opening_pages as OpeningPages
     OpeningPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                        role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
@@ -976,6 +983,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     from bookflow.adapters.workbench import finance_charges as FinanceCharges
     FinanceCharges.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                          role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
+    # R116 increment 1: private, saved manual paycheck calculations.
+    from bookflow.adapters.workbench import payroll_pages as PayrollPages
+    PayrollPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                       role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R106: Weekly Timesheet, the time clock and the job calendar.
     from bookflow.adapters.workbench import timekeeping_pages as TimekeepingPages
     TimekeepingPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,

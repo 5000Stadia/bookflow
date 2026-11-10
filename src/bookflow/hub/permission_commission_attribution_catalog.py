@@ -1,9 +1,9 @@
-"""Invoice line attribution on the immutable notice-reversal-v1 catalog."""
+"""Invoice line attribution on the immutable payroll-draft-v1 catalog."""
 from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_notice_reversal_catalog as previous, permission_catalog as c
+from . import permission_payroll_draft_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
 SOURCE_COMMIT = '087f61ff75dcc48fcf62b049337d7bb0295f9f19'
