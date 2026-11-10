@@ -1,0 +1,21 @@
+"""co0135: staged intercompany setup; empty settings mean all layers off."""
+from alembic import op
+revision = 'co0135'
+down_revision = 'co0134'
+branch_labels = depends_on = None
+DDL = ["\nCREATE TABLE intercompany_settings (\n\tid VARCHAR(26) NOT NULL, \n\tversion INTEGER NOT NULL, \n\tcreated_at VARCHAR(32) NOT NULL, \n\tcreated_by VARCHAR(26) NOT NULL, \n\tcreated_via VARCHAR(16) NOT NULL, \n\tupdated_at VARCHAR(32) NOT NULL, \n\tupdated_by VARCHAR(26) NOT NULL, \n\tupdated_via VARCHAR(16) NOT NULL, \n\tlinked_entries_enabled BOOLEAN NOT NULL, \n\ttemplates_enabled BOOLEAN NOT NULL, \n\tbulk_enabled BOOLEAN NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT ck_intercompany_settings_singleton CHECK (id = 'settings'), \n\tCONSTRAINT ck_intercompany_settings_booleans CHECK (linked_entries_enabled IN (0,1) AND templates_enabled IN (0,1) AND bulk_enabled IN (0,1)), \n\tCONSTRAINT ck_intercompany_settings_layers CHECK (linked_entries_enabled = 1 OR (templates_enabled = 0 AND bulk_enabled = 0))\n)\n\n", '\nCREATE TABLE intercompany_drafts (\n\tid VARCHAR(26) NOT NULL, \n\tversion INTEGER NOT NULL, \n\tcreated_at VARCHAR(32) NOT NULL, \n\tcreated_by VARCHAR(26) NOT NULL, \n\tcreated_via VARCHAR(16) NOT NULL, \n\tupdated_at VARCHAR(32) NOT NULL, \n\tupdated_by VARCHAR(26) NOT NULL, \n\tupdated_via VARCHAR(16) NOT NULL, \n\tdate VARCHAR(10) NOT NULL, \n\tamount_minor_units BIGINT NOT NULL, \n\tcurrency VARCHAR(3) NOT NULL, \n\toffset_account_id VARCHAR(26), \n\tmemo VARCHAR(1000), \n\tPRIMARY KEY (id), \n\tCONSTRAINT ck_intercompany_draft_amount CHECK (amount_minor_units > 0), \n\tFOREIGN KEY(offset_account_id) REFERENCES accounts (id) ON DELETE RESTRICT\n)\n\n', '\nCREATE TABLE intercompany_mappings (\n\tid VARCHAR(26) NOT NULL, \n\tversion INTEGER NOT NULL, \n\tcreated_at VARCHAR(32) NOT NULL, \n\tcreated_by VARCHAR(26) NOT NULL, \n\tcreated_via VARCHAR(16) NOT NULL, \n\tupdated_at VARCHAR(32) NOT NULL, \n\tupdated_by VARCHAR(26) NOT NULL, \n\tupdated_via VARCHAR(16) NOT NULL, \n\tpeer_id VARCHAR(64) NOT NULL, \n\tdue_from_id VARCHAR(26) NOT NULL, \n\tdue_to_id VARCHAR(26) NOT NULL, \n\tcurrency VARCHAR(3) NOT NULL, \n\tdigest VARCHAR(64) NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_intercompany_mapping_revision UNIQUE (peer_id, version), \n\tCONSTRAINT ck_intercompany_distinct_accounts CHECK (due_from_id != due_to_id), \n\tFOREIGN KEY(due_from_id) REFERENCES accounts (id) ON DELETE RESTRICT, \n\tFOREIGN KEY(due_to_id) REFERENCES accounts (id) ON DELETE RESTRICT\n)\n\n', 'CREATE INDEX ix_intercompany_mapping_peer ON intercompany_mappings (peer_id, version)', "CREATE TRIGGER intercompany_mappings_no_update BEFORE UPDATE ON intercompany_mappings BEGIN SELECT RAISE(ABORT, 'Configuration revisions are immutable'); END", "CREATE TRIGGER intercompany_mappings_no_delete BEFORE DELETE ON intercompany_mappings BEGIN SELECT RAISE(ABORT, 'Configuration revisions are immutable'); END", "CREATE TRIGGER intercompany_reserved_posting BEFORE INSERT ON posting_lines WHEN EXISTS (SELECT 1 FROM intercompany_mappings WHERE due_from_id=NEW.account_id OR due_to_id=NEW.account_id) BEGIN SELECT RAISE(ABORT, 'Account is reserved for an owned workflow'); END", "CREATE TRIGGER intercompany_reserved_account BEFORE UPDATE OF type,currency,active ON accounts WHEN (OLD.type != NEW.type OR OLD.currency != NEW.currency OR OLD.active != NEW.active) AND EXISTS (SELECT 1 FROM intercompany_mappings WHERE due_from_id=OLD.id OR due_to_id=OLD.id) BEGIN SELECT RAISE(ABORT, 'Account is reserved for an owned workflow'); END"]
+DDL.append("CREATE TRIGGER intercompany_reserved_merge BEFORE INSERT ON list_merges WHEN NEW.list_kind = 'account' AND EXISTS (SELECT 1 FROM intercompany_mappings WHERE due_from_id IN (NEW.merged_id, NEW.survivor_id) OR due_to_id IN (NEW.merged_id, NEW.survivor_id)) BEGIN SELECT RAISE(ABORT, 'Account is reserved for an owned workflow'); END")
+NEW_TABLES = ('intercompany_settings', 'intercompany_drafts', 'intercompany_mappings')
+
+
+def upgrade():
+    db = op.get_bind()
+    names = {row[0] for row in db.exec_driver_sql('SELECT name FROM sqlite_schema')}
+    if names & set(NEW_TABLES):
+        raise RuntimeError('co0135 reserved object exists')
+    for statement in DDL:
+        db.exec_driver_sql(statement)
+
+
+def downgrade():
+    raise RuntimeError('Migrations are forward-only')

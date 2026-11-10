@@ -626,6 +626,8 @@ def load_request(s: Session, event_id: str) -> UndoRequest:
     """Load and authorize one eligible original event without mutating."""
 
     stable_event_id = event_id.upper()
+    from bookflow.company.intercompany_visibility import authorize_event
+    authorize_event(s, stable_event_id)
     event_row = s.company.conn.execute(
         sa.select(schema.audit_events).where(schema.audit_events.c.id == stable_event_id)
     ).mappings().first()

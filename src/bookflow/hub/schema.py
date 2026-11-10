@@ -292,3 +292,6 @@ user_homes = _table(
     _column("set_via", sa.String(16), "Interface it was last set through.", nullable=False),
     description="Each person's chosen start page (R191): where signing in and the Home button land. Starting location is not permission.",
 )
+
+from bookflow.hub import intercompany_schema as _intercompany_schema
+globals().update(_intercompany_schema.define_tables(metadata, _column, _table, _common))

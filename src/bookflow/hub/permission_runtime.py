@@ -100,6 +100,7 @@ def catalog_bundle() -> s.CatalogBundle:
 # the chain is imported anyway -- at module scope it would force that import on every
 # command and cost roughly half a second, against nothing here.
 ACCEPTED_DESCRIPTOR_SHA256 = {
+    c.INTERCOMPANY_SETUP_POLICY_VERSION: '67602d51a720ba672a62fe16afbe33cab1f266d96b4ceaf24ebedd3705f7f63f',
     c.PAYROLL_DRAFT_POLICY_VERSION: '365f7a60586a9ad2bef7341b77905c85a4816b033177fc22215ac0c63155419a',
     c.SCOPED_POLICY_VERSION: 'a0823e6d9ae98e96c98e2b6e4e73042ecc8ecb7cf0e7d4d9b50e8febc7ed6979',
     c.SETUP_POLICY_VERSION: '5d71ff2a0970f85e12b6fca0f84ff2736176565db44064b0668f84a3c132e2f2',
@@ -373,6 +374,7 @@ def _full_known():
     from . import permission_pos_refund_catalog, permission_pos_split_catalog
     from . import permission_pos_ticket_catalog, permission_pos_ticket_takeover_catalog, permission_pos_receipt_catalog
     from . import permission_bill_approval_catalog
+    from . import permission_intercompany_setup_catalog
     from . import permission_membership_pricing_catalog
     from . import permission_crm_leads_catalog
     from . import permission_payroll_draft_catalog
@@ -486,6 +488,7 @@ def _full_known():
         c.PURCHASE_DRAFT_POLICY_VERSION: permission_purchase_draft_catalog,
         c.BILL_APPROVAL_POLICY_VERSION: permission_bill_approval_catalog,
         c.MEMBERSHIP_PRICING_POLICY_VERSION: permission_membership_pricing_catalog,
+        c.INTERCOMPANY_SETUP_POLICY_VERSION: permission_intercompany_setup_catalog,
         c.NOTICE_REVERSAL_POLICY_VERSION: permission_notice_reversal_catalog,
         c.COMMISSION_ATTRIBUTION_POLICY_VERSION: permission_commission_attribution_catalog,
         c.REVERSIBLE_BATCH_POLICY_VERSION: permission_reversible_batch_catalog,
@@ -650,7 +653,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.MEMBERSHIP_PRICING_POLICY_VERSION)
+    return known_catalog(c.INTERCOMPANY_SETUP_POLICY_VERSION)
 
 
 def catalog_for_root(tx):

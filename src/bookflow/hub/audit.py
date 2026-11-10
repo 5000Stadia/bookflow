@@ -11,7 +11,7 @@ from bookflow.core.audit import RAW, SECRET_FIELDS, ZIP, decode_snapshot, encode
 
 
 def visible_record_ids(s: Session) -> set[str] | None:
-    """Ids of organizations and companies the actor may see; None for hub admins (everything)."""
+    """Visible entry IDs; private setup events also pass visible_event_ids_filter."""
     if s.is_hub_admin:
         return None
     org_ids = {m["scope_id"] for m in s.memberships if m["scope_type"] == "organization"}
@@ -22,14 +22,18 @@ def visible_record_ids(s: Session) -> set[str] | None:
     if company_ids:
         rows = s.hub.conn.execute(sa.select(h.companies.c.organization_id).where(h.companies.c.id.in_(company_ids))).all()
         org_ids |= {r[0] for r in rows}
-    return org_ids | company_ids | {s.actor.id}
+    from bookflow.company.intercompany_visibility import visible_relationship_ids
+    return org_ids | company_ids | {s.actor.id} | visible_relationship_ids(s)
 
 
 def visible_event_ids_filter(s: Session):
-    """Criterion over audit_events: hub admins see all; others see events with a visible entry or their own."""
+    """Visible entry/own-event policy, intersected with private setup authority."""
+    from bookflow.company.intercompany_visibility import hidden_events
+    private = hidden_events(s, hub=True)
+    permitted = h.audit_events.c.id.not_in(private) if private else sa.true()
     if s.is_hub_admin:
-        return sa.true()
+        return permitted
     ids = visible_record_ids(s) or set()
     own = h.audit_events.c.actor_id == s.actor.id
     sub = sa.select(h.audit_entries.c.event_id).where(h.audit_entries.c.record_id.in_(ids))
-    return sa.or_(own, h.audit_events.c.id.in_(sub))
+    return sa.and_(permitted, sa.or_(own, h.audit_events.c.id.in_(sub)))

@@ -131,6 +131,7 @@ ACCEPTED = {
     'crm-leads-v1': (931, '2391f97a14862f9e1b000380a94508db57869b458bc6b6125f8a56a0075ca672'),
     'bill-approval-v1': (942, '2c3aa75ea00d9b2be1276eb3847bb3d712a84026df49c03eaeef97ff430f618e'),
     'membership-pricing-v1': (949, '14c33f7743c47b7721d8825be60f3fb4e89d287f515d97166286b59bc189d4a6'),
+    'intercompany-setup-v1': (960, '67602d51a720ba672a62fe16afbe33cab1f266d96b4ceaf24ebedd3705f7f63f'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores

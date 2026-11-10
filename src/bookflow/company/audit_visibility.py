@@ -29,6 +29,9 @@ def _lists():
 
 # Record types named exactly; checked before the prefixes below.
 EXACT = {
+    'intercompany_settings': frozenset(('company',)),
+    'intercompany_draft': frozenset((LEDGER,)),
+    'intercompany_mapping': frozenset((LEDGER,)),
     **_lists(),
     'company': frozenset(('company',)),
     'company_info': frozenset(('company',)),

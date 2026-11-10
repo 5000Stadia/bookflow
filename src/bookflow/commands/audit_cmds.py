@@ -185,6 +185,8 @@ def _apply_filters(q, events, s: Session, hub: bool, inp: AuditFilters, entries)
 
 def _event_out(s: Session, hub: bool, e: dict[str, Any], names: dict[str, str], with_entries: bool, authority=None,
                held: frozenset[str] | None = None) -> AuditEventOut:
+    from bookflow.company.intercompany_visibility import authorize_event
+    authorize_event(s, e['id'], hub)
     if not hub:
         from bookflow.company.payment_authority import authorize_event
         authorize_event(s, e['id'], authority)
@@ -247,6 +249,10 @@ def _list(s: Session, hub: bool, inp: AuditListInput) -> AuditListOutput:
     if hub:
         q = q.where(hub_audit.visible_event_ids_filter(s))
     q = _apply_filters(q, events, s, hub, inp, entries)
+    from bookflow.company.intercompany_visibility import hidden_events
+    private = hidden_events(s, hub)
+    if private:
+        q = q.where(events.c.id.not_in(private))
     authority = {}
     held = None
     if not hub:
@@ -269,13 +275,14 @@ def _list(s: Session, hub: bool, inp: AuditListInput) -> AuditListOutput:
 
 def _tail(s: Session, hub: bool, inp: AuditTailInput) -> AuditTailOutput:
     db, events, entries, visible, resolver, _ = _scope(s, hub)
-    denied = []
+    from bookflow.company.intercompany_visibility import hidden_events
+    denied = hidden_events(s, hub)
     authority = {}
     held = None
     if not hub:
         held = visibility.admitted(s)
         from bookflow.company.payment_authority import denied_events
-        denied = denied_events(s, authority)
+        denied = denied | set(denied_events(s, authority))
     after = inp.after
     if after is None:
         newest = _visible(sa.select(sa.func.max(events.c.seq)), events, held)
@@ -317,6 +324,8 @@ def _tail(s: Session, hub: bool, inp: AuditTailInput) -> AuditTailOutput:
 def _show(s: Session, hub: bool, inp: EventSelector) -> AuditEventOut:
     db, events, entries, visible, resolver, _ = _scope(s, hub)
     q = sa.select(events).where(events.c.id == inp.event.upper())
+    from bookflow.company.intercompany_visibility import authorize_event
+    authorize_event(s, inp.event.upper(), hub)
     held = None
     if hub:
         q = q.where(hub_audit.visible_event_ids_filter(s))

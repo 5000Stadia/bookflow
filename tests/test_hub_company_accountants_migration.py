@@ -6,6 +6,8 @@ backfills the designations, marking a company whose books cannot be read unverif
 import importlib
 import sqlite3
 
+import pytest
+
 from sqlalchemy.dialects import sqlite
 from sqlalchemy.schema import CreateIndex, CreateTable
 
@@ -38,12 +40,16 @@ def test_upgrading_backfills_designations_and_marks_unreadable_books_unverified(
         # Back to hub0015, as a hub upgraded from before R121 would be.
         hub.execute('DROP TABLE company_accountants')
         hub.execute('DROP TABLE company_accountant_sync')
-        hub.execute('DROP TABLE user_homes')  # hub0017 (R191) comes after it
         hub.execute("UPDATE alembic_version SET version_num='hub0015'")
-    with open_database(root / 'hub.db', writable=True) as db:
-        assert migrate_to_head(db, 'hub', tmp_path) == ('hub0015', HEADS['hub'])
-        assert db.raw.execute('PRAGMA foreign_key_check').fetchall() == []
+    # Only hub0016 is rewound, so only it is run; the file is stamped back to its real head afterwards.
+    head = HEADS['hub']
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setitem(HEADS, 'hub', 'hub0016')
+        with open_database(root / 'hub.db', writable=True) as db:
+            assert migrate_to_head(db, 'hub', tmp_path) == ('hub0015', 'hub0016')
+            assert db.raw.execute('PRAGMA foreign_key_check').fetchall() == []
     with sqlite3.connect(root / 'hub.db') as hub:
+        hub.execute('UPDATE alembic_version SET version_num=?', (head,))
         assert hub.execute('SELECT company_id, user_id, through_date FROM company_accountants').fetchall() == [(company, cpa, '2026-09-30')]
         states = dict(hub.execute('SELECT company_id, state FROM company_accountant_sync').fetchall())
     assert states[company] == 'verified' and states[lost] == 'unverified'
