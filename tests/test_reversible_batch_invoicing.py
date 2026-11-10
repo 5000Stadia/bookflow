@@ -347,6 +347,9 @@ def test_shared_blocker_summary_preserves_members_and_remedies():
     assert [m['record_id'] for m in summary[0]['members']] == ['1', '2']
     assert all(b['clears'] in summary[0]['clears'] for b in raw)
     assert [m['used_by'] for m in summary[0]['members']] == [b['used_by'] for b in raw]
+    assert summary[0]['message'] == 'In use by payment 1'
+    alone = batches.summarize_blockers(raw[:1])
+    assert alone[0]['count'] == 1 and alone[0]['message'] == 'Invoice 1 uses payment 1'
 
 
 def test_invoice_inverse_is_scoped_to_invoice_batches():

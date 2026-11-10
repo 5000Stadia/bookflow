@@ -1063,7 +1063,7 @@ def summarize_blockers(blockers: list[dict]) -> list[dict]:
         if key not in grouped:
             grouped[key] = {k: v for k, v in blocker.items()
                             if k not in ('shared_message', 'member_name')}
-            grouped[key].update(message=message, count=0, members=[])
+            grouped[key].update(message=message, count=0, members=[], _single=blocker['message'])
         out = grouped[key]
         member = {k: blocker[k] for k in ('seq', 'record_type', 'record_id', 'details', 'clears', 'used_by') if k in blocker}
         if 'member_name' in blocker:
@@ -1072,6 +1072,11 @@ def summarize_blockers(blockers: list[dict]) -> list[dict]:
             out['members'].append(member)
             out['count'] += 1
         out['clears'] = '; '.join(dict.fromkeys(m['clears'] for m in out['members'] if m.get('clears'))) or None
+    for out in grouped.values():
+        # One affected record: keep its own message, which names the record as well as the cause.
+        single = out.pop('_single')
+        if out['count'] == 1:
+            out['message'] = single
     return list(grouped.values())
 
 
