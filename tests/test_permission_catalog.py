@@ -75,6 +75,11 @@ def test_complete_unfiltered_registry_descriptors_and_action_owners():
 FROZEN_DESCRIPTOR_SHA256 = 'c4b724e114772d9940ead6450a4bd64fd490cd1f45ca42092e647284e2fef123'
 
 RESOURCE_PAIRS = {
+    'approvals.native_write': {('ledger.post', 'standard')},
+    'approvals.recover': {('ledger.post', 'standard')},
+    'approvals.decision_authority': {('approval.decide', 'admin'), ('ledger.read', 'member')},
+    'approval_commit_reversal._read': {('ledger.read', 'member')},
+    'approval_commit_reversal._native': {('ledger.post', 'standard'), ('ledger.read', 'member')},
     # One per Delete delta. Each declares its own admit site in its own catalog
     # module; none of them could be listed here while the assertion below named the
     # frozen ancestor's inventory, which by construction cannot carry a site a later
@@ -163,7 +168,7 @@ def _import_read_pairs():
     commands = {cmd.name: cmd for cmd in registry.all_commands(include_standalone=True)}
     targets = {t for kind in import_kinds.KINDS.values() for t in imports._references(kind).values()}
     pairs = set()
-    for name in {'attachment text', 'bank-feed show', *(kind.noun + ' show' for kind in import_kinds.KINDS.values()),
+    for name in {'attachment text', 'bank-feed show', 'purchase-draft show', *(kind.noun + ' show' for kind in import_kinds.KINDS.values()),
                  *(t + ' show' for t in targets)}:
         cmd = commands[name]
         pairs |= {(cmd.capability, cmd.required_role or 'authenticated'), *cmd.resource_requirements}

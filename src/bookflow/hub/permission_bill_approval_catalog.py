@@ -30,7 +30,7 @@ ADDED_DEFAULTS = tuple(c.DefaultEntry(role, c.Requirement(name, 'admin'))
 
 
 def _resources(native):
-    return (c.Requirement('ledger.read', 'member'),) + ((c.Requirement('ledger.post', 'standard'),) if native else ())
+    return ((c.Requirement('ledger.post', 'standard'),) if native else ()) + (c.Requirement('ledger.read', 'member'),)
 
 
 ADDED_COMMANDS = tuple(c.CommandDescriptor(name, 'company', capability, threshold, _resources(native),
@@ -40,10 +40,38 @@ ADDED_ACTIONS = tuple(c.CompanyAction(name,
     (c.Requirement(capability, threshold), *_resources(native)), True,
     tuple(sorted((_OWNER.format(planner), _RECOVERY))) if write else (_OWNER.format(planner),))
     for name, planner, capability, threshold, write, native in _ADDED)
+# These owners discover native targets and recheck authority at replay/reversal time.
+_ADDED_SOURCES = (
+    c.ResourceSource('bookflow.company.approvals.native_write',
+        (('src/bookflow/company/approvals.py', 50),),
+        (c.Requirement('ledger.post', 'standard'),)),
+    c.ResourceSource('bookflow.company.approvals.recover',
+        (('src/bookflow/company/approvals.py', 182),),
+        (c.Requirement('ledger.post', 'standard'),)),
+    c.ResourceSource('bookflow.company.approvals.decision_authority',
+        (('src/bookflow/company/approvals.py', 200), ('src/bookflow/company/approvals.py', 201)),
+        (c.Requirement('approval.decide', 'admin'), c.Requirement('ledger.read', 'member'))),
+    c.ResourceSource('bookflow.company.approval_commit_reversal._read',
+        (('src/bookflow/company/approval_commit_reversal.py', 19),),
+        (c.Requirement('ledger.read', 'member'),)),
+    c.ResourceSource('bookflow.company.approval_commit_reversal._native',
+        (('src/bookflow/company/approval_commit_reversal.py', 66), ('src/bookflow/company/approval_commit_reversal.py', 67)),
+        (c.Requirement('ledger.post', 'standard'), c.Requirement('ledger.read', 'member'))),
+)
+_PRIOR_BATCH_READ = next(x for x in previous.CATALOG.conditional_sources
+                        if x.owner == 'bookflow.company.batches.require_read')
+CURRENT_SOURCES = (
+    *(x for x in previous.CATALOG.conditional_sources if x.owner != _PRIOR_BATCH_READ.owner),
+    replace(_PRIOR_BATCH_READ, requirements=tuple(sorted(
+        {*_PRIOR_BATCH_READ.requirements, c.Requirement('approval.read', 'standard')},
+        key=lambda r: (r.capability, c.THRESHOLDS.index(r.threshold))))),
+    *_ADDED_SOURCES,
+)
 CATALOG = replace(previous.CATALOG, version=c.BILL_APPROVAL_POLICY_VERSION,
     commands=tuple(sorted((*previous.CATALOG.commands, *ADDED_COMMANDS), key=lambda x: x.name)),
     capabilities=tuple(sorted((*previous.CATALOG.capabilities, *ADDED_CAPABILITIES), key=lambda x: x.name)),
     defaults=(*previous.CATALOG.defaults, *ADDED_DEFAULTS),
+    conditional_sources=tuple(sorted(CURRENT_SOURCES, key=lambda x: x.owner)),
     company_actions=tuple(sorted((*previous.CATALOG.company_actions, *ADDED_ACTIONS), key=lambda x: x.key)))
 MANIFEST = c.catalog_manifest(CATALOG, previous.MANIFEST.standalone_names)
 
