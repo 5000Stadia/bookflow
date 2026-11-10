@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json as _example_json
 from typing import Any
 
 
@@ -2224,4 +2225,41 @@ EXAMPLES.update({
     'pos deposit prepare': Example(
         'bookflow pos deposit prepare --pos-register Main --date 2026-10-31 --company "Demo Plumbing Co" --json',
         {'pos_register': 'Main', 'date': '2026-10-31'}),
+})
+
+# R116 increment 1: fictional manual amounts, never installed rates or tax tables.
+_PAYROLL_EARNINGS = [{'code': 'Regular', 'quantity': '40', 'rate': '25'}]
+_PAYROLL_ITEMS = [
+    {'code': 'Fictional employee tax', 'kind': 'employee_tax', 'amount_minor_units': 10000,
+     'liability_account': 'Employee Tax Payable', 'payee': 'Fictional agency',
+     'source_note': 'Fictional fixture: independently calculated 100.00 USD.'},
+    {'code': 'Fictional employer tax', 'kind': 'employer_tax', 'amount_minor_units': 5000,
+     'liability_account': 'Employer Tax Payable', 'payee': 'Fictional agency',
+     'source_note': 'Fictional fixture: independently calculated 50.00 USD.'},
+]
+# Serialize only deterministic fixture values into the illustrative CLI invocation.
+EXAMPLES.update({
+    'payroll setup': Example(
+        'bookflow payroll setup --enabled --expected-version 0 --operation-key payroll-setup-1 '
+        '--wage-account "Wages Expense" --employer-tax-account "Employer Tax Expense" '
+        '--net-pay-account "Net Pay Payable" --company "Demo Plumbing Co" '
+        '--reason "Enable manual paycheck preparation" --json',
+        {'enabled': True, 'expected_version': 0, 'operation_key': 'payroll-setup-1',
+         'wage_account': 'Wages Expense', 'employer_tax_account': 'Employer Tax Expense',
+         'net_pay_account': 'Net Pay Payable'}),
+    'payroll settings': Example('bookflow payroll settings --company "Demo Plumbing Co" --json', {}),
+    'payroll draft': Example(
+        f'bookflow payroll draft --employee {ID} --period-start 2026-10-01 --period-end 2026-10-14 '
+        '--pay-date 2026-10-15 --operation-key payroll-draft-1 --taxes-confirmed '
+        f"--earnings '{_example_json.dumps(_PAYROLL_EARNINGS)}' --items '{_example_json.dumps(_PAYROLL_ITEMS)}' "
+        '--company "Demo Plumbing Co" --reason "Prepare manual paycheck" --json',
+        {'employee': ID, 'period_start': '2026-10-01', 'period_end': '2026-10-14', 'pay_date': '2026-10-15',
+         'operation_key': 'payroll-draft-1', 'taxes_confirmed': True,
+         'earnings': _PAYROLL_EARNINGS, 'items': _PAYROLL_ITEMS}),
+    'payroll show': Example(f'bookflow payroll show --draft {ID} --company "Demo Plumbing Co" --json', {'draft': ID}),
+    'payroll list': Example('bookflow payroll list --limit 25 --company "Demo Plumbing Co" --json', {'limit': 25}),
+    'payroll prepare': Example(
+        f'bookflow payroll prepare --draft {ID} --expected-version 1 --operation-key payroll-prepare-1 '
+        '--company "Demo Plumbing Co" --reason "Review saved paycheck" --json',
+        {'draft': ID, 'expected_version': 1, 'operation_key': 'payroll-prepare-1'}),
 })

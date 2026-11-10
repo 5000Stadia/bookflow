@@ -125,6 +125,7 @@ ACCEPTED = {
     'pos-split-v1': (908, '73027f1c23b43bf348babaa0afffdfc3bd15d53f52a62b6ab2e9a00685972480'),
     'reversible-batch-v1': (909, 'b6ab69b716a3b999e88d86716f54fef5fcc7174768f3f0f6e4c073ce8cf515ce'),
     'notice-reversal-v1': (910, 'a8255242bbbb0b1a4ac0f5eaf8aa62a5cb84c291a7a03316584b2bbf06b67932'),
+    'payroll-draft-v1': (916, 'af3490db88af14672f5e41973497a04dc43464a52c0f9b0ecffe9ee44939a97d'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -296,6 +297,7 @@ CHAIN_ADDITIONS = {
     'pos-split-v1': set(),  # scoped split-sale payment composition
     'reversible-batch-v1': {'batch reverse'},
     'notice-reversal-v1': {'notice reverse'},
+    'payroll-draft-v1': {'payroll setup', 'payroll settings', 'payroll draft', 'payroll show', 'payroll list', 'payroll prepare'},
 }
 
 _ANCESTOR_EDIT = """

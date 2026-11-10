@@ -553,6 +553,7 @@ SECTIONS: tuple[Section, ...] = (
             _list("Time entries", "time-activity query", "/time-activity"),
         ),
         tasks=(
+            Action("Payroll", READ, ("payroll settings", "payroll list"), "/payroll"),
             Action("Use weekly timesheet", READ, ("timesheet show",), "/timesheet"),
             Action("Time clock", READ, ("clock status",), "/clock"),
             Action("Job calendar", READ, ("schedule calendar",), "/calendar"),
@@ -1319,6 +1320,7 @@ PAGE_RUNS: dict[str, tuple[str, ...]] = {
     '/journal/post': ('custom-field list',),
     '/mileage': ('customer list', 'item list', 'mileage-rate list', 'vehicle list'),
     '/opening': ('opening-draft query',),
+    '/payroll': ('payroll settings', 'payroll list'),
     '/other-name': ('other-name query', 'other-name query options'),
     '/other-name/create': ('custom-field list',),
     '/payment': ('payment-method list',),

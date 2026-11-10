@@ -1760,3 +1760,35 @@ message blocks the entire batch. Pending check-print runs attached to a bill pay
 be cancelled before reversing that bill-payment batch. Reconciled bill payments,
 later edits and later dependent records block the whole batch. A batch with nothing
 reversible says so; a reversal itself cannot be reversed.
+
+## Prepare a private manual paycheck
+
+`payroll settings` reads the payroll switch and its version. It starts off. `payroll setup` enables it using
+three existing active USD accounts: wage expense, employer-tax expense and Net Pay Payable. Setup needs
+`payroll.configure`, `payroll.read` and company admin authority. All payroll reads need `payroll.read`;
+`payroll draft` and `payroll prepare` additionally need `payroll.prepare`. Ordinary employee access grants
+no payroll detail. A colleague with the required payroll grants can continue the same draft by ID.
+
+`payroll draft` saves an employee, service-period dates, optional actual pay date, manual earnings and fixed
+employee/employer items. Money fields named `amount_minor_units` are integer cents: `10000` means USD 100.00.
+Quantity and hourly dollar rates are exact decimal strings, such as `"40"` and `"25"`; each extended earning
+rounds half up to cents. Fixed tax amounts are independently computed owner inputs, not percentage rules.
+Each fixed item names its kind, liability account, payee and source note; explicit zero still requires a note.
+`taxes_confirmed: true` confirms the entered item list is complete, including an intentionally empty list.
+No tax tables or statutory rates are supplied or fetched.
+
+Save the returned draft `id` and `version`. `payroll prepare` takes that ID as `draft`, the version as
+`expected_version`, a new `operation_key` and a reason; it saves the calculation and advances the version.
+The result includes gross, employee taxes/deductions, net, employer cost and the per-line calculation trace.
+Employer costs do not reduce employee net. Negative net refuses without saving; zero net is allowed.
+The fictional P1 example gives 100000 gross cents, 10000 employee-tax cents, 5000 employer-tax cents and
+90000 net cents; conceptual debits and credits both equal 105000 cents. Nothing posts or records payment.
+
+Use `payroll list` to find saved work and `payroll show --draft ID` to reopen it. To edit, call `payroll draft`
+with the existing `draft`, its current `expected_version`, all replacement inputs and a new operation key;
+this clears the previous calculation. Recalculate before relying on the preview. A stale version refuses.
+Every write requires a reason and a permanent `operation_key`: retry the identical request with the same
+key after a lost response, and use a fresh key for a new action. Payroll reasons and saved inputs are private.
+Disabling payroll stops new drafts and calculations but preserves authorized reads. CLI, MCP and the browser's
+Employees → Payroll page share these commands, IDs, versions and permission checks. This calculator has no
+posting, ledger effect, payment, export or filing action.

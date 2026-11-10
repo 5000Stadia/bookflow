@@ -100,6 +100,7 @@ def catalog_bundle() -> s.CatalogBundle:
 # the chain is imported anyway -- at module scope it would force that import on every
 # command and cost roughly half a second, against nothing here.
 ACCEPTED_DESCRIPTOR_SHA256 = {
+    c.PAYROLL_DRAFT_POLICY_VERSION: 'af3490db88af14672f5e41973497a04dc43464a52c0f9b0ecffe9ee44939a97d',
     c.SCOPED_POLICY_VERSION: 'a0823e6d9ae98e96c98e2b6e4e73042ecc8ecb7cf0e7d4d9b50e8febc7ed6979',
     c.SETUP_POLICY_VERSION: '5d71ff2a0970f85e12b6fca0f84ff2736176565db44064b0668f84a3c132e2f2',
     c.DELETE_POLICY_VERSION: 'bdcd036b653a165a65279386fc91a6ac8ead2dc45fa49e7791e943067c989f9e',
@@ -366,6 +367,7 @@ def _full_known():
     from . import permission_pos_day_catalog
     from . import permission_pos_refund_catalog, permission_pos_split_catalog
     from . import permission_pos_ticket_catalog, permission_pos_ticket_takeover_catalog, permission_pos_receipt_catalog
+    from . import permission_payroll_draft_catalog
     from . import permission_notice_reversal_catalog
     from . import permission_reversible_batch_catalog
     from . import permission_pos_layout_catalog
@@ -467,6 +469,7 @@ def _full_known():
         c.POS_REFUND_POLICY_VERSION: permission_pos_refund_catalog,
         c.POS_SPLIT_POLICY_VERSION: permission_pos_split_catalog,
         c.POS_LAYOUT_POLICY_VERSION: permission_pos_layout_catalog,
+        c.PAYROLL_DRAFT_POLICY_VERSION: permission_payroll_draft_catalog,
         c.NOTICE_REVERSAL_POLICY_VERSION: permission_notice_reversal_catalog,
         c.REVERSIBLE_BATCH_POLICY_VERSION: permission_reversible_batch_catalog,
         c.BANK_SOURCE_POLICY_VERSION: permission_bank_source_catalog,
@@ -630,7 +633,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.NOTICE_REVERSAL_POLICY_VERSION)
+    return known_catalog(c.PAYROLL_DRAFT_POLICY_VERSION)
 
 
 def catalog_for_root(tx):

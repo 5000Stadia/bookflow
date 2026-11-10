@@ -113,6 +113,10 @@ def require_explicit_grant(s: Session, capability: str) -> None:
 def require_command_activation(s: Session, cmd) -> None:
     """Admission before company opening, saved recovery facts or planner reads."""
     from bookflow.core.registry import EXPLICIT_GRANT_ONLY_CAPABILITIES
+    from .capabilities import PAYROLL
+    from .permission_access import activated, upgrade_required
+    if (cmd.capability in PAYROLL or any(cap in PAYROLL for cap, _ in cmd.resource_requirements)) and not activated(s):
+        raise upgrade_required(cmd.capability, cmd.required_role)
     if s.actor is not None and s.actor.kind != "human":
         # Five acts stay a person's; the rest are capabilities an agent holds only when granted (capabilities-v1).
         from .capabilities import require_for_command
@@ -172,6 +176,13 @@ def require_resource(s: Session, capability: str, required_role: str) -> None:
 
 def _require_resource(s: Session, capability: str, required_role: str) -> None:
     from .permission_access import activated, require
+    from .capabilities import PAYROLL, granted, _company_scopes, refusal
+    if capability in PAYROLL:
+        if not activated(s):
+            from .permission_access import upgrade_required
+            raise upgrade_required(capability, required_role)
+        if s.actor is None or (s.actor.kind != 'human' and not granted(s, s.actor.id, capability, _company_scopes(s))):
+            raise refusal(capability, '')
     if activated(s):
         return require(s, capability, required_role)
     from bookflow.core.errors import BookflowError
