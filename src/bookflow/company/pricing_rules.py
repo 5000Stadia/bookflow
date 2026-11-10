@@ -781,7 +781,22 @@ def preview(s, inp) -> PricePreviewOutput:
                               unit_price=shown(amount), chosen=rule['id'] == chosen_id))
     note = (profile.pricing_rule.summary if chosen_id else f'price from price level {profile.price_rule.label}'
             if level_priced else 'item sales price')
-    return PricePreviewOutput(item=profile.item.label, customer=header.customer.label,
+    member = None
+    if getattr(header, 'membership', None) is not None:
+        from bookflow.company.pricing_rule_models import MembershipPrice
+        fact = header.membership
+        chosen = source == 'price_level' and profile.price_rule.id == fact.price_level_id
+        level_label = header.price_level.label if header.price_level else fact.price_level_id
+        reason = None if chosen else (
+            'a matching price rule gives a lower price' if chosen_id and policy == 'lowest_price' else
+            'the first matching price rule wins under the priority preference' if chosen_id else
+            'the member price level has no price for this item; the item price is used')
+        member = MembershipPrice(plan=Named(id=fact.plan.id, label=fact.plan.label),
+                                 price_level=Named(id=fact.price_level_id, label=level_label),
+                                 start_date=fact.start_date, end_date=fact.end_date, chosen=chosen, reason=reason)
+        note = (f'member price from plan {fact.plan.label} (price level {level_label})' if chosen
+                else f'{note}; member plan {fact.plan.label} not used: {reason}')
+    return PricePreviewOutput(item=profile.item.label, customer=header.customer.label, membership=member,
                               quantity=format_quantity_micro_units(resolved['quantity_microunits']),
                               date=date, conflict_policy=policy,
                               unit_price=unit_price.text(unit_price.row_units(resolved, 'unit_price'), currency), currency=currency,

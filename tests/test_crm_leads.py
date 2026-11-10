@@ -183,10 +183,11 @@ def test_lead_target_denial_covers_note_attachment_and_task(books, source):
         assert refused.value.code == 'E_PERMISSION'
 
 
-def test_old_customer_contacts_survive_crm_migration(books):
+def test_old_customer_contacts_survive_crm_migration(books, monkeypatch):
     import importlib
     from bookflow.storage.engine import open_database
-    from bookflow.storage.migrate import migrate_to_head
+    from bookflow.storage.migrate import HEADS, migrate_to_head
+    head = HEADS['company']
     customer = write(books, 'customer create', {'name': 'Existing contact customer', 'contacts': [
         {'role': 'primary', 'display_name': 'Existing person', 'primary_email': 'person@example.test'}]})
     path = Path(books.run('company show', {})['path']) / 'company.db'
@@ -206,12 +207,18 @@ def test_old_customer_contacts_survive_crm_migration(books):
             if ' ON todos ' in ddl:
                 db.execute(ddl)
         db.execute("UPDATE alembic_version SET version_num='co0131'")
-    with open_database(path, writable=True) as db:
-        assert migrate_to_head(db, 'company', None) == ('co0131', 'co0133')
-        assert db.raw.execute('SELECT * FROM customers').fetchall() == before
-        assert db.raw.execute('SELECT * FROM customer_contacts').fetchall() == contacts
-        assert db.raw.execute('PRAGMA foreign_key_check').fetchall() == []
-        assert db.raw.execute('SELECT count(*) FROM crm_leads').fetchone() == (0,)
+    # Only the CRM migration is rewound, so only it is run: the objects of later migrations are still in
+    # this file, and the file is stamped back to its real head afterwards.
+    with monkeypatch.context() as patch:
+        patch.setitem(HEADS, 'company', 'co0132')
+        with open_database(path, writable=True) as db:
+            assert migrate_to_head(db, 'company', None) == ('co0131', 'co0132')
+            assert db.raw.execute('SELECT * FROM customers').fetchall() == before
+            assert db.raw.execute('SELECT * FROM customer_contacts').fetchall() == contacts
+            assert db.raw.execute('PRAGMA foreign_key_check').fetchall() == []
+            assert db.raw.execute('SELECT count(*) FROM crm_leads').fetchone() == (0,)
+    with sqlite3.connect(path) as db:
+        db.execute('UPDATE alembic_version SET version_num=?', (head,))
     assert books.run('customer show', {'customer': customer['id']})['contacts'][0]['display_name'] == 'Existing person'
 
 

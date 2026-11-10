@@ -33,7 +33,14 @@ _APPROVAL = {
     'approval.manage': ('standard', ('approval-policy create', 'approval-policy update', 'approval-policy publish')),
 }
 COMMAND_CAPABILITY.update({name: cap for cap, (_, names) in _APPROVAL.items() for name in names})
-CAPABILITIES = {**_V1, **_automation_v1.CAPABILITIES, **_BANK_SOURCE, **_APPROVAL}
+# R188 increment 1 (membership-pricing-v1): an agent enrolls or reads memberships only by explicit grant.
+_PROMOTION = {
+    'promotion.read': ('standard', ('membership-plan show', 'membership-plan list', 'customer membership show')),
+    'promotion.manage': ('standard', ('membership-plan create', 'membership-plan update')),
+    'promotion.assign': ('standard', ('customer membership set', 'customer membership end')),
+}
+COMMAND_CAPABILITY.update({name: cap for cap, (_, names) in _PROMOTION.items() for name in names})
+CAPABILITIES = {**_V1, **_automation_v1.CAPABILITIES, **_BANK_SOURCE, **_APPROVAL, **_PROMOTION}
 
 HUB = frozenset(name for name, (threshold, _) in CAPABILITIES.items() if threshold == 'hub_admin')
 # The POS layer (pos-v1, design/point-of-sale.md §9): an agent holds a pos.* capability only by an explicit grant, as

@@ -57,6 +57,7 @@ def company_form_groups(leaves):
         weight_unit='Weight unit (lb, kg, oz)', shipping_item_id='Freight to bill is billed as',
         delivery_reply_to='Reply-To on every email', delivery_copy_to='Copy every email to (Bcc)',
         commission_attribution_enabled='Commission attribution (credit invoice lines to a recipient)',
+        membership_pricing_enabled='Membership pricing (enrolled customers get their plan price level on invoices)',
         pos_enabled='Use point of sale (ring up sales on a phone, tablet or till; off records sales as sales receipts only)',
         bank_rule_learning='When two bank lines of a payee are added the same way, learn a rule',
         bank_rule_automation='Let live auto-add and ignore bank rules act at imports')
@@ -64,7 +65,7 @@ def company_form_groups(leaves):
     display_preferences = {'negative_number_style'}
     shipping_preferences = {'invoice_when_shipping', 'pick_and_pack_enabled', 'weight_unit', 'shipping_item_id'}
     email_preferences = {'delivery_reply_to', 'delivery_copy_to'}
-    sales_preferences = {'pos_enabled', 'commission_attribution_enabled'}
+    sales_preferences = {'pos_enabled', 'commission_attribution_enabled', 'membership_pricing_enabled'}
     banking_preferences = {'bank_rule_learning', 'bank_rule_automation'}
     finance_preferences = {'finance_charge_annual_rate', 'finance_charge_minimum', 'finance_charge_grace_days',
         'finance_charge_account_id', 'finance_charge_on_overdue_charges', 'finance_charge_from', 'finance_charge_mark_to_print'}

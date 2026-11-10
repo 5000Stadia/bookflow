@@ -865,6 +865,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `candidates[].priority` | integer \| null | no | yes | null | — |
 | `candidates[].unit_price` | string | yes | no | — | — |
 | `candidates[].chosen` | boolean | yes | no | — | — |
+| `membership` | object \| null | no | yes | null | The enrolled customer's member plan and price level on this date; null when none applies or the layer is off. |
+| `membership.plan` | object | yes | no | — | — |
+| `membership.plan.id` | string | yes | no | — | — |
+| `membership.plan.label` | string | yes | no | — | — |
+| `membership.price_level` | object | yes | no | — | — |
+| `membership.price_level.id` | string | yes | no | — | — |
+| `membership.price_level.label` | string | yes | no | — | — |
+| `membership.start_date` | string | yes | no | — | — |
+| `membership.end_date` | string \| null | yes | yes | — | — |
+| `membership.chosen` | boolean | yes | no | — | Whether the member price level gave the line its price. |
+| `membership.reason` | string \| null | no | yes | null | Why the member price lost, when it did. |
 
 Example JSON output:
 
@@ -876,6 +887,7 @@ Example JSON output:
   "customer": "value",
   "date": "2026-01-01",
   "item": "value",
+  "membership": null,
   "note": "value",
   "quantity": "value",
   "rule": null,

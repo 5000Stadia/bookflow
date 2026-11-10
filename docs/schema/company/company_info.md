@@ -114,3 +114,4 @@ Database: `company`.
 | `bill_approvals_enabled` | BOOLEAN | no | — | — | — | — | Optional approval layer switch; defaults off. |
 | `approval_routing_enabled` | BOOLEAN | no | — | — | — | — | Optional approval layer switch; defaults off. |
 | `approval_reminders_enabled` | BOOLEAN | no | — | — | — | — | Optional approval layer switch; defaults off. |
+| `membership_pricing_enabled` | BOOLEAN | no | — | — | — | — | Optional membership pricing layer: an enrolled customer defaults to its plan price level on invoices dated inside the enrollment; off by default. |

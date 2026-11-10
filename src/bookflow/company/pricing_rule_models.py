@@ -148,6 +148,16 @@ class Candidate(_Strict):
     chosen: bool
 
 
+class MembershipPrice(_Strict):
+    """The member plan that supplied the sale's price level (R188), reported even when a rule wins."""
+    plan: Named
+    price_level: Named
+    start_date: str
+    end_date: str | None
+    chosen: bool = Field(description='Whether the member price level gave the line its price.')
+    reason: str | None = Field(None, description='Why the member price lost, when it did.')
+
+
 class PricePreviewOutput(_Strict):
     item: str
     customer: str
@@ -160,3 +170,4 @@ class PricePreviewOutput(_Strict):
     rule: Named | None
     note: str = Field(description='Where the price came from, such as "price from rule Acme fittings 10% off".')
     candidates: list[Candidate]
+    membership: MembershipPrice | None = Field(None, description="The enrolled customer's member plan and price level on this date; null when none applies or the layer is off.")

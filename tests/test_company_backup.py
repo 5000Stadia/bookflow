@@ -211,6 +211,10 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     co0119 = importlib.import_module("bookflow.storage.company_migrations.versions.0119_bank_rules")
 
     def older(conn):
+        # co0134's membership tables and off-by-default switch are additive.
+        for table in ('customer_memberships', 'membership_plans'):
+            conn.execute('DROP TABLE ' + table)
+        conn.execute('ALTER TABLE company_info DROP COLUMN membership_pricing_enabled')
         for table in ('approval_operations', 'approval_commits', 'approval_events', 'approval_requests',
                       'approval_policy_revisions', 'approval_policies'):
             conn.execute('DROP TABLE ' + table)
@@ -555,7 +559,7 @@ def test_restore_refuses_a_backup_from_a_newer_bookflow_and_migrates_an_older_on
     old = _rebuild(archive, tmp_path / "older.bookflow-backup", database=older, manifest=lambda m: m.update(schema_revision="co0062"))
     restored = client.run("company restore", {"archive": str(old), "as_copy": True, "name": "Demo From Older",
                                               "organization": "Older Books Organization"})
-    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0133"
+    assert restored["migrated"] and restored["backup_schema_revision"] == "co0062" and restored["schema_revision"] == "co0134"
     folder = _folder(client, restored["company_id"])
     # The migration took its verified backup of the restored database first, as every migration does.
     assert list((folder / "backups").glob("*-from-co0062.db"))

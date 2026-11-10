@@ -1362,3 +1362,8 @@ for _purchase_draft_column in _purchase_draft_schema.company_columns(_column):
 
 from bookflow.company import approval_schema as _approval_schema
 globals().update(_approval_schema.define_tables(metadata, _column, _table, _common))
+
+# R188 increment 1: membership plans and dated enrollments; the layer starts off.
+from bookflow.company import membership_schema as _membership_schema
+globals().update(_membership_schema.define_tables(metadata, _column, _table, _common))
+company_info.append_column(_membership_schema.company_column(_column))

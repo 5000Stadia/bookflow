@@ -253,6 +253,11 @@ def resolve_header(s, inp, doc_type, *, previous: SalesProfile | None = None,
     out = {'customer': customer, 'preferences': prefs}
     if previous and prefs != previous.preferences:
         warnings.append('preferences: current company settings captured by refresh')
+    # R188 increment 1: on an invoice, the sold-to customer's own enrollment covering the invoice date
+    # supplies the default price level in place of the customer's ordinary one. An explicit level or
+    # unit price stays explicit; with the layer off this is never consulted.
+    member = {}
+    member_date = getattr(inp, 'date', None) or old_date
     for field in ('terms', 'ship_method', 'sales_rep', 'class_id', 'customer_tax_code', 'price_level', 'payment_method'):
         if (field == 'terms' and doc_type != 'invoice' and not nonposting) or (field == 'payment_method' and doc_type != 'sales_receipt'):
             continue
@@ -260,6 +265,12 @@ def resolve_header(s, inp, doc_type, *, previous: SalesProfile | None = None,
         if not enabled and field in fields.supplied and getattr(inp, field) is not None:
             raise _invalid(field, 'feature is disabled in company preferences')
         default = party_default(default_map[field])
+        if field == 'price_level' and doc_type == 'invoice' and enabled and info.get('membership_pricing_enabled'):
+            def default(ordinary=default):
+                from bookflow.company.memberships import effective_fact
+                fact = effective_fact(db, row['id'], member_date)
+                member['resolved'], member['fact'] = True, fact
+                return (fact.price_level_id, fact.enrollment_id) if fact else ordinary()
         if field == 'class_id' and not enabled:
             default = lambda: (None, info['id'])
         # Disabled stored price assignments are still identified, but unused
@@ -280,6 +291,15 @@ def resolve_header(s, inp, doc_type, *, previous: SalesProfile | None = None,
                 default = lambda: (None, source)
         out[field] = fields.reference(db, field, default, dependency=customer_changed,
                                       active=needed or field in fields.supplied or refresh)
+    if doc_type == 'invoice':
+        origin = fields.origins.get('price_level')
+        if origin is None or origin.kind != 'default':
+            out['membership'] = None
+        elif member.get('resolved'):
+            out['membership'] = member['fact']
+        else:
+            # Not re-resolved: a saved invoice keeps the membership it captured.
+            out['membership'] = getattr(previous, 'membership', None)
     if not prefs.enable_price_levels:
         warnings.append('price_level: price levels disabled; standard/manual price is in use')
 

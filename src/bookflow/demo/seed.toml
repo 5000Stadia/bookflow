@@ -2959,3 +2959,33 @@ command = "approval-policy create"
 capture = "simple_bill_policy"
 reason = "Prepare a one-person review policy for inspection"
 input = { eligible_members = ["${saved_bill_draft.created_by}"], allow_self = true, enabled = false, operation_key = "demo-bill-policy" }
+
+# R188 increment 1: a dated membership price. The layer is shown, then the demo is
+# returned to its ordinary pricing (price levels and membership pricing both off).
+[[commands]]
+command = "company update"
+reason = "Show the optional membership pricing layer"
+input = { enable_price_levels = true, membership_pricing_enabled = true }
+
+[[commands]]
+command = "customer create"
+capture = "member_customer"
+reason = "Fictional customer for the membership example"
+input = { name = "Membership Example Customer" }
+
+[[commands]]
+command = "membership-plan create"
+capture = "member_plan"
+reason = "Trade members are priced at the preferred level"
+input = { name = "Trade members", price_level = "${preferred_price.id}", description = "Fictional plan for the demo" }
+
+[[commands]]
+command = "customer membership set"
+capture = "member_enrollment"
+reason = "Enroll the example customer for the fourth quarter"
+input = { customer = "${member_customer.id}", plan = "${member_plan.id}", start_date = "2026-10-01", end_date = "2026-12-31", member_number = "M-1001" }
+
+[[commands]]
+command = "company update"
+reason = "Keep optional pricing layers off in the default demo"
+input = { membership_pricing_enabled = false, enable_price_levels = false }
