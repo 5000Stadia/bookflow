@@ -223,6 +223,28 @@ class PublicationPermit:
         if succeeded and self.input_error is not None:
             raise BookflowError("E_IO", details={"reason": "invalid_rejection_permit"})
         self.execution_succeeded = succeeded
+        if (self.inp is not None and getattr(self.inp, 'peer', None) is not None
+                and (self.cmd.name.startswith('intercompany-relationship ')
+                     or self.cmd.name == 'intercompany-mapping set')):
+            # A refusal after pair admission can reveal a currency mismatch or
+            # existing setup. Preserve that authority dependency on cached errors.
+            # Refusals before admission disclose no peer facts and retain the same
+            # generic missing-company response for known and unknown identifiers.
+            self.projection['intercompany_input_peer'] = self.inp.peer
+            if not succeeded and s.company_row is not None:
+                from bookflow.company.intercompany import require_pair
+                try:
+                    require_pair(s, self.inp.peer, manage=self.cmd.is_write)
+                except BookflowError as exc:
+                    if exc.code not in ('E_COMPANY_NOT_FOUND', 'E_PERMISSION'):
+                        raise
+                else:
+                    self.projection['intercompany_rejection_admitted'] = True
+        if not succeeded and self.cmd.name == 'undo' and self.inp is not None and s.company is not None:
+            from bookflow.company.intercompany_visibility import hidden_events
+            event_id = self.inp.event_id.upper()
+            if not hidden_events(s, event_id=event_id):
+                self.projection['undo_rejection_event'] = event_id
         if succeeded and self.cmd.transfer is not None:
             self.projection["transfer"] = (str(s.transfer.store), s.transfer.info.sha256, s.transfer.info.size_bytes)
         if result is not None:
@@ -248,6 +270,28 @@ class PublicationPermit:
                 self.projection["identity_scopes"] = host_cmds.listed_scope_keys(
                     host_cmds.listing_audience(s, self.inp.company, self.inp.organization))
         if succeeded and result is not None:
+            if self.cmd.name.startswith('intercompany-relationship ') or self.cmd.name == 'intercompany-mapping set':
+                rows = result['items'] if self.cmd.name.endswith(' list') else [result]
+                self.projection['intercompany_peers'] = ((self.inp.peer,) if self.cmd.name == 'intercompany-mapping set'
+                    else tuple(sorted({row['peer_id'] for row in rows})))
+            if self.cmd.name in {'audit list', 'audit show', 'audit tail', 'activity',
+                                 'hub audit list', 'hub audit show', 'hub audit tail'}:
+                hub_audit = self.cmd.name.startswith('hub ')
+                rows = [result] if self.cmd.name.endswith(' show') else result['items']
+                event_ids = {row['event_id'] if self.cmd.name == 'activity' else row['id'] for row in rows}
+                # An empty tail/activity response can still disclose its watermark.
+                # Keep that event's authority dependency along with returned rows.
+                if result.get('high_water'):
+                    audit_db = s.hub if hub_audit else s.company
+                    if audit_db is None:
+                        open_company(s, self.ctx, False)
+                        audit_db = s.company
+                    mark = audit_db.raw.execute('SELECT id FROM audit_events WHERE seq=?',
+                        (result['high_water'],)).fetchone()
+                    if mark is not None:
+                        event_ids.add(mark[0])
+                self.projection['setup_audit_events'] = tuple(sorted(event_ids))
+                self.projection['setup_audit_hub'] = hub_audit
             from bookflow.core import publication_payment
             if publication_payment.captures(self.cmd):
                 if s.company is None:
@@ -352,6 +396,13 @@ class PublicationPermit:
                     _deny()
                 s.company_row = row
                 if not self.execution_succeeded:
+                    if self.projection.get('intercompany_rejection_admitted'):
+                        from bookflow.company.intercompany import require_pair
+                        require_pair(s, self.projection['intercompany_input_peer'], manage=self.cmd.is_write)
+                    if self.projection.get('undo_rejection_event'):
+                        open_company(s, self.ctx, False)
+                        from bookflow.company.intercompany_visibility import authorize_event
+                        authorize_event(s, self.projection['undo_rejection_event'])
                     return  # unchanged authority may receive its original rejection
                 access.require_command_activation(s, self.cmd)
                 acc, role = access.company_role(s, *self.company)
@@ -367,7 +418,9 @@ class PublicationPermit:
                     require_capability(s, self.cmd.name)
                 # Role/resource predicates live in the hub. Open company data
                 # only for a predicate that actually reads protected targets.
-                if self.cmd.authorize_input is not None or self.cmd.name == "undo" or self.cmd.transfer is not None or self.projection.get('payment_roots'):
+                if (self.cmd.authorize_input is not None or self.cmd.name == "undo" or self.cmd.transfer is not None
+                        or self.projection.get('payment_roots') or (
+                            self.projection.get('setup_audit_events') and not self.projection.get('setup_audit_hub'))):
                     open_company(s, self.ctx, False)
             elif self.cmd.required_role == "hub_admin" and not s.is_hub_admin:
                 from bookflow.hub.capabilities import HUB, capability_for, holds_hub
@@ -377,6 +430,15 @@ class PublicationPermit:
                     _deny()
             if not self.execution_succeeded:
                 return
+            if self.projection.get('intercompany_peers'):
+                from bookflow.company.intercompany import require_pair
+                for peer_id in self.projection['intercompany_peers']:
+                    require_pair(s, peer_id, manage=self.cmd.is_write)
+            if self.projection.get('setup_audit_events'):
+                from bookflow.company.intercompany_visibility import hidden_events
+                hidden = hidden_events(s, hub=self.projection['setup_audit_hub'])
+                if hidden.intersection(self.projection['setup_audit_events']):
+                    _deny()
             for company_id, organization_id in self.projection.get("companies", ()):
                 row = resolve_company(s, company_id, "option")
                 if row["organization_id"] != organization_id:
@@ -463,6 +525,8 @@ class PublicationPermit:
         name = self.cmd.name
         if name == "undo":
             from bookflow.company import undo, schema as c
+            from bookflow.company.intercompany_visibility import authorize_event
+            authorize_event(s, self.inp.event_id.upper())
             original = s.company.conn.execute(sa.select(c.audit_events.c.command).where(
                 c.audit_events.c.id == self.inp.event_id.upper())).scalar_one_or_none()
             if original is None:

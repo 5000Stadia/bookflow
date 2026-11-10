@@ -2356,3 +2356,28 @@ EXAMPLES.update({
         'bookflow customer membership show "Membership Example Customer" --as-of 2026-11-15 --company "Demo Plumbing Co" --json',
         {'customer': 'Membership Example Customer', 'as_of': '2026-11-15'}),
 })
+
+# R123 increment 1. Local setup is staged; all amounts below are proposals only.
+_INTERCOMPANY_INPUTS = {
+    'intercompany-settings show': {},
+    'intercompany-settings update': {'expected_version': 0, 'linked_entries_enabled': True},
+    'intercompany-draft create': {'date': '2026-11-01', 'amount_minor_units': 10000},
+    'intercompany-draft update': {'draft': ID, 'expected_version': 1, 'date': '2026-11-02', 'amount_minor_units': 2500},
+    'intercompany-draft show': {'draft': ID},
+    'intercompany-draft list': {'limit': 50},
+    'intercompany-mapping set': {'peer': ID, 'due_from': "01ARZ3NDEKTSV4RRFFQ69G5FAW", 'due_to': "01ARZ3NDEKTSV4RRFFQ69G5FAX", 'expected_version': 0},
+    'intercompany-relationship create': {'peer': ID},
+    'intercompany-relationship update': {'peer': ID, 'relationship': "01ARZ3NDEKTSV4RRFFQ69G5FAW", 'expected_version': 1, 'enabled': False},
+    'intercompany-relationship show': {'peer': ID, 'relationship': "01ARZ3NDEKTSV4RRFFQ69G5FAW"},
+    'intercompany-relationship list': {'limit': 50},
+}
+for _ic_name, _ic_input in _INTERCOMPANY_INPUTS.items():
+    _ic_flags = []
+    for _ic_key, _ic_value in _ic_input.items():
+        if _ic_key == 'draft':
+            _ic_flags.append(str(_ic_value))
+        else:
+            _ic_flags.append('--' + _ic_key.replace('_', '-') + ' ' + (str(_ic_value).lower() if isinstance(_ic_value, bool) else str(_ic_value)))
+    _ic_write = _ic_name.rsplit(' ', 1)[-1] in ('create', 'update', 'set')
+    EXAMPLES[_ic_name] = Example('bookflow ' + _ic_name + ' ' + ' '.join(_ic_flags) +
+        ' --company "Demo Plumbing Co"' + (' --reason "Prepare local intercompany work"' if _ic_write else '') + ' --json', _ic_input)

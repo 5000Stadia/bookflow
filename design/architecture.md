@@ -5360,3 +5360,13 @@ ledger.read on every command. `hub/capabilities.py` requires explicit agent gran
 intersection. The workbench purchase-drafts route uses these commands for its htmx forms and separate draft list.
 The acceptance tests are `test_purchase_drafts.py` and `test_purchase_drafts_browser.py`; execution status belongs
 to the build report. Scope and later increments are in `design/approvals.md` section 10.
+
+
+## Intercompany setup
+
+`company/intercompany.py` owns staged local account mappings and hub relationship metadata.
+`company/intercompany_local.py` owns settings and untargeted drafts. The former admits both
+actor/principal company scopes before a read-only peer open; the latter never looks up a peer.
+Each command writes one database. `intercompany_visibility.py` supplies whole-event audit
+filtering, and publication rechecks disclosed peers and audit events before hosted release.
+The executable boundaries and later posting protocol are in [intercompany.md](intercompany.md).

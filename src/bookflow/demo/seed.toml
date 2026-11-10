@@ -2996,3 +2996,25 @@ input = { customer = "${member_customer.id}", plan = "${member_plan.id}", start_
 command = "company update"
 reason = "Keep optional pricing layers off in the default demo"
 input = { membership_pricing_enabled = false, enable_price_levels = false }
+
+# R123 increment 1: untargeted local work, with no relationship or ledger effect.
+[[commands]]
+command = "intercompany-settings update"
+reason = "Demonstrate local proposal preparation"
+input = { expected_version = 0, linked_entries_enabled = true, templates_enabled = false, bulk_enabled = false }
+
+[[commands]]
+command = "intercompany-draft create"
+capture = "local_advance_draft"
+reason = "Prepare an untargeted advance proposal for later review"
+input = { date = "2026-11-01", amount_minor_units = 10000, memo = "Local advance proposal; counterpart has not been selected" }
+
+[[commands]]
+command = "intercompany-draft create"
+reason = "Prepare an untargeted expense allocation proposal"
+input = { date = "2026-11-02", amount_minor_units = 2500, memo = "Local expense allocation proposal; nothing posted" }
+
+[[commands]]
+command = "intercompany-settings update"
+reason = "Leave optional intercompany layers off in the default demo"
+input = { expected_version = 1, linked_entries_enabled = false, templates_enabled = false, bulk_enabled = false }

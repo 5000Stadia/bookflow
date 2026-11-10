@@ -146,9 +146,12 @@ def test_unknown_record_types_need_every_read_capability():
     # No two families claim one record type, so the SQL and Python readings agree.
     prefixes = [p for p, _ in v.PREFIXES]
     assert not [(a, b) for a in prefixes for b in prefixes if a != b and a.startswith(b)]
-    # The catalog records exactly the requirements this filter asks for.
-    from bookflow.hub import permission_audit_visibility_catalog as catalog
-    assert set(catalog.READ_CAPABILITIES) == v.CAPABILITIES
+    # The current catalog records exactly the requirements this filter asks for (later layers extend the
+    # first audit-visibility layer's list, which stays frozen).
+    from bookflow.hub import permission_runtime
+    source = next(x for x in permission_runtime.current_catalog().CATALOG.conditional_sources
+                  if x.owner == 'bookflow.company.audit_visibility.admitted')
+    assert {x.capability for x in source.requirements} == v.CAPABILITIES
 
 
 def test_directive_text_needs_the_directive_capability(root):

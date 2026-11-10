@@ -1,4 +1,4 @@
-"""Commission attribution at the till (R189 increment 2) on the immutable membership-pricing-v1 catalog.
+"""Commission attribution at the till (R189 increment 2) on the immutable intercompany-setup-v1 catalog.
 
 Selecting who sold a line becomes a `member` act, so a `readonly` POS clerk can hold `commission.attribute` by an
 explicit grant: standard, admin, owner and installation administrators hold it at `member` by default, as they
@@ -13,10 +13,10 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_membership_pricing_catalog as previous, permission_catalog as c
+from . import permission_intercompany_setup_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = '410490270f007f05c5b4bf91fa9958c72e9d35f7'
+SOURCE_COMMIT = '513641afd9b8273ca49c7bd0ab5638dcbe2911ea'
 _OWNER = 'bookflow.commands.pos_sale_cmds.{}|src/bookflow/commands/pos_sale_cmds.py'
 ATTRIBUTE = c.Requirement('commission.attribute', 'member')
 PRESET_MARKER = 'preset.pos-clerk-commission'

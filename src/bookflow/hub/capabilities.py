@@ -40,7 +40,13 @@ _PROMOTION = {
     'promotion.assign': ('standard', ('customer membership set', 'customer membership end')),
 }
 COMMAND_CAPABILITY.update({name: cap for cap, (_, names) in _PROMOTION.items() for name in names})
-CAPABILITIES = {**_V1, **_automation_v1.CAPABILITIES, **_BANK_SOURCE, **_APPROVAL, **_PROMOTION}
+_INTERCOMPANY = {
+    'intercompany.read': ('member', ('intercompany-draft show', 'intercompany-draft list', 'intercompany-relationship show', 'intercompany-relationship list')),
+    'intercompany.post': ('standard', ('intercompany-draft create', 'intercompany-draft update')),
+    'intercompany.manage': ('admin', ('intercompany-mapping set', 'intercompany-relationship create', 'intercompany-relationship update')),
+}
+COMMAND_CAPABILITY.update({name: cap for cap, (_, names) in _INTERCOMPANY.items() for name in names})
+CAPABILITIES = {**_INTERCOMPANY, **_V1, **_automation_v1.CAPABILITIES, **_BANK_SOURCE, **_APPROVAL, **_PROMOTION}
 
 HUB = frozenset(name for name, (threshold, _) in CAPABILITIES.items() if threshold == 'hub_admin')
 # The POS layer (pos-v1, design/point-of-sale.md §9): an agent holds a pos.* capability only by an explicit grant, as

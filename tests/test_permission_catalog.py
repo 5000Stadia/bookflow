@@ -75,6 +75,10 @@ def test_complete_unfiltered_registry_descriptors_and_action_owners():
 FROZEN_DESCRIPTOR_SHA256 = 'c4b724e114772d9940ead6450a4bd64fd490cd1f45ca42092e647284e2fef123'
 
 RESOURCE_PAIRS = {
+    'intercompany.require_pair': {('intercompany.manage', 'admin'), ('company', 'admin'), ('account', 'member'), ('intercompany.read', 'member'), ('ledger.read', 'member')},
+    'intercompany_local.require_read': {('intercompany.read', 'member'), ('ledger.read', 'member')},
+    'intercompany_local.authorize_settings': {('company', 'admin')},
+    'intercompany_local.authorize_draft': {('ledger.post', 'standard'), ('account', 'member'), ('ledger.read', 'member')},
     'approvals.native_write': {('ledger.post', 'standard')},
     'approvals.recover': {('ledger.post', 'standard')},
     'approvals.decision_authority': {('approval.decide', 'standard'), ('ledger.read', 'member')},

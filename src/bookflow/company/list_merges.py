@@ -370,6 +370,8 @@ def _exists(db, sql: str, params: tuple) -> bool:
 
 def _account_refusals(db, merged: dict[str, Any], target: dict[str, Any], ids: dict[str, str]) -> None:
     m, s = merged["id"], target["id"]
+    from bookflow.company.intercompany_account_owner import require_unreserved
+    require_unreserved(db, m, s)
     if merged["type"] != target["type"]:
         raise _refuse("the two accounts are of different types", merged_type=merged["type"],
                       survivor_type=target["type"], **ids)

@@ -454,7 +454,7 @@ implementation is authorized by this documentation commit itself.
    capture itself. Turning attribution off is refused (`E_WORK_DEPENDENCY`, naming the ticket) while a held or open
    ticket carries a selection, as POS-off already is for any ticket.
 
-   **Authority (catalog `commission-pos-v1` on `membership-pricing-v1`).** A selection is a `member` act: the
+   **Authority (catalog `commission-pos-v1` on `intercompany-setup-v1`).** A selection is a `member` act: the
    `commission.attribute` spec gains the member threshold and standard, admin, owner and installation administrators
    hold it at member by default (they already held it at standard). The capture and the till lookup ask it at member,
    so a `readonly` clerk can hold it by grant. The new preset "Clerk with commission attribution"
