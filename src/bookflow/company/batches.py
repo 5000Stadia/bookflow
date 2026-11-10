@@ -86,6 +86,7 @@ ADAPTER_MODULES = {
     'inventory-count': 'count_batch_reversal', 'check-print': 'check_print_batch_reversal',
     'delivery-batch': 'delivery_batch_reversal',
     'approval-commit': 'approval_commit_reversal',
+    'crm-conversion': 'crm_conversion', 'crm-lead-import': 'crm_imports',
 }
 
 

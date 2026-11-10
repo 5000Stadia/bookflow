@@ -133,6 +133,7 @@ ACCEPTED = {
     'membership-pricing-v1': (949, '14c33f7743c47b7721d8825be60f3fb4e89d287f515d97166286b59bc189d4a6'),
     'intercompany-setup-v1': (960, '67602d51a720ba672a62fe16afbe33cab1f266d96b4ceaf24ebedd3705f7f63f'),
     'commission-pos-v1': (961, '8171794a1952fea02695361d7c712f5e10c8e0b74506d66db6a2d810f325299e'),
+    'crm-convert-v1': (964, '93a120a2e91e0f151878d417cb63c87d3649ce9799265208e31997af2f988a3b'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -319,6 +320,7 @@ CHAIN_ADDITIONS = {
                               'intercompany-relationship update', 'intercompany-relationship show',
                               'intercompany-relationship list'},
     'commission-pos-v1': {'pos commission-options'},
+    'crm-convert-v1': {'crm timeline', 'lead convert', 'lead import'},
 }
 
 _ANCESTOR_EDIT = """

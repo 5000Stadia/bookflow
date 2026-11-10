@@ -43,6 +43,7 @@ EXACT = {
     'lead': frozenset(('crm.read',)),
     'lead_contact': frozenset(('crm.read',)),
     'lead_contact_point': frozenset(('crm.read',)),
+    'crm_conversion': frozenset(('crm.read', 'customer')),
     'attachment': frozenset(('attachment',)),
     'attachment_link': frozenset(('attachment',)),
     'attachment_collection': frozenset(('attachment',)),

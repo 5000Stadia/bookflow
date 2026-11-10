@@ -196,6 +196,7 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.BILL_APPROVAL_POLICY_VERSION: '2c3aa75ea00d9b2be1276eb3847bb3d712a84026df49c03eaeef97ff430f618e',
     c.MEMBERSHIP_PRICING_POLICY_VERSION: '14c33f7743c47b7721d8825be60f3fb4e89d287f515d97166286b59bc189d4a6',
     c.COMMISSION_POS_POLICY_VERSION: '8171794a1952fea02695361d7c712f5e10c8e0b74506d66db6a2d810f325299e',
+    c.CRM_CONVERT_POLICY_VERSION: '93a120a2e91e0f151878d417cb63c87d3649ce9799265208e31997af2f988a3b',
     c.NOTICE_REVERSAL_POLICY_VERSION: 'a8255242bbbb0b1a4ac0f5eaf8aa62a5cb84c291a7a03316584b2bbf06b67932',
     c.COMMISSION_ATTRIBUTION_POLICY_VERSION: 'b8f3b2224ff689ed09c689687114678d118a379d75c56756e80a85267bf2cc13',
     c.REVERSIBLE_BATCH_POLICY_VERSION: 'b6ab69b716a3b999e88d86716f54fef5fcc7174768f3f0f6e4c073ce8cf515ce',
@@ -378,6 +379,7 @@ def _full_known():
     from . import permission_intercompany_setup_catalog
     from . import permission_membership_pricing_catalog
     from . import permission_commission_pos_catalog
+    from . import permission_crm_convert_catalog
     from . import permission_crm_leads_catalog
     from . import permission_payroll_draft_catalog
 
@@ -492,6 +494,7 @@ def _full_known():
         c.MEMBERSHIP_PRICING_POLICY_VERSION: permission_membership_pricing_catalog,
         c.INTERCOMPANY_SETUP_POLICY_VERSION: permission_intercompany_setup_catalog,
         c.COMMISSION_POS_POLICY_VERSION: permission_commission_pos_catalog,
+        c.CRM_CONVERT_POLICY_VERSION: permission_crm_convert_catalog,
         c.NOTICE_REVERSAL_POLICY_VERSION: permission_notice_reversal_catalog,
         c.COMMISSION_ATTRIBUTION_POLICY_VERSION: permission_commission_attribution_catalog,
         c.REVERSIBLE_BATCH_POLICY_VERSION: permission_reversible_batch_catalog,
@@ -656,7 +659,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.COMMISSION_POS_POLICY_VERSION)
+    return known_catalog(c.CRM_CONVERT_POLICY_VERSION)
 
 
 def catalog_for_root(tx):
