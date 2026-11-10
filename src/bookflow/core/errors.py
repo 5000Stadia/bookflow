@@ -60,6 +60,7 @@ RECONCILIATION_CODES: dict[str, str] = {
 }
 
 COMMAND_CODES: dict[str, str] = {
+    "E_SECURITY_NOT_READY": "Wider deployment prerequisites are not satisfied.",
     "E_COMMISSION_REQUIRED": "Choose a recipient for every enabled invoice line.",
     **RECONCILIATION_CODES,
     "E_RECOVERY_PENDING": "Resolve the active recovery before editing or recording this selection.",

@@ -102,7 +102,7 @@ serve_cmd = command("serve", scope="hub",
                     description="Serve every routed command over HTTP and the loopback socket, holding the data-root lock until interrupted. While it runs, the host's scheduler enters due automatic memorized transactions, assigns to-dos and prepares overdue notices; it looks for due work every BOOKFLOW_SCHEDULE_CHECK_SECONDS seconds (environment variable; default 60, at least 1).",
                     input_model=ServeInput, output_model=ServeOutput,
                     bootstrap=True, local_only=True,
-                    error_codes=["E_NETWORK_NOT_ALLOWED", "E_VERSION_MISMATCH", "E_COMPANY_MISSING"],
+                    error_codes=["E_NETWORK_NOT_ALLOWED", "E_VERSION_MISMATCH", "E_COMPANY_MISSING", "E_SECURITY_NOT_READY"],
                     authorization="human hub administrator")(_plan_serve)
 
 
@@ -181,6 +181,9 @@ def run_serve(cmd, inp: ServeInput, ctx: Context, s: Session) -> dict[str, Any]:
     host_name, port = parse_bind(inp.bind)
     origin = po.resolve(s.data_root, inp.public_origin)
     decoders = sd.resolve(inp.scan_decoders)
+    from bookflow.core.deployment import Deployment
+    Deployment.load(s.data_root, public_origin=origin, bind=inp.bind,
+                    secure_cookies=cookie_security(host_name, inp.secure_cookies, origin)).require_startup()
     po.require_proxy_bind(origin, host_name, inp.bind)
     if not inp.allow_network and not is_loopback(host_name):
         raise BookflowError("E_NETWORK_NOT_ALLOWED", details={"bind": inp.bind})
@@ -223,7 +226,8 @@ def run_serve(cmd, inp: ServeInput, ctx: Context, s: Session) -> dict[str, Any]:
         log.warning("bookflow host listening on %s (socket %s)", inp.bind, handle.socket)
         from bookflow.adapters.http.admission import AdmissionProtocol
         server = uvicorn.Server(uvicorn.Config(handle.app, http=AdmissionProtocol, loop="asyncio",
-                                               log_level="warning", access_log=False))
+                                               log_level="warning", access_log=False,
+                                               proxy_headers=not handle.app.state.deployment.wider))
         import signal
         import threading
         from contextlib import nullcontext
@@ -399,6 +403,10 @@ def start_serving(data_root: Path | str, version: str, *, bind: str = DEFAULT_BI
     from bookflow.core.forward import socket_path
     from bookflow.core.host import Host
     root = Path(data_root)
+    from bookflow.core.deployment import Deployment, configure_diagnostics
+    deployment = Deployment.load(root, public_origin=public_origin, bind=bind, secure_cookies=secure_cookies)
+    deployment.require_startup()
+    configure_diagnostics(deployment)
     # How often the scheduler looks for due work (R111). An operator may slow it down; tests that drive it
     # themselves through Host.schedule_now set it high so a live test host never races them.
     try:

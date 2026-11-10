@@ -1,9 +1,7 @@
 # Wider exposure (R128)
 
 Design contract, 2026-11-10. Approved scope: **“cursor key rotation, same-company hardening, encryption at rest and
-hosted demo sessions, for use beyond a trusted local network”.** This document specifies future behavior, commands,
-storage and build acceptance. It authorizes neither product implementation nor publication of a host. This change
-contains design only; the Tests clauses describe later implementation work.
+hosted demo sessions, for use beyond a trusted local network”.** This document specifies behavior, commands, storage and build acceptance; the As built notes identify implemented increments. It authorizes neither product implementation nor publication of a host. The Tests clauses define implementation acceptance.
 
 **Outcome.** The owner can deliberately expose a host to less trusted clients without treating company membership
 as permission to read everything, keep stolen offline storage and backup copies confidential, rotate compromised
@@ -500,6 +498,65 @@ ships a partial “wider ready” claim; readiness remains blocked until all req
    host and every unmet prerequisite is a named blocker without enabling publication. **Tests:** Host/forwarded
    spoofing, missing/null/foreign Origin, login/setup/logout CSRF, bearer-only requests, cookie conflicts, local
    compatibility, stored-script/attachment cases and browser flows at both widths.
+   #### As built — increment 1
+
+   Deployment configuration is read from `[host]` in `config.toml`: `deployment_profile = "local"` (the default)
+   or `"wider"`, existing `public_origin`, and `trusted_proxy = "127.0.0.1"`. Configure it only while the host is
+   stopped, using local installation administration. The profile is immutable for an app lifetime; restart applies
+   a change. No remote configuration command, permission layer, migration or new grant is installed. The proposed
+   `security show/check/configure` contracts remain uninstalled; no ordinary company administrator acquires
+   installation authority. Existing `serve` reports `E_SECURITY_NOT_READY` and all named blockers for wider mode
+   before a writer, migration, descriptor or listener starts. `Deployment.preflight()` is the shared read-only
+   typed configuration/evidence seam. Missing future evidence cannot be cleared with config booleans or flags.
+
+   `create_app` validates the transport prerequisites and supports isolated synthetic transport testing; it does
+   not activate a service or certify readiness. Normal launchers always refuse wider startup until the later
+   evidence providers exist. Local loopback and existing trusted TLS-proxy configurations retain their source and
+   cookie behavior. Wider requests require the exact configured external Host and the configured raw loopback peer;
+   duplicate security headers, malformed/duplicate cookies and ambiguous credentials are refused. Forwarded and
+   proxy identity headers are discarded; the wider launcher disables automatic forwarded parsing. No source IP authority
+   or rate-limiter key is inferred from these headers. Unclassified WebSocket requests are refused.
+
+   Wider unsafe cookie requests require the exact external Origin (or same-origin Referer when absent), the
+   workbench header and an HMAC CSRF token bound to the session secret. Login/setup use a signed, two-hour prelogin
+   cookie; successful authentication clears it. Bearer-only requests may omit source headers, but cannot mix browser
+   credentials or present foreign/null sources. All workbench htmx submissions and same-origin native fetch writes
+   carry the CSRF token without browser persistence. Setup GET still only displays the form. Restart invalidates
+   transport tokens and requires a page reload, preserving the underlying session lifecycle for increment 4.
+
+   Wider responses use private/no-store, no-referrer, nosniff, frame denial and CSP. Trusted template source receives
+   script nonces; rendered user markup is never blessed. The nonce is independently derived per session/prelogin
+   binding so htmx script fragments remain compatible with their document policy. JavaScript eval is disabled;
+   local vendored WASM compilation remains permitted. Inline event handlers became delegated static listeners;
+   htmx history snapshots are disabled in wider pages. Downloads use attachment disposition and a non-executable
+   MIME type. Wider infrastructure diagnostics suppress raw errors/SQL and exception bodies in logs;
+   the default local profile retains full diagnostic messages, facts and tracebacks as before;
+   business error reasons, conflict facts and validation contracts survive secret-field redaction.
+
+   The local administrator's CLI uses the separate Unix-domain `LocalListener`, whose handler calls
+   `run_hosted` directly with an OS-bound identity; it never enters the ASGI middleware. Wider HTTP
+   requests with no client address remain refused. This refusal does not lock out local socket forwarding;
+   wider service startup remains blocked by the pending evidence providers.
+
+   Open points for increments 3 and 4:
+   - The CSP nonce is stable for a whole session, not per response.
+   - A safe GET carrying a foreign Referer is refused, including links opened from another site or webmail.
+   - CSRF and nonce keys are per process; a host restart invalidates open pages until reload.
+
+   The proxy must reject unexpected Host, overwrite forwarded fields, redirect HTTP to HTTPS, apply HSTS only to
+   this host (no includeSubDomains), disable access logging of login/setup URLs and bodies, and keep its upstream
+   unreachable by clients. These are named unverified proxy-boundary blockers, not an application assertion.
+   No HSTS is emitted by the app, preserving existing hosts shared across ports. No publication, provider contact,
+   DNS change or wider listener is performed. Security/recovery dashboards and command administration belong to
+   later increments; cursor, authority, authentication/resource, storage, plaintext-disposition, encrypted-backup,
+   recovery and operational evidence all remain explicit readiness blockers. Demo service stays absent/off.
+
+   Tests are `tests/test_wider_transport.py` and `tests/test_wider_transport_browser.py`; the latter exercises an
+   isolated loopback TLS proxy at 390/1440 px. Prior-art review adopted session-bound CSRF and non-evaluated htmx
+   handlers from the [OWASP CSRF guidance](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)
+   and [htmx security guidance](https://htmx.org/docs/#security); it rejected unbound cookie matching, arbitrary
+   forwarded chains and nonce insertion into rendered content. No external executable was adopted.
+
 2. **Cursor lifecycle (M).** Keyring migration, shared envelope, consumer inventory, scheduled/manual/emergency
    rotation and restore incarnation hook. **Done when:** every report/deposit continuation uses one lifecycle and no
    legacy verifier remains. **Tests:** overlap boundaries, expiry/skew, malformed input, purpose/subject/company

@@ -20,8 +20,9 @@ from urllib.parse import urlencode
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response, JSONResponse
 from starlette.concurrency import run_in_threadpool
-from jinja2 import Environment, FileSystemLoader, select_autoescape
+from jinja2 import Environment, select_autoescape
 
+from bookflow.adapters.workbench.security_templates import NonceLoader
 from bookflow.adapters.workbench import forms as F
 from bookflow.adapters.workbench import activity as Activity
 from bookflow.adapters.workbench import admin as Admin
@@ -66,7 +67,7 @@ from bookflow.storage import migrate
 HERE = Path(__file__).parent
 LAST_COMPANY = "bookflow_company"
 FLASH_TTL_SECONDS = 60.0
-env = Environment(loader=FileSystemLoader(str(HERE / "templates")), autoescape=select_autoescape(["html"]))
+env = Environment(loader=NonceLoader(str(HERE / "templates")), autoescape=select_autoescape(["html"]))
 # One humaniser for every template, so no table anywhere heads a column with a field name.
 env.filters["label"] = Naming.column_label
 # One spelling of a noun inside a URL, so no template ever writes a raw space into an href.
@@ -671,7 +672,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js", "timekeeping.css", "scan.js", "counts.css", "picks.css", "import.css", "import.js", "item-picture.js", "camera-scan.js", "camera-scan.css", "scan-decoder-native.js", "scan-decoder-zxing-wasm.js", "secure-context.js", "bulk-edit.css", "bulk-edit.js", "opening.css", "pos.js", "pos-day.js", "pos-refund.js", "pos.css", "bank-inbox.css", "bank-inbox.js", "bank-import.css", "bank-import.js")
+        for name in ("transport-security.js", "csp-events.js", "workspace.css", "workspace.js", "style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "report-print.css", "report-print.js", "report-full.css", "report-page.css", "report-page.js", "timekeeping.css", "scan.js", "counts.css", "picks.css", "import.css", "import.js", "item-picture.js", "camera-scan.js", "camera-scan.css", "scan-decoder-native.js", "scan-decoder-zxing-wasm.js", "secure-context.js", "bulk-edit.css", "bulk-edit.js", "opening.css", "pos.js", "pos-day.js", "pos-refund.js", "pos.css", "bank-inbox.css", "bank-inbox.js", "bank-import.css", "bank-import.js")
     }
     # The Scan field macro (scan_field.html) is imported without the page's context, so its camera scripts come
     # from the environment; their URLs depend only on the files' bytes.
@@ -3153,7 +3154,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return HTMLResponse(
                 "<!doctype html><meta charset=utf-8><title>Created</title>"
                 f"<p>Created. <a href=\"{escape(record_url, quote=True)}\">Open record</a></p>"
-                f"<script>const message={payload};if(window.opener){{window.opener.postMessage(message,location.origin);window.close();}}</script>",
+                f'<script nonce="{escape(getattr(request.state, "csp_nonce", ""), quote=True)}">const message={payload};if(window.opener){{window.opener.postMessage(message,location.origin);window.close();}}</script>',
                 headers={"Cache-Control": "no-store"},
             )
         target = _success_target(cmd, company_id, noun, record_id, out)
