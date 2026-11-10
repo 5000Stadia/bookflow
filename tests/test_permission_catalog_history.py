@@ -125,6 +125,8 @@ ACCEPTED = {
     'pos-split-v1': (908, '73027f1c23b43bf348babaa0afffdfc3bd15d53f52a62b6ab2e9a00685972480'),
     'reversible-batch-v1': (909, 'b6ab69b716a3b999e88d86716f54fef5fcc7174768f3f0f6e4c073ce8cf515ce'),
     'notice-reversal-v1': (910, 'a8255242bbbb0b1a4ac0f5eaf8aa62a5cb84c291a7a03316584b2bbf06b67932'),
+    'purchase-draft-v1': (916, 'a6faac71521b11c6e09f9c515a346b71bc783a1b5e44ef985f95373f11ede861'),
+    'bill-approval-v1': (927, 'd2343d570dca35241610113cb5e5a38e30982a24a306577a90e3a328306bbb6f'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -296,6 +298,10 @@ CHAIN_ADDITIONS = {
     'pos-split-v1': set(),  # scoped split-sale payment composition
     'reversible-batch-v1': {'batch reverse'},
     'notice-reversal-v1': {'notice reverse'},
+    'purchase-draft-v1': {'purchase-draft ' + verb for verb in ('create', 'update', 'cancel', 'preview', 'show', 'list')},
+    'bill-approval-v1': {'purchase-draft submit', 'purchase-draft withdraw', 'purchase-draft commit',
+                         'approval decide', 'approval show', 'approval history', 'approval-policy create',
+                         'approval-policy update', 'approval-policy publish', 'approval-policy show', 'approval-policy list'},
 }
 
 _ANCESTOR_EDIT = """
