@@ -192,6 +192,7 @@ ACCEPTED_DESCRIPTOR_SHA256 = {
     c.BANK_RECONCILE_POLICY_VERSION: '8673bd998c7e077061301d0bfaea5af7b33cbd3eb773f89dd0e6fdcdbf026e42',
     c.PURCHASE_DRAFT_POLICY_VERSION: 'a6faac71521b11c6e09f9c515a346b71bc783a1b5e44ef985f95373f11ede861',
     c.NOTICE_REVERSAL_POLICY_VERSION: 'a8255242bbbb0b1a4ac0f5eaf8aa62a5cb84c291a7a03316584b2bbf06b67932',
+    c.COMMISSION_ATTRIBUTION_POLICY_VERSION: 'b8f3b2224ff689ed09c689687114678d118a379d75c56756e80a85267bf2cc13',
     c.REVERSIBLE_BATCH_POLICY_VERSION: 'b6ab69b716a3b999e88d86716f54fef5fcc7174768f3f0f6e4c073ce8cf515ce',
     c.POS_SPLIT_POLICY_VERSION: '73027f1c23b43bf348babaa0afffdfc3bd15d53f52a62b6ab2e9a00685972480',
     c.POS_DAY_POLICY_VERSION: '4dfeb905ccc2dcf9451f2c7021c9b042016f48382d40b394fa6e73dfa962729b',
@@ -372,6 +373,7 @@ def _full_known():
 
     from . import permission_purchase_draft_catalog
     from . import permission_notice_reversal_catalog
+    from . import permission_commission_attribution_catalog
     from . import permission_reversible_batch_catalog
     from . import permission_pos_layout_catalog
     from . import permission_bank_source_catalog
@@ -476,6 +478,7 @@ def _full_known():
 
         c.PURCHASE_DRAFT_POLICY_VERSION: permission_purchase_draft_catalog,
         c.NOTICE_REVERSAL_POLICY_VERSION: permission_notice_reversal_catalog,
+        c.COMMISSION_ATTRIBUTION_POLICY_VERSION: permission_commission_attribution_catalog,
         c.REVERSIBLE_BATCH_POLICY_VERSION: permission_reversible_batch_catalog,
         c.BANK_SOURCE_POLICY_VERSION: permission_bank_source_catalog,
     }
@@ -638,7 +641,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.PAYROLL_DRAFT_POLICY_VERSION)
+    return known_catalog(c.COMMISSION_ATTRIBUTION_POLICY_VERSION)
 
 
 def catalog_for_root(tx):

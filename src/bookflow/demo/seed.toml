@@ -2835,6 +2835,39 @@ command = "batch reverse"
 reason = "Restore the original customer note"
 input = { batch = "${reversible_note_run.run.batch.id}", fingerprint = "${reversible_note_plan.fingerprint}" }
 
+# R189 increment 1: names and one item flag suffice for invoice attribution.
+# A preview demonstrates two recipients without changing the demo's accounting balances.
+[[commands]]
+command = "sales-rep create"
+capture = "commission_affiliate"
+reason = "Add a referral recipient for the attribution example"
+input = { name = "Alex Referral", initials = "AR", name_type = "other_name", name_id = "${conversion_candidate.id}" }
+
+[[commands]]
+command = "company update"
+reason = "Show the optional invoice attribution layer"
+input = { commission_attribution_enabled = true }
+
+[[commands]]
+command = "item create"
+capture = "commission_service"
+reason = "Flag a service for one recipient per invoice line"
+input = { name = "Attributed Service", type = "service", description = "Service with a named sales recipient", price = "40", income_account_id = "${income_account.id}", sales_tax_code_id = "${tax_code.id}", commission_enabled = true }
+
+[[commands]]
+command = "commission recipient-options"
+input = { item = "${commission_service.id}" }
+
+[[commands]]
+command = "invoice post"
+dry_run = true
+reason = "Preview different recipients on two service lines without changing balances"
+input = { date = "2026-09-05", customer = "${sale_customer.id}", lines = [{ item = "${commission_service.id}", quantity = "1", commission = { recipients = [{ recipient = "${sales_rep.id}", share = 100 }] } }, { item = "${commission_service.id}", quantity = "1", commission = { recipients = [{ recipient = "${commission_affiliate.id}", share = 100 }] } }] }
+
+[[commands]]
+command = "company update"
+reason = "Keep optional attribution off in the default demo"
+input = { commission_attribution_enabled = false }
 # R116 increment 1: fictional P1 manual calculator. These are test inputs, not statutory rates.
 # Payroll is returned to off after preparing the specimen; authorized historical reads still work.
 [[commands]]

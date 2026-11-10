@@ -134,6 +134,7 @@ class ItemInput(StrictModel):
     category_id: str | None = Field(default=None, min_length=26, max_length=26)
     description: str | None = None
     purchase_description: str | None = None
+    commission_enabled: bool = Field(default=None, strict=True, description="Require one commission recipient on new invoice lines when commission attribution is enabled; no rates or payments.")
     sales_enabled: bool | None = None
     purchase_enabled: bool | None = None
     price: Any | None = None
@@ -306,6 +307,7 @@ class ItemOutput(StrictModel):
     category: str | None
     description: str | None
     purchase_description: str | None
+    commission_enabled: bool = False
     sales_enabled: bool
     purchase_enabled: bool
     price: MoneyOutput | None
@@ -387,7 +389,7 @@ class ItemProfile:
 
 
 _IDENTITY = frozenset({"name", "type", "parent_id", "category_id", "default_class_id", "notes", "custom_fields"})
-_SALES = frozenset({"description", "sales_enabled", "price", "income_account_id", "sales_tax_code_id"})
+_SALES = frozenset({"commission_enabled", "description", "sales_enabled", "price", "income_account_id", "sales_tax_code_id"})
 _PURCHASE = frozenset({"purchase_description", "purchase_enabled", "cost", "expense_account_id", "preferred_vendor_id", "vendor_profiles"})
 _INVENTORY_PURCHASE = frozenset({"purchase_description", "purchase_enabled", "cost", "preferred_vendor_id", "vendor_profiles"})
 _STOCK = frozenset({"cogs_account_id", "asset_account_id", "manufacturer_part_number", "barcode", "tracking", "cycle_class_id", "unit_of_measure_set_id", "reorder_point_min", "reorder_point_max", "unit_weight", "unit_volume"})
@@ -675,13 +677,17 @@ def _required(value: Any) -> bool:
 def _validate_profile(parsed: ItemInput, supplied: set[str]) -> None:
     item_type = parsed.type
     profile = ITEM_PROFILES[item_type]
-    foreign = sorted(field for field in supplied if field not in profile.allowed and field not in {"custom_fields"} and getattr(parsed, field, None) is not None)
+    foreign = sorted(field for field in supplied if field not in profile.allowed and field not in {"custom_fields"}
+                     and getattr(parsed, field, None) is not None
+                     and not (field == "commission_enabled" and parsed.commission_enabled is False))
     if foreign:
         raise _validation(foreign[0], f"is not allowed for item type {item_type}")
     missing = sorted(field for field in profile.required if not _required(getattr(parsed, field)))
     missing_fields = {field: f"is required for item type {item_type}" for field in missing}
 
     sales, purchase = _logical_defaults(item_type, parsed)
+    if parsed.commission_enabled and not sales:
+        raise _validation("commission_enabled", "requires a sales-enabled item")
     if item_type in {"service", "non_inventory_part", "other_charge"} and not (sales or purchase):
         raise _validation("sales_enabled", "at least one of sales or purchase must be enabled")
     if item_type in {"inventory_part", "inventory_assembly"} and not (sales and purchase):
@@ -864,6 +870,10 @@ def _owner_values(db: Database, parsed: ItemInput, *, supplied: set[str], refere
     for field in _DIRECT_FIELDS:
         values[field] = getattr(parsed, field)
     values["preferred_vendor_id"] = parsed.preferred_vendor_id
+    values["commission_enabled"] = bool(parsed.commission_enabled)
+    if parsed.commission_enabled and (creating or "commission_enabled" in reference_changes):
+        if not _info(db)["commission_attribution_enabled"]:
+            raise BookflowError("E_FEATURE_DISABLED", details={"feature": "commission_attribution", "setting": "commission_attribution_enabled", "enable_command": "company update"})
     values["tracking"] = parsed.tracking or "none"   # R104 increment 4
     values["cycle_class_id"] = parsed.cycle_class_id   # R104 increment 5
     for field in _MONEY_FIELDS:
@@ -1170,6 +1180,7 @@ def _payload_from_state(owner: Mapping[str, Any], members: Sequence[Mapping[str,
         "category_id": owner["category_id"], "description": owner["description"],
         "purchase_description": owner["purchase_description"], "sales_enabled": bool(owner["sales_enabled"]),
         "purchase_enabled": bool(owner["purchase_enabled"]), "preferred_vendor_id": owner["preferred_vendor_id"],
+        "commission_enabled": bool(owner.get("commission_enabled", False)),
     }
     payload.update({field: owner[field] for field in _DIRECT_FIELDS if field not in {"category_id", "description", "purchase_description"}})
     if (owner.get("tracking") or "none") != "none":
@@ -2025,6 +2036,7 @@ def project_item(
     picture, thumbnail = (cache.pictures.get(owner_id, (None, None)) if cache is not None and cache.pictures is not None
                           else item_pictures.pictures(db, [owner]).get(owner_id, (None, None)))
     return ItemOutput(
+        commission_enabled=bool(owner.get("commission_enabled", False)),
         **{field: owner[field] for field in (
             "id", "version", "created_at", "created_by", "created_via", "updated_at",
             "updated_by", "updated_via", "active", "seed_key", "name", "type",

@@ -131,7 +131,11 @@ def _default_conflicts(model):
         raise ValueError("use_defaults conflicts with explicit input: " + ", ".join(sorted(conflicts)))
 
 
+from bookflow.company.commission_models import CommissionInput
+
+
 class SalesLineInput(StrictModel):
+    commission: CommissionInput | None = Field(None, description="Invoice attribution: exactly one sales-rep recipient with share 100; required for enabled new items when attribution is on.")
     line_id: Selector | None = None
     item: Selector
     quantity: Quantity = "1"
@@ -158,6 +162,8 @@ class SalesLineInput(StrictModel):
     @model_serializer(mode="wrap")
     def legacy_line_request(self, handler):
         values = handler(self)
+        if "commission" not in self.model_fields_set:
+            values.pop("commission", None)
         if "percent" not in self.model_fields_set:
             values.pop("percent", None)
         if "site" not in self.model_fields_set:

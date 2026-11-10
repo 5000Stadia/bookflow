@@ -306,6 +306,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     # and `payment recovery` do; the command name itself is frozen by co0022's command enum.
     "bookflow.commands.reconcile_cmds": ["reconcile", "reconcile opening"],
     "bookflow.commands.reconcile_import_cmds": ["reconcile"],
+    "bookflow.commands.commission_cmds": ["commission", "report"],
     "bookflow.commands.sales_cmds": ["invoice", "sales-receipt"],
     "bookflow.commands.statement_charge_cmds": ["statement-charge"],
     "bookflow.commands.deposit_cmds": ["deposit"],

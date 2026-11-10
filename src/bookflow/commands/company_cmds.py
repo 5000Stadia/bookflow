@@ -259,6 +259,7 @@ class CompanyUpdateInput(BaseModel):
     delivery_copy_to: str | None = Field(None, max_length=254, description="Email: a Bcc copy of every message to this address; null for none.")
     delivery_auto_flag_from: str | None = Field(None, min_length=10, max_length=10, description="Email: documents dated on or after this day (YYYY-MM-DD) are to be emailed when the customer prefers email; null is off.")
     pick_and_pack_enabled: bool = Field(None, strict=True, description="Pick lists, draft shipments and boxes as optional layers on shipping: off by default, when `shipment post` ships straight from the order. Turning it off is refused while a pick list or draft shipment is open.")
+    commission_attribution_enabled: bool = Field(None, strict=True, description="Commission attribution on invoice lines: off by default. Turning it on creates no plans, accounts, earnings or payouts; turning it off preserves historical reads.")
     pos_enabled: bool = Field(None, strict=True, description="Point of sale as an optional layer on sales receipts: off by default. Turning it on the first time makes register Main and its walk-in customer; turning it off keeps the registers, and is refused while a ticket is held or a shift is open.")
     weight_unit: str | None = Field(None, min_length=1, max_length=16, description="The one weight unit of item weights and boxes (lb, kg, oz): a label, never converted.")
     shipping_item_id: str | None = Field(None, description="Other-charge or service item a shipment's freight to bill is billed as, by default.")
@@ -284,7 +285,7 @@ NOT_NULLABLE = {
     "order_printable_checks", "attachment_max_bytes", "negative_number_style",
     "finance_charge_grace_days", "finance_charge_on_overdue_charges", "finance_charge_from", "finance_charge_mark_to_print",
     "overdue_notice_frequency", "overdue_notice_template", "invoice_when_shipping", "pick_and_pack_enabled", "weight_unit", "pos_enabled",
-    "bank_rule_learning", "bank_rule_automation",
+    "bank_rule_learning", "bank_rule_automation", "commission_attribution_enabled",
 }
 
 

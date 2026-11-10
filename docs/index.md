@@ -47,6 +47,7 @@ An AI agent installing Bookflow for someone starts with the agent install page: 
 - [`class`](cli/class.md)
 - [`class query`](cli/class-query.md)
 - [`clock`](cli/clock.md)
+- [`commission`](cli/commission.md)
 - [`company`](cli/company.md)
 - [`costing-method`](cli/costing-method.md)
 - [`credit-memo`](cli/credit-memo.md)
