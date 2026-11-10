@@ -559,6 +559,12 @@ commit. Later increments never become prerequisites for the early simple route.
    require payroll read authority when private records exist; raw files, existing archives and scheduled host backups
    remain under trusted filesystem custody. The browser disables htmx history snapshots and sends `no-store`.
 
+   Open points for increment 2, from the merge review: the general audit event for a payroll write drops the
+   directive link and carries a fresh request id, so the directive an agent acted under is not recoverable from
+   either place; keep the directive id in the private revision row. The demo seed adds four "Demo Payroll"
+   accounts and one specimen draft, then leaves payroll off; a demo company therefore holds private payroll rows,
+   and an agent backing it up needs `payroll.read`.
+
    Employees → Payroll provides htmx setup, multiple input rows, save/resume, separate gross/net/employer sections
    and expandable calculation traces. A fictional P1 demo is saved and prepared, then its switch is returned to off.
    Tests cover independent arithmetic, privacy, archive guards, stale edits/retries, CLI/MCP continuation and a real
