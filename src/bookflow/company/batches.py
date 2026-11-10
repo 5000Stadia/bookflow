@@ -359,6 +359,9 @@ NOT_REFERENCES: dict[tuple[str, str], str] = {
     ('custom_field_values', 'record_id'): ("the record's own custom-field values (its detail); they change only "
                                            "through the record's own update, which bumps its version"),
     ('principals', 'user_id'): _PEOPLE, ('presence', 'user_id'): _PEOPLE,
+    ('crm_leads', 'owner_id'): _PEOPLE,
+    ('payroll_draft_revisions', 'actor_id'): _PEOPLE, ('payroll_operations', 'actor_id'): _PEOPLE,
+    ('intercompany_mappings', 'peer_id'): 'a keyed opaque reference to the counterpart company, not a record id',
     ('presence', 'record_id'): 'who is looking at a record now; ephemeral',
     ('audit_entries', 'record_id'): 'the audit trail: history, never a use',
     ('audit_events', 'actor_id'): _PEOPLE, ('audit_events', 'session_id'): 'the audit trail',
