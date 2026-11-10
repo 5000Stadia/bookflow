@@ -311,6 +311,7 @@ def test_list_and_dry_run_report_complete_grouped_blockers(books, cause):
 
 
 def test_batch_list_filters_kind_and_inclusive_creation_dates(books):
+    """Batch query filters kind and inclusive creation dates (legacy test identifier)."""
     out = post(books)
     batch = out['reversal_batch_id']
     shown = books.run('batch show', {'batch': batch})['batch']
@@ -364,7 +365,11 @@ def test_batch_date_range_validation_without_company():
         BatchQueryInput(date_from='2026-11-10', date_to='2026-11-09')
 
 
-def test_list_description_probes_native_authority_and_keeps_every_cause(monkeypatch):
+@pytest.mark.parametrize('reason', [None, 'Inspect a correction'])
+def test_query_description_probes_native_authority_and_keeps_every_cause(monkeypatch, reason):
+    from bookflow.core.context import Context, Interface
+
+    context = Context.new(Interface.mcp, 'batch-query-test', actor_id='reader', reason=reason)
     batch = dict.fromkeys(('id', 'kind', 'scope', 'ordering', 'label', 'state', 'source_type', 'source_id',
                           'reversal_of', 'actor_id', 'actor_kind', 'via', 'on_behalf_of', 'reason',
                           'created_at', 'reversed_by', 'reversed_at', 'reversal_reason', 'reversal_event_id'))
@@ -379,10 +384,13 @@ def test_list_description_probes_native_authority_and_keeps_every_cause(monkeypa
 
     def full_plan(s, ctx, identifier, *, probe):
         assert probe is True
+        assert ctx.reason == (reason or 'Inspect batch reversibility')
+        assert ctx.model_dump(exclude={'reason'}) == context.model_dump(exclude={'reason'})
         return {'blockers': blockers, 'steps': []}
 
     monkeypatch.setattr(batches, 'plan', full_plan)
-    listed = batches.describe(None, batch, with_plan=True)
+    listed = batches.describe(None, batch, with_plan=True, ctx=context)
+    assert context.reason == reason
     assert listed['reversible'] is False
     assert listed['blocker_count'] == 2
     assert listed['blockers'] == batches.summarize_blockers(blockers)

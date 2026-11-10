@@ -134,6 +134,17 @@ demo-reset or checkpoint behavior in this increment. A separate reference-year p
   unchanged refusal with payment or closed period, grouped permission/period blockers, full list/dry-run
   agreement, date/kind filters, stock restoration and interrupted reversal. No later increment is changed.
 
+### As built: increment 1 query-probe correction
+
+- `batch query` and `batch show` supply an inspection reason only to their copied dry-run
+  planning context. Native inverse commands still evaluate the caller's authority and all
+  dependency blockers; a missing write reason cannot mask them during a read. The original
+  context and actual reversal reason requirements remain unchanged.
+- Regression coverage retains the grouped period/payment/permission comparisons and inclusive
+  query filters, and checks that the probe preserves every context field except a missing reason.
+- No money calculation, migration or permission layer changes. Company head remains `co0128`
+  and permission tip remains `notice-reversal-v1`; later increments retain their existing scope.
+
 ## As built: increment 2
 
 - `barcode generate` and `cycle-count classify` return `batch_id` and a `next` command for the shared reversal

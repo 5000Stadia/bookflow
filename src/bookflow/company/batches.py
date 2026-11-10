@@ -254,7 +254,11 @@ def describe(s, batch: dict, *, with_plan: bool = False, ctx=None) -> dict:
         if batch['state'] in ('live', 'reversing', 'blocked') and batch['reversal_of'] is None \
                 and batch['kind'] in ADAPTERS:
             try:
-                found = plan(s, ctx, batch['id'], probe=True)
+                # Reads have no write reason. Supply one only to the dry-run plan so
+                # native reason gates cannot mask authority or dependency blockers.
+                probe_ctx = ctx.model_copy(update={'reason': ctx.reason or 'Inspect batch reversibility'}) \
+                    if ctx is not None else None
+                found = plan(s, probe_ctx, batch['id'], probe=True)
             except BookflowError as error:
                 if error.code != 'E_PERMISSION':
                     raise
