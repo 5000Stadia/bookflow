@@ -15,13 +15,13 @@ is no more than ``catch_up_days`` old (default 7); every other missed slot is re
 ``outside_window``), never run. A missed email is not the books.
 
 **A send schedule is an automation** (design/principal-directives.md §3). Anyone who may write schedules writes it as a
-draft: its runs release what they draft without a go, so every message waits for a person, and one to-do per run says
-so. A person makes it live (``delivery-schedule live``) after one check of its exact details (``live_check``: the
+draft: its runs release what they draft without a go, so every message waits for a go, and one to-do per run says
+so. A holder of ``automate.delivery`` makes it live (``delivery-schedule live``) after one check of its exact details (``live_check``: the
 selection, cadence, first run and who it would reach today, with a fingerprint the act must carry). Live, each run's
 releases carry the establisher's go, checked at every firing: an establisher no longer active or no longer allowed to
 send pauses it with the reason and one to-do, and its runs then leave messages waiting. An operative change by anyone
-but a person confirming the changed schedule's check returns it to draft. Until R187 lands, "a person" stands where
-``automate.delivery`` will (each place says so).
+but a holder confirming the changed schedule's check returns it to draft. Its runs' go is the establisher's, so making
+it live also needs ``delivery.send`` (R187: a person at standard, an agent by its principal's grant).
 
 **Whose authority drafts.** A run drafts as ``run_as``, the last actor to set what the schedule drafts, through
 ``delivery-schedule run`` with that actor's reads checked afresh (an agent: its assignment, suspension and epoch, as
@@ -303,7 +303,7 @@ def status_label(s, row) -> str:
         return f"Paused: {row['paused_reason']}"
     if row['mode'] == 'send':
         back = f" (back to draft: {row['draft_reason']})" if row.get('draft_reason') else ''
-        return f'Draft{back}: its messages wait for a go until a person makes it live'
+        return f'Draft{back}: its messages wait for a go until a holder of automate.delivery makes it live'
     return 'Drafts only'
 
 
@@ -336,8 +336,8 @@ def output(s, row, *, warnings=(), check=None, ran=(), runs=10) -> sm.ScheduleOu
     if row.get('id'):
         name = row['name']
         if row['mode'] == 'send' and row['state'] != 'live':
-            commands.append(f'delivery-schedule live "{name}" --dry-run (a person: shows the check, then make it '
-                            'live with its fingerprint as confirm)')
+            commands.append(f'delivery-schedule live "{name}" --dry-run (a holder of automate.delivery: shows '
+                            'the check, then make it live with its fingerprint as confirm)')
         commands.append(f'delivery-schedule {"resume" if not row["active"] else "pause"} "{name}"')
     return sm.ScheduleOutput(
         schedule_id=row.get('id'), name=row['name'], kind=row['kind'], selection=json.loads(row['selection']),
@@ -558,7 +558,7 @@ def prepare_create(s, ctx, inp) -> Plan:
     row.update(_authority(s, ctx))
     warnings = []
     if row['mode'] == 'send':
-        warnings.append('A send schedule is a draft until a person makes it live (delivery-schedule live); until '
+        warnings.append('A send schedule is a draft until a holder of automate.delivery makes it live (delivery-schedule live); until '
                         'then each run leaves its messages waiting for a go.')
     from bookflow.company.memorized_schedule import today
     if row['start_date'] < today(s.company_tz):
@@ -586,20 +586,21 @@ def _check_version(row, expected):
 
 
 def _refuse_without_authority(s, row):
-    """Making it live (or keeping it live through a change) is lending one's own go: refused, saying why, when the
-    person could not give a go now (R187: automate.delivery and delivery.send)."""
+    """Making it live (or keeping it live through a change) is lending one's own go: refused, naming delivery.send
+    and why, when the actor could not give a go now (go_lost: a person as before, an agent holding delivery.send)."""
     why = authority_lost(s, s.actor.id)
     if why is not None:
-        text = f"You cannot make schedule {row['name']} live: {why}."
+        text = (f"You cannot make schedule {row['name']} live: its runs release with your go, which needs "
+                f"delivery.send, and {why}. Ask your principal to grant it if this is yours to do.")
         raise BookflowError('E_PERMISSION', message=text, details={
-            'reason': 'no_send_authority', 'command': 'delivery-schedule live', 'problem': why,
-            'needs': 'automate.delivery'})
+            'reason': 'no_send_authority', 'capability': 'delivery.send', 'command': 'delivery-schedule live',
+            'problem': why, 'needs': 'delivery.send'})
 
 
 def _require_automate(s):
     """automate.delivery (R187 §3, company.automation): an agent needs its principal's grant, and everyone the
-    establisher test each firing repeats. The go its runs release is still checked by _refuse_without_authority,
-    which until R187's consumer step counts only a person's go."""
+    establisher test each firing repeats. The go its runs release is checked by _refuse_without_authority
+    (delivery.send)."""
     from bookflow.company import automation
     automation.require_establish(s, CAPABILITY, 'delivery-schedule live')
 
@@ -704,7 +705,7 @@ def apply_update(plan, ctx, s) -> Applied:
 # ---------------------------------------------------------------- live, pause, resume
 
 def prepare_live(s, ctx, inp) -> Plan:
-    """Make a send schedule live: one check of its exact details. A person's act until R187 (automate.delivery)."""
+    """Make a send schedule live: one check of its exact details. Needs automate.delivery and a go (delivery.send)."""
     _require_automate(s)  # dispatch asks an agent first; kept so the rule is visible here too
     before = resolve(s, inp.schedule)
     _check_version(before, inp.expected_version)
@@ -744,7 +745,7 @@ def prepare_pause(s, ctx, inp) -> Plan:
 
 def prepare_resume(s, ctx, inp) -> Plan:
     """Run it again from today: slots that passed while it was stopped are skipped. A paused schedule comes back as a
-    draft (a send schedule then waits for a person to make it live again)."""
+    draft (a send schedule then waits for a holder of automate.delivery to make it live again)."""
     before = resolve(s, inp.schedule)
     _check_version(before, inp.expected_version)
     if before['active'] and before['state'] != 'paused':
@@ -767,7 +768,7 @@ def prepare_resume(s, ctx, inp) -> Plan:
         after.update(state='draft', paused_reason=None, paused_at=None, established_by=None, established_at=None,
                      confirmed=None)
         if before['mode'] == 'send':
-            warnings.append('It is a draft again: a person makes it live (delivery-schedule live) for its messages '
+            warnings.append('It is a draft again: a holder of automate.delivery makes it live (delivery-schedule live) for its messages '
                             'to carry a go.')
     today = _today(s)
     stopped = [x for x in due_slots(before, today, SKIPS_PER_STEP) if x < today] if not before['active'] else []
@@ -868,9 +869,8 @@ def open_run(s, schedule_id) -> dict | None:
 
 
 def authority_lost(s, user_id) -> str | None:
-    """Why the establisher can no longer send under this schedule, or None. Interim rule until R187: what a person's
-    go needs (active, a standing membership at standard that does not deny customer). R187: the establisher still
-    holds automate.delivery and delivery.send."""
+    """Why the establisher can no longer give its runs a go, or None: the go check (delivery_dispatch.go_lost; a
+    person as before, an agent while it holds delivery.send). automate.delivery is the firing check's."""
     from bookflow.company import delivery_dispatch
     return delivery_dispatch.go_lost(s, user_id)
 

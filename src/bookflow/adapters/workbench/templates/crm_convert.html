@@ -1,0 +1,29 @@
+{% extends 'base.html' %}{% block title %}Convert {{ lead.display_name }}{% endblock %}{% block body %}
+<link rel="stylesheet" href="{{ static_urls['crm.css'] }}">
+<section id="crm-workspace" class="crm-sheet" data-lead="{{ lead.id }}" aria-labelledby="convert-title">
+<h1 id="convert-title">Convert {{ lead.display_name }} to a customer</h1>
+<nav class="actions"><a href="/c/{{ company_id }}/lead/{{ lead.id }}" id="convert-cancel">Cancel</a></nav>
+{% if error %}<p class="error" role="alert">{{ error.message }}</p>{% endif %}
+<form method="get" action="/c/{{ company_id }}/lead/{{ lead.id }}/convert" class="crm-form" aria-label="Choose the customer">
+<fieldset><legend>Customer</legend>
+<label><input type="radio" name="target" value="new"{% if target == 'new' %} checked{% endif %}> A new customer</label>
+<label><input type="radio" name="target" value="existing"{% if target == 'existing' %} checked{% endif %}> An existing customer (link only)</label>
+</fieldset>
+{% if target == 'new' %}<label>Customer name<input name="name" maxlength="200" value="{{ values.get('name', lead.display_name) }}"></label>
+{% else %}<label>Existing customer name or ID<input name="customer" maxlength="200" value="{{ values.get('customer', '') }}"></label>{% endif %}
+<button>Review</button>
+</form>
+{% if preview %}<section class="workspace-card" aria-labelledby="convert-review"><h2 id="convert-review">Review</h2>
+<p>{% if target == 'new' %}Creates customer <strong>{{ preview.conversion.customer_name }}</strong>. No balance, terms, tax or job is set.{% else %}Links this lead to <strong>{{ preview.conversion.customer_name }}</strong>; nothing on that customer changes.{% endif %}</p>
+{% if preview.copied_fields %}<p>Copied from the lead: {{ preview.copied_fields|join(', ')|replace('_', ' ') }}.</p>{% endif %}
+{% if preview.conversion.contact_map %}<ul>{% for item in preview.conversion.contact_map %}<li>Lead contact becomes a customer contact ({{ item.fields|join(', ')|replace('_', ' ') }})</li>{% endfor %}</ul>{% endif %}
+{% if preview.matching_customers %}<p>Similar customers, kept separate: {% for match in preview.matching_customers %}{{ match.name }} ({{ match.reason }}{% if not match.active %}, inactive{% endif %}){% if not loop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
+<p>Notes, to-dos and files stay on the lead and show in the customer's history. The conversion can be reversed while nothing later depends on it.</p>
+<form method="post" action="/c/{{ company_id }}/lead/{{ lead.id }}" hx-post="/c/{{ company_id }}/lead/{{ lead.id }}" hx-target="#crm-workspace" hx-select="#crm-workspace" hx-swap="outerHTML" class="crm-form" id="convert-form">
+<input type="hidden" name="action" value="convert"><input type="hidden" name="target" value="{{ target }}">
+<input type="hidden" name="expected_version" value="{{ lead.version }}"><input type="hidden" name="back" value="{{ back }}">
+{% if target == 'existing' %}<input type="hidden" name="customer" value="{{ customer.id }}"><input type="hidden" name="customer_expected_version" value="{{ customer.version }}">{% else %}<input type="hidden" name="name" value="{{ values.get('name', lead.display_name) }}">{% endif %}
+<label>Reason<input name="ctx:reason" required value="Convert lead to customer"></label>
+<button>Convert</button>
+</form></section>{% endif %}
+</section>{% endblock %}

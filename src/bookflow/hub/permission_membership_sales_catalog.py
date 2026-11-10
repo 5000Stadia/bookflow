@@ -1,4 +1,4 @@
-"""Membership across sales and jobs (R188 increment 2) on the immutable commission-pos-v1 catalog.
+"""Membership across sales and jobs (R188 increment 2) on the immutable payroll-post-v1 catalog.
 
 Three commands, each under the capabilities increment 1 added (no new capability, no new default):
 `customer membership inherit` (promotion.assign and customer write: whether a job takes its parent's membership),
@@ -12,10 +12,10 @@ from dataclasses import asdict, replace
 import hashlib
 import json
 
-from . import permission_commission_pos_catalog as previous, permission_catalog as c
+from . import permission_payroll_post_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
-SOURCE_COMMIT = '12056be35944174594bd4b45a4e174286516ecc7'
+SOURCE_COMMIT = '23276ea65c4e02e1c6623837598ba4f595e65a1b'
 _OWNER = 'bookflow.commands.membership_cmds.{}|src/bookflow/commands/membership_cmds.py'
 _WRITE = (c.Requirement('customer', 'standard'),)
 _READ = (c.Requirement('customer', 'member'),)

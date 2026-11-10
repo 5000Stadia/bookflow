@@ -3923,6 +3923,8 @@ Example JSON output:
 
 Withdraw a trip with a required reason. It posted nothing, so nothing is reversed; it stays readable with the reason, and leaves the mileage reports. Refused while an invoice carries its miles (void or edit the invoice first) or a posted check paid it back (void the check first).
 
+Confirm first (void): it voids a posted document. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |

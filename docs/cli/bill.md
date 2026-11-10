@@ -6,6 +6,8 @@
 
 Delete this bill with a required reason and exact expected_version. Cancel its expense, payable and stock effects at their original dates and release the received lines it claimed; retain immutable history and its number. Requires the explicit family Delete grant and ledger.read, independently of ledger.post. A live bill payment or vendor credit refuses atomically and names the settlement holding it; a closed period refuses. A purchase order this bill consumed stays consumed, exactly as it does on void, and is named in the result.
 
+Confirm first (delete): it deletes or removes records. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
@@ -2967,6 +2969,8 @@ Example JSON output:
 ## `bill void`
 
 Void a bill with a required reason. Its accounting is reversed at its own date, its number stays occupied and its history stays readable. A linked bill releases its exact financial intervals and reverses its own acquisition-price corrections; physical receipts and PO quantity claims remain.
+
+Confirm first (void): it voids a posted document. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

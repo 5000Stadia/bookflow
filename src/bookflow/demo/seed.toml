@@ -2863,6 +2863,31 @@ command = "attachment add"
 body_fixture = "example.pdf"
 reason = "Keep the enquiry brief"
 input = { record_type = "lead", record_id = "${crm_contact.id}", original_filename = "enquiry-brief.pdf", media_type = "application/pdf", caption = "Prospect enquiry brief" }
+
+# R115 increment 2: an existing customer's enquiry linked to it (link only, nothing on the customer changes), and a
+# small source-keyed prospect list that a repeated import would leave unchanged; each is one reversible batch.
+[[commands]]
+command = "lead create"
+capture = "crm_existing_enquiry"
+reason = "Record an existing customer's new enquiry"
+input = { display_name = "Riverside second building enquiry", source = "Phone", rating = "hot" }
+
+[[commands]]
+command = "customer show"
+capture = "crm_link_customer"
+input = { customer = "${customer.id}" }
+
+[[commands]]
+command = "lead convert"
+capture = "crm_linked"
+reason = "The enquiry is from an existing customer"
+input = { lead = "${crm_existing_enquiry.id}", expected_version = 1, target = "existing", customer = "${crm_link_customer.id}", customer_expected_version = "${crm_link_customer.version}" }
+
+[[commands]]
+command = "lead import"
+capture = "crm_fair_import"
+reason = "Trade fair sign-up list"
+input = { source = "trade-fair-2026", rows = [{ source_key = "1", display_name = "Harbor Cafe", source = "Trade fair" }, { source_key = "2", display_name = "Elm Street Dental", source = "Trade fair", contacts = [{ role = "primary", display_name = "Dana Elm", primary_email = "dana@elm.example.test" }] }] }
 # R189 increment 1: names and one item flag suffice for invoice attribution.
 # A preview demonstrates two recipients without changing the demo's accounting balances.
 [[commands]]
@@ -2934,8 +2959,18 @@ input = { employee = "${employee.id}", operation_key = "demo-payroll-p1", period
 
 [[commands]]
 command = "payroll prepare"
+capture = "payroll_p1_ready"
 reason = "Review fictional P1 arithmetic without posting"
 input = { draft = "${payroll_p1.id}", expected_version = "${payroll_p1.version}", operation_key = "demo-payroll-calculate" }
+
+# R116 increment 2: preview posting P1 with its net-pay check (Dr wages 1,000.00 and employer expense 50.00;
+# Cr tax payable 150.00 and net payable 900.00; then Dr net payable / Cr Checking 900.00). A dry run, so the demo
+# books and balances do not change; the switch then returns to off.
+[[commands]]
+command = "payroll post"
+dry_run = true
+reason = "Preview posting the fictional P1 paycheck and its net-pay check without changing balances"
+input = { draft = "${payroll_p1_ready.id}", expected_version = "${payroll_p1_ready.version}", operation_key = "demo-payroll-post", check_account = "Checking", check_number = "9001" }
 
 [[commands]]
 command = "payroll setup"

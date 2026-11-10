@@ -6,6 +6,8 @@
 
 Issue a bearer token; the secret is shown once. Agents require an active assigned human principal and unsuspended authority. One agent identity per principal is recommended.
 
+Confirm first (permission change): it changes who may do what. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
@@ -247,6 +249,8 @@ Example JSON output:
 ## `token revoke`
 
 Revoke a bearer token so it stops working immediately.
+
+Confirm first (permission change): it changes who may do what. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

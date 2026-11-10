@@ -21,7 +21,9 @@ from bookflow.core.errors import BookflowError
 from . import people_only
 from . import permission_automation_catalog as _automation_v1
 from .permission_capabilities_catalog import CAPABILITIES as _V1, CLOSING_DATE_CAPABILITY, COMMAND_CAPABILITY as _COMMAND_V1
-from .permission_payroll_draft_catalog import CAPABILITIES as PAYROLL
+from .permission_payroll_draft_catalog import CAPABILITIES as _PAYROLL_DRAFT
+from .permission_payroll_post_catalog import CAPABILITIES as _PAYROLL_POST
+PAYROLL = {**_PAYROLL_DRAFT, **_PAYROLL_POST}
 from .permission_bank_source_catalog import CAPABILITIES as _BANK_SOURCE
 COMMAND_CAPABILITY = {**_COMMAND_V1, **{name: cap for cap, (_, names) in _BANK_SOURCE.items() for name in names}}
 

@@ -386,6 +386,8 @@ Example JSON output:
 
 Remove a company from the registry, leaving its folder in place.
 
+Confirm first (delete): it deletes or removes records. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |

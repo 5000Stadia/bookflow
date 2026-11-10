@@ -6,6 +6,8 @@
 
 Stop an import run. All or nothing undoes what it made; a partial run keeps it (`import reverse` undoes it).
 
+Confirm first (batch reversal): it undoes a whole batch at once. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
@@ -897,6 +899,8 @@ Example JSON output:
 
 Undo everything an import run made, as one unit, through its batch: created records are renamed out of the way and deactivated (they leave the lists and stay in history; their keys are released so the corrected file imports again), updated records get their prior values back. Refused (E_BATCH_BLOCKED, every blocker named with what clears it) while a record was changed since or is in use; then nothing changes. --dry-run shows the plan and a fingerprint. Example: {"run": "01J..."}.
 
+Confirm first (batch reversal): it undoes a whole batch at once. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
@@ -1134,6 +1138,8 @@ Example JSON output:
 ## `import run`
 
 Run the next slice of a previewed import: each row through its ordinary command, written with its audit event, its key and its batch effect in one transaction. Returns counts, `state` (running, stopped, done) and `next`; call again until done. A run advances only when called; after a crash it resumes at the first row without an outcome and repeats nothing. Rows revalidate as they run. Example: {"run": "01J..."}.
+
+Confirm first (broad lasting change): it changes many records, or how the business works from then on. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

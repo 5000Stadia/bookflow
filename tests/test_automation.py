@@ -305,13 +305,14 @@ def test_a_delivery_schedule_is_an_automation_end_to_end(hosted):  # noqa: F811
     body = r.json()
     assert r.status_code == 403 and body['details']['capability'] == 'automate.delivery', r.text
     assert body['details']['reason'] == 'capability_not_held' and 'denied' in body['message']
-    # An agent granted automate.delivery is refused by the go check: a go is still a person's (increment 3).
+    # An agent granted automate.delivery but not delivery.send is refused: its schedule's runs would need a go (increment 3).
     _grant(hosted, agent, 'standard', grants=['automate.delivery'])
     check = hosted.ok('delivery-schedule.update?dry_run=true', {**name, 'mode': 'send'}, company=cid,
                       headers=as_agent)['check']
     r = hosted.call('delivery-schedule.update', {**name, 'mode': 'send', 'confirm': check['fingerprint']},
                     company=cid, headers=as_agent)
     assert r.status_code == 403 and r.json()['details']['reason'] == 'no_send_authority', r.text
+    assert r.json()['details']['capability'] == 'delivery.send' and 'delivery.send' in r.json()['message']
     # The clerk (standard: a holder) makes it live by update.
     live = make_live(as_clerk)
     assert live['state'] == 'live' and live['established_by'] == users['clerk']

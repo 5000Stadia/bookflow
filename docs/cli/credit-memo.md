@@ -6,6 +6,8 @@
 
 Delete this credit memo with a required reason and exact expected_version. Cancel the income, the sales tax and the receivable it took back at their original dates, and release every source invoice quantity it claimed so that quantity can be returned again; retain immutable history and its number. Requires the explicit family Delete grant and ledger.read, independently of ledger.post. A credit still applied to an invoice refuses atomically with `E_HAS_APPLICATIONS` naming those invoices, and one a customer refund was paid out of with `E_HAS_REFUND` naming the refunds: take the credit back off the invoice, or void the refund, first. A closed period refuses.
 
+Confirm first (delete): it deletes or removes records. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
@@ -3211,6 +3213,8 @@ Example JSON output:
 ## `credit-memo void`
 
 Void a credit memo with a required reason. Its accounting is reversed at its own date, so the income and the sales tax it took back go back where they were and the customer owes the full amount again; any stock it brought back goes out again at exactly what it came in at, leaving the quantity and the cost where the sale left them; every source invoice quantity it claimed is released and can be returned again; its number stays occupied and every revision stays readable. A credit still applied to an invoice is refused with `E_HAS_APPLICATIONS` and one a refund has paid out with `E_HAS_REFUND`: take the credit back off the invoice, or void the refund, first. A void that would take returned stock back out of an empty shelf is refused naming the date, and writes nothing.
+
+Confirm first (void): it voids a posted document. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

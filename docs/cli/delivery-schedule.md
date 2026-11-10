@@ -49,7 +49,7 @@ The same example as complete `bookflow_run` arguments:
 | `start_date` | `--start-date` | string \| null | no | yes | null | The first slot. A month-end start stays at month end. |
 | `stop_date` | `--stop-date` | string \| null | no | yes | null | No slot after this day. |
 | `remaining_runs` | `--remaining-runs` | integer \| null | no | yes | null | Stop after this many runs. |
-| `mode` | `--mode` | literal["draft", "send"] \| null | no | yes | null | draft: each run leaves drafts. send: each run releases them; they leave only once a person has made the schedule live (delivery-schedule live), and until then wait for a go. |
+| `mode` | `--mode` | literal["draft", "send"] \| null | no | yes | null | draft: each run leaves drafts. send: each run releases them; they leave only once a holder of automate.delivery has made the schedule live (delivery-schedule live), and until then wait for a go. |
 | `catch_up_days` | `--catch-up-days` | integer \| null | no | yes | null | After the host was off, the latest missed slot runs only if no older than this (default 7). |
 | `run_time` | `--run-time` | string \| null | no | yes | null | Company-local HH:MM from which a slot is due (default 06:00). |
 | `name` | `--name` | string | yes | no | — | minimum length 1; maximum length 100 |
@@ -261,6 +261,8 @@ Example JSON output:
 ## `delivery-schedule live`
 
 Make a send schedule live: its runs then release with your go and pause if you lose it. One check first: run it with dry_run, show your principal the check (selection, cadence, first run, who it would reach today), then run it with the check's fingerprint as confirm. Needs automate.delivery, which a principal may grant an agent.
+
+Confirm first (automation): it can make a rule live that then acts unattended. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -1113,6 +1115,8 @@ Example JSON output:
 
 Do now what the host does on its tick: claim the due slot (once) and draft a chunk of its run, or continue an open run. Nothing if nothing is due.
 
+Confirm first (send): what it sends cannot be recalled. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
@@ -1351,7 +1355,7 @@ Example JSON output:
 
 ## `delivery-schedule show`
 
-A schedule, its state and recent runs; check includes the details a person confirms to make it live.
+A schedule, its state and recent runs; check includes the details a holder of automate.delivery confirms to make it live.
 
 | Contract | Value |
 |---|---|
@@ -1382,7 +1386,7 @@ The same example as complete `bookflow_run` arguments:
 |---|---|---|---|---|---|---|
 | `schedule` | `SCHEDULE` | string | yes | no | — | Schedule name or id.; minimum length 1; maximum length 1004 |
 | `runs` | `--runs` | integer | no | no | 10 | How many recent runs to list, newest first.; minimum 1; maximum 400 |
-| `check` | `--check` | boolean | no | no | false | Include the check a person sees before making it live: the exact selection, cadence, first run and who it would reach today. |
+| `check` | `--check` | boolean | no | no | false | Include the check a holder of automate.delivery sees before making it live: the exact selection, cadence, first run and who it would reach today. |
 
 ### Command and context options
 
@@ -1578,6 +1582,8 @@ Example JSON output:
 
 Change a schedule. A change to what or when it sends returns a live one to draft, unless a holder of automate.delivery passes the changed schedule's check fingerprint as confirm (dry_run shows it).
 
+Confirm first (automation): it can make a rule live that then acts unattended. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
@@ -1621,7 +1627,7 @@ The same example as complete `bookflow_run` arguments:
 | `start_date` | `--start-date` | string \| null | no | yes | null | The first slot. A month-end start stays at month end. |
 | `stop_date` | `--stop-date` | string \| null | no | yes | null | No slot after this day. |
 | `remaining_runs` | `--remaining-runs` | integer \| null | no | yes | null | Stop after this many runs. |
-| `mode` | `--mode` | literal["draft", "send"] \| null | no | yes | null | draft: each run leaves drafts. send: each run releases them; they leave only once a person has made the schedule live (delivery-schedule live), and until then wait for a go. |
+| `mode` | `--mode` | literal["draft", "send"] \| null | no | yes | null | draft: each run leaves drafts. send: each run releases them; they leave only once a holder of automate.delivery has made the schedule live (delivery-schedule live), and until then wait for a go. |
 | `catch_up_days` | `--catch-up-days` | integer \| null | no | yes | null | After the host was off, the latest missed slot runs only if no older than this (default 7). |
 | `run_time` | `--run-time` | string \| null | no | yes | null | Company-local HH:MM from which a slot is due (default 06:00). |
 | `schedule` | `SCHEDULE` | string | yes | no | — | Schedule name or id.; minimum length 1; maximum length 1004 |

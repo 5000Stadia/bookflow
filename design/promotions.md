@@ -469,10 +469,10 @@ first slice leaves codes, offers, POS and commissions entirely optional.
    and a broad mistaken enrollment is reversible. **Tests:** ancestor/owner identity, renewal/expiry on held ticket,
    merge overlap, later-sale reversal blocker, 1440/390 list and sale journeys.
 
-   **As built — increment 2.** Migration `co0136` adds `customer_membership_inheritance` (one versioned row per job
+   **As built — increment 2.** Migration `co0138` adds `customer_membership_inheritance` (one versioned row per job
    that has a setting; no row means the job inherits) and a nullable `pos_tickets.membership_token`; existing
    companies migrate with no rows, no tokens and the layer still off. Three commands sit on the permission layer
-   `membership-sales-v1`, chained on `commission-pos-v1`, under increment 1's capabilities (no new capability or
+   `membership-sales-v1`, chained on `payroll-post-v1`, under increment 1's capabilities (no new capability or
    default): `customer membership inherit` (promotion.assign and customer write), `customer membership list`
    (promotion.read and customer read) and `customer membership enroll` (promotion.assign and customer write).
    - *Jobs.* `memberships.effective_fact` stays the one resolver: a customer with no own enrollment on the date climbs

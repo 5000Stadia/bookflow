@@ -2421,6 +2421,8 @@ Example JSON output:
 
 Void a statement charge with a required reason. Its accounting is reversed at its own date, so the customer’s balance, their aging and their statement all go back to what they were; its number stays occupied and its history stays readable. A charge a payment or credit is still applied to is refused with `E_HAS_APPLICATIONS` naming those applications, exactly as an invoice is: release them with `payment unapply` first, so the money that settled the charge is never left pointing at a document worth nothing.
 
+Confirm first (void): it voids a posted document. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |

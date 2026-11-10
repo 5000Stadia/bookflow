@@ -133,7 +133,9 @@ ACCEPTED = {
     'membership-pricing-v1': (949, '14c33f7743c47b7721d8825be60f3fb4e89d287f515d97166286b59bc189d4a6'),
     'intercompany-setup-v1': (960, '67602d51a720ba672a62fe16afbe33cab1f266d96b4ceaf24ebedd3705f7f63f'),
     'commission-pos-v1': (961, '8171794a1952fea02695361d7c712f5e10c8e0b74506d66db6a2d810f325299e'),
-    'membership-sales-v1': (964, '8b8b1ea3c2da35bb51c0c4e1ec494fad348b3ee66cca78e28ad9b9b82030468c'),
+    'crm-convert-v1': (964, '93a120a2e91e0f151878d417cb63c87d3649ce9799265208e31997af2f988a3b'),
+    'payroll-post-v1': (970, 'b61bf2a8f7f2e3db2a764fabd589304131851fed00a828c1ae4296e1cf311211'),
+    'membership-sales-v1': (973, '67d40463de1ce8c896d1362ad9f520079ded670285d5b880a64e72daff816b2a'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -320,6 +322,9 @@ CHAIN_ADDITIONS = {
                               'intercompany-relationship update', 'intercompany-relationship show',
                               'intercompany-relationship list'},
     'commission-pos-v1': {'pos commission-options'},
+    'crm-convert-v1': {'crm timeline', 'lead convert', 'lead import'},
+    'payroll-post-v1': {'payroll post', 'payroll pay-net', 'payroll void', 'payroll void-payment',
+                        'payroll paycheck', 'payroll paychecks'},
     'membership-sales-v1': {'customer membership inherit', 'customer membership list',
                             'customer membership enroll'},
 }

@@ -22,12 +22,13 @@ _DRAFT = (
 _UPDATE = ('Edit a draft or held message: To, Cc, Bcc, subject or body. The attachments stay as drafted unless '
            '`refresh`, which attaches the document as it is now and releases a changed-document hold.')
 _SEND = (
-    "Release drafts to the outbox (ready). A person's release is also their go; an agent's waits for one. No sending "
+    "Release drafts to the outbox (ready). The release of a holder of delivery.send (a person at standard; an agent "
+    "its principal granted it) is also its go; anyone else's waits for one. No sending "
     'connection exists yet, so a ready message waits there; export it to send it yourself. A message whose document '
     'changed or was voided is held instead.')
 _CANCEL = 'Set an unsent message aside, with --reason. Final; draft again for a new one.'
 _MARK = (
-    "Record that a person sent the message from their own mail program (shown 'Sent by hand', never delivered). "
+    "Record that someone sent the message from their own mail program (shown 'Sent by hand', never delivered). "
     'For an overdue notice it also marks the notice sent. Needs delivery.mark-sent, which a principal may grant an agent.')
 _EXPORT = (
     'Export messages as RFC 5322 .eml files (X-Unsent: 1) with their frozen PDFs, to open and send in a mail program: '
@@ -190,16 +191,18 @@ from bookflow.company import delivery_connections as cn  # noqa: E402
 from bookflow.company import delivery_dispatch as dq  # noqa: E402
 from bookflow.company import delivery_queue_models as qm  # noqa: E402
 
-_APPROVE = ("A person's go for ready messages waiting for one (an agent's release): by number, or all_waiting. A "
-            'message leaves only with a go, and only through a sending connection. Needs delivery.send. '
+_APPROVE = ("A go for ready messages waiting for one (released without delivery.send): by number, or all_waiting. "
+            'A message leaves only with a go, and only through a sending connection. Needs delivery.send, which a '
+            'principal may grant an agent. '
             'Example: {"messages": ["M-1001"]}.')
 _RETRY = ('Put a failed message, or one held because an attempt ended without an answer, back in the outbox. Check '
-          'the sent mail first: if it went, mark it sent instead. A person\'s retry is their go; an agent\'s waits.')
+          'the sent mail first: if it went, mark it sent instead. A retry by a holder of delivery.send is its go; '
+          'anyone else\'s waits for one.')
 _RUN = ('One dispatch pass now: claim due messages with a go, send each through the sending connection, record what '
         'it said (sent, try again later, failed, or held when the answer is unknown). With no connection it claims '
         'nothing. The host does this on its own about once a minute.')
 _CONNECTION = ('A sending connection: where mail goes, under keys held in the keyring or environment (secret_ref), '
-               'never in Bookflow. A person\'s act.')
+               'never in Bookflow. Needs delivery.connect, which a principal may grant an agent.')
 
 
 def plan_delivery_approve(inp, ctx, s) -> Plan:
@@ -376,7 +379,7 @@ delivery_unflag = _write('delivery unflag', _UNFLAG, bm.UnflagInput, bm.FlagOutp
                          errors=['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT'])
 delivery_queue = _read('delivery queue', _QUEUE, bm.QueueInput, bm.QueueOutput, plan_delivery_queue,
                        errors=['E_RECORD_NOT_FOUND', 'E_VALIDATION'])
-# R187: `send` releases with a go only for an actor holding delivery.send (today: a person).
+# `send` releases with a go only for an actor holding delivery.send (delivery_dispatch.gives_go).
 delivery_batch = _write('delivery batch', _BATCH, bm.BatchInput, bm.BatchOutput, plan_delivery_batch,
                         db.apply_batch,
                         errors=['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_WORK_DEPENDENCY'])
@@ -414,7 +417,8 @@ _SCHEDULE_RESUME = ('Run a stopped or paused schedule again from today; slots th
                     'schedule comes back as a draft.')
 _SCHEDULE_RUN = ('Do now what the host does on its tick: claim the due slot (once) and draft a chunk of its run, or '
                  'continue an open run. Nothing if nothing is due.')
-_SCHEDULE_SHOW = 'A schedule, its state and recent runs; check includes the details a person confirms to make it live.'
+_SCHEDULE_SHOW = ('A schedule, its state and recent runs; check includes the details a holder of automate.delivery '
+                  'confirms to make it live.')
 _SCHEDULE_QUERY = 'The schedules, with cadence, next slot, state and last run.'
 
 
@@ -454,7 +458,7 @@ _SCHED_ERRORS = ['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_
 delivery_schedule_create = _write('delivery-schedule create', _SCHEDULE_CREATE, sm.ScheduleCreateInput,
                                   sm.ScheduleOutput, plan_schedule_create, ds.apply_create,
                                   errors=['E_VALIDATION', 'E_RECORD_NOT_FOUND'])
-# R187: confirm (staying live through a change) needs automate.delivery; today a person.
+# confirm (making it live, or staying live through a change) needs automate.delivery and a go (delivery.send).
 delivery_schedule_update = _write('delivery-schedule update', _SCHEDULE_UPDATE, sm.ScheduleUpdateInput,
                                   sm.ScheduleOutput, plan_schedule_update, ds.apply_update, positional=('schedule',),
                                   version=_SCHEDULE_VERSION, errors=[*_SCHED_ERRORS, 'E_PERMISSION'])

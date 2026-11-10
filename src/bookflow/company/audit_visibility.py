@@ -43,6 +43,7 @@ EXACT = {
     'lead': frozenset(('crm.read',)),
     'lead_contact': frozenset(('crm.read',)),
     'lead_contact_point': frozenset(('crm.read',)),
+    'crm_conversion': frozenset(('crm.read', 'customer')),
     'attachment': frozenset(('attachment',)),
     'attachment_link': frozenset(('attachment',)),
     'attachment_collection': frozenset(('attachment',)),
@@ -73,6 +74,7 @@ EXACT = {
 # transaction, its lines, postings, settlement, deposit, reconciliation and deletion rows under
 # ledger.read. No two prefixes here match the same record type.
 PREFIXES = (
+    ('payroll_', frozenset(('payroll.read',))),
     ('work_', frozenset((WORK,))),
     ('time_activit', frozenset((WORK,))),
     *((prefix, frozenset((LEDGER,))) for prefix in (

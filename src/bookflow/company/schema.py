@@ -1375,3 +1375,9 @@ from bookflow.company import intercompany_schema as _intercompany_schema
 globals().update(_intercompany_schema.define_tables(metadata, _column, _table, _common))
 from bookflow.company import intercompany_relationship_schema as _intercompany_relationship_schema
 globals().update(_intercompany_relationship_schema.define_tables(metadata, _column, _table, _common))
+
+# R116 increment 2: posted paychecks, net payments and YTD facts; private beside a neutral ledger link.
+from bookflow.company import payroll_posting_schema as _payroll_posting_schema
+globals().update(_payroll_posting_schema.define_tables(metadata, _column, _table))
+for _payroll_revision_column in _payroll_posting_schema.revision_columns(_column):
+    payroll_draft_revisions.append_column(_payroll_revision_column)

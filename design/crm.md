@@ -444,6 +444,61 @@ are future build acceptance, not instructions to add tests in this design-only c
    agent's converted lead and a mistaken unused import/conversion reverses as one unit without lost history.
    **Tests:** competing conversion, lost response, existing-contact mapping, source-key collision, denied customer
    write, later note/task/document blockers, failed import resume, reversal interruption and customer merge/unmerge.
+
+   #### As built — increment 2
+
+   `lead convert` turns a lead into a new top-level customer or links it to an existing one. A new customer goes
+   through the native customer planner, so it gets the same name rules, contact validation and audit as `customer
+   create`. It takes the lead's name (or `name`), person fields, address as the billing address, summary as notes, and
+   contacts. No balance, terms, tax code or job is set. Linking to an existing customer copies nothing unless
+   `contact_transfers` names each lead contact and, for an existing customer contact, each field to copy. The dry run
+   shows that map, the copied fields and any same-name or same-email customers, which are never merged. Every
+   conversion is its own reversible batch (`crm-conversion`). Its `crm_conversions` and `crm_conversion_contacts` rows
+   keep the lead and customer versions and each copied field's earlier value. A unique index allows one active
+   conversion per lead. An identical retry returns the first receipt (`replayed`), with or without an idempotency key.
+   A different second conversion refuses with `E_CRM_ALREADY_CONVERTED`, naming the customer and how to reverse.
+
+   `crm timeline` reads one history across a lead and the customer it became, following active conversions and
+   standing customer merges. It joins the native notes, to-dos and files with the conversion and reversal events,
+   newest first, with snapshot-bound continuation. Entries read on a customer say which lead they came from. Notes and
+   to-dos need `note`, files need `attachment`, and the customer side needs `customer`. What a reader may not see is
+   left out and listed in `omitted`. Lead work stays on the lead; nothing is copied or re-pointed.
+
+   `lead import` takes up to 500 rows from a named source, each with a stable `source_key`. Every row is checked by a
+   `lead create` dry run before anything lands. Then each row lands as its own native `lead create` with its batch
+   effect and key, so an interrupted import resumes on rerun. A held key with the same row is `unchanged`. A changed
+   row under a held key refuses (`source_key_changed`), and so does a key repeated in one request. Imports of one source
+   share a live batch until it is reversed. This is a dedicated command rather than the file-import pipeline, so CLI,
+   HTTP and MCP callers send rows directly. Lead imports are not added to that pipeline's kinds.
+
+   Both kinds reverse through `batch reverse`, newest first. A conversion reversal is refused by name while a later
+   note, to-do, file or document depends on the customer. Documents include accounting documents and estimates, sales
+   orders and other work documents. It is also refused while the lead changed again, the customer is in a standing
+   merge, a created customer or copied contact was edited after, or a created customer is used elsewhere. Lead work
+   from before the conversion never blocks. The inverse deactivates and renames a created customer (it is never
+   deleted, so its audit and history stay). It restores copied contact fields and removes added contacts on an existing
+   customer, and puts back the lead's earlier status and close reason. The conversion row stays as `reversed`, and the
+   history shows both events. An import reversal closes and archives each lead, with reason `Import reversed: …`, and
+   releases its key. It is refused per lead when the lead was edited, converted, or given notes, to-dos or files. A
+   new import of the source waits until an unfinished reversal of it finishes.
+
+   Merging a converted customer is allowed and blocks the reversal while it stands. Undoing the merge leaves the
+   customer at a later version, so the reversal then refuses as `customer_edited`. This is the honest outcome, since
+   the merge touched the customer. An undone merge alone is history, not a use.
+
+   Migration `co0136` adds the three tables empty. `crm-convert-v1` adds `crm.convert` (convert and reverse) and
+   `crm.bulk` (import and reverse), both at standard, for the standard, admin, owner and installation-administrator
+   roles. Agents get them only through their role. Conversion also asks for `customer` at standard to create a
+   customer or copy contact fields, and at member to link only. Imports also need `import` at standard, and each row
+   needs `crm.write`. A converter denied `customer` writes nothing. Nothing posts money. Both optional layers stay off.
+
+   The lead page shows a "Converted to customer" banner with a link and the shared history. The "Convert to customer"
+   sheet has Cancel, a target choice and a review before the htmx submit. `/crm/history` pages the history for a lead
+   or customer. The demo links one lead to an existing customer and imports two leads from a named trade-fair list.
+
+   Left for later increments: manual communications and their place in the timeline (3), the pipeline (4), the
+   financial snapshot (5) and campaigns (6). Bulk conversion and conversion onto jobs are not built. File (CSV)
+   upload of lead imports through the workbench is not built either; imports come through the command.
 3. **Communication history (M).** Manual log/revision/retraction, atomic follow-up completion, native delivery union
    and full permission-filtered timeline. **Done when:** old sent mail and new manual calls appear once with correct
    provenance, and a CRM action cannot send. **Tests:** drafts/unknown outcomes excluded from last contact, bounce,

@@ -52,6 +52,14 @@ class SetupInput(BaseModel):
     agent: str = Field("assistant", min_length=1, max_length=64, description="Username for the AI agent's own identity")
     agent_name: str | None = Field(None, max_length=200, description="The agent's name in lists and the audit trail; defaults to Assistant")
     role: Literal["readonly", "standard", "admin"] | None = Field(None, description="The agent's role in the company: standard for a new agent; given for an existing one, it changes the role")
+    preset: Literal["bookkeeper", "read-only", "trusted"] | None = Field(None, description=(
+        "The agent's level, a list of grants you can edit later: bookkeeper (the default for a new agent: standard, no "
+        "automations, sending, merges or restores), read-only (reads only) or trusted (bookkeeper plus delivery.send, "
+        "opening.accept-differences and the automate capabilities named in automate). Given for an existing agent, it "
+        "changes its role and grants. Not with role"))
+    automate: list[Literal["bank-rule", "delivery", "invoice"]] = Field(default_factory=list, description=(
+        "With preset trusted: which automations the agent may make live (automate.bank-rule, automate.delivery, "
+        "automate.invoice); each then runs unattended as the agent, for you"))
     mcp_config: str = Field(".mcp.json", min_length=1, description="MCP client configuration file to write or update (the `bookflow` server entry only)")
     bind: str = Field("127.0.0.1:8765", max_length=128, description="Address the host listens on, host:port (loopback)")
     public_origin: str | None = Field(None, max_length=256, description="The https://host[:port] a TLS proxy in front of the host serves (for example what `colony serve` prints); the links and the MCP configuration use it. Defaults to [host] public_origin in config.toml")
@@ -80,6 +88,10 @@ class SetupOutput(BaseModel):
     owner: dict[str, Any] = Field(description="user_id, username and display_name of the person setup ran for")
     company: dict[str, Any] = Field(description="company_id, display_name, home_currency and organization_id")
     agent: dict[str, Any] = Field(description="user_id, username and role of the agent's own identity, and the principal it acts for")
+    level: dict[str, Any] = Field(description=(
+        "The agent's level (R187 setup guidance; nothing here blocks anything): preset, role, grants, applied (whether "
+        "the grants are on its membership now), command (the membership grant that applies or edits them), cannot, "
+        "the three presets, one line per automate capability, how to reverse a batch, and what audit list shows"))
     mcp_config: str = Field(description="The MCP client configuration file written")
     mcp_server: dict[str, Any] = Field(description="The `bookflow` server entry in it: command, args and env (no secret)")
     token_file: str = Field(description="Owner-only file holding the agent's bearer; the configuration points at it")
@@ -359,6 +371,59 @@ def _opening_hint(run, inp: SetupInput, company_id: str, shown: dict[str, Any], 
             f"--reason \"Opening balance the owner gave\" --json")
 
 
+# ---------------------------------------------------------------- the agent's level (R187 §6)
+
+PRESETS: dict[str, dict[str, Any]] = {
+    "bookkeeper": {"role": "standard", "grants": [], "cannot": (
+        "make an automation live, send email or approve sending, mark email sent by hand, merge or unmerge records, "
+        "restore a deleted document, post an opening whose totals do not tie, change who may do what, or do the other "
+        "acts a principal grants by name (the agent guide lists them)")},
+    "read-only": {"role": "readonly", "grants": [], "cannot": (
+        "write anything: it reads the books, reports and records, and drafts nothing")},
+    "trusted": {"role": "standard", "grants": ["delivery.send", "opening.accept-differences"], "cannot": (
+        "make live an automation you did not pick, mark email sent by hand, merge or unmerge records, restore a "
+        "deleted document, change who may do what, or do the other acts a principal grants by name")},
+}
+AUTOMATE: dict[str, str] = {
+    "bank-rule": "automate.bank-rule: a bank rule it makes live adds (or ignores) matching bank lines in the books at "
+                 "each import, unattended",
+    "delivery": "automate.delivery: an email schedule it makes live sends email to customers, unattended (its runs "
+                "also need delivery.send)",
+    "invoice": "automate.invoice: an invoice schedule it makes live raises invoices, unattended",
+}
+REVERSE = ("Every batch is reversible by one command: bookflow batch reverse BATCH (run it with --dry-run first to read "
+           "every effect it would undo); imports, grid edits and bank imports also have their own reverse.")
+AUDIT = ("bookflow audit list shows every write with its actor, interface, the principal it was done for and its "
+         "reason. You are answerable for what you grant.")
+AUTOMATION_RULE = ("Each runs as the one who made it live (its establisher), for you, and pauses with a to-do if they "
+                   "lose the capability.")
+
+
+def preset_grants(preset: str, automate: list[str] | tuple[str, ...] = ()) -> list[str]:
+    """The grants a preset gives: its own, and for trusted the automate.* capabilities picked."""
+    extra = [f"automate.{kind}" for kind in automate] if preset == "trusted" else []
+    return [*PRESETS[preset]["grants"], *extra]
+
+
+def level_guidance(*, agent: str, company: str, preset: str, role: str | None, grants: list[str], applied: bool,
+                   activated: bool, root_flag: str = "") -> dict[str, Any]:
+    """What setup tells the principal about the agent's level. Words only: nothing in it blocks anything."""
+    command = (f"bookflow membership grant {shlex.quote(agent)} --company {shlex.quote(company)} --role "
+               f"{role or PRESETS[preset]['role']} --grants {shlex.quote(json.dumps(grants))} "
+               f"--expected-version N{root_flag}")
+    return {
+        "preset": preset, "role": role, "grants": grants, "applied": applied, "permissions_activated": activated,
+        "command": command, "cannot": PRESETS[preset]["cannot"],
+        "presets": [{"preset": name, "role": p["role"], "grants": list(p["grants"]), "cannot": p["cannot"],
+                     **({"pick": [f"automate.{k}" for k in AUTOMATE]} if name == "trusted" else {})}
+                    for name, p in PRESETS.items()],
+        "automations": [AUTOMATE[k] + ". " + AUTOMATION_RULE for k in AUTOMATE],
+        "reverse": REVERSE, "audit": AUDIT,
+        "refused": ("Refused for a missing capability, the agent is told which one and to ask you to grant it if it "
+                    "is its to do."),
+    }
+
+
 def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
     """The bootstrap path for `setup` (dispatch._run_bootstrap): existing commands, in order, each only if needed."""
     import sqlalchemy as sa
@@ -371,6 +436,10 @@ def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
 
     if s.dry_run:
         raise BookflowError("E_USAGE", message="`setup` has no dry run; rerunning it is safe and only adds what is missing.")
+    if inp.preset is not None and inp.role is not None:
+        raise BookflowError("E_VALIDATION", details={"fields": [{"field": "preset", "problem": "give preset or role, not both"}]})
+    if inp.automate and inp.preset != "trusted":
+        raise BookflowError("E_VALIDATION", details={"fields": [{"field": "automate", "problem": "only with preset trusted"}]})
     host_name, _port = parse_bind(inp.bind)
     if not is_loopback(host_name):
         raise BookflowError("E_NETWORK_NOT_ALLOWED", details={"bind": inp.bind},
@@ -488,11 +557,11 @@ def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
         listed = []
     access = [m for m in listed if m["scope_type"] == "company" and m["scope_id"] == company_id]
     live_access = [m for m in access if m["active"]]
-    role = inp.role or "standard"
+    role = inp.role or (PRESETS[inp.preset]["role"] if inp.preset else "standard")
     if stopped:
         step("access", "skipped", "left as it is while the agent is stopped")
         role = live_access[0]["role"] if live_access else None
-    elif live_access and (inp.role is None or live_access[0]["role"] == inp.role):
+    elif live_access and (inp.role is None and inp.preset is None or live_access[0]["role"] == role):
         role = live_access[0]["role"]
         step("access", "exists", f"{role} in {inp.company}")
     elif access and not live_access and not created:
@@ -502,6 +571,27 @@ def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
     else:
         run("membership grant", {"user": inp.agent, "company": company_id, "role": role}, write=True)
         step("access", "updated" if live_access else "created", f"{role} in {inp.company}")
+    # The agent's level (R187 §6): a preset is a list of grants the principal can edit. Grants exist only once
+    # permissions are activated (a person's act, never setup's), so until then the step names the command.
+    preset = inp.preset or ("read-only" if role == "readonly" else "bookkeeper")
+    grants = preset_grants(preset, inp.automate)
+    activated = run("permission show").get("mode") == "policy_v1"
+    applied = not grants
+    if grants and activated and role is not None and not stopped and (inp.preset is not None or created):
+        version = next((m.get("version") for m in run("membership list", {"user": inp.agent, "company": company_id})["items"]
+                        if m["scope_type"] == "company" and m["scope_id"] == company_id and m["active"]), 0)
+        run("membership grant", {"user": inp.agent, "company": company_id, "role": role, "grants": grants,
+                                 "expected_version": version}, write=True)
+        applied = True
+    level = level_guidance(agent=inp.agent, company=inp.company, preset=preset, role=role, grants=grants,
+                           applied=applied, activated=activated, root_flag=_root_flag(root))
+    if applied:
+        step("level", "created" if grants else "exists",
+             f"{preset}: {role or PRESETS[preset]['role']}" + (f", granted {', '.join(grants)}" if grants else
+                                                                "") + f"; it cannot {level['cannot']}")
+    else:
+        step("level", "skipped", f"{preset}: grants {', '.join(grants)} wait until permissions are activated "
+                                 f"(bookflow permission activate), then: {level['command']}")
     agent = run("agent show", {"agent": inp.agent})
     authority = agent["authority"]
     if not authority["suspended"]:
@@ -622,6 +712,13 @@ def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
     lines = [f"Bookflow is set up for {company_out['display_name']} ({company_out['home_currency']}).", ""]
     lines += [f"  {x.step:<15} {x.status:<8} {x.detail}" for x in steps]
     lines += ["", "Next:"] + [f"  {n}. {t}" for n, t in enumerate(next_steps, 1)]
+    lines += ["", f"The agent's level: {preset} (a list of grants you can edit: {level['command']}).",
+              f"  It cannot {level['cannot']}.",
+              "  Presets: " + "; ".join(f"{p['preset']} ({p['role']}" + (", " + ", ".join(p["grants"]) if p["grants"] else "")
+                                       + (", and the automate.* you pick" if p.get("pick") else "") + ")"
+                                       for p in level["presets"]) + ".",
+              *[f"  {line}" for line in level["automations"]],
+              f"  {REVERSE}", f"  {AUDIT}"]
     if pending:
         lines += ["", "Owner checklist (only the owner does these):"]
         for x in pending:
@@ -634,6 +731,7 @@ def run_setup(cmd, inp: SetupInput, ctx: Context, s: Session) -> dict[str, Any]:
         company=company_out,
         agent={"user_id": agent["agent_id"], "username": agent["username"], "role": role, "stopped": bool(stopped),
                "acts_for": owner_row["username"], "acts_for_user_id": owner_id},
+        level=level,
         mcp_config=str(config_path), mcp_server=server, token_file=str(token_file), url=url, host=host,
         owner_link=owner_link, owner_checklist=checklist, opening_balance=opening, steps=steps, next_steps=next_steps, content="\n".join(lines) + "\n",
     ).model_dump(mode="json")

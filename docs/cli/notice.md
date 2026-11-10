@@ -539,6 +539,8 @@ Example JSON output:
 
 Record that a ready notice has been sent -- printed and mailed, emailed by hand, or otherwise (`method`). Bookflow did not send it; this records that a person (or a delivery step outside Bookflow) did.
 
+Confirm first (send): what it sends cannot be recalled. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |

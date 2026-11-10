@@ -6,6 +6,8 @@
 
 Post a planned opening through the cutover engine, as one batch: the accounts' balances in one opening journal against a clearing account, each open invoice and bill for its open amount, each item's stock. All or nothing: a command refused part way undoes what the opening had posted (rolled_back). A run stopped any other way stays applying and the same call continues it. Refused while the plan has a blocking exception; `accept_differences` (a person's act; an agent needs the capability opening.accept-differences) posts one whose given totals do not tie, the difference left in the clearing account. Before `apply`, show your principal the plan's exact details once (the as-of date, the counts and totals, and which checks are given and which derived) and apply on their yes: an opening sets how the books start.
 
+Confirm first (broad lasting change): it changes many records, or how the business works from then on. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
@@ -965,6 +967,8 @@ Example JSON output:
 ## `opening-draft reverse`
 
 Undo an applied opening as one unit through its batch, for as long as nothing later depends on it: each invoice, credit memo, bill, journal and sales receipt deleted with its history kept, each vendor credit and stock adjustment voided, each customer, vendor, item and term it made renamed and deactivated. Accounts are not retired (an account keeps its history): the clearing account stays at 0.00 for the next opening; `stays` lists that and anything else the opening set outside its batch. Refused (E_BATCH_BLOCKED), naming each record and what clears it, while one is in use (a payment applied to an opening invoice, stock it brought in sold since) or was changed since; then nothing changes. Needs your own delete grants for those families. --dry-run shows the plan and a fingerprint. Confirm with your principal first.
+
+Confirm first (batch reversal): it undoes a whole batch at once. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

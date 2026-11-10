@@ -1,0 +1,9 @@
+{% extends 'base.html' %}{% block title %}History{% endblock %}{% block body %}
+<link rel="stylesheet" href="{{ static_urls['crm.css'] }}">
+<section id="crm-workspace">
+<h1>History of {{ history.customer_name or history.lead_name }}</h1>
+<nav class="actions">{% if history.lead_id %}<a href="/c/{{ company_id }}/lead/{{ history.lead_id }}">Open lead</a>{% endif %}{% if history.customer_id %}<a href="/c/{{ company_id }}/customer/{{ history.customer_id }}">Open customer</a>{% endif %}</nav>
+<p>{{ history.total_count }} entries, newest first.</p>
+{% include 'crm_history_items.html' %}
+{% if next_url %}<a href="{{ next_url }}">Older entries →</a>{% endif %}
+</section>{% endblock %}

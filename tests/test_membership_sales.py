@@ -205,14 +205,14 @@ def test_old_companies_migrate_intact_with_the_layer_off(root, monkeypatch):
         db.execute('PRAGMA foreign_keys=OFF')
         db.execute('DROP TABLE customer_membership_inheritance')
         db.execute('ALTER TABLE pos_tickets DROP COLUMN membership_token')
-        db.execute("UPDATE alembic_version SET version_num='co0135'")
+        db.execute("UPDATE alembic_version SET version_num='co0137'")
         before = {name: db.execute('SELECT * FROM ' + name).fetchall()
                   for name in ('customers', 'customer_memberships', 'pos_tickets')}
     # Only this migration is rewound, so only it is run; the file is stamped back to its real head afterwards.
     with monkeypatch.context() as patch:
-        patch.setitem(HEADS, 'company', 'co0136')
+        patch.setitem(HEADS, 'company', 'co0138')
         with open_database(path, writable=True) as db:
-            assert migrate_to_head(db, 'company', None) == ('co0135', 'co0136')
+            assert migrate_to_head(db, 'company', None) == ('co0137', 'co0138')
             for name, rows in before.items():
                 assert [r[:len(rows[0])] if rows else r for r in db.raw.execute('SELECT * FROM ' + name).fetchall()] == rows
             assert db.raw.execute('SELECT count(*) FROM customer_membership_inheritance').fetchone() == (0,)

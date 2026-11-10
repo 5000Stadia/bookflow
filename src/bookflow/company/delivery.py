@@ -975,7 +975,8 @@ def prepare_mark_sent(s, ctx, inp) -> Plan:
 # ---------------------------------------------------------------- release
 
 def prepare_send(s, ctx, inp) -> Plan:
-    person = s.actor.kind == 'human'
+    from bookflow.company.delivery_dispatch import gives_go
+    person = gives_go(s)  # a person, or an agent holding delivery.send: the release is also the go
     seen, plans, warnings = set(), [], []
     read = reader(s, ctx)
     at = clock.now_iso()
@@ -1020,15 +1021,16 @@ def prepare_send(s, ctx, inp) -> Plan:
         if person:
             after.update(go_by=s.actor.id, go_at=at)
             details.update(go_by=s.actor.id, go_at=at)
-        else:  # R187: an actor without delivery.send; whatever go the message carried does not survive its release
+        else:  # an actor without delivery.send: whatever go the message carried does not survive its release
             drop_go(before, after, details)
         plans.append((before, after, 'released', details))
     if any(a['status'] == 'ready' for _, a, _, _ in plans):
         from bookflow.company import delivery_connections as conns
         connected = conns.label(s) != 'none'
-        if not person:  # R187: an actor holding delivery.send releases with a go
-            warnings.append(("" if connected else NO_CONNECTION + ' ') + "An agent's release waits for a person's go "
-                            '(delivery approve) before anything could leave.')
+        if not person:
+            warnings.append(("" if connected else NO_CONNECTION + ' ') + 'Your release waits for a go before '
+                            'anything could leave: you do not hold delivery.send, so a holder approves it (delivery '
+                            'approve). Ask your principal to grant it if this is yours to do.')
         elif not connected:
             warnings.append(NO_CONNECTION)
     outs = [project(s, after) for _, after, _, _ in plans]

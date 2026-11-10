@@ -380,8 +380,13 @@ POS_REFUND_COMMANDS = frozenset(('pos refund', 'pos refund lines', 'pos refund s
 POS_DAY_COMMANDS = frozenset(('pos shift open', 'pos shift close', 'report pos-day', 'pos deposit prepare'))
 
 CRM_LEAD_COMMANDS = frozenset('lead ' + verb for verb in ('create', 'update', 'show', 'list', 'close', 'reopen', 'archive'))
+# R115 increment 2: conversion, one lead/customer history and source-keyed lead imports.
+CRM_CONVERT_COMMANDS = frozenset(('lead convert', 'lead import', 'crm timeline'))
 
 PAYROLL_COMMANDS = frozenset(('payroll setup', 'payroll settings', 'payroll draft', 'payroll show', 'payroll list', 'payroll prepare'))
+# R116 increment 2: posting one paycheck, net pay by check, voids and reads.
+PAYROLL_POST_COMMANDS = frozenset(('payroll post', 'payroll pay-net', 'payroll void', 'payroll void-payment',
+                                   'payroll paycheck', 'payroll paychecks'))
 
 PURCHASE_DRAFT_COMMANDS = frozenset('purchase-draft ' + verb for verb in
                                     ('create', 'update', 'preview', 'cancel', 'show', 'list'))
@@ -397,7 +402,7 @@ MEMBERSHIP_COMMANDS = frozenset(('membership-plan create', 'membership-plan upda
 MEMBERSHIP_SALES_COMMANDS = frozenset(('customer membership inherit', 'customer membership list',
                                        'customer membership enroll'))
 INTERCOMPANY_COMMANDS = frozenset(('intercompany-settings show', 'intercompany-settings update', 'intercompany-draft create', 'intercompany-draft update', 'intercompany-draft show', 'intercompany-draft list', 'intercompany-mapping set', 'intercompany-relationship create', 'intercompany-relationship update', 'intercompany-relationship show', 'intercompany-relationship list'))
-FROZEN_COMMANDS = MEMBERSHIP_SALES_COMMANDS | INTERCOMPANY_COMMANDS | MEMBERSHIP_COMMANDS | BILL_APPROVAL_COMMANDS | CRM_LEAD_COMMANDS | frozenset(('commission recipient-options', 'report commission-attribution', 'pos commission-options')) | PAYROLL_COMMANDS | PURCHASE_DRAFT_COMMANDS | POS_DAY_COMMANDS | POS_REFUND_COMMANDS | frozenset(('pos receipt show', 'batch reverse', 'notice reverse')) | POS_TICKET_COMMANDS | POS_LAYOUT_COMMANDS | BANK_SOURCE_COMMANDS | POS_SALE_COMMANDS | BANK_RULE_COMMANDS | POS_REGISTER_COMMANDS | OPENING_DRAFT_COMMANDS | AUTOMATION_COMMANDS | USER_HOME_COMMANDS | BULK_EDIT_COMMANDS | ITEM_PICTURE_COMMANDS | BANK_FEED_COMMANDS | IMPORT_COMMANDS | DELIVERY_COMMANDS | SETUP_TRIAL_COMMANDS | SHIPMENT_COMMANDS | AGENT_SETUP_COMMANDS | VERIFY_COMMANDS | FIFO_COMMANDS | LANDED_COST_COMMANDS | BIN_COMMANDS | SERIAL_LOT_COMMANDS | PERF_COMMANDS | SCHEDULING_COMMANDS | INVENTORY_COUNT_COMMANDS | BARCODE_COMMANDS | CHECK_PRINTING_COMMANDS | ACCOUNTANT_REVIEW_COMMANDS | TIMEKEEPING_COMMANDS | INVENTORY_SITE_COMMANDS | PARTIAL_PO_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
+FROZEN_COMMANDS = MEMBERSHIP_SALES_COMMANDS | CRM_CONVERT_COMMANDS | INTERCOMPANY_COMMANDS | MEMBERSHIP_COMMANDS | BILL_APPROVAL_COMMANDS | CRM_LEAD_COMMANDS | frozenset(('commission recipient-options', 'report commission-attribution', 'pos commission-options')) | PAYROLL_COMMANDS | PAYROLL_POST_COMMANDS | PURCHASE_DRAFT_COMMANDS | POS_DAY_COMMANDS | POS_REFUND_COMMANDS | frozenset(('pos receipt show', 'batch reverse', 'notice reverse')) | POS_TICKET_COMMANDS | POS_LAYOUT_COMMANDS | BANK_SOURCE_COMMANDS | POS_SALE_COMMANDS | BANK_RULE_COMMANDS | POS_REGISTER_COMMANDS | OPENING_DRAFT_COMMANDS | AUTOMATION_COMMANDS | USER_HOME_COMMANDS | BULK_EDIT_COMMANDS | ITEM_PICTURE_COMMANDS | BANK_FEED_COMMANDS | IMPORT_COMMANDS | DELIVERY_COMMANDS | SETUP_TRIAL_COMMANDS | SHIPMENT_COMMANDS | AGENT_SETUP_COMMANDS | VERIFY_COMMANDS | FIFO_COMMANDS | LANDED_COST_COMMANDS | BIN_COMMANDS | SERIAL_LOT_COMMANDS | PERF_COMMANDS | SCHEDULING_COMMANDS | INVENTORY_COUNT_COMMANDS | BARCODE_COMMANDS | CHECK_PRINTING_COMMANDS | ACCOUNTANT_REVIEW_COMMANDS | TIMEKEEPING_COMMANDS | INVENTORY_SITE_COMMANDS | PARTIAL_PO_COMMANDS | ORDER_INVOICING_COMMANDS | SHORTFALL_COMMANDS | COLLECTIONS_COMMANDS | FIXED_ASSET_COMMANDS | ASSEMBLY_BUILD_COMMANDS | COMMITTED_STOCK_COMMANDS | MILEAGE_COMMANDS | PRICING_RULE_COMMANDS | BROWSING_COMMANDS | PAYMENT_COMMANDS | BATCH_2026_09_COMMANDS | DELETION_CLOSE_COMMANDS | JOB_TIME_COMMANDS | CUTOVER_COMMANDS | RESTORE_COMMANDS | MERGE_COMMANDS | BOUNCE_COMMANDS | VENDOR_1099_COMMANDS | ATTACHMENT_TEXT_COMMANDS | TRANSACTION_FIND_COMMANDS | ITEM_CONVERT_COMMANDS | FINANCE_CHARGE_COMMANDS | VENDOR_REFUND_COMMANDS | BUDGET_COMMANDS | PREPAYMENT_COMMANDS | LIST_MERGE_COMMANDS | SALES_ORDER_COMMANDS | frozenset("""account activate
 account create
 account deactivate
 account list
@@ -1078,9 +1083,11 @@ def execution_map():
                    'tests/test_verify_surfaces.py::test_the_same_verification_through_python_cli_http_and_mcp' if cmd.name in VERIFY_SURFACE_COMMANDS else  # all four
                    'tests/test_shipment_surfaces.py::test_the_same_shipment_through_python_cli_http_and_mcp' if cmd.name in SHIPMENT_SURFACE_COMMANDS else  # all four
                    'tests/test_crm_leads.py::test_lead_workflow_through_python_cli_http_and_mcp' if cmd.name in CRM_LEAD_COMMANDS else
+                   'tests/test_crm_conversion.py::test_conversion_history_and_import_through_python_cli_http_and_mcp' if cmd.name in CRM_CONVERT_COMMANDS else
                    'tests/test_commission_attribution.py::test_commission_contracts_python_cli_http_mcp' if cmd.name in {'commission recipient-options', 'report commission-attribution'} else
                    'tests/test_commission_receipts_pos.py::test_pos_commission_options_contract_python_cli_http_mcp' if cmd.name == 'pos commission-options' else
                    'tests/test_payroll.py::test_cli_and_mcp' if cmd.name in PAYROLL_COMMANDS else
+                   'tests/test_payroll_posting.py::test_cli_and_mcp' if cmd.name in PAYROLL_POST_COMMANDS else
                    'tests/test_notice_batch_reversal.py::test_notice_reverse_through_python_cli_http_and_mcp' if cmd.name == 'notice reverse' else
                    'tests/test_batch_reverse_surfaces.py::test_batch_reverse_through_python_cli_http_and_mcp' if cmd.name == 'batch reverse' else
                    'tests/test_import_surfaces.py::test_the_same_import_through_python_cli_http_and_mcp' if cmd.name in IMPORT_SURFACE_COMMANDS else  # all four

@@ -406,6 +406,29 @@ NOT_IMPORTABLE: dict[str, frozenset[str]] = {
     )),
 }
 
+# Commands of the optional layers added in 2026-11 (leads, payroll drafts, purchase drafts and approvals, memberships,
+# intercompany setup), classified as each landed.
+for _reason, _names in {
+    'destructive': ('lead archive', 'lead close', 'purchase-draft cancel', 'customer membership end'),
+    'needs-a-person': ('approval decide', 'approval-policy publish', 'purchase-draft submit',
+                       'purchase-draft withdraw', 'purchase-draft commit', 'payroll post', 'payroll pay-net'),
+    # R188 increment 2: a job's inherit setting is a list change like the enrollment it qualifies, not planned yet;
+    # bulk enrollment is already one reversible batch of its own, not a row in a file.
+    'not-yet': ('approval-policy create', 'approval-policy update', 'customer membership set',
+                'customer membership inherit',
+                'intercompany-draft create', 'intercompany-draft update', 'intercompany-mapping set',
+                'lead create', 'lead update', 'membership-plan create', 'membership-plan update',
+                'payroll draft', 'payroll setup', 'purchase-draft create', 'purchase-draft update'),
+    'not-a-record': ('lead convert', 'lead import', 'lead reopen', 'payroll prepare',
+                     'customer membership enroll',
+                     'intercompany-settings update'),
+    # R116 increment 2: voiding a paycheck or its check undoes posted history; posting a paycheck or settling its
+    # net pay is one person's decision over one prepared draft, never a row in a file.
+    'void': ('payroll void', 'payroll void-payment'),
+}.items():
+    NOT_IMPORTABLE[_reason] = NOT_IMPORTABLE[_reason] | frozenset(_names)
+del _reason, _names
+
 
 def kind(name: str) -> Kind:
     try:

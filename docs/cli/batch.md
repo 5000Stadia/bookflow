@@ -111,6 +111,8 @@ Example JSON output:
 
 Confirm-first: reverse the entire batch, newest effects first, using your own grants for every inverse. Run --dry-run and check its exact list with your principal unless this reversal was plainly named. Invoice batches void each invoice under your own ledger.post grant. Every blocker is named and a blocked plan changes nothing. Later edits, dependent records, closed periods, reconciled payments and pending or printed checks can block. Inventory counts cancel or void through their native inverse; pending check-print runs cancel, and delivery batches cancel only with unexported drafts. Sent mail, printed cheques and exported files cannot be recalled. A printed cheque or sent message blocks the whole batch. History stays. Returns a resumable slice; repeat `next` until reversed. A batch with nothing reversible says so. Example: {"batch": "01J..."}.
 
+Confirm first (batch reversal): it undoes a whole batch at once. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
