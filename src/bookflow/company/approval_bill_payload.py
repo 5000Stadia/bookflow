@@ -177,3 +177,57 @@ def calculate(s, ctx, payload, operation='create', original_id=None, original_ve
                     receipt_stock=_stock(received.get('stock')) if received else None,
                     total=plan.preview.total.model_dump(mode='json'))
     return normalized, json.loads(json.dumps(snapshot)), plan
+
+
+def prior_payload(s, header):
+    """Capture the current bill as a complete native correction input for an inverse.
+
+    This is commercial input, not a bypass: native correction still rejects retired line
+    identities, changed source capacity, inactive references and closed dates. The caller
+    must compare the inverse's native semantic/effects with its saved prior evidence.
+    """
+    from bookflow.company import custom_fields, placements, serial_lots
+    revision = bills.journals.revision(s, header)
+    view = bills.revision_output(s, header, revision).model_dump(mode='json')
+    profile, currency = view['profile'], view['currency']
+    payload = dict(bill=header['id'], expected_version=header['version'], date=view['date'],
+                   number=view['number'], vendor=profile['vendor']['id'],
+                   ap_account=profile['ap_account']['id'], terms=_reference(profile.get('terms')),
+                   supplier_reference=profile['supplier_reference'], memo=view['memo'],
+                   class_id=_reference(profile.get('class_id')))
+    # Preserve the captured terms/date basis where possible; an entered due date is explicit.
+    if profile['due_date_basis'] == 'entered':
+        payload['due_date'] = profile['due_date']
+    else:
+        payload['due_date'] = None
+    places = placements.revision_line_places(s, revision['id'])
+    numbers = serial_lots.revision_display(s, revision['id'])
+    for grid in ('expenses', 'items'):
+        payload[grid] = []
+        for value in view[grid]:
+            line = _line(value, currency, item=grid == 'items')
+            line['line_id'] = value['line_id']
+            if grid == 'items':
+                place = places.get(value['line_id'])
+                if place:
+                    line['site'], line['bin'] = place
+                line.update(numbers.get(value['line_id']) or {})
+            payload[grid].append(line)
+    if view['receipts']:
+        payload.pop('items')
+        payload['receipts'] = [{key: value[key] for key in ('receipt_line', 'expected_receipt_version',
+            'quantity', 'unit_cost', 'amount') if key in value} for value in view['receipts']]
+    captured = view['custom_fields_snapshot']
+    # Include unfilled definitions as explicit clears, so a correction which fills one
+    # cannot leave that new value behind when its prior commercial state is restored.
+    payload['custom_fields'] = {value['id']: None for value in
+        custom_fields._applicable_definitions(s.company.conn, 'bill')}
+    payload['custom_fields'].update({key: value['value'] for key, value in captured.items()})
+    payload['custom_field_kinds'] = {key: value['kind'] for key, value in captured.items()}
+    own = bills.inventory_effects.own_movements(s, header['id'])
+    positions = {value.get('count_position') or 'before' for value in own}
+    if len(positions) > 1:
+        raise BookflowError('E_APPROVAL_STATE', message='A bill with mixed count positions cannot be captured for correction reversal.')
+    if positions:
+        payload['count_position'] = positions.pop()
+    return BillUpdateInput.model_validate(payload).model_dump(mode='json', exclude_unset=True)
