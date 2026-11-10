@@ -506,7 +506,9 @@ def _help_epilog(cmd: registry.Command) -> str:
     codes = ", ".join(cmd.error_codes) if cmd.error_codes else "none beyond the infrastructure codes"
     related = [other.name for other in registry.all_commands(include_standalone=True) if other.name.startswith(cmd.name + ' ')]
     suffix = "\n\nRelated command paths: " + ", ".join(related) + "." if related else ""
-    return (f"Output fields: {fields}.\n\nErrors this command can return: {codes}. "
+    from bookflow.core import confirm_first
+    mark = confirm_first.note(cmd.name)
+    return ((mark + "\n\n" if mark else "") + f"Output fields: {fields}.\n\nErrors this command can return: {codes}. "
             f"Every command can also return: {', '.join(INFRASTRUCTURE_CODES)}." + suffix)
 
 

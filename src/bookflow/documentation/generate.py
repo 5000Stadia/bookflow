@@ -156,7 +156,10 @@ def _payment_usage(name: str) -> list[str]:
 
 
 def _purpose(cmd: Any) -> list[str]:
+    from bookflow.core import confirm_first
+    mark = confirm_first.note(cmd.name)
     return [cmd.description,
+        *(["", mark] if mark else []),
         *_payment_usage(cmd.name),
         *(["", "Posting an invoice records it in the books. It does not send or email the invoice to the customer."] if cmd.name == "invoice post" else []),
         *(["", "A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record."] if cmd.is_write else [])]

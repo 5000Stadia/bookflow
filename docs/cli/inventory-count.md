@@ -1208,6 +1208,8 @@ Example JSON output:
 
 Void a recorded count: its posted differences are reversed at the count date and nothing is derived for it again. Refused inside a closed period. A reason is required.
 
+Confirm first (void): it voids a posted document. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |

@@ -289,6 +289,8 @@ Example JSON output:
 
 Void a shipment return with a reason: its units leave stock again at the return date and wait in Shipped Not Invoiced; a return that cancelled them on the order un-cancels them. Refused when the order no longer has them to ship (shipped again or billed since).
 
+Confirm first (void): it voids a posted document. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |

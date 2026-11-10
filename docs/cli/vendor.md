@@ -1351,6 +1351,8 @@ Example JSON output:
 
 Merge a duplicate vendor into another. Nothing posted changes: every report, balance, aging and A/P read shows the merged vendor's documents under the survivor, and the merged vendor is made inactive and hidden. People only, with a reason; `--dry-run` previews what moves and the balance after. The output names its batch; `batch reverse` previews and reverses the complete merge, or refuses every blocker. Native `vendor unmerge` also remains available.
 
+Confirm first (merge): it reads one record as another everywhere. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
@@ -1945,6 +1947,8 @@ Example JSON output:
 ## `vendor unmerge`
 
 Undo a vendor merge: the merged vendor reads as itself again and is made active again if the merge made it inactive. Nothing posted changes. People only, with a reason.
+
+Confirm first (merge): it reads one record as another everywhere. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

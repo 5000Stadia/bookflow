@@ -29,6 +29,7 @@ def descriptor(cmd):
         "follow": cmd.streams, "clearable": cmd.clearable,
         "transfer": cmd.transfer.direction if cmd.transfer else None,
         "authorization": cmd.authorization_requirement,
+        "confirm_first": cmd.confirm_first,
     }
 
 
@@ -103,8 +104,10 @@ def command_help(name, view="usage", section=None):
                           {"const": False if key == "dry_run" else None,
                            "description": "Only this inactive value or omission applies to this command."}
                           for key in ("company", "dry_run", "reason", "source_ref", "directive", "idempotency_key")}
+    from bookflow.core import confirm_first
     result = {
         **row,
+        **({"confirm_first_note": confirm_first.note(cmd.name)} if cmd.confirm_first else {}),
         "context_schema": {"type": "object", "description": "Schema fragment for top-level bookflow_run execution fields, not a nested context argument.", "additionalProperties": False,
             "properties": context_properties},
         "context_usage": "Omit optional context or use null; dry_run omitted/false is inactive and null is invalid. Active context applies only where listed. Use a short audit reason naming the trigger (at most 140 characters), not a narrative. Agent writes require reason or an active directive, and so do their dry_run previews: a preview runs the same checks as the save. Company selection: explicit non-null company, then calling-machine environment, then calling-machine configuration; null behaves as omitted.",
@@ -214,7 +217,7 @@ def keyword_match(query, name):
 # A listed description is its opening, cut at a sentence; bookflow_help has the whole text.
 LISTED_DESCRIPTION = 600
 _DEFAULTS = {"local_only": False, "standalone": False, "protocol_stdout": False, "follow": False,
-             "clearable": False, "transfer": None}
+             "clearable": False, "transfer": None, "confirm_first": False}
 
 
 def listed_row(row):

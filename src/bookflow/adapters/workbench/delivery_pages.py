@@ -37,7 +37,7 @@ COMPOSE_NOTE = ('No sending connection is set up. This will wait in the outbox. 
 
 def _connection_note(name):
     return CONNECTION if name == 'none' else (f'Messages with a go are sent through the connection {name}; one '
-                                              'waiting for a go stays here until a person approves it.')
+                                              'waiting for a go stays here until a holder of delivery.send approves it.')
 
 
 def compose_url(company_id: str, kind: str, **identity) -> str:

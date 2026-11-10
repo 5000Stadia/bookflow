@@ -7839,6 +7839,8 @@ Example JSON output:
 
 Withdraw an estimate with a required reason. An estimate posts nothing, so nothing is reversed and no money moves; what changes is that it can no longer become an invoice, a sales receipt or a work order, and it stays readable in full -- every revision, line and captured fact, with the reason recorded as its decision. Terminal: a voided estimate cannot be updated, completed or voided again, and it is refused while a work order or a bill already consumes its work. Copying it into a fresh draft still works, which is how a withdrawn quote is re-quoted.
 
+Confirm first (void): it voids a posted document. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |

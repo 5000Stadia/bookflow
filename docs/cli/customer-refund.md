@@ -1617,6 +1617,8 @@ Example JSON output:
 
 Void a customer refund with a required reason. Its accounting is reversed at its own date, every credit memo and every payment overage it paid out is worth again exactly what it was worth before, its number stays occupied and its history stays readable. A refund that was merely typed wrong is corrected with `customer-refund update` instead, which keeps one document where one payment happened.
 
+Confirm first (void): it voids a posted document. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |

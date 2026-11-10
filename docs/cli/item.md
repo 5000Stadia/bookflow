@@ -1641,6 +1641,8 @@ Example JSON output:
 
 Merge a duplicate item into another of the same type. Nothing posted changes: sales and purchases by item and every item filter show the merged item's lines under the survivor; group and assembly members, price levels and vendor profiles naming it are re-pointed to the survivor, and the merged item is made inactive and hidden. A saved document that names it saves with the survivor when next edited. People only, with a reason; `--dry-run` previews what moves, every reference re-pointed and any conflict. Undo with `batch reverse` using the output batch_id; it refuses if any reference would be kept. Native `item unmerge` also remains available.
 
+Confirm first (merge): it reads one record as another everywhere. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
@@ -2306,6 +2308,8 @@ Example JSON output:
 ## `item unmerge`
 
 Undo an item merge: the merged item reads as itself again, is made active again if the merge made it inactive, and every reference the merge re-pointed is put back unless it has been changed since. Nothing posted changes. People only, with a reason.
+
+Confirm first (merge): it reads one record as another everywhere. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

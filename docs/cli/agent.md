@@ -6,6 +6,8 @@
 
 Bring a deactivated agent back. It returns suspended with no tokens: authorize it with `agent authorize`, then issue a new token.
 
+Confirm first (permission change): it changes who may do what. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
@@ -177,6 +179,8 @@ Example JSON output:
 ## `agent assign`
 
 Let an agent act on behalf of one more human. Everyone an agent acts for must hold identical permissions; adding someone never lifts a suspension or revives a token.
+
+Confirm first (permission change): it changes who may do what. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -352,6 +356,8 @@ Example JSON output:
 ## `agent authorize`
 
 Authorize an agent, the first time or after a suspension: its assigned humans must hold identical permissions and permit its use. Old tokens stay revoked; issue new ones with `token issue`.
+
+Confirm first (permission change): it changes who may do what. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -695,6 +701,8 @@ Example JSON output:
 ## `agent deactivate`
 
 Retire an agent: it stops acting at once, every token it holds is revoked in the same audited change, and it leaves the default lists. Its history stays. Reactivating it revives no token; it must be authorized again.
+
+Confirm first (permission change): it changes who may do what. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -1206,6 +1214,8 @@ Example JSON output:
 ## `agent unassign`
 
 Stop an agent acting for a human. Always allowed; the agent is suspended and every token it holds is revoked, including tokens for its other principals, until it is authorized again.
+
+Confirm first (permission change): it changes who may do what. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
