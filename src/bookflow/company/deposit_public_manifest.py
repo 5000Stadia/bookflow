@@ -412,6 +412,14 @@ FIELDS: dict[str, dict[str, tuple]] = {
         'automatically_calculate_payments': (_P, (), 'Company preference captured on the receipt.'),
         'use_undeposited_funds_for_payments': (_P, (), 'Company preference captured on the receipt.'),
     },
+    'sales_facts.MembershipFact': {
+        'enrollment_id': (_P, (), 'Private membership enrollment identity; not deposit cash provenance.'),
+        'enrollment_version': (_P, (), 'Private membership enrollment version.'),
+        'plan': (_P, (), 'Private membership plan reference.'),
+        'price_level_id': (_P, (), 'Price level the plan supplied; not a deposit row fact.'),
+        'start_date': (_P, (), 'Membership interval start; not a deposit date.'),
+        'end_date': (_P, (), 'Membership interval end; not a deposit date.'),
+    },
     'sales_facts.SalesProfile': {
         'schema_version': (_P, (), 'Private capture format version.'),
         'sales_tax_calculation': (_P, (), 'Receipt tax policy; not a deposit cash fact.'),
@@ -430,6 +438,7 @@ FIELDS: dict[str, dict[str, tuple]] = {
         'sales_tax_item': (_P, (), 'Receipt tax item; not a deposit row fact.'),
         'tax_rules': (_P, (), 'Receipt tax rules; not a deposit row fact.'),
         'price_level': (_P, (), 'Receipt price level; not a deposit row fact.'),
+        'membership': (_P, (), 'Member plan that supplied an invoice price level; not a deposit cash fact.'),
         'customer_message': (_P, (), 'Receipt customer message; not a deposit row fact.'),
         'customer_message_item': (_P, (), 'Receipt customer message list record; not a deposit row fact.'),
         'customer_purchase_order': (_P, (), 'Receipt purchase order; not a deposit row fact.'),

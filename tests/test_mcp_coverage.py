@@ -114,7 +114,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # + seven lead commands (R115 increment 1).
     # R189: +2 commission recipient-options and report commission-attribution commands.
     # + six private payroll calculator commands (R116 increment 1).
-    assert len(rows) == 948  # + batch reverse, notice reverse (R186); +6 purchase-draft create, update, preview, cancel, show, list (R122)
+    # +7 membership plans and dated enrollments (R188 increment 1).
+    assert len(rows) == 955  # + batch reverse, notice reverse (R186); +6 purchase-draft create, update, preview, cancel, show, list (R122)
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
@@ -474,7 +475,9 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # R122 increment 2: 4527 -> 4594. Draft create/update each grow 13 -> 45 (+64),
     # adding item/source/correction input shapes; commit request version, decide comment and policy-list cursor
     # add one nullable node each (+3). The other eight new commands add none; no new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==4703  # R186 trial fixes: batch query date_from and date_to add two nullable inputs. R186: batch reverse fingerprint adds one nullable input; notice reverse adds nullable note and expected_version
+    # R188 increment 1: 4703 -> 4716. customer membership set 4, end 1, show 1; membership-plan create 1,
+    # update 5, list 1, show 0. No new variant kind; company update's new switch adds none.
+    assert sum(len(group["paths"]) for group in mapped)==4716  # R186 trial fixes: batch query date_from and date_to add two nullable inputs. R186: batch reverse fingerprint adds one nullable input; notice reverse adds nullable note and expected_version
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

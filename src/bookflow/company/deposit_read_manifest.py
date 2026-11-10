@@ -335,6 +335,7 @@ FIELDS = {
         'crm_pipeline_enabled': ('bool', False, False, 'outside_output'),
         'crm_campaigns_enabled': ('bool', False, False, 'outside_output'),
         'commission_attribution_enabled': ('bool', False, False, 'outside_output'),
+        'membership_pricing_enabled': ('bool', False, False, 'outside_output'),
         'pos_enabled': ('bool', False, False, 'dependency_field'),
         'pos_home_view_style': ('str', False, False, 'outside_output'),
         'pos_layout_version': ('int', False, False, 'outside_output'),
@@ -1710,7 +1711,7 @@ DEPOSIT_TABLES = ('transaction_revisions', 'deposit_profiles', 'document_line_id
 # Merged R104 increment 4 (serial/lot fields) with the co0091 fraction on CoordinateSalesLineProfilesRow, then increment 5's line bin field and main's LineLot/LineSerials types: CoordinateOutput rehashed.
 # POS returns add private captured return_cost_minor_units to SalesLineProfile; enclosing codecs rehashed.
 # R189: private invoice attribution snapshots extend the nested sales line codecs.
-CODECS = {'CoordinateOutput': 'b44363c5a4f1f7edef4ca91f32cbd183d4fdcff4a695aace10e5e44d7fce8d92', 'Effect': '6597fe399fc8ee13114a32fab60824a7bde439f2bfd0730f22065ca856f8b929', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': 'd74007c1005635f3beaed6b4c9774579d158c3e53ca1d681f26395b209b848e6', 'Manifest': '264c0889a36dd0ab93266df24f94d74973ccaaf395f8ea1edc7a8e8fccf0bba6', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
+CODECS = {'CoordinateOutput': '399f7cc78ea6eb3950624e35255b013d7dcba0810d4fe38894a60f29ecf9f1de', 'Effect': '00a48b968cc9adaa718b0c68b6bdbff9126baa0cc28745556327c74c8393f08a', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'LifecycleOutput': '0a8b5e8d4011595c635851b83406487b06efad35c0bca048e1f49ee3c2d6ceee', 'Manifest': 'a3d46c6985fc4e595e32dfaf83b6537af7955812573f9dfc251dc71a019fd0f0', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
 
 # Explicit dependency inspection registry closure, separate from disclosure.
 DEPENDENCY_OWNERS = {'account': ('accounts',

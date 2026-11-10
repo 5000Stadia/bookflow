@@ -1038,6 +1038,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     # R153: bill part of a purchase order, or close its lines by hand.
     from bookflow.adapters.workbench import purchase_order_billing_pages as PartialOrderPages
     PartialOrderPages.mount(app, render=render, run=run, credential=credential, page_error=page_error)
+    # R188 increment 1: a customer's membership enrollments and a member price preview.
+    from bookflow.adapters.workbench import membership_pages as MembershipPages
+    MembershipPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                          role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R115 increment 1: leads share native notes, files and to-dos.
     from bookflow.adapters.workbench import crm_pages as CrmPages
     CrmPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
@@ -1874,9 +1878,13 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             out = run(request, show.name, raw, company_id if show.scope == "company" else None)
             cred = credential(request)
             role_view = out
+            membership_link = False
             if company_id:
                 company_view = out if show.name == "company show" else run(request, "company show", {}, company_id)
                 role_view = {"access": company_view.get("access"), "role": company_view.get("role")}
+                # R188: the customer Membership panel exists only while the layer is on.
+                membership_link = (noun == "customer" and bool((company_view.get("info") or {}).get("membership_pricing_enabled"))
+                                   and _role_allows(registry.get("customer membership show"), role_view, hub_admin=cred.hub_admin))
             audit = None
             if company_id and registry.get("audit list"):
                 rid = out.get("company_id", record_id) if noun == "company" else out.get("id", record_id)
@@ -2129,7 +2137,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             from bookflow.adapters.workbench import landed_cost_pages
             landed = landed_cost_pages.record_panel(request, run, company_id, out, record_id)
         return render("record.html", request, company_id=company_id, noun=noun, record_id=record_id, record=visible_record, record_title=record_title, record_noun_label=record_noun_label, audit=audit, meta=meta, verbs=verbs,
-                      item_numbers=item_numbers, landed=landed, item_picture=item_picture,
+                      membership_link=membership_link, item_numbers=item_numbers, landed=landed, item_picture=item_picture,
                       details_url=_details_url(request, company_id, noun, record_id),
                       source_report_watermark=_source_watermark(request),
                       master_detail=master_detail,

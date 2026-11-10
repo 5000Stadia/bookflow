@@ -87,6 +87,7 @@ COMMAND_CODES: dict[str, str] = {
     "E_APPROVAL_SELF": "Self-approval is not permitted by this captured policy.",
     "E_APPROVAL_POLICY": "The approval policy is incomplete or invalid.",
     "E_APPROVAL_STATE": "This draft state does not allow the requested act; inspect its legal next actions.",
+    "E_MEMBERSHIP_OVERLAP": "The customer already has an enrollment covering part of that interval; end it first.",
     "E_WORK_DEPENDENCY": "The accepted or linked work prevents this change; inspect the related document.",
     "E_CONVERSION_KEY_REUSED": "That permanent conversion key was used for different work or input.",
     "E_DUPLICATE_NUMBER": "That document number is already used in this document's number series.",

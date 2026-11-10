@@ -95,6 +95,19 @@ class PriceRule(Reference):
     matched: bool = True
 
 
+class MembershipFact(StrictModel):
+    """Where an invoice's default price level came from when a membership supplied it (R188).
+
+    Captured whole on the revision: ending or changing the enrollment, or editing the plan, never
+    changes a saved invoice. ``price_level_id`` is the plan's level the header captured."""
+    enrollment_id: str
+    enrollment_version: int = Field(ge=1)
+    plan: Reference
+    price_level_id: str
+    start_date: str
+    end_date: str | None = None
+
+
 class AppliedPriceRule(Reference):
     """The price rule a line took its price from (R110), captured whole: editing the rule later never
     changes the line. Prices are per base unit in minor units; ``value`` is the percent in millionths
@@ -178,6 +191,8 @@ class SalesProfile(CommercialProfile):
     discount_available: bool = False
     payment_method: Reference | None = None
     payment_reference: str | None = None
+    # R188: present only when an enrolled customer's membership supplied the default price level.
+    membership: MembershipFact | None = Field(default=None, exclude_if=lambda v: v is None)
 
     @model_serializer(mode="wrap")
     def legacy_order(self, handler):
@@ -188,7 +203,7 @@ class SalesProfile(CommercialProfile):
             'billing_address', 'shipping_address', 'shipping_address_id', 'terms',
             'due_date', 'discount_date', 'discount_available', 'ship_date',
             'ship_method', 'sales_rep', 'class_id', 'customer_tax_code',
-            'sales_tax_item', 'tax_rules', 'price_level', 'payment_method',
+            'sales_tax_item', 'tax_rules', 'price_level', 'membership', 'payment_method',
             'payment_reference', 'customer_message', 'customer_message_item',
             'customer_purchase_order', 'origins',
         )

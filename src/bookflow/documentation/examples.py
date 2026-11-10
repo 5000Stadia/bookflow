@@ -2330,3 +2330,25 @@ for _approval_name, _approval_raw in _APPROVAL_INPUTS.items():
             _approval_flags.append(_approval_shlex.quote(_approval_json.dumps(_value) if isinstance(_value, list) else str(_value)))
     EXAMPLES[_approval_name] = Example('bookflow ' + _approval_name + ' ' + ' '.join(_approval_flags) +
         ' --company "Demo Plumbing Co" --json' + (' --reason "Review supplier bill"' if _approval_write else ''), _approval_raw)
+
+# R188 increment 1: membership plans and dated enrollments; the layer must be on for writes.
+EXAMPLES.update({
+    'membership-plan create': Example(
+        'bookflow membership-plan create --name "Trade members" --price-level "Preferred Customer" --company "Demo Plumbing Co" --reason "Trade member pricing" --json',
+        {'name': 'Trade members', 'price_level': 'Preferred Customer'}),
+    'membership-plan update': Example(
+        f'bookflow membership-plan update {ID} --expected-version 1 --active false --company "Demo Plumbing Co" --reason "Plan withdrawn" --json',
+        {'plan': ID, 'expected_version': 1, 'active': False}),
+    'membership-plan show': Example('bookflow membership-plan show "Trade members" --company "Demo Plumbing Co" --json',
+                                    {'plan': 'Trade members'}),
+    'membership-plan list': Example('bookflow membership-plan list --limit 50 --company "Demo Plumbing Co" --json', {'limit': 50}),
+    'customer membership set': Example(
+        'bookflow customer membership set "Membership Example Customer" --plan "Trade members" --start-date 2026-10-01 --end-date 2026-12-31 --company "Demo Plumbing Co" --reason "Fourth-quarter trade membership" --json',
+        {'customer': 'Membership Example Customer', 'plan': 'Trade members', 'start_date': '2026-10-01', 'end_date': '2026-12-31'}),
+    'customer membership end': Example(
+        f'bookflow customer membership end {ID} --expected-version 1 --end-date 2026-11-30 --company "Demo Plumbing Co" --reason "Membership cancelled" --json',
+        {'membership': ID, 'expected_version': 1, 'end_date': '2026-11-30'}),
+    'customer membership show': Example(
+        'bookflow customer membership show "Membership Example Customer" --as-of 2026-11-15 --company "Demo Plumbing Co" --json',
+        {'customer': 'Membership Example Customer', 'as_of': '2026-11-15'}),
+})

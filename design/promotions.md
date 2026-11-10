@@ -440,6 +440,30 @@ first slice leaves codes, offers, POS and commissions entirely optional.
    **Done when:** an enrolled customer gets that level in the interval and their ordinary level outside it; an old
    invoice stays fixed. **Tests:** date boundaries, explicit price and R110 precedence, overlap refusal, disabled
    layer, one 390 px enrollment/preview path and all-interface typed input validation.
+
+   **As built — increment 1.** Migration `co0134` adds `membership_plans`, `customer_memberships` and the company
+   switch `membership_pricing_enabled` (off; existing companies migrate with it off and price exactly as before).
+   The switch can be turned on only while price levels are on. Seven commands sit on the permission layer
+   `membership-pricing-v1`, chained on `bill-approval-v1`: `membership-plan create/update/show/list` and
+   `customer membership set/end/show`. Plans need `promotion.manage` (admins by default), enrollments
+   `promotion.assign` plus ordinary customer write rights, reads `promotion.read` plus customer read rights; an agent
+   holds none of the three without an explicit grant. Writes are refused with `E_FEATURE_DISABLED` while the layer is
+   off; reads stay available and report `layer_enabled`.
+   - *Resolution.* On an invoice, with the layer on, the sold-to customer's enrollment covering the invoice date
+     (inclusive at both ends, an open end for no end yet) supplies the header price-level *default* in place of the
+     customer's own level. An explicit header or line price level and an explicit unit price still win, and R110
+     rules compete with the member level exactly as with any other level (lowest price or priority). The resolver
+     records the enrollment as the price level's origin (`origins.price_level.source_id`) and captures a
+     `membership` fact (enrollment and plan versions, level, dates) in the sale profile; a saved invoice re-resolves
+     only when its customer changes or it is refreshed, so ending an enrollment or repointing a plan leaves saved
+     prices alone. `price-rule preview` names the plan and level, and says why when a rule beats it.
+   - *Overlap.* A customer has at most one enrollment on any day; an overlapping set is refused with
+     `E_MEMBERSHIP_OVERLAP` and adjacent intervals are accepted.
+   - *Not yet.* Jobs use only their own enrollment (no inheritance), there is no suspend command (`suspended` is a
+     reserved status), deactivation is `membership-plan update --active false`, plan history is the audit trail rather
+     than a revision table, and other sales forms (receipts, POS) keep their ordinary levels until increment 2.
+   - *Screens.* The customer record links to a Membership panel while the layer is on: enrollment history, enroll and
+     end forms, and a price preview for an item and date, all through htmx.
 2. **Membership across sales and jobs (M).** Job inheritance/suppression, customer-list filtering, receipt/POS pricing,
    version revalidation and membership batch inverse. **Done when:** a person and agent see the same membership price
    and a broad mistaken enrollment is reversible. **Tests:** ancestor/owner identity, renewal/expiry on held ticket,
