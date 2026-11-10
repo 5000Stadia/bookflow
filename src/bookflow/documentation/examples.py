@@ -2355,6 +2355,18 @@ EXAMPLES.update({
     'customer membership show': Example(
         'bookflow customer membership show "Membership Example Customer" --as-of 2026-11-15 --company "Demo Plumbing Co" --json',
         {'customer': 'Membership Example Customer', 'as_of': '2026-11-15'}),
+    # R188 increment 2.
+    'customer membership inherit': Example(
+        f'bookflow customer membership inherit {ID} --inherit false --company "Demo Plumbing Co" --reason "Warranty work is billed at ordinary prices" --json',
+        {'customer': ID, 'inherit': False}),
+    'customer membership list': Example(
+        'bookflow customer membership list --plan "Trade members" --as-of 2026-11-15 --company "Demo Plumbing Co" --json',
+        {'plan': 'Trade members', 'as_of': '2026-11-15'}),
+    'customer membership enroll': Example(
+        'bookflow customer membership enroll --customers \'["Trade Counter North","Trade Counter South"]\' --plan "Trade members"'
+        ' --start-date 2026-10-01 --end-date 2026-12-31 --company "Demo Plumbing Co" --reason "Fourth-quarter trade counters" --json',
+        {'customers': ['Trade Counter North', 'Trade Counter South'], 'plan': 'Trade members',
+         'start_date': '2026-10-01', 'end_date': '2026-12-31'}),
 })
 
 # R123 increment 1. Local setup is staged; all amounts below are proposals only.

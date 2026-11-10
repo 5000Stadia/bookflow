@@ -1,10 +1,16 @@
-"""Membership plans and dated customer enrollments (R188 increment 1).
+"""Membership plans and dated customer enrollments (R188 increments 1 and 2).
 
-A plan points at an existing price level. An enrollment lets one customer (or job, itself) use one
-plan on invoices dated from ``start_date`` through ``end_date``, both inclusive company-local dates.
-The sales resolver asks :func:`effective_fact` for the sold-to customer and the invoice date; with
-the layer off, or no covering enrollment, it is never consulted and prices resolve as before.
-Nothing here edits the customer's ordinary price level or any saved sale.
+A plan points at an existing price level. An enrollment lets one customer use one plan on sales dated
+from ``start_date`` through ``end_date``, both inclusive company-local dates. A job uses its own
+enrollment, else its nearest ancestor's, unless its inheritance is switched off (increment 2). The
+sales resolver asks :func:`effective_fact` for the sold-to customer and the sale date of an invoice or
+sales receipt (a POS sale is one); with the layer off, or no covering enrollment, prices resolve as
+before. A customer merged into another lends its enrollments to the survivor, the stable entitlement
+identity. Nothing here edits the customer's ordinary price level or any saved sale.
+
+Enrolling many customers at once is one reversible batch (kind ``membership-enroll``): ``batch reverse``
+deletes the enrollments it created, newest first, and refuses by name while a sale captured one or one
+was changed since.
 """
 from __future__ import annotations
 
@@ -197,6 +203,18 @@ def _enrollment(db, selector: str) -> dict:
     return dict(row)
 
 
+def _enrollable(db, customer: dict, field: str = 'customer') -> None:
+    if not customer['active']:
+        raise BookflowError('E_INACTIVE_REFERENCE', details={'field': field, 'record_id': customer['id']})
+    walk_in = db.conn.execute(sa.select(c.pos_registers.c.name).where(
+        c.pos_registers.c.walk_in_customer_id == customer['id'])).scalar()
+    if walk_in is not None:
+        raise BookflowError('E_VALIDATION', message=(
+            f"{customer['full_name']} is register {walk_in}'s walk-in customer; a membership needs a named customer."),
+            details={'fields': [{'field': field, 'problem': 'the register walk-in customer cannot hold a membership'}],
+                     'record_id': customer['id']})
+
+
 def membership_output(db, row: dict) -> m.MembershipOutput:
     plan = db.conn.execute(sa.select(c.membership_plans).where(c.membership_plans.c.id == row['plan_id'])).mappings().one()
     customer = db.conn.execute(sa.select(c.customers.c.id, c.customers.c.full_name).where(
@@ -207,10 +225,22 @@ def membership_output(db, row: dict) -> m.MembershipOutput:
         start_date=row['start_date'], end_date=row['end_date'], status=row['status'], member_number=row['member_number'])
 
 
-def _overlaps(db, row: dict) -> list[dict]:
-    """Other non-suspended enrollments of the customer whose inclusive interval meets this one."""
+def family(db, customer_id: str) -> list[str]:
+    """The customer and every customer merged into it (live merges): one entitlement identity."""
+    from bookflow.company.party_merges import survivor
+    root = survivor(db, 'customer', customer_id) or customer_id
+    merged = db.conn.execute(sa.select(c.party_merges.c.merged_id).where(
+        c.party_merges.c.party_kind == 'customer', c.party_merges.c.survivor_id == root,
+        c.party_merges.c.undone_at.is_(None))).scalars().all()
+    return [root, *sorted(merged)]
+
+
+def _overlaps(db, row: dict, others: list[str] | None = None) -> list[dict]:
+    """Other non-suspended enrollments of the customer's entitlement identity (itself and customers merged into
+    it, or ``others``) whose inclusive interval meets this one."""
     t = c.customer_memberships
-    query = sa.select(t).where(t.c.customer_id == row['customer_id'], t.c.id != row['id'], t.c.status != 'suspended',
+    owners = others if others is not None else family(db, row['customer_id'])
+    query = sa.select(t).where(t.c.customer_id.in_(owners), t.c.id != row['id'], t.c.status != 'suspended',
                                sa.or_(t.c.end_date.is_(None), t.c.end_date >= row['start_date']))
     if row['end_date'] is not None:
         query = query.where(t.c.start_date <= row['end_date'])
@@ -252,8 +282,7 @@ def membership_set(s, ctx, inp) -> Plan:
     if inp.membership is None:
         if inp.expected_version is not None:
             raise _invalid('expected_version', 'only with membership, when changing an enrollment')
-        if not customer['active']:
-            raise BookflowError('E_INACTIVE_REFERENCE', details={'field': 'customer', 'record_id': customer['id']})
+        _enrollable(db, customer)
         old = None
         row = dict(id=new_id(), **common(s.actor.id, ctx.interface.value, clock.now_iso()), customer_id=customer['id'],
                    plan_id=plan['id'], status='active')
@@ -319,28 +348,233 @@ def membership_show(s, inp) -> m.CustomerMembershipOutput:
     rows = [dict(r) for r in db.conn.execute(sa.select(t).where(t.c.customer_id == customer['id']).order_by(
         t.c.start_date.desc(), t.c.id.desc())).mappings()]
     fact = effective_fact(db, customer['id'], as_of)
-    effective = next((r for r in rows if fact and r['id'] == fact.enrollment_id), None)
+    effective = _enrollment(db, fact.enrollment_id) if fact else None
+    setting = _setting(db, customer['id'])
     return m.CustomerMembershipOutput(customer=m.Named(id=customer['id'], label=customer['full_name']),
         layer_enabled=enabled(db), as_of=as_of, effective=membership_output(db, effective) if effective else None,
-        history=[membership_output(db, r) for r in rows])
+        history=[membership_output(db, r) for r in rows],
+        effective_owner=m.Named(id=fact.owner.id, label=fact.owner.label) if fact and fact.owner else None,
+        inherits=None if customer.get('parent_id') is None else (bool(setting['inherit']) if setting else True),
+        inheritance_version=setting['version'] if setting else None)
+
+
+# ---------------------------------------------------------------------------- job inheritance (increment 2)
+
+INHERITANCE = 'customer_membership_inheritance'
+
+
+def _setting(db, customer_id: str) -> dict | None:
+    t = c.customer_membership_inheritance
+    row = db.conn.execute(sa.select(t).where(t.c.customer_id == customer_id)).mappings().first()
+    return dict(row) if row else None
+
+
+def inheritance_set(s, ctx, inp) -> Plan:
+    db = s.company
+    _require_enabled(db)
+    customer = _customer(db, inp.customer)
+    if customer.get('parent_id') is None:
+        raise _invalid('customer', 'only a job (a customer with a parent) inherits a membership')
+    old = _setting(db, customer['id'])
+    if old is None:
+        if inp.expected_version is not None:
+            raise _invalid('expected_version', 'this job has no inheritance setting yet; omit expected_version')
+        row = dict(id=new_id(), **common(s.actor.id, ctx.interface.value, clock.now_iso()), customer_id=customer['id'],
+                   inherit=inp.inherit)
+        changed = not inp.inherit  # no row already means "inherits"
+    else:
+        _version_check(old, inp.expected_version, INHERITANCE)
+        changed = bool(old['inherit']) != inp.inherit
+        row = _bumped(dict(old, inherit=inp.inherit), s, ctx) if changed else old
+    out = m.InheritanceOutput(customer=m.Named(id=customer['id'], label=customer['full_name']), inherit=inp.inherit,
+                              version=row['version'] if (old is not None or changed) else None, changed=changed)
+    return Plan(out, dict(row=row, before=old, changed=changed))
+
+
+def apply_inheritance(plan: Plan, ctx, s) -> Applied:
+    if not plan.data['changed']:
+        return Applied(plan.preview, [], 'no change')
+    db, row, before = s.company, plan.data['row'], plan.data['before']
+    t = c.customer_membership_inheritance
+    if before is None:
+        db.conn.execute(t.insert().values(**row))
+        touched = Touched(INHERITANCE, row['id'], 'create', None, 1, row, db='company')
+    else:
+        done = db.conn.execute(t.update().where(t.c.id == row['id'], t.c.version == before['version']).values(**row)).rowcount
+        if done != 1:
+            raise BookflowError('E_VERSION_CONFLICT', details={'record_type': INHERITANCE, 'record_id': row['id']})
+        touched = Touched(INHERITANCE, row['id'], 'update', before['version'], row['version'], row, before, db='company')
+    said = 'job inherits its ancestor membership' if row['inherit'] else 'job uses only its own membership'
+    return Applied(plan.preview, [touched], said)
+
+
+# ---------------------------------------------------------------------------- the member list (increment 2)
+
+def members_list(s, inp) -> m.MemberPage:
+    """Customers an effective enrollment prices on ``as_of``: the enrolled ones and, unless excluded, the jobs that
+    inherit from them. Starts from the covering enrollments (an indexed interval read), never from every customer."""
+    db = s.company
+    as_of = inp.as_of or today(s)
+    on = enabled(db)
+    plan_id = resolve_plan(db, inp.plan)['id'] if inp.plan else None
+    if not on:
+        return m.MemberPage(items=[], as_of=as_of, layer_enabled=False)
+    from bookflow.company.party_merges import survivor
+    t, p = c.customer_memberships, c.membership_plans
+    query = sa.select(t.c.customer_id).join(p, p.c.id == t.c.plan_id).where(
+        t.c.status != 'suspended', p.c.active.is_(True), t.c.start_date <= as_of,
+        sa.or_(t.c.end_date.is_(None), t.c.end_date >= as_of))
+    if plan_id:
+        query = query.where(t.c.plan_id == plan_id)
+    owners = {survivor(db, 'customer', x) or x for x in db.conn.execute(query).scalars()}
+    candidates = set(owners)
+    if inp.include_inherited and owners:
+        marks = ','.join('?' * len(owners))
+        candidates |= {r[0] for r in db.raw.execute(
+            f"WITH RECURSIVE down(id) AS (SELECT id FROM customers WHERE id IN ({marks}) "
+            "UNION SELECT k.id FROM customers k JOIN down ON k.parent_id = down.id) SELECT id FROM down",
+            tuple(sorted(owners))).fetchall()}
+    rows = []
+    for customer_id in candidates:
+        fact = effective_fact(db, customer_id, as_of)
+        if fact is None or (plan_id and fact.plan.id != plan_id):
+            continue
+        inherited = fact.owner is not None and fact.owner.id != customer_id
+        if inherited and not inp.include_inherited:
+            continue
+        customer = db.conn.execute(sa.select(c.customers.c.full_name, c.customers.c.full_name_key, c.customers.c.active)
+                                   .where(c.customers.c.id == customer_id)).one()
+        if not customer[2]:
+            continue
+        rows.append((customer[1], customer_id, customer[0], fact, inherited))
+    rows.sort(key=lambda r: (r[0], r[1]))
+    if inp.cursor:
+        keys = [r[1] for r in rows]
+        if inp.cursor not in keys:
+            raise _invalid('cursor', 'use next_cursor from the previous page')
+        rows = rows[keys.index(inp.cursor) + 1:]
+    more = len(rows) > inp.limit
+    rows = rows[:inp.limit]
+    items = [m.MemberRow(customer=m.Named(id=cid, label=name), membership=fact.enrollment_id,
+                         plan=m.Named(id=fact.plan.id, label=fact.plan.label),
+                         price_level=m.Named(id=fact.price_level_id, label=_level_label(db, fact.price_level_id)),
+                         start_date=fact.start_date, end_date=fact.end_date,
+                         owner=m.Named(id=fact.owner.id, label=fact.owner.label), inherited=inherited)
+             for _, cid, name, fact, inherited in rows]
+    return m.MemberPage(items=items, as_of=as_of, layer_enabled=True, next_cursor=rows[-1][1] if more else None)
+
+
+# ---------------------------------------------------------------------------- enrolling many: one batch (increment 2)
+
+BATCH_KIND = 'membership-enroll'
+
+
+def enroll_many(s, ctx, inp) -> Plan:
+    """Plan one enrollment per named customer; all or none. Overlaps are refused against existing enrollments
+    and against each other (one customer named twice, or a customer and one merged into it)."""
+    db = s.company
+    _require_enabled(db)
+    plan = resolve_plan(db, inp.plan)
+    if not plan['active']:
+        raise BookflowError('E_INACTIVE_REFERENCE', details={'field': 'plan', 'record_id': plan['id']})
+    if inp.end_date is not None and inp.end_date < inp.start_date:
+        raise _invalid('end_date', 'must be on or after start_date')
+    rows, seen = [], {}
+    stamp = common(s.actor.id, ctx.interface.value, clock.now_iso())
+    for index, selector in enumerate(inp.customers):
+        field = f'customers.{index}'
+        customer = _customer(db, selector)
+        _enrollable(db, customer, field)
+        identity = family(db, customer['id'])[0]
+        if identity in seen:
+            raise _invalid(field, f"{customer['full_name']} is already in this list (as {seen[identity]})")
+        seen[identity] = customer['full_name']
+        row = dict(id=new_id(), **stamp, customer_id=customer['id'], plan_id=plan['id'], status='active',
+                   start_date=inp.start_date, end_date=inp.end_date, member_number=None, member_number_key=None)
+        _refuse_overlap(db, row)
+        rows.append(row)
+    out = m.EnrollManyOutput(batch=None, enrolled=[membership_output(db, r) for r in rows], count=len(rows))
+    return Plan(out, dict(rows=rows, plan=plan['name']))
+
+
+def apply_enroll_many(plan: Plan, ctx, s) -> Applied:
+    from bookflow.company import batches
+    db, rows = s.company, plan.data['rows']
+    for row in rows:
+        _refuse_overlap(db, row)  # rechecked inside the write transaction
+    batch_id = batches._insert_batch(s, ctx, kind=BATCH_KIND, label=f"Enrolled {len(rows)} in {plan.data['plan']}"[:200],
+                                     scope=BATCH_KIND, ordering='record', source_type=ENROLLMENT)
+    touched = []
+    for row in rows:
+        db.conn.execute(c.customer_memberships.insert().values(**row))
+        batches.record_effect(s, batch_id, record_type=ENROLLMENT, record_id=row['id'], action='created',
+                              version_after=1, before={'customer_id': row['customer_id']})
+        touched.append(Touched(ENROLLMENT, row['id'], 'create', None, 1, row, db='company'))
+    out = plan.preview.model_copy(update={'batch': batch_id})
+    return Applied(out, touched, f"enrolled {len(rows)} customers in membership plan {plan.data['plan']} (batch {batch_id})")
+
+
+def merge_overlap(db, merged_id: str, survivor_id: str) -> None:
+    """A merge joins two entitlement identities; overlapping enrollments must be resolved first."""
+    t = c.customer_memberships
+    others = family(db, survivor_id)
+    for row in db.conn.execute(sa.select(t).where(t.c.customer_id == merged_id, t.c.status != 'suspended')).mappings():
+        clashes = _overlaps(db, dict(row), others)
+        if clashes:
+            first = clashes[0]
+            raise BookflowError('E_MERGE_REFUSED', message=(
+                f"Merge refused: the customer's enrollment from {row['start_date']} through {row['end_date'] or 'no end date'} "
+                f"overlaps the other customer's from {first['start_date']} through {first['end_date'] or 'no end date'}; "
+                f"end one (`customer membership end {first['id']}`) before merging."),
+                details={'membership': row['id'], 'overlapping': [x['id'] for x in clashes], 'problem': 'membership_overlap'})
 
 
 # ---------------------------------------------------------------------------- the sales hook
 
-def effective_fact(db, customer_id: str, on_date: str | None) -> MembershipFact | None:
-    """The enrollment covering ``on_date`` for this customer itself, with an active plan; None when the
-    layer is off. At most one exists: overlapping non-suspended intervals are refused on write."""
-    if on_date is None or not enabled(db):
-        return None
+def _own_fact(db, customer_id: str, on_date: str):
     t, p = c.customer_memberships, c.membership_plans
-    row = db.conn.execute(sa.select(t.c.id, t.c.version, t.c.start_date, t.c.end_date, p.c.id.label('plan_id'),
-                                    p.c.name, p.c.version.label('plan_version'), p.c.price_level_id)
+    return db.conn.execute(sa.select(t.c.id, t.c.version, t.c.start_date, t.c.end_date, p.c.id.label('plan_id'),
+                                     p.c.name, p.c.version.label('plan_version'), p.c.price_level_id)
         .join(p, p.c.id == t.c.plan_id)
-        .where(t.c.customer_id == customer_id, t.c.status != 'suspended', p.c.active.is_(True),
+        .where(t.c.customer_id.in_(family(db, customer_id)), t.c.status != 'suspended', p.c.active.is_(True),
                t.c.start_date <= on_date, sa.or_(t.c.end_date.is_(None), t.c.end_date >= on_date))
         .order_by(t.c.start_date.desc(), t.c.id)).mappings().first()
-    if row is None:
+
+
+def inherits(db, customer_id: str) -> bool:
+    t = c.customer_membership_inheritance
+    value = db.conn.execute(sa.select(t.c.inherit).where(t.c.customer_id == customer_id)).scalar()
+    return True if value is None else bool(value)
+
+
+def effective_fact(db, customer_id: str, on_date: str | None) -> MembershipFact | None:
+    """The enrollment covering ``on_date`` for this customer, with an active plan: its own (or a customer's
+    merged into it), else for a job its nearest ancestor's, climbing only while each job inherits. None when
+    the layer is off. At most one exists per identity: overlapping non-suspended intervals are refused."""
+    if on_date is None or not enabled(db):
         return None
-    return MembershipFact(enrollment_id=row['id'], enrollment_version=row['version'],
-                          plan=Reference(id=row['plan_id'], label=row['name'], version=row['plan_version']),
-                          price_level_id=row['price_level_id'], start_date=row['start_date'], end_date=row['end_date'])
+    node, seen = customer_id, set()
+    while node is not None and node not in seen:
+        seen.add(node)
+        row = _own_fact(db, node, on_date)
+        if row is not None:
+            owner = db.conn.execute(sa.select(c.customers.c.id, c.customers.c.full_name, c.customers.c.version)
+                                    .where(c.customers.c.id == node)).one()
+            return MembershipFact(enrollment_id=row['id'], enrollment_version=row['version'],
+                                  plan=Reference(id=row['plan_id'], label=row['name'], version=row['plan_version']),
+                                  price_level_id=row['price_level_id'], start_date=row['start_date'],
+                                  end_date=row['end_date'], owner=Reference(id=owner[0], label=owner[1], version=owner[2]))
+        parent = db.conn.execute(sa.select(c.customers.c.parent_id).where(c.customers.c.id == node)).scalar()
+        if parent is None or not inherits(db, node):
+            return None
+        node = parent
+    return None
+
+
+def token(fact: MembershipFact | None) -> str:
+    """The membership version a sale was priced with; a renewal, plan change or expiry gives another."""
+    if fact is None:
+        return 'none'
+    owner = fact.owner.id if fact.owner else ''
+    return ':'.join((fact.enrollment_id, str(fact.enrollment_version), fact.plan.id, str(fact.plan.version),
+                     fact.price_level_id, owner))

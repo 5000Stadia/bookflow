@@ -676,7 +676,8 @@ def expand_groups(s, entered):
             continue
         item = sales_defaults._row(s.company, 'item', line.item)
         if item['type'] != 'group':
-            if line.member_commissions is not None:
+            # An empty list names no one (the generated browser form sends one for every line).
+            if line.member_commissions:
                 raise _invalid(f'lines.{index}.member_commissions', 'only a new group line names member recipients')
             result.append((line, None))
             continue

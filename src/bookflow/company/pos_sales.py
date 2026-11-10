@@ -241,8 +241,50 @@ def preview(s, ctx, inp) -> PosSalePreviewOutput:
     warnings = list(out.get('warnings') or [])
     if stock is not None:
         warnings += [w for w in dict.fromkeys(getattr(stock, 'warnings', None) or ()) if w not in warnings]
+    profile = (out.get('revision') or {}).get('profile') or {}
     return PosSalePreviewOutput(**base, lines=_lines(out.get('revision') or {}), subtotal=_money(out['subtotal']),
-                                tax=_money(out['tax']), total=_money(out['total']), warnings=warnings)
+                                tax=_money(out['tax']), total=_money(out['total']), warnings=warnings,
+                                membership=_membership(profile))
+
+
+# ---------------------------------------------------------------------------- membership (R188 increment 2)
+
+def _fact(profile: dict):
+    from bookflow.company.sales_facts import MembershipFact
+    return MembershipFact.model_validate(profile['membership']) if profile.get('membership') else None
+
+
+def membership_token(profile: dict) -> str:
+    from bookflow.company import memberships
+    return memberships.token(_fact(profile))
+
+
+def _membership(profile: dict):
+    from bookflow.company.pos_sale_models import PosMembership
+    fact = _fact(profile)
+    if fact is None:
+        return None
+    owner = fact.owner or profile['customer']
+    owner = owner if isinstance(owner, dict) else owner.model_dump()
+    return PosMembership(plan=fact.plan.label, price_level=(profile.get('price_level') or {}).get('label') or fact.price_level_id,
+                         owner=Named(id=owner['id'], name=owner['label']), token=membership_token(profile))
+
+
+def _check_membership(plan, expected: str | None) -> None:
+    """A renewal, expiry or plan change since the clerk's preview (or since the ticket was held) is stale even
+    when the total happens to match (design/promotions.md section 4)."""
+    if expected is None:
+        return
+    profile = plan.preview.model_dump(mode='json')['revision']['profile']
+    now = membership_token(profile)
+    if now != expected:
+        member = _membership(profile)
+        raise BookflowError('E_PREVIEW_STALE', message=(
+            'The customer\'s membership changed since this cart was priced ('
+            + (f'now {member.plan}, price level {member.price_level}' if member else 'no membership applies now')
+            + '). Nothing was posted; preview the cart again and charge the new total.'),
+            details={'membership': member.model_dump() if member else None, 'expected_membership': expected,
+                     'total': plan.preview.total.amount})
 
 
 # ---------------------------------------------------------------------------- complete
@@ -331,7 +373,8 @@ def plan_complete(s, ctx, inp) -> Plan:
     reg = register(s, inp.pos_register)
     from bookflow.company import pos_day
     pos_day.active_shift(s, reg)
-    pos_tickets.check_complete(s, inp.ticket, inp.ticket_version, reg['id'])
+    held = pos_tickets.check_complete(s, inp.ticket, inp.ticket_version, reg['id'])
+    expected_membership = inp.expected_membership or (held or {}).get('membership_token')
     chosen = customer(s, inp.customer)
     tender = (inp.tenders or [inp.tender])[0]
     method = payment_method(s, reg, tender.payment_method)
@@ -342,6 +385,7 @@ def plan_complete(s, ctx, inp) -> Plan:
             payload.pop(key, None)
         payload.update(terms='Due on receipt', due_date=payload['date'])
     plan = _posting_plan(s, ctx, payload, split)
+    _check_membership(plan, expected_membership)
     total = plan.preview.total.model_dump(mode='json') if hasattr(plan.preview.total, 'model_dump') else \
         dict(plan.preview.total)
     if Money.parse(inp.expected_total, total['currency']).minor_units != total['minor_units']:
@@ -358,7 +402,8 @@ def plan_complete(s, ctx, inp) -> Plan:
         change=Money(facts['change'], facts['currency']).to_dict(), tenders=[_tender_out(p) for p in facts['parts']],
         document_type='invoice' if split else 'sales_receipt', version=1 + len(facts['parts']) if split else 1,
         warnings=list(header.warnings or []))
-    return Plan(preview, dict(payload=payload, split=split, register=reg, customer=chosen, facts=facts, sha=_input_sha(inp), ticket_version=inp.ticket_version))
+    return Plan(preview, dict(payload=payload, split=split, register=reg, customer=chosen, facts=facts, sha=_input_sha(inp), ticket_version=inp.ticket_version,
+                              expected_membership=expected_membership))
 
 
 def _named_customer(chosen) -> Named | None:
@@ -388,6 +433,7 @@ def apply_complete(plan: Plan, ctx, s) -> Applied:
             raise _mismatch(s, found)
         return Applied(sale_output(s, found, replayed=True), [], 'no change')
     fresh = _posting_plan(s, ctx, plan.data['payload'], plan.data['split'])
+    _check_membership(fresh, plan.data.get('expected_membership'))
     total = fresh.preview.total
     if total.minor_units != plan.data['facts']['total']:
         raise BookflowError('E_PREVIEW_STALE', details={'total': total.amount})

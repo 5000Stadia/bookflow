@@ -173,7 +173,7 @@ def test_the_clerk_preset_holds_company_item_and_pos_sell_and_lands_on_the_pos(h
     assert clerk["denies"] == CLERK_DENIES
     assert pos_presets.preset("pos-clerk-returns")["grants"] == ["pos.sell", "pos.void", "pos.refund",
                                                                  "preset.pos-clerk-returns"]
-    assert runtime.current_catalog().CATALOG.version == "commission-pos-v1"
+    assert runtime.current_catalog().CATALOG.version == "membership-sales-v1"
     # commission-pos-v1: the till lookup is a pos.sell command whose plan also asks commission.attribute, which only
     # the "Clerk with commission attribution" preset adds; neither clerk reaches the back-office commission commands.
     assert not {"commission recipient-options", "report commission-attribution"} & _admitted_commands(clerk)

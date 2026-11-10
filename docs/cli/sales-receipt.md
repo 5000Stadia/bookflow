@@ -905,6 +905,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.membership.price_level_id` | string | yes | no | — | — |
 | `revision.profile.membership.start_date` | string | yes | no | — | — |
 | `revision.profile.membership.end_date` | string \| null | no | yes | null | — |
+| `revision.profile.membership.owner` | object \| null | no | yes | null | — |
+| `revision.profile.membership.owner.id` | string | yes | no | — | — |
+| `revision.profile.membership.owner.label` | string | yes | no | — | — |
+| `revision.profile.membership.owner.version` | integer | yes | no | — | — |
 | `revision.lines` | array[object] | yes | no | — | — |
 | `revision.lines[].id` | string | yes | no | — | — |
 | `revision.lines[].created_at` | string | yes | no | — | — |
@@ -2431,6 +2435,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.membership.price_level_id` | string | yes | no | — | — |
 | `revision.profile.membership.start_date` | string | yes | no | — | — |
 | `revision.profile.membership.end_date` | string \| null | no | yes | null | — |
+| `revision.profile.membership.owner` | object \| null | no | yes | null | — |
+| `revision.profile.membership.owner.id` | string | yes | no | — | — |
+| `revision.profile.membership.owner.label` | string | yes | no | — | — |
+| `revision.profile.membership.owner.version` | integer | yes | no | — | — |
 | `revision.lines` | array[object] | yes | no | — | — |
 | `revision.lines[].id` | string | yes | no | — | — |
 | `revision.lines[].created_at` | string | yes | no | — | — |
@@ -3367,6 +3375,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.membership.price_level_id` | string | yes | no | — | — |
 | `revision.profile.membership.start_date` | string | yes | no | — | — |
 | `revision.profile.membership.end_date` | string \| null | no | yes | null | — |
+| `revision.profile.membership.owner` | object \| null | no | yes | null | — |
+| `revision.profile.membership.owner.id` | string | yes | no | — | — |
+| `revision.profile.membership.owner.label` | string | yes | no | — | — |
+| `revision.profile.membership.owner.version` | integer | yes | no | — | — |
 | `revision.lines` | array[object] | yes | no | — | — |
 | `revision.lines[].id` | string | yes | no | — | — |
 | `revision.lines[].created_at` | string | yes | no | — | — |
@@ -4723,6 +4735,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.membership.price_level_id` | string | yes | no | — | — |
 | `revision.profile.membership.start_date` | string | yes | no | — | — |
 | `revision.profile.membership.end_date` | string \| null | no | yes | null | — |
+| `revision.profile.membership.owner` | object \| null | no | yes | null | — |
+| `revision.profile.membership.owner.id` | string | yes | no | — | — |
+| `revision.profile.membership.owner.label` | string | yes | no | — | — |
+| `revision.profile.membership.owner.version` | integer | yes | no | — | — |
 | `revision.lines` | array[object] | yes | no | — | — |
 | `revision.lines[].id` | string | yes | no | — | — |
 | `revision.lines[].created_at` | string | yes | no | — | — |

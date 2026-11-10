@@ -419,6 +419,7 @@ FIELDS: dict[str, dict[str, tuple]] = {
         'price_level_id': (_P, (), 'Price level the plan supplied; not a deposit row fact.'),
         'start_date': (_P, (), 'Membership interval start; not a deposit date.'),
         'end_date': (_P, (), 'Membership interval end; not a deposit date.'),
+        'owner': (_P, (), 'Customer or ancestor that holds the membership a job inherited; not a deposit payer.'),
     },
     'sales_facts.SalesProfile': {
         'schema_version': (_P, (), 'Private capture format version.'),

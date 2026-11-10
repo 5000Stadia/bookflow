@@ -864,6 +864,7 @@
       const tender = currentPayment();
       const paymentInput = payments.length ? {tenders: [...payments, tender]} : {tender};
       complete({...cartInput(), ticket: state.ticket, ...paymentInput, expected_total: server.total.amount,
+                expected_membership: server.membership ? server.membership.token : 'none',
                 ...(state.ticket_version ? {ticket_version: state.ticket_version} : {})});
     }
     else if (target.matches('[data-pos-retry]')) retry();

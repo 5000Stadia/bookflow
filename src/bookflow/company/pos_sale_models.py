@@ -84,6 +84,11 @@ class PosSaleCompleteInput(_Cart):
     expected_total: Amount = Field(description=(
         '`pos sale preview`\'s total, which the clerk saw. If the sale now totals anything else (a price changed '
         'meanwhile), nothing posts and E_PREVIEW_STALE carries the new total.'))
+    expected_membership: str | None = Field(None, min_length=1, max_length=200, description=(
+        "`pos sale preview`'s membership.token (\"none\" when it had none), the membership version the clerk saw. If "
+        'the customer\'s membership now resolves differently (renewed, ended, its plan changed) nothing posts and '
+        'E_PREVIEW_STALE asks for a fresh preview, even when the total matches. Omitted on a resumed ticket, the '
+        'membership captured when it was held is checked instead.'))
 
 
 class PosLineOutput(_Strict):
@@ -99,6 +104,14 @@ class PosLineOutput(_Strict):
         "Who gets this line's commission: recipient IDs and display names only, never rates or amounts."))
 
 
+class PosMembership(_Strict):
+    """The member plan that priced the cart (R188): labels only, never a member number or history."""
+    plan: str
+    price_level: str
+    owner: Named = Field(description='Whose membership it is: the customer, or the parent a job inherits from.')
+    token: str = Field(description='Pass back as `pos sale complete --expected-membership`.')
+
+
 class PosSalePreviewOutput(_Strict):
     pos_register: Named
     customer: Named | None = Field(description='The chosen customer; null for the walk-in, which is never shown.')
@@ -110,6 +123,8 @@ class PosSalePreviewOutput(_Strict):
     tax: MoneyOutput
     total: MoneyOutput
     warnings: list[str] = Field(default_factory=list)
+    membership: PosMembership | None = Field(**_UNSET, description=(
+        "The member plan whose price level priced the cart; absent when none applies or the layer is off."))
 
 
 class TenderOutput(_Strict):

@@ -1367,6 +1367,9 @@ globals().update(_approval_schema.define_tables(metadata, _column, _table, _comm
 from bookflow.company import membership_schema as _membership_schema
 globals().update(_membership_schema.define_tables(metadata, _column, _table, _common))
 company_info.append_column(_membership_schema.company_column(_column))
+# R188 increment 2: job inheritance settings and the membership a held cart was priced with.
+globals().update(_membership_schema.define_inheritance(metadata, _column, _table, _common))
+pos_tickets.append_column(_membership_schema.ticket_column(_column))
 
 from bookflow.company import intercompany_schema as _intercompany_schema
 globals().update(_intercompany_schema.define_tables(metadata, _column, _table, _common))

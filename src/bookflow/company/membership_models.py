@@ -69,7 +69,7 @@ class PlanPage(_Strict):
 
 
 class MembershipSetInput(_Strict):
-    customer: Selector = Field(description='Customer or job ID or name. A job is enrolled itself; it does not inherit a parent enrollment yet.')
+    customer: Selector = Field(description="Customer or job ID or name. A job enrolled itself uses its own enrollment; one not enrolled inherits its nearest ancestor's unless its inheritance is off.")
     plan: Selector = Field(description='Active membership plan ID or name.')
     start_date: _Date = Field(description='First company-local transaction date covered, inclusive.')
     end_date: _Date | None = Field(None, description='Last transaction date covered, inclusive; omit for no end yet.')
@@ -110,5 +110,63 @@ class CustomerMembershipOutput(_Strict):
     customer: Named
     layer_enabled: bool
     as_of: str
-    effective: MembershipOutput | None = Field(description='The enrollment covering as_of, if any and the layer is on.')
+    effective: MembershipOutput | None = Field(description='The enrollment covering as_of, if any and the layer is on: its own, or for a job the one it inherits.')
     history: list[MembershipOutput] = Field(description='Every enrollment of this customer, newest start first.')
+    effective_owner: Named | None = Field(None, description='Whose enrollment applies on as_of: this customer, or the ancestor a job inherits from.')
+    inherits: bool | None = Field(None, description="For a job, whether it inherits its nearest ancestor's enrollment; null for a top-level customer.")
+    inheritance_version: int | None = Field(None, description="Version of the job's inheritance setting; null while it has none (it inherits).")
+
+
+# ---------------------------------------------------------------------------- increment 2
+
+class InheritanceSetInput(_Strict):
+    customer: Selector = Field(description='Job ID or name (a customer with a parent).')
+    inherit: bool = Field(description="true: the job uses its nearest ancestor's enrollment when it has none of its own; false: only its own.")
+    expected_version: _Version | None = Field(None, description="The setting's version you read (inheritance_version from customer membership show); omit for a job with no setting yet.")
+
+
+class InheritanceOutput(_Strict):
+    customer: Named
+    inherit: bool
+    version: int | None = Field(description='Version of the setting row; null when the job has none.')
+    changed: bool = True
+
+
+class MemberListInput(_Strict):
+    plan: Selector | None = Field(None, description='Only members of this plan (ID or name).')
+    as_of: _Date | None = Field(None, description='Date whose effective memberships to list; today when omitted.')
+    include_inherited: bool = Field(True, description="Include jobs priced through an ancestor's enrollment.")
+    limit: int = Field(100, ge=1, le=500, description='Most customers to return, in name order.')
+    cursor: str | None = Field(None, min_length=1, max_length=64, description='next_cursor from the previous page.')
+
+
+class MemberRow(_Strict):
+    customer: Named
+    membership: str = Field(description='Enrollment ID that prices this customer on as_of.')
+    plan: Named
+    price_level: Named
+    start_date: str
+    end_date: str | None
+    owner: Named = Field(description='Whose enrollment it is: the customer itself or the ancestor a job inherits from.')
+    inherited: bool
+
+
+class MemberPage(_Strict):
+    items: list[MemberRow]
+    as_of: str
+    layer_enabled: bool
+    next_cursor: str | None = None
+
+
+class EnrollManyInput(_Strict):
+    customers: list[Selector] = Field(min_length=1, max_length=200, description='Customers or jobs to enroll (IDs or names), each once.')
+    plan: Selector = Field(description='Active membership plan ID or name.')
+    start_date: _Date = Field(description='First company-local transaction date covered, inclusive.')
+    end_date: _Date | None = Field(None, description='Last transaction date covered, inclusive; omit for no end yet.')
+
+
+class EnrollManyOutput(_Strict):
+    batch: str | None = Field(description='Reversible batch ID (`batch reverse <id>`); null in a dry run.')
+    enrolled: list[MembershipOutput]
+    count: int
+

@@ -1,8 +1,9 @@
-"""Membership plans and dated customer enrollments (R188 increment 1).
+"""Membership plans and dated customer enrollments (R188 increments 1 and 2).
 
-The work lives in ``company/memberships.py``; an invoice asks it for the sold-to customer's
-enrollment through one hook in ``sales_defaults.resolve_header``. Plans need promotion.manage,
-enrollments promotion.assign with ordinary customer write rights, reads promotion.read.
+The work lives in ``company/memberships.py``; an invoice or sales receipt (a POS sale is one) asks it for
+the sold-to customer's effective enrollment through one hook in ``sales_defaults.resolve_header``. Plans
+need promotion.manage, enrollments and job inheritance promotion.assign with ordinary customer write
+rights, reads promotion.read with customer read rights. Enrolling many customers is one reversible batch.
 """
 from bookflow.company import memberships as ms
 from bookflow.company import membership_models as m
@@ -100,3 +101,39 @@ customer_membership_show = _read(
     ' (today by default) when the layer is on. Member numbers are shown only here.',
     m.MembershipShowInput, m.CustomerMembershipOutput, plan_membership_show, errors=['E_RECORD_NOT_FOUND'],
     positional=['customer'], resources=(('customer', 'member'),))
+
+
+# ---------------------------------------------------------------------------- increment 2 (membership-sales-v1)
+
+def plan_inherit(inp, ctx, s) -> Plan:
+    return ms.inheritance_set(s, ctx, inp)
+
+
+def plan_members(inp, ctx, s) -> Plan:
+    return Plan(ms.members_list(s, inp))
+
+
+def plan_enroll(inp, ctx, s) -> Plan:
+    return ms.enroll_many(s, ctx, inp)
+
+
+customer_membership_inherit = _write(
+    'customer membership inherit', "Say whether a job inherits its nearest ancestor's membership (true, the default for"
+    ' every job) or uses only its own enrollment (false). A job with its own enrollment covering the sale date always'
+    ' uses it. Sales already saved keep the membership they captured.',
+    m.InheritanceSetInput, m.InheritanceOutput, plan_inherit, ms.apply_inheritance, capability='promotion.assign',
+    errors=['E_VALIDATION', 'E_RECORD_NOT_FOUND', 'E_FEATURE_DISABLED', 'E_VERSION_CONFLICT'],
+    positional=['customer'], resources=(('customer', 'standard'),))
+customer_membership_list = _read(
+    'customer membership list', 'The customers a membership prices on as_of (today by default), in name order: those'
+    ' enrolled and, unless include_inherited is false, the jobs that inherit from them, each with whose enrollment it'
+    ' is. Filter by plan. Member numbers are not listed. Empty while the layer is off.',
+    m.MemberListInput, m.MemberPage, plan_members, errors=['E_VALIDATION', 'E_RECORD_NOT_FOUND'],
+    resources=(('customer', 'member'),))
+customer_membership_enroll = _write(
+    'customer membership enroll', 'Enroll several customers (up to 200, each once) in one plan for the same dates, all'
+    ' or none, as one reversible batch. Preview it with --dry-run first. A mistaken run is undone as a unit with'
+    ' `batch reverse <batch>`, which refuses, naming each, while an enrollment was changed since or a saved sale'
+    ' captured it; ending an enrollment is the separate, prospective act.',
+    m.EnrollManyInput, m.EnrollManyOutput, plan_enroll, ms.apply_enroll_many, capability='promotion.assign',
+    errors=[*_WRITE_ERRORS, 'E_MEMBERSHIP_OVERLAP'], resources=(('customer', 'standard'),))

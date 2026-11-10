@@ -100,6 +100,8 @@ def plan_hold(s, ctx, inp):
         device=inp.device, register_id=reg['id'], customer_id=chosen['id'] if chosen else None,
         label=(inp.label or '').strip() or (before['label'] if before else f'{now} · {first_name}'), status='held',
         lines=json.dumps(lines), currency=preview.total.currency, total_minor_units=preview.total.minor_units,
+        # R188: the membership version the held cart was priced with; completion rechecks it.
+        membership_token=preview.membership.token if preview.membership else 'none',
         updated_at=now, updated_by=s.actor.id, updated_via=ctx.interface.value)
     if not before:
         after.update(created_at=now, created_by=s.actor.id, created_via=ctx.interface.value)

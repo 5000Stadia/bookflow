@@ -54,6 +54,7 @@ The same example as complete `bookflow_run` arguments:
 | `tenders[].amount` | inside `--tenders` JSON array | string \| null | no | yes | null | Amount tendered. Single tender defaults to the total; cash may give change. Every split tender needs an explicit positive amount, and only cash can exceed the remaining balance. |
 | `tenders[].reference` | inside `--tenders` JSON array | string \| null | no | yes | null | Card or check reference (last four digits, approval code), stored as the receipt's payment reference. |
 | `expected_total` | `--expected-total` | string | yes | no | — | `pos sale preview`'s total, which the clerk saw. If the sale now totals anything else (a price changed meanwhile), nothing posts and E_PREVIEW_STALE carries the new total.; minimum length 1; maximum length 32; pattern "^\\d+(\\.\\d{1,2})?$" |
+| `expected_membership` | `--expected-membership` | string \| null | no | yes | null | `pos sale preview`'s membership.token ("none" when it had none), the membership version the clerk saw. If the customer's membership now resolves differently (renewed, ended, its plan changed) nothing posts and E_PREVIEW_STALE asks for a fresh preview, even when the total matches. Omitted on a resumed ticket, the membership captured when it was held is checked instead. |
 
 ### Command and context options
 
@@ -336,6 +337,13 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total.currency` | string | yes | no | — | — |
 | `total.minor_units` | integer | yes | no | — | — |
 | `warnings` | array[string] | no | no | [] | — |
+| `membership` | object \| null | no | yes | null | The member plan whose price level priced the cart; absent when none applies or the layer is off. |
+| `membership.plan` | string | yes | no | — | — |
+| `membership.price_level` | string | yes | no | — | — |
+| `membership.owner` | object | yes | no | — | Whose membership it is: the customer, or the parent a job inherits from. |
+| `membership.owner.id` | string | yes | no | — | — |
+| `membership.owner.name` | string | yes | no | — | — |
+| `membership.token` | string | yes | no | — | Pass back as `pos sale complete --expected-membership`. |
 
 Example JSON output:
 
