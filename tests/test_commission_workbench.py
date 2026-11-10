@@ -2,6 +2,7 @@
 import json
 
 import pytest
+from bookflow.core import registry
 from tests.test_row5_browser_acceptance import CHROME, browser_site  # noqa: F401
 from tests.test_row8_register_browser import register_browser, _command  # noqa: F401
 from tests.test_service_sales_browser import _fill, _choose, _click, _preview, _saved, _contained
@@ -14,7 +15,8 @@ def test_invoice_recipient_prompt_cancel_and_reopened_report_at_390px(register_b
     b.viewport(390, 900)
 
     def run(name, data):
-        return _command(b, env.site, name, data, **{'X-Bookflow-Reason': 'Invoice attribution browser journey'})
+        headers = {'X-Bookflow-Reason': 'Invoice attribution browser journey'} if registry.get(name.replace('.', ' ')).is_write else {}
+        return _command(b, env.site, name, data, **headers)
 
     info = run('company.show', {})
     run('company.update', {'commission_attribution_enabled': True, 'expected_version': info['info_version']})

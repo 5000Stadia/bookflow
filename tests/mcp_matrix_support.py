@@ -22,13 +22,15 @@ from tests import provenance
 
 
 class Matrix:
+    def __init__(self):
+        self.stack = AsyncExitStack()
+
     async def open(self, baseline, directory, *, mcp_args=(), mcp_env=None):
         from mcp import ClientSession
         from mcp.client.stdio import StdioServerParameters, stdio_client
         seed = bookflow.connect(data_root=str(baseline))
         self.company = seed.company.list()['items'][0]['company_id']
         issued = seed.token.issue(label='Parity bearer')
-        self.stack = AsyncExitStack()
         self.roots = {}
         self.hosts = {}
         self.documents = {surface: [] for surface in ('python', 'cli', 'http', 'mcp')}

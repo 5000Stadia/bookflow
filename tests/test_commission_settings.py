@@ -2,12 +2,14 @@
 import pytest
 
 from bookflow.core.errors import BookflowError
+from bookflow.core import registry
 
 COMPANY = 'Demo Plumbing Co'
 
 
 def call(client, name, data=None):
-    return client.run(name, data or {}, company=COMPANY, reason='Check commission attribution settings')
+    context = {'reason': 'Check commission attribution settings'} if registry.get(name).is_write else {}
+    return client.run(name, data or {}, company=COMPANY, **context)
 
 
 def test_switch_and_item_flag_survive_disable_without_accounts(client):

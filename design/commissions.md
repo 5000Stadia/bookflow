@@ -407,6 +407,23 @@ implementation is authorized by this documentation commit itself.
    denial, adapter contracts and a 390 px prompt/cancel/save/reopen journey. Rates, earnings, payments, splits, dedicated
    recipient identity/payout links, sales receipts, POS, grouped entry and reattribution remain later-increment work.
 
+   ##### As built — increment 1 fix round
+
+   Attribution test callers supply reason context only for registry-declared writes; the subtotal fixture supplies
+   its required description. The MCP matrix owns its cleanup stack before startup, preserving the original error
+   when an optional dependency or initialization fails. The POS clerk preset is unchanged: the supplied failure log
+   reaches its MCP import after the preset and HTTP permission assertions pass, then reports a missing MCP package.
+
+   Deposit publication explicitly treats commission snapshots, recipient identities/labels and attributed net as
+   private sales facts. The private reader pins the updated enclosing model schemas; exact schema hashes, table
+   checks and public field/model closure remain enforced. No deposit cash meaning, money calculation, permission
+   grant, migration or catalog layer changes in this fix round. Later increments retain the scope above.
+
+   Local verification passes both deposit manifest conformance checks and the one-recipient typed contract.
+   Database-backed attribution/settings, actual MCP and POS clerk reruns exceed the 25-second execution cap during
+   setup with no test result; docs generation and its check also exceed that cap. These remain for the principal's
+   longer targeted run, along with the corrected 390 px browser journey.
+
 2. **Sales receipts and POS (M).** Shared line facts in receipt/POS, groups, scan coalescing, hold/resume and clerk preset.
    **Done when:** all §3 routes preserve distinct recipients and the clerk sees no earnings. **Tests:** tap/scan/group
    at both widths, different recipients for identical items, retry and held-ticket stale recipient, native receipt parity.

@@ -3,6 +3,7 @@ import anyio
 import pytest
 import bookflow
 from bookflow.core.errors import BookflowError
+from bookflow.core import registry
 from tests.test_scheduling import books, member
 from tests.test_row3_host import hosted
 
@@ -33,8 +34,8 @@ def post(books, lines, **kw):
 
 def test_two_people_final_net_snapshots_reopen_and_off_layer(books, shop):
     call = shop['call']
-    subtotal = call('item create', name='Attribution subtotal', type='subtotal')['id']
-    discount = call('item create', name='Attribution discount', type='discount', discount_amount='30.00',
+    subtotal = call('item create', name='Attribution subtotal', type='subtotal', description='Attribution subtotal')['id']
+    discount = call('item create', name='Attribution discount', type='discount', description='Attribution discount', discount_amount='30.00',
         income_account_id=shop['income'])['id']
     sale = post(books, [line(shop), line(shop, 1, unit_price='50.00'), {'item': subtotal}, {'item': discount}])
     assert sale['total_minor_units'] == 12000
@@ -92,7 +93,7 @@ def test_recipient_lookup_narrow_and_permission_denial(books, shop):
     for command, raw in [('commission recipient-options', {}), ('report commission-attribution', {}),
         ('invoice post', {'customer': 'Rivera Construction', 'date': '2026-01-15', 'lines': [line(shop)]})]:
         with pytest.raises(BookflowError) as err:
-            denied(command, raw, reason='Test denied selection')
+            denied(command, raw, **({'reason': 'Test denied selection'} if registry.get(command).is_write else {}))
         assert err.value.code == 'E_PERMISSION'
 
 
