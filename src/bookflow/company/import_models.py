@@ -1,7 +1,8 @@
 """Inputs and outputs of `import` and `batch` (R107 increments 0 and 1)."""
 from typing import Any, Literal
+from datetime import date
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class _Input(BaseModel):
@@ -244,6 +245,15 @@ class BatchReverseInput(BatchShowInput):
 
 
 class BatchQueryInput(_Input):
+    date_from: date | None = Field(None, description='Batch creation UTC date, inclusive lower bound.')
+    date_to: date | None = Field(None, description='Batch creation UTC date, inclusive upper bound.')
+
+    @model_validator(mode='after')
+    def ordered_dates(self):
+        if self.date_from and self.date_to and self.date_from > self.date_to:
+            raise ValueError('date_from must be on or before date_to')
+        return self
+
     kind: str | None = Field(None, max_length=32, description='Only batches of this kind (import, reversal...).')
     state: Literal['live', 'reversing', 'blocked', 'reversed', 'reversed_partly'] | None = Field(
         None, description='Only batches in this state.')
@@ -315,11 +325,11 @@ class ImportErrorsOutput(BaseModel):
 class BatchOutput(BaseModel):
     batch: dict[str, Any] = Field(description=(
         'The batch: kind, scope, ordering, label, state, counts, who, how, for whom, why, reversal; `reversible` and '
-        '`first_blocker` from a plan; `effects` (up to 200) on show.'))
+        '`blockers` (all causes, with counts and members), `blocker_count`, and compatibility `first_blocker` from a full dry-run plan; `effects` (up to 200) on show.'))
 
 
 class BatchQueryOutput(BaseModel):
-    items: list[dict[str, Any]] = Field(description='Batches, newest first, with `reversible` and the first blocker.')
+    items: list[dict[str, Any]] = Field(description='Batches, newest first, with `reversible`, all `blockers`, and `blocker_count` from the full dry-run plan.')
     next_cursor: str | None = Field(description='Pass as `cursor` for the next page; null on the last.')
 
 

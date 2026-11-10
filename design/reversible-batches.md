@@ -109,6 +109,31 @@ to trash a non-demo sibling despite the current protection; and the host WAL wit
 checkpoint file below 4 MiB (observed 4,206,552 bytes). These are recorded rather than changing unrelated migration,
 demo-reset or checkpoint behavior in this increment. A separate reference-year preview failure passed on rerun.
 
+### As built: increment 1 closing-trial fixes
+
+- Batch invoicing now selects native `invoice void` for each created invoice, under the caller's
+  `ledger.post` authority at standard role (including native conditional checks). No explicit deletion
+  grant is needed. Void cancels the invoice's accounting and stock effects while preserving its number,
+  history and the shared batch's `reversed` lifecycle. Resumption recognizes both new void effects and
+  historical delete effects. Imports and memorized runs keep their existing inverse choices.
+- List/show use the full inverse preflight, including permissions. `blockers` contains all causes,
+  with `count` and `members`; `blocker_count` counts causes. `first_blocker` remains a compatibility field.
+  Shared causes are grouped in list and refusal output without losing each member's details or remedy.
+  Applied settlements name unapply as the next step, closed periods name reopening, and permission
+  refusals name the needed grant. Explicit deletion messages no longer imply a role includes deletion.
+- `batch list` is the existing alias of `batch query`. Its existing `kind` filter is joined by
+  `date_from` and `date_to`, inclusive UTC batch-creation dates; an inverted range is refused.
+- No migration or permission layer is added; company head remains `co0128` and the permission tip
+  remains `notice-reversal-v1`. The changes use existing commands and authority.
+- Other explicit-only inverse requirements remain unchanged: depreciation journals require
+  `transaction.journal_entry.delete`; imports, opening batches and memorized runs require the
+  applicable document deletion grants when they create invoices, credit memos, sales receipts, bills,
+  journals, checks, card charges or customer payments. Automation batches also retain the registry's
+  deletion requirements for any such recorded document effects. These are separate follow-up choices.
+- Regression tests cover a standard bookkeeper's door reversal with hand-worked $170 A/R and income,
+  unchanged refusal with payment or closed period, grouped permission/period blockers, full list/dry-run
+  agreement, date/kind filters, stock restoration and interrupted reversal. No later increment is changed.
+
 ## As built: increment 2
 
 - `barcode generate` and `cycle-count classify` return `batch_id` and a `next` command for the shared reversal

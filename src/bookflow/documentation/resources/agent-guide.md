@@ -1733,7 +1733,9 @@ survive resume, but preview, hold and completion still require `pos.price-overri
 
 ## Reverse a batch
 
-`batch query` finds a run and `batch show <batch>` lists its recorded effects. Use
+`batch list` (also `batch query`) finds a run; filter with `kind`, `date_from` and `date_to`
+(inclusive UTC creation dates). Each row includes every blocker with its count and members,
+using the same authority checks as the dry run. `batch query` finds a run and `batch show <batch>` lists its recorded effects. Use
 `batch reverse <batch> --dry-run` to read the complete inverse list. This is confirm-first:
 check that list once with your principal unless they plainly named the reversal. The
 command needs the same `import` read capability as batch show; every inverse also needs
@@ -1746,6 +1748,8 @@ first. Sent messages, deposits and finished reconciliations block the whole run,
 Run `batch reverse <batch>` with a reason, following `next` until reversed. An interrupted
 reversal resumes without repeating completed steps. A blocker names the dependent record,
 later batch, closed period or missing grant and leaves the attempted slice unchanged.
+Invoice batches void every invoice through `invoice void`, requiring your own
+`ledger.post` grant; A/R and income return to their pre-batch balances.
 Invoice runs, bill payments, depreciation journals and finance charges retain their history;
 a Finance Charge item created by the assessment is retired after its charges.
 

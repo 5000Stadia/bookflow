@@ -255,6 +255,7 @@ def apply_batch_reverse(plan, ctx, s) -> Applied:
 
 def plan_batch_query(inp, ctx, s) -> Plan:
     return Plan(m.BatchQueryOutput(**batches.query(s, ctx, kind=inp.kind, state=inp.state, scope=inp.scope,
+                                                   date_from=inp.date_from, date_to=inp.date_to,
                                                    limit=inp.limit, cursor=inp.cursor)))
 
 
@@ -305,7 +306,7 @@ import_errors = _read('import errors', 'The refused rows of a run as a CSV file:
 batch_show = _read('batch show', 'Show a batch (an import run\'s writes, a reversal...): its effects, who made it, '
                    'whether it can be reversed now and what blocks it.', m.BatchShowInput, m.BatchOutput,
                    plan_batch_show, positional=('batch',))
-batch_query = _read('batch query', 'List batches, newest first, each with `reversible` and its first blocker.',
+batch_query = _read('batch query', 'List batches, newest first, filtered by kind and creation date range, with `reversible` and every blocker.',
                     m.BatchQueryInput, m.BatchQueryOutput, plan_batch_query)
 import_check = _read('import check', 'Check a file before importing it, running no command: is every required field '
                      'mapped, does each cell fit its field (type, length, pattern), is any key repeated, does every '
@@ -352,6 +353,7 @@ batch_reverse = command(
     description=(
         'Confirm-first: reverse the entire batch, newest effects first, using your own grants for every inverse. '
         'Run --dry-run and check its exact list with your principal unless this reversal was plainly named. '
+        'Invoice batches void each invoice under your own ledger.post grant. '
         'Every blocker is named and a blocked plan changes nothing. Later edits, dependent records, closed periods, '
         'reconciled payments and pending or printed checks can block. Inventory counts cancel or void through their '
         'native inverse; pending check-print runs cancel, and delivery batches cancel only with unexported drafts. '
