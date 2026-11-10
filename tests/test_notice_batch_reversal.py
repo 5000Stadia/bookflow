@@ -164,10 +164,17 @@ def test_live_notice_delivery_blocks_and_populated_co0127_upgrade_keeps_referenc
             if ' ON overdue_notices ' in ddl:
                 db.execute(ddl)
         db.execute("UPDATE alembic_version SET version_num='co0127'")
-    with open_database(path, writable=True) as db:
-        assert migrate_to_head(db, 'company', None) == ('co0127', 'co0128')
-        assert db.raw.execute('PRAGMA foreign_key_check').fetchall() == []
-        assert db.raw.execute('SELECT period_released FROM overdue_notices WHERE id=?', (notice['id'],)).fetchone() == (0,)
+    # Only co0128 is rewound, so only it is run; the file is stamped back to its real head afterwards.
+    from bookflow.storage.migrate import HEADS
+    head = HEADS['company']
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setitem(HEADS, 'company', 'co0128')
+        with open_database(path, writable=True) as db:
+            assert migrate_to_head(db, 'company', None) == ('co0127', 'co0128')
+            assert db.raw.execute('PRAGMA foreign_key_check').fetchall() == []
+            assert db.raw.execute('SELECT period_released FROM overdue_notices WHERE id=?', (notice['id'],)).fetchone() == (0,)
+    with sqlite3.connect(path) as db:
+        db.execute('UPDATE alembic_version SET version_num=?', (head,))
     assert books.run('delivery show', {'message': message['id']})['id'] == message['id']
     assert snapshot(books) == before
 
