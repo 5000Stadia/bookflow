@@ -2225,3 +2225,21 @@ EXAMPLES.update({
         'bookflow pos deposit prepare --pos-register Main --date 2026-10-31 --company "Demo Plumbing Co" --json',
         {'pos_register': 'Main', 'date': '2026-10-31'}),
 })
+
+_DRAFT_BILL = {'date': '2026-09-15', 'vendor': 'Regional Parts',
+               'expenses': [{'account': 'Professional Fees', 'amount': '80.00'}]}
+_DRAFT_FIELDS = " --date 2026-09-15 --vendor 'Regional Parts' --expenses '[{\"account\":\"Professional Fees\",\"amount\":\"80.00\"}]'"
+_DRAFT_CONTEXT = ' --company "Demo Plumbing Co" --reason "Save supplier bill for review" --json'
+EXAMPLES.update({
+    'purchase-draft create': Example('bookflow purchase-draft create' + _DRAFT_FIELDS +
+        ' --operation-key draft-save-1' + _DRAFT_CONTEXT, {**_DRAFT_BILL, 'operation_key': 'draft-save-1'}),
+    'purchase-draft update': Example('bookflow purchase-draft update ' + ID + _DRAFT_FIELDS +
+        ' --expected-version 1 --operation-key draft-edit-1' + _DRAFT_CONTEXT,
+        {**_DRAFT_BILL, 'draft': ID, 'expected_version': 1, 'operation_key': 'draft-edit-1'}),
+    'purchase-draft cancel': Example('bookflow purchase-draft cancel ' + ID +
+        ' --expected-version 1 --operation-key draft-cancel-1' + _DRAFT_CONTEXT,
+        {'draft': ID, 'expected_version': 1, 'operation_key': 'draft-cancel-1'}),
+    'purchase-draft show': Example('bookflow purchase-draft show ' + ID + ' --company "Demo Plumbing Co" --json', {'draft': ID}),
+    'purchase-draft preview': Example('bookflow purchase-draft preview ' + ID + ' --company "Demo Plumbing Co" --json', {'draft': ID}),
+    'purchase-draft list': Example('bookflow purchase-draft list --state draft --company "Demo Plumbing Co" --json', {'state': 'draft'}),
+})

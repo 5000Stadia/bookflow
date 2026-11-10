@@ -1339,3 +1339,8 @@ globals().update(_pos_refund_schema.define_tables(metadata, _column, _table))
 
 from bookflow.company import pos_day_schema as _pos_day_schema
 globals().update(_pos_day_schema.define_tables(metadata, _column, _table))
+
+from bookflow.company import purchase_draft_schema as _purchase_draft_schema
+globals().update(_purchase_draft_schema.define_tables(metadata, _column, _table, _common))
+for _purchase_draft_column in _purchase_draft_schema.company_columns(_column):
+    company_info.append_column(_purchase_draft_column)
