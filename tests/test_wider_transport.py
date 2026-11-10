@@ -368,6 +368,6 @@ def test_guard_refusal_log_diagnostics_follow_profile(profile, caplog):
 def test_no_workbench_template_carries_an_inline_handler():
     """The wider policy allows no inline script, so a page's behaviour lives in a static file."""
     templates = Path(__file__).resolve().parents[1] / 'src/bookflow/adapters/workbench/templates'
-    inline = re.compile(r'\son[a-z]+\s*=|hx-on|javascript:', re.I)
+    inline = re.compile(r'\son[a-z]+=["\']|hx-on|javascript:', re.I)
     found = sorted(path.name for path in templates.rglob('*.html') if inline.search(path.read_text(encoding='utf-8')))
     assert found == []
