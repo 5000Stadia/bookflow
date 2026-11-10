@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block title %}Delete journal {{ record.revision.number }}{% endblock %}{% block body %}<section id="journal-deletion" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+{% extends "base.html" %}{% block title %}Delete journal {{ record.revision.number }}{% endblock %}{% block body %}<section id="journal-deletion" data-swap-validation-errors>
 {% set base = '/c/' ~ company_id ~ '/journal' %}{% set record_id = record.id %}
 <nav class="crumbs"><a href="{{ base }}">Journals</a> / Delete</nav>
 <h1>Delete journal {{ record.revision.number }}</h1>

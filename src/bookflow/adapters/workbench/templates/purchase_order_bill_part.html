@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block title %}Bill part of purchase order {{ order.number }}{% endblock %}{% block body %}<section id="po-bill-part" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+{% extends "base.html" %}{% block title %}Bill part of purchase order {{ order.number }}{% endblock %}{% block body %}<section id="po-bill-part" data-swap-validation-errors>
 <nav class="crumbs"><a href="/c/{{ company_id }}/purchase-order">Purchase orders</a> / <a href="/c/{{ company_id }}/purchase-order/{{ order.id }}">{{ order.number }}</a> / Bill or close lines</nav>
 <h1>Bill or close lines · purchase order {{ order.number }}</h1>
 <p>{{ order.vendor_name }} · {{ ui_words(order.status) }} · ordered {{ order.date|longday }} · {{ order.total|amount }} {{ order.currency }}</p>

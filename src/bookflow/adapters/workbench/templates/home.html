@@ -9,7 +9,7 @@
 </div></section>{% endif %}</div>
 {% if clocks %}<link rel="stylesheet" href="{{ static_urls['timekeeping.css'] }}"><section class="notice clock-banner" role="status" aria-label="Clocked in" data-open-clocks><strong>Clocked in:</strong> {% for c in clocks %}<span data-open-clock="{{ c.employee_id }}">{{ c.employee_name }} since {{ c.clock_in_local[11:] }}{% if c.clock_in_local[:10] != clocks[0].clock_in_local[:10] or c.over_max_shift %} on {{ c.clock_in_local[:10] }}{% endif %}{% if c.over_max_shift %} (past the maximum shift){% endif %}</span>{% if not loop.last %}, {% endif %}{% endfor %} <a class="button" href="/c/{{ company_id }}/clock" data-clock-link>Time clock</a></section>{% endif %}
 {# The figures and lists run reports; they arrive after the page so the tasks never wait on them. #}
-<div class="overview-live" hx-get="/c/{{ company_id }}/_overview" hx-trigger="load" hx-swap="outerHTML" hx-on::response-error="this.querySelector('.overview-loading').textContent = 'Figures could not be loaded just now.'"><p class="overview-loading muted" role="status">Loading figures…</p></div>
+<div class="overview-live" hx-get="/c/{{ company_id }}/_overview" hx-trigger="load" hx-swap="outerHTML" data-overview-load><p class="overview-loading muted" role="status">Loading figures…</p></div>
 {# Every task, as compact links grouped by area. #}
 {# A panel with no tile this reader may open is not shown, nor the heading when none is left. #}
 {% set shown_panels = [] %}{% for row in panels %}{% if (row.chain + row.asides) | selectattr('live') | rejectattr('step.id', 'equalto', 'invoice') | list %}{% set _ = shown_panels.append(row) %}{% endif %}{% endfor %}

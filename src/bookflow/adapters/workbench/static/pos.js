@@ -139,7 +139,7 @@
   const children = parent => data.layout.items.filter(box => box.parent === parent).sort((a, b) => a.position - b.position);
   const groupName = box => box.label || 'Group';
   function pictureHtml(url, name, shade) {
-    return url ? `<img class="pos-tile" src="${escape(url)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'pos-tile',textContent:''}))">`
+    return url ? `<img class="pos-tile" src="${escape(url)}" alt="" loading="lazy" data-pos-tile-fallback>`
       : `<span class="pos-tile" style="background:${/^#[0-9a-f]{6}$/i.test(shade || '') ? shade : colour(name)}">${escape(name.slice(0, 2))}</span>`;
   }
   function boxHtml(box) {

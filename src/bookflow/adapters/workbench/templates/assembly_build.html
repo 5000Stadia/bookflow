@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block title %}Build assemblies{% endblock %}{% block body %}<section id="assembly-build" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+{% extends "base.html" %}{% block title %}Build assemblies{% endblock %}{% block body %}<section id="assembly-build" data-swap-validation-errors>
 <nav class="crumbs"><a href="/c/{{ company_id }}/_group/items">Items</a> / Build assemblies</nav>
 <h1>Build assemblies</h1>
 {% if result %}<div role="status" class="notice" data-assembly-result>

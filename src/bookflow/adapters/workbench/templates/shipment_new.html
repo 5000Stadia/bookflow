@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block title %}Ship an order{% endblock %}{% block body %}<section id="shipment-page" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+{% extends "base.html" %}{% block title %}Ship an order{% endblock %}{% block body %}<section id="shipment-page" data-swap-validation-errors>
 <nav class="crumbs"><a href="/c/{{ company_id }}/shipments">Shipments</a> / Ship an order</nav>
 <h1>Ship an order</h1>
 <p class="workflow-note">The goods leave stock on the ship date; their cost waits in Shipped Not Invoiced until the invoice bills them. What you do not ship stays backordered on the order.</p>

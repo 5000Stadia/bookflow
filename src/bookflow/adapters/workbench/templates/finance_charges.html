@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block title %}Assess finance charges{% endblock %}{% block body %}<section id="finance-charges" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+{% extends "base.html" %}{% block title %}Assess finance charges{% endblock %}{% block body %}<section id="finance-charges" data-swap-validation-errors>
 <nav class="crumbs"><a href="/c/{{ company_id }}/_group/customers">Customers</a> / Assess finance charges</nav>
 <h1>Assess finance charges</h1>
 {% if result %}<div role="status" class="notice" data-finance-charge-result>

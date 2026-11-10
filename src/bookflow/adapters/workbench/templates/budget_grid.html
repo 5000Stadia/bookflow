@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block title %}{{ budget.name }} · Set up budgets{% endblock %}{% block body %}<section id="budget-grid" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }" data-budget="{{ budget.id }}">
+{% extends "base.html" %}{% block title %}{{ budget.name }} · Set up budgets{% endblock %}{% block body %}<section id="budget-grid" data-swap-validation-errors data-budget="{{ budget.id }}">
 <style>
 .budget-table input{width:5.4rem;text-align:right;padding-left:.3rem;padding-right:.3rem}
 .budget-table th,.budget-table td{padding-left:.3rem;padding-right:.3rem}
@@ -47,7 +47,7 @@ Amounts never post. <a href="/c/{{ company_id }}/report/budget-overview?f:budget
 <section class="workspace-card" aria-label="Save">
 <label>Reason (shown in the audit trail) <input name="ctx:reason" value="{{ values.get('ctx:reason', '') if values else '' }}" placeholder="Budget review"></label>
 <div class="actions"><button type="submit" name="action" value="save" class="primary-action" data-budget-save>Save</button>
-<button type="submit" name="action" value="clear" data-budget-clear formnovalidate onclick="return confirm('Clear every amount in this budget{{ ' for this ' ~ ('customer' if budget.dimension == 'customer' else 'class') if dimension_key else '' }}?')">Clear</button></div>
+<button type="submit" name="action" value="clear" data-budget-clear formnovalidate data-confirm-action="Clear every amount in this budget{{ ' for this ' ~ ('customer' if budget.dimension == 'customer' else 'class') if dimension_key else '' }}?">Clear</button></div>
 </section>
 <section class="workspace-card" aria-label="Fill a row">
 <h2>Fill a row</h2>
