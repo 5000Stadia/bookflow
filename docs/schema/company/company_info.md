@@ -110,7 +110,7 @@ Database: `company`.
 | `crm_pipeline_enabled` | BOOLEAN | no | — | — | — | — | Reserved optional CRM layer; off until its increment is installed. |
 | `crm_campaigns_enabled` | BOOLEAN | no | — | — | — | — | Reserved optional CRM layer; off until its increment is installed. |
 | `commission_attribution_enabled` | BOOLEAN | no | — | — | — | — | Enable commission attribution on invoice lines; no calculation or payout setup. |
-| `purchase_approvals_enabled` | BOOLEAN | no | — | — | — | — | Reserved approval layer switch; off until the approval workflow is available. |
-| `bill_approvals_enabled` | BOOLEAN | no | — | — | — | — | Reserved approval layer switch; off until the approval workflow is available. |
-| `approval_routing_enabled` | BOOLEAN | no | — | — | — | — | Reserved approval layer switch; off until the approval workflow is available. |
-| `approval_reminders_enabled` | BOOLEAN | no | — | — | — | — | Reserved approval layer switch; off until the approval workflow is available. |
+| `purchase_approvals_enabled` | BOOLEAN | no | — | — | — | — | Optional approval layer switch; defaults off. |
+| `bill_approvals_enabled` | BOOLEAN | no | — | — | — | — | Optional approval layer switch; defaults off. |
+| `approval_routing_enabled` | BOOLEAN | no | — | — | — | — | Optional approval layer switch; defaults off. |
+| `approval_reminders_enabled` | BOOLEAN | no | — | — | — | — | Optional approval layer switch; defaults off. |

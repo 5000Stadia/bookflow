@@ -1,16 +1,24 @@
 {% extends "base.html" %}{% block title %}Purchase drafts{% endblock %}{% block body %}
 <link rel="stylesheet" href="{{ static_urls['purchase-drafts.css'] }}">
 <script src="{{ static_urls['purchase-drafts.js'] }}" defer></script>
+{% macro lines(p) %}
+{% for line in p.expenses %}<p>{{ line.account.name }} · {{ display_money(line.amount) }}{% if line.memo %} · {{ line.memo }}{% endif %}</p>{% endfor %}
+{% for line in p['items'] %}<p data-draft-item>{{ line.item.name }}{% if line.description %} · {{ line.description }}{% endif %} · Quantity {{ line.quantity }}{% if line.unit_cost %} · Unit cost {{ line.unit_cost.amount }}{% endif %} · Amount {{ display_money(line.amount) }}</p>{% endfor %}
+{% if p.purchase_order %}<p>Purchase order {{ p.purchase_order.name }}</p>{% endif %}
+{% for source in p.receipts %}<p>Receipt {{ source.number }} · Quantity {{ source.quantity }}</p>{% endfor %}
+{% endmacro %}
 {% set post = '/c/' ~ company_id ~ '/purchase-drafts' %}
 <section id="purchase-drafts" class="purchase-drafts" data-draft-id="{{ draft.id if draft else '' }}">
 <nav class="crumbs"><a href="/c/{{ company_id }}/_group/vendors">Vendors &amp; purchases</a> / <a href="{{ post }}">Purchase drafts</a></nav>
 <h1>{{ 'Edit bill draft' if editing and draft else 'New bill draft' if editing else 'Bill draft' if draft else 'Purchase drafts' }}</h1>
-<p>Saved drafts do not affect accounts payable, the ledger or stock. Approvals and posting are not available here yet.</p>
-{% if error %}<div role="alert" class="error" data-draft-error><strong>{{ error.message or error.code }}</strong>{% for f in (error.details or {}).get('fields', []) %}<p>{{ f.field }}: {{ f.problem }}</p>{% endfor %}{% if draft %}<p>Your entries are retained. <a href="{{ post }}?draft={{ draft.id }}&amp;edit=1">Reload current draft</a> before trying again.</p>{% endif %}</div>{% endif %}
+<p>Saved drafts and approvals do not affect accounts payable, the ledger or stock. Commit posts the bill after current approval and posting checks.</p>
+{% if error %}<div role="alert" class="error" data-draft-error><strong>{{ error.message or error.code }}</strong>{% for f in (error.details or {}).get('fields', []) %}<p>{{ f.field }}: {{ f.problem }}</p>{% endfor %}{% if draft %}<p>Your entries are retained. <a href="{{ post }}?draft={{ draft.id }}{% if editing %}&amp;edit=1{% endif %}">Reload current draft</a> before trying again.</p>{% endif %}</div>{% endif %}
+{% if notice %}<p role="status">{{ notice }}</p>{% endif %}
+{% if committed %}<p><a href="/c/{{ company_id }}/bill/{{ committed.document_id }}">Open posted bill</a> · Batch {{ committed.batch_id }}</p>{% endif %}
 {% if saved %}<p role="status" data-draft-saved>Draft saved. No accounting effect.</p>{% endif %}
 {% if cancelled %}<p role="status">Draft cancelled. Its history is retained.</p>{% endif %}
-{% if result %}{% set p = result.preview %}<section class="workspace-card" data-draft-preview><h2>Preview — nothing saved or posted</h2><p><strong>Total {{ display_money(p.total) }}</strong></p><p>{{ p.vendor.name }} · {{ p.due_date }} · No accounting effect</p>{% for line in p.expenses %}<p>{{ line.account.name }} · {{ display_money(line.amount) }}{% if line.memo %} · {{ line.memo }}{% endif %}</p>{% endfor %}</section>{% endif %}
-{% if editing and can_write and (not draft or draft.state == 'draft') %}
+{% if result %}{% set p = result.preview %}<section class="workspace-card" data-draft-preview><h2>Preview — nothing saved or posted</h2><p><strong>Total {{ display_money(p.total) }}</strong></p><p>{{ p.vendor.name }} · {{ p.due_date }} · No accounting effect</p><h3>Lines</h3>{{ lines(p) }}</section>{% endif %}
+{% if editing and can_write and (not draft or draft.state in ('draft', 'rejected')) %}
 <form method="post" action="{{ post }}" hx-post="{{ post }}" hx-target="#purchase-drafts" hx-select="#purchase-drafts" hx-swap="outerHTML" data-draft-form>
 <input type="hidden" name="draft" value="{{ draft.id if draft else '' }}"><input type="hidden" name="expected_version" value="{{ values.expected_version }}"><input type="hidden" name="operation_key" value="{{ values.operation_key }}">
 <h2>Summary</h2><div class="draft-fields">
@@ -28,14 +36,40 @@
 </form>
 {% elif draft %}
 <section class="workspace-card"><h2>Summary</h2><p><strong>{{ draft.preview.vendor.name }} · {{ display_money(draft.preview.total) }}</strong></p><p>{{ draft.payload.date }} · <span data-draft-state>{{ draft.state }}</span> · Version {{ draft.version }}</p><p>Created by {{ draft.created_by }}{% if draft.created_at %} · {{ draft.created_at|when }}{% endif %}</p>{% if draft.payload.memo %}<p>{{ draft.payload.memo }}</p>{% endif %}</section>
-<section class="workspace-card"><h2>Lines</h2>{% for line in draft.preview.expenses %}<p>{{ line.account.name }} · {{ display_money(line.amount) }}{% if line.memo %} · {{ line.memo }}{% endif %}</p>{% endfor %}</section>
-<section class="workspace-card"><h2>History</h2>{% for revision in draft.history %}<article data-draft-history><h3>Version {{ revision.version }} · {{ revision.state }}</h3><p>{{ revision.reason }} · {{ revision.actor }}{% if revision.interface %} via {{ revision.interface }}{% endif %}</p>{% if revision.preview %}<p>{{ display_money(revision.preview.total) }}</p>{% endif %}</article>{% endfor %}</section>
-{% if draft.state == 'draft' %}<div class="actions">{% if can_write %}<a href="{{ post }}?draft={{ draft.id }}&amp;edit=1" data-draft-edit>Edit draft</a>{% endif %}</div>
-<form method="post" hx-post="{{ post }}" hx-target="#purchase-drafts" hx-select="#purchase-drafts" hx-swap="outerHTML"><input type="hidden" name="draft" value="{{ draft.id }}"><button name="action" value="saved-preview">Preview saved draft</button></form>
-{% if can_write %}<details><summary>Cancel draft</summary><p>Cancellation keeps this draft and every saved revision.</p><form method="post" hx-post="{{ post }}" hx-target="#purchase-drafts" hx-select="#purchase-drafts" hx-swap="outerHTML"><input type="hidden" name="draft" value="{{ draft.id }}"><input type="hidden" name="expected_version" value="{{ values.expected_version }}"><input type="hidden" name="operation_key" value="{{ values.operation_key }}"><label>Reason for cancellation<textarea name="reason" required>{{ values.get('reason','') }}</textarea></label><button name="action" value="cancel" data-draft-cancel>Cancel draft</button></form></details>{% endif %}{% endif %}
+<section class="workspace-card"><h2>Lines</h2>{{ lines(draft.preview) }}</section>
+<section class="workspace-card"><h2>Evidence</h2>
+<p>{{ draft.operation|capitalize }} bill{% if draft.original_id %} · Original bill {{ draft.original_id }} · Version {{ draft.original_version }}{% endif %}</p>
+<details><summary>Complete saved bill inputs</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">{{ draft.payload|tojson(indent=2) }}</pre></details>
+</section>
+<section class="workspace-card"><h2>History</h2>{% for revision in draft.history %}<article data-draft-history><h3>Version {{ revision.version }} · {{ revision.state }}</h3><p>{{ revision.reason }} · {{ revision.actor }}{% if revision.interface %} via {{ revision.interface }}{% endif %}</p>{% if revision.preview %}<p>{{ display_money(revision.preview.total) }}</p><h4>Lines</h4>{{ lines(revision.preview) }}{% endif %}</article>{% endfor %}</section>
+{% if draft.state in ('draft', 'rejected') %}<div class="actions">{% if can_write and simple_edit %}<a href="{{ post }}?draft={{ draft.id }}&amp;edit=1" data-draft-edit>Edit draft</a>{% elif can_write %}<p>This draft includes source, item or correction fields. <a href="/c/{{ company_id }}/purchase-draft/{{ draft.id }}/update">Open the full draft form</a> to preserve those fields.</p>{% endif %}</div>
+{% if actions.preview %}<form method="post" hx-post="{{ post }}" hx-target="#purchase-drafts" hx-select="#purchase-drafts" hx-swap="outerHTML"><input type="hidden" name="draft" value="{{ draft.id }}"><button name="action" value="saved-preview">Preview saved draft</button></form>{% endif %}
+{% if actions.cancel %}<details><summary>Cancel draft</summary><p>Cancellation keeps this draft and every saved revision.</p><form method="post" hx-post="{{ post }}" hx-target="#purchase-drafts" hx-select="#purchase-drafts" hx-swap="outerHTML"><input type="hidden" name="draft" value="{{ draft.id }}"><input type="hidden" name="expected_version" value="{{ values.expected_version }}"><input type="hidden" name="operation_key" value="{{ values.operation_key }}"><label>Reason for cancellation<textarea name="reason" required>{{ values.get('reason','') }}</textarea></label><button name="action" value="cancel" data-draft-cancel>Cancel draft</button></form></details>{% endif %}{% endif %}
+{% if approval %}
+<section class="workspace-card"><h2>Approval</h2><p>{{ approval.state }} · Request version {{ approval.version }}</p>
+{% for step in approval.steps %}<p>{{ step.label }} · {{ 'Self-review allowed' if step.allow_self else 'Self-review not allowed' }}</p>{% endfor %}
+{% for event in approval.events %}<article><p>{{ event.action }} · {{ event.actor }}{% if event.reason %} · {{ event.reason }}{% endif %}{% if event.data.get('comment') %} · {{ event.data.comment }}{% endif %}</p></article>{% endfor %}
+</section>
+{% endif %}
+{% if draft.state in ('draft', 'pending', 'approved') %}
+<form method="post" action="{{ post }}" hx-post="{{ post }}" hx-target="#purchase-drafts" hx-select="#purchase-drafts" hx-swap="outerHTML" data-approval-form>
+<input type="hidden" name="draft" value="{{ draft.id }}"><input type="hidden" name="expected_version" value="{{ values.get('expected_version', draft.version) }}"><input type="hidden" name="operation_key" value="{{ values.operation_key }}">
+<input type="hidden" name="request_id" value="{{ values.get('request_id', draft.request_id or '') }}"><input type="hidden" name="request_version" value="{{ values.get('request_version', draft.request_version or '') }}">
+<h2>{{ 'Review and post' if draft.state == 'approved' else 'Review' if draft.state == 'pending' else 'Next step' }}</h2>
+<label>Reason<textarea name="reason" required rows="2">{{ values.get('reason', '') }}</textarea></label>
+{% if draft.state == 'pending' and actions.decide %}<label>Review comment<textarea name="comment" rows="2">{{ values.get('comment', '') }}</textarea></label>{% endif %}
+<div class="draft-bar"><strong>Total {{ display_money(draft.preview.total) }}</strong>
+{% if draft.state == 'draft' and actions.submit %}<button name="action" value="submit">Submit for approval</button>{% endif %}
+{% if draft.state == 'pending' and actions.decide %}<button name="action" value="approve">Approve</button><button name="action" value="reject">Return for revision</button>{% endif %}
+{% if draft.state in ('draft', 'approved') and actions.commit %}<button name="action" value="commit">Commit bill</button>{% endif %}
+{% if draft.state in ('pending', 'approved') and actions.withdraw %}
+{% if draft.state == 'approved' and not withdraw_preview %}<button name="action" value="withdraw-preview">Preview withdrawal</button>{% else %}{% if withdraw_preview %}<input type="hidden" name="confirm" value="true">{% endif %}<button name="action" value="withdraw">{{ 'Confirm withdrawal' if withdraw_preview else 'Withdraw submission' }}</button>{% endif %}
+{% endif %}
+</div></form>
+{% endif %}
 {% else %}
 {% if can_write %}<p><a href="{{ post }}?new=1" data-draft-new>New bill draft</a></p>{% endif %}
-<form method="get"><label>Status<select name="state"><option value="">All</option value="draft"{% if request.query_params.get('state') == 'draft' %} selected{% endif %}>Draft</option><option value="cancelled"{% if request.query_params.get('state') == 'cancelled' %} selected{% endif %}>Cancelled</option></select></label><button>Filter</button></form>
+<form method="get"><label>Status<select name="state"><option value="">All</option>{% for state in ('draft', 'pending', 'approved', 'rejected', 'committed', 'cancelled') %}<option value="{{ state }}"{% if request.query_params.get('state') == state %} selected{% endif %}>{{ state|capitalize }}</option>{% endfor %}</select></label><button>Filter</button></form>
 {% for row in listing['items'] %}<article class="workspace-card"><h2><a href="{{ post }}?draft={{ row.id }}">{{ row.preview.vendor.name }}</a></h2><p>{{ display_money(row.preview.total) }} · {{ row.payload.date }} · {{ row.state }}</p><p>Created by {{ row.created_by }}</p></article>{% else %}<p>No saved drafts.</p>{% endfor %}
 {% if listing.next_cursor %}<a href="{{ post }}?cursor={{ listing.next_cursor|urlencode }}{% if request.query_params.get('state') %}&amp;state={{ request.query_params.get('state')|urlencode }}{% endif %}">Next drafts</a>{% endif %}
 {% endif %}</section>{% endblock %}

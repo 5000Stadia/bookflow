@@ -75,15 +75,31 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `snapshot` | object[string, any] \| null | no | yes | null | — |
+| `request_id` | string \| null | no | yes | null | — |
+| `request_version` | integer \| null | no | yes | null | — |
 | `id` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
 | `kind` | literal["bill"] | yes | no | — | — |
-| `operation` | literal["create"] | yes | no | — | — |
-| `state` | literal["draft", "cancelled"] | yes | no | — | — |
+| `operation` | literal["create", "correct", "restore"] | yes | no | — | — |
+| `original_id` | string \| null | no | yes | null | — |
+| `original_version` | integer \| null | no | yes | null | — |
+| `state` | literal["draft", "pending", "approved", "rejected", "committed", "cancelled"] | yes | no | — | — |
 | `payload` | object | yes | no | — | — |
+| `payload.number` | string \| null | no | yes | null | — |
+| `payload.ap_account` | string \| null | no | yes | null | — |
+| `payload.terms` | string \| null | no | yes | null | — |
+| `payload.due_date` | string \| null | no | yes | null | — |
+| `payload.supplier_reference` | string \| null | no | yes | null | — |
+| `payload.memo` | string \| null | no | yes | null | — |
+| `payload.class_id` | string \| null | no | yes | null | — |
+| `payload.site` | string \| null | no | yes | null | Inventory site the stocked item lines are received at where a line names none; omitted, the default site. |
+| `payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
+| `payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
+| `payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `payload.date` | string | yes | no | — | — |
-| `payload.vendor` | string | yes | no | — | — |
-| `payload.expenses` | array[object] | yes | no | — | — |
+| `payload.vendor` | string \| null | no | yes | null | — |
+| `payload.expenses` | array[object] \| null | no | yes | null | — |
 | `payload.expenses[].line_id` | string \| null | no | yes | null | — |
 | `payload.expenses[].account` | string | yes | no | — | — |
 | `payload.expenses[].amount` | string \| object | yes | no | — | — |
@@ -92,13 +108,34 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `payload.expenses[].billable` | boolean | no | no | false | — |
 | `payload.expenses[].class_id` | string \| null | no | yes | null | — |
 | `payload.expenses[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
-| `payload.number` | string \| null | no | yes | null | — |
-| `payload.ap_account` | string \| null | no | yes | null | — |
-| `payload.terms` | string \| null | no | yes | null | — |
-| `payload.due_date` | string \| null | no | yes | null | — |
-| `payload.supplier_reference` | string \| null | no | yes | null | — |
-| `payload.memo` | string \| null | no | yes | null | — |
-| `payload.class_id` | string \| null | no | yes | null | — |
+| `payload.items` | array[object] \| null | no | yes | null | — |
+| `payload.items[].line_id` | string \| null | no | yes | null | — |
+| `payload.items[].item` | string | yes | no | — | — |
+| `payload.items[].description` | string \| null | no | yes | null | — |
+| `payload.items[].quantity` | string | no | no | "1" | — |
+| `payload.items[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `payload.items[].amount` | string \| object \| null | no | yes | null | — |
+| `payload.items[].customer` | string \| null | no | yes | null | — |
+| `payload.items[].billable` | boolean | no | no | false | — |
+| `payload.items[].class_id` | string \| null | no | yes | null | — |
+| `payload.items[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `payload.items[].site` | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
+| `payload.items[].bin` | string \| null | no | yes | null | Bin at the line's site (id, full name A:3 or label code); "(no bin)" is outside every bin. Omitted: the bin the stock stood in, else the item's default bin. |
+| `payload.items[].lot` | string \| null | no | yes | null | Lot an incoming line receives into (made when new) or an outgoing line takes from; omitted, outgoing units leave unassigned. |
+| `payload.items[].lot_expiry` | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
+| `payload.items[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers, one per unit, up to the quantity; unnumbered units stay unassigned. Never invent one. Omitted on a correction, the line keeps its numbers. |
+| `payload.purchase_order` | string \| null | no | yes | null | — |
+| `payload.order_lines` | array[object] \| null | no | yes | null | — |
+| `payload.order_lines[].line` | string | yes | no | — | — |
+| `payload.order_lines[].quantity` | string \| null | no | yes | null | — |
+| `payload.order_lines[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `payload.order_lines[].amount` | string \| object \| null | no | yes | null | — |
+| `payload.receipts` | array[object] \| null | no | yes | null | — |
+| `payload.receipts[].receipt_line` | string | yes | no | — | — |
+| `payload.receipts[].expected_receipt_version` | integer | yes | no | — | — |
+| `payload.receipts[].quantity` | string | yes | no | — | — |
+| `payload.receipts[].unit_cost` | string \| object \| null | no | yes | null | Product unit cost only, excluding retained receipt shipping. |
+| `payload.receipts[].amount` | string \| object \| null | no | yes | null | Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value. |
 | `preview` | object | yes | no | — | — |
 | `preview.total` | object | yes | no | — | — |
 | `preview.total.amount` | string | yes | no | — | — |
@@ -120,6 +157,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `preview.expenses[].billable` | boolean | yes | no | — | — |
+| `preview.items` | array[object] | no | no | [] | — |
+| `preview.items[].item` | object | yes | no | — | — |
+| `preview.items[].item.id` | string | yes | no | — | — |
+| `preview.items[].item.name` | string | yes | no | — | — |
+| `preview.items[].description` | string \| null | yes | yes | — | — |
+| `preview.items[].quantity` | string | yes | no | — | — |
+| `preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `preview.items[].amount` | object | yes | no | — | — |
+| `preview.items[].amount.amount` | string | yes | no | — | — |
+| `preview.items[].amount.currency` | string | yes | no | — | — |
+| `preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `preview.purchase_order` | object \| null | no | yes | null | — |
+| `preview.purchase_order.id` | string | yes | no | — | — |
+| `preview.purchase_order.name` | string | yes | no | — | — |
+| `preview.receipts` | array[object] | no | no | [] | — |
+| `preview.receipts[].id` | string | yes | no | — | — |
+| `preview.receipts[].number` | string | yes | no | — | — |
+| `preview.receipts[].quantity` | string | yes | no | — | — |
 | `preview.vendor` | object | yes | no | — | — |
 | `preview.vendor.id` | string | yes | no | — | — |
 | `preview.vendor.name` | string | yes | no | — | — |
@@ -135,11 +193,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_by` | string | yes | no | — | — |
 | `history` | array[object] | yes | no | — | — |
 | `history[].version` | integer | yes | no | — | — |
-| `history[].state` | literal["draft", "cancelled"] | yes | no | — | — |
+| `history[].state` | literal["draft", "pending", "approved", "rejected", "committed", "cancelled"] | yes | no | — | — |
 | `history[].payload` | object | yes | no | — | — |
+| `history[].payload.number` | string \| null | no | yes | null | — |
+| `history[].payload.ap_account` | string \| null | no | yes | null | — |
+| `history[].payload.terms` | string \| null | no | yes | null | — |
+| `history[].payload.due_date` | string \| null | no | yes | null | — |
+| `history[].payload.supplier_reference` | string \| null | no | yes | null | — |
+| `history[].payload.memo` | string \| null | no | yes | null | — |
+| `history[].payload.class_id` | string \| null | no | yes | null | — |
+| `history[].payload.site` | string \| null | no | yes | null | Inventory site the stocked item lines are received at where a line names none; omitted, the default site. |
+| `history[].payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
+| `history[].payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
+| `history[].payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `history[].payload.date` | string | yes | no | — | — |
-| `history[].payload.vendor` | string | yes | no | — | — |
-| `history[].payload.expenses` | array[object] | yes | no | — | — |
+| `history[].payload.vendor` | string \| null | no | yes | null | — |
+| `history[].payload.expenses` | array[object] \| null | no | yes | null | — |
 | `history[].payload.expenses[].line_id` | string \| null | no | yes | null | — |
 | `history[].payload.expenses[].account` | string | yes | no | — | — |
 | `history[].payload.expenses[].amount` | string \| object | yes | no | — | — |
@@ -148,13 +217,34 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].payload.expenses[].billable` | boolean | no | no | false | — |
 | `history[].payload.expenses[].class_id` | string \| null | no | yes | null | — |
 | `history[].payload.expenses[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
-| `history[].payload.number` | string \| null | no | yes | null | — |
-| `history[].payload.ap_account` | string \| null | no | yes | null | — |
-| `history[].payload.terms` | string \| null | no | yes | null | — |
-| `history[].payload.due_date` | string \| null | no | yes | null | — |
-| `history[].payload.supplier_reference` | string \| null | no | yes | null | — |
-| `history[].payload.memo` | string \| null | no | yes | null | — |
-| `history[].payload.class_id` | string \| null | no | yes | null | — |
+| `history[].payload.items` | array[object] \| null | no | yes | null | — |
+| `history[].payload.items[].line_id` | string \| null | no | yes | null | — |
+| `history[].payload.items[].item` | string | yes | no | — | — |
+| `history[].payload.items[].description` | string \| null | no | yes | null | — |
+| `history[].payload.items[].quantity` | string | no | no | "1" | — |
+| `history[].payload.items[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `history[].payload.items[].amount` | string \| object \| null | no | yes | null | — |
+| `history[].payload.items[].customer` | string \| null | no | yes | null | — |
+| `history[].payload.items[].billable` | boolean | no | no | false | — |
+| `history[].payload.items[].class_id` | string \| null | no | yes | null | — |
+| `history[].payload.items[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `history[].payload.items[].site` | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
+| `history[].payload.items[].bin` | string \| null | no | yes | null | Bin at the line's site (id, full name A:3 or label code); "(no bin)" is outside every bin. Omitted: the bin the stock stood in, else the item's default bin. |
+| `history[].payload.items[].lot` | string \| null | no | yes | null | Lot an incoming line receives into (made when new) or an outgoing line takes from; omitted, outgoing units leave unassigned. |
+| `history[].payload.items[].lot_expiry` | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
+| `history[].payload.items[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers, one per unit, up to the quantity; unnumbered units stay unassigned. Never invent one. Omitted on a correction, the line keeps its numbers. |
+| `history[].payload.purchase_order` | string \| null | no | yes | null | — |
+| `history[].payload.order_lines` | array[object] \| null | no | yes | null | — |
+| `history[].payload.order_lines[].line` | string | yes | no | — | — |
+| `history[].payload.order_lines[].quantity` | string \| null | no | yes | null | — |
+| `history[].payload.order_lines[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `history[].payload.order_lines[].amount` | string \| object \| null | no | yes | null | — |
+| `history[].payload.receipts` | array[object] \| null | no | yes | null | — |
+| `history[].payload.receipts[].receipt_line` | string | yes | no | — | — |
+| `history[].payload.receipts[].expected_receipt_version` | integer | yes | no | — | — |
+| `history[].payload.receipts[].quantity` | string | yes | no | — | — |
+| `history[].payload.receipts[].unit_cost` | string \| object \| null | no | yes | null | Product unit cost only, excluding retained receipt shipping. |
+| `history[].payload.receipts[].amount` | string \| object \| null | no | yes | null | Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value. |
 | `history[].preview` | object | yes | no | — | — |
 | `history[].preview.total` | object | yes | no | — | — |
 | `history[].preview.total.amount` | string | yes | no | — | — |
@@ -176,6 +266,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `history[].preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `history[].preview.expenses[].billable` | boolean | yes | no | — | — |
+| `history[].preview.items` | array[object] | no | no | [] | — |
+| `history[].preview.items[].item` | object | yes | no | — | — |
+| `history[].preview.items[].item.id` | string | yes | no | — | — |
+| `history[].preview.items[].item.name` | string | yes | no | — | — |
+| `history[].preview.items[].description` | string \| null | yes | yes | — | — |
+| `history[].preview.items[].quantity` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `history[].preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `history[].preview.items[].amount` | object | yes | no | — | — |
+| `history[].preview.items[].amount.amount` | string | yes | no | — | — |
+| `history[].preview.items[].amount.currency` | string | yes | no | — | — |
+| `history[].preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `history[].preview.purchase_order` | object \| null | no | yes | null | — |
+| `history[].preview.purchase_order.id` | string | yes | no | — | — |
+| `history[].preview.purchase_order.name` | string | yes | no | — | — |
+| `history[].preview.receipts` | array[object] | no | no | [] | — |
+| `history[].preview.receipts[].id` | string | yes | no | — | — |
+| `history[].preview.receipts[].number` | string | yes | no | — | — |
+| `history[].preview.receipts[].quantity` | string | yes | no | — | — |
 | `history[].preview.vendor` | object | yes | no | — | — |
 | `history[].preview.vendor.id` | string | yes | no | — | — |
 | `history[].preview.vendor.name` | string | yes | no | — | — |
@@ -201,28 +312,27 @@ Example JSON output:
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "kind": "bill",
   "operation": "create",
+  "original_id": null,
+  "original_version": null,
   "payload": {
     "ap_account": null,
     "class_id": null,
+    "count_position": null,
+    "custom_field_kinds": {},
+    "custom_fields": {},
     "date": "2026-01-01",
     "due_date": null,
-    "expenses": [
-      {
-        "account": "Professional Fees",
-        "amount": "80.00",
-        "billable": false,
-        "class_id": null,
-        "class_mode": "inherit",
-        "customer": null,
-        "line_id": null,
-        "memo": null
-      }
-    ],
+    "expenses": null,
+    "items": null,
     "memo": null,
     "number": null,
+    "order_lines": null,
+    "purchase_order": null,
+    "receipts": null,
+    "site": null,
     "supplier_reference": null,
     "terms": null,
-    "vendor": "value"
+    "vendor": null
   },
   "preview": {
     "accounting_effect": "none",
@@ -233,6 +343,9 @@ Example JSON output:
     "currency": "USD",
     "due_date": "2026-01-01",
     "expenses": [],
+    "items": [],
+    "purchase_order": null,
+    "receipts": [],
     "total": {
       "amount": "value",
       "currency": "USD",
@@ -243,6 +356,9 @@ Example JSON output:
       "name": "value"
     }
   },
+  "request_id": null,
+  "request_version": null,
+  "snapshot": null,
   "state": "draft",
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
@@ -287,9 +403,150 @@ Example JSON output:
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 | `E_VERSION_CONFLICT` | The record changed since the version you read. |
 
+## `purchase-draft commit`
+
+Post an approved bill or commit a saved draft with approvals off. Revalidates exact source and commercial evidence and current native posting rights; creates one reversible batch. Supply request version when approved.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | approval.prepare |
+| Additional resources | ledger.read: member, ledger.post: standard |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/purchase-draft.commit` |
+| External binary body | none |
+
+### CLI
+
+`bookflow purchase-draft commit --draft 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 3 --expected-request-version 2 --operation-key approval-example --company "Demo Plumbing Co" --json --reason "Review supplier bill"`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "purchase-draft commit", "input": {"draft": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 3, "expected_request_version": 2, "operation_key": "approval-example"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `draft` | `--draft` | string | yes | no | — | minimum length 1 |
+| `expected_version` | `--expected-version` | integer | yes | no | — | minimum 1 |
+| `operation_key` | `--operation-key` | string | yes | no | — | minimum length 1; maximum length 128 |
+| `expected_request_version` | `--expected-request-version` | integer \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/purchase-draft.commit`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `draft_id` | string | yes | no | — | — |
+| `version` | integer | yes | no | — | — |
+| `state` | literal["committed"] | no | no | "committed" | — |
+| `request_id` | string \| null | yes | yes | — | — |
+| `document_id` | string | yes | no | — | — |
+| `document_version` | integer | yes | no | — | — |
+| `batch_id` | string | yes | no | — | — |
+| `total_minor_units` | integer | yes | no | — | — |
+| `currency` | string | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "batch_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "currency": "USD",
+  "document_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "document_version": 1,
+  "draft_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "request_id": null,
+  "state": "committed",
+  "total_minor_units": 1,
+  "version": 1
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_APPROVAL_ASSIGNEE` | Only a currently assigned reviewer may decide this step. |
+| `E_APPROVAL_POLICY` | The approval policy is incomplete or invalid. |
+| `E_APPROVAL_REQUIRED` | This bill requires an approved purchase draft before posting. |
+| `E_APPROVAL_SELF` | Self-approval is not permitted by this captured policy. |
+| `E_APPROVAL_STALE` | The captured approval facts changed; withdraw and resubmit. |
+| `E_APPROVAL_STATE` | This draft state does not allow the requested act; inspect its legal next actions. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
 ## `purchase-draft create`
 
-Save an expense-only bill draft with a reason and permanent operation_key. The draft posts nothing: no AP, ledger, inventory or purchase consumption. Use --dry-run for an exact unsaved preview. kind is bill and operation is create; approval layers remain off. Another preparer can resume its shared ID.
+Save a native bill draft with a reason and permanent operation_key. The draft posts nothing: no AP, ledger, inventory or purchase consumption. Use --dry-run for an exact unsaved preview. kind is bill; operation is create or correct with original_id and original_version. Sources and exact amounts are captured without reservations. Restore awaits native bill restoration. Another preparer can resume its shared ID.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -320,8 +577,19 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
+| `number` | `--number` | string \| null | no | yes | null | — |
+| `ap_account` | `--ap-account` | string \| null | no | yes | null | — |
+| `terms` | `--terms` | string \| null | no | yes | null | — |
+| `due_date` | `--due-date` | string \| null | no | yes | null | — |
+| `supplier_reference` | `--supplier-reference` | string \| null | no | yes | null | — |
+| `memo` | `--memo` | string \| null | no | yes | null | — |
+| `class_id` | `--class-id` | string \| null | no | yes | null | — |
+| `site` | `--site` | string \| null | no | yes | null | Inventory site the stocked item lines are received at where a line names none; omitted, the default site. |
+| `count_position` | `--count-position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
+| `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
+| `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
-| `vendor` | `--vendor` | string | yes | no | — | minimum length 1 |
+| `vendor` | `--vendor` | string \| null | no | yes | null | — |
 | `expenses[].line_id` | inside `--expenses` JSON array | string \| null | no | yes | null | — |
 | `expenses[].account` | inside `--expenses` JSON array | string | yes | no | — | minimum length 1 |
 | `expenses[].amount` | inside `--expenses` JSON array | string \| object | yes | no | — | — |
@@ -330,15 +598,35 @@ The same example as complete `bookflow_run` arguments:
 | `expenses[].billable` | inside `--expenses` JSON array | boolean | no | no | false | — |
 | `expenses[].class_id` | inside `--expenses` JSON array | string \| null | no | yes | null | — |
 | `expenses[].class_mode` | inside `--expenses` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
-| `number` | `--number` | string \| null | no | yes | null | — |
-| `ap_account` | `--ap-account` | string \| null | no | yes | null | — |
-| `terms` | `--terms` | string \| null | no | yes | null | — |
-| `due_date` | `--due-date` | string \| null | no | yes | null | — |
-| `supplier_reference` | `--supplier-reference` | string \| null | no | yes | null | — |
-| `memo` | `--memo` | string \| null | no | yes | null | — |
-| `class_id` | `--class-id` | string \| null | no | yes | null | — |
+| `items[].line_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].item` | inside `--items` JSON array | string | yes | no | — | minimum length 1 |
+| `items[].description` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].quantity` | inside `--items` JSON array | string | no | no | "1" | — |
+| `items[].unit_cost` | inside `--items` JSON array | string \| object \| null | no | yes | null | — |
+| `items[].amount` | inside `--items` JSON array | string \| object \| null | no | yes | null | — |
+| `items[].customer` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].billable` | inside `--items` JSON array | boolean | no | no | false | — |
+| `items[].class_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].class_mode` | inside `--items` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `items[].site` | inside `--items` JSON array | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
+| `items[].bin` | inside `--items` JSON array | string \| null | no | yes | null | Bin at the line's site (id, full name A:3 or label code); "(no bin)" is outside every bin. Omitted: the bin the stock stood in, else the item's default bin. |
+| `items[].lot` | inside `--items` JSON array | string \| null | no | yes | null | Lot an incoming line receives into (made when new) or an outgoing line takes from; omitted, outgoing units leave unassigned. |
+| `items[].lot_expiry` | inside `--items` JSON array | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
+| `items[].serial_numbers` | inside `--items` JSON array | array[string] \| null | no | yes | null | Serial numbers, one per unit, up to the quantity; unnumbered units stay unassigned. Never invent one. Omitted on a correction, the line keeps its numbers. |
+| `purchase_order` | `--purchase-order` | string \| null | no | yes | null | — |
+| `order_lines[].line` | inside `--order-lines` JSON array | string | yes | no | — | minimum length 1; maximum length 64 |
+| `order_lines[].quantity` | inside `--order-lines` JSON array | string \| null | no | yes | null | — |
+| `order_lines[].unit_cost` | inside `--order-lines` JSON array | string \| object \| null | no | yes | null | — |
+| `order_lines[].amount` | inside `--order-lines` JSON array | string \| object \| null | no | yes | null | — |
+| `receipts[].receipt_line` | inside `--receipts` JSON array | string | yes | no | — | minimum length 1 |
+| `receipts[].expected_receipt_version` | inside `--receipts` JSON array | integer | yes | no | — | minimum 1 |
+| `receipts[].quantity` | inside `--receipts` JSON array | string | yes | no | — | — |
+| `receipts[].unit_cost` | inside `--receipts` JSON array | string \| object \| null | no | yes | null | Product unit cost only, excluding retained receipt shipping. |
+| `receipts[].amount` | inside `--receipts` JSON array | string \| object \| null | no | yes | null | Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value. |
 | `kind` | `--kind` | literal["bill"] | no | no | "bill" | — |
-| `operation` | `--operation` | literal["create"] | no | no | "create" | — |
+| `operation` | `--operation` | literal["create", "correct", "restore"] | no | no | "create" | — |
+| `original_id` | `--original-id` | string \| null | no | yes | null | — |
+| `original_version` | `--original-version` | integer \| null | no | yes | null | — |
 | `operation_key` | `--operation-key` | string | yes | no | — | minimum length 1; maximum length 128 |
 
 ### Command and context options
@@ -377,15 +665,31 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `snapshot` | object[string, any] \| null | no | yes | null | — |
+| `request_id` | string \| null | no | yes | null | — |
+| `request_version` | integer \| null | no | yes | null | — |
 | `id` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
 | `kind` | literal["bill"] | yes | no | — | — |
-| `operation` | literal["create"] | yes | no | — | — |
-| `state` | literal["draft", "cancelled"] | yes | no | — | — |
+| `operation` | literal["create", "correct", "restore"] | yes | no | — | — |
+| `original_id` | string \| null | no | yes | null | — |
+| `original_version` | integer \| null | no | yes | null | — |
+| `state` | literal["draft", "pending", "approved", "rejected", "committed", "cancelled"] | yes | no | — | — |
 | `payload` | object | yes | no | — | — |
+| `payload.number` | string \| null | no | yes | null | — |
+| `payload.ap_account` | string \| null | no | yes | null | — |
+| `payload.terms` | string \| null | no | yes | null | — |
+| `payload.due_date` | string \| null | no | yes | null | — |
+| `payload.supplier_reference` | string \| null | no | yes | null | — |
+| `payload.memo` | string \| null | no | yes | null | — |
+| `payload.class_id` | string \| null | no | yes | null | — |
+| `payload.site` | string \| null | no | yes | null | Inventory site the stocked item lines are received at where a line names none; omitted, the default site. |
+| `payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
+| `payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
+| `payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `payload.date` | string | yes | no | — | — |
-| `payload.vendor` | string | yes | no | — | — |
-| `payload.expenses` | array[object] | yes | no | — | — |
+| `payload.vendor` | string \| null | no | yes | null | — |
+| `payload.expenses` | array[object] \| null | no | yes | null | — |
 | `payload.expenses[].line_id` | string \| null | no | yes | null | — |
 | `payload.expenses[].account` | string | yes | no | — | — |
 | `payload.expenses[].amount` | string \| object | yes | no | — | — |
@@ -394,13 +698,34 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `payload.expenses[].billable` | boolean | no | no | false | — |
 | `payload.expenses[].class_id` | string \| null | no | yes | null | — |
 | `payload.expenses[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
-| `payload.number` | string \| null | no | yes | null | — |
-| `payload.ap_account` | string \| null | no | yes | null | — |
-| `payload.terms` | string \| null | no | yes | null | — |
-| `payload.due_date` | string \| null | no | yes | null | — |
-| `payload.supplier_reference` | string \| null | no | yes | null | — |
-| `payload.memo` | string \| null | no | yes | null | — |
-| `payload.class_id` | string \| null | no | yes | null | — |
+| `payload.items` | array[object] \| null | no | yes | null | — |
+| `payload.items[].line_id` | string \| null | no | yes | null | — |
+| `payload.items[].item` | string | yes | no | — | — |
+| `payload.items[].description` | string \| null | no | yes | null | — |
+| `payload.items[].quantity` | string | no | no | "1" | — |
+| `payload.items[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `payload.items[].amount` | string \| object \| null | no | yes | null | — |
+| `payload.items[].customer` | string \| null | no | yes | null | — |
+| `payload.items[].billable` | boolean | no | no | false | — |
+| `payload.items[].class_id` | string \| null | no | yes | null | — |
+| `payload.items[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `payload.items[].site` | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
+| `payload.items[].bin` | string \| null | no | yes | null | Bin at the line's site (id, full name A:3 or label code); "(no bin)" is outside every bin. Omitted: the bin the stock stood in, else the item's default bin. |
+| `payload.items[].lot` | string \| null | no | yes | null | Lot an incoming line receives into (made when new) or an outgoing line takes from; omitted, outgoing units leave unassigned. |
+| `payload.items[].lot_expiry` | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
+| `payload.items[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers, one per unit, up to the quantity; unnumbered units stay unassigned. Never invent one. Omitted on a correction, the line keeps its numbers. |
+| `payload.purchase_order` | string \| null | no | yes | null | — |
+| `payload.order_lines` | array[object] \| null | no | yes | null | — |
+| `payload.order_lines[].line` | string | yes | no | — | — |
+| `payload.order_lines[].quantity` | string \| null | no | yes | null | — |
+| `payload.order_lines[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `payload.order_lines[].amount` | string \| object \| null | no | yes | null | — |
+| `payload.receipts` | array[object] \| null | no | yes | null | — |
+| `payload.receipts[].receipt_line` | string | yes | no | — | — |
+| `payload.receipts[].expected_receipt_version` | integer | yes | no | — | — |
+| `payload.receipts[].quantity` | string | yes | no | — | — |
+| `payload.receipts[].unit_cost` | string \| object \| null | no | yes | null | Product unit cost only, excluding retained receipt shipping. |
+| `payload.receipts[].amount` | string \| object \| null | no | yes | null | Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value. |
 | `preview` | object | yes | no | — | — |
 | `preview.total` | object | yes | no | — | — |
 | `preview.total.amount` | string | yes | no | — | — |
@@ -422,6 +747,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `preview.expenses[].billable` | boolean | yes | no | — | — |
+| `preview.items` | array[object] | no | no | [] | — |
+| `preview.items[].item` | object | yes | no | — | — |
+| `preview.items[].item.id` | string | yes | no | — | — |
+| `preview.items[].item.name` | string | yes | no | — | — |
+| `preview.items[].description` | string \| null | yes | yes | — | — |
+| `preview.items[].quantity` | string | yes | no | — | — |
+| `preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `preview.items[].amount` | object | yes | no | — | — |
+| `preview.items[].amount.amount` | string | yes | no | — | — |
+| `preview.items[].amount.currency` | string | yes | no | — | — |
+| `preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `preview.purchase_order` | object \| null | no | yes | null | — |
+| `preview.purchase_order.id` | string | yes | no | — | — |
+| `preview.purchase_order.name` | string | yes | no | — | — |
+| `preview.receipts` | array[object] | no | no | [] | — |
+| `preview.receipts[].id` | string | yes | no | — | — |
+| `preview.receipts[].number` | string | yes | no | — | — |
+| `preview.receipts[].quantity` | string | yes | no | — | — |
 | `preview.vendor` | object | yes | no | — | — |
 | `preview.vendor.id` | string | yes | no | — | — |
 | `preview.vendor.name` | string | yes | no | — | — |
@@ -437,11 +783,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_by` | string | yes | no | — | — |
 | `history` | array[object] | yes | no | — | — |
 | `history[].version` | integer | yes | no | — | — |
-| `history[].state` | literal["draft", "cancelled"] | yes | no | — | — |
+| `history[].state` | literal["draft", "pending", "approved", "rejected", "committed", "cancelled"] | yes | no | — | — |
 | `history[].payload` | object | yes | no | — | — |
+| `history[].payload.number` | string \| null | no | yes | null | — |
+| `history[].payload.ap_account` | string \| null | no | yes | null | — |
+| `history[].payload.terms` | string \| null | no | yes | null | — |
+| `history[].payload.due_date` | string \| null | no | yes | null | — |
+| `history[].payload.supplier_reference` | string \| null | no | yes | null | — |
+| `history[].payload.memo` | string \| null | no | yes | null | — |
+| `history[].payload.class_id` | string \| null | no | yes | null | — |
+| `history[].payload.site` | string \| null | no | yes | null | Inventory site the stocked item lines are received at where a line names none; omitted, the default site. |
+| `history[].payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
+| `history[].payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
+| `history[].payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `history[].payload.date` | string | yes | no | — | — |
-| `history[].payload.vendor` | string | yes | no | — | — |
-| `history[].payload.expenses` | array[object] | yes | no | — | — |
+| `history[].payload.vendor` | string \| null | no | yes | null | — |
+| `history[].payload.expenses` | array[object] \| null | no | yes | null | — |
 | `history[].payload.expenses[].line_id` | string \| null | no | yes | null | — |
 | `history[].payload.expenses[].account` | string | yes | no | — | — |
 | `history[].payload.expenses[].amount` | string \| object | yes | no | — | — |
@@ -450,13 +807,34 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].payload.expenses[].billable` | boolean | no | no | false | — |
 | `history[].payload.expenses[].class_id` | string \| null | no | yes | null | — |
 | `history[].payload.expenses[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
-| `history[].payload.number` | string \| null | no | yes | null | — |
-| `history[].payload.ap_account` | string \| null | no | yes | null | — |
-| `history[].payload.terms` | string \| null | no | yes | null | — |
-| `history[].payload.due_date` | string \| null | no | yes | null | — |
-| `history[].payload.supplier_reference` | string \| null | no | yes | null | — |
-| `history[].payload.memo` | string \| null | no | yes | null | — |
-| `history[].payload.class_id` | string \| null | no | yes | null | — |
+| `history[].payload.items` | array[object] \| null | no | yes | null | — |
+| `history[].payload.items[].line_id` | string \| null | no | yes | null | — |
+| `history[].payload.items[].item` | string | yes | no | — | — |
+| `history[].payload.items[].description` | string \| null | no | yes | null | — |
+| `history[].payload.items[].quantity` | string | no | no | "1" | — |
+| `history[].payload.items[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `history[].payload.items[].amount` | string \| object \| null | no | yes | null | — |
+| `history[].payload.items[].customer` | string \| null | no | yes | null | — |
+| `history[].payload.items[].billable` | boolean | no | no | false | — |
+| `history[].payload.items[].class_id` | string \| null | no | yes | null | — |
+| `history[].payload.items[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `history[].payload.items[].site` | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
+| `history[].payload.items[].bin` | string \| null | no | yes | null | Bin at the line's site (id, full name A:3 or label code); "(no bin)" is outside every bin. Omitted: the bin the stock stood in, else the item's default bin. |
+| `history[].payload.items[].lot` | string \| null | no | yes | null | Lot an incoming line receives into (made when new) or an outgoing line takes from; omitted, outgoing units leave unassigned. |
+| `history[].payload.items[].lot_expiry` | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
+| `history[].payload.items[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers, one per unit, up to the quantity; unnumbered units stay unassigned. Never invent one. Omitted on a correction, the line keeps its numbers. |
+| `history[].payload.purchase_order` | string \| null | no | yes | null | — |
+| `history[].payload.order_lines` | array[object] \| null | no | yes | null | — |
+| `history[].payload.order_lines[].line` | string | yes | no | — | — |
+| `history[].payload.order_lines[].quantity` | string \| null | no | yes | null | — |
+| `history[].payload.order_lines[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `history[].payload.order_lines[].amount` | string \| object \| null | no | yes | null | — |
+| `history[].payload.receipts` | array[object] \| null | no | yes | null | — |
+| `history[].payload.receipts[].receipt_line` | string | yes | no | — | — |
+| `history[].payload.receipts[].expected_receipt_version` | integer | yes | no | — | — |
+| `history[].payload.receipts[].quantity` | string | yes | no | — | — |
+| `history[].payload.receipts[].unit_cost` | string \| object \| null | no | yes | null | Product unit cost only, excluding retained receipt shipping. |
+| `history[].payload.receipts[].amount` | string \| object \| null | no | yes | null | Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value. |
 | `history[].preview` | object | yes | no | — | — |
 | `history[].preview.total` | object | yes | no | — | — |
 | `history[].preview.total.amount` | string | yes | no | — | — |
@@ -478,6 +856,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `history[].preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `history[].preview.expenses[].billable` | boolean | yes | no | — | — |
+| `history[].preview.items` | array[object] | no | no | [] | — |
+| `history[].preview.items[].item` | object | yes | no | — | — |
+| `history[].preview.items[].item.id` | string | yes | no | — | — |
+| `history[].preview.items[].item.name` | string | yes | no | — | — |
+| `history[].preview.items[].description` | string \| null | yes | yes | — | — |
+| `history[].preview.items[].quantity` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `history[].preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `history[].preview.items[].amount` | object | yes | no | — | — |
+| `history[].preview.items[].amount.amount` | string | yes | no | — | — |
+| `history[].preview.items[].amount.currency` | string | yes | no | — | — |
+| `history[].preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `history[].preview.purchase_order` | object \| null | no | yes | null | — |
+| `history[].preview.purchase_order.id` | string | yes | no | — | — |
+| `history[].preview.purchase_order.name` | string | yes | no | — | — |
+| `history[].preview.receipts` | array[object] | no | no | [] | — |
+| `history[].preview.receipts[].id` | string | yes | no | — | — |
+| `history[].preview.receipts[].number` | string | yes | no | — | — |
+| `history[].preview.receipts[].quantity` | string | yes | no | — | — |
 | `history[].preview.vendor` | object | yes | no | — | — |
 | `history[].preview.vendor.id` | string | yes | no | — | — |
 | `history[].preview.vendor.name` | string | yes | no | — | — |
@@ -503,28 +902,27 @@ Example JSON output:
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "kind": "bill",
   "operation": "create",
+  "original_id": null,
+  "original_version": null,
   "payload": {
     "ap_account": null,
     "class_id": null,
+    "count_position": null,
+    "custom_field_kinds": {},
+    "custom_fields": {},
     "date": "2026-01-01",
     "due_date": null,
-    "expenses": [
-      {
-        "account": "Professional Fees",
-        "amount": "80.00",
-        "billable": false,
-        "class_id": null,
-        "class_mode": "inherit",
-        "customer": null,
-        "line_id": null,
-        "memo": null
-      }
-    ],
+    "expenses": null,
+    "items": null,
     "memo": null,
     "number": null,
+    "order_lines": null,
+    "purchase_order": null,
+    "receipts": null,
+    "site": null,
     "supplier_reference": null,
     "terms": null,
-    "vendor": "value"
+    "vendor": null
   },
   "preview": {
     "accounting_effect": "none",
@@ -535,6 +933,9 @@ Example JSON output:
     "currency": "USD",
     "due_date": "2026-01-01",
     "expenses": [],
+    "items": [],
+    "purchase_order": null,
+    "receipts": [],
     "total": {
       "amount": "value",
       "currency": "USD",
@@ -545,6 +946,9 @@ Example JSON output:
       "name": "value"
     }
   },
+  "request_id": null,
+  "request_version": null,
+  "snapshot": null,
   "state": "draft",
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
@@ -591,7 +995,7 @@ Example JSON output:
 
 ## `purchase-draft list`
 
-List saved bill drafts in stable ID order, optionally by draft or cancelled state. Continue with next_cursor; a cursor belongs to its state filter. These records never appear in AP aging or posted bill lists.
+List saved bill drafts in stable ID order, optionally by lifecycle state. Continue with next_cursor; a cursor belongs to its state filter. These records never appear in AP aging or posted bill lists.
 
 | Contract | Value |
 |---|---|
@@ -620,7 +1024,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `state` | `--state` | literal["draft", "cancelled"] \| null | no | yes | null | — |
+| `state` | `--state` | literal["draft", "pending", "approved", "rejected", "committed", "cancelled"] \| null | no | yes | null | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
 
@@ -651,15 +1055,31 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
 | `items` | array[object] | yes | no | — | — |
+| `items[].snapshot` | object[string, any] \| null | no | yes | null | — |
+| `items[].request_id` | string \| null | no | yes | null | — |
+| `items[].request_version` | integer \| null | no | yes | null | — |
 | `items[].id` | string | yes | no | — | — |
 | `items[].version` | integer | yes | no | — | — |
 | `items[].kind` | literal["bill"] | yes | no | — | — |
-| `items[].operation` | literal["create"] | yes | no | — | — |
-| `items[].state` | literal["draft", "cancelled"] | yes | no | — | — |
+| `items[].operation` | literal["create", "correct", "restore"] | yes | no | — | — |
+| `items[].original_id` | string \| null | no | yes | null | — |
+| `items[].original_version` | integer \| null | no | yes | null | — |
+| `items[].state` | literal["draft", "pending", "approved", "rejected", "committed", "cancelled"] | yes | no | — | — |
 | `items[].payload` | object | yes | no | — | — |
+| `items[].payload.number` | string \| null | no | yes | null | — |
+| `items[].payload.ap_account` | string \| null | no | yes | null | — |
+| `items[].payload.terms` | string \| null | no | yes | null | — |
+| `items[].payload.due_date` | string \| null | no | yes | null | — |
+| `items[].payload.supplier_reference` | string \| null | no | yes | null | — |
+| `items[].payload.memo` | string \| null | no | yes | null | — |
+| `items[].payload.class_id` | string \| null | no | yes | null | — |
+| `items[].payload.site` | string \| null | no | yes | null | Inventory site the stocked item lines are received at where a line names none; omitted, the default site. |
+| `items[].payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
+| `items[].payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
+| `items[].payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `items[].payload.date` | string | yes | no | — | — |
-| `items[].payload.vendor` | string | yes | no | — | — |
-| `items[].payload.expenses` | array[object] | yes | no | — | — |
+| `items[].payload.vendor` | string \| null | no | yes | null | — |
+| `items[].payload.expenses` | array[object] \| null | no | yes | null | — |
 | `items[].payload.expenses[].line_id` | string \| null | no | yes | null | — |
 | `items[].payload.expenses[].account` | string | yes | no | — | — |
 | `items[].payload.expenses[].amount` | string \| object | yes | no | — | — |
@@ -668,13 +1088,34 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].payload.expenses[].billable` | boolean | no | no | false | — |
 | `items[].payload.expenses[].class_id` | string \| null | no | yes | null | — |
 | `items[].payload.expenses[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
-| `items[].payload.number` | string \| null | no | yes | null | — |
-| `items[].payload.ap_account` | string \| null | no | yes | null | — |
-| `items[].payload.terms` | string \| null | no | yes | null | — |
-| `items[].payload.due_date` | string \| null | no | yes | null | — |
-| `items[].payload.supplier_reference` | string \| null | no | yes | null | — |
-| `items[].payload.memo` | string \| null | no | yes | null | — |
-| `items[].payload.class_id` | string \| null | no | yes | null | — |
+| `items[].payload.items` | array[object] \| null | no | yes | null | — |
+| `items[].payload.items[].line_id` | string \| null | no | yes | null | — |
+| `items[].payload.items[].item` | string | yes | no | — | — |
+| `items[].payload.items[].description` | string \| null | no | yes | null | — |
+| `items[].payload.items[].quantity` | string | no | no | "1" | — |
+| `items[].payload.items[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `items[].payload.items[].amount` | string \| object \| null | no | yes | null | — |
+| `items[].payload.items[].customer` | string \| null | no | yes | null | — |
+| `items[].payload.items[].billable` | boolean | no | no | false | — |
+| `items[].payload.items[].class_id` | string \| null | no | yes | null | — |
+| `items[].payload.items[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `items[].payload.items[].site` | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
+| `items[].payload.items[].bin` | string \| null | no | yes | null | Bin at the line's site (id, full name A:3 or label code); "(no bin)" is outside every bin. Omitted: the bin the stock stood in, else the item's default bin. |
+| `items[].payload.items[].lot` | string \| null | no | yes | null | Lot an incoming line receives into (made when new) or an outgoing line takes from; omitted, outgoing units leave unassigned. |
+| `items[].payload.items[].lot_expiry` | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
+| `items[].payload.items[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers, one per unit, up to the quantity; unnumbered units stay unassigned. Never invent one. Omitted on a correction, the line keeps its numbers. |
+| `items[].payload.purchase_order` | string \| null | no | yes | null | — |
+| `items[].payload.order_lines` | array[object] \| null | no | yes | null | — |
+| `items[].payload.order_lines[].line` | string | yes | no | — | — |
+| `items[].payload.order_lines[].quantity` | string \| null | no | yes | null | — |
+| `items[].payload.order_lines[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `items[].payload.order_lines[].amount` | string \| object \| null | no | yes | null | — |
+| `items[].payload.receipts` | array[object] \| null | no | yes | null | — |
+| `items[].payload.receipts[].receipt_line` | string | yes | no | — | — |
+| `items[].payload.receipts[].expected_receipt_version` | integer | yes | no | — | — |
+| `items[].payload.receipts[].quantity` | string | yes | no | — | — |
+| `items[].payload.receipts[].unit_cost` | string \| object \| null | no | yes | null | Product unit cost only, excluding retained receipt shipping. |
+| `items[].payload.receipts[].amount` | string \| object \| null | no | yes | null | Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value. |
 | `items[].preview` | object | yes | no | — | — |
 | `items[].preview.total` | object | yes | no | — | — |
 | `items[].preview.total.amount` | string | yes | no | — | — |
@@ -696,6 +1137,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `items[].preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `items[].preview.expenses[].billable` | boolean | yes | no | — | — |
+| `items[].preview.items` | array[object] | no | no | [] | — |
+| `items[].preview.items[].item` | object | yes | no | — | — |
+| `items[].preview.items[].item.id` | string | yes | no | — | — |
+| `items[].preview.items[].item.name` | string | yes | no | — | — |
+| `items[].preview.items[].description` | string \| null | yes | yes | — | — |
+| `items[].preview.items[].quantity` | string | yes | no | — | — |
+| `items[].preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `items[].preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `items[].preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `items[].preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `items[].preview.items[].amount` | object | yes | no | — | — |
+| `items[].preview.items[].amount.amount` | string | yes | no | — | — |
+| `items[].preview.items[].amount.currency` | string | yes | no | — | — |
+| `items[].preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `items[].preview.purchase_order` | object \| null | no | yes | null | — |
+| `items[].preview.purchase_order.id` | string | yes | no | — | — |
+| `items[].preview.purchase_order.name` | string | yes | no | — | — |
+| `items[].preview.receipts` | array[object] | no | no | [] | — |
+| `items[].preview.receipts[].id` | string | yes | no | — | — |
+| `items[].preview.receipts[].number` | string | yes | no | — | — |
+| `items[].preview.receipts[].quantity` | string | yes | no | — | — |
 | `items[].preview.vendor` | object | yes | no | — | — |
 | `items[].preview.vendor.id` | string | yes | no | — | — |
 | `items[].preview.vendor.name` | string | yes | no | — | — |
@@ -711,11 +1173,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].updated_by` | string | yes | no | — | — |
 | `items[].history` | array[object] | yes | no | — | — |
 | `items[].history[].version` | integer | yes | no | — | — |
-| `items[].history[].state` | literal["draft", "cancelled"] | yes | no | — | — |
+| `items[].history[].state` | literal["draft", "pending", "approved", "rejected", "committed", "cancelled"] | yes | no | — | — |
 | `items[].history[].payload` | object | yes | no | — | — |
+| `items[].history[].payload.number` | string \| null | no | yes | null | — |
+| `items[].history[].payload.ap_account` | string \| null | no | yes | null | — |
+| `items[].history[].payload.terms` | string \| null | no | yes | null | — |
+| `items[].history[].payload.due_date` | string \| null | no | yes | null | — |
+| `items[].history[].payload.supplier_reference` | string \| null | no | yes | null | — |
+| `items[].history[].payload.memo` | string \| null | no | yes | null | — |
+| `items[].history[].payload.class_id` | string \| null | no | yes | null | — |
+| `items[].history[].payload.site` | string \| null | no | yes | null | Inventory site the stocked item lines are received at where a line names none; omitted, the default site. |
+| `items[].history[].payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
+| `items[].history[].payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
+| `items[].history[].payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `items[].history[].payload.date` | string | yes | no | — | — |
-| `items[].history[].payload.vendor` | string | yes | no | — | — |
-| `items[].history[].payload.expenses` | array[object] | yes | no | — | — |
+| `items[].history[].payload.vendor` | string \| null | no | yes | null | — |
+| `items[].history[].payload.expenses` | array[object] \| null | no | yes | null | — |
 | `items[].history[].payload.expenses[].line_id` | string \| null | no | yes | null | — |
 | `items[].history[].payload.expenses[].account` | string | yes | no | — | — |
 | `items[].history[].payload.expenses[].amount` | string \| object | yes | no | — | — |
@@ -724,13 +1197,34 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].history[].payload.expenses[].billable` | boolean | no | no | false | — |
 | `items[].history[].payload.expenses[].class_id` | string \| null | no | yes | null | — |
 | `items[].history[].payload.expenses[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
-| `items[].history[].payload.number` | string \| null | no | yes | null | — |
-| `items[].history[].payload.ap_account` | string \| null | no | yes | null | — |
-| `items[].history[].payload.terms` | string \| null | no | yes | null | — |
-| `items[].history[].payload.due_date` | string \| null | no | yes | null | — |
-| `items[].history[].payload.supplier_reference` | string \| null | no | yes | null | — |
-| `items[].history[].payload.memo` | string \| null | no | yes | null | — |
-| `items[].history[].payload.class_id` | string \| null | no | yes | null | — |
+| `items[].history[].payload.items` | array[object] \| null | no | yes | null | — |
+| `items[].history[].payload.items[].line_id` | string \| null | no | yes | null | — |
+| `items[].history[].payload.items[].item` | string | yes | no | — | — |
+| `items[].history[].payload.items[].description` | string \| null | no | yes | null | — |
+| `items[].history[].payload.items[].quantity` | string | no | no | "1" | — |
+| `items[].history[].payload.items[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `items[].history[].payload.items[].amount` | string \| object \| null | no | yes | null | — |
+| `items[].history[].payload.items[].customer` | string \| null | no | yes | null | — |
+| `items[].history[].payload.items[].billable` | boolean | no | no | false | — |
+| `items[].history[].payload.items[].class_id` | string \| null | no | yes | null | — |
+| `items[].history[].payload.items[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `items[].history[].payload.items[].site` | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
+| `items[].history[].payload.items[].bin` | string \| null | no | yes | null | Bin at the line's site (id, full name A:3 or label code); "(no bin)" is outside every bin. Omitted: the bin the stock stood in, else the item's default bin. |
+| `items[].history[].payload.items[].lot` | string \| null | no | yes | null | Lot an incoming line receives into (made when new) or an outgoing line takes from; omitted, outgoing units leave unassigned. |
+| `items[].history[].payload.items[].lot_expiry` | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
+| `items[].history[].payload.items[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers, one per unit, up to the quantity; unnumbered units stay unassigned. Never invent one. Omitted on a correction, the line keeps its numbers. |
+| `items[].history[].payload.purchase_order` | string \| null | no | yes | null | — |
+| `items[].history[].payload.order_lines` | array[object] \| null | no | yes | null | — |
+| `items[].history[].payload.order_lines[].line` | string | yes | no | — | — |
+| `items[].history[].payload.order_lines[].quantity` | string \| null | no | yes | null | — |
+| `items[].history[].payload.order_lines[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `items[].history[].payload.order_lines[].amount` | string \| object \| null | no | yes | null | — |
+| `items[].history[].payload.receipts` | array[object] \| null | no | yes | null | — |
+| `items[].history[].payload.receipts[].receipt_line` | string | yes | no | — | — |
+| `items[].history[].payload.receipts[].expected_receipt_version` | integer | yes | no | — | — |
+| `items[].history[].payload.receipts[].quantity` | string | yes | no | — | — |
+| `items[].history[].payload.receipts[].unit_cost` | string \| object \| null | no | yes | null | Product unit cost only, excluding retained receipt shipping. |
+| `items[].history[].payload.receipts[].amount` | string \| object \| null | no | yes | null | Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value. |
 | `items[].history[].preview` | object | yes | no | — | — |
 | `items[].history[].preview.total` | object | yes | no | — | — |
 | `items[].history[].preview.total.amount` | string | yes | no | — | — |
@@ -752,6 +1246,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].history[].preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `items[].history[].preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `items[].history[].preview.expenses[].billable` | boolean | yes | no | — | — |
+| `items[].history[].preview.items` | array[object] | no | no | [] | — |
+| `items[].history[].preview.items[].item` | object | yes | no | — | — |
+| `items[].history[].preview.items[].item.id` | string | yes | no | — | — |
+| `items[].history[].preview.items[].item.name` | string | yes | no | — | — |
+| `items[].history[].preview.items[].description` | string \| null | yes | yes | — | — |
+| `items[].history[].preview.items[].quantity` | string | yes | no | — | — |
+| `items[].history[].preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `items[].history[].preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `items[].history[].preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `items[].history[].preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `items[].history[].preview.items[].amount` | object | yes | no | — | — |
+| `items[].history[].preview.items[].amount.amount` | string | yes | no | — | — |
+| `items[].history[].preview.items[].amount.currency` | string | yes | no | — | — |
+| `items[].history[].preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `items[].history[].preview.purchase_order` | object \| null | no | yes | null | — |
+| `items[].history[].preview.purchase_order.id` | string | yes | no | — | — |
+| `items[].history[].preview.purchase_order.name` | string | yes | no | — | — |
+| `items[].history[].preview.receipts` | array[object] | no | no | [] | — |
+| `items[].history[].preview.receipts[].id` | string | yes | no | — | — |
+| `items[].history[].preview.receipts[].number` | string | yes | no | — | — |
+| `items[].history[].preview.receipts[].quantity` | string | yes | no | — | — |
 | `items[].history[].preview.vendor` | object | yes | no | — | — |
 | `items[].history[].preview.vendor.id` | string | yes | no | — | — |
 | `items[].history[].preview.vendor.name` | string | yes | no | — | — |
@@ -866,15 +1381,31 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `snapshot` | object[string, any] \| null | no | yes | null | — |
+| `request_id` | string \| null | no | yes | null | — |
+| `request_version` | integer \| null | no | yes | null | — |
 | `id` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
 | `kind` | literal["bill"] | yes | no | — | — |
-| `operation` | literal["create"] | yes | no | — | — |
-| `state` | literal["draft", "cancelled"] | yes | no | — | — |
+| `operation` | literal["create", "correct", "restore"] | yes | no | — | — |
+| `original_id` | string \| null | no | yes | null | — |
+| `original_version` | integer \| null | no | yes | null | — |
+| `state` | literal["draft", "pending", "approved", "rejected", "committed", "cancelled"] | yes | no | — | — |
 | `payload` | object | yes | no | — | — |
+| `payload.number` | string \| null | no | yes | null | — |
+| `payload.ap_account` | string \| null | no | yes | null | — |
+| `payload.terms` | string \| null | no | yes | null | — |
+| `payload.due_date` | string \| null | no | yes | null | — |
+| `payload.supplier_reference` | string \| null | no | yes | null | — |
+| `payload.memo` | string \| null | no | yes | null | — |
+| `payload.class_id` | string \| null | no | yes | null | — |
+| `payload.site` | string \| null | no | yes | null | Inventory site the stocked item lines are received at where a line names none; omitted, the default site. |
+| `payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
+| `payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
+| `payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `payload.date` | string | yes | no | — | — |
-| `payload.vendor` | string | yes | no | — | — |
-| `payload.expenses` | array[object] | yes | no | — | — |
+| `payload.vendor` | string \| null | no | yes | null | — |
+| `payload.expenses` | array[object] \| null | no | yes | null | — |
 | `payload.expenses[].line_id` | string \| null | no | yes | null | — |
 | `payload.expenses[].account` | string | yes | no | — | — |
 | `payload.expenses[].amount` | string \| object | yes | no | — | — |
@@ -883,13 +1414,34 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `payload.expenses[].billable` | boolean | no | no | false | — |
 | `payload.expenses[].class_id` | string \| null | no | yes | null | — |
 | `payload.expenses[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
-| `payload.number` | string \| null | no | yes | null | — |
-| `payload.ap_account` | string \| null | no | yes | null | — |
-| `payload.terms` | string \| null | no | yes | null | — |
-| `payload.due_date` | string \| null | no | yes | null | — |
-| `payload.supplier_reference` | string \| null | no | yes | null | — |
-| `payload.memo` | string \| null | no | yes | null | — |
-| `payload.class_id` | string \| null | no | yes | null | — |
+| `payload.items` | array[object] \| null | no | yes | null | — |
+| `payload.items[].line_id` | string \| null | no | yes | null | — |
+| `payload.items[].item` | string | yes | no | — | — |
+| `payload.items[].description` | string \| null | no | yes | null | — |
+| `payload.items[].quantity` | string | no | no | "1" | — |
+| `payload.items[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `payload.items[].amount` | string \| object \| null | no | yes | null | — |
+| `payload.items[].customer` | string \| null | no | yes | null | — |
+| `payload.items[].billable` | boolean | no | no | false | — |
+| `payload.items[].class_id` | string \| null | no | yes | null | — |
+| `payload.items[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `payload.items[].site` | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
+| `payload.items[].bin` | string \| null | no | yes | null | Bin at the line's site (id, full name A:3 or label code); "(no bin)" is outside every bin. Omitted: the bin the stock stood in, else the item's default bin. |
+| `payload.items[].lot` | string \| null | no | yes | null | Lot an incoming line receives into (made when new) or an outgoing line takes from; omitted, outgoing units leave unassigned. |
+| `payload.items[].lot_expiry` | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
+| `payload.items[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers, one per unit, up to the quantity; unnumbered units stay unassigned. Never invent one. Omitted on a correction, the line keeps its numbers. |
+| `payload.purchase_order` | string \| null | no | yes | null | — |
+| `payload.order_lines` | array[object] \| null | no | yes | null | — |
+| `payload.order_lines[].line` | string | yes | no | — | — |
+| `payload.order_lines[].quantity` | string \| null | no | yes | null | — |
+| `payload.order_lines[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `payload.order_lines[].amount` | string \| object \| null | no | yes | null | — |
+| `payload.receipts` | array[object] \| null | no | yes | null | — |
+| `payload.receipts[].receipt_line` | string | yes | no | — | — |
+| `payload.receipts[].expected_receipt_version` | integer | yes | no | — | — |
+| `payload.receipts[].quantity` | string | yes | no | — | — |
+| `payload.receipts[].unit_cost` | string \| object \| null | no | yes | null | Product unit cost only, excluding retained receipt shipping. |
+| `payload.receipts[].amount` | string \| object \| null | no | yes | null | Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value. |
 | `preview` | object | yes | no | — | — |
 | `preview.total` | object | yes | no | — | — |
 | `preview.total.amount` | string | yes | no | — | — |
@@ -911,6 +1463,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `preview.expenses[].billable` | boolean | yes | no | — | — |
+| `preview.items` | array[object] | no | no | [] | — |
+| `preview.items[].item` | object | yes | no | — | — |
+| `preview.items[].item.id` | string | yes | no | — | — |
+| `preview.items[].item.name` | string | yes | no | — | — |
+| `preview.items[].description` | string \| null | yes | yes | — | — |
+| `preview.items[].quantity` | string | yes | no | — | — |
+| `preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `preview.items[].amount` | object | yes | no | — | — |
+| `preview.items[].amount.amount` | string | yes | no | — | — |
+| `preview.items[].amount.currency` | string | yes | no | — | — |
+| `preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `preview.purchase_order` | object \| null | no | yes | null | — |
+| `preview.purchase_order.id` | string | yes | no | — | — |
+| `preview.purchase_order.name` | string | yes | no | — | — |
+| `preview.receipts` | array[object] | no | no | [] | — |
+| `preview.receipts[].id` | string | yes | no | — | — |
+| `preview.receipts[].number` | string | yes | no | — | — |
+| `preview.receipts[].quantity` | string | yes | no | — | — |
 | `preview.vendor` | object | yes | no | — | — |
 | `preview.vendor.id` | string | yes | no | — | — |
 | `preview.vendor.name` | string | yes | no | — | — |
@@ -926,11 +1499,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_by` | string | yes | no | — | — |
 | `history` | array[object] | yes | no | — | — |
 | `history[].version` | integer | yes | no | — | — |
-| `history[].state` | literal["draft", "cancelled"] | yes | no | — | — |
+| `history[].state` | literal["draft", "pending", "approved", "rejected", "committed", "cancelled"] | yes | no | — | — |
 | `history[].payload` | object | yes | no | — | — |
+| `history[].payload.number` | string \| null | no | yes | null | — |
+| `history[].payload.ap_account` | string \| null | no | yes | null | — |
+| `history[].payload.terms` | string \| null | no | yes | null | — |
+| `history[].payload.due_date` | string \| null | no | yes | null | — |
+| `history[].payload.supplier_reference` | string \| null | no | yes | null | — |
+| `history[].payload.memo` | string \| null | no | yes | null | — |
+| `history[].payload.class_id` | string \| null | no | yes | null | — |
+| `history[].payload.site` | string \| null | no | yes | null | Inventory site the stocked item lines are received at where a line names none; omitted, the default site. |
+| `history[].payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
+| `history[].payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
+| `history[].payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `history[].payload.date` | string | yes | no | — | — |
-| `history[].payload.vendor` | string | yes | no | — | — |
-| `history[].payload.expenses` | array[object] | yes | no | — | — |
+| `history[].payload.vendor` | string \| null | no | yes | null | — |
+| `history[].payload.expenses` | array[object] \| null | no | yes | null | — |
 | `history[].payload.expenses[].line_id` | string \| null | no | yes | null | — |
 | `history[].payload.expenses[].account` | string | yes | no | — | — |
 | `history[].payload.expenses[].amount` | string \| object | yes | no | — | — |
@@ -939,13 +1523,34 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].payload.expenses[].billable` | boolean | no | no | false | — |
 | `history[].payload.expenses[].class_id` | string \| null | no | yes | null | — |
 | `history[].payload.expenses[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
-| `history[].payload.number` | string \| null | no | yes | null | — |
-| `history[].payload.ap_account` | string \| null | no | yes | null | — |
-| `history[].payload.terms` | string \| null | no | yes | null | — |
-| `history[].payload.due_date` | string \| null | no | yes | null | — |
-| `history[].payload.supplier_reference` | string \| null | no | yes | null | — |
-| `history[].payload.memo` | string \| null | no | yes | null | — |
-| `history[].payload.class_id` | string \| null | no | yes | null | — |
+| `history[].payload.items` | array[object] \| null | no | yes | null | — |
+| `history[].payload.items[].line_id` | string \| null | no | yes | null | — |
+| `history[].payload.items[].item` | string | yes | no | — | — |
+| `history[].payload.items[].description` | string \| null | no | yes | null | — |
+| `history[].payload.items[].quantity` | string | no | no | "1" | — |
+| `history[].payload.items[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `history[].payload.items[].amount` | string \| object \| null | no | yes | null | — |
+| `history[].payload.items[].customer` | string \| null | no | yes | null | — |
+| `history[].payload.items[].billable` | boolean | no | no | false | — |
+| `history[].payload.items[].class_id` | string \| null | no | yes | null | — |
+| `history[].payload.items[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `history[].payload.items[].site` | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
+| `history[].payload.items[].bin` | string \| null | no | yes | null | Bin at the line's site (id, full name A:3 or label code); "(no bin)" is outside every bin. Omitted: the bin the stock stood in, else the item's default bin. |
+| `history[].payload.items[].lot` | string \| null | no | yes | null | Lot an incoming line receives into (made when new) or an outgoing line takes from; omitted, outgoing units leave unassigned. |
+| `history[].payload.items[].lot_expiry` | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
+| `history[].payload.items[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers, one per unit, up to the quantity; unnumbered units stay unassigned. Never invent one. Omitted on a correction, the line keeps its numbers. |
+| `history[].payload.purchase_order` | string \| null | no | yes | null | — |
+| `history[].payload.order_lines` | array[object] \| null | no | yes | null | — |
+| `history[].payload.order_lines[].line` | string | yes | no | — | — |
+| `history[].payload.order_lines[].quantity` | string \| null | no | yes | null | — |
+| `history[].payload.order_lines[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `history[].payload.order_lines[].amount` | string \| object \| null | no | yes | null | — |
+| `history[].payload.receipts` | array[object] \| null | no | yes | null | — |
+| `history[].payload.receipts[].receipt_line` | string | yes | no | — | — |
+| `history[].payload.receipts[].expected_receipt_version` | integer | yes | no | — | — |
+| `history[].payload.receipts[].quantity` | string | yes | no | — | — |
+| `history[].payload.receipts[].unit_cost` | string \| object \| null | no | yes | null | Product unit cost only, excluding retained receipt shipping. |
+| `history[].payload.receipts[].amount` | string \| object \| null | no | yes | null | Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value. |
 | `history[].preview` | object | yes | no | — | — |
 | `history[].preview.total` | object | yes | no | — | — |
 | `history[].preview.total.amount` | string | yes | no | — | — |
@@ -967,6 +1572,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `history[].preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `history[].preview.expenses[].billable` | boolean | yes | no | — | — |
+| `history[].preview.items` | array[object] | no | no | [] | — |
+| `history[].preview.items[].item` | object | yes | no | — | — |
+| `history[].preview.items[].item.id` | string | yes | no | — | — |
+| `history[].preview.items[].item.name` | string | yes | no | — | — |
+| `history[].preview.items[].description` | string \| null | yes | yes | — | — |
+| `history[].preview.items[].quantity` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `history[].preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `history[].preview.items[].amount` | object | yes | no | — | — |
+| `history[].preview.items[].amount.amount` | string | yes | no | — | — |
+| `history[].preview.items[].amount.currency` | string | yes | no | — | — |
+| `history[].preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `history[].preview.purchase_order` | object \| null | no | yes | null | — |
+| `history[].preview.purchase_order.id` | string | yes | no | — | — |
+| `history[].preview.purchase_order.name` | string | yes | no | — | — |
+| `history[].preview.receipts` | array[object] | no | no | [] | — |
+| `history[].preview.receipts[].id` | string | yes | no | — | — |
+| `history[].preview.receipts[].number` | string | yes | no | — | — |
+| `history[].preview.receipts[].quantity` | string | yes | no | — | — |
 | `history[].preview.vendor` | object | yes | no | — | — |
 | `history[].preview.vendor.id` | string | yes | no | — | — |
 | `history[].preview.vendor.name` | string | yes | no | — | — |
@@ -992,28 +1618,27 @@ Example JSON output:
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "kind": "bill",
   "operation": "create",
+  "original_id": null,
+  "original_version": null,
   "payload": {
     "ap_account": null,
     "class_id": null,
+    "count_position": null,
+    "custom_field_kinds": {},
+    "custom_fields": {},
     "date": "2026-01-01",
     "due_date": null,
-    "expenses": [
-      {
-        "account": "Professional Fees",
-        "amount": "80.00",
-        "billable": false,
-        "class_id": null,
-        "class_mode": "inherit",
-        "customer": null,
-        "line_id": null,
-        "memo": null
-      }
-    ],
+    "expenses": null,
+    "items": null,
     "memo": null,
     "number": null,
+    "order_lines": null,
+    "purchase_order": null,
+    "receipts": null,
+    "site": null,
     "supplier_reference": null,
     "terms": null,
-    "vendor": "value"
+    "vendor": null
   },
   "preview": {
     "accounting_effect": "none",
@@ -1024,6 +1649,9 @@ Example JSON output:
     "currency": "USD",
     "due_date": "2026-01-01",
     "expenses": [],
+    "items": [],
+    "purchase_order": null,
+    "receipts": [],
     "total": {
       "amount": "value",
       "currency": "USD",
@@ -1034,6 +1662,9 @@ Example JSON output:
       "name": "value"
     }
   },
+  "request_id": null,
+  "request_version": null,
+  "snapshot": null,
   "state": "draft",
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
@@ -1130,15 +1761,31 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `snapshot` | object[string, any] \| null | no | yes | null | — |
+| `request_id` | string \| null | no | yes | null | — |
+| `request_version` | integer \| null | no | yes | null | — |
 | `id` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
 | `kind` | literal["bill"] | yes | no | — | — |
-| `operation` | literal["create"] | yes | no | — | — |
-| `state` | literal["draft", "cancelled"] | yes | no | — | — |
+| `operation` | literal["create", "correct", "restore"] | yes | no | — | — |
+| `original_id` | string \| null | no | yes | null | — |
+| `original_version` | integer \| null | no | yes | null | — |
+| `state` | literal["draft", "pending", "approved", "rejected", "committed", "cancelled"] | yes | no | — | — |
 | `payload` | object | yes | no | — | — |
+| `payload.number` | string \| null | no | yes | null | — |
+| `payload.ap_account` | string \| null | no | yes | null | — |
+| `payload.terms` | string \| null | no | yes | null | — |
+| `payload.due_date` | string \| null | no | yes | null | — |
+| `payload.supplier_reference` | string \| null | no | yes | null | — |
+| `payload.memo` | string \| null | no | yes | null | — |
+| `payload.class_id` | string \| null | no | yes | null | — |
+| `payload.site` | string \| null | no | yes | null | Inventory site the stocked item lines are received at where a line names none; omitted, the default site. |
+| `payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
+| `payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
+| `payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `payload.date` | string | yes | no | — | — |
-| `payload.vendor` | string | yes | no | — | — |
-| `payload.expenses` | array[object] | yes | no | — | — |
+| `payload.vendor` | string \| null | no | yes | null | — |
+| `payload.expenses` | array[object] \| null | no | yes | null | — |
 | `payload.expenses[].line_id` | string \| null | no | yes | null | — |
 | `payload.expenses[].account` | string | yes | no | — | — |
 | `payload.expenses[].amount` | string \| object | yes | no | — | — |
@@ -1147,13 +1794,34 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `payload.expenses[].billable` | boolean | no | no | false | — |
 | `payload.expenses[].class_id` | string \| null | no | yes | null | — |
 | `payload.expenses[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
-| `payload.number` | string \| null | no | yes | null | — |
-| `payload.ap_account` | string \| null | no | yes | null | — |
-| `payload.terms` | string \| null | no | yes | null | — |
-| `payload.due_date` | string \| null | no | yes | null | — |
-| `payload.supplier_reference` | string \| null | no | yes | null | — |
-| `payload.memo` | string \| null | no | yes | null | — |
-| `payload.class_id` | string \| null | no | yes | null | — |
+| `payload.items` | array[object] \| null | no | yes | null | — |
+| `payload.items[].line_id` | string \| null | no | yes | null | — |
+| `payload.items[].item` | string | yes | no | — | — |
+| `payload.items[].description` | string \| null | no | yes | null | — |
+| `payload.items[].quantity` | string | no | no | "1" | — |
+| `payload.items[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `payload.items[].amount` | string \| object \| null | no | yes | null | — |
+| `payload.items[].customer` | string \| null | no | yes | null | — |
+| `payload.items[].billable` | boolean | no | no | false | — |
+| `payload.items[].class_id` | string \| null | no | yes | null | — |
+| `payload.items[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `payload.items[].site` | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
+| `payload.items[].bin` | string \| null | no | yes | null | Bin at the line's site (id, full name A:3 or label code); "(no bin)" is outside every bin. Omitted: the bin the stock stood in, else the item's default bin. |
+| `payload.items[].lot` | string \| null | no | yes | null | Lot an incoming line receives into (made when new) or an outgoing line takes from; omitted, outgoing units leave unassigned. |
+| `payload.items[].lot_expiry` | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
+| `payload.items[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers, one per unit, up to the quantity; unnumbered units stay unassigned. Never invent one. Omitted on a correction, the line keeps its numbers. |
+| `payload.purchase_order` | string \| null | no | yes | null | — |
+| `payload.order_lines` | array[object] \| null | no | yes | null | — |
+| `payload.order_lines[].line` | string | yes | no | — | — |
+| `payload.order_lines[].quantity` | string \| null | no | yes | null | — |
+| `payload.order_lines[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `payload.order_lines[].amount` | string \| object \| null | no | yes | null | — |
+| `payload.receipts` | array[object] \| null | no | yes | null | — |
+| `payload.receipts[].receipt_line` | string | yes | no | — | — |
+| `payload.receipts[].expected_receipt_version` | integer | yes | no | — | — |
+| `payload.receipts[].quantity` | string | yes | no | — | — |
+| `payload.receipts[].unit_cost` | string \| object \| null | no | yes | null | Product unit cost only, excluding retained receipt shipping. |
+| `payload.receipts[].amount` | string \| object \| null | no | yes | null | Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value. |
 | `preview` | object | yes | no | — | — |
 | `preview.total` | object | yes | no | — | — |
 | `preview.total.amount` | string | yes | no | — | — |
@@ -1175,6 +1843,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `preview.expenses[].billable` | boolean | yes | no | — | — |
+| `preview.items` | array[object] | no | no | [] | — |
+| `preview.items[].item` | object | yes | no | — | — |
+| `preview.items[].item.id` | string | yes | no | — | — |
+| `preview.items[].item.name` | string | yes | no | — | — |
+| `preview.items[].description` | string \| null | yes | yes | — | — |
+| `preview.items[].quantity` | string | yes | no | — | — |
+| `preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `preview.items[].amount` | object | yes | no | — | — |
+| `preview.items[].amount.amount` | string | yes | no | — | — |
+| `preview.items[].amount.currency` | string | yes | no | — | — |
+| `preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `preview.purchase_order` | object \| null | no | yes | null | — |
+| `preview.purchase_order.id` | string | yes | no | — | — |
+| `preview.purchase_order.name` | string | yes | no | — | — |
+| `preview.receipts` | array[object] | no | no | [] | — |
+| `preview.receipts[].id` | string | yes | no | — | — |
+| `preview.receipts[].number` | string | yes | no | — | — |
+| `preview.receipts[].quantity` | string | yes | no | — | — |
 | `preview.vendor` | object | yes | no | — | — |
 | `preview.vendor.id` | string | yes | no | — | — |
 | `preview.vendor.name` | string | yes | no | — | — |
@@ -1190,11 +1879,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_by` | string | yes | no | — | — |
 | `history` | array[object] | yes | no | — | — |
 | `history[].version` | integer | yes | no | — | — |
-| `history[].state` | literal["draft", "cancelled"] | yes | no | — | — |
+| `history[].state` | literal["draft", "pending", "approved", "rejected", "committed", "cancelled"] | yes | no | — | — |
 | `history[].payload` | object | yes | no | — | — |
+| `history[].payload.number` | string \| null | no | yes | null | — |
+| `history[].payload.ap_account` | string \| null | no | yes | null | — |
+| `history[].payload.terms` | string \| null | no | yes | null | — |
+| `history[].payload.due_date` | string \| null | no | yes | null | — |
+| `history[].payload.supplier_reference` | string \| null | no | yes | null | — |
+| `history[].payload.memo` | string \| null | no | yes | null | — |
+| `history[].payload.class_id` | string \| null | no | yes | null | — |
+| `history[].payload.site` | string \| null | no | yes | null | Inventory site the stocked item lines are received at where a line names none; omitted, the default site. |
+| `history[].payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
+| `history[].payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
+| `history[].payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `history[].payload.date` | string | yes | no | — | — |
-| `history[].payload.vendor` | string | yes | no | — | — |
-| `history[].payload.expenses` | array[object] | yes | no | — | — |
+| `history[].payload.vendor` | string \| null | no | yes | null | — |
+| `history[].payload.expenses` | array[object] \| null | no | yes | null | — |
 | `history[].payload.expenses[].line_id` | string \| null | no | yes | null | — |
 | `history[].payload.expenses[].account` | string | yes | no | — | — |
 | `history[].payload.expenses[].amount` | string \| object | yes | no | — | — |
@@ -1203,13 +1903,34 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].payload.expenses[].billable` | boolean | no | no | false | — |
 | `history[].payload.expenses[].class_id` | string \| null | no | yes | null | — |
 | `history[].payload.expenses[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
-| `history[].payload.number` | string \| null | no | yes | null | — |
-| `history[].payload.ap_account` | string \| null | no | yes | null | — |
-| `history[].payload.terms` | string \| null | no | yes | null | — |
-| `history[].payload.due_date` | string \| null | no | yes | null | — |
-| `history[].payload.supplier_reference` | string \| null | no | yes | null | — |
-| `history[].payload.memo` | string \| null | no | yes | null | — |
-| `history[].payload.class_id` | string \| null | no | yes | null | — |
+| `history[].payload.items` | array[object] \| null | no | yes | null | — |
+| `history[].payload.items[].line_id` | string \| null | no | yes | null | — |
+| `history[].payload.items[].item` | string | yes | no | — | — |
+| `history[].payload.items[].description` | string \| null | no | yes | null | — |
+| `history[].payload.items[].quantity` | string | no | no | "1" | — |
+| `history[].payload.items[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `history[].payload.items[].amount` | string \| object \| null | no | yes | null | — |
+| `history[].payload.items[].customer` | string \| null | no | yes | null | — |
+| `history[].payload.items[].billable` | boolean | no | no | false | — |
+| `history[].payload.items[].class_id` | string \| null | no | yes | null | — |
+| `history[].payload.items[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `history[].payload.items[].site` | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
+| `history[].payload.items[].bin` | string \| null | no | yes | null | Bin at the line's site (id, full name A:3 or label code); "(no bin)" is outside every bin. Omitted: the bin the stock stood in, else the item's default bin. |
+| `history[].payload.items[].lot` | string \| null | no | yes | null | Lot an incoming line receives into (made when new) or an outgoing line takes from; omitted, outgoing units leave unassigned. |
+| `history[].payload.items[].lot_expiry` | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
+| `history[].payload.items[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers, one per unit, up to the quantity; unnumbered units stay unassigned. Never invent one. Omitted on a correction, the line keeps its numbers. |
+| `history[].payload.purchase_order` | string \| null | no | yes | null | — |
+| `history[].payload.order_lines` | array[object] \| null | no | yes | null | — |
+| `history[].payload.order_lines[].line` | string | yes | no | — | — |
+| `history[].payload.order_lines[].quantity` | string \| null | no | yes | null | — |
+| `history[].payload.order_lines[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `history[].payload.order_lines[].amount` | string \| object \| null | no | yes | null | — |
+| `history[].payload.receipts` | array[object] \| null | no | yes | null | — |
+| `history[].payload.receipts[].receipt_line` | string | yes | no | — | — |
+| `history[].payload.receipts[].expected_receipt_version` | integer | yes | no | — | — |
+| `history[].payload.receipts[].quantity` | string | yes | no | — | — |
+| `history[].payload.receipts[].unit_cost` | string \| object \| null | no | yes | null | Product unit cost only, excluding retained receipt shipping. |
+| `history[].payload.receipts[].amount` | string \| object \| null | no | yes | null | Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value. |
 | `history[].preview` | object | yes | no | — | — |
 | `history[].preview.total` | object | yes | no | — | — |
 | `history[].preview.total.amount` | string | yes | no | — | — |
@@ -1231,6 +1952,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `history[].preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `history[].preview.expenses[].billable` | boolean | yes | no | — | — |
+| `history[].preview.items` | array[object] | no | no | [] | — |
+| `history[].preview.items[].item` | object | yes | no | — | — |
+| `history[].preview.items[].item.id` | string | yes | no | — | — |
+| `history[].preview.items[].item.name` | string | yes | no | — | — |
+| `history[].preview.items[].description` | string \| null | yes | yes | — | — |
+| `history[].preview.items[].quantity` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `history[].preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `history[].preview.items[].amount` | object | yes | no | — | — |
+| `history[].preview.items[].amount.amount` | string | yes | no | — | — |
+| `history[].preview.items[].amount.currency` | string | yes | no | — | — |
+| `history[].preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `history[].preview.purchase_order` | object \| null | no | yes | null | — |
+| `history[].preview.purchase_order.id` | string | yes | no | — | — |
+| `history[].preview.purchase_order.name` | string | yes | no | — | — |
+| `history[].preview.receipts` | array[object] | no | no | [] | — |
+| `history[].preview.receipts[].id` | string | yes | no | — | — |
+| `history[].preview.receipts[].number` | string | yes | no | — | — |
+| `history[].preview.receipts[].quantity` | string | yes | no | — | — |
 | `history[].preview.vendor` | object | yes | no | — | — |
 | `history[].preview.vendor.id` | string | yes | no | — | — |
 | `history[].preview.vendor.name` | string | yes | no | — | — |
@@ -1256,28 +1998,27 @@ Example JSON output:
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "kind": "bill",
   "operation": "create",
+  "original_id": null,
+  "original_version": null,
   "payload": {
     "ap_account": null,
     "class_id": null,
+    "count_position": null,
+    "custom_field_kinds": {},
+    "custom_fields": {},
     "date": "2026-01-01",
     "due_date": null,
-    "expenses": [
-      {
-        "account": "Professional Fees",
-        "amount": "80.00",
-        "billable": false,
-        "class_id": null,
-        "class_mode": "inherit",
-        "customer": null,
-        "line_id": null,
-        "memo": null
-      }
-    ],
+    "expenses": null,
+    "items": null,
     "memo": null,
     "number": null,
+    "order_lines": null,
+    "purchase_order": null,
+    "receipts": null,
+    "site": null,
     "supplier_reference": null,
     "terms": null,
-    "vendor": "value"
+    "vendor": null
   },
   "preview": {
     "accounting_effect": "none",
@@ -1288,6 +2029,9 @@ Example JSON output:
     "currency": "USD",
     "due_date": "2026-01-01",
     "expenses": [],
+    "items": [],
+    "purchase_order": null,
+    "receipts": [],
     "total": {
       "amount": "value",
       "currency": "USD",
@@ -1298,6 +2042,9 @@ Example JSON output:
       "name": "value"
     }
   },
+  "request_id": null,
+  "request_version": null,
+  "snapshot": null,
   "state": "draft",
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
@@ -1335,6 +2082,146 @@ Example JSON output:
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
 
+## `purchase-draft submit`
+
+Submit the exact saved bill revision to the published one-step Review policy. Freezes commercial and source facts; posts nothing. Use operation_key and reason.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | approval.prepare |
+| Additional resources | ledger.read: member |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/purchase-draft.submit` |
+| External binary body | none |
+
+### CLI
+
+`bookflow purchase-draft submit --draft 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --operation-key approval-example --company "Demo Plumbing Co" --json --reason "Review supplier bill"`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "purchase-draft submit", "input": {"draft": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1, "operation_key": "approval-example"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `draft` | `--draft` | string | yes | no | — | minimum length 1 |
+| `expected_version` | `--expected-version` | integer | yes | no | — | minimum 1 |
+| `operation_key` | `--operation-key` | string | yes | no | — | minimum length 1; maximum length 128 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/purchase-draft.submit`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `id` | string | yes | no | — | — |
+| `draft_id` | string | yes | no | — | — |
+| `draft_version` | integer | yes | no | — | — |
+| `policy_revision_id` | string | yes | no | — | — |
+| `version` | integer | yes | no | — | — |
+| `state` | string | yes | no | — | — |
+| `current_step` | integer | yes | no | — | — |
+| `steps` | array[object[string, any]] | yes | no | — | — |
+| `events` | array[object[string, any]] | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "current_step": 1,
+  "draft_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "draft_version": 1,
+  "events": [],
+  "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "policy_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "state": "value",
+  "steps": [],
+  "version": 1
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_APPROVAL_ASSIGNEE` | Only a currently assigned reviewer may decide this step. |
+| `E_APPROVAL_POLICY` | The approval policy is incomplete or invalid. |
+| `E_APPROVAL_REQUIRED` | This bill requires an approved purchase draft before posting. |
+| `E_APPROVAL_SELF` | Self-approval is not permitted by this captured policy. |
+| `E_APPROVAL_STALE` | The captured approval facts changed; withdraw and resubmit. |
+| `E_APPROVAL_STATE` | This draft state does not allow the requested act; inspect its legal next actions. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
 ## `purchase-draft update`
 
 Replace all commercial fields of a saved bill draft, carrying its exact expected_version, a new operation_key and reason. Omitted optional fields reset to defaults. Prior revisions remain readable; a cancelled draft refuses.
@@ -1368,8 +2255,19 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
+| `number` | `--number` | string \| null | no | yes | null | — |
+| `ap_account` | `--ap-account` | string \| null | no | yes | null | — |
+| `terms` | `--terms` | string \| null | no | yes | null | — |
+| `due_date` | `--due-date` | string \| null | no | yes | null | — |
+| `supplier_reference` | `--supplier-reference` | string \| null | no | yes | null | — |
+| `memo` | `--memo` | string \| null | no | yes | null | — |
+| `class_id` | `--class-id` | string \| null | no | yes | null | — |
+| `site` | `--site` | string \| null | no | yes | null | Inventory site the stocked item lines are received at where a line names none; omitted, the default site. |
+| `count_position` | `--count-position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
+| `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
+| `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
-| `vendor` | `--vendor` | string | yes | no | — | minimum length 1 |
+| `vendor` | `--vendor` | string \| null | no | yes | null | — |
 | `expenses[].line_id` | inside `--expenses` JSON array | string \| null | no | yes | null | — |
 | `expenses[].account` | inside `--expenses` JSON array | string | yes | no | — | minimum length 1 |
 | `expenses[].amount` | inside `--expenses` JSON array | string \| object | yes | no | — | — |
@@ -1378,15 +2276,35 @@ The same example as complete `bookflow_run` arguments:
 | `expenses[].billable` | inside `--expenses` JSON array | boolean | no | no | false | — |
 | `expenses[].class_id` | inside `--expenses` JSON array | string \| null | no | yes | null | — |
 | `expenses[].class_mode` | inside `--expenses` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
-| `number` | `--number` | string \| null | no | yes | null | — |
-| `ap_account` | `--ap-account` | string \| null | no | yes | null | — |
-| `terms` | `--terms` | string \| null | no | yes | null | — |
-| `due_date` | `--due-date` | string \| null | no | yes | null | — |
-| `supplier_reference` | `--supplier-reference` | string \| null | no | yes | null | — |
-| `memo` | `--memo` | string \| null | no | yes | null | — |
-| `class_id` | `--class-id` | string \| null | no | yes | null | — |
+| `items[].line_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].item` | inside `--items` JSON array | string | yes | no | — | minimum length 1 |
+| `items[].description` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].quantity` | inside `--items` JSON array | string | no | no | "1" | — |
+| `items[].unit_cost` | inside `--items` JSON array | string \| object \| null | no | yes | null | — |
+| `items[].amount` | inside `--items` JSON array | string \| object \| null | no | yes | null | — |
+| `items[].customer` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].billable` | inside `--items` JSON array | boolean | no | no | false | — |
+| `items[].class_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].class_mode` | inside `--items` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `items[].site` | inside `--items` JSON array | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
+| `items[].bin` | inside `--items` JSON array | string \| null | no | yes | null | Bin at the line's site (id, full name A:3 or label code); "(no bin)" is outside every bin. Omitted: the bin the stock stood in, else the item's default bin. |
+| `items[].lot` | inside `--items` JSON array | string \| null | no | yes | null | Lot an incoming line receives into (made when new) or an outgoing line takes from; omitted, outgoing units leave unassigned. |
+| `items[].lot_expiry` | inside `--items` JSON array | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
+| `items[].serial_numbers` | inside `--items` JSON array | array[string] \| null | no | yes | null | Serial numbers, one per unit, up to the quantity; unnumbered units stay unassigned. Never invent one. Omitted on a correction, the line keeps its numbers. |
+| `purchase_order` | `--purchase-order` | string \| null | no | yes | null | — |
+| `order_lines[].line` | inside `--order-lines` JSON array | string | yes | no | — | minimum length 1; maximum length 64 |
+| `order_lines[].quantity` | inside `--order-lines` JSON array | string \| null | no | yes | null | — |
+| `order_lines[].unit_cost` | inside `--order-lines` JSON array | string \| object \| null | no | yes | null | — |
+| `order_lines[].amount` | inside `--order-lines` JSON array | string \| object \| null | no | yes | null | — |
+| `receipts[].receipt_line` | inside `--receipts` JSON array | string | yes | no | — | minimum length 1 |
+| `receipts[].expected_receipt_version` | inside `--receipts` JSON array | integer | yes | no | — | minimum 1 |
+| `receipts[].quantity` | inside `--receipts` JSON array | string | yes | no | — | — |
+| `receipts[].unit_cost` | inside `--receipts` JSON array | string \| object \| null | no | yes | null | Product unit cost only, excluding retained receipt shipping. |
+| `receipts[].amount` | inside `--receipts` JSON array | string \| object \| null | no | yes | null | Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value. |
 | `kind` | `--kind` | literal["bill"] | no | no | "bill" | — |
-| `operation` | `--operation` | literal["create"] | no | no | "create" | — |
+| `operation` | `--operation` | literal["create", "correct", "restore"] | no | no | "create" | — |
+| `original_id` | `--original-id` | string \| null | no | yes | null | — |
+| `original_version` | `--original-version` | integer \| null | no | yes | null | — |
 | `operation_key` | `--operation-key` | string | yes | no | — | minimum length 1; maximum length 128 |
 | `draft` | `DRAFT` | string | yes | no | — | minimum length 1 |
 | `expected_version` | `--expected-version` | integer | yes | no | — | minimum 1 |
@@ -1427,15 +2345,31 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `snapshot` | object[string, any] \| null | no | yes | null | — |
+| `request_id` | string \| null | no | yes | null | — |
+| `request_version` | integer \| null | no | yes | null | — |
 | `id` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
 | `kind` | literal["bill"] | yes | no | — | — |
-| `operation` | literal["create"] | yes | no | — | — |
-| `state` | literal["draft", "cancelled"] | yes | no | — | — |
+| `operation` | literal["create", "correct", "restore"] | yes | no | — | — |
+| `original_id` | string \| null | no | yes | null | — |
+| `original_version` | integer \| null | no | yes | null | — |
+| `state` | literal["draft", "pending", "approved", "rejected", "committed", "cancelled"] | yes | no | — | — |
 | `payload` | object | yes | no | — | — |
+| `payload.number` | string \| null | no | yes | null | — |
+| `payload.ap_account` | string \| null | no | yes | null | — |
+| `payload.terms` | string \| null | no | yes | null | — |
+| `payload.due_date` | string \| null | no | yes | null | — |
+| `payload.supplier_reference` | string \| null | no | yes | null | — |
+| `payload.memo` | string \| null | no | yes | null | — |
+| `payload.class_id` | string \| null | no | yes | null | — |
+| `payload.site` | string \| null | no | yes | null | Inventory site the stocked item lines are received at where a line names none; omitted, the default site. |
+| `payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
+| `payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
+| `payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `payload.date` | string | yes | no | — | — |
-| `payload.vendor` | string | yes | no | — | — |
-| `payload.expenses` | array[object] | yes | no | — | — |
+| `payload.vendor` | string \| null | no | yes | null | — |
+| `payload.expenses` | array[object] \| null | no | yes | null | — |
 | `payload.expenses[].line_id` | string \| null | no | yes | null | — |
 | `payload.expenses[].account` | string | yes | no | — | — |
 | `payload.expenses[].amount` | string \| object | yes | no | — | — |
@@ -1444,13 +2378,34 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `payload.expenses[].billable` | boolean | no | no | false | — |
 | `payload.expenses[].class_id` | string \| null | no | yes | null | — |
 | `payload.expenses[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
-| `payload.number` | string \| null | no | yes | null | — |
-| `payload.ap_account` | string \| null | no | yes | null | — |
-| `payload.terms` | string \| null | no | yes | null | — |
-| `payload.due_date` | string \| null | no | yes | null | — |
-| `payload.supplier_reference` | string \| null | no | yes | null | — |
-| `payload.memo` | string \| null | no | yes | null | — |
-| `payload.class_id` | string \| null | no | yes | null | — |
+| `payload.items` | array[object] \| null | no | yes | null | — |
+| `payload.items[].line_id` | string \| null | no | yes | null | — |
+| `payload.items[].item` | string | yes | no | — | — |
+| `payload.items[].description` | string \| null | no | yes | null | — |
+| `payload.items[].quantity` | string | no | no | "1" | — |
+| `payload.items[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `payload.items[].amount` | string \| object \| null | no | yes | null | — |
+| `payload.items[].customer` | string \| null | no | yes | null | — |
+| `payload.items[].billable` | boolean | no | no | false | — |
+| `payload.items[].class_id` | string \| null | no | yes | null | — |
+| `payload.items[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `payload.items[].site` | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
+| `payload.items[].bin` | string \| null | no | yes | null | Bin at the line's site (id, full name A:3 or label code); "(no bin)" is outside every bin. Omitted: the bin the stock stood in, else the item's default bin. |
+| `payload.items[].lot` | string \| null | no | yes | null | Lot an incoming line receives into (made when new) or an outgoing line takes from; omitted, outgoing units leave unassigned. |
+| `payload.items[].lot_expiry` | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
+| `payload.items[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers, one per unit, up to the quantity; unnumbered units stay unassigned. Never invent one. Omitted on a correction, the line keeps its numbers. |
+| `payload.purchase_order` | string \| null | no | yes | null | — |
+| `payload.order_lines` | array[object] \| null | no | yes | null | — |
+| `payload.order_lines[].line` | string | yes | no | — | — |
+| `payload.order_lines[].quantity` | string \| null | no | yes | null | — |
+| `payload.order_lines[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `payload.order_lines[].amount` | string \| object \| null | no | yes | null | — |
+| `payload.receipts` | array[object] \| null | no | yes | null | — |
+| `payload.receipts[].receipt_line` | string | yes | no | — | — |
+| `payload.receipts[].expected_receipt_version` | integer | yes | no | — | — |
+| `payload.receipts[].quantity` | string | yes | no | — | — |
+| `payload.receipts[].unit_cost` | string \| object \| null | no | yes | null | Product unit cost only, excluding retained receipt shipping. |
+| `payload.receipts[].amount` | string \| object \| null | no | yes | null | Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value. |
 | `preview` | object | yes | no | — | — |
 | `preview.total` | object | yes | no | — | — |
 | `preview.total.amount` | string | yes | no | — | — |
@@ -1472,6 +2427,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `preview.expenses[].billable` | boolean | yes | no | — | — |
+| `preview.items` | array[object] | no | no | [] | — |
+| `preview.items[].item` | object | yes | no | — | — |
+| `preview.items[].item.id` | string | yes | no | — | — |
+| `preview.items[].item.name` | string | yes | no | — | — |
+| `preview.items[].description` | string \| null | yes | yes | — | — |
+| `preview.items[].quantity` | string | yes | no | — | — |
+| `preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `preview.items[].amount` | object | yes | no | — | — |
+| `preview.items[].amount.amount` | string | yes | no | — | — |
+| `preview.items[].amount.currency` | string | yes | no | — | — |
+| `preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `preview.purchase_order` | object \| null | no | yes | null | — |
+| `preview.purchase_order.id` | string | yes | no | — | — |
+| `preview.purchase_order.name` | string | yes | no | — | — |
+| `preview.receipts` | array[object] | no | no | [] | — |
+| `preview.receipts[].id` | string | yes | no | — | — |
+| `preview.receipts[].number` | string | yes | no | — | — |
+| `preview.receipts[].quantity` | string | yes | no | — | — |
 | `preview.vendor` | object | yes | no | — | — |
 | `preview.vendor.id` | string | yes | no | — | — |
 | `preview.vendor.name` | string | yes | no | — | — |
@@ -1487,11 +2463,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_by` | string | yes | no | — | — |
 | `history` | array[object] | yes | no | — | — |
 | `history[].version` | integer | yes | no | — | — |
-| `history[].state` | literal["draft", "cancelled"] | yes | no | — | — |
+| `history[].state` | literal["draft", "pending", "approved", "rejected", "committed", "cancelled"] | yes | no | — | — |
 | `history[].payload` | object | yes | no | — | — |
+| `history[].payload.number` | string \| null | no | yes | null | — |
+| `history[].payload.ap_account` | string \| null | no | yes | null | — |
+| `history[].payload.terms` | string \| null | no | yes | null | — |
+| `history[].payload.due_date` | string \| null | no | yes | null | — |
+| `history[].payload.supplier_reference` | string \| null | no | yes | null | — |
+| `history[].payload.memo` | string \| null | no | yes | null | — |
+| `history[].payload.class_id` | string \| null | no | yes | null | — |
+| `history[].payload.site` | string \| null | no | yes | null | Inventory site the stocked item lines are received at where a line names none; omitted, the default site. |
+| `history[].payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
+| `history[].payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
+| `history[].payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `history[].payload.date` | string | yes | no | — | — |
-| `history[].payload.vendor` | string | yes | no | — | — |
-| `history[].payload.expenses` | array[object] | yes | no | — | — |
+| `history[].payload.vendor` | string \| null | no | yes | null | — |
+| `history[].payload.expenses` | array[object] \| null | no | yes | null | — |
 | `history[].payload.expenses[].line_id` | string \| null | no | yes | null | — |
 | `history[].payload.expenses[].account` | string | yes | no | — | — |
 | `history[].payload.expenses[].amount` | string \| object | yes | no | — | — |
@@ -1500,13 +2487,34 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].payload.expenses[].billable` | boolean | no | no | false | — |
 | `history[].payload.expenses[].class_id` | string \| null | no | yes | null | — |
 | `history[].payload.expenses[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
-| `history[].payload.number` | string \| null | no | yes | null | — |
-| `history[].payload.ap_account` | string \| null | no | yes | null | — |
-| `history[].payload.terms` | string \| null | no | yes | null | — |
-| `history[].payload.due_date` | string \| null | no | yes | null | — |
-| `history[].payload.supplier_reference` | string \| null | no | yes | null | — |
-| `history[].payload.memo` | string \| null | no | yes | null | — |
-| `history[].payload.class_id` | string \| null | no | yes | null | — |
+| `history[].payload.items` | array[object] \| null | no | yes | null | — |
+| `history[].payload.items[].line_id` | string \| null | no | yes | null | — |
+| `history[].payload.items[].item` | string | yes | no | — | — |
+| `history[].payload.items[].description` | string \| null | no | yes | null | — |
+| `history[].payload.items[].quantity` | string | no | no | "1" | — |
+| `history[].payload.items[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `history[].payload.items[].amount` | string \| object \| null | no | yes | null | — |
+| `history[].payload.items[].customer` | string \| null | no | yes | null | — |
+| `history[].payload.items[].billable` | boolean | no | no | false | — |
+| `history[].payload.items[].class_id` | string \| null | no | yes | null | — |
+| `history[].payload.items[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `history[].payload.items[].site` | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
+| `history[].payload.items[].bin` | string \| null | no | yes | null | Bin at the line's site (id, full name A:3 or label code); "(no bin)" is outside every bin. Omitted: the bin the stock stood in, else the item's default bin. |
+| `history[].payload.items[].lot` | string \| null | no | yes | null | Lot an incoming line receives into (made when new) or an outgoing line takes from; omitted, outgoing units leave unassigned. |
+| `history[].payload.items[].lot_expiry` | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
+| `history[].payload.items[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers, one per unit, up to the quantity; unnumbered units stay unassigned. Never invent one. Omitted on a correction, the line keeps its numbers. |
+| `history[].payload.purchase_order` | string \| null | no | yes | null | — |
+| `history[].payload.order_lines` | array[object] \| null | no | yes | null | — |
+| `history[].payload.order_lines[].line` | string | yes | no | — | — |
+| `history[].payload.order_lines[].quantity` | string \| null | no | yes | null | — |
+| `history[].payload.order_lines[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `history[].payload.order_lines[].amount` | string \| object \| null | no | yes | null | — |
+| `history[].payload.receipts` | array[object] \| null | no | yes | null | — |
+| `history[].payload.receipts[].receipt_line` | string | yes | no | — | — |
+| `history[].payload.receipts[].expected_receipt_version` | integer | yes | no | — | — |
+| `history[].payload.receipts[].quantity` | string | yes | no | — | — |
+| `history[].payload.receipts[].unit_cost` | string \| object \| null | no | yes | null | Product unit cost only, excluding retained receipt shipping. |
+| `history[].payload.receipts[].amount` | string \| object \| null | no | yes | null | Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value. |
 | `history[].preview` | object | yes | no | — | — |
 | `history[].preview.total` | object | yes | no | — | — |
 | `history[].preview.total.amount` | string | yes | no | — | — |
@@ -1528,6 +2536,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `history[].preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `history[].preview.expenses[].billable` | boolean | yes | no | — | — |
+| `history[].preview.items` | array[object] | no | no | [] | — |
+| `history[].preview.items[].item` | object | yes | no | — | — |
+| `history[].preview.items[].item.id` | string | yes | no | — | — |
+| `history[].preview.items[].item.name` | string | yes | no | — | — |
+| `history[].preview.items[].description` | string \| null | yes | yes | — | — |
+| `history[].preview.items[].quantity` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `history[].preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `history[].preview.items[].amount` | object | yes | no | — | — |
+| `history[].preview.items[].amount.amount` | string | yes | no | — | — |
+| `history[].preview.items[].amount.currency` | string | yes | no | — | — |
+| `history[].preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `history[].preview.purchase_order` | object \| null | no | yes | null | — |
+| `history[].preview.purchase_order.id` | string | yes | no | — | — |
+| `history[].preview.purchase_order.name` | string | yes | no | — | — |
+| `history[].preview.receipts` | array[object] | no | no | [] | — |
+| `history[].preview.receipts[].id` | string | yes | no | — | — |
+| `history[].preview.receipts[].number` | string | yes | no | — | — |
+| `history[].preview.receipts[].quantity` | string | yes | no | — | — |
 | `history[].preview.vendor` | object | yes | no | — | — |
 | `history[].preview.vendor.id` | string | yes | no | — | — |
 | `history[].preview.vendor.name` | string | yes | no | — | — |
@@ -1553,28 +2582,27 @@ Example JSON output:
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "kind": "bill",
   "operation": "create",
+  "original_id": null,
+  "original_version": null,
   "payload": {
     "ap_account": null,
     "class_id": null,
+    "count_position": null,
+    "custom_field_kinds": {},
+    "custom_fields": {},
     "date": "2026-01-01",
     "due_date": null,
-    "expenses": [
-      {
-        "account": "Professional Fees",
-        "amount": "80.00",
-        "billable": false,
-        "class_id": null,
-        "class_mode": "inherit",
-        "customer": null,
-        "line_id": null,
-        "memo": null
-      }
-    ],
+    "expenses": null,
+    "items": null,
     "memo": null,
     "number": null,
+    "order_lines": null,
+    "purchase_order": null,
+    "receipts": null,
+    "site": null,
     "supplier_reference": null,
     "terms": null,
-    "vendor": "value"
+    "vendor": null
   },
   "preview": {
     "accounting_effect": "none",
@@ -1585,6 +2613,9 @@ Example JSON output:
     "currency": "USD",
     "due_date": "2026-01-01",
     "expenses": [],
+    "items": [],
+    "purchase_order": null,
+    "receipts": [],
     "total": {
       "amount": "value",
       "currency": "USD",
@@ -1595,6 +2626,9 @@ Example JSON output:
       "name": "value"
     }
   },
+  "request_id": null,
+  "request_version": null,
+  "snapshot": null,
   "state": "draft",
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
@@ -1637,4 +2671,411 @@ Example JSON output:
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
+## `purchase-draft withdraw`
+
+Withdraw pending or approved work using exact draft and request versions. Retains decisions and returns to draft. Approved withdrawal requires confirm=true after preview.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | approval.prepare |
+| Additional resources | ledger.read: member |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/purchase-draft.withdraw` |
+| External binary body | none |
+
+### CLI
+
+`bookflow purchase-draft withdraw --draft 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 3 --expected-request-version 2 --confirm --operation-key approval-example --company "Demo Plumbing Co" --json --reason "Review supplier bill"`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "purchase-draft withdraw", "input": {"draft": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 3, "expected_request_version": 2, "confirm": true, "operation_key": "approval-example"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `draft` | `--draft` | string | yes | no | — | minimum length 1 |
+| `expected_version` | `--expected-version` | integer | yes | no | — | minimum 1 |
+| `operation_key` | `--operation-key` | string | yes | no | — | minimum length 1; maximum length 128 |
+| `expected_request_version` | `--expected-request-version` | integer | yes | no | — | minimum 1 |
+| `confirm` | `--confirm` | boolean | no | no | false | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/purchase-draft.withdraw`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `snapshot` | object[string, any] \| null | no | yes | null | — |
+| `request_id` | string \| null | no | yes | null | — |
+| `request_version` | integer \| null | no | yes | null | — |
+| `id` | string | yes | no | — | — |
+| `version` | integer | yes | no | — | — |
+| `kind` | literal["bill"] | yes | no | — | — |
+| `operation` | literal["create", "correct", "restore"] | yes | no | — | — |
+| `original_id` | string \| null | no | yes | null | — |
+| `original_version` | integer \| null | no | yes | null | — |
+| `state` | literal["draft", "pending", "approved", "rejected", "committed", "cancelled"] | yes | no | — | — |
+| `payload` | object | yes | no | — | — |
+| `payload.number` | string \| null | no | yes | null | — |
+| `payload.ap_account` | string \| null | no | yes | null | — |
+| `payload.terms` | string \| null | no | yes | null | — |
+| `payload.due_date` | string \| null | no | yes | null | — |
+| `payload.supplier_reference` | string \| null | no | yes | null | — |
+| `payload.memo` | string \| null | no | yes | null | — |
+| `payload.class_id` | string \| null | no | yes | null | — |
+| `payload.site` | string \| null | no | yes | null | Inventory site the stocked item lines are received at where a line names none; omitted, the default site. |
+| `payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
+| `payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
+| `payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
+| `payload.date` | string | yes | no | — | — |
+| `payload.vendor` | string \| null | no | yes | null | — |
+| `payload.expenses` | array[object] \| null | no | yes | null | — |
+| `payload.expenses[].line_id` | string \| null | no | yes | null | — |
+| `payload.expenses[].account` | string | yes | no | — | — |
+| `payload.expenses[].amount` | string \| object | yes | no | — | — |
+| `payload.expenses[].memo` | string \| null | no | yes | null | — |
+| `payload.expenses[].customer` | string \| null | no | yes | null | — |
+| `payload.expenses[].billable` | boolean | no | no | false | — |
+| `payload.expenses[].class_id` | string \| null | no | yes | null | — |
+| `payload.expenses[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `payload.items` | array[object] \| null | no | yes | null | — |
+| `payload.items[].line_id` | string \| null | no | yes | null | — |
+| `payload.items[].item` | string | yes | no | — | — |
+| `payload.items[].description` | string \| null | no | yes | null | — |
+| `payload.items[].quantity` | string | no | no | "1" | — |
+| `payload.items[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `payload.items[].amount` | string \| object \| null | no | yes | null | — |
+| `payload.items[].customer` | string \| null | no | yes | null | — |
+| `payload.items[].billable` | boolean | no | no | false | — |
+| `payload.items[].class_id` | string \| null | no | yes | null | — |
+| `payload.items[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `payload.items[].site` | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
+| `payload.items[].bin` | string \| null | no | yes | null | Bin at the line's site (id, full name A:3 or label code); "(no bin)" is outside every bin. Omitted: the bin the stock stood in, else the item's default bin. |
+| `payload.items[].lot` | string \| null | no | yes | null | Lot an incoming line receives into (made when new) or an outgoing line takes from; omitted, outgoing units leave unassigned. |
+| `payload.items[].lot_expiry` | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
+| `payload.items[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers, one per unit, up to the quantity; unnumbered units stay unassigned. Never invent one. Omitted on a correction, the line keeps its numbers. |
+| `payload.purchase_order` | string \| null | no | yes | null | — |
+| `payload.order_lines` | array[object] \| null | no | yes | null | — |
+| `payload.order_lines[].line` | string | yes | no | — | — |
+| `payload.order_lines[].quantity` | string \| null | no | yes | null | — |
+| `payload.order_lines[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `payload.order_lines[].amount` | string \| object \| null | no | yes | null | — |
+| `payload.receipts` | array[object] \| null | no | yes | null | — |
+| `payload.receipts[].receipt_line` | string | yes | no | — | — |
+| `payload.receipts[].expected_receipt_version` | integer | yes | no | — | — |
+| `payload.receipts[].quantity` | string | yes | no | — | — |
+| `payload.receipts[].unit_cost` | string \| object \| null | no | yes | null | Product unit cost only, excluding retained receipt shipping. |
+| `payload.receipts[].amount` | string \| object \| null | no | yes | null | Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value. |
+| `preview` | object | yes | no | — | — |
+| `preview.total` | object | yes | no | — | — |
+| `preview.total.amount` | string | yes | no | — | — |
+| `preview.total.currency` | string | yes | no | — | — |
+| `preview.total.minor_units` | integer | yes | no | — | — |
+| `preview.expenses` | array[object] | yes | no | — | — |
+| `preview.expenses[].account` | object | yes | no | — | — |
+| `preview.expenses[].account.id` | string | yes | no | — | — |
+| `preview.expenses[].account.name` | string | yes | no | — | — |
+| `preview.expenses[].amount` | object | yes | no | — | — |
+| `preview.expenses[].amount.amount` | string | yes | no | — | — |
+| `preview.expenses[].amount.currency` | string | yes | no | — | — |
+| `preview.expenses[].amount.minor_units` | integer | yes | no | — | — |
+| `preview.expenses[].memo` | string \| null | yes | yes | — | — |
+| `preview.expenses[].customer` | object \| null | yes | yes | — | — |
+| `preview.expenses[].customer.id` | string | yes | no | — | — |
+| `preview.expenses[].customer.name` | string | yes | no | — | — |
+| `preview.expenses[].class_id` | object \| null | yes | yes | — | — |
+| `preview.expenses[].class_id.id` | string | yes | no | — | — |
+| `preview.expenses[].class_id.name` | string | yes | no | — | — |
+| `preview.expenses[].billable` | boolean | yes | no | — | — |
+| `preview.items` | array[object] | no | no | [] | — |
+| `preview.items[].item` | object | yes | no | — | — |
+| `preview.items[].item.id` | string | yes | no | — | — |
+| `preview.items[].item.name` | string | yes | no | — | — |
+| `preview.items[].description` | string \| null | yes | yes | — | — |
+| `preview.items[].quantity` | string | yes | no | — | — |
+| `preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `preview.items[].amount` | object | yes | no | — | — |
+| `preview.items[].amount.amount` | string | yes | no | — | — |
+| `preview.items[].amount.currency` | string | yes | no | — | — |
+| `preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `preview.purchase_order` | object \| null | no | yes | null | — |
+| `preview.purchase_order.id` | string | yes | no | — | — |
+| `preview.purchase_order.name` | string | yes | no | — | — |
+| `preview.receipts` | array[object] | no | no | [] | — |
+| `preview.receipts[].id` | string | yes | no | — | — |
+| `preview.receipts[].number` | string | yes | no | — | — |
+| `preview.receipts[].quantity` | string | yes | no | — | — |
+| `preview.vendor` | object | yes | no | — | — |
+| `preview.vendor.id` | string | yes | no | — | — |
+| `preview.vendor.name` | string | yes | no | — | — |
+| `preview.ap_account` | object | yes | no | — | — |
+| `preview.ap_account.id` | string | yes | no | — | — |
+| `preview.ap_account.name` | string | yes | no | — | — |
+| `preview.due_date` | string | yes | no | — | — |
+| `preview.currency` | string | yes | no | — | — |
+| `preview.accounting_effect` | literal["none"] | no | no | "none" | — |
+| `created_at` | string | yes | no | — | — |
+| `created_by` | string | yes | no | — | — |
+| `updated_at` | string | yes | no | — | — |
+| `updated_by` | string | yes | no | — | — |
+| `history` | array[object] | yes | no | — | — |
+| `history[].version` | integer | yes | no | — | — |
+| `history[].state` | literal["draft", "pending", "approved", "rejected", "committed", "cancelled"] | yes | no | — | — |
+| `history[].payload` | object | yes | no | — | — |
+| `history[].payload.number` | string \| null | no | yes | null | — |
+| `history[].payload.ap_account` | string \| null | no | yes | null | — |
+| `history[].payload.terms` | string \| null | no | yes | null | — |
+| `history[].payload.due_date` | string \| null | no | yes | null | — |
+| `history[].payload.supplier_reference` | string \| null | no | yes | null | — |
+| `history[].payload.memo` | string \| null | no | yes | null | — |
+| `history[].payload.class_id` | string \| null | no | yes | null | — |
+| `history[].payload.site` | string \| null | no | yes | null | Inventory site the stocked item lines are received at where a line names none; omitted, the default site. |
+| `history[].payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
+| `history[].payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
+| `history[].payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
+| `history[].payload.date` | string | yes | no | — | — |
+| `history[].payload.vendor` | string \| null | no | yes | null | — |
+| `history[].payload.expenses` | array[object] \| null | no | yes | null | — |
+| `history[].payload.expenses[].line_id` | string \| null | no | yes | null | — |
+| `history[].payload.expenses[].account` | string | yes | no | — | — |
+| `history[].payload.expenses[].amount` | string \| object | yes | no | — | — |
+| `history[].payload.expenses[].memo` | string \| null | no | yes | null | — |
+| `history[].payload.expenses[].customer` | string \| null | no | yes | null | — |
+| `history[].payload.expenses[].billable` | boolean | no | no | false | — |
+| `history[].payload.expenses[].class_id` | string \| null | no | yes | null | — |
+| `history[].payload.expenses[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `history[].payload.items` | array[object] \| null | no | yes | null | — |
+| `history[].payload.items[].line_id` | string \| null | no | yes | null | — |
+| `history[].payload.items[].item` | string | yes | no | — | — |
+| `history[].payload.items[].description` | string \| null | no | yes | null | — |
+| `history[].payload.items[].quantity` | string | no | no | "1" | — |
+| `history[].payload.items[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `history[].payload.items[].amount` | string \| object \| null | no | yes | null | — |
+| `history[].payload.items[].customer` | string \| null | no | yes | null | — |
+| `history[].payload.items[].billable` | boolean | no | no | false | — |
+| `history[].payload.items[].class_id` | string \| null | no | yes | null | — |
+| `history[].payload.items[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `history[].payload.items[].site` | string \| null | no | yes | null | Inventory site a stocked item is received at (or sent back from), by id or name; omitted, the document's site, else the purchase-order line's, else the default site. |
+| `history[].payload.items[].bin` | string \| null | no | yes | null | Bin at the line's site (id, full name A:3 or label code); "(no bin)" is outside every bin. Omitted: the bin the stock stood in, else the item's default bin. |
+| `history[].payload.items[].lot` | string \| null | no | yes | null | Lot an incoming line receives into (made when new) or an outgoing line takes from; omitted, outgoing units leave unassigned. |
+| `history[].payload.items[].lot_expiry` | string \| null | no | yes | null | Expiry date of a new lot (ISO); change an existing lot's with `lot update`. |
+| `history[].payload.items[].serial_numbers` | array[string] \| null | no | yes | null | Serial numbers, one per unit, up to the quantity; unnumbered units stay unassigned. Never invent one. Omitted on a correction, the line keeps its numbers. |
+| `history[].payload.purchase_order` | string \| null | no | yes | null | — |
+| `history[].payload.order_lines` | array[object] \| null | no | yes | null | — |
+| `history[].payload.order_lines[].line` | string | yes | no | — | — |
+| `history[].payload.order_lines[].quantity` | string \| null | no | yes | null | — |
+| `history[].payload.order_lines[].unit_cost` | string \| object \| null | no | yes | null | — |
+| `history[].payload.order_lines[].amount` | string \| object \| null | no | yes | null | — |
+| `history[].payload.receipts` | array[object] \| null | no | yes | null | — |
+| `history[].payload.receipts[].receipt_line` | string | yes | no | — | — |
+| `history[].payload.receipts[].expected_receipt_version` | integer | yes | no | — | — |
+| `history[].payload.receipts[].quantity` | string | yes | no | — | — |
+| `history[].payload.receipts[].unit_cost` | string \| object \| null | no | yes | null | Product unit cost only, excluding retained receipt shipping. |
+| `history[].payload.receipts[].amount` | string \| object \| null | no | yes | null | Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value. |
+| `history[].preview` | object | yes | no | — | — |
+| `history[].preview.total` | object | yes | no | — | — |
+| `history[].preview.total.amount` | string | yes | no | — | — |
+| `history[].preview.total.currency` | string | yes | no | — | — |
+| `history[].preview.total.minor_units` | integer | yes | no | — | — |
+| `history[].preview.expenses` | array[object] | yes | no | — | — |
+| `history[].preview.expenses[].account` | object | yes | no | — | — |
+| `history[].preview.expenses[].account.id` | string | yes | no | — | — |
+| `history[].preview.expenses[].account.name` | string | yes | no | — | — |
+| `history[].preview.expenses[].amount` | object | yes | no | — | — |
+| `history[].preview.expenses[].amount.amount` | string | yes | no | — | — |
+| `history[].preview.expenses[].amount.currency` | string | yes | no | — | — |
+| `history[].preview.expenses[].amount.minor_units` | integer | yes | no | — | — |
+| `history[].preview.expenses[].memo` | string \| null | yes | yes | — | — |
+| `history[].preview.expenses[].customer` | object \| null | yes | yes | — | — |
+| `history[].preview.expenses[].customer.id` | string | yes | no | — | — |
+| `history[].preview.expenses[].customer.name` | string | yes | no | — | — |
+| `history[].preview.expenses[].class_id` | object \| null | yes | yes | — | — |
+| `history[].preview.expenses[].class_id.id` | string | yes | no | — | — |
+| `history[].preview.expenses[].class_id.name` | string | yes | no | — | — |
+| `history[].preview.expenses[].billable` | boolean | yes | no | — | — |
+| `history[].preview.items` | array[object] | no | no | [] | — |
+| `history[].preview.items[].item` | object | yes | no | — | — |
+| `history[].preview.items[].item.id` | string | yes | no | — | — |
+| `history[].preview.items[].item.name` | string | yes | no | — | — |
+| `history[].preview.items[].description` | string \| null | yes | yes | — | — |
+| `history[].preview.items[].quantity` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost` | object \| null | yes | yes | — | — |
+| `history[].preview.items[].unit_cost.amount` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost.currency` | string | yes | no | — | — |
+| `history[].preview.items[].unit_cost.minor_units` | integer | yes | no | — | — |
+| `history[].preview.items[].amount` | object | yes | no | — | — |
+| `history[].preview.items[].amount.amount` | string | yes | no | — | — |
+| `history[].preview.items[].amount.currency` | string | yes | no | — | — |
+| `history[].preview.items[].amount.minor_units` | integer | yes | no | — | — |
+| `history[].preview.purchase_order` | object \| null | no | yes | null | — |
+| `history[].preview.purchase_order.id` | string | yes | no | — | — |
+| `history[].preview.purchase_order.name` | string | yes | no | — | — |
+| `history[].preview.receipts` | array[object] | no | no | [] | — |
+| `history[].preview.receipts[].id` | string | yes | no | — | — |
+| `history[].preview.receipts[].number` | string | yes | no | — | — |
+| `history[].preview.receipts[].quantity` | string | yes | no | — | — |
+| `history[].preview.vendor` | object | yes | no | — | — |
+| `history[].preview.vendor.id` | string | yes | no | — | — |
+| `history[].preview.vendor.name` | string | yes | no | — | — |
+| `history[].preview.ap_account` | object | yes | no | — | — |
+| `history[].preview.ap_account.id` | string | yes | no | — | — |
+| `history[].preview.ap_account.name` | string | yes | no | — | — |
+| `history[].preview.due_date` | string | yes | no | — | — |
+| `history[].preview.currency` | string | yes | no | — | — |
+| `history[].preview.accounting_effect` | literal["none"] | no | no | "none" | — |
+| `history[].actor` | string | yes | no | — | — |
+| `history[].principal` | string \| null | yes | yes | — | — |
+| `history[].interface` | string | yes | no | — | — |
+| `history[].reason` | string | yes | no | — | — |
+| `history[].created_at` | string | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "created_at": "2026-01-01T00:00:00Z",
+  "created_by": "value",
+  "history": [],
+  "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "kind": "bill",
+  "operation": "create",
+  "original_id": null,
+  "original_version": null,
+  "payload": {
+    "ap_account": null,
+    "class_id": null,
+    "count_position": null,
+    "custom_field_kinds": {},
+    "custom_fields": {},
+    "date": "2026-01-01",
+    "due_date": null,
+    "expenses": null,
+    "items": null,
+    "memo": null,
+    "number": null,
+    "order_lines": null,
+    "purchase_order": null,
+    "receipts": null,
+    "site": null,
+    "supplier_reference": null,
+    "terms": null,
+    "vendor": null
+  },
+  "preview": {
+    "accounting_effect": "none",
+    "ap_account": {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "name": "value"
+    },
+    "currency": "USD",
+    "due_date": "2026-01-01",
+    "expenses": [],
+    "items": [],
+    "purchase_order": null,
+    "receipts": [],
+    "total": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "vendor": {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "name": "value"
+    }
+  },
+  "request_id": null,
+  "request_version": null,
+  "snapshot": null,
+  "state": "draft",
+  "updated_at": "2026-01-01T00:00:00Z",
+  "updated_by": "value",
+  "version": 1
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_APPROVAL_ASSIGNEE` | Only a currently assigned reviewer may decide this step. |
+| `E_APPROVAL_POLICY` | The approval policy is incomplete or invalid. |
+| `E_APPROVAL_REQUIRED` | This bill requires an approved purchase draft before posting. |
+| `E_APPROVAL_SELF` | Self-approval is not permitted by this captured policy. |
+| `E_APPROVAL_STALE` | The captured approval facts changed; withdraw and resubmit. |
+| `E_APPROVAL_STATE` | This draft state does not allow the requested act; inspect its legal next actions. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
 | `E_VERSION_CONFLICT` | The record changed since the version you read. |

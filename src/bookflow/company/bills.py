@@ -1227,6 +1227,12 @@ def _stock_entries(pending, profile, lines=None, header_site=None):
 
 
 def prepare(s, ctx, inp, operation):
+    from bookflow.company.approvals import require_native_door
+    require_native_door(s, operation, getattr(inp, 'bill', None))
+    return _prepare_native(s, ctx, inp, operation)
+
+
+def _prepare_native(s, ctx, inp, operation):
     from bookflow.company import purchase_order_billing as order_billing
     partial = None
     if operation == 'post' and getattr(inp, 'order_lines', None) is None:
@@ -1520,6 +1526,8 @@ def persist_prepared(fresh, ctx, s, *, command_name):
     same void aggregate under its own authority and then needs exactly these three writes, in
     this order, inside the one company transaction.
     """
+    from bookflow.company.approvals import validate_native_seal
+    validate_native_seal(s, fresh)
     from bookflow.company.bill_validation import validate
     validate(fresh, s, ctx)
     applied = effects.persist(fresh, ctx, s, command_name=command_name,

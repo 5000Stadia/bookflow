@@ -5,23 +5,26 @@ FLAGS = ('purchase_approvals_enabled', 'bill_approvals_enabled', 'approval_routi
 
 
 def company_columns(C):
-    return [C(name, sa.Boolean, 'Reserved approval layer switch; off until the approval workflow is available.',
+    return [C(name, sa.Boolean, 'Optional approval layer switch; defaults off.',
               nullable=False, server_default=sa.text('0')) for name in FLAGS]
 
 
 def define_tables(metadata, C, T, common):
     drafts = T('purchase_drafts', *common(),
         C('kind', sa.String(24), 'Target document kind; currently bill.', nullable=False),
-        C('operation', sa.String(16), 'Intended native operation; currently create.', nullable=False),
-        C('state', sa.String(16), 'draft or cancelled; neither has accounting effects.', nullable=False),
+        C('operation', sa.String(16), 'Intended native operation: create, correct or restore.', nullable=False),
+        C('state', sa.String(16), 'Draft lifecycle state; only commit invokes native accounting.', nullable=False),
         C('payload', sa.Text, 'Normalized native bill fields as JSON with stable reference IDs and integer money.', nullable=False),
         C('preview', sa.Text, 'Exact calculated commercial snapshot as JSON.', nullable=False),
+        C('original_id', sa.String(26), 'Original native bill for a correction or restoration.', sa.ForeignKey('transactions.id', ondelete='RESTRICT')),
+        C('original_version', sa.Integer, 'Exact original document version.'),
+        C('snapshot', sa.Text, 'Full native commercial and source snapshot JSON.'),
         C('currency', sa.String(3), 'Company currency captured by this revision.', nullable=False),
-        sa.CheckConstraint("kind = 'bill' AND operation = 'create' AND state IN ('draft','cancelled')", name='ck_purchase_draft_scope'),
+        sa.CheckConstraint("kind = 'bill' AND operation IN ('create','correct','restore') AND state IN ('draft','pending','approved','rejected','committed','cancelled')", name='ck_purchase_draft_scope'),
         sa.CheckConstraint('version >= 1', name='ck_purchase_draft_version'),
         sa.CheckConstraint('json_valid(payload) AND json_valid(preview)', name='ck_purchase_draft_json'),
         sa.Index('ix_purchase_drafts_state_id', 'state', 'id'),
-        description='Saved expense-only bill drafts; no ledger, AP, inventory or source consumption effects.')
+        description='Saved bill proposals, separate from native documents until commit.')
     revisions = T('purchase_draft_revisions',
         C('id', sa.String(26), 'Immutable revision ULID.', primary_key=True),
         C('draft_id', sa.String(26), 'Owning saved draft.', sa.ForeignKey('purchase_drafts.id', ondelete='RESTRICT'), nullable=False),
@@ -35,7 +38,7 @@ def define_tables(metadata, C, T, common):
         C('reason', sa.String(140), 'Required reason for this act.', nullable=False),
         C('created_at', sa.String(32), 'UTC time of the act.', nullable=False),
         sa.UniqueConstraint('draft_id', 'version', name='uq_purchase_draft_revision'),
-        sa.CheckConstraint("state IN ('draft','cancelled') AND version >= 1", name='ck_purchase_draft_revision_state'),
+        sa.CheckConstraint("state IN ('draft','pending','approved','rejected','committed','cancelled') AND version >= 1", name='ck_purchase_draft_revision_state'),
         sa.CheckConstraint('json_valid(payload) AND json_valid(preview)', name='ck_purchase_draft_revision_json'),
         description='Insert-only draft revisions including cancelled history and actor attribution.')
     operations = T('purchase_draft_operations',

@@ -2,7 +2,7 @@
 
 # `company.purchase_drafts`
 
-Saved expense-only bill drafts; no ledger, AP, inventory or source consumption effects.
+Saved bill proposals, separate from native documents until commit.
 
 Database: `company`.
 
@@ -17,8 +17,11 @@ Database: `company`.
 | `updated_by` | VARCHAR(26) | no | — | — | — | — | User id recorded for the latest update to this record. |
 | `updated_via` | VARCHAR(16) | no | — | — | — | — | Interface recorded for the latest update to this record. |
 | `kind` | VARCHAR(24) | no | — | — | — | — | Target document kind; currently bill. |
-| `operation` | VARCHAR(16) | no | — | — | — | — | Intended native operation; currently create. |
-| `state` | VARCHAR(16) | no | — | — | ix_purchase_drafts_state_id | — | draft or cancelled; neither has accounting effects. |
+| `operation` | VARCHAR(16) | no | — | — | — | — | Intended native operation: create, correct or restore. |
+| `state` | VARCHAR(16) | no | — | — | ix_purchase_drafts_state_id | — | Draft lifecycle state; only commit invokes native accounting. |
 | `payload` | TEXT | no | — | — | — | — | Normalized native bill fields as JSON with stable reference IDs and integer money. |
 | `preview` | TEXT | no | — | — | — | — | Exact calculated commercial snapshot as JSON. |
+| `original_id` | VARCHAR(26) | yes | — | — | — | transactions.id | Original native bill for a correction or restoration. |
+| `original_version` | INTEGER | yes | — | — | — | — | Exact original document version. |
+| `snapshot` | TEXT | yes | — | — | — | — | Full native commercial and source snapshot JSON. |
 | `currency` | VARCHAR(3) | no | — | — | — | — | Company currency captured by this revision. |

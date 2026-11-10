@@ -154,7 +154,7 @@ def test_predecessor_migration_preserves_existing_data_and_creates_empty_drafts(
             before = {name: db.raw.execute('SELECT * FROM ' + name).fetchall()
                       for name in ('transactions', 'posting_batches', 'posting_lines', 'audit_events')}
     with open_database(path, writable=True) as db:
-        assert migrate_to_head(db, 'company', None) == ('co0128', 'co0132')
+        assert migrate_to_head(db, 'company', None) == ('co0128', 'co0133')
         assert db.raw.execute('SELECT * FROM local_purchase_witness').fetchall() == [('preserved',)]
         for name, rows in before.items():
             assert db.raw.execute('SELECT * FROM ' + name).fetchall() == rows
@@ -162,7 +162,7 @@ def test_predecessor_migration_preserves_existing_data_and_creates_empty_drafts(
             assert db.raw.execute('SELECT count(*) FROM ' + name).fetchone() == (0,)
         assert db.raw.execute('PRAGMA foreign_key_check').fetchall() == []
         assert db.raw.execute('PRAGMA integrity_check').fetchall() == [('ok',)]
-        assert migrate_to_head(db, 'company', None) == ('co0132', 'co0132')
+        assert migrate_to_head(db, 'company', None) == ('co0133', 'co0133')
 
 
 def test_agent_needs_explicit_prepare_and_read_grants(root, client, draft_books):
@@ -221,3 +221,17 @@ def test_invalid_money_and_unsupported_sources_are_atomic(client, draft_books):
     with pytest.raises(BookflowError):
         run('create', payload(operation_key='unsupported-source', purchase_order='not-a-source'))
     assert financial(client) == before
+
+
+def test_noneditable_states_explain_legal_next_actions():
+    from bookflow.company.purchase_drafts import check
+    for state, phrase, actions in (
+        ('pending', 'Withdraw this pending draft', ['show', 'list', 'withdraw']),
+        ('approved', 'Withdraw this approved draft', ['show', 'list', 'withdraw']),
+        ('committed', 'new correction draft', ['show', 'list', 'purchase-draft create', 'batch reverse']),
+        ('cancelled', 'remains readable', ['show', 'list']),
+    ):
+        with pytest.raises(BookflowError) as refused:
+            check(None, dict(version=1, state=state), 1)
+        assert phrase in refused.value.message
+        assert refused.value.details == dict(state=state, allowed_actions=actions)

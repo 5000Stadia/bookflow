@@ -27,8 +27,10 @@ COMMAND_CAPABILITY = {**_COMMAND_V1, **{name: cap for cap, (_, names) in _BANK_S
 
 # capabilities-v1's and automation-v1's (automate.bank-rule, automate.invoice: no command of their own).
 _APPROVAL = {
-    'approval.prepare': ('standard', tuple('purchase-draft ' + verb for verb in ('create', 'update', 'cancel'))),
-    'approval.read': ('standard', tuple('purchase-draft ' + verb for verb in ('show', 'list', 'preview'))),
+    'approval.prepare': ('standard', tuple('purchase-draft ' + verb for verb in ('create', 'update', 'cancel', 'submit', 'withdraw', 'commit'))),
+    'approval.read': ('standard', tuple('purchase-draft ' + verb for verb in ('show', 'list', 'preview')) + ('approval show', 'approval history', 'approval-policy show', 'approval-policy list')),
+    'approval.decide': ('standard', ('approval decide',)),
+    'approval.manage': ('standard', ('approval-policy create', 'approval-policy update', 'approval-policy publish')),
 }
 COMMAND_CAPABILITY.update({name: cap for cap, (_, names) in _APPROVAL.items() for name in names})
 CAPABILITIES = {**_V1, **_automation_v1.CAPABILITIES, **_BANK_SOURCE, **_APPROVAL}

@@ -342,6 +342,50 @@ part of this design commit.
    bill post/update gates; source-aware bill drafts. **Done when:** fixture 1 and direct/import/automated bypass
    refusals pass, and cancelled drafts have no financial residue. **Tests:** revision races, source revalidation,
    closed periods, retry, approved correction and restoration, R186 effects for commit from its first release.
+   #### As built — increment 2
+
+   Later increments settle these boundaries:
+   - Bill restoration has no native command; restore proposals refuse.
+   - The reviewer list is captured at submission and stays until reassignment exists.
+   - The browser draft form edits expense-only drafts; item and source drafts use the full command form.
+
+
+   The shared commands add simple bill policy create/update/publish/show/list, draft submit/withdraw/commit,
+   and approval decide/show/history. Migration `co0133` adds policy revisions, requests, append-only events,
+   commit attempts and permanent operation receipts. Policy publication controls the existing bill switch;
+   all approval switches still migrate off. Pending requests retain their published policy when setup changes.
+   Drafts accept native item, purchase-order and receipt selections and correction targets. Native preparation
+   captures exact commercial, ledger, inventory and source facts without reserving a number or source capacity.
+   Draft reads expose that snapshot. Submission captures it in immutable evidence, and commit revalidates it.
+
+   The public bill prepare and persistence doors refuse direct post/update while approval is required, including
+   imports and memorized producers. A private sealed native plan is issued only after draft authorization;
+   callers cannot supply an approval-bypass flag. Commit performs native posting, approval transitions,
+   permanent retry receipt and one `approval-commit` batch effect in the same transaction. Approval itself
+   never posts. Cancellation preserves the draft and has no financial effect. The browser draft page uses
+   htmx for submission, review, withdrawal and posting; source/item/correction edits use the full shared form.
+
+   Permission layer `bill-approval-v1` extends `purchase-draft-v1`. Review and policy management default to
+   human administrators; explicit grants can authorize standard-role reviewers without making them administrators.
+   Assignment does not grant authority. Agents need explicit capabilities intersected
+   with their principal's rights, including native posting rights on both commit and retry. Self-review
+   defaults false and compares creator, submitter and their effective principals. Publication requires
+   company-admin identity for both actor and principal plus `approval.manage`. Publication and approved
+   withdrawal require explicit confirmation. Every approval write requires a reason and operation key.
+
+   Batch create inverses invoke native void; correction inverses invoke native compensating correction and
+   compare the complete prior commercial snapshot. Original field provenance is restored from captured
+   evidence. Retired line identities, changed reference facts, source dependencies, applications, closed
+   dates and external artifacts refuse reversal rather than approximating prior effects. Inverse links and
+   correction version rebases are append-only events. Recommit is a new attempt; changed source or inventory
+   identities can require withdrawal and resubmission rather than reuse of stale evidence.
+
+   **Unmet dependency:** this branch has no native bill restoration command or inverse adapter. Restore
+   proposals explicitly refuse; no new native restoration semantics are invented in the approval layer.
+   Approved restoration remains incomplete pending its native owner. Full approval inbox/routing/reminders,
+   purchase-order approvals, commission draft claims and bulk decisions remain in increments 3–5. The demo
+   includes a saved one-person policy without enabling the layer; routed/rejected demo journeys remain later.
+
 3. **Purchase release and conversions (M).** PO drafts, simple purchase policy, release/correction and receiving,
    partial-bill and commission-draft seams. **Done when:** fixture 3 and affiliate transfer wait correctly. **Tests:**
    racing consumption, receipt clearing, old-order migration, sent-order reversal blocker, distinct PO/bill approvals.

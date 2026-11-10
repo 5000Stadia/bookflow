@@ -2952,3 +2952,10 @@ input = { operation_key = "demo-cancelled-bill", vendor = "${backup_vendor.id}",
 command = "purchase-draft cancel"
 reason = "Cancel the duplicate while preserving its history"
 input = { draft = "${cancelled_bill_draft.id}", expected_version = 1, operation_key = "demo-cancel-bill" }
+
+# A saved simple policy is inert until publication; the demo retains layer-off behavior.
+[[commands]]
+command = "approval-policy create"
+capture = "simple_bill_policy"
+reason = "Prepare a one-person review policy for inspection"
+input = { eligible_members = ["${saved_bill_draft.created_by}"], allow_self = true, enabled = false, operation_key = "demo-bill-policy" }

@@ -20,32 +20,25 @@ def named(value):
     return dict(id=value.id, name=getattr(value, 'full_name', None) or value.label)
 
 
-def calculate(s, inp):
-    fields = {k: v for k, v in inp.model_dump(mode='json', exclude_unset=True).items() if k in m.Payload.model_fields}
-    payload = m.Payload.model_validate(fields)
-    header, _ = bills.resolve_header(s, payload, payload.date, None, None)
-    currency = header['currency']
-    lines = [bills._expense_line(s, line, header['class_id'], currency, index)
-             for index, line in enumerate(payload.expenses)]
-    total = checked_sum((line['amount_minor_units'] for line in lines), 'expenses.total')
-    normalized = payload.model_dump(mode='json')
-    normalized.update(vendor=header['vendor'].id, ap_account=header['ap_account'].id,
-                      terms=header['terms'].id if header['terms'] else None, due_date=header['due_date'],
-                      supplier_reference=header['supplier_reference'],
-                      class_id=header['class_id'].id if header['class_id'] else None)
-    expenses = []
-    for line in lines:
-        profile = line['profile']
-        amount = Money(line['amount_minor_units'], currency).to_dict()
-        expenses.append(dict(account=named(profile.account), amount=amount, memo=line['memo'],
-                             customer=named(profile.customer), class_id=named(profile.class_id), billable=profile.billable))
-    normalized['expenses'] = [dict(account=line['account']['id'], amount=line['amount'], memo=line['memo'],
-        customer=line['customer']['id'] if line['customer'] else None, billable=line['billable'],
-        class_id=line['class_id']['id'] if line['class_id'] else None,
-        class_mode='value' if line['class_id'] else 'none') for line in expenses]
-    preview = m.Preview(total=Money(total, currency).to_dict(), expenses=expenses, vendor=named(header['vendor']),
-                        ap_account=named(header['ap_account']), due_date=header['due_date'], currency=currency)
-    return m.Payload.model_validate(normalized), preview
+def calculate(s, inp, ctx=None, operation='create', original_id=None, original_version=None):
+    from bookflow.company.approval_bill_payload import calculate as native_calculate
+    if ctx is None:
+        from bookflow.core.context import Context, Interface
+        ctx = Context.new(Interface.python, 'Draft preview')
+    fields = {k:v for k,v in inp.model_dump(mode='json', exclude_unset=True).items() if k in m.Payload.model_fields}
+    normalized, snapshot, native = native_calculate(s, ctx, fields, operation, original_id, original_version)
+    # Native correction identity is stored on the draft header, not in its commercial payload.
+    normalized = {k:v for k,v in normalized.items() if k in m.Payload.model_fields}
+    bill = native.preview
+    expenses = [dict(account=named(x.line_snapshot.account), amount=x.amount,
+        memo=x.memo, customer=named(x.line_snapshot.customer), class_id=named(x.line_snapshot.class_id),billable=x.billable)
+        for x in bill.revision.expenses]
+    preview = m.Preview(total=bill.total,expenses=expenses,
+        items=[dict(item=named(x.line_snapshot.item), description=x.description, quantity=x.quantity,
+                    unit_cost=x.unit_cost, amount=x.amount) for x in bill.revision.items],
+        **native.data['display_sources'],vendor=dict(id=bill.vendor_id,name=bill.vendor_name),
+        ap_account=named(bill.revision.profile.ap_account),due_date=bill.due_date,currency=bill.currency)
+    return m.Payload.model_validate(normalized), preview, snapshot
 
 
 def row(s, draft):
@@ -65,8 +58,10 @@ def output(s, value, added=None):
         c.purchase_draft_revisions.c.draft_id == value['id']).order_by(c.purchase_draft_revisions.c.version)).mappings()]
     if added is not None:
         history.append(revision_out(added))
-    return m.DraftOutput(**{key: value[key] for key in ('id', 'version', 'kind', 'operation', 'state', 'created_at',
-        'created_by', 'updated_at', 'updated_by')}, payload=json.loads(value['payload']), preview=json.loads(value['preview']),
+    from bookflow.company.approvals import request_for
+    req = request_for(s, value['id'])
+    return m.DraftOutput(snapshot=json.loads(value['snapshot']) if value.get('snapshot') else None, request_id=req['id'] if req else None, request_version=req['version'] if req else None, **{key: value[key] for key in ('id', 'version', 'kind', 'operation', 'state', 'created_at',
+        'created_by', 'updated_at', 'updated_by', 'original_id', 'original_version')}, payload=json.loads(value['payload']), preview=json.loads(value['preview']),
         history=history)
 
 
@@ -77,9 +72,17 @@ def check(s, value, expected):
             details=dict(record_type='purchase_draft', record_id=value['id'], expected_version=expected,
                          current_version=value['version'], updated_by=value['updated_by'], updated_at=value['updated_at'],
                          changed_fields=['payload', 'state']))
-    if value['state'] != 'draft':
-        raise BookflowError('E_APPROVAL_STATE', message='A cancelled draft remains readable and cannot be changed.',
-                            details={'state': value['state'], 'allowed_actions': ['show', 'list']})
+    if value['state'] not in ('draft', 'rejected'):
+        state = value['state']
+        message, actions = {
+            'pending': ('Withdraw this pending draft before changing it.', ['show', 'list', 'withdraw']),
+            'approved': ('Withdraw this approved draft before changing it.', ['show', 'list', 'withdraw']),
+            'committed': ('Correct a committed bill with a new correction draft, or reverse it through its batch.',
+                          ['show', 'list', 'purchase-draft create', 'batch reverse']),
+            'cancelled': ('A cancelled draft remains readable and cannot be changed.', ['show', 'list']),
+        }[state]
+        raise BookflowError('E_APPROVAL_STATE', message=message,
+                            details={'state': state, 'allowed_actions': actions})
 
 
 def request(inp, ctx):
@@ -111,9 +114,15 @@ def prepare(s, ctx, inp, verb):
     if verb == 'cancel':
         after = dict(before, state='cancelled')
     else:
-        payload, preview = calculate(s, inp)
-        after = dict(before or {}, kind=inp.kind, operation=inp.operation, state='draft',
-                     payload=payload.model_dump_json(), preview=preview.model_dump_json(), currency=preview.currency)
+        entry = inp
+        if before and 'operation' not in inp.model_fields_set:
+            entry = inp.model_copy(update={'operation': before['operation'],
+                'original_id': inp.original_id if 'original_id' in inp.model_fields_set else before['original_id'],
+                'original_version': inp.original_version if 'original_version' in inp.model_fields_set else before['original_version']})
+        payload, preview, snapshot = calculate(s, entry, ctx, entry.operation, entry.original_id, entry.original_version)
+        after = dict(before or {}, kind=entry.kind, operation=entry.operation, state='draft',
+                     payload=payload.model_dump_json(exclude_unset=True), preview=preview.model_dump_json(), currency=preview.currency,
+                     snapshot=encoded(snapshot), original_id=bills.resolve(s, entry.original_id)['id'] if entry.original_id else None, original_version=entry.original_version)
     if before is None:
         after.update(id=new_id(), created_at=at, created_by=s.actor.id, created_via=ctx.interface.value)
     after.update(version=before['version'] + 1 if before else 1, updated_at=at,

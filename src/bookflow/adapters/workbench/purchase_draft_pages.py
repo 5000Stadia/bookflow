@@ -8,6 +8,7 @@ from starlette.concurrency import run_in_threadpool
 
 from bookflow.core.errors import BookflowError
 from bookflow.core.ids import new_id
+from bookflow.core.money import Money
 
 HEADERS = ('vendor', 'date', 'number', 'ap_account', 'terms', 'due_date', 'supplier_reference', 'memo', 'class_id')
 LINE_FIELDS = ('account', 'amount', 'memo', 'customer', 'class_id', 'class_mode', 'line_id')
@@ -48,7 +49,7 @@ def values_of(draft):
     for index, row in enumerate(payload.get('expenses') or [{}]):
         for key, value in row.items():
             if key == 'amount' and isinstance(value, dict):
-                value = value.get('amount', '')
+                value = Money.parse(value).amount
             values[f'expense:{index}:{key}'] = 'on' if value is True else '' if value is None or value is False else value
     return values
 
@@ -59,10 +60,18 @@ def mount(app, *, render, run, credential, page_error, role_allows):
         return base + ('?' + urlencode({'draft': draft_id}) if draft_id else '')
 
     def page(request, company_id, *, draft_id=None, editing=False, values=None, result=None,
-             error=None, saved=False, cancelled=False):
+             error=None, saved=False, cancelled=False, notice=None, committed=None, withdraw_preview=False):
         company = run(request, 'company show', {}, company_id)
         draft = run(request, 'purchase-draft show', {'draft': draft_id}, company_id) if draft_id else None
         can_write = role_allows('purchase-draft create', company, credential(request))
+        actions = {verb: role_allows('approval decide' if verb == 'decide' else 'purchase-draft ' + verb,
+                   company, credential(request)) for verb in ('submit', 'withdraw', 'commit', 'decide', 'cancel', 'preview')}
+        approval = None
+        if draft and draft.get('request_id') and role_allows('approval show', company, credential(request)):
+            approval = run(request, 'approval show', {'request': draft['request_id']}, company_id)
+        simple_edit = not draft or (draft['operation'] == 'create' and not any(
+            draft['payload'].get(key) for key in ('items', 'purchase_order', 'order_lines', 'receipts', 'custom_fields', 'site', 'count_position')))
+        editing = editing and simple_edit
         listing = None
         if not draft_id and not editing:
             raw = {'limit': 50}
@@ -74,7 +83,9 @@ def mount(app, *, render, run, credential, page_error, role_allows):
         indices = row_indices(values) or [0]
         response = render('purchase_drafts.html', request, company=company, company_id=company['company_id'],
                           draft=draft, listing=listing, editing=editing, values=values, indices=indices,
-                          result=result, error=error, saved=saved, cancelled=cancelled, can_write=can_write)
+                          result=result, error=error, saved=saved, cancelled=cancelled, can_write=can_write,
+                          actions=actions, approval=approval, simple_edit=simple_edit, notice=notice, committed=committed,
+                          withdraw_preview=withdraw_preview)
         if draft:
             response.headers['HX-Push-Url'] = url(company['company_id'], draft_id) + ('&edit=1' if editing else '')
         return response
@@ -95,7 +106,8 @@ def mount(app, *, render, run, credential, page_error, role_allows):
             if action == 'saved-preview':
                 result = run(request, 'purchase-draft preview', {'draft': draft_id}, company_id)
                 return page(request, company_id, draft_id=draft_id, result=result)
-            if action not in ('save', 'preview', 'cancel'):
+            workflow = ('submit', 'approve', 'reject', 'withdraw', 'withdraw-preview', 'commit')
+            if action not in ('save', 'preview', 'cancel', *workflow):
                 raise BookflowError('E_VALIDATION', message='Choose Save draft, Preview or Cancel draft.')
             raw = {'operation_key': form.get('operation_key', '')}
             if draft_id:
@@ -104,21 +116,49 @@ def mount(app, *, render, run, credential, page_error, role_allows):
                 except ValueError:
                     raise BookflowError('E_VALIDATION', message='Reload the draft to read its current version.') from None
                 raw.update(draft=draft_id, expected_version=version)
+            if action in workflow:
+                if action in ('approve', 'reject'):
+                    raw = dict(request=form.get('request_id', ''), expected_version=int(form.get('request_version', '0')),
+                               decision=action, step_id='review', comment=form.get('comment') or None,
+                               operation_key=form.get('operation_key', ''))
+                    command = 'approval decide'
+                else:
+                    command = 'purchase-draft ' + ('withdraw' if action == 'withdraw-preview' else action)
+                    if action in ('withdraw', 'withdraw-preview', 'commit') and form.get('request_version'):
+                        raw['expected_request_version'] = int(form['request_version'])
+                    if action in ('withdraw', 'withdraw-preview'):
+                        raw['confirm'] = action == 'withdraw-preview' or form.get('confirm') == 'true'
+                result = run(request, command, raw, company_id, headers=headers, dry_run=action == 'withdraw-preview')
+                notices = {'submit': 'Submitted for approval. Nothing posted.', 'approve': 'Approved. Nothing posted.',
+                    'reject': 'Returned for revision. Nothing posted.', 'withdraw': 'Approval withdrawn; draft is editable.',
+                    'withdraw-preview': 'Review withdrawal: this approval will be invalidated and the draft will become editable. Nothing has changed.',
+                    'commit': 'Bill posted. The commit is recorded as one reversible batch.'}
+                return page(request, company_id, draft_id=draft_id, notice=notices[action],
+                            values=form if action == 'withdraw-preview' else None,
+                            withdraw_preview=action == 'withdraw-preview', committed=result if action == 'commit' else None)
             if action == 'cancel':
                 result = run(request, 'purchase-draft cancel', raw, company_id, headers=headers)
                 return page(request, company_id, draft_id=draft_id, cancelled=True)
+            if draft_id:
+                current = run(request, 'purchase-draft show', {'draft': draft_id}, company_id)
+                if current['operation'] != 'create' or any(current['payload'].get(key) for key in
+                    ('items', 'purchase_order', 'order_lines', 'receipts', 'custom_fields', 'site', 'count_position')):
+                    raise BookflowError('E_VALIDATION', message='Use the full purchase-draft update form to preserve this draft’s source and item fields.')
             raw.update(payload_of(form))
             command = 'purchase-draft update' if draft_id else 'purchase-draft create'
             result = run(request, command, raw, company_id, headers=headers, dry_run=action == 'preview')
             if action == 'preview':
                 return page(request, company_id, draft_id=draft_id, editing=True, values=form, result=result)
             return page(request, company_id, draft_id=result['id'], saved=True)
+        except ValueError:
+            return page(request, company_id, draft_id=draft_id, values=form,
+                        error={'code': 'E_VALIDATION', 'message': 'Reload the draft to read its current versions.'})
         except BookflowError as error:
             if error.code in ('E_UNAUTHENTICATED', 'E_WORKBENCH_HEADER', 'E_PERMISSION'):
                 raise
             safe_form = {key: value for key, value in form.items() if not key.startswith('expense:') or
                          (len(key.split(':')) == 3 and key.split(':')[1].isdigit() and len(key.split(':')[1]) <= 3)}
-            return page(request, company_id, draft_id=draft_id, editing=action != 'cancel',
+            return page(request, company_id, draft_id=draft_id, editing=action in ('save', 'preview'),
                         values=safe_form, error=error.to_dict())
 
     @app.post('/c/{company_id}/purchase-drafts')

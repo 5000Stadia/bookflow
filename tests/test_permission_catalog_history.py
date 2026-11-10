@@ -129,6 +129,7 @@ ACCEPTED = {
     'payroll-draft-v1': (922, '365f7a60586a9ad2bef7341b77905c85a4816b033177fc22215ac0c63155419a'),
     'commission-attribution-v1': (924, 'b8f3b2224ff689ed09c689687114678d118a379d75c56756e80a85267bf2cc13'),
     'crm-leads-v1': (931, '2391f97a14862f9e1b000380a94508db57869b458bc6b6125f8a56a0075ca672'),
+    'bill-approval-v1': (942, '2c3aa75ea00d9b2be1276eb3847bb3d712a84026df49c03eaeef97ff430f618e'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -304,6 +305,9 @@ CHAIN_ADDITIONS = {
     'payroll-draft-v1': {'payroll setup', 'payroll settings', 'payroll draft', 'payroll show', 'payroll list', 'payroll prepare'},
     'commission-attribution-v1': {'commission recipient-options', 'report commission-attribution'},
     'crm-leads-v1': {'lead ' + verb for verb in ('create', 'update', 'show', 'list', 'close', 'reopen', 'archive')},
+    'bill-approval-v1': {'purchase-draft submit', 'purchase-draft withdraw', 'purchase-draft commit',
+                         'approval decide', 'approval show', 'approval history', 'approval-policy create',
+                         'approval-policy update', 'approval-policy publish', 'approval-policy show', 'approval-policy list'},
 }
 
 _ANCESTOR_EDIT = """
