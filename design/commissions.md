@@ -400,7 +400,7 @@ implementation is authorized by this documentation commit itself.
    standard humans; `commission.manage` defaults to admins and gates item flag edits in addition to ordinary item rights.
    Company settings retain company-admin authority. The report also requires customer-work read permission. Agents need
    explicit new-capability grants intersected with their principal's rights. The plain POS clerk gains no capability.
-   Catalog `commission-attribution-v1` extends `notice-reversal-v1`; company migration `co0129` adds only the two flags.
+   Catalog `commission-attribution-v1` extends `payroll-draft-v1`; company migration `co0131` adds only the two flags.
 
    The demo adds a recipient and flagged service, previews two different recipients, then restores the off switch without
    changing its accounting balances. Targeted tests cover refusal atomicity, legacy snapshots, discounted net, permission
