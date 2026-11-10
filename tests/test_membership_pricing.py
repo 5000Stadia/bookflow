@@ -163,9 +163,10 @@ def test_the_layer_off_changes_no_price_and_refuses_membership_writes(books):
     assert code_of(lambda: write(books, 'company update', {'membership_pricing_enabled': True})) == 'E_VALIDATION'
 
 
-def test_old_companies_migrate_intact_with_the_layer_off(books):
+def test_old_companies_migrate_intact_with_the_layer_off(books, monkeypatch):
     from bookflow.storage.engine import open_database
-    from bookflow.storage.migrate import migrate_to_head
+    from bookflow.storage.migrate import HEADS, migrate_to_head
+    head = HEADS['company']
     path = Path(books.run('company show', {})['path']) / 'company.db'
     with sqlite3.connect(path) as db:
         db.execute('PRAGMA foreign_keys=OFF')
@@ -174,13 +175,18 @@ def test_old_companies_migrate_intact_with_the_layer_off(books):
         db.execute('ALTER TABLE company_info DROP COLUMN membership_pricing_enabled')
         db.execute("UPDATE alembic_version SET version_num='co0133'")
         before = {name: db.execute('SELECT * FROM ' + name).fetchall() for name in ('customers', 'items', 'price_levels')}
-    with open_database(path, writable=True) as db:
-        assert migrate_to_head(db, 'company', None) == ('co0133', 'co0134')
-        for name, rows in before.items():
-            assert db.raw.execute('SELECT * FROM ' + name).fetchall() == rows
-        assert db.raw.execute('SELECT membership_pricing_enabled FROM company_info').fetchall() == [(0,)]
-        assert db.raw.execute('SELECT count(*) FROM membership_plans').fetchone() == (0,)
-        assert db.raw.execute('PRAGMA foreign_key_check').fetchall() == []
+    # Only this migration is rewound, so only it is run; the file is stamped back to its real head afterwards.
+    with monkeypatch.context() as patch:
+        patch.setitem(HEADS, 'company', 'co0134')
+        with open_database(path, writable=True) as db:
+            assert migrate_to_head(db, 'company', None) == ('co0133', 'co0134')
+            for name, rows in before.items():
+                assert db.raw.execute('SELECT * FROM ' + name).fetchall() == rows
+            assert db.raw.execute('SELECT membership_pricing_enabled FROM company_info').fetchall() == [(0,)]
+            assert db.raw.execute('SELECT count(*) FROM membership_plans').fetchone() == (0,)
+            assert db.raw.execute('PRAGMA foreign_key_check').fetchall() == []
+    with sqlite3.connect(path) as db:
+        db.execute('UPDATE alembic_version SET version_num=?', (head,))
     assert invoice(books, '2026-11-15')['total_minor_units'] == 5997
 
 
