@@ -313,6 +313,11 @@ CHAIN_ADDITIONS = {
                          'approval-policy update', 'approval-policy publish', 'approval-policy show', 'approval-policy list'},
     'membership-pricing-v1': {'membership-plan create', 'membership-plan update', 'membership-plan show', 'membership-plan list',
                               'customer membership set', 'customer membership end', 'customer membership show'},
+    'intercompany-setup-v1': {'intercompany-settings show', 'intercompany-settings update', 'intercompany-mapping set',
+                              'intercompany-draft create', 'intercompany-draft update', 'intercompany-draft show',
+                              'intercompany-draft list', 'intercompany-relationship create',
+                              'intercompany-relationship update', 'intercompany-relationship show',
+                              'intercompany-relationship list'},
     'commission-pos-v1': {'pos commission-options'},
 }
 
