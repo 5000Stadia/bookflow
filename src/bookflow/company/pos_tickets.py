@@ -51,9 +51,12 @@ def output(s, row):
         name = s.company.conn.execute(sa.select(c.customers.c.full_name).where(c.customers.c.id == row['customer_id'])).scalar_one()
         chosen = dict(id=row['customer_id'], name=name)
     names = user_names(s, {row['updated_by']})
+    lines = json.loads(row['lines'])
+    from bookflow.company import commissions
+    review = commissions.review_ticket(s, lines) if row['status'] in ('held', 'open') else []
     return m.TicketOutput(**{key: row[key] for key in ('id', 'version', 'status', 'label', 'created_at', 'created_by',
         'created_via', 'updated_at', 'updated_by', 'updated_via')},
-        pos_register=dict(id=reg['id'], name=reg['name']), customer=chosen, lines=json.loads(row['lines']),
+        pos_register=dict(id=reg['id'], name=reg['name']), customer=chosen, lines=lines, commission_review=review,
         total=Money(row['total_minor_units'], row['currency']).to_dict(),
         device=row['device'], clerk_id=row['updated_by'], clerk_name=names.get(row['updated_by'], row['updated_by']))
 

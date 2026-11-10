@@ -101,11 +101,10 @@ def test_recipient_lookup_narrow_and_permission_denial(books, shop):
         assert err.value.code == 'E_PERMISSION'
 
 
-def test_receipts_cannot_accept_attribution_yet(books, shop):
-    bank = shop['call']('account create', name='Receipt till', type='bank')['id']
+def test_estimates_cannot_accept_attribution_yet(books, shop):
+    # Sales receipts take attribution since increment 2 (tests/test_commission_receipts_pos.py); quotes do not.
     with pytest.raises(BookflowError) as err:
-        shop['call']('sales-receipt post', customer='Rivera Construction', date='2026-01-15',
-            deposit_to=bank, lines=[line(shop)])
+        shop['call']('estimate create', customer='Rivera Construction', date='2026-01-15', lines=[line(shop)])
     assert err.value.code == 'E_VALIDATION'
 
 

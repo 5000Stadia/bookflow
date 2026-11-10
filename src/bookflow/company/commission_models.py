@@ -1,4 +1,4 @@
-"""Invoice attribution contracts; no commission rates, earnings or payments."""
+"""Line attribution contracts for invoices, sales receipts and POS sales; no commission rates, earnings or payments."""
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from bookflow.company.journal_models import _Date
@@ -17,10 +17,25 @@ class CommissionInput(StrictModel):
     recipients: list[CommissionRecipientInput] = Field(min_length=1, max_length=1)
 
 
+class MemberCommissionInput(StrictModel):
+    member: int = Field(ge=1, le=200, description="1-based position of the group's active member, in member order.")
+    commission: CommissionInput
+
+
 class CapturedRecipient(StrictModel):
     recipient_id: str
     recipient_label: str
     share: Literal[100] = 100
+
+
+class RecipientLabel(StrictModel):
+    recipient_id: str
+    recipient_label: str
+
+
+class CommissionLabels(StrictModel):
+    """Who was chosen, as any seller may see it: no rates, amounts or private recipient fields."""
+    recipients: list[RecipientLabel]
 
 
 class CommissionSnapshot(StrictModel):
@@ -35,7 +50,7 @@ class RecipientOptionsInput(StrictModel):
     item: str | None = Field(None, min_length=1, max_length=1004)
     sales_rep: str | None = Field(None, min_length=1, max_length=1004)
     search: str = Field('', max_length=200)
-    document_kind: Literal['invoice'] = 'invoice'
+    document_kind: Literal['invoice', 'sales_receipt', 'pos_sale'] = 'invoice'
     limit: int = Field(100, ge=1, le=200)
 
 
@@ -65,7 +80,8 @@ class CommissionAttributionInput(StrictModel):
 
 
 class CommissionAttributionRow(StrictModel):
-    invoice_id: str
+    invoice_id: str = Field(description='The posted document: an invoice or a sales receipt (a POS sale posts either).')
+    document_type: Literal['invoice', 'sales_receipt'] = 'invoice'
     number: str
     date: str
     line_id: str
@@ -88,3 +104,20 @@ class CommissionAttributionTotal(StrictModel):
 class CommissionAttributionOutput(StrictModel):
     rows: list[CommissionAttributionRow]
     totals: list[CommissionAttributionTotal]
+
+
+class PosCommissionOptionsInput(StrictModel):
+    item: str | None = Field(None, min_length=1, max_length=1004, description='Item ID or name the clerk just rang up.')
+    customer: str | None = Field(None, min_length=1, max_length=1004, description="The ticket's chosen customer, whose header rep is only suggested.")
+    search: str = Field('', max_length=200)
+    limit: int = Field(100, ge=1, le=200)
+
+
+class CommissionReview(StrictModel):
+    """A held line whose selection no longer stands; shown before Charge and re-asked by the till."""
+    line: int = Field(description='1-based position of the ticket line.')
+    member: int | None = Field(None, description='1-based group member, when the line is a group.')
+    item_id: str
+    problem: Literal['recipient_inactive', 'selection_required', 'item_not_enabled']
+    recipient_id: str | None = None
+    recipient_label: str | None = None

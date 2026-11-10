@@ -86,6 +86,8 @@ def capability_for(command: str) -> str | None:
 
 
 def threshold(capability: str) -> str:
+    if capability == 'commission.attribute':
+        return 'member'   # commission-pos-v1: a till selection, so a clerk-principal's agent can be admitted
     if capability in _COMMISSION:
         return _COMMISSION[capability][0]
     if capability in PAYROLL:

@@ -579,7 +579,7 @@ The same example as complete `bookflow_run` arguments:
 | `category_id` | `--category-id` | string \| null | no | yes | null | — |
 | `description` | `--description` | string \| null | no | yes | null | — |
 | `purchase_description` | `--purchase-description` | string \| null | no | yes | null | — |
-| `commission_enabled` | `--commission-enabled` | boolean | no | no | null | Require one commission recipient on new invoice lines when commission attribution is enabled; no rates or payments. |
+| `commission_enabled` | `--commission-enabled` | boolean | no | no | null | Require one commission recipient on new invoice, sales receipt and POS lines when commission attribution is enabled; no rates or payments. |
 | `sales_enabled` | `--sales-enabled` | boolean \| null | no | yes | null | — |
 | `purchase_enabled` | `--purchase-enabled` | boolean \| null | no | yes | null | — |
 | `price` | `--price` | any \| null | no | yes | null | — |
@@ -2468,7 +2468,7 @@ The same example as complete `bookflow_run` arguments:
 | `category_id` | `--category-id` | string \| null | no | yes | null | — |
 | `description` | `--description` | string \| null | no | yes | null | — |
 | `purchase_description` | `--purchase-description` | string \| null | no | yes | null | — |
-| `commission_enabled` | `--commission-enabled` | boolean | no | no | null | Require a commission recipient on new invoice lines; needs commission.manage and attribution enabled to turn on. Omission preserves; null refuses. |
+| `commission_enabled` | `--commission-enabled` | boolean | no | no | null | Require a commission recipient on new invoice, sales receipt and POS lines; needs commission.manage and attribution enabled to turn on. Omission preserves; null refuses. |
 | `sales_enabled` | `--sales-enabled` | boolean \| null | no | yes | null | — |
 | `purchase_enabled` | `--purchase-enabled` | boolean \| null | no | yes | null | — |
 | `price` | `--price` | any \| null | no | yes | null | — |

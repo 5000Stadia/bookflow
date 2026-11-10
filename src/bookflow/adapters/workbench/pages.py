@@ -2855,7 +2855,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       commission_labels={allocation['recipient_id']: allocation['recipient_label']
                           for line in (result or shown or {}).get('revision', {}).get('lines', [])
                           for allocation in (line.get('item_snapshot', {}).get('commission') or {}).get('recipients', [])},
-                      commission_entry=(noun == 'invoice' and verb in ('post', 'update')
+                      commission_entry=(noun in ('invoice', 'sales-receipt') and verb in ('post', 'update')
                           and bool((authorized_company or {}).get('info', {}).get('commission_attribution_enabled'))
                           and effective_capabilities(request, company_id).holds('commission.attribute')),
                       crumb=meta.get("plural_label") or (Naming.list_heading(noun, meta) if company_id is None and noun in Admin.COLUMNS else None),

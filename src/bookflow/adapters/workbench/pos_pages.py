@@ -26,8 +26,17 @@ def _picture(item: dict[str, Any]) -> str | None:
     return shown.get('url') if shown else None
 
 
+def _commission_members(item: dict[str, Any], enabled: set[str]) -> list[dict[str, Any]]:
+    """A group's commission-enabled members, each asked for its own recipient: its 1-based position among the
+    group's active members (what `member_commissions` names) and its name."""
+    active = sorted((m for m in item.get('members') or () if m.get('active', True)), key=lambda m: (m['position'], m['id']))
+    return [dict(member=index, item=m['component_item_id'], name=m['component_name']) for index, m in enumerate(active, start=1)
+            if m['component_item_id'] in enabled]
+
+
 def _items(listed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     out = []
+    enabled = {item['id'] for item in listed if item.get('commission_enabled')}
     for item in listed:
         if not item.get('active', True) or not item.get('sales_enabled') or item.get('type') not in LOOKUP_TYPES:
             continue
@@ -39,7 +48,10 @@ def _items(listed: list[dict[str, Any]]) -> list[dict[str, Any]]:
                                                                                  'inventory_assembly') else None,
                         tracking=item.get('tracking') or 'none', picture=_picture(item),
                         # A percentage charge has no price of its own: it is rung up by lookup, like a discount.
-                        box=item['type'] in BOX_TYPES and not (item['type'] == 'other_charge' and price is None)))
+                        box=item['type'] in BOX_TYPES and not (item['type'] == 'other_charge' and price is None),
+                        # R189 increment 2: who sold it is asked at the till; a group asks once per enabled member.
+                        commission=bool(item.get('commission_enabled')),
+                        commission_members=_commission_members(item, enabled) if item['type'] == 'group' else []))
     return out
 
 
@@ -74,10 +86,14 @@ def mount(app, *, render, run, credential, page_error, role_allows, holds=None, 
             items = _items(run(request, 'item list', {}, cid)['items'])
             held = holds(request, cid, 'pos.price-override') if holds is not None else None
             can_override = bool(held) if held is not None else company.get('role') in _SELLERS
+            attributes = holds(request, cid, 'commission.attribute') if holds is not None else None
+            can_attribute = bool(attributes) if attributes is not None else company.get('role') in _SELLERS
             data = dict(company=cid, currency=company.get('home_currency') or 'USD',
                         registers=[dict(id=r['id'], name=r['name'], methods=r['payment_methods'], count_shifts=r['count_shifts'])
                                    for r in registers],
                         items=items, layout=run(request, 'pos-box list', {}, cid), can_override=can_override,
+                        commission_on=bool((company.get('info') or {}).get('commission_attribution_enabled')),
+                        can_attribute=can_attribute,
                         can_layout=role_allows('pos-box create', company, credential(request)),
                         can_void=role_allows('pos sale void', company, credential(request)),
                         can_refund=role_allows('pos refund', company, credential(request)),

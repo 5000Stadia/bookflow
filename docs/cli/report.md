@@ -2066,7 +2066,7 @@ Example JSON output:
 
 ## `report commission-attribution`
 
-Report final net invoice sales credited to each salesperson or affiliate from captured per-line attribution. Current posted invoices only; historical attribution remains readable when the switch is off. No commission money is calculated.
+Report final net sales credited to each salesperson or affiliate from captured per-line attribution on invoices and sales receipts, POS sales included. Current posted documents only; historical attribution remains readable when the switch is off. No commission money is calculated.
 
 | Contract | Value |
 |---|---|
@@ -2128,7 +2128,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
 | `rows` | array[object] | yes | no | — | — |
-| `rows[].invoice_id` | string | yes | no | — | — |
+| `rows[].invoice_id` | string | yes | no | — | The posted document: an invoice or a sales receipt (a POS sale posts either). |
+| `rows[].document_type` | literal["invoice", "sales_receipt"] | no | no | "invoice" | — |
 | `rows[].number` | string | yes | no | — | — |
 | `rows[].date` | string | yes | no | — | — |
 | `rows[].line_id` | string | yes | no | — | — |

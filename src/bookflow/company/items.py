@@ -134,7 +134,7 @@ class ItemInput(StrictModel):
     category_id: str | None = Field(default=None, min_length=26, max_length=26)
     description: str | None = None
     purchase_description: str | None = None
-    commission_enabled: bool = Field(default=None, strict=True, description="Require one commission recipient on new invoice lines when commission attribution is enabled; no rates or payments.")
+    commission_enabled: bool = Field(default=None, strict=True, description="Require one commission recipient on new invoice, sales receipt and POS lines when commission attribution is enabled; no rates or payments.")
     sales_enabled: bool | None = None
     purchase_enabled: bool | None = None
     price: Any | None = None

@@ -3,7 +3,7 @@ from bookflow.company import pos_tickets as t, pos_ticket_models as m, pos_sales
 from bookflow.core.registry import Plan, command
 
 ERRORS = ['E_FEATURE_DISABLED', 'E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_WORK_DEPENDENCY',
-          'E_VALIDATION', 'E_INACTIVE_REFERENCE', 'E_PERMISSION', 'E_PERIOD_CLOSED', 'E_VALUE_RANGE', 'E_AMOUNT_PRECISION']
+          'E_VALIDATION', 'E_INACTIVE_REFERENCE', 'E_PERMISSION', 'E_PERIOD_CLOSED', 'E_VALUE_RANGE', 'E_AMOUNT_PRECISION', 'E_COMMISSION_REQUIRED']
 
 
 def plan_hold(inp, ctx, s):

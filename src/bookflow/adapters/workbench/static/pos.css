@@ -193,3 +193,14 @@
 #pos .pos-payments li { display: flex; justify-content: space-between; align-items: center; gap: .5rem; border-bottom: 1px solid var(--pos-line); }
 #pos .pos-payments span { overflow-wrap: anywhere; }
 #pos .pos-tender { max-height: calc(100dvh - 2rem); overflow-y: auto; }
+
+/* R189 increment 2: who sold a line. Full height on a phone, a modal beside the cart on a desk; 44px targets. */
+#pos .pos-commission-results button { min-height: 44px; font-size: 1.05rem; }
+#pos .pos-line-commission-label { display: block; font-size: .85rem; opacity: .8; }
+#pos .pos-line-commission-label[data-needs] { color: #a8445b; opacity: 1; font-weight: 600; }
+#pos .pos-line-commission { display: flex; gap: .5rem; align-items: center; justify-content: space-between; }
+#pos .pos-line-commission button { min-height: 44px; }
+@media (max-width: 559px) {
+  #pos .pos-commission-dialog { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; }
+  #pos .pos-commission-dialog .pos-commission-results { max-height: calc(100dvh - 14rem); }
+}

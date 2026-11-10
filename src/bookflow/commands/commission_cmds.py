@@ -7,7 +7,7 @@ from bookflow.company.commission_models import (
 
 
 @command('commission recipient-options', scope='company',
-    description='Find active sales representatives for who sold an invoice line: names and IDs only, with an optional header-rep suggestion. Attribution uses sales-rep list names; no rates, earnings or payments.',
+    description='Find active sales representatives for who sold an invoice or sales receipt line ("who sold it", salesperson, affiliate): names and IDs only, with an optional header-rep suggestion. Attribution uses sales-rep list names; no rates, earnings or payments. At the till use `pos commission-options`.',
     input_model=RecipientOptionsInput, output_model=RecipientOptionsOutput,
     required_role='standard', capability='commission.attribute', error_codes=['E_RECORD_NOT_FOUND'])
 def plan_recipient_options(inp, ctx, s):
@@ -16,7 +16,7 @@ def plan_recipient_options(inp, ctx, s):
 
 
 @command('report commission-attribution', scope='company',
-    description='Report final net invoice sales credited to each salesperson or affiliate from captured per-line attribution. Current posted invoices only; historical attribution remains readable when the switch is off. No commission money is calculated.',
+    description='Report final net sales credited to each salesperson or affiliate from captured per-line attribution on invoices and sales receipts, POS sales included. Current posted documents only; historical attribution remains readable when the switch is off. No commission money is calculated.',
     input_model=CommissionAttributionInput, output_model=CommissionAttributionOutput,
     required_role='standard', capability='commission.read', error_codes=['E_RECORD_NOT_FOUND'])
 def plan_attribution(inp, ctx, s):

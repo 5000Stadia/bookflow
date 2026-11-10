@@ -149,9 +149,11 @@ RESOURCE_PAIRS = {
         # pos-v1: an agent holds a POS capability only by its own grant.
         ('pos.sell', 'member'), ('pos.void', 'member'), ('pos.refund', 'member'), ('pos.price-override', 'member'),
         ('pos.layout', 'admin'), ('bank-feed.connect', 'admin'),
-        ('commission.attribute', 'standard'), ('commission.read', 'standard'), ('commission.manage', 'admin')},
+        ('commission.attribute', 'standard'), ('commission.read', 'standard'), ('commission.manage', 'admin'),
+        # commission-pos-v1: a till selection is a member act.
+        ('commission.attribute', 'member')},
     'commissions.require_capability': {('commission.attribute', 'standard'), ('commission.read', 'standard'),
-                                       ('commission.manage', 'admin')},
+                                       ('commission.manage', 'admin'), ('commission.attribute', 'member')},
     # pos-v1: an item read shows costs only with the books, and vendors only with the vendor list.
     'item_concealment.holds': {('ledger.read', 'member'), ('vendor', 'member')},
     'payment_authority.pos_scope': {('pos.sell', 'member'), ('pos.void', 'member')},

@@ -132,6 +132,7 @@ ACCEPTED = {
     'bill-approval-v1': (942, '2c3aa75ea00d9b2be1276eb3847bb3d712a84026df49c03eaeef97ff430f618e'),
     'membership-pricing-v1': (949, '14c33f7743c47b7721d8825be60f3fb4e89d287f515d97166286b59bc189d4a6'),
     'intercompany-setup-v1': (960, '67602d51a720ba672a62fe16afbe33cab1f266d96b4ceaf24ebedd3705f7f63f'),
+    'commission-pos-v1': (961, '8171794a1952fea02695361d7c712f5e10c8e0b74506d66db6a2d810f325299e'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -312,6 +313,12 @@ CHAIN_ADDITIONS = {
                          'approval-policy update', 'approval-policy publish', 'approval-policy show', 'approval-policy list'},
     'membership-pricing-v1': {'membership-plan create', 'membership-plan update', 'membership-plan show', 'membership-plan list',
                               'customer membership set', 'customer membership end', 'customer membership show'},
+    'intercompany-setup-v1': {'intercompany-settings show', 'intercompany-settings update', 'intercompany-mapping set',
+                              'intercompany-draft create', 'intercompany-draft update', 'intercompany-draft show',
+                              'intercompany-draft list', 'intercompany-relationship create',
+                              'intercompany-relationship update', 'intercompany-relationship show',
+                              'intercompany-relationship list'},
+    'commission-pos-v1': {'pos commission-options'},
 }
 
 _ANCESTOR_EDIT = """

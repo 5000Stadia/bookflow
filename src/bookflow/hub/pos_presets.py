@@ -23,6 +23,8 @@ HOME = 'pos'
 PRESETS = {
     'pos-clerk': ('POS clerk', ('pos.sell',)),
     'pos-clerk-returns': ('Clerk with returns', ('pos.sell', 'pos.void', 'pos.refund')),
+    # R189 increment 2 (commission-pos-v1): who sold each line, and nothing about rates, earnings or payouts.
+    'pos-clerk-commission': ('Clerk with commission attribution', ('pos.sell', 'commission.attribute')),
 }
 
 
