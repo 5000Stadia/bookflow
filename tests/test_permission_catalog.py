@@ -124,7 +124,9 @@ RESOURCE_PAIRS = {
     # opening-draft-v1: posting an opening that does not tie is a person's act an agent holds only by grant.
     'opening_drafts.require_accept': {('opening.accept-differences', 'standard')},
     # capabilities-v1: an agent's former people-only act, admitted for it and its principal (hub.capabilities).
+    'payroll_privacy.require_archive_read': {('payroll.read', 'member')},
     'capability_gate.require_held': {
+        ('payroll.read', 'member'), ('payroll.prepare', 'standard'), ('payroll.configure', 'admin'),
         ('party.merge', 'standard'), ('list.merge', 'standard'), ('restore.document', 'standard'),
         ('item.convert', 'standard'), ('check.print-confirm', 'standard'), ('clock.link', 'standard'),
         ('accountant.manage', 'admin'), ('costing.method', 'admin'), ('company.closing-date', 'admin'),
@@ -171,6 +173,7 @@ def _import_read_pairs():
 
 
 def test_every_resource_call_site_has_explicit_owner_disposition():
+    registry.load_all()
     declared = {**RESOURCE_PAIRS, 'batches.require_read': _import_read_pairs()}
     sites = {}
     for folder in ('commands', 'company'):

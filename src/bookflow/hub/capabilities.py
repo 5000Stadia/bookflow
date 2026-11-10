@@ -21,6 +21,7 @@ from bookflow.core.errors import BookflowError
 from . import people_only
 from . import permission_automation_catalog as _automation_v1
 from .permission_capabilities_catalog import CAPABILITIES as _V1, CLOSING_DATE_CAPABILITY, COMMAND_CAPABILITY as _COMMAND_V1
+from .permission_payroll_draft_catalog import CAPABILITIES as PAYROLL
 from .permission_bank_source_catalog import CAPABILITIES as _BANK_SOURCE
 COMMAND_CAPABILITY = {**_COMMAND_V1, **{name: cap for cap, (_, names) in _BANK_SOURCE.items() for name in names}}
 
@@ -51,6 +52,11 @@ def pos_capability(cmd) -> str | None:
 
 
 def capability_for(command: str) -> str | None:
+    if command.startswith('payroll '):
+        from bookflow.core import registry
+        cmd = registry.get(command)
+        if cmd is not None and cmd.capability in PAYROLL:
+            return cmd.capability
     found = COMMAND_CAPABILITY.get(command)
     if found is None:
         from bookflow.core import registry
@@ -59,6 +65,8 @@ def capability_for(command: str) -> str | None:
 
 
 def threshold(capability: str) -> str:
+    if capability in PAYROLL:
+        return PAYROLL[capability]
     return _POS[capability][0] if capability in _POS else CAPABILITIES[capability][0]
 
 

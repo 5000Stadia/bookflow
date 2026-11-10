@@ -514,6 +514,8 @@ def _copy_out(s, row) -> dict:
 
 
 def plan_export(s, ctx, inp) -> Plan:
+    from bookflow.company.payroll_privacy import require_archive_read
+    require_archive_read(s)
     from bookflow.core.ids import new_id
     copy = active_copy(s)
     if copy and copy['side'] == 'accountant':
@@ -570,6 +572,8 @@ def _seed_copy(row):
 
 
 def apply_export(plan, ctx, s) -> Applied:
+    from bookflow.company.payroll_privacy import require_archive_read
+    require_archive_read(s)
     from bookflow.company import backup_archive as archive
     from bookflow.core.context import client_version
     from bookflow.core.durability import sync_directory

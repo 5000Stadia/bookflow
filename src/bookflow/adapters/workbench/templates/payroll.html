@@ -1,0 +1,59 @@
+{% extends "base.html" %}{% block title %}Private payroll{% endblock %}{% block body %}
+<section id="payroll-workspace" hx-history="false" hx-on::before-swap="if ([400,409].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }" hx-on::after-settle="const e = this.querySelector('[role=alert]'); if(e) e.focus();">
+<style>#payroll-workspace{max-width:900px;overflow-wrap:anywhere}#payroll-workspace *{box-sizing:border-box}#payroll-workspace fieldset{min-width:0;margin:1rem 0}#payroll-workspace label{display:block;margin:.65rem 0}#payroll-workspace input:not([type=checkbox]),#payroll-workspace select,#payroll-workspace textarea{width:100%;min-width:0;min-height:44px}#payroll-workspace button,#payroll-workspace summary{min-height:44px}#payroll-workspace summary{padding:.65rem 0}#payroll-workspace .payroll-actions{position:sticky;bottom:0;background:var(--paper,#fff);padding:.75rem 0;z-index:2}#payroll-workspace .payroll-card{padding:1rem;border:1px solid var(--line,#ddd);border-radius:8px;margin:.7rem 0}#payroll-workspace dl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:.5rem}#payroll-workspace dd{margin:0;text-align:right}</style>
+<nav class="crumbs"><a href="/c/{{ company_id }}/_group/employees">Employees</a> / Payroll</nav>
+<h1>Private paycheck calculator</h1>
+<p>Manual USD payroll. Save and review a paycheck without posting to the books. No tax tables or rates are supplied.</p>
+{% if result %}<p class="notice" role="status" data-payroll-result>{{ result }}</p>{% endif %}
+{% if error %}<div class="error" role="alert" tabindex="-1" data-payroll-error><strong>{{ error.code }}</strong>: {{ error.message }}{% for field in (error.details or {}).get('fields',[]) %}<p>{{ field.field }}: {{ field.problem }}</p>{% endfor %}</div>{% endif %}
+{% if can_setup %}<details {% if not settings.enabled %}open{% endif %}><summary>Payroll settings — {{ 'on' if settings.enabled else 'off' }}</summary>
+<form method="post" hx-post="/c/{{ company_id }}/payroll" hx-select="#payroll-workspace" hx-target="#payroll-workspace" hx-swap="outerHTML" autocomplete="off">
+<input type="hidden" name="action" value="setup"><input type="hidden" name="settings_version" value="{{ values.get('settings_version', settings.version) if values.get('action') == 'setup' else settings.version }}"><input type="hidden" name="operation_key" value="{{ operation_key }}-setup">
+<label><input type="checkbox" name="enabled" value="yes" {% if (values.get('enabled') == 'yes' if values.get('action') == 'setup' else settings.enabled) %}checked{% endif %}> Enable payroll</label>
+{% for key,label in [('wage_account','Wage expense account'),('employer_tax_account','Employer tax expense account'),('net_pay_account','Net Pay Payable account')] %}<label>{{ label }}<input name="{{ key }}" value="{{ values.get(key, '') if values.get('action') == 'setup' else (settings[key] or '') }}" placeholder="Account name or ID"></label>{% endfor %}
+<label>Reason (private)<input name="ctx:reason" required maxlength="140"></label><button type="submit">Save payroll settings</button>
+</form></details>{% endif %}
+<section aria-label="Saved paychecks"><h2>Saved paychecks</h2><p><a href="/c/{{ company_id }}/payroll" data-payroll-new>New paycheck</a></p>
+{% for row in drafts %}<article class="payroll-card"><a href="/c/{{ company_id }}/payroll?draft={{ row.id }}">{{ row.employee }}</a><p>{{ row.period_start }} – {{ row.period_end }} · Pay date {{ row.pay_date or 'not set' }} · {{ row.state }}</p></article>{% else %}<p>No saved paychecks.</p>{% endfor %}</section>
+{% if not settings.enabled %}<p>Payroll is off. Saved paychecks remain readable; enable payroll to save or calculate.</p>{% endif %}
+{% if draft %}<p data-payroll-identity data-id="{{ draft.id }}" data-version="{{ draft.version }}">Draft {{ draft.id }} · version {{ draft.version }} · {{ draft.state }}</p>{% endif %}
+{% if can_prepare and settings.enabled %}
+<form method="post" hx-post="/c/{{ company_id }}/payroll" hx-select="#payroll-workspace" hx-target="#payroll-workspace" hx-swap="outerHTML" autocomplete="off" data-payroll-form>
+<input type="hidden" name="draft" value="{{ values.get('draft','') }}"><input type="hidden" name="expected_version" value="{{ values.get('expected_version',0) }}"><input type="hidden" name="operation_key" value="{{ operation_key }}">
+<input type="hidden" name="earning_count" value="{{ earning_count }}"><input type="hidden" name="item_count" value="{{ item_count }}">
+<h2>{{ 'Edit saved paycheck' if draft else 'New paycheck' }}</h2>
+<label>Employee<input name="employee" required value="{{ values.get('employee','') }}" placeholder="Employee name or ID"></label>
+{% for key,label in [('period_start','Period start'),('period_end','Period end'),('pay_date','Actual pay date (may be left empty in a draft)')] %}<label>{{ label }}<input type="date" name="{{ key }}" {% if key != 'pay_date' %}required{% endif %} value="{{ values.get(key,'') }}"></label>{% endfor %}
+<h3>Earnings</h3><p>Enter a fixed USD amount, or exact quantity × USD rate. Each earning rounds half up to cents.</p>
+{% for i in range(earning_count) %}{% set prefix='e' ~ i ~ '_' %}<fieldset><legend>Earning {{ i+1 }}</legend>
+<label>Code<input name="{{ prefix }}code" value="{{ values.get(prefix ~ 'code','') }}"></label>
+<label>Fixed amount (USD)<input name="{{ prefix }}amount" inputmode="decimal" value="{{ values.get(prefix ~ 'amount','') }}"></label>
+<label>Quantity / hours<input name="{{ prefix }}quantity" inputmode="decimal" value="{{ values.get(prefix ~ 'quantity','') }}"></label>
+<label>Rate (USD per unit)<input name="{{ prefix }}rate" inputmode="decimal" value="{{ values.get(prefix ~ 'rate','') }}"></label>
+</fieldset>{% endfor %}<button type="submit" name="action" value="add_earning" formnovalidate>Add earning row</button>
+<h3>Fixed taxes, deductions and employer costs</h3><p>Enter independently calculated amounts per paycheck. A zero amount needs an explicit source note. These are not percentage rates.</p>
+{% for i in range(item_count) %}{% set prefix='i' ~ i ~ '_' %}<fieldset><legend>Fixed item {{ i+1 }}</legend>
+<label>Code<input name="{{ prefix }}code" value="{{ values.get(prefix ~ 'code','') }}"></label>
+<label>Kind<select name="{{ prefix }}kind">{% for kind in ['employee_tax','employee_deduction','employer_tax','employer_contribution'] %}<option value="{{ kind }}" {% if values.get(prefix ~ 'kind','employee_tax' if i == 0 else 'employer_tax') == kind %}selected{% endif %}>{{ kind.replace('_',' ') }}</option>{% endfor %}</select></label>
+<label>Amount per paycheck (USD)<input name="{{ prefix }}amount" inputmode="decimal" value="{{ values.get(prefix ~ 'amount','') }}"></label>
+<label>Liability account<input name="{{ prefix }}liability_account" value="{{ values.get(prefix ~ 'liability_account','') }}" placeholder="Account name or ID"></label>
+<label>Payee<input name="{{ prefix }}payee" value="{{ values.get(prefix ~ 'payee','') }}"></label>
+<label>Source note / explicit zero reason<textarea name="{{ prefix }}source_note" maxlength="500">{{ values.get(prefix ~ 'source_note','') }}</textarea></label>
+</fieldset>{% endfor %}<button type="submit" name="action" value="add_item" formnovalidate>Add fixed item row</button>
+<label><input type="checkbox" name="taxes_confirmed" value="yes" {% if values.get('taxes_confirmed') %}checked{% endif %} I confirm these fixed items are complete for this paycheck, including any intentionally empty list.</label>
+<label>Reason (private)<input name="ctx:reason" required maxlength="140" value="{{ values.get('ctx:reason','') }}"></label>
+<div class="payroll-actions"><button type="submit" name="action" value="save" data-payroll-save>Save draft</button></div>
+</form>
+{% if draft %}<form method="post" hx-post="/c/{{ company_id }}/payroll" hx-select="#payroll-workspace" hx-target="#payroll-workspace" hx-swap="outerHTML" autocomplete="off">
+<input type="hidden" name="action" value="prepare"><input type="hidden" name="draft" value="{{ draft.id }}"><input type="hidden" name="expected_version" value="{{ draft.version }}"><input type="hidden" name="operation_key" value="{{ operation_key }}-prepare">
+<p>Calculate uses the saved draft. Save any edits above first.</p><label>Reason (private)<input name="ctx:reason" required maxlength="140" value="Review saved paycheck"></label><button type="submit" data-payroll-calculate>Calculate saved draft</button>
+</form>{% endif %}
+{% endif %}
+{% if draft and (not can_prepare or not settings.enabled) %}<section aria-label="Saved paycheck inputs"><h2>Saved inputs — USD</h2><p>Employee {{ draft.employee }} · {{ draft.period_start }} – {{ draft.period_end }} · Pay date {{ draft.pay_date or 'not set' }}</p>
+{% for row in draft.earnings %}<article class="payroll-card"><strong>{{ row.code }}</strong><p>{% if row.amount_minor_units is not none %}{{ money(row.amount_minor_units) }} USD{% else %}{{ row.quantity }} × {{ row.rate }} USD{% endif %}</p></article>{% endfor %}
+{% for row in draft['items'] %}<article class="payroll-card"><strong>{{ row.code }}</strong><p>{{ row.kind.replace('_',' ') }} · {{ money(row.amount_minor_units) }} USD per paycheck</p><p>Payee {{ row.payee }} · Liability account {{ row.liability_account }}</p><p>Source: {{ row.source_note }}</p></article>{% endfor %}</section>{% endif %}
+{% if draft and draft.calculation %}{% set calc=draft.calculation %}<section class="payroll-card" data-payroll-calculation aria-label="Calculation"><h2>Calculation — USD</h2><p>Period {{ draft.period_start }} – {{ draft.period_end }} · Pay date {{ draft.pay_date or 'not set' }}</p>
+<dl>{% for key,label in [('gross_minor_units','Cash gross'),('employee_tax_minor_units','Employee taxes'),('employee_deduction_minor_units','Employee deductions'),('net_minor_units','Net pay'),('employer_cost_minor_units','Employer taxes and contributions'),('total_expense_minor_units','Total employer expense'),('debit_minor_units','Preview debits'),('credit_minor_units','Preview credits')] %}<dt>{{ label }}</dt><dd data-payroll-total="{{ key }}">{{ money(calc[key]) }} USD</dd>{% endfor %}</dl><p>Preview only. Nothing posted or paid.</p>
+{% for line in calc.trace %}<details><summary>How calculated: {{ line.code }} — {{ money(line.amount_minor_units) }} USD</summary><p>{{ line.kind.replace('_',' ') }} · {{ line.method }}</p>{% if line.quantity is not none %}<p>{{ line.quantity }} × {{ line.rate }} USD</p>{% endif %}<p>Exact cents: {{ line.exact_minor_units }}. Rounding: {{ line.rounding.replace('_',' ') }}.</p>{% if line.source_note %}<p>Source: {{ line.source_note }}</p>{% endif %}</details>{% endfor %}
+</section>{% endif %}
+</section>{% endblock %}
