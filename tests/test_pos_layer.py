@@ -25,7 +25,7 @@ H = {"X-Bookflow-Workbench": "1", "X-Bookflow-Client-Name": "bookflow-workbench"
 # `item`. A capability added to `readonly` later fails here first, and must be judged before a clerk can read it.
 CLERK_DENIES = ['account', 'activity', 'attachment', 'audit', 'automation', 'bank-feed', 'bulk-edit', 'chart', 'class',
                 'crm.read', 'custom-field', 'customer', 'customer-message', 'customer-type', 'customer-work', 'directive',
-                'employee', 'import', 'item-category', 'job-type', 'ledger.read', 'note', 'other-name',
+                'employee', 'import', 'intercompany.read', 'item-category', 'job-type', 'ledger.read', 'note', 'other-name',
                 'payment-method', 'price-level', 'profile', 'reports', 'sales-rep', 'sales-tax-code', 'ship-method',
                 'term', 'unit-of-measure', 'vendor', 'vendor-type']
 
@@ -351,6 +351,7 @@ def test_every_pos_command_names_its_pos_capability():
     expected.update({f'pos ticket {verb}': ('pos.sell', 'member') for verb in ('hold', 'list', 'resume', 'take-over', 'discard')})
     expected['pos sale void'] = ('pos.void', 'member')
     expected['pos receipt show'] = ('pos.sell', 'member')
+    expected['pos commission-options'] = ('pos.sell', 'member')   # R189 increment 2: the till's recipient lookup
     expected.update({name: ('pos.refund', 'member') for name in (
         'pos refund', 'pos refund lines', 'pos refund show', 'pos refund receipt')})
     expected.update({'pos shift open': ('pos.sell', 'member'), 'pos shift close': ('pos.sell', 'member'),
