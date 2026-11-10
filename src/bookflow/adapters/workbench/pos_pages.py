@@ -55,6 +55,11 @@ def _items(listed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def _zone(run, request, company_id):
+    """The company's time zone name for printing a receipt's instant, or None for UTC."""
+    return (run(request, 'company show', {}, company_id).get('info') or {}).get('timezone')
+
+
 def mount(app, *, render, run, credential, page_error, role_allows, holds=None, host=None, make_context=None):
     @app.get('/c/{company_id}/pos/receipt/{sale}.pdf')
     def receipt_pdf(request: Request, company_id: str, sale: str, reprint: bool = False, refund: bool = False):
@@ -62,17 +67,18 @@ def mount(app, *, render, run, credential, page_error, role_allows, holds=None, 
         try:
             receipt = run(request, 'pos refund receipt' if refund else 'pos receipt show',
                           {'sale': sale, 'reprint': reprint}, company_id)
-            return Response(pdf(receipt), media_type='application/pdf', headers={'Cache-Control': 'private, no-store'})
+            return Response(pdf(receipt, _zone(run, request, company_id)), media_type='application/pdf', headers={'Cache-Control': 'private, no-store'})
         except BookflowError as error:
             return page_error(request, error)
 
     @app.get('/c/{company_id}/pos/receipt/{sale}')
     def receipt_page(request: Request, company_id: str, sale: str, reprint: bool = False, refund: bool = False):
-        from bookflow.documents.pos_receipt import barcode_svg
+        from bookflow.documents.pos_receipt import barcode_svg, local_time
         try:
             receipt = run(request, 'pos refund receipt' if refund else 'pos receipt show',
                           {'sale': sale, 'reprint': reprint}, company_id)
             return render('pos_receipt.html', request, company_id=company_id, receipt=receipt,
+                          sold_at=local_time(receipt['sale']['created_at'], _zone(run, request, company_id)),
                           barcode='' if refund else barcode_svg(receipt['number']))
         except BookflowError as error:
             return page_error(request, error)

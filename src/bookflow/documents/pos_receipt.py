@@ -1,5 +1,6 @@
 """Content-sized thermal receipts, with one Code 128 representation for HTML and PDF."""
 from io import BytesIO
+from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from functools import lru_cache
@@ -13,6 +14,26 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.platypus import Paragraph, Spacer
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+
+def local_time(instant, zone=None):
+    """A recorded instant as a customer reads it: the company's date and minute, no offset.
+
+    Rendering only; the stored and returned instant is untouched. A missing or unknown zone
+    reads as UTC, never the host's; an unreadable instant prints as given.
+    """
+    try:
+        tz = ZoneInfo(zone or 'UTC')
+    except (ZoneInfoNotFoundError, ValueError, TypeError):
+        tz = timezone.utc
+    try:
+        moment = datetime.fromisoformat(str(instant).replace('Z', '+00:00'))
+    except ValueError:
+        return instant
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(tz).strftime('%Y-%m-%d %H:%M')
 
 
 def barcode(number):
@@ -34,7 +55,7 @@ def receipt_fonts():
     pdfmetrics.registerFont(UnicodeCIDFont('STSong-Light'))
 
 
-def pdf(receipt):
+def pdf(receipt, zone=None):
     receipt_fonts()
     width, margin = receipt['width'] * mm, 3 * mm
     available = width - 2 * margin
@@ -52,7 +73,7 @@ def pdf(receipt):
     if receipt['reprint']: line('Reprint', True)
     if receipt['status'] == 'voided': line('VOID', True)
     sale = receipt['sale']
-    line(sale['created_at'])
+    line(local_time(sale['created_at'], zone))
     line(sale['pos_register']['name'] + ' · ' + receipt['clerk'])
     line(('Credit memo ' if receipt.get('kind') == 'refund' else 'Receipt ') + receipt['number'])
     if receipt['customer']: line(receipt['customer'])
