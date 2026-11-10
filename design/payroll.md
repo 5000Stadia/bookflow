@@ -611,21 +611,41 @@ commit. Later increments never become prerequisites for the early simple route.
    paycheck is one `payroll` batch: `batch reverse` undoes the check and then the paycheck, newest first, and names
    what blocks it (`in_print_run`, `printed`, `reconciled`, `bank_matched`, `later_paycheck`, `closed_period`).
 
-   The wage, employer expense and net-pay accounts are reserved while payroll is on, and so is every account a posted
-   paycheck captured. Journal, register, check, import and memorized entries, transfers and list merges refuse them by
-   name; bills, sales documents and deposits meet the same rule in the `payroll_reserved_posting` trigger on
-   `posting_lines`, reported as `E_SYSTEM_RECORD` naming payroll. A payroll-owned journal or check refuses
-   ordinary edit, void and delete, and names the payroll command to use. Item liability accounts stay open, as §5 says.
+   The wage, employer expense and net-pay accounts are reserved while payroll is on, and so is every account a posted,
+   unvoided paycheck captured (whether its net pay is paid or not). When every paycheck that used an account is voided
+   or reversed, and payroll is off or names other accounts, it is an ordinary account again. Journal, register, check,
+   import and memorized entries, transfers and list merges refuse a reserved account by name; bills, sales documents
+   and deposits refuse it by name at plan time too, dry runs included, all as `E_SYSTEM_RECORD` naming payroll. An
+   existing ordinary entry stays editable when the edit leaves its lines on a reserved account as they were (same
+   account, side and amount), and may always be voided. The `payroll_reserved_posting` trigger on `posting_lines`
+   remains the backstop: it refuses a new, unreversed leg on a reserved account unless the transaction is
+   payroll's or already holds the same live leg; inside `import run` (or any nested step) its refusal becomes that
+   row's named failure. A payroll-owned journal or check refuses ordinary edit, void and delete, and names the payroll
+   command to use. Item liability accounts stay open, as §5 says; an item's liability account may not be the net-pay
+   account, refused by name when the item is entered on a draft.
+
+   With the payroll layer off, an already posted paycheck can still be settled and corrected (§2): `payroll pay-net`,
+   `payroll void-payment`, `payroll void` and `batch reverse` work; drafting, preparing and posting new paychecks need
+   it on. `batch reverse` of a payroll batch needs a reason, refused as `E_REASON_REQUIRED` before anything is
+   committed. While a reversal of a paycheck's batch is part way, direct `payroll pay-net`, `payroll void` and
+   `payroll void-payment` on that paycheck refuse by name; the same `batch reverse` finishes it. A check number given
+   with `to_be_printed` or `no_number`, and a paycheck that would post more than 200 ledger lines, are refused on the
+   payroll command's own field without echoing amounts.
 
    Privacy holds as in increment 1. Amounts beyond the ledger totals, codes, payees, rates, notes, reasons and
    directives are read only through payroll commands with `payroll.read`. General audit carries a neutral reason and
-   no directive, and any audit event that touches a `payroll_` record now needs `payroll.read` to be seen. A ledger
+   no directive, and any audit event that touches a `payroll_` record now needs `payroll.read` to be seen; events
+   touching no payroll record are visible exactly as before. A batch reversal of a payroll batch keeps the shared
+   batch rows (`reason`, `reversal_reason`, the reversal batch's own reason) and its finishing audit event neutral,
+   with no directive; the real reason and directive are kept in `payroll_paycheck_events`. `batch show` of the reversal
+   batch asks the same payroll rights as the paycheck batch. A ledger
    reader sees the journal and check totals, the bank and payroll accounts, and the employee as the check's payee,
    which §8 allows. The private page shows a directive as a link only to a reader who may open that directive;
    anyone else sees its id as plain text.
 
    Open points: intercompany's reserved accounts have the same bill-route gap that the posting-line trigger closes here
-   for payroll. Remittance, benefits, tables, time, runs and forms remain in later increments.
+   for payroll. A deposit edit that changes the amount on a reserved account it already used is refused by the
+   posting-line backstop at save rather than at plan time. Remittance, benefits, tables, time, runs and forms remain in later increments.
 
 3. **Liabilities and reconciliation (M).** Payee/source allocations, partial remittance, reports, payment void.
    **Done when:** P1's $120 then $30 payments reconcile every component to GL. **Tests:** racing over-allocation,

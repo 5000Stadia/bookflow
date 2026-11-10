@@ -483,3 +483,274 @@ def test_cli_and_mcp(books, tmp_path):
     shown = co.run('payroll paycheck', {'paycheck': pc['id']})
     assert shown['net_status'] == 'payment_recorded' and co.run('payroll paychecks')['rows'] == [shown]
     assert balances(co)['Payroll Bank'] == -90000
+
+
+# ---------------------------------------------------------------- review fix round (increment 2)
+
+def _reader(co, name, role='readonly', **grant):
+    from tests.conftest import as_user, make_actor
+    uid = make_actor(co.root, name)
+    co.client.run('membership grant', {'user': uid, 'company': co.company, 'role': role, 'expected_version': 0, **grant})
+    return as_user(co.root, name)
+
+
+def _bank_import(co, content='Date,Description,Amount\n2026-10-09,Fictional statement line,-900.00\n'):
+    return co.run('bank-feed import', {'account': 'Payroll Bank', 'content': content})
+
+
+@pytest.mark.parametrize('activated', [True, False], ids=['permission-rules', 'never-activated'])
+def test_payroll_read_hides_only_payroll_events(books, activated):
+    from tests.conftest import make_legacy
+    co = books
+    pc = post(co, prepared(co, p1(co)), 'post-audit', account='Payroll Bank', number='1001')
+    _bank_import(co)
+    if not activated:
+        make_legacy(co.root)
+    reader = _reader(co, 'plain-reader')
+    seen = {e['id'] for e in reader.run('audit tail', {'after': 0, 'limit': 1000}, company=co.company)['items']}
+    with sqlite3.connect(co.path) as db:
+        bank = {r[0] for r in db.execute("SELECT DISTINCT event_id FROM audit_entries WHERE record_type LIKE 'bank_%'")}
+        payroll = {r[0] for r in db.execute("SELECT DISTINCT event_id FROM audit_entries WHERE record_type LIKE 'payroll_%'")}
+    # The bank lines' events (a record type the map does not name) stay visible; the paycheck's do not.
+    assert bank and bank <= seen, (bank - seen)
+    assert payroll and not payroll & seen
+    from bookflow.company import audit_visibility as v
+    assert v.record_capabilities('bank_line') == v.UNKNOWN and 'payroll.read' not in v.UNKNOWN
+    history = reader.run('activity', {'record_type': 'transaction', 'record_id': pc['journal']}, company=co.company)
+    assert not {i['event_id'] for i in history['items']} & payroll
+
+
+def test_reasonless_batch_reversal_refuses_before_it_begins(books):
+    co = books
+    pc = post(co, prepared(co, p1(co)), 'post-noreason')
+    refused(co, 'batch reverse', {'batch': pc['batch']}, 'E_REASON_REQUIRED', reason=None)
+    refused(co, 'batch reverse', {'batch': pc['batch']}, 'E_REASON_REQUIRED', reason='   ')
+    with sqlite3.connect(co.path) as db:
+        assert db.execute('SELECT state, reversed_by, reversal_reason FROM batches WHERE id = ?',
+                          (pc['batch'],)).fetchone() == ('live', None, None)
+        assert db.execute("SELECT count(*) FROM batches WHERE kind = 'reversal'").fetchone() == (0,)
+    paid = co.run('payroll pay-net', {'paycheck': pc['id'], 'expected_version': pc['version'], 'operation_key': 'pay-after',
+                                      'account': 'Payroll Bank', 'number': '1001'})
+    assert paid['net_status'] == 'payment_recorded'
+
+
+def test_reversal_reason_and_directive_stay_in_payroll(books):
+    co = books
+    secret = 'TELLING-REASON-73190 garnishment dispute'
+    pc = post(co, prepared(co, p1(co)), 'post-secret', account='Payroll Bank', number='1001')
+    directive = co.run('directive add', {'text': 'Fictional directive for the reversal'})['directive']
+    done = co.run('batch reverse', {'batch': pc['batch']}, reason=secret, directive=directive['code'])
+    assert done['state'] == 'reversed'
+    reader = _reader(co, 'ledger-standard', role='standard')
+    seen = []
+    seen.append(reader.run('batch query', {}, company=co.company))
+    for batch in (pc['batch'], done['reversal_batch']):
+        with pytest.raises(BookflowError) as caught:
+            reader.run('batch show', {'batch': batch}, company=co.company)
+        assert caught.value.code == 'E_PERMISSION', batch
+        seen.append(caught.value.to_dict())
+    seen.append(reader.run('audit list', {'limit': 200}, company=co.company))
+    seen.append(reader.run('audit tail', {'after': 0, 'limit': 1000}, company=co.company))
+    seen.append(reader.run('activity', {'record_type': 'transaction', 'record_id': pc['journal']}, company=co.company))
+    text = json.dumps(seen)
+    at = text.find('73190')
+    assert at < 0, text[max(0, at - 1500):at + 200]
+    rows = [r for r in seen[0]['items'] if r['id'] in (pc['batch'], done['reversal_batch'])]
+    assert len(rows) == 2 and all('reason retained' in r['reason'] for r in rows)
+    with sqlite3.connect(co.path) as db:
+        assert not db.execute('SELECT 1 FROM audit_events WHERE reason LIKE ? OR directive_id = ?',
+                              ('%73190%', directive['id'])).fetchall()
+        assert not db.execute('SELECT 1 FROM batches WHERE reason LIKE ? OR reversal_reason LIKE ?',
+                              ('%73190%', '%73190%')).fetchall()
+        # The real reason and directive are kept in payroll's private history.
+        assert db.execute("SELECT reason, directive_id FROM payroll_paycheck_events WHERE action = 'reverse'").fetchall() == [
+            (secret, directive['id'])]
+    # A payroll reader sees both batches.
+    payroll = _reader(co, 'payroll-batch-reader', grants=['payroll.read'])
+    assert pc['batch'] in json.dumps(payroll.run('batch show', {'batch': done['reversal_batch']}, company=co.company))
+
+
+def test_bill_deposit_and_sale_refuse_reserved_accounts_at_plan_time(books):
+    co = books
+    post(co, prepared(co, p1(co)), 'post-routes')
+    co.run('vendor create', {'name': 'Fictional vendor'})
+    customer = co.run('customer create', {'name': 'Fictional customer'})['id']
+    before = count(co, 'transactions')
+    error = refused(co, 'bill post', {'vendor': 'Fictional vendor', 'date': '2026-10-20',
+                                      'expenses': [{'account': 'Wages', 'amount': '3.00'}]}, 'E_SYSTEM_RECORD', dry_run=True)
+    assert '"Wages" is a payroll account' in error.message
+    error = refused(co, 'deposit post', {'operation_key': 'deposit-reserved', 'document': {
+        'mode': 'inline', 'deposit_to': 'Payroll Bank', 'date': '2026-10-20', 'additional': [
+            {'received_from': {'kind': 'customer', 'id': customer}, 'from_account': 'Net Pay Payable',
+             'amount': '4.00'}]}}, 'E_SYSTEM_RECORD', dry_run=True)
+    assert '"Net Pay Payable" is a payroll account' in error.message
+    with sqlite3.connect(co.path) as db:
+        net_pay = db.execute("SELECT id FROM accounts WHERE name = 'Net Pay Payable'").fetchone()[0]
+    co.run('item create', {'name': 'Fictional charge', 'type': 'other_charge', 'price': '5', 'description': 'Fictional charge',
+                           'income_account_id': net_pay})
+    error = refused(co, 'invoice post', {'customer': 'Fictional customer', 'date': '2026-10-20',
+        'lines': [{'item': 'Fictional charge', 'quantity': '1'}]}, 'E_SYSTEM_RECORD', dry_run=True)
+    assert '"Net Pay Payable" is a payroll account' in error.message
+    assert count(co, 'transactions') == before
+
+
+def test_import_row_meeting_the_reserved_backstop_is_that_rows_refusal(books, monkeypatch):
+    from bookflow.company import payroll_owner
+    co = books
+    post(co, prepared(co, p1(co)), 'post-import')
+    co.run('vendor create', {'name': 'Fictional vendor'})
+    co.run('account create', {'name': 'Fictional supplies', 'type': 'expense'})
+    csv = ('vendor,supplier_reference,date,expenses[].account,expenses[].amount\n'
+           'Fictional vendor,B-1,2026-10-20,Wages,3.00\n'
+           'Fictional vendor,B-2,2026-10-21,Fictional supplies,2.00\n')
+    # The plan-time check names the row in the preview.
+    preview = co.run('import preview', {'kind': 'bill', 'content': csv})
+    assert preview['counts'].get('refused') == 1, json.dumps(preview)[:3000]
+    assert preview['refused'][0]['code'] == 'E_SYSTEM_RECORD'
+    # With only the posting-line trigger left (as for any writer without the plan-time check), the run still
+    # reports that row as refused by name and goes on, instead of aborting at it.
+    monkeypatch.setattr(payroll_owner, 'require_unreserved_legs', lambda db, legs: None)
+    preview = co.run('import preview', {'kind': 'bill', 'content': csv})
+    transactions = count(co, 'transactions')
+    result = co.run('import run', {'run': preview['run']['id']})
+    # All or nothing (the default): the refused row is named and the rest is not run, as for any refused row.
+    assert result['counts'] == {'refused': 1, 'not_run': 1}, result['counts']
+    assert [(r['code'], 'payroll account' in r['message']) for r in result['refused']] == [('E_SYSTEM_RECORD', True)]
+    assert count(co, 'transactions') == transactions
+
+
+def _setup(co, enabled, key):
+    settings = co.run('payroll settings')
+    accounts = {'wage_account': 'Wages', 'employer_tax_account': 'Employer Tax Expense',
+                'net_pay_account': 'Net Pay Payable'} if enabled else {}
+    return co.run('payroll setup', {'enabled': enabled, 'expected_version': settings['version'], 'operation_key': key,
+                                    **accounts})
+
+
+def _wages(amount='7.00', date='2026-10-01'):
+    return [{'account': 'Wages', 'side': 'debit', 'amount': amount},
+            {'account': 'Payroll Bank', 'side': 'credit', 'amount': amount}]
+
+
+def test_reservation_ends_with_the_last_paycheck_and_old_entries_stay_editable(books):
+    co = books
+    _setup(co, False, 'off-before')
+    old = co.run('journal post', {'date': '2026-10-01', 'lines': _wages()})
+    spare = co.run('journal post', {'date': '2026-10-02', 'lines': _wages('2.00')})
+    _setup(co, True, 'on-again')
+    # An older ordinary entry: an edit that leaves its Wages line as it was saves; changing that line refuses.
+    edited = co.run('journal update', {'journal': old['id'], 'expected_version': old['version'], 'memo': 'Lines kept'})
+    assert edited['changed'] and edited['memo'] == 'Lines kept'
+    lines = co.run('journal show', {'journal': old['id']})['revision']['lines']
+    changed = [{'line_id': x['line_id'], 'account': x['account_id'], 'side': x['side'],
+                'amount': '8.00'} for x in lines]
+    error = refused(co, 'journal update', {'journal': old['id'], 'expected_version': edited['version'],
+                                           'lines': changed}, 'E_SYSTEM_RECORD')
+    assert '"Wages" is a payroll account' in error.message
+    # ...and it may always be voided.
+    assert co.run('journal void', {'journal': spare['id'], 'expected_version': spare['version']})['status'] == 'voided'
+    # A posted paycheck keeps its accounts reserved with payroll off, until it is voided.
+    pc = post(co, prepared(co, p1(co)), 'post-reserve')
+    _setup(co, False, 'off-after')
+    refused(co, 'journal post', {'date': '2026-10-20', 'lines': _wages('1.00')}, 'E_SYSTEM_RECORD')
+    co.run('payroll void', {'paycheck': pc['id'], 'expected_version': pc['version'], 'operation_key': 'void-release'})
+    released = co.run('journal post', {'date': '2026-10-20', 'lines': _wages('1.00')})
+    assert released['status'] == 'posted'
+    # A liability account may not be the net-pay account, so a remittance through an ordinary entry stays open.
+    _setup(co, True, 'on-last')
+    raw = p1(co, 'net-as-liability', pay_date='2026-10-23')
+    raw['items'][0]['liability_account'] = 'Net Pay Payable'
+    error = refused(co, 'payroll draft', raw, 'E_VALIDATION')
+    assert error.details['fields'][0]['field'] == 'items.liability_account'
+
+
+def test_net_pay_settles_voids_and_reverses_with_the_layer_off(books):
+    co = books
+    first = post(co, prepared(co, p1(co)), 'post-first')
+    second = post(co, prepared(co, p1(co, 'second', pay_date='2026-10-16')), 'post-second', account='Payroll Bank',
+                  number='2001')
+    waiting = prepared(co, p1(co, 'waiting', pay_date='2026-10-23'))
+    _setup(co, False, 'layer-off')
+    paid = co.run('payroll pay-net', {'paycheck': first['id'], 'expected_version': first['version'],
+                                      'operation_key': 'pay-off', 'account': 'Payroll Bank', 'number': '1001'})
+    assert paid['net_status'] == 'payment_recorded' and 'Net Pay Payable' not in balances(co)
+    unpaid = co.run('payroll void-payment', {'paycheck': first['id'], 'expected_version': paid['version'],
+                                             'operation_key': 'unpay-off'})
+    assert unpaid['net_status'] == 'payment_not_recorded'
+    done = co.run('batch reverse', {'batch': second['batch']}, reason='Reverse with payroll off')
+    assert done['state'] == 'reversed'
+    voided = co.run('payroll void', {'paycheck': first['id'], 'expected_version': unpaid['version'],
+                                     'operation_key': 'void-off'})
+    assert voided['status'] == 'voided' and balances(co) == {}
+    # New paychecks still need the layer on.
+    refused(co, 'payroll post', {'draft': waiting['id'], 'expected_version': waiting['version'],
+                                 'operation_key': 'post-off'}, 'E_FEATURE_DISABLED')
+    refused(co, 'payroll draft', p1(co, 'draft-off'), 'E_FEATURE_DISABLED')
+
+
+def test_check_number_conflicts_and_too_many_legs_are_named_refusals(books):
+    co = books
+    draft = prepared(co, p1(co))
+    body = {'draft': draft['id'], 'expected_version': draft['version'], 'operation_key': 'post-conflict',
+            'check_account': 'Payroll Bank', 'check_number': '1001'}
+    for extra, field in (({'check_to_be_printed': True}, 'check_number'), ({'check_no_number': True}, 'check_number')):
+        error = refused(co, 'payroll post', dict(body, **extra), 'E_VALIDATION')
+        assert error.details['fields'][0]['field'] == field
+        assert '900' not in json.dumps(error.to_dict())
+    error = refused(co, 'payroll post', dict(body, check_number=None, check_to_be_printed=True, check_no_number=True),
+                    'E_VALIDATION')
+    assert error.details['fields'][0]['field'] == 'check_no_number'
+    pc = post(co, draft, 'post-plain')
+    error = refused(co, 'payroll pay-net', {'paycheck': pc['id'], 'expected_version': pc['version'], 'operation_key': 'pay-conflict',
+        'account': 'Payroll Bank', 'number': '1001', 'to_be_printed': True}, 'E_VALIDATION')
+    assert error.details['fields'][0]['field'] == 'number'
+    # 1 wage leg + 100 employer items x 2 legs + 1 net leg = 202 legs, more than the journal writer takes.
+    raw = p1(co, 'wide', pay_date='2026-10-16')
+    raw['items'] = [fixed(f'er-{i}', 'employer_tax', 1, 'Employer Tax Payable') for i in range(100)]
+    wide = prepared(co, raw)
+    transactions = count(co, 'transactions')
+    error = refused(co, 'payroll post', {'draft': wide['id'], 'expected_version': wide['version'],
+                                         'operation_key': 'post-wide'}, 'E_VALIDATION')
+    assert error.details['fields'][0]['field'] == 'items' and '200 ledger lines' in error.message
+    assert '100000' not in json.dumps(error.to_dict()) and count(co, 'transactions') == transactions
+
+
+def test_inactive_employee_list_partial_reversal_bank_match_and_reserved_routes(books):
+    co = books
+    pc = post(co, prepared(co, p1(co)), 'post-misc', account='Payroll Bank', number='1001')
+    # A partly run reversal is finished by `batch reverse`; a direct write on that paycheck refuses by name.
+    part = co.run('batch reverse', {'batch': pc['batch'], 'limit': 1}, reason='Wrong week')
+    assert (part['state'], part['remaining']) == ('reversing', 1)
+    mid = co.run('payroll paycheck', {'paycheck': pc['id']})
+    for command, extra in (('payroll void', {}), ('payroll pay-net', {'account': 'Payroll Bank', 'number': '1002'})):
+        error = refused(co, command, {'paycheck': pc['id'], 'expected_version': mid['version'],
+                                      'operation_key': 'direct-' + command, **extra}, 'E_VALIDATION')
+        assert error.details['fields'][0]['problem'] == 'batch_reversal_in_progress'
+    assert co.run('batch reverse', {'batch': pc['batch']}, reason='Wrong week')['state'] == 'reversed'
+    # A former employee's paychecks are still listed.
+    employee = co.run('employee show', {'employee': co.employee})
+    co.run('employee deactivate', {'employee': co.employee, 'expected_version': employee['version']})
+    assert [r['id'] for r in co.run('payroll paychecks', {'employee': co.employee})['rows']] == [pc['id']]
+    co.run('employee activate', {'employee': co.employee,
+                                 'expected_version': co.run('employee show', {'employee': co.employee})['version']})
+    # A check matched to a bank line blocks its void and the reversal.
+    second = post(co, prepared(co, p1(co, 'matched', pay_date='2026-10-16')), 'post-matched', account='Payroll Bank',
+                  number='3001')
+    _bank_import(co, 'Date,Description,Amount,Check Number\n2026-10-16,Check 3001,-900.00,3001\n')
+    with sqlite3.connect(co.path) as db:
+        line, entry = db.execute('SELECT id, entry_id FROM bank_lines WHERE live = 1').fetchone()
+    if entry is None:
+        co.run('bank-line match', {'line': line, 'entry': second['net_payment']['check']})
+    refused(co, 'payroll void-payment', {'paycheck': second['id'], 'expected_version': second['version'],
+                                         'operation_key': 'vp-matched'}, 'E_RECONCILIATION_DEPENDENCY')
+    blocked = refused(co, 'batch reverse', {'batch': second['batch']}, 'E_BATCH_BLOCKED', dry_run=True)
+    assert [b['code'] for b in blocked.details['blockers']] == ['bank_matched']
+    # Transfers and account merges onto or from a reserved account refuse by name.
+    co.run('account create', {'name': 'Fictional savings', 'type': 'bank'})
+    co.run('account create', {'name': 'Fictional supplies', 'type': 'expense'})
+    error = refused(co, 'transfer post', {'from_account': 'Fictional savings', 'to_account': 'Net Pay Payable',
+                                          'date': '2026-10-20', 'amount': '5.00'}, 'E_SYSTEM_RECORD')
+    assert 'payroll account' in error.message
+    for merged, into in (('Fictional supplies', 'Wages'), ('Wages', 'Fictional supplies')):
+        error = refused(co, 'account merge', {'merged': merged, 'into': into}, 'E_SYSTEM_RECORD')
+        assert 'payroll account' in error.message

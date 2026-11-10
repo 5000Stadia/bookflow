@@ -205,6 +205,15 @@ def _prepare(s,ctx,inp,verb, *, binding=None, expected_guard=None, posting=True)
     dependencies.reconciliation_status(s.company)
     account_ids={resolved.intent.bank.id}|{r.account.id for r in resolved.intent.additional}
     if resolved.intent.cash_back:account_ids.add(resolved.intent.cash_back.account.id)
+    if changed and verb not in CANCELLING:
+        # Payroll's reserved accounts refuse by name at plan time, dry runs included; an account the deposit already
+        # used before this edit is left to the posting-line backstop, which admits its unchanged legs.
+        before_ids=set()
+        if previous:
+            before_ids={previous.intent.bank.id}|{r.account.id for r in previous.intent.additional}
+            if previous.intent.cash_back:before_ids.add(previous.intent.cash_back.account.id)
+        from bookflow.company.payroll_owner import require_unreserved_account
+        require_unreserved_account(s.company,*sorted(account_ids-before_ids))
     reference_accounts=[effects.rows(s,c.accounts,c.accounts.c.id==key)[0] for key in sorted(account_ids)]
     facts=dict(accounts=reference_accounts,request=operations.facts_request(inp,ctx,s,verb),before=old,sources=source_headers,claims=current_claims,
         resolved=_logical(resolved.model_dump(mode='json'),mapping),number=number,memo=memo,
