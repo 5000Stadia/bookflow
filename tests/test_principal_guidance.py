@@ -160,3 +160,70 @@ def test_a_bookkeeper_agent_drafts_an_auto_add_rule_is_told_the_capability_and_a
                                                                                   '-48.20')])})
     [ran] = done['automations']
     assert (ran['outcome'], ran['added'], done['lines'][0]['state']) == ('acted', 1, 'added')
+
+
+# ---------------------------------------------------------------- the setup step with permissions activated
+
+@pytest.mark.timeout(600)
+def test_setup_presets_apply_their_grants_once_permissions_are_activated(tmp_path, monkeypatch):
+    """The level step really grants on an activated installation: Trusted holds standard, its two grants and the one
+    automate.* picked; Bookkeeper holds standard and nothing granted; Read-only is role readonly. What an agent holds
+    by name is read from `membership list` (its grants) and `membership effective` (each capability's grant sources)."""
+    import bookflow
+    from tests.test_agent_setup import _free_port
+    root, project = tmp_path / 'books', tmp_path / 'project'
+    project.mkdir()
+    monkeypatch.setenv('BOOKFLOW_DATA_ROOT', str(root))
+    monkeypatch.delenv('BOOKFLOW_COMPANY', raising=False)
+    client = bookflow.connect(data_root=str(root))
+
+    def setup(agent, **extra):
+        out = client.run('setup', {'company': 'Harbour Mills', 'owner_name': 'Owner', 'serve': False,
+                                   'bind': f'127.0.0.1:{_free_port()}', 'agent': agent,
+                                   'mcp_config': str(project / f'{agent}.mcp.json'), **extra})
+        return out, {s['step']: s for s in out['steps']}
+
+    # The first agent and the company; permissions activated (a new root may already be, else a person activates).
+    first, _ = setup('keeper')
+    cid = first['company']['company_id']
+    state = client.run('permission show', {})
+    if state['mode'] != 'policy_v1':
+        client.run('permission activate', {'expected_generation': state['generation'],
+                                           'expected_catalog_sha256': state['catalog_sha256']}, reason='owner activates')
+    assert client.run('permission show', {})['mode'] == 'policy_v1'
+
+    automate = {'automate.bank-rule', 'automate.delivery', 'automate.invoice'}
+    named = {'delivery.send', 'opening.accept-differences'} | automate
+
+    def held(agent):
+        [row] = [m for m in client.run('membership list', {'user': agent, 'company': cid})['items']
+                 if m['scope_type'] == 'company' and m['scope_id'] == cid and m['active']]
+        rows = client.run('membership effective', {'company': cid, 'user': agent})['permissions']
+        granted = {p['requirement']['capability'] for p in rows if p['grant_sources']}
+        admitted = {p['requirement']['capability'] for p in rows if p['admitted']}
+        return row['role'], set(row['grants'] or []), granted, admitted
+
+    # Trusted, with one automation picked: the grants are applied, not left as a command to run.
+    out, steps = setup('trusty', preset='trusted', automate=['bank-rule'])
+    assert steps['level']['status'] == 'created', steps['level']
+    assert out['level']['applied'] is True and out['level']['permissions_activated'] is True
+    role, grants, granted, admitted = held('trusty')
+    want = {'delivery.send', 'opening.accept-differences', 'automate.bank-rule'}
+    assert (role, grants) == ('standard', want)
+    assert granted & named == want and want <= admitted
+    # The two not picked are not granted by name; an agent needs that (a role default is never enough for an agent,
+    # hub/capabilities.py), and `membership effective` says so: it does not show them as admitted.
+    assert not (automate - {'automate.bank-rule'}) & granted
+    assert not (automate - {'automate.bank-rule'}) & admitted
+
+    # Bookkeeper (the second agent, rerun with the preset now that permissions are active): standard, no grants.
+    out, steps = setup('keeper', preset='bookkeeper')
+    assert steps['level']['status'] == 'exists' and out['level']['applied'] is True
+    role, grants, granted, admitted = held('keeper')
+    assert (role, grants) == ('standard', set()) and not granted and not (automate | {'delivery.send'}) & admitted
+
+    # Read-only: role readonly, no grants.
+    out, steps = setup('reader', preset='read-only')
+    assert steps['level']['status'] == 'exists' and out['level']['applied'] is True
+    role, grants, granted, admitted = held('reader')
+    assert (role, grants) == ('readonly', set()) and not granted and not named & admitted
