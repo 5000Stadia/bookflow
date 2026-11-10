@@ -372,6 +372,41 @@ implementation is authorized by this documentation commit itself.
    report for invoices; no rates or payments. **Done when:** an invoice credits different lines to two people and the
    report survives reopening, with zero setup beyond names and item flags. **Tests:** prompt/cancel, inactive/missing
    recipient, capability denial, legacy invoice unchanged, one 390 px browser journey and CLI/MCP contract checks.
+   #### As built — increment 1
+
+   `company update --commission-attribution-enabled true` enables invoice attribution; new and migrated companies
+   start with it off. `item create/update` accepts `commission_enabled`; only sales-enabled ordinary sale items and
+   percentage charges can enable it. No accounts or money plans are created. Turning attribution off retains item
+   flags, invoice snapshots and report access.
+
+   This increment reuses the versioned `sales-rep` list as requested: recipients are existing employee, vendor or
+   other-name representatives, selected by ID or unambiguous name. It adds no duplicate recipient identity table or
+   payout identity. Existing sales-rep maintenance keeps its existing list permissions. Header/customer rep suggests
+   an active recipient but never selects one; line attribution does not change pricing's header rep.
+
+   Invoice lines accept `commission: {recipients: [{recipient: "Ada", share: 100}]}`. Exactly one recipient is allowed;
+   share defaults to 100. Missing, unknown and inactive recipients refuse before any write. Captured line facts retain
+   the recipient ID/name, currency and integer final net after discounts, inside the existing immutable sales revision.
+   Legacy lines omit the new fact. Unchanged historical allocations survive ordinary corrections; a changed item asks
+   again. Attributed writes require a reason. A source-billed invoice containing enabled items refuses until its entry
+   route can supply attribution; source billing cannot silently bypass required selection.
+
+   The browser invoice form prompts on item selection, offers searchable names and explicit Select/Cancel, and preserves
+   existing lines when an edit is cancelled. The report supports date, recipient, customer and item filters, recipient
+   totals and invoice links, including after reopening or disabling attribution. It sums current posted invoice revisions,
+   excluding voided/deleted invoices; it is a sales-attribution report, not an earned-commission or return reconciliation.
+
+   `commission recipient-options` exposes only IDs and labels. `commission.attribute` and `commission.read` default to
+   standard humans; `commission.manage` defaults to admins and gates item flag edits in addition to ordinary item rights.
+   Company settings retain company-admin authority. The report also requires customer-work read permission. Agents need
+   explicit new-capability grants intersected with their principal's rights. The plain POS clerk gains no capability.
+   Catalog `commission-attribution-v1` extends `notice-reversal-v1`; company migration `co0129` adds only the two flags.
+
+   The demo adds a recipient and flagged service, previews two different recipients, then restores the off switch without
+   changing its accounting balances. Targeted tests cover refusal atomicity, legacy snapshots, discounted net, permission
+   denial, adapter contracts and a 390 px prompt/cancel/save/reopen journey. Rates, earnings, payments, splits, dedicated
+   recipient identity/payout links, sales receipts, POS, grouped entry and reattribution remain later-increment work.
+
 2. **Sales receipts and POS (M).** Shared line facts in receipt/POS, groups, scan coalescing, hold/resume and clerk preset.
    **Done when:** all §3 routes preserve distinct recipients and the clerk sees no earnings. **Tests:** tap/scan/group
    at both widths, different recipients for identical items, retry and held-ticket stale recipient, native receipt parity.

@@ -125,6 +125,7 @@ ACCEPTED = {
     'pos-split-v1': (908, '73027f1c23b43bf348babaa0afffdfc3bd15d53f52a62b6ab2e9a00685972480'),
     'reversible-batch-v1': (909, 'b6ab69b716a3b999e88d86716f54fef5fcc7174768f3f0f6e4c073ce8cf515ce'),
     'notice-reversal-v1': (910, 'a8255242bbbb0b1a4ac0f5eaf8aa62a5cb84c291a7a03316584b2bbf06b67932'),
+    'commission-attribution-v1': (912, '891bcd8ee4d998f1f39565b2b2c488016f8eee56a41ff536ef89949ebbcf050f'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -296,6 +297,7 @@ CHAIN_ADDITIONS = {
     'pos-split-v1': set(),  # scoped split-sale payment composition
     'reversible-batch-v1': {'batch reverse'},
     'notice-reversal-v1': {'notice reverse'},
+    'commission-attribution-v1': {'commission recipient-options', 'report commission-attribution'},
 }
 
 _ANCESTOR_EDIT = """

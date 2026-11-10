@@ -278,7 +278,11 @@ class LineGroup(StrictModel):
     print_members: bool
 
 
+from bookflow.company.commission_models import CommissionSnapshot
+
+
 class SalesLineProfile(StrictModel):
+    commission: CommissionSnapshot | None = Field(None, exclude_if=lambda v: v is None)
     @field_validator('schema_version', mode='before')
     @classmethod
     def exact_schema_version(cls, value):

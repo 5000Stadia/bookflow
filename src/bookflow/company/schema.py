@@ -1339,3 +1339,9 @@ globals().update(_pos_refund_schema.define_tables(metadata, _column, _table))
 
 from bookflow.company import pos_day_schema as _pos_day_schema
 globals().update(_pos_day_schema.define_tables(metadata, _column, _table))
+
+# R189 increment 1: independent off-by-default attribution flags.
+company_info.append_column(_column("commission_attribution_enabled", sa.Boolean,
+    "Enable commission attribution on invoice lines; no calculation or payout setup.", nullable=False, server_default="0"))
+items.append_column(_column("commission_enabled", sa.Boolean,
+    "Require one recipient on new invoice lines while attribution is enabled.", nullable=False, server_default="0"))

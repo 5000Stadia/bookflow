@@ -2064,6 +2064,125 @@ Example JSON output:
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 
+## `report commission-attribution`
+
+Report final net invoice sales credited to each salesperson or affiliate from captured per-line attribution. Current posted invoices only; historical attribution remains readable when the switch is off. No commission money is calculated.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | standard |
+| Capability | commission.read |
+| Additional resources | customer-work: member |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.commission-attribution` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report commission-attribution --date-from 2026-01-01 --date-to 2026-12-31 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "report commission-attribution", "input": {"date_from": "2026-01-01", "date_to": "2026-12-31"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `date_from` | `--date-from` | string \| null | no | yes | null | — |
+| `date_to` | `--date-to` | string \| null | no | yes | null | — |
+| `recipient` | `--recipient` | string \| null | no | yes | null | — |
+| `customer` | `--customer` | string \| null | no | yes | null | — |
+| `item` | `--item` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.commission-attribution`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].invoice_id` | string | yes | no | — | — |
+| `rows[].number` | string | yes | no | — | — |
+| `rows[].date` | string | yes | no | — | — |
+| `rows[].line_id` | string | yes | no | — | — |
+| `rows[].position` | integer | yes | no | — | — |
+| `rows[].item_id` | string | yes | no | — | — |
+| `rows[].item_name` | string | yes | no | — | — |
+| `rows[].recipient_id` | string | yes | no | — | — |
+| `rows[].recipient_name` | string | yes | no | — | — |
+| `rows[].net_minor_units` | integer | yes | no | — | — |
+| `rows[].currency` | string | yes | no | — | — |
+| `totals` | array[object] | yes | no | — | — |
+| `totals[].recipient_id` | string | yes | no | — | — |
+| `totals[].recipient_name` | string | yes | no | — | — |
+| `totals[].net_minor_units` | integer | yes | no | — | — |
+| `totals[].currency` | string | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "rows": [],
+  "totals": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
 ## `report customer-balance-detail`
 
 Every accrual receivable effect that makes up each customer's balance as of as_of, oldest first across all dates, with the running balance after each and a total row closing each customer or job. One row is one document's effect on one customer on one date -- an invoice, statement charge, payment, sales receipt, credit memo, refund or receivable journal entry -- read exactly as report statement reads it from the beginning of the books: a correction on a later date is its own row, a voided document nets to nothing and has no row, and applying a receipt to the same customer's invoice moves nothing and has no row. A parent's receipt that settles a job's invoice moves that balance from the parent to the job, and each side is an applied_credit row. Customers whose balance is zero are omitted unless customer names one. A customer's total row is its report customer-balance-summary row, and the report total is Accounts Receivable on the accrual balance sheet for the same date. Totals cover the whole filter and rows are paged; the running balance is computed over the whole customer before a page is cut.

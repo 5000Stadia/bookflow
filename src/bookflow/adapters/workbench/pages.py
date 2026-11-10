@@ -1028,6 +1028,15 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     from bookflow.adapters.workbench import scheduling_pages as SchedulingPages
     SchedulingPages.mount(app, render=render, run=run, credential=credential, page_error=page_error)
 
+    @app.get('/c/{company_id}/commission-options')
+    def commission_options(request: Request, company_id: str):
+        try:
+            raw = {key: request.query_params[key] for key in ('item', 'sales_rep', 'customer', 'search')
+                   if request.query_params.get(key)}
+            return JSONResponse(run(request, 'commission recipient-options', raw, company_id))
+        except BookflowError as err:
+            return JSONResponse(err.to_dict(), status_code=403 if err.code == 'E_PERMISSION' else 400)
+
     @app.get("/static/{name}")
     @permission_read_package(host)
     def static(name: str):
@@ -2809,7 +2818,16 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 described = Admin.decorate_form(noun, verb, described, record_id, lambda name, raw: run(request, name, raw, None))
             except BookflowError as err:
                 return page_error(request, err)
+        if noun == 'item' and (not (authorized_company or {}).get('info', {}).get('commission_attribution_enabled')
+                or not effective_capabilities(request, company_id).holds('commission.manage')):
+            described = [leaf for leaf in described if leaf['path'] != 'commission_enabled']
         return render("form.html", request, company_id=company_id, noun=noun, verb=verb, cmd=cmd, leaves=described, originals=originals,
+                      commission_labels={allocation['recipient_id']: allocation['recipient_label']
+                          for line in (result or shown or {}).get('revision', {}).get('lines', [])
+                          for allocation in (line.get('item_snapshot', {}).get('commission') or {}).get('recipients', [])},
+                      commission_entry=(noun == 'invoice' and verb in ('post', 'update')
+                          and bool((authorized_company or {}).get('info', {}).get('commission_attribution_enabled'))
+                          and effective_capabilities(request, company_id).holds('commission.attribute')),
                       crumb=meta.get("plural_label") or (Naming.list_heading(noun, meta) if company_id is None and noun in Admin.COLUMNS else None),
                       plain_errors=company_id is None and noun in Admin.COLUMNS, field_labels=Admin.FIELD_LABELS,
                       panel_return=panel_return,

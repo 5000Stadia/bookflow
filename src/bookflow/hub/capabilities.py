@@ -33,6 +33,8 @@ HUB = frozenset(name for name, (threshold, _) in CAPABILITIES.items() if thresho
 # refused by a deny, through the policy like any capability; only the agent's half is asked here.
 from .permission_pos_catalog import CAPABILITIES as _POS  # noqa: E402
 POS = frozenset(_POS)
+from .permission_commission_attribution_catalog import CAPABILITIES as _COMMISSION
+COMMISSION = frozenset(_COMMISSION)
 
 
 def pos_capability(cmd) -> str | None:
@@ -49,11 +51,17 @@ def capability_for(command: str) -> str | None:
     found = COMMAND_CAPABILITY.get(command)
     if found is None:
         from bookflow.core import registry
-        found = pos_capability(registry.get(command))
+        cmd = registry.get(command)
+        found = pos_capability(cmd)
+        if found is None and cmd is not None:
+            found = cmd.capability if cmd.capability in COMMISSION else next(
+                (cap for cap, _ in cmd.resource_requirements if cap in COMMISSION), None)
     return found
 
 
 def threshold(capability: str) -> str:
+    if capability in _COMMISSION:
+        return _COMMISSION[capability][0]
     return _POS[capability][0] if capability in _POS else CAPABILITIES[capability][0]
 
 

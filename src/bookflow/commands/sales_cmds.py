@@ -42,7 +42,7 @@ def _write(document_type, verb, model):
         required_role='standard', capability='ledger.post', accepts_idempotency_key=True,
         positional=[] if verb == 'post' else [document_type], clearable=verb == 'update',
         version_source=None if verb == 'post' else (noun + ' show', document_type, 'version'),
-        error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_PERIOD_CLOSED',
+        error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_PERIOD_CLOSED', 'E_COMMISSION_REQUIRED',
                      'E_DUPLICATE_NUMBER', 'E_INACTIVE_REFERENCE', 'E_VALUE_RANGE',
                      'E_AMOUNT_PRECISION', 'E_REASON_REQUIRED', 'E_HAS_APPLICATIONS', 'E_APPLIED_EXCEEDS_TOTAL', 'E_PAYMENT_OPERATION_KEY_REUSED']
                     + (['E_DEPOSIT_DEPENDENCY'] if document_type == 'sales_receipt' and verb != 'post' else [])

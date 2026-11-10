@@ -60,6 +60,7 @@ RECONCILIATION_CODES: dict[str, str] = {
 }
 
 COMMAND_CODES: dict[str, str] = {
+    "E_COMMISSION_REQUIRED": "Choose a recipient for every enabled invoice line.",
     **RECONCILIATION_CODES,
     "E_RECOVERY_PENDING": "Resolve the active recovery before editing or recording this selection.",
     "E_RECOVERY_INCOMPLETE": "The complete attempted edits must be uploaded and reviewed before confirmation.",

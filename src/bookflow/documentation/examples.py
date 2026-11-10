@@ -2225,3 +2225,12 @@ EXAMPLES.update({
         'bookflow pos deposit prepare --pos-register Main --date 2026-10-31 --company "Demo Plumbing Co" --json',
         {'pos_register': 'Main', 'date': '2026-10-31'}),
 })
+
+EXAMPLES.update({
+    'commission recipient-options': Example(
+        'bookflow commission recipient-options --item "Attributed Service" --search Alex' + _C + ' --json',
+        {'item': 'Attributed Service', 'search': 'Alex'}),
+    'report commission-attribution': Example(
+        'bookflow report commission-attribution --date-from 2026-01-01 --date-to 2026-12-31' + _C + ' --json',
+        {'date_from': '2026-01-01', 'date_to': '2026-12-31'}),
+})

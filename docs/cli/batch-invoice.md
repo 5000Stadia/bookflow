@@ -37,6 +37,8 @@ The same example as complete `bookflow_run` arguments:
 | `date` | `--date` | string | yes | no | — | Invoice date for every invoice in this batch.; minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
 | `billing_group` | `--billing-group` | string \| null | no | yes | null | Billing group whose members are invoiced, in member order. |
 | `customers` | `--customers` | array[string] \| null | no | yes | null | Explicit customers or jobs to invoice, in the order given; use instead of billing_group. |
+| `lines[].commission.recipients[].recipient` | inside `--lines` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
+| `lines[].commission.recipients[].share` | inside `--lines` JSON array | literal[100] | no | no | 100 | — |
 | `lines[].line_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].item` | inside `--lines` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
 | `lines[].quantity` | inside `--lines` JSON array | string | no | no | "1" | — |

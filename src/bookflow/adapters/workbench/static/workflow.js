@@ -75,6 +75,8 @@
     filled(picker);
     if (changed) invalidateUnit(picker);
     search(picker).focus();
+    if (changed) picker.dispatchEvent(new CustomEvent('bookflow:reference-selected',
+      {bubbles: true, detail: {value: option.value, label: option.label}}));
   }
   function onlyAdders(picker) {
     const options = picker.querySelector('[data-ref-options]');
@@ -345,3 +347,9 @@ const downloadExports = () => document.querySelectorAll('a[data-export-file]:not
   link.click();
 });
 document.addEventListener('htmx:afterSettle', downloadExports);
+
+// Checkbox presentation keeps the command's explicit boolean wire field.
+document.addEventListener('change', event => {
+  if (event.target.matches('[data-commission-switch]'))
+    event.target.parentElement.querySelector('[data-commission-switch-value]').value = String(event.target.checked);
+});
