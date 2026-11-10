@@ -166,8 +166,17 @@ def plan_effective(inp,ctx,s):
         return Plan(EffectiveOutput(**extra,company_id=scope.scope_id,user_id=user['id'],mode='legacy',permissions=[]))
     observed = runtime.observe_current(s.hub).snapshot
     rows = policy.admissions(observed.comparison,phase='old',subject=user['id'],scope=ScopeKey('company',scope.scope_id))
+    permissions = [asdict(row) for row in rows]
+    if user['kind'] == 'agent':
+        # An agent holds one of these capabilities only by an explicit grant (hub/capabilities.py): a role default
+        # never admits it, so this read must not show one as admitted when the command would refuse it.
+        from bookflow.hub import capabilities
+        for row in permissions:
+            if row['admitted'] and not row['grant_sources'] and row['requirement']['capability'] in capabilities.CAPABILITIES:
+                row['admitted'] = False
+                row['agent_needs_grant'] = True
     return Plan(EffectiveOutput(**extra,company_id=scope.scope_id,user_id=user['id'],mode='policy_v1',
-        permissions=[asdict(row) for row in rows]))
+        permissions=permissions))
 
 
 plan_effective.authorize_input = authorize_effective

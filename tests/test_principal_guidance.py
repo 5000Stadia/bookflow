@@ -212,14 +212,15 @@ def test_setup_presets_apply_their_grants_once_permissions_are_activated(tmp_pat
     assert (role, grants) == ('standard', want)
     assert granted & named == want and want <= admitted
     # The two not picked are not granted by name; an agent needs that (a role default is never enough for an agent,
-    # hub/capabilities.py), though `membership effective` shows them admitted by the standard role's default.
+    # hub/capabilities.py), and `membership effective` says so: it does not show them as admitted.
     assert not (automate - {'automate.bank-rule'}) & granted
+    assert not (automate - {'automate.bank-rule'}) & admitted
 
     # Bookkeeper (the second agent, rerun with the preset now that permissions are active): standard, no grants.
     out, steps = setup('keeper', preset='bookkeeper')
     assert steps['level']['status'] == 'exists' and out['level']['applied'] is True
     role, grants, granted, admitted = held('keeper')
-    assert (role, grants) == ('standard', set()) and not granted
+    assert (role, grants) == ('standard', set()) and not granted and not (automate | {'delivery.send'}) & admitted
 
     # Read-only: role readonly, no grants.
     out, steps = setup('reader', preset='read-only')
