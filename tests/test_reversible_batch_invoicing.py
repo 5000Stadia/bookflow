@@ -292,7 +292,7 @@ def test_list_and_dry_run_report_complete_grouped_blockers(books, cause):
                   'payment_method': 'Check', 'applications': {'mode': 'inline', 'items': [
                       {'invoice': invoice, 'expected_version': shown['version'], 'amount': '10'}]}})
     before = unchanged(books)
-    listed = caller.run('batch list', {'kind': 'batch-invoice'}, company=books.company)['items'][0]
+    listed = caller.run('batch query', {'kind': 'batch-invoice'}, company=books.company)['items'][0]
     with pytest.raises(BookflowError) as refused:
         caller.run('batch reverse', {'batch': out['reversal_batch_id']}, company=books.company,
                    dry_run=True, reason='Preview correction')
@@ -315,14 +315,14 @@ def test_batch_list_filters_kind_and_inclusive_creation_dates(books):
     batch = out['reversal_batch_id']
     shown = books.run('batch show', {'batch': batch})['batch']
     day = shown['created_at'][:10]
-    listed = books.run('batch list', {'kind': 'batch-invoice', 'date_from': day, 'date_to': day})['items']
+    listed = books.run('batch query', {'kind': 'batch-invoice', 'date_from': day, 'date_to': day})['items']
     assert [row['id'] for row in listed] == [batch]
     assert listed[0]['reversible'] is True
     assert reverse(books, batch, dry_run=True)['blockers'] == listed[0]['blockers'] == []
     for filters in ({'kind': 'finance-charge'}, {'date_to': '2000-01-01'}, {'date_from': '2099-01-01'}):
-        assert books.run('batch list', filters)['items'] == []
+        assert books.run('batch query', filters)['items'] == []
     with pytest.raises(BookflowError):
-        books.run('batch list', {'date_from': '2026-02-01', 'date_to': '2026-01-01'})
+        books.run('batch query', {'date_from': '2026-02-01', 'date_to': '2026-01-01'})
 
 
 def test_explicit_delete_permission_message_names_grant_without_role_contradiction():

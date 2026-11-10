@@ -1733,7 +1733,7 @@ survive resume, but preview, hold and completion still require `pos.price-overri
 
 ## Reverse a batch
 
-`batch list` (also `batch query`) finds a run; filter with `kind`, `date_from` and `date_to`
+`batch query` finds a run; filter with `kind`, `date_from` and `date_to`
 (inclusive UTC creation dates). Each row includes every blocker with its count and members,
 using the same authority checks as the dry run. `batch query` finds a run and `batch show <batch>` lists its recorded effects. Use
 `batch reverse <batch> --dry-run` to read the complete inverse list. This is confirm-first:

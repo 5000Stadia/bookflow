@@ -121,7 +121,7 @@ demo-reset or checkpoint behavior in this increment. A separate reference-year p
   Shared causes are grouped in list and refusal output without losing each member's details or remedy.
   Applied settlements name unapply as the next step, closed periods name reopening, and permission
   refusals name the needed grant. Explicit deletion messages no longer imply a role includes deletion.
-- `batch list` is the existing alias of `batch query`. Its existing `kind` filter is joined by
+- `batch query`: its existing `kind` filter is joined by
   `date_from` and `date_to`, inclusive UTC batch-creation dates; an inverted range is refused.
 - No migration or permission layer is added; company head remains `co0128` and the permission tip
   remains `notice-reversal-v1`. The changes use existing commands and authority.
