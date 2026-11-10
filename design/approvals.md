@@ -344,6 +344,12 @@ part of this design commit.
    closed periods, retry, approved correction and restoration, R186 effects for commit from its first release.
    #### As built — increment 2
 
+   Later increments settle these boundaries:
+   - Bill restoration has no native command; restore proposals refuse.
+   - The reviewer list is captured at submission and stays until reassignment exists.
+   - The browser draft form edits expense-only drafts; item and source drafts use the full command form.
+
+
    The shared commands add simple bill policy create/update/publish/show/list, draft submit/withdraw/commit,
    and approval decide/show/history. Migration `co0130` adds policy revisions, requests, append-only events,
    commit attempts and permanent operation receipts. Policy publication controls the existing bill switch;

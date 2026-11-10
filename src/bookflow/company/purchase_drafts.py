@@ -33,7 +33,10 @@ def calculate(s, inp, ctx=None, operation='create', original_id=None, original_v
     expenses = [dict(account=named(x.line_snapshot.account), amount=x.amount,
         memo=x.memo, customer=named(x.line_snapshot.customer), class_id=named(x.line_snapshot.class_id),billable=x.billable)
         for x in bill.revision.expenses]
-    preview = m.Preview(total=bill.total,expenses=expenses,vendor=dict(id=bill.vendor_id,name=bill.vendor_name),
+    preview = m.Preview(total=bill.total,expenses=expenses,
+        items=[dict(item=named(x.line_snapshot.item), description=x.description, quantity=x.quantity,
+                    unit_cost=x.unit_cost, amount=x.amount) for x in bill.revision.items],
+        **native.data['display_sources'],vendor=dict(id=bill.vendor_id,name=bill.vendor_name),
         ap_account=named(bill.revision.profile.ap_account),due_date=bill.due_date,currency=bill.currency)
     return m.Payload.model_validate(normalized), preview, snapshot
 
@@ -70,8 +73,16 @@ def check(s, value, expected):
                          current_version=value['version'], updated_by=value['updated_by'], updated_at=value['updated_at'],
                          changed_fields=['payload', 'state']))
     if value['state'] not in ('draft', 'rejected'):
-        raise BookflowError('E_APPROVAL_STATE', message='A cancelled draft remains readable and cannot be changed.',
-                            details={'state': value['state'], 'allowed_actions': ['show', 'list']})
+        state = value['state']
+        message, actions = {
+            'pending': ('Withdraw this pending draft before changing it.', ['show', 'list', 'withdraw']),
+            'approved': ('Withdraw this approved draft before changing it.', ['show', 'list', 'withdraw']),
+            'committed': ('Correct a committed bill with a new correction draft, or reverse it through its batch.',
+                          ['show', 'list', 'purchase-draft create', 'batch reverse']),
+            'cancelled': ('A cancelled draft remains readable and cannot be changed.', ['show', 'list']),
+        }[state]
+        raise BookflowError('E_APPROVAL_STATE', message=message,
+                            details={'state': state, 'allowed_actions': actions})
 
 
 def request(inp, ctx):

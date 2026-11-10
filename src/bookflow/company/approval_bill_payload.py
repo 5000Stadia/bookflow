@@ -152,9 +152,11 @@ def calculate(s, ctx, payload, operation='create', original_id=None, original_ve
     if inp.number is None:
         semantic.pop('number', None)
     sources = []
+    display_sources = dict(purchase_order=None, receipts=[])
     if normalized.get('purchase_order'):
         header = purchase_orders.resolve(s, normalized['purchase_order'])
         revision = purchase_orders.revision(s, header)
+        display_sources['purchase_order'] = dict(id=header['id'], name=revision['number'])
         sources.append(dict(kind='purchase_order', id=header['id'], version=header['version'], revision=revision['id'],
                             selections=normalized.get('order_lines'),
                             lines=[{key: line.get(key) for key in ('line_id', 'quantity_microunits',
@@ -162,6 +164,8 @@ def calculate(s, ctx, payload, operation='create', original_id=None, original_ve
                                 for line in purchase_orders.saved_lines(s, revision)]))
     received = plan.data.get('received')
     if received:
+        display_sources['receipts'] = [dict(id=x['header']['id'], number=x['header']['number'],
+            quantity=line.quantity) for x, line in zip(received['sources'], plan.preview.revision.receipts, strict=True)]
         sources.extend(dict(kind='item_receipt', id=x['header']['id'], version=x['header']['version'],
                             line=x['line']['id'], spans=x['spans'], quantity=x['quantity'],
                             product_amount=x['product_amount'], shipping=x['shipping']) for x in received['sources'])
@@ -177,6 +181,7 @@ def calculate(s, ctx, payload, operation='create', original_id=None, original_ve
                     stock=_stock(plan.data.get('stock')),
                     receipt_stock=_stock(received.get('stock')) if received else None,
                     total=plan.preview.total.model_dump(mode='json'))
+    plan.data['display_sources'] = display_sources
     return normalized, json.loads(json.dumps(snapshot)), plan
 
 

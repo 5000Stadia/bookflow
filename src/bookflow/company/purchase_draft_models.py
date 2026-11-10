@@ -70,9 +70,26 @@ class ExpensePreview(_Input):
     billable: bool
 
 
+class ItemPreview(_Input):
+    item: Named
+    description: str | None
+    quantity: str
+    unit_cost: JournalMoneyOutput | None
+    amount: JournalMoneyOutput
+
+
+class ReceiptPreview(_Input):
+    id: str
+    number: str
+    quantity: str
+
+
 class Preview(_Input):
     total: JournalMoneyOutput
     expenses: list[ExpensePreview]
+    items: list[ItemPreview] = Field(default_factory=list)
+    purchase_order: Named | None = None
+    receipts: list[ReceiptPreview] = Field(default_factory=list)
     vendor: Named
     ap_account: Named
     due_date: str
