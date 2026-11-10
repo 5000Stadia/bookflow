@@ -40,7 +40,7 @@ def test_invoice_recipient_prompt_cancel_and_reopened_report_at_390px(register_b
     b.wait_for('!!document.querySelector(".commission-picker[open]")')
     b.evaluate('document.querySelector("[data-commission-cancel]").click()')
     assert b.evaluate('document.querySelectorAll(".line-body > [data-collection-item]").length') == 1
-    assert b.evaluate('document.querySelector("[data-ref-value][name$=\":item\"]").value') == disabled
+    assert b.evaluate("""document.querySelector('[data-ref-value][name$=":item"]').value""") == disabled
     assert b.evaluate('document.querySelector("[data-commission-value]").value') == ''
     b.navigate(f'{env.site.base_url}/c/{env.site.company_id}/invoice/post')
     b.wait_for('!!document.querySelector("[data-commission-entry]")')

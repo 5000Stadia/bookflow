@@ -14,14 +14,16 @@ def shop(books):
         return books.run(command, raw, reason='Invoice attribution setup')
     call('company update', commission_attribution_enabled=True)
     income = call('account create', name='Attribution sales', type='income')['id']
+    code = next(r['id'] for r in call('sales-tax-code list')['items'] if not r['taxable'])
     item = call('item create', name='Attribution service', type='service', sales_enabled=True,
-        income_account_id=income, price='100.00', commission_enabled=True)['id']
+        income_account_id=income, price='100.00', description='Attribution service',
+        sales_tax_code_id=code, commission_enabled=True)['id']
     people = []
     for name, initials in [('Ada', 'ADA'), ('Bo', 'BO')]:
         person = call('other-name create', name=name)['id']
         people.append(call('sales-rep create', name=name, initials=initials,
             name_type='other_name', name_id=person)['id'])
-    return dict(call=call, item=item, people=people, income=income)
+    return dict(call=call, item=item, people=people, income=income, tax_code=code)
 
 
 def line(shop, who=0, **kw):
@@ -36,7 +38,7 @@ def test_two_people_final_net_snapshots_reopen_and_off_layer(books, shop):
     call = shop['call']
     subtotal = call('item create', name='Attribution subtotal', type='subtotal', description='Attribution subtotal')['id']
     discount = call('item create', name='Attribution discount', type='discount', description='Attribution discount', discount_amount='30.00',
-        income_account_id=shop['income'])['id']
+        income_account_id=shop['income'], sales_tax_code_id=shop['tax_code'])['id']
     sale = post(books, [line(shop), line(shop, 1, unit_price='50.00'), {'item': subtotal}, {'item': discount}])
     assert sale['total_minor_units'] == 12000
     report = books.run('report commission-attribution', {})
@@ -78,7 +80,8 @@ def test_legacy_line_unchanged_but_changed_item_requires_selection(books, shop):
     same = call('invoice update', invoice=sale['id'], expected_version=sale['version'], memo='New memo')
     assert same['revision']['lines'][0]['item_snapshot'] == snapshot
     new_item = call('item create', name='Another attributed service', type='service', sales_enabled=True,
-        income_account_id=shop['income'], price='25.00', commission_enabled=True)['id']
+        income_account_id=shop['income'], price='25.00', description='Another attributed service',
+        sales_tax_code_id=shop['tax_code'], commission_enabled=True)['id']
     with pytest.raises(BookflowError) as err:
         call('invoice update', invoice=sale['id'], expected_version=same['version'],
              lines=[{'line_id': same['revision']['lines'][0]['line_id'], 'item': new_item}])
@@ -128,8 +131,11 @@ def test_commission_contracts_python_cli_http_mcp(root, tmp_path):
                 assert options['items']
                 rep = options['items'][0]['id']
                 account = await call('account create', {'name': 'Contract attribution income', 'type': 'income'})
+                codes = await call('sales-tax-code list', {})
+                code = next(r['id'] for r in codes['items'] if not r['taxable'])
                 item = await call('item create', {'name': 'Contract attribution service', 'type': 'service',
-                    'sales_enabled': True, 'income_account_id': account['id'], 'price': '12.34', 'commission_enabled': True})
+                    'sales_enabled': True, 'income_account_id': account['id'], 'price': '12.34',
+                    'description': 'Contract attribution service', 'sales_tax_code_id': code, 'commission_enabled': True})
                 customer = await call('customer create', {'name': 'Contract attribution customer'})
                 payload = {'customer': customer['id'], 'date': '2026-11-02', 'lines': [{'item': item['id']}]}
                 error = await call('invoice post', payload, rejected=True)
