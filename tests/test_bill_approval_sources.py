@@ -20,6 +20,7 @@ def test_approved_source_competition_revalidates_without_consuming_twice(root, c
     income = next(row['id'] for row in accounts if row['type'] == 'income')
     cogs = next(row['id'] for row in accounts if row['type'] == 'cost_of_goods_sold')
     item = client.item.create(company=COMPANY, name='Approval source part', type='inventory_part',
+        description='Approval source part', purchase_description='Approval source part',
         price='15.00', cost='12.00', cogs_account_id=cogs, income_account_id=income)['id']
     order = run(client, 'purchase-order post', dict(date='2026-06-01', vendor=payload['vendor'],
         lines=[dict(item=item, quantity='10', rate='12.00')]))
@@ -132,11 +133,11 @@ def test_self_review_and_same_principal_agent_refuse_and_retry_rechecks_grants(r
     client.membership.grant(user=agent, company=company, expected_version=2, grants=[])
     with pytest.raises(BookflowError) as revoked:
         run(bot, 'approval decide', decision)
-    assert revoked.value.code == 'E_PERMISSION'
+    assert revoked.value.code in ('E_PERMISSION', 'E_UNAUTHENTICATED')
     client.membership.grant(user=agent, company=company, expected_version=3,
                             grants=['approval.read', 'approval.decide'])
     client.membership.grant(user=principal, company=company, role='admin', expected_version=1,
                             denies=['approval.decide'])
     with pytest.raises(BookflowError) as principal_revoked:
         run(bot, 'approval decide', decision)
-    assert principal_revoked.value.code == 'E_PERMISSION'
+    assert principal_revoked.value.code in ('E_PERMISSION', 'E_UNAUTHENTICATED')

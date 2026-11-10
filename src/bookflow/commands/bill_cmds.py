@@ -43,8 +43,8 @@ _ENTRY_ERRORS = ['E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE', 'E_VALIDATION', '
 WRITE_ERRORS = {
     # A bill entered from a purchase order can be refused for that order's sake: it was
     # withdrawn, or another bill already consumed it.
-    'post': _ENTRY_ERRORS + ['E_WORK_DEPENDENCY'],
-    'update': _ENTRY_ERRORS + ['E_VERSION_CONFLICT', 'E_HAS_APPLICATIONS'],
+    'post': _ENTRY_ERRORS + ['E_WORK_DEPENDENCY', 'E_APPROVAL_REQUIRED'],
+    'update': _ENTRY_ERRORS + ['E_VERSION_CONFLICT', 'E_HAS_APPLICATIONS', 'E_APPROVAL_REQUIRED'],
     'void': ['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_VALIDATION', 'E_REASON_REQUIRED',
              'E_PERIOD_CLOSED', 'E_HAS_APPLICATIONS'],
 }
@@ -95,7 +95,7 @@ def _write(verb, model):
         return bills.prepare(s, ctx, inp, verb)
 
     cmd = command(
-        'bill ' + verb, scope='company', description=DESCRIPTIONS[verb],
+        'bill ' + verb, scope='company', description=DESCRIPTIONS[verb] + (' When bill approvals are enabled, use purchase-draft create, submit and commit; this direct command refuses E_APPROVAL_REQUIRED.' if verb in ('post', 'update') else ''),
         input_model=model, output_model=BillWriteOutput, writes={'company'},
         required_role='standard', capability='ledger.post', accepts_idempotency_key=True,
         positional=[] if verb == 'post' else ['bill'], clearable=verb == 'update',
@@ -113,7 +113,7 @@ def _read(verb, model, output_model):
         return Plan(bills.page(s, ctx, inp, history=verb == 'history'))
 
     return command(
-        'bill ' + verb, scope='company', description=DESCRIPTIONS[verb],
+        'bill ' + verb, scope='company', description=DESCRIPTIONS[verb] + (' When bill approvals are enabled, use purchase-draft create, submit and commit; this direct command refuses E_APPROVAL_REQUIRED.' if verb in ('post', 'update') else ''),
         input_model=model, output_model=output_model,
         required_role='member', capability='ledger.read',
         positional=[] if verb == 'query' else ['bill'],

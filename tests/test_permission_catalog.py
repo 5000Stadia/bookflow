@@ -165,6 +165,7 @@ def _import_read_pairs():
 
     Derived from the kind declarations, so a kind or reference added without a delta declaring its read fails here."""
     from bookflow.company import import_kinds, imports
+    registry.load_all()
     commands = {cmd.name: cmd for cmd in registry.all_commands(include_standalone=True)}
     targets = {t for kind in import_kinds.KINDS.values() for t in imports._references(kind).values()}
     pairs = set()

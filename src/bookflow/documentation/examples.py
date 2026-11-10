@@ -2243,3 +2243,32 @@ EXAMPLES.update({
     'purchase-draft preview': Example('bookflow purchase-draft preview ' + ID + ' --company "Demo Plumbing Co" --json', {'draft': ID}),
     'purchase-draft list': Example('bookflow purchase-draft list --state draft --company "Demo Plumbing Co" --json', {'state': 'draft'}),
 })
+
+
+# Revision-bound one-step bill approvals.
+_APPROVAL_INPUTS = {
+    'purchase-draft submit': {'draft': ID, 'expected_version': 1},
+    'purchase-draft withdraw': {'draft': ID, 'expected_version': 3, 'expected_request_version': 2, 'confirm': True},
+    'purchase-draft commit': {'draft': ID, 'expected_version': 3, 'expected_request_version': 2},
+    'approval decide': {'request': ID, 'expected_version': 1, 'decision': 'approve'},
+    'approval-policy create': {'eligible_members': [ID]},
+    'approval-policy update': {'policy': ID, 'expected_version': 1, 'eligible_members': [ID]},
+    'approval-policy publish': {'policy': ID, 'expected_version': 1, 'confirm': True},
+    'approval show': {'request': ID},
+    'approval history': {'request': ID},
+    'approval-policy show': {'policy': ID},
+    'approval-policy list': {'limit': 50},
+}
+import json as _approval_json
+import shlex as _approval_shlex
+for _approval_name, _approval_raw in _APPROVAL_INPUTS.items():
+    _approval_write = _approval_name.split()[-1] not in ('show', 'history', 'list')
+    if _approval_write:
+        _approval_raw = dict(_approval_raw, operation_key='approval-example')
+    _approval_flags = []
+    for _key, _value in _approval_raw.items():
+        _approval_flags.append('--' + _key.replace('_', '-'))
+        if _value is not True:
+            _approval_flags.append(_approval_shlex.quote(_approval_json.dumps(_value) if isinstance(_value, list) else str(_value)))
+    EXAMPLES[_approval_name] = Example('bookflow ' + _approval_name + ' ' + ' '.join(_approval_flags) +
+        ' --company "Demo Plumbing Co" --json' + (' --reason "Review supplier bill"' if _approval_write else ''), _approval_raw)

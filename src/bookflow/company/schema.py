@@ -1344,3 +1344,6 @@ from bookflow.company import purchase_draft_schema as _purchase_draft_schema
 globals().update(_purchase_draft_schema.define_tables(metadata, _column, _table, _common))
 for _purchase_draft_column in _purchase_draft_schema.company_columns(_column):
     company_info.append_column(_purchase_draft_column)
+
+from bookflow.company import approval_schema as _approval_schema
+globals().update(_approval_schema.define_tables(metadata, _column, _table, _common))

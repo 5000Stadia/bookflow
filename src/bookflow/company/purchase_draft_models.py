@@ -1,35 +1,39 @@
-"""Expense-only saved bill drafts; no posting or approval transition."""
-from typing import Literal
+"""Saved native bill proposal contracts."""
+from typing import Literal, Any
 from pydantic import Field, model_validator
 from bookflow.company.journal_models import _Input, _Selector, _Date, _Version, _Number
 from bookflow.company.bill_models import BillExpenseInput, SupplierReference, Text
 from bookflow.company.journal_outputs import JournalMoneyOutput
 
 
-class Payload(_Input):
-    date: _Date
-    vendor: _Selector
-    expenses: list[BillExpenseInput] = Field(min_length=1, max_length=200,
-        json_schema_extra={'sample': [{'account': 'Professional Fees', 'amount': '80.00'}]})
-    number: _Number | None = None
-    ap_account: _Selector | None = None
-    terms: _Selector | None = None
-    due_date: _Date | None = None
-    supplier_reference: SupplierReference | None = None
-    memo: Text | None = None
-    class_id: _Selector | None = None
+from bookflow.company.bill_models import _BillFields, Expenses, Items, OrderLineSelection, ReceiptBillingInput
 
-    @model_validator(mode='after')
-    def new_lines(self):
-        if any(line.line_id for line in self.expenses):
-            raise ValueError('draft expense rows do not reference posted line identities')
-        return self
+State = Literal['draft', 'pending', 'approved', 'rejected', 'committed', 'cancelled']
+
+class Payload(_BillFields):
+    date: _Date
+    vendor: _Selector | None = None
+    expenses: Expenses | None = None
+    items: Items | None = None
+    purchase_order: _Selector | None = None
+    order_lines: list[OrderLineSelection] | None = None
+    receipts: list[ReceiptBillingInput] | None = None
 
 
 class CreateInput(Payload):
     kind: Literal['bill'] = 'bill'
-    operation: Literal['create'] = 'create'
+    operation: Literal['create', 'correct', 'restore'] = 'create'
+    original_id: _Selector | None = None
+    original_version: _Version | None = None
     operation_key: str = Field(min_length=1, max_length=128)
+
+    @model_validator(mode='after')
+    def original_target(self):
+        if self.operation == 'create' and (self.original_id is not None or self.original_version is not None):
+            raise ValueError('create does not accept an original bill')
+        if self.operation != 'create' and (self.original_id is None or self.original_version is None):
+            raise ValueError('correct and restore require an original bill and exact version')
+        return self
 
 
 class UpdateInput(CreateInput):
@@ -47,7 +51,7 @@ class CancelInput(DraftInput):
 
 
 class ListInput(_Input):
-    state: Literal['draft', 'cancelled'] | None = None
+    state: State | None = None
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=200)
 
@@ -78,7 +82,7 @@ class Preview(_Input):
 
 class Revision(_Input):
     version: int
-    state: Literal['draft', 'cancelled']
+    state: State
     payload: Payload
     preview: Preview
     actor: str
@@ -89,11 +93,16 @@ class Revision(_Input):
 
 
 class DraftOutput(_Input):
+    snapshot: dict[str, Any] | None = None
+    request_id: str | None = None
+    request_version: int | None = None
     id: str
     version: int
     kind: Literal['bill']
-    operation: Literal['create']
-    state: Literal['draft', 'cancelled']
+    operation: Literal['create', 'correct', 'restore']
+    original_id: str | None = None
+    original_version: int | None = None
+    state: State
     payload: Payload
     preview: Preview
     created_at: str

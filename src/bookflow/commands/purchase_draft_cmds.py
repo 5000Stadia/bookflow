@@ -1,4 +1,4 @@
-"""Shared expense-only bill draft commands; approval and posting are later increments."""
+"""Shared non-posting bill draft commands."""
 from bookflow.company import purchase_drafts as d, purchase_draft_models as m
 from bookflow.core.registry import Plan, command
 
@@ -21,7 +21,7 @@ def plan_show(inp, ctx, s):
 
 def plan_preview(inp, ctx, s):
     value = d.output(s, d.row(s, inp.draft))
-    _, preview = d.calculate(s, value.payload)
+    _, preview, _ = d.calculate(s, value.payload, ctx, value.operation, value.original_id, value.original_version)
     return Plan(value.model_copy(update={'preview': preview}))
 
 
@@ -53,9 +53,9 @@ def _read(verb, model, output, planner, description):
 
 
 purchase_draft_create = _write('create', m.CreateInput, plan_create,
-    'Save an expense-only bill draft with a reason and permanent operation_key. The draft posts nothing: no AP, '
+    'Save a native bill draft with a reason and permanent operation_key. The draft posts nothing: no AP, '
     'ledger, inventory or purchase consumption. Use --dry-run for an exact unsaved preview. '
-    'kind is bill and operation is create; approval layers remain off. Another preparer can resume its shared ID.')
+    'kind is bill; operation is create or correct with original_id and original_version. Sources and exact amounts are captured without reservations. Restore awaits native bill restoration. Another preparer can resume its shared ID.')
 purchase_draft_update = _write('update', m.UpdateInput, plan_update,
     'Replace all commercial fields of a saved bill draft, carrying its exact expected_version, a new operation_key '
     'and reason. Omitted optional fields reset to defaults. Prior revisions remain readable; a cancelled draft refuses.')
@@ -68,7 +68,7 @@ purchase_draft_preview = _read('preview', m.DraftInput, m.DraftOutput, plan_prev
     'Revalidate a saved bill draft and calculate its exact current total without saving or posting. The captured '
     'revision history stays unchanged. Use create --dry-run to preview a bill before saving.')
 purchase_draft_list = _read('list', m.ListInput, m.ListOutput, plan_list,
-    'List saved bill drafts in stable ID order, optionally by draft or cancelled state. Continue with next_cursor; '
+    'List saved bill drafts in stable ID order, optionally by lifecycle state. Continue with next_cursor; '
     'a cursor belongs to its state filter. These records never appear in AP aging or posted bill lists.')
 
 PURCHASE_DRAFT_COMMANDS = [purchase_draft_create, purchase_draft_update, purchase_draft_cancel,

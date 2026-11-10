@@ -107,7 +107,7 @@ Database: `company`.
 | `bank_rule_automation` | BOOLEAN | no | — | — | — | — | Bank rules: live auto-add and ignore rules act at imports (true, the default); false holds every one back company-wide, their lines waiting with their proposals. |
 | `pos_home_view_style` | VARCHAR(12) | no | — | — | — | — | Saved POS home style: block, list, compact or photo. |
 | `pos_layout_version` | INTEGER | no | — | — | — | — | POS layout revision, independent of company settings. Zero means the category seed has not yet been saved; positive revisions also preserve an intentionally empty layout. |
-| `purchase_approvals_enabled` | BOOLEAN | no | — | — | — | — | Reserved approval layer switch; off until the approval workflow is available. |
-| `bill_approvals_enabled` | BOOLEAN | no | — | — | — | — | Reserved approval layer switch; off until the approval workflow is available. |
-| `approval_routing_enabled` | BOOLEAN | no | — | — | — | — | Reserved approval layer switch; off until the approval workflow is available. |
-| `approval_reminders_enabled` | BOOLEAN | no | — | — | — | — | Reserved approval layer switch; off until the approval workflow is available. |
+| `purchase_approvals_enabled` | BOOLEAN | no | — | — | — | — | Optional approval layer switch; defaults off. |
+| `bill_approvals_enabled` | BOOLEAN | no | — | — | — | — | Optional approval layer switch; defaults off. |
+| `approval_routing_enabled` | BOOLEAN | no | — | — | — | — | Optional approval layer switch; defaults off. |
+| `approval_reminders_enabled` | BOOLEAN | no | — | — | — | — | Optional approval layer switch; defaults off. |

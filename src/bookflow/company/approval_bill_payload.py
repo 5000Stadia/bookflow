@@ -10,7 +10,8 @@ from bookflow.core.exact import format_quantity_micro_units
 
 
 def _money(value, currency):
-    return {'minor_units': value, 'currency': currency}
+    from bookflow.core.money import Money
+    return Money(value, currency).to_dict()
 
 
 def _reference(value):
@@ -31,7 +32,7 @@ def _line(value, currency, *, item=False):
         else:
             out['amount'] = _money(value['amount_minor_units'], currency)
     else:
-        out.update(account=facts['account']['id'], memo=value['description'],
+        out.update(account=facts['account']['id'], memo=value['memo'],
                    amount=_money(value['amount_minor_units'], currency))
     return out
 
