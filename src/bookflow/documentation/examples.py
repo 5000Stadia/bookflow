@@ -2292,6 +2292,29 @@ EXAMPLES.update({
         f'bookflow payroll prepare --draft {ID} --expected-version 1 --operation-key payroll-prepare-1 '
         '--company "Demo Plumbing Co" --reason "Review saved paycheck" --json',
         {'draft': ID, 'expected_version': 1, 'operation_key': 'payroll-prepare-1'}),
+    'payroll post': Example(
+        f"bookflow payroll post --draft {ID} --expected-version 2 --operation-key payroll-post-1 "
+        "--check-account Checking --check-number 1001 "
+        '--company "Demo Plumbing Co" --reason "Post reviewed paycheck" --json',
+        {'draft': ID, 'expected_version': 2, 'operation_key': 'payroll-post-1',
+         'check_account': 'Checking', 'check_number': '1001'}),
+    'payroll pay-net': Example(
+        f'bookflow payroll pay-net --paycheck {ID} --expected-version 1 --account Checking --number 1001 '
+        '--operation-key payroll-pay-1 --company "Demo Plumbing Co" --reason "Record net-pay check" --json',
+        {'paycheck': ID, 'expected_version': 1, 'account': 'Checking', 'number': '1001',
+         'operation_key': 'payroll-pay-1'}),
+    'payroll void': Example(
+        f'bookflow payroll void --paycheck {ID} --expected-version 1 --operation-key payroll-void-1 '
+        '--company "Demo Plumbing Co" --reason "Posted to the wrong employee" --json',
+        {'paycheck': ID, 'expected_version': 1, 'operation_key': 'payroll-void-1'}),
+    'payroll void-payment': Example(
+        f'bookflow payroll void-payment --paycheck {ID} --expected-version 2 --operation-key payroll-void-pay-1 '
+        '--company "Demo Plumbing Co" --reason "Check spoiled" --json',
+        {'paycheck': ID, 'expected_version': 2, 'operation_key': 'payroll-void-pay-1'}),
+    'payroll paycheck': Example(f'bookflow payroll paycheck --paycheck {ID} --company "Demo Plumbing Co" --json',
+                                {'paycheck': ID}),
+    'payroll paychecks': Example('bookflow payroll paychecks --limit 25 --company "Demo Plumbing Co" --json',
+                                 {'limit': 25}),
 })
 
 _DRAFT_BILL = {'date': '2026-09-15', 'vendor': 'Regional Parts',

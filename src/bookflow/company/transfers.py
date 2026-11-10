@@ -117,6 +117,8 @@ def _end(s, selector, field, currency):
     account = journals.active(accounts.resolve_account(s.company, selector, follow_merge=True), 'account')
     from bookflow.company.intercompany_account_owner import require_unreserved
     require_unreserved(s.company, account['id'])
+    from bookflow.company.payroll_owner import require_unreserved_account
+    require_unreserved_account(s.company, account['id'])
     if account['type'] not in ELIGIBLE:
         raise _ineligible(field, account)
     held = account.get('currency')

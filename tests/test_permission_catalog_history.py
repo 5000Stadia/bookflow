@@ -134,6 +134,7 @@ ACCEPTED = {
     'intercompany-setup-v1': (960, '67602d51a720ba672a62fe16afbe33cab1f266d96b4ceaf24ebedd3705f7f63f'),
     'commission-pos-v1': (961, '8171794a1952fea02695361d7c712f5e10c8e0b74506d66db6a2d810f325299e'),
     'crm-convert-v1': (964, '93a120a2e91e0f151878d417cb63c87d3649ce9799265208e31997af2f988a3b'),
+    'payroll-post-v1': (970, 'b7f6bca6de63ed276c9a9694b8d5e8a54f95d92af19d8ea377aab3c0d1fa1579'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -321,6 +322,8 @@ CHAIN_ADDITIONS = {
                               'intercompany-relationship list'},
     'commission-pos-v1': {'pos commission-options'},
     'crm-convert-v1': {'crm timeline', 'lead convert', 'lead import'},
+    'payroll-post-v1': {'payroll post', 'payroll pay-net', 'payroll void', 'payroll void-payment',
+                        'payroll paycheck', 'payroll paychecks'},
 }
 
 _ANCESTOR_EDIT = """

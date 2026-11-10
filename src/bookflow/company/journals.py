@@ -228,6 +228,12 @@ def line_values(s, inp, currency, old=None, refresh=False, *, date=None, rate=No
         party_name=(party.get('full_name') or party.get('name') or party.get('display_name')) if party else None,
         class_id=klass['id'] if klass else None, class_name=(klass.get('full_name') or klass.get('name')) if klass else None,
         description=inp.description)
+    # Payroll's reserved accounts: an edit that leaves an existing line on one as it was (same account, side and
+    # amount) is still an ordinary entry's own history; any new or changed line on one is refused.
+    if not (old and (old['account_id'], old['side'], old['amount_minor_units']) ==
+            (result['account_id'], result['side'], result['amount_minor_units'])):
+        from bookflow.company.payroll_owner import require_unreserved_account
+        require_unreserved_account(s.company, account['id'])
     if old and not refresh:
         if result['account_id'] == old['account_id']:
             result['account_snapshot'] = old['account_snapshot']
@@ -283,7 +289,10 @@ def foreign_document(s, transaction_id, *, verb, owner=None):
 
     One home for all of it, so every writer refuses the same documents in the same words.
     """
-    from bookflow.company import inventory, money_out
+    from bookflow.company import inventory, money_out, payroll_owner
+    payroll = payroll_owner.refusal(s.company.conn, transaction_id)
+    if payroll is not None:
+        return payroll
     kind = money_out.owning_document_kind(s, transaction_id) if owner is None else None
     if kind is not None:
         return money_out.owned_elsewhere(kind, transaction_id, verb=verb)
@@ -615,7 +624,7 @@ def apply(plan, ctx, s):
     return persist_prepared(fresh, ctx, s, command_name='journal ' + plan.data['operation'])
 
 
-def persist_prepared(fresh, ctx, s, *, command_name, extra=(), noun='journal', number=None):
+def persist_prepared(fresh, ctx, s, *, command_name, extra=(), noun='journal', number=None, first=()):
     """Persist a writer-validated aggregate under its outer command's single audit event.
 
     ``extra`` is how a document that posts *as* a journal records the one thing the journal
@@ -626,6 +635,9 @@ def persist_prepared(fresh, ctx, s, *, command_name, extra=(), noun='journal', n
     ``noun`` is what the audit summary calls what was written, and ``number`` is what that
     person would call it by. A person reading the audit page is looking for the cheque they
     voided, by the number on its face, not for the journal series reference it posts under.
+
+    ``first`` takes rows of the same shape as ``extra`` that must exist before the posting legs
+    are written: payroll's ledger link, which the reserved-account trigger on ``posting_lines`` reads.
     """
     if not fresh.data['changed']:
         return Applied(fresh.preview, [], 'no change')
@@ -638,7 +650,7 @@ def persist_prepared(fresh, ctx, s, *, command_name, extra=(), noun='journal', n
                        h['version'], h, old, db='company')]
     for table, kind in zip(TABLES, TYPES):
         touched.extend(Touched(kind, row['id'], 'create', None, 1, decoded(row), db='company') for row in pending[table])
-    for _, kind, key, rows_ in extra:
+    for _, kind, key, rows_ in (*first, *extra):
         touched.extend(Touched(kind, row[key], 'create', None, 1, decoded(row), db='company') for row in rows_)
     if custom_plan is not None:
         touched.extend(custom.touches(custom_plan))
@@ -655,6 +667,9 @@ def persist_prepared(fresh, ctx, s, *, command_name, extra=(), noun='journal', n
         s.company.conn.execute(c.transactions.update().where(c.transactions.c.id == h['id']).values(**h))
     else:
         s.company.conn.execute(c.transactions.insert().values(**h))
+    for table, _, _, rows_ in first:
+        if rows_:
+            s.company.conn.execute(getattr(c, table).insert(), rows_)
     for table in TABLES:
         if pending[table]:
             s.company.conn.execute(getattr(c, table).insert(), pending[table])

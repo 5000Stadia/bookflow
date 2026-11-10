@@ -142,7 +142,9 @@ def test_unknown_record_types_need_every_read_capability():
     assert v.record_capabilities('directive') == {'directive'}
     assert v.record_capabilities('sales_rep') == {'sales-rep'}
     assert v.record_capabilities('work_billing_allocation') == {'customer-work', 'ledger.read'}
-    assert v.record_capabilities('some_future_record') == v.CAPABILITIES
+    # An unknown record type needs every capability but payroll's, which hides only payroll's own records.
+    assert v.record_capabilities('some_future_record') == v.UNKNOWN == v.CAPABILITIES - {'payroll.read'}
+    assert v.record_capabilities('payroll_paycheck') == {'payroll.read'}
     # No two families claim one record type, so the SQL and Python readings agree.
     prefixes = [p for p, _ in v.PREFIXES]
     assert not [(a, b) for a in prefixes for b in prefixes if a != b and a.startswith(b)]

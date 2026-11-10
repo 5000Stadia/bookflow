@@ -5,8 +5,8 @@ catalog capabilities at `member`: an estimate under `customer-work`, a purchase 
 other transaction under `ledger.read`, a note under `note`, a customer under `customer`. An event
 is shown only when the reader holds every capability its entries need, and a note or file link
 also needs what the record it is attached to needs. A record type this map does not know needs
-every capability here, so a new kind of record stays hidden from a restricted reader until it is
-named. The audit and activity commands apply this in SQL, before paging, so a hidden event is
+every capability here but `payroll.read`, so a new kind of record stays hidden from a restricted
+reader until it is named; `payroll.read` hides only events that touch a `payroll_` record. The audit and activity commands apply this in SQL, before paging, so a hidden event is
 neither returned nor counted.
 """
 from __future__ import annotations
@@ -74,6 +74,7 @@ EXACT = {
 # transaction, its lines, postings, settlement, deposit, reconciliation and deletion rows under
 # ledger.read. No two prefixes here match the same record type.
 PREFIXES = (
+    ('payroll_', frozenset(('payroll.read',))),
     ('work_', frozenset((WORK,))),
     ('time_activit', frozenset((WORK,))),
     *((prefix, frozenset((LEDGER,))) for prefix in (
@@ -83,8 +84,11 @@ PREFIXES = (
         'statement_', 'inventory_', 'invoice_batch', 'memorized_', 'reconciliation_', 'journal_')),
 )
 
-# The strictest requirement: what a record type this module does not know needs.
+# Every capability this filter asks about.
 CAPABILITIES = frozenset().union(*EXACT.values(), *(caps for _, caps in PREFIXES))
+# What a record type this module does not know needs: all of them but payroll's, which hides only
+# payroll's own records (a reader without `payroll.read` still sees every other event as before).
+UNKNOWN = CAPABILITIES - {'payroll.read'}
 
 
 def record_capabilities(record_type: str) -> frozenset[str]:
@@ -94,7 +98,7 @@ def record_capabilities(record_type: str) -> frozenset[str]:
     for prefix, caps in PREFIXES:
         if record_type.startswith(prefix):
             return caps
-    return CAPABILITIES
+    return UNKNOWN
 
 
 def admitted(s) -> frozenset[str]:
@@ -129,8 +133,9 @@ def _hidden(column, held: frozenset[str]):
     clauses = [column.in_(denied)] if denied else []
     if family:
         clauses.append(sa.and_(column.not_in(exact), sa.or_(*family)))
-    clauses.append(sa.and_(column.not_in(exact), ~known))
-    return sa.or_(*clauses)
+    if UNKNOWN - held:
+        clauses.append(sa.and_(column.not_in(exact), ~known))
+    return sa.or_(*clauses) if clauses else sa.false()
 
 
 def visible_events(event_id, held: frozenset[str]):

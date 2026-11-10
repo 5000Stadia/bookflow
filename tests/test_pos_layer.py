@@ -175,6 +175,7 @@ def test_the_clerk_preset_holds_company_item_and_pos_sell_and_lands_on_the_pos(h
                                                                  "preset.pos-clerk-returns"]
     from bookflow.hub import permission_catalog as catalog
     assert runtime.current_catalog().CATALOG.version == catalog.SCOPED_POLICY_VERSIONS[0]   # the tip, whatever layer is newest
+    # payroll-post-v1 adds only standard-level capabilities, which a readonly clerk never holds.
     # commission-pos-v1: the till lookup is a pos.sell command whose plan also asks commission.attribute, which only
     # the "Clerk with commission attribution" preset adds; neither clerk reaches the back-office commission commands.
     assert not {"commission recipient-options", "report commission-attribution"} & _admitted_commands(clerk)

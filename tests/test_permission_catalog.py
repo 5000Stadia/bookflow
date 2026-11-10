@@ -116,7 +116,7 @@ RESOURCE_PAIRS = {
     'audit_visibility.admitted': {(name, 'member') for name in (
         'account', 'attachment', 'class', 'company', 'crm.read', 'custom-field', 'customer', 'customer-message',
         'customer-type', 'customer-work', 'directive', 'employee', 'item', 'item-category', 'job-type',
-        'ledger.read', 'note', 'other-name', 'payment-method', 'price-level', 'sales-rep',
+        'ledger.read', 'note', 'other-name', 'payment-method', 'payroll.read', 'price-level', 'sales-rep',
         'sales-tax-code', 'ship-method', 'term', 'unit-of-measure', 'vendor', 'vendor-type')},
     'payment_authority.authorize': {('customer-work', 'member'), ('customer-work', 'standard'), ('ledger.post', 'standard'), ('ledger.read', 'member')},
     'payment_authority.authorize_event': {('customer-work', 'member'), ('ledger.read', 'member')},
@@ -141,8 +141,12 @@ RESOURCE_PAIRS = {
     'opening_drafts.require_accept': {('opening.accept-differences', 'standard')},
     # capabilities-v1: an agent's former people-only act, admitted for it and its principal (hub.capabilities).
     'payroll_privacy.require_archive_read': {('payroll.read', 'member')},
+    # payroll-post-v1: a paycheck write's extra rights and the payroll batch adapter's read and reverse authority.
+    'payroll_paychecks.require': {('payroll.read', 'member'), ('ledger.read', 'member'), ('payroll.pay', 'standard'),
+                                  ('payroll.void', 'standard'), ('ledger.post', 'standard')},
     'capability_gate.require_held': {
         ('payroll.read', 'member'), ('payroll.prepare', 'standard'), ('payroll.configure', 'admin'),
+        ('payroll.post', 'standard'), ('payroll.pay', 'standard'), ('payroll.void', 'standard'),
         ('party.merge', 'standard'), ('list.merge', 'standard'), ('restore.document', 'standard'),
         ('item.convert', 'standard'), ('check.print-confirm', 'standard'), ('clock.link', 'standard'),
         ('accountant.manage', 'admin'), ('costing.method', 'admin'), ('company.closing-date', 'admin'),
