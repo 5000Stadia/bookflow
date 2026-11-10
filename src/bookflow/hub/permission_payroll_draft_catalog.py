@@ -1,4 +1,4 @@
-"""Private manual payroll drafts (R116 increment 1), on notice-reversal-v1.
+"""Private manual payroll drafts (R116 increment 1), on purchase-draft-v1.
 
 Only administrators hold the three capabilities by default. Preparation and setup also
 require payroll.read; changing the switch requires company administration. Agents need
@@ -7,7 +7,7 @@ explicit grants for every payroll capability they use, with principal intersecti
 from dataclasses import asdict, replace
 import hashlib
 import json
-from . import permission_notice_reversal_catalog as previous, permission_catalog as c
+from . import permission_purchase_draft_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
 SOURCE_COMMIT = '940402dffcc8cd2c591c9a2e5555998f974b787c'

@@ -330,7 +330,7 @@ def test_payroll_migration_matches_metadata_and_retains_history():
     import sqlalchemy as sa
     from bookflow.company import schema as c
     from tests.test_docs_schema_metadata import _metadata_shape, _database_shape
-    migration = importlib.import_module('bookflow.storage.company_migrations.versions.0129_payroll_drafts')
+    migration = importlib.import_module('bookflow.storage.company_migrations.versions.0130_payroll_drafts')
     engine = sa.create_engine('sqlite://')
     with engine.connect() as connection:
         for statement in migration.DDL + migration.TRIGGERS:

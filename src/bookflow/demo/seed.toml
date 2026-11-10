@@ -2873,3 +2873,21 @@ input = { draft = "${payroll_p1.id}", expected_version = "${payroll_p1.version}"
 command = "payroll setup"
 reason = "Leave optional payroll switched off"
 input = { enabled = false, expected_version = 1, operation_key = "demo-payroll-disable" }
+
+# Saved purchase drafts are separate from accounts payable; approval switches stay off.
+[[commands]]
+command = "purchase-draft create"
+capture = "saved_bill_draft"
+reason = "Save a bill for another bookkeeper to finish"
+input = { operation_key = "demo-saved-bill", vendor = "${backup_vendor.id}", date = "2026-09-15", supplier_reference = "DRAFT-80", memo = "Saved for review; no accounts payable effect", expenses = [{ account = "${expense_account.id}", amount = "60.25", memo = "Service" }, { account = "${expense_account.id}", amount = "19.75", memo = "Freight" }] }
+
+[[commands]]
+command = "purchase-draft create"
+capture = "cancelled_bill_draft"
+reason = "Prepare a duplicate draft for cancellation"
+input = { operation_key = "demo-cancelled-bill", vendor = "${backup_vendor.id}", date = "2026-09-15", supplier_reference = "DRAFT-CANCEL", expenses = [{ account = "${expense_account.id}", amount = "80.00" }] }
+
+[[commands]]
+command = "purchase-draft cancel"
+reason = "Cancel the duplicate while preserving its history"
+input = { draft = "${cancelled_bill_draft.id}", expected_version = 1, operation_key = "demo-cancel-bill" }

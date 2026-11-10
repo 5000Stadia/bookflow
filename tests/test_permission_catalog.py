@@ -173,6 +173,7 @@ def _import_read_pairs():
 
 
 def test_every_resource_call_site_has_explicit_owner_disposition():
+    registry.load_all()
     declared = {**RESOURCE_PAIRS, 'batches.require_read': _import_read_pairs()}
     sites = {}
     for folder in ('commands', 'company'):

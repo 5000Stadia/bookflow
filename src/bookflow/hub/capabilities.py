@@ -26,7 +26,12 @@ from .permission_bank_source_catalog import CAPABILITIES as _BANK_SOURCE
 COMMAND_CAPABILITY = {**_COMMAND_V1, **{name: cap for cap, (_, names) in _BANK_SOURCE.items() for name in names}}
 
 # capabilities-v1's and automation-v1's (automate.bank-rule, automate.invoice: no command of their own).
-CAPABILITIES = {**_V1, **_automation_v1.CAPABILITIES, **_BANK_SOURCE}
+_APPROVAL = {
+    'approval.prepare': ('standard', tuple('purchase-draft ' + verb for verb in ('create', 'update', 'cancel'))),
+    'approval.read': ('standard', tuple('purchase-draft ' + verb for verb in ('show', 'list', 'preview'))),
+}
+COMMAND_CAPABILITY.update({name: cap for cap, (_, names) in _APPROVAL.items() for name in names})
+CAPABILITIES = {**_V1, **_automation_v1.CAPABILITIES, **_BANK_SOURCE, **_APPROVAL}
 
 HUB = frozenset(name for name, (threshold, _) in CAPABILITIES.items() if threshold == 'hub_admin')
 # The POS layer (pos-v1, design/point-of-sale.md §9): an agent holds a pos.* capability only by an explicit grant, as
