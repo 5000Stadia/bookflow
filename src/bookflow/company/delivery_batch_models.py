@@ -139,7 +139,7 @@ class BatchOutput(BaseModel):
     next: dict | None = Field(default=None, description='Input for the next chunk (delivery batch), while drafting.')
     fingerprint: str | None = Field(default=None, description=(
         'The exact set (documents, versions, recipients); pass it to the run so a changed set is refused.'))
-    go: bool = Field(default=False, description="Whether its releases carry a person's go (decided when it began).")
+    go: bool = Field(default=False, description="Whether its releases carry a go (decided when it began: its starter held delivery.send).")
     open_batches: list[str] = Field(default_factory=list, description=(
         'Dry run: unfinished batches over this same selection; continue one instead of starting another.'))
     version: int | None = None
@@ -169,7 +169,7 @@ class BatchRow(BaseModel):
     planned: int
     position: int
     drafts: int = Field(description='Messages still drafts.')
-    waiting: int = Field(description="Ready messages waiting for a person's go.")
+    waiting: int = Field(description="Ready messages waiting for a go.")
     created_at: str
     next_commands: list[str] = Field(default_factory=list)
 

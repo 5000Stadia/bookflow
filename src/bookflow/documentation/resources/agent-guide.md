@@ -6,7 +6,7 @@ To install Bookflow for someone and connect to it as their agent, follow [agent 
 
 The bootstrap bearer below belongs to the human who issued it, so do not describe this token as an independent agent identity. An agent's own identity is made with `bookflow setup` or the `agent` commands (`agent create`, `agent assign`, `agent authorize`, then `token issue --principal`).
 
-Some changes are a person's, whatever role an agent holds: the company's closing date (set, moved or cleared through `company update`) and anything that changes who can do what (memberships with their grants and denials, roles, agent assignment and authorization, token issue, users added, activated or deactivated, passwords, permission activation, backup schedules, `demo reset`), and merging or unmerging duplicate customers, vendors, accounts or items (`customer merge`, `vendor merge`, `account merge`, `item merge` and their `unmerge`). An agent asking for one gets `E_PERMISSION` with `details.reason` `people_only` and the rule it met; ask your principal to make the change. Do not make it yourself through a shell that runs as their login (`bookflow backup schedule` typed by you is recorded as their own act): give them the command and let them run it. When you find two entries that look like duplicates (two expense accounts for the same thing, an item entered twice), say so and name both; do not post to work around it. A merge leaves everything posted as it is and reads the duplicate as the other; a person previews it with `--dry-run` and can undo it. Reads, every other company setting and ordinary posting are unchanged. A directive you record yourself is your own note, made for your principal (`person_given` is false): citing it does not replace a reason. Only a directive a person recorded is their standing instruction.
+What you may do is your level: your role and the capabilities your principal (the person you act for) granted you, and never more than they hold themselves. Some acts need a capability by name, whatever your role: the company's closing date (`company update`), memberships, users, agents and backup schedules, `demo reset`, merging or unmerging duplicate customers, vendors, accounts or items, restoring a deleted journal or invoice, converting an item, confirming check printing, costing method, accountant designation, sending email and making an automation live. Refused for one, you get `E_PERMISSION` with `details.capability` naming it and `details.reason` `capability_not_granted` (or `principal_lacks_capability`): tell your principal which capability, and ask them to grant it if this is yours to do. Five acts stay a person's whatever is granted, because each is a person's own secret or statement (`user set-password`, `token issue`, `agent assign`, `agent authorize`, `permission activate`): those refuse with `details.reason` `people_only` and `principal_only` true; give your principal the command. Do not make any of these yourself through a shell that runs as their login (`bookflow backup schedule` typed by you is recorded as their own act). When you find two entries that look like duplicates (two expense accounts for the same thing, an item entered twice), say so and name both; do not post to work around it. A merge leaves everything posted as it is and reads the duplicate as the other; preview it with `--dry-run`, and it can be undone. A directive you record yourself is your own note, made for your principal (`person_given` is false): citing it does not replace a reason. Only a directive a person recorded is their standing instruction. [Your level and how to ask for more](#your-level-and-how-to-ask-for-more) says more.
 
 Browser and programmatic clients operate on the same records. After another writer
 corrects an invoice, read `invoice show` again and use its current `version` for the
@@ -711,7 +711,8 @@ already used on the account is refused, never skipped.
 
 Then ask the person "Did the checks print OK?" and stop: only they know what came out of the printer,
 so `check print-confirm` (all fine, or `failed_from` the first bad number), `check print-cancel` and
-`check reprint` are a person's act and refused to an agent. Misprinted checks go back to the queue for
+`check reprint` need `check.print-confirm`, which your principal grants by name; without it you are refused
+naming it, so give them the answer to record or ask for the grant. Misprinted checks go back to the queue for
 new numbers and their numbers are recorded as spoiled, which `report missing-checks` shows. A printed
 check's amount, payee and bank account cannot be changed: void it and write a new one.
 
@@ -740,8 +741,9 @@ company preference picks the lowest price (the default) or the first rule by `pr
 
 ## Handing the books to the outside accountant
 
-An agent can prepare the accountant's hand-off but never accepts an import: designating an external
-accountant (`accountant add`), cancelling a copy and `accountant-copy import` are a person's steps.
+An agent can prepare the accountant's hand-off. Designating an external accountant (`accountant add`,
+`accountant remove`), cancelling a copy and `accountant-copy import` need `accountant.manage`, which your
+principal grants by name; without it, prepare the hand-off and leave those steps to them.
 
 Before a review, read `report accountant-review` (as_of the period end): entries to review, what waits in
 the Uncategorized accounts, bank and card accounts not reconciled through the date, open receivables,
@@ -1204,8 +1206,8 @@ difference from `reconcile preview`.
 ## An item that should have been stocked
 
 `item convert ITEM --to inventory` turns a non-inventory part or other charge into an inventory
-part. It is one-way and a person's act: an agent is refused with `E_PERMISSION`, so tell the
-owner which item and why, and suggest `--dry-run` to see the accounts it will carry. Nothing
+part. It is one-way and needs `item.convert`, which your principal grants by name: without it you are
+refused naming it, so tell the owner which item and why, and suggest `--dry-run` to see the accounts it will carry. Nothing
 posted changes; stock starts at 0 on the conversion date and is counted with `inventory adjust`.
 After a conversion, no stock line for that item may be dated before the conversion date.
 
@@ -1281,13 +1283,48 @@ sent notices because sent mail cannot be recalled.
 
 ## When to ask, and when to just do it
 
-A clear task runs: "post that invoice to John and email it to him" names the acts, so post it and draft and
-send the email with no "are you sure?". Missing details get a question, never a guess: "send the invoice when
-the guys are done" does not say which job, which invoice or when "done" is, so ask for those and do nothing
-yet. A broad change that sets how the business works from then on (a batch to every customer, a schedule
-turned on, new terms for everyone) gets one check of its exact details: run it with `dry_run`, say what it
-will do in plain words (who, how many, what, from when) and run it on the person's yes. One check, of the
-details; never a second "are you sure". Ask too when you would be inferring a damaging act nobody named.
+Some commands carry a confirm-first mark: `--help`, `bookflow_help` (`confirm_first` and its note) and the
+`bookflow_list_commands` rows (`confirm_first: true`) show it on deletes, voids, batch reversals, sends and
+mark-sent, permission and capability changes, merges, and broad edits. The mark is for you; Bookflow never asks
+"are you sure", and your permissions and reversible batches are the guarantees. Use it like this:
+
+- **A named act just runs.** "Post that invoice to John and email it to him" names the acts, so post it and draft
+  and send the email with no question, marked or not.
+- **A damaging act your principal did not plainly name gets one plain confirmation.** When you would be inferring
+  it ("tidy up the customer list" read as deleting 40 customers), it reaches wider than what was said, or the
+  request is unclear about which records, say in plain words what it will do ("just to be clear, you want me to
+  void invoice 1007 and its payment?") and run it on their yes.
+- **A broad change that sets how the business works from then on gets one check of the dry run's exact details,
+  even when named:** new terms or price levels on every customer, a chart restructure, an import that rewrites
+  records, a schedule or rule turned live. Run it with `dry_run`, show the details ("212 customers, terms Net 30 to
+  Net 15, from today") and run it on their yes. One check, of the details; never a second "are you sure".
+- **Ambiguity always gets a question, never a guess,** on any task. "When the guys are done send the invoice and
+  take the payment over email!" leaves out which job, which customer, the amount, when "done" is and how the
+  payment is taken: ask for those specifics and do nothing yet.
+
+## Your level and how to ask for more
+
+Your level is what your principal set when they made you (`bookflow setup` offers three presets, each a list of
+grants they can edit): **Bookkeeper**, the default (standard role: everyday posting, no automations, no sending, no
+merges or restores, no posting an opening that does not tie); **Read-only** (reads the books, reports and records,
+writes nothing); **Trusted** (Bookkeeper plus `delivery.send`, `opening.accept-differences` and the
+`automate.*` capabilities they picked). `membership effective` shows what you may do here, and `membership list` your role and grants.
+You never hold more than your principal holds themselves.
+
+When a command is refused for a missing capability, the refusal names it (`details.capability`) and says to ask
+your principal to grant it if this is yours to do. Tell them which capability, what it would let you do, and the
+command they run (`bookflow membership grant <you> --company <company> --grants '["<capability>"]'
+--expected-version N`); do the part you may meanwhile. For "auto-add Shell fuel to Fuel" as a Bookkeeper: create
+the bank rule (`bank-rule create` with `auto_add`; it stays a draft and only proposes), then `bank-rule update
+--live` is refused naming `automate.bank-rule`: ask for it. Once granted, show the rule's check from `--dry-run`,
+make it live with its fingerprint as `confirm`, and the next import adds the matching line, as you, for your
+principal, citing the rule.
+
+An automation you make live runs unattended as you (its establisher), for your principal: a bank rule adds or
+ignores lines at each import (`automate.bank-rule`), an email schedule sends (`automate.delivery`, with
+`delivery.send`), an invoice schedule raises invoices (`automate.invoice`). It pauses with a to-do if you or your
+principal lose the capability. Every batch it writes is reversible by one command (`batch reverse`, or the
+import's own reverse), and `audit list` shows each write's actor, interface, principal and reason.
 
 ## Emailing a document
 
@@ -1295,9 +1332,9 @@ No email leaves this machine until the owner sets up a sending connection (`deli
 then messages wait in the outbox, ready, and `delivery run` reports "no sending connection". For "email
 Riverside their invoice DEMO-PIPE-INV-1": `delivery draft --kind invoice --document DEMO-PIPE-INV-1`, read
 back the returned To, Subject and body (change them with `delivery update` if asked), then `delivery send`
-on the message. Tell the person whether it is waiting for their go (you lack `delivery.send`:
-`waiting_for_go` is true and `delivery approve` is theirs) and that it will not go out until a sending
-connection exists. A customer with no address drafts with a warning and no To: ask the person for the
+on the message. If your principal granted you `delivery.send`, your release is the go; without it the
+message waits (`waiting_for_go` is true) for a holder's `delivery approve`, so tell them, and ask for the
+grant if sending is yours to do. Say too that it will not go out until a sending connection exists. A customer with no address drafts with a warning and no To: ask the person for the
 address and add it with `delivery update --to`, never invent one. A statement takes `customer`, `date_from` and `date_to`.
 
 "What is waiting to go out?": `delivery query --status ready` (and `--status draft` for unreleased drafts).
@@ -1316,7 +1353,7 @@ skipped and why (no address, prefers mail, already in the outbox or sent) before
 preview. Run it with the preview's `fingerprint`, so it does exactly what was shown: if the set changed
 since, it is refused, and you preview again. If the period, kind or customers are not given, ask; never
 guess them. A batch drafts 10 messages per call and returns `next`; call `delivery batch` with it until
-`state` is `done`. An agent's batch with `send` waits for a person's go; `delivery approve --batch`
+`state` is `done`. A batch with `send` begun without `delivery.send` waits for a go; `delivery approve --batch`
 approves only messages still exactly as the batch drafted them, and names the rest. `delivery
 batch-query` lists unfinished batches; `delivery batch-cancel B-1001 --reason "..."` cancels a whole
 batch, naming any message that was already released or exported.
@@ -1328,9 +1365,11 @@ batch, naming any message that was already released or exported.
 --start-date 2026-11-30 --mode send`. Ask for anything missing (which documents, how often, the first
 day); never guess. The host runs each slot once; after it was off, only the latest missed slot runs, and
 only within `catch_up_days`. A `send` schedule you write stays a draft: its runs leave messages waiting for
-a go and raise one to-do. Making it live (`delivery-schedule live`) is your principal's act (it needs
-`automate.delivery`): run it with `--dry-run`, show them the check (selection, cadence, first run, who it
-would reach today), and they turn it on with its fingerprint as `confirm`. Your later change to what or
+a go and raise one to-do. Making it live (`delivery-schedule live`) needs `automate.delivery`, and its runs
+carry the go of whoever made it live, so it needs `delivery.send` too; without either you are refused naming
+the one you lack. It sets how the business works from then on, so even when asked: run it with `--dry-run`,
+show your principal the check (selection, cadence, first run, who it would reach today), and on their yes
+turn it on with its fingerprint as `confirm` (or they do, if you lack the grants). Your later change to what or
 when it sends returns it to draft. `delivery-schedule pause` stops it; `show` lists its runs.
 
 ## A scanned barcode
@@ -1452,8 +1491,9 @@ names cannot be voided or reduced until that allocation is voided (E_WORK_DEPEND
 Stock is costed by weighted average unless a person switched the company to FIFO. `costing-method show` says
 which method is in force and lists every switch; `report inventory-layers` lists each item's cost layers on a
 date (under FIFO a sale takes the oldest layer first; under average each item is one row). Changing the method
-is a person's act, on the accountant's advice: `costing-method set` and `costing-method withdraw` refuse an
-agent (E_PERMISSION). When asked to switch, say so and leave it to your principal. Everything else -- sales,
+is decided on the accountant's advice: `costing-method set` and `costing-method withdraw` need `costing.method`,
+which your principal grants by name (without it you are refused naming it). It changes how the business works from
+then on, so even when asked, show the dry run's exact details once and run it on their yes. Everything else -- sales,
 receipts, returns, counts, freight -- works the same under either method; replay costs it.
 
 ## Ship Acme's order now, bill it later

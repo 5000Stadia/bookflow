@@ -46,7 +46,7 @@ def test_a_send_schedule_saved_checked_and_turned_on(register_browser, width):
                '"[data-schedules-error]")', timeout=30)
     assert b.evaluate('window.__sameDocument === true')
     text = _text(b)
-    assert 'Schedule Daily invoices saved' in text and 'wait for a go until a person makes it live' in text, text
+    assert 'Schedule Daily invoices saved' in text and 'wait for a go until a holder of automate.delivery makes it live' in text, text
     _shot(b, width, 'schedules')
     if width == 390:
         _fits(b)

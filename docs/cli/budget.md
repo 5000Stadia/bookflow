@@ -6,6 +6,8 @@
 
 Clear budget amounts: one account row (account), one customer or class (customer / class_id), both, or the whole budget when neither is named, as the anchor's Clear button does. Every cleared amount is audited with its value before, so nothing is lost from the trail.
 
+Confirm first (delete): it deletes or removes records. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
@@ -350,6 +352,8 @@ Example JSON output:
 ## `budget delete`
 
 Delete a budget and all its amounts. Nothing in the ledger changes, because a budget never posted; the audit event keeps every amount it held.
+
+Confirm first (delete): it deletes or removes records. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

@@ -28,12 +28,12 @@ In one step it:
 - creates the books (in `~/.bookflow`, or `--data-root`) with the owner as their administrator; this computer's login is the owner's;
 - creates the company with that home currency and a chart of accounts (`--chart general`, or `service`, `product`, `contractor`, `retail`, `nonprofit`), and its legal form with `--entity-type` (`sole_proprietor`, `partnership`, `llc`, `s_corp`, `c_corp`, `nonprofit`; `other` otherwise);
 - with `--opening-balance "ACCOUNT=AMOUNT"`, posts that bank account's opening balance once: a journal entry, the bank account against Opening Balance Equity, dated `--opening-date` or else the first day of the fiscal year, where the books start. Ask the owner for the balance on the statement for that day. A rerun never posts it again; it reports the opening balance the account already has (`opening_balance`, status `exists`);
-- creates your own identity, `assistant` (`--agent`, `--agent-name`), working for the owner with the `standard` role (`--role` chooses another), so the audit trail records "Assistant for Dana Ruiz", never the owner alone;
+- creates your own identity, `assistant` (`--agent`, `--agent-name`), working for the owner at the level `--preset` chooses: `bookkeeper` (the default: the `standard` role, no automations, sending, merges or restores), `read-only`, or `trusted` (bookkeeper plus `delivery.send`, `opening.accept-differences` and the `--automate` kinds picked: `bank-rule`, `delivery`, `invoice`); `--role` sets a role instead. The audit trail records "Assistant for Dana Ruiz", never the owner alone. The result's `level` says what that level cannot do, what each automation would run unattended (as whoever made it live), how one command reverses a batch and what `audit list` shows; a preset is a list of grants the owner can edit, and grants wait until the owner activates permissions (`bookflow permission activate`), when the step names the exact `membership grant`;
 - issues your token into an owner-only file beside the books and writes the `bookflow` server into `.mcp.json` (`--mcp-config PATH`); the file names the token file and never holds the secret;
 - makes a one-time link for the owner to set their password in the browser (`owner_link.url`; it works once and expires after two hours, `--link-minutes`; `bookflow owner-link` makes a fresh one later);
 - starts the host in the background and returns once it answers (`url`; `GET <url>health` returns 200). `--no-serve` skips this.
 
-Rerunning `setup` with the same company is safe: it reports what exists, adds what was never made and never makes anything twice. It keeps the agent's current role unless you pass `--role`. It never undoes a person's decision: if the owner unassigned or suspended the agent, revoked its access or revoked its token, setup reports that step as `stopped` with the command the owner runs to restore it, and changes nothing. If the owner has not used their link yet, a rerun replaces it with a new one.
+Rerunning `setup` with the same company is safe: it reports what exists, adds what was never made and never makes anything twice. It keeps the agent's current role and grants unless you pass `--role` or `--preset`. It never undoes a person's decision: if the owner unassigned or suspended the agent, revoked its access or revoked its token, setup reports that step as `stopped` with the command the owner runs to restore it, and changes nothing. If the owner has not used their link yet, a rerun replaces it with a new one.
 
 The JSON result holds everything: `company.company_id`, `agent`, `mcp_config`, `mcp_server` (the stdio command for any other MCP client), `token_file`, `url`, `owner_link`, `owner_checklist`, `steps` and `next_steps`. Every path in it, `.mcp.json` and the token file is absolute, whatever `--data-root` you gave.
 
@@ -70,7 +70,7 @@ Setup's result ends with `owner_checklist`, the two things only the owner does, 
 `company show` lists the owner's steps still pending (`owner_steps`), so either of you can check later. Also tell them:
 
 - What you enter shows in the books as yours, made for them.
-- Some things stay theirs: the closing date, who can do what (people, roles, tokens), merging duplicates and backup schedules. You will ask them when one comes up.
+- Some things are theirs unless they grant them to you by name: the closing date, who can do what (people, roles, tokens), merging duplicates, sending email, making a rule run unattended and backup schedules. Refused for one, you will tell them which capability and ask; setting passwords, issuing tokens, assigning and authorizing you and activating permissions stay theirs always.
 
 ## Serving over HTTPS (phones, the camera)
 

@@ -1313,6 +1313,8 @@ Example JSON output:
 
 Change a bank rule, make an auto-add or ignore rule live, or pause one (live false). Making it live needs automate.bank-rule and one check of its exact details: --dry-run returns check (what it will do, the waiting lines it fits now, a fingerprint); pass the fingerprint as confirm. It then acts at each later import under your authority. A change to what a live rule does by anyone without automate.bank-rule returns it to draft; by a holder it stays live under them only with the new check confirmed. A learned rule you change is kept when its import is reversed. Example: {"rule": "Shell fuel", "live": true, "confirm": "<fingerprint>"}.
 
+Confirm first (automation): it can make a rule live that then acts unattended. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |

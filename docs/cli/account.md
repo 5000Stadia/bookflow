@@ -803,6 +803,8 @@ Example JSON output:
 
 Merge a duplicate account into another of the same type. Nothing posted changes: every report, balance, register and filter shows the merged account's postings under the survivor; item, vendor, account and preference fields naming it are re-pointed to the survivor, and the merged account is made inactive and hidden. A saved document that names it saves with the survivor when next edited. People only, with a reason; `--dry-run` previews what moves, every reference re-pointed and any conflict. Undo with `batch reverse` using the output batch_id; it refuses if any reference would be kept. Native `account unmerge` also remains available.
 
+Confirm first (merge): it reads one record as another everywhere. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
@@ -1423,6 +1425,8 @@ Example JSON output:
 ## `account unmerge`
 
 Undo an account merge: the merged account reads as itself again, is made active again if the merge made it inactive, and every reference the merge re-pointed is put back unless it has been changed since. Nothing posted changes. People only, with a reason.
+
+Confirm first (merge): it reads one record as another everywhere. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

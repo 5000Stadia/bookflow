@@ -1235,6 +1235,8 @@ Example JSON output:
 
 Void a landed-cost allocation: reversing lines, its journal entry reversed, and the forward true-ups it owed backed out at its date. Refused when a freight credit allocated later needs it, and in a closed period. Example: `bookflow landed-cost void LC-3 --reason "Allocated to the wrong receipt"`.
 
+Confirm first (void): it voids a posted document. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |

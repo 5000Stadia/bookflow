@@ -6,6 +6,8 @@
 
 Delete this journal entry with a required reason and exact expected_version. Cancel its accounting at its original date; retain immutable history and its number. Requires the explicit family Delete grant and ledger.read, independently of ledger.post. A check, card charge, transfer, inventory document or item receipt is refused by name and deleted or voided through the command that owns it. Reconciled, settled or closed effects refuse atomically.
 
+Confirm first (delete): it deletes or removes records. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
@@ -1695,6 +1697,8 @@ Example JSON output:
 ## `journal void`
 
 Void a journal with a required context reason and an exact reversal at its current accounting date.
+
+Confirm first (void): it voids a posted document. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 

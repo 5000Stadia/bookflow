@@ -487,6 +487,8 @@ Example JSON output:
 
 Undo a credit transfer: the target invoices the moved credit paid are owed again, the source's credit comes off the transfer charge, and the charge invoice and the credit memo are voided at the transfer's own date (so its period must be open). Refused while any of the moved credit was refunded (void the refund first). A reason is required. Voiding a transfer already voided writes nothing.
 
+Confirm first (void): it voids a posted document. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |

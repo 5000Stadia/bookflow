@@ -114,6 +114,12 @@ class Command:
         return self.kind == "write"
 
     @property
+    def confirm_first(self) -> bool:
+        """Whether its effect could damage (core/confirm_first.py): shown in help and the MCP list, never enforced."""
+        from bookflow.core import confirm_first
+        return confirm_first.category(self.name) is not None
+
+    @property
     def standalone(self) -> bool:
         return self.standalone_runner is not None
 

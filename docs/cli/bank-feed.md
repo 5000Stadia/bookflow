@@ -778,6 +778,8 @@ Example JSON output:
 
 Undo a bank import as one unit: hide its lines (their keys are released, so the file can come in again), undo its matches, delete the entries it created (with preserved history) and restore the account's record of its number and last import. Newest first per account: a later live import blocks it (--through reverses the newer ones with it). Refused (E_BATCH_BLOCKED) naming every blocker and what clears it; then nothing changes. --dry-run shows the plan and a fingerprint. Pass it on the real call; follow next until reversed. For a wrong account, inspect this preview but execute bank-feed move instead of reversing first: move needs the live import. Report blockers; do not undo unrelated work to clear them without instruction. Example: {"import_id": "01J..."}.
 
+Confirm first (batch reversal): it undoes a whole batch at once. Run it at once when your principal plainly named this act; otherwise say in plain words what it will do, show the dry run, and run it on their yes. Bookflow never asks; this mark is guidance.
+
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |

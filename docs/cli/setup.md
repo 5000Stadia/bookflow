@@ -37,6 +37,8 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `agent` | `--agent` | string | no | no | "assistant" | Username for the AI agent's own identity; minimum length 1; maximum length 64 |
 | `agent_name` | `--agent-name` | string \| null | no | yes | null | The agent's name in lists and the audit trail; defaults to Assistant |
 | `role` | `--role` | literal["readonly", "standard", "admin"] \| null | no | yes | null | The agent's role in the company: standard for a new agent; given for an existing one, it changes the role |
+| `preset` | `--preset` | literal["bookkeeper", "read-only", "trusted"] \| null | no | yes | null | The agent's level, a list of grants you can edit later: bookkeeper (the default for a new agent: standard, no automations, sending, merges or restores), read-only (reads only) or trusted (bookkeeper plus delivery.send, opening.accept-differences and the automate capabilities named in automate). Given for an existing agent, it changes its role and grants. Not with role |
+| `automate` | `--automate` | array[literal["bank-rule", "delivery", "invoice"]] | no | no | [] | With preset trusted: which automations the agent may make live (automate.bank-rule, automate.delivery, automate.invoice); each then runs unattended as the agent, for you |
 | `mcp_config` | `--mcp-config` | string | no | no | ".mcp.json" | MCP client configuration file to write or update (the `bookflow` server entry only); minimum length 1 |
 | `bind` | `--bind` | string | no | no | "127.0.0.1:8765" | Address the host listens on, host:port (loopback); maximum length 128 |
 | `public_origin` | `--public-origin` | string \| null | no | yes | null | The https://host[:port] a TLS proxy in front of the host serves (for example what `colony serve` prints); the links and the MCP configuration use it. Defaults to [host] public_origin in config.toml |
@@ -69,6 +71,7 @@ This command has no HTTP route.
 | `owner` | object[string, any] | yes | no | — | user_id, username and display_name of the person setup ran for |
 | `company` | object[string, any] | yes | no | — | company_id, display_name, home_currency and organization_id |
 | `agent` | object[string, any] | yes | no | — | user_id, username and role of the agent's own identity, and the principal it acts for |
+| `level` | object[string, any] | yes | no | — | The agent's level (R187 setup guidance; nothing here blocks anything): preset, role, grants, applied (whether the grants are on its membership now), command (the membership grant that applies or edits them), cannot, the three presets, one line per automate capability, how to reverse a batch, and what audit list shows |
 | `mcp_config` | string | yes | no | — | The MCP client configuration file written |
 | `mcp_server` | object[string, any] | yes | no | — | The `bookflow` server entry in it: command, args and env (no secret) |
 | `token_file` | string | yes | no | — | Owner-only file holding the agent's bearer; the configuration points at it |
@@ -99,6 +102,7 @@ Example JSON output:
   "data_root": "/example",
   "dry_run": false,
   "host": {},
+  "level": {},
   "mcp_config": "value",
   "mcp_server": {},
   "media_type": "text/plain",
