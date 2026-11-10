@@ -4,7 +4,7 @@
 
 ## `batch query`
 
-List batches, newest first, each with `reversible` and its first blocker.
+List batches, newest first, filtered by kind and creation date range, with `reversible` and every blocker.
 
 | Contract | Value |
 |---|---|
@@ -32,6 +32,8 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
+| `date_from` | `--date-from` | date \| null | no | yes | null | Batch creation UTC date, inclusive lower bound. |
+| `date_to` | `--date-to` | date \| null | no | yes | null | Batch creation UTC date, inclusive upper bound. |
 | `kind` | `--kind` | string \| null | no | yes | null | Only batches of this kind (import, reversal...). |
 | `state` | `--state` | literal["live", "reversing", "blocked", "reversed", "reversed_partly"] \| null | no | yes | null | Only batches in this state. |
 | `scope` | `--scope` | string \| null | no | yes | null | Only batches in this scope. |
@@ -64,7 +66,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
-| `items` | array[object[string, any]] | yes | no | — | Batches, newest first, with `reversible` and the first blocker. |
+| `items` | array[object[string, any]] | yes | no | — | Batches, newest first, with `reversible`, all `blockers`, and `blocker_count` from the full dry-run plan. |
 | `next_cursor` | string \| null | yes | yes | — | Pass as `cursor` for the next page; null on the last. |
 
 Example JSON output:
@@ -107,7 +109,7 @@ Example JSON output:
 
 ## `batch reverse`
 
-Confirm-first: reverse the entire batch, newest effects first, using your own grants for every inverse. Run --dry-run and check its exact list with your principal unless this reversal was plainly named. Every blocker is named and a blocked plan changes nothing. Later edits, dependent records, closed periods, reconciled payments and pending or printed checks can block. Inventory counts cancel or void through their native inverse; pending check-print runs cancel, and delivery batches cancel only with unexported drafts. Sent mail, printed cheques and exported files cannot be recalled. A printed cheque or sent message blocks the whole batch. History stays. Returns a resumable slice; repeat `next` until reversed. A batch with nothing reversible says so. Example: {"batch": "01J..."}.
+Confirm-first: reverse the entire batch, newest effects first, using your own grants for every inverse. Run --dry-run and check its exact list with your principal unless this reversal was plainly named. Invoice batches void each invoice under your own ledger.post grant. Every blocker is named and a blocked plan changes nothing. Later edits, dependent records, closed periods, reconciled payments and pending or printed checks can block. Inventory counts cancel or void through their native inverse; pending check-print runs cancel, and delivery batches cancel only with unexported drafts. Sent mail, printed cheques and exported files cannot be recalled. A printed cheque or sent message blocks the whole batch. History stays. Returns a resumable slice; repeat `next` until reversed. A batch with nothing reversible says so. Example: {"batch": "01J..."}.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -294,7 +296,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
-| `batch` | object[string, any] | yes | no | — | The batch: kind, scope, ordering, label, state, counts, who, how, for whom, why, reversal; `reversible` and `first_blocker` from a plan; `effects` (up to 200) on show. |
+| `batch` | object[string, any] | yes | no | — | The batch: kind, scope, ordering, label, state, counts, who, how, for whom, why, reversal; `reversible` and `blockers` (all causes, with counts and members), `blocker_count`, and compatibility `first_blocker` from a full dry-run plan; `effects` (up to 200) on show. |
 
 Example JSON output:
 
