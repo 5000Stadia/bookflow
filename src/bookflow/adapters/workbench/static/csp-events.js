@@ -65,7 +65,7 @@
       event.preventDefault();
       window.print();
     }
-    if (closest(event, '[data-history-back]') && window.history.length > 1) {
+    if (closest(event, '[data-history-back]')) {
       event.preventDefault();
       window.history.back();
     }
