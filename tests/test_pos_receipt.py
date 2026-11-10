@@ -108,12 +108,17 @@ def test_unicode_receipt_number_is_not_silently_encoded_as_different_number(co):
 
 
 def test_plain_clerk_can_read_print_and_reprint_but_not_general_receipts(hosted):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
     from fastapi.testclient import TestClient
     from bookflow.hub import pos_presets
     from tests.test_item_pictures_review import _membership_version
     from tests.test_pos_layer import H, REASON, _password, _pos
     cid = hosted.company_id
     _pos(hosted, True)
+    # A half-hour zone: the receipt reads the company's own date and minute, not the UTC instant.
+    hosted.ok('company.update', {'timezone':'Asia/Kolkata', 'expected_version':hosted.info()['info_version']},
+              company=cid, headers=REASON)
     cart = {'lines':[{'item':'Pipe Sealant'}]}
     total = hosted.ok('pos.sale.preview', cart, company=cid)['total']['amount']
     sold = hosted.ok('pos.sale.complete', dict(cart, ticket='clerk-receipt', expected_total=total,
@@ -128,10 +133,16 @@ def test_plain_clerk_can_read_print_and_reprint_but_not_general_receipts(hosted)
         command = client.post(f'/companies/{cid}/commands/pos.receipt.show', headers=H, json={'sale':sold['id'],'reprint':True})
         assert command.status_code == 200 and command.json()['total'] == total
         assert 'account_id' not in command.text and 'cost' not in command.text
+        instant = command.json()['sale']['created_at']
+        local = datetime.fromisoformat(instant.replace('Z', '+00:00')).astimezone(ZoneInfo('Asia/Kolkata'))
+        assert instant.endswith('Z')
         page = client.get(f'/c/{cid}/pos/receipt/{sold["id"]}?reprint=true')
         assert page.status_code == 200 and 'Reprint' in page.text
+        assert f'<p>{local:%Y-%m-%d %H:%M}</p>' in page.text and instant not in page.text
         printed = client.get(f'/c/{cid}/pos/receipt/{sold["id"]}.pdf?reprint=true')
         assert printed.status_code == 200 and printed.content.startswith(b'%PDF')
+        text = PdfReader(BytesIO(printed.content)).pages[0].extract_text()
+        assert f'{local:%Y-%m-%d %H:%M}' in text and instant not in text and instant[:16].replace('T', ' ') not in text
         refused = client.post(f'/companies/{cid}/commands/sales-receipt.show', headers=H,
                              json={'sales_receipt':sold['sales_receipt']['id']})
         assert refused.status_code == 403
