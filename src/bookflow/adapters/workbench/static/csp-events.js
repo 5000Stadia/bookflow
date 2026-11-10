@@ -14,6 +14,12 @@
     }
   });
 
+  document.addEventListener('htmx:afterSettle', function (event) {
+    const region = closest(event, '[data-focus-alert-after-settle]');
+    const alert = region ? region.querySelector('[role=alert]') : null;
+    if (alert) alert.focus();
+  });
+
   document.addEventListener('htmx:beforeRequest', function (event) {
     if (closest(event, '[data-auth-feedback]')) {
       const error = document.getElementById('err');

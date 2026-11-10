@@ -391,3 +391,16 @@ html:has(.document-actions) { scroll-padding-bottom: 5.5rem; }
 @media (min-width: 701px) {
   .workbench .line-cell-actions button { min-height: 0; padding: .2rem .4rem; font-size: .75rem; }
 }
+
+.line-commission { grid-column: 1 / -1; padding: .5rem; }
+.commission-picker { width: min(34rem, 95vw); max-height: 90dvh; padding: 1rem; box-sizing: border-box; }
+.commission-picker::backdrop { background: #0007; }
+.commission-picker header { position: sticky; top: 0; background: Canvas; padding-bottom: .5rem; }
+.commission-picker [data-commission-choices] label { display: flex; align-items: center; gap: .75rem; min-height: 44px; padding: .5rem; }
+.commission-picker input[type=search] { display: block; width: 100%; box-sizing: border-box; min-height: 44px; }
+.commission-picker footer { position: sticky; bottom: 0; background: Canvas; display: flex; justify-content: space-between; padding-top: .75rem; }
+.commission-picker button { min-height: 44px; }
+.commission-attribution-card { border-bottom: 1px solid #aaa; padding: .75rem 0; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .commission-picker { width: 100%; height: 100dvh; max-height: 100dvh; max-width: 100%; margin: 0; border: 0; }
+}

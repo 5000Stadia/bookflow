@@ -834,6 +834,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].source_revision_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].source_line_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].item_snapshot` | object | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.commission.enabled_at_entry` | literal[true] | no | no | true | — |
+| `revision.lines[].item_snapshot.commission.recipients` | array[object] | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission.recipients[].recipient_id` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission.recipients[].recipient_label` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission.recipients[].share` | literal[100] | no | no | 100 | — |
+| `revision.lines[].item_snapshot.commission.net_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission.currency` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.schema_version` | literal[1, 2, 3] | no | no | 1 | — |
 | `revision.lines[].item_snapshot.item` | object | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.id` | string | yes | no | — | — |
@@ -1852,6 +1860,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].source_revision_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].source_line_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].item_snapshot` | object | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.commission.enabled_at_entry` | literal[true] | no | no | true | — |
+| `revision.lines[].item_snapshot.commission.recipients` | array[object] | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission.recipients[].recipient_id` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission.recipients[].recipient_label` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission.recipients[].share` | literal[100] | no | no | 100 | — |
+| `revision.lines[].item_snapshot.commission.net_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission.currency` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.schema_version` | literal[1, 2, 3] | no | no | 1 | — |
 | `revision.lines[].item_snapshot.item` | object | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.id` | string | yes | no | — | — |
@@ -2708,6 +2724,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].source_revision_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].source_line_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].item_snapshot` | object | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.commission.enabled_at_entry` | literal[true] | no | no | true | — |
+| `revision.lines[].item_snapshot.commission.recipients` | array[object] | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission.recipients[].recipient_id` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission.recipients[].recipient_label` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission.recipients[].share` | literal[100] | no | no | 100 | — |
+| `revision.lines[].item_snapshot.commission.net_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission.currency` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.schema_version` | literal[1, 2, 3] | no | no | 1 | — |
 | `revision.lines[].item_snapshot.item` | object | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.id` | string | yes | no | — | — |
@@ -3553,6 +3577,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].source_revision_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].source_line_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].item_snapshot` | object | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.commission.enabled_at_entry` | literal[true] | no | no | true | — |
+| `revision.lines[].item_snapshot.commission.recipients` | array[object] | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission.recipients[].recipient_id` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission.recipients[].recipient_label` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission.recipients[].share` | literal[100] | no | no | 100 | — |
+| `revision.lines[].item_snapshot.commission.net_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission.currency` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.schema_version` | literal[1, 2, 3] | no | no | 1 | — |
 | `revision.lines[].item_snapshot.item` | object | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.id` | string | yes | no | — | — |

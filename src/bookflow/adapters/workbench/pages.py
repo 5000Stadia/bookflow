@@ -274,6 +274,9 @@ def _role_allows(cmd: registry.Command, record: dict[str, Any], *, hub_admin: bo
         decided = effective.decide(cmd)
         if decided is not None:
             return decided
+    # Payroll has no legacy role-only admission, including for installation administrators.
+    if cmd is not None and (cmd.capability or '').startswith('payroll.'):
+        return False
     if hub_admin or record.get("access") == "hub_admin":
         return True
     required = legacy_required_role(cmd)  # before activation the roles decide: a POS seller is standard
@@ -981,6 +984,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     from bookflow.adapters.workbench import finance_charges as FinanceCharges
     FinanceCharges.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                          role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
+    # R116 increment 1: private, saved manual paycheck calculations.
+    from bookflow.adapters.workbench import payroll_pages as PayrollPages
+    PayrollPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                       role_allows=lambda name, company, cred: _role_allows(registry.get(name), company, hub_admin=cred.hub_admin))
     # R106: Weekly Timesheet, the time clock and the job calendar.
     from bookflow.adapters.workbench import timekeeping_pages as TimekeepingPages
     TimekeepingPages.mount(app, render=render, run=run, credential=credential, page_error=page_error,
@@ -1032,6 +1039,15 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     # R111: Reminders, the to-do list and the overdue notice queue.
     from bookflow.adapters.workbench import scheduling_pages as SchedulingPages
     SchedulingPages.mount(app, render=render, run=run, credential=credential, page_error=page_error)
+
+    @app.get('/c/{company_id}/commission-options')
+    def commission_options(request: Request, company_id: str):
+        try:
+            raw = {key: request.query_params[key] for key in ('item', 'sales_rep', 'customer', 'search')
+                   if request.query_params.get(key)}
+            return JSONResponse(run(request, 'commission recipient-options', raw, company_id))
+        except BookflowError as err:
+            return JSONResponse(err.to_dict(), status_code=403 if err.code == 'E_PERMISSION' else 400)
 
     @app.get("/static/{name}")
     @permission_read_package(host)
@@ -2814,7 +2830,16 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 described = Admin.decorate_form(noun, verb, described, record_id, lambda name, raw: run(request, name, raw, None))
             except BookflowError as err:
                 return page_error(request, err)
+        if noun == 'item' and (not (authorized_company or {}).get('info', {}).get('commission_attribution_enabled')
+                or not effective_capabilities(request, company_id).holds('commission.manage')):
+            described = [leaf for leaf in described if leaf['path'] != 'commission_enabled']
         return render("form.html", request, company_id=company_id, noun=noun, verb=verb, cmd=cmd, leaves=described, originals=originals,
+                      commission_labels={allocation['recipient_id']: allocation['recipient_label']
+                          for line in (result or shown or {}).get('revision', {}).get('lines', [])
+                          for allocation in (line.get('item_snapshot', {}).get('commission') or {}).get('recipients', [])},
+                      commission_entry=(noun == 'invoice' and verb in ('post', 'update')
+                          and bool((authorized_company or {}).get('info', {}).get('commission_attribution_enabled'))
+                          and effective_capabilities(request, company_id).holds('commission.attribute')),
                       crumb=meta.get("plural_label") or (Naming.list_heading(noun, meta) if company_id is None and noun in Admin.COLUMNS else None),
                       plain_errors=company_id is None and noun in Admin.COLUMNS, field_labels=Admin.FIELD_LABELS,
                       panel_return=panel_return,
